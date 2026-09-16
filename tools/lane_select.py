@@ -458,6 +458,37 @@ def _python_closure(seeds, sinks=()):
         stack.extend(fresh)
 
 
+def _mojo_module_files(dotted, rel):
+    """Every repository file one Mojo import could mean, resolved against the
+    repository root AND against the importing file's OWN DIRECTORY.
+
+    THE IMPORTER'S DIRECTORY IS ON THE INCLUDE PATH. Every binding is built
+    with `-I . -I bindings` (bindings/build_rf.sh:123, build_trees.sh:134,
+    build_gbdt.sh:268), so `bindings/_mojolearn_rf.mojo` writing
+    `from forest_inference_binding import forest_prepare_gpu_binding` means
+    `bindings/forest_inference_binding.mojo`, which is compiled into the
+    shipped `.so`. Resolving against the root alone found no such file and
+    dropped the import as one of the toolchain's own, so the whole resident
+    forest inference tree (`bindings/forest_inference_binding.mojo` ->
+    `core/forest_inference_model.mojo` -> `core/forest_inference.mojo`) was in
+    no lane's map while being a shipped surface.
+
+    This is not a new rule for this tree: `tools/bincache.py:198`, written for
+    the binding cache and against the same compiler, searches
+    `list(roots) + [importer.parent]` for exactly this reason.
+
+    `from max.gpu.host import ...` still resolves to nothing under either root
+    and is still dropped, which is what makes the toolchain fall out."""
+    parts = dotted.split(".")
+    out = set()
+    for base in ("", os.path.dirname(rel)):
+        for cand in (os.path.join(base, *parts) + ".mojo",
+                     os.path.join(base, *parts, "__init__.mojo")):
+            if os.path.exists(os.path.join(ROOT, cand)):
+                out.add(cand)
+    return out
+
+
 @_by_path
 def _mojo_imports(rel):
     """The repository's own Mojo imports of one file. `from cluster.impl.kmeans
@@ -473,11 +504,7 @@ def _mojo_imports(rel):
         m = _MOJO_IMPORT_RE.match(line)
         if not m:
             continue
-        dotted = m.group(1) or m.group(2)
-        parts = dotted.split(".")
-        for cand in (os.path.join(*parts) + ".mojo", os.path.join(*parts, "__init__.mojo")):
-            if os.path.exists(os.path.join(ROOT, cand)):
-                out.add(cand)
+        out |= _mojo_module_files(m.group(1) or m.group(2), rel)
     return out
 
 
@@ -589,9 +616,7 @@ def _mojo_import_symbols(rel):
         m = re.match(r"^\s*from\s+([A-Za-z0-9_.]+)\s+import\s+(.+)$", line)
         if not m:
             continue
-        parts = m.group(1).split(".")
-        files = {c for c in (os.path.join(*parts) + ".mojo", os.path.join(*parts, "__init__.mojo"))
-                 if os.path.exists(os.path.join(ROOT, c))}
+        files = _mojo_module_files(m.group(1), rel)
         if not files:
             continue                         # the toolchain's own modules, not ours
         for name in m.group(2).split(","):
@@ -604,13 +629,21 @@ def _mojo_import_symbols(rel):
 @_by_path
 def _binding_exports(rel):
     """export name -> the binding function implementing it, from the
-    `module.def_function[impl]("name")` registrations a binding ends with."""
+    `module.def_function[impl]("name")` registrations a binding ends with.
+
+    THE IMPL MAY BE PARAMETRIZED. `def_function[forest_prepare_gpu_binding[True]]`
+    and `def_function[rf_classifier_fit_binding[False]]` are the ordinary
+    spelling in the forest bindings, and requiring a bare identifier dropped 35
+    exports across five bindings, among them `rf_classifier_fit`,
+    `et_classifier_fit` and `forest_prepare_gpu`. A dropped export is not a
+    wide answer: the lane still HITS other exports, so the per-export branch
+    runs and the dropped export's whole tree is simply absent."""
     try:
         text = _read(rel)
     except OSError:
         return {}
-    return {m.group(2): m.group(1) for m in
-            re.finditer(r"def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+    return {m.group(2): m.group(1) for m in re.finditer(
+        r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
 
 
 #: Calls that RESOLVE a binding by name, and the assignment targets that hold
@@ -762,7 +795,38 @@ def lane_sources():
                 syms = _mojo_import_symbols(src)
                 seeds = set()
                 for export in hit:
-                    body = blocks.get(exports[export], "")
+                    # THE EXPORT'S BODY IS NOT ONLY THE FUNCTION NAMED. An
+                    # export reaches a Mojo file two ways this scan used to
+                    # miss, and both are the ordinary spelling here:
+                    #  * the impl is IMPORTED, not defined in the binding file.
+                    #    `def_function[forest_prepare_gpu_binding[True]]` names
+                    #    a function in bindings/forest_inference_binding.mojo,
+                    #    so `blocks.get` returned "" and the export
+                    #    contributed nothing at all.
+                    #  * the impl calls a helper DEFINED IN THE SAME FILE which
+                    #    is where the imported symbol appears.
+                    #    `rf_predict_proba_gpu_parallel_binding` calls the
+                    #    file-local `_rf_predict_gpu_parallel`, and only that
+                    #    helper names `forest_predict_gpu`.
+                    # Both are closed here: the export's name is resolved as an
+                    # imported symbol in its own right, and the bodies are
+                    # followed through the file's own functions.
+                    bodies, seen, stack = [], set(), [exports[export]]
+                    while stack:
+                        name = stack.pop()
+                        if name in seen:
+                            continue
+                        seen.add(name)
+                        seeds |= syms.get(name, set())
+                        body = blocks.get(name)
+                        if body is None:
+                            continue
+                        bodies.append(body)
+                        for other in blocks:
+                            if other not in seen and re.search(
+                                    r"\b%s\b" % re.escape(other), body):
+                                stack.append(other)
+                    body = "\n".join(bodies)
                     for sym, files in syms.items():
                         if re.search(r"\b%s\b" % re.escape(sym), body):
                             seeds |= files

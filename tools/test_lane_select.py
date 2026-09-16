@@ -1074,3 +1074,154 @@ def _main():
 
 if __name__ == "__main__":
     sys.exit(_main())
+
+
+# --------------------------------------------------------------------------
+# THE FORWARD WALK LOST A SHIPPED SURFACE, 2026-09-16 (lane/lane-map-census).
+# `core/forest_inference.mojo` is imported by `bindings/_mojolearn_rf.mojo`
+# and `bindings/_mojolearn_trees.mojo` and was in NO lane's map. It is not a
+# backward edge and it is not correct as is: the shipped `_mojolearn_rf.so`
+# carries that file's Metal kernels as the AIR blobs
+# `core_forest_inference_forest_g...` and `core_forest_inference_forest_v...`
+# (the same probe over `_mojolearn.so`, `_mojolearn_gbdt.so`,
+# `_mojolearn_estimators.so` and `_mojolearn_forest_host.so` prints nothing),
+# and a `RandomForestClassifier(..., inference_engine="parallel_groves")`,
+# which is exactly what `@lane("rf-clf-balanced-parallel")` builds, was
+# measured calling `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu`
+# and `forest_release_gpu` on Metal while the sequential control called
+# `rf_predict_proba` and none of the three. Three separate rules each hid it,
+# and each is pinned below beside the case that must STAY narrow.
+# --------------------------------------------------------------------------
+
+FOREST_INFERENCE_LANES = ("rf-clf", "rf-clf-balanced-parallel", "rf-reg",
+                          "et-clf", "et-reg", "et-reg-bootstrap-parallel",
+                          "par-forest", "par-forest-pool")
+
+
+def test_a_shipped_inference_file_is_in_the_map_of_the_lanes_that_run_it():
+    """`core/forest_inference.mojo` carries the forest prediction kernels the
+    rf and trees bindings launch. A change to it can move those lanes' bits,
+    so they must be named. THE FAILING SIDE: before the three fixes below the
+    reverse map held this file under NO lane at all."""
+    rev = lane_select.reverse_map()
+    for rel in ("core/forest_inference.mojo", "core/forest_inference_model.mojo",
+                "bindings/forest_inference_binding.mojo"):
+        lanes = rev.get(rel, set())
+        assert lanes, f"{rel} is a shipped forest inference source and is in no lane's map"
+        missing = [lane for lane in FOREST_INFERENCE_LANES if lane not in lanes]
+        assert not missing, f"{rel} does not name the lanes that run it: {missing}"
+
+
+def test_a_mojo_import_resolves_against_the_importing_files_own_directory():
+    """Every binding is built `-I . -I bindings` (bindings/build_rf.sh:123),
+    so `bindings/_mojolearn_rf.mojo` writing `from forest_inference_binding
+    import ...` means `bindings/forest_inference_binding.mojo`.
+
+    THE FAILING SIDE, run here rather than asserted: resolving against the
+    repository root ALONE finds no such file, and the import is dropped as one
+    of the toolchain's own."""
+    rel = "bindings/_mojolearn_rf.mojo"
+    assert "bindings/forest_inference_binding.mojo" in lane_select._mojo_imports(rel), \
+        "the sibling import the build's -I bindings resolves is not in the map"
+
+    def root_only(dotted, _rel):
+        parts = dotted.split(".")
+        return {c for c in (os.path.join(*parts) + ".mojo",
+                            os.path.join(*parts, "__init__.mojo"))
+                if os.path.exists(os.path.join(lane_select.ROOT, c))}
+
+    keep = lane_select._mojo_module_files
+    lane_select._mojo_module_files = root_only
+    try:
+        lane_select.reset_caches()
+        blind = lane_select._mojo_imports(rel)
+        assert "bindings/forest_inference_binding.mojo" not in blind, \
+            ("root-only resolution still found the sibling import, so this test "
+             "cannot fail and is not a check")
+        assert "core/forest_inference.mojo" in blind, \
+            "root-only resolution lost an ordinary root import too; the arm is not clean"
+    finally:
+        lane_select._mojo_module_files = keep
+        lane_select.reset_caches()
+
+    # ... and it must not invent an edge out of the toolchain's own modules.
+    assert not [c for c in lane_select._mojo_module_files("max.gpu.host", rel)], \
+        "a toolchain module resolved to a file in this tree"
+
+
+def test_a_parametrized_def_function_is_still_an_export():
+    """`def_function[forest_prepare_gpu_binding[True]]("forest_prepare_gpu")`
+    is the ordinary spelling in the forest bindings. Requiring a bare
+    identifier dropped 35 exports across five bindings, among them the FIT
+    entry points `rf_classifier_fit` and `et_classifier_fit`.
+
+    A dropped export is not a wide answer. The lane still HITS other exports,
+    so the per-export branch runs and the dropped export's whole tree is
+    simply absent."""
+    rf = lane_select._binding_exports("bindings/_mojolearn_rf.mojo")
+    trees = lane_select._binding_exports("bindings/_mojolearn_trees.mojo")
+    for name in ("rf_classifier_fit", "rf_regressor_fit", "forest_prepare_gpu",
+                 "forest_predict_resident_reuse_gpu", "forest_release_gpu"):
+        assert name in rf, f"{name} is registered in _mojolearn_rf.mojo and is not an export"
+    for name in ("et_classifier_fit", "et_regressor_fit", "forest_prepare_gpu"):
+        assert name in trees, f"{name} is registered in _mojolearn_trees.mojo and is not an export"
+    # THE FAILING SIDE: the old pattern, run here, must miss them.
+    text = lane_select._read("bindings/_mojolearn_rf.mojo")
+    old = {m.group(2) for m in re.finditer(
+        r"def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+    assert "rf_classifier_fit" not in old, \
+        "the old pattern already found the parametrized export; this test cannot fail"
+    # It must still be an export NAME, never the impl, that lands in the map.
+    assert "forest_prepare_gpu_binding" not in rf, "the impl name leaked in as an export"
+
+
+def test_an_export_reaches_what_its_impl_reaches():
+    """An export reaches a Mojo file two ways the body scan used to miss, and
+    both are the ordinary spelling here:
+
+    * the impl is IMPORTED, not defined in the binding. `forest_prepare_gpu`
+      is `forest_prepare_gpu_binding` from bindings/forest_inference_binding.mojo,
+      so `blocks.get` returned "" and the export contributed nothing;
+    * the impl calls a file-local helper which is where the imported symbol
+      appears. `rf_predict_proba_gpu_parallel_binding` calls
+      `_rf_predict_gpu_parallel`, and only that helper names
+      `forest_predict_gpu`.
+    """
+    src = "bindings/_mojolearn_rf.mojo"
+    blocks = lane_select._mojo_blocks_for(src)
+    syms = lane_select._mojo_import_symbols(src)
+    exports = lane_select._binding_exports(src)
+
+    # the imported impl
+    assert exports["forest_prepare_gpu"] not in blocks, \
+        "forest_prepare_gpu's impl is defined in the binding now; pick a new case"
+    assert "bindings/forest_inference_binding.mojo" in syms.get(exports["forest_prepare_gpu"], set()), \
+        "the imported impl does not resolve to the file that defines it"
+
+    # the file-local helper
+    impl = exports["rf_predict_proba_gpu_parallel"]
+    assert "forest_predict_gpu" not in blocks[impl], \
+        "the export's own body names it now; pick a new case"
+    assert "_rf_predict_gpu_parallel" in blocks[impl], "the helper call moved; pick a new case"
+    assert "forest_predict_gpu" in blocks["_rf_predict_gpu_parallel"], "the helper moved"
+    assert "core/forest_inference.mojo" in syms["forest_predict_gpu"]
+
+
+def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
+    """THE CONTROL THE THREE FIXES ABOVE MUST NOT BREAK. Widening a walk is
+    how a map goes back to answering every lane, so the files whose narrow
+    answers were measured when the per-export rule landed are pinned here.
+    `core/forest_host_predict.mojo` is 15 rather than its old 7 on purpose:
+    `rf_predict_proba` routes to it and the rf lanes were missing."""
+    rev = lane_select.reverse_map()
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 20),
+                      ("core/gbdt_host_predict.mojo", 23),
+                      ("core/forest_host_predict.mojo", 15),
+                      ("core/forest_inference.mojo", 23),
+                      ("python/mojolearn/neural_inference.py", 21)):
+        got = len(rev.get(rel, set()))
+        assert got == want, f"{rel} answers {got} lanes, not {want}"
+    lanes = len(lane_select.all_lanes())
+    every = [rel for rel, seen in rev.items() if len(seen) == lanes]
+    assert len(every) <= 41, \
+        f"{len(every)} files now select every lane, against 41 when the per-export rule landed"
