@@ -616,7 +616,10 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert host_surface.main(["--wheel-notes"]) == 0
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
-    assert "spectral:" in capsys.readouterr().out
+    # lane/saved-model-reference-gaps (2026-09-16) recorded spectral, dbscan
+    # and agglomerative and declared them, which left kmeans: the one owed
+    # entry that waits on a serialization format rather than on a box.
+    assert "kmeans:" in capsys.readouterr().out
 
 
 def _lane_revisions():

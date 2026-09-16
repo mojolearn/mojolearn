@@ -1185,6 +1185,10 @@ FAMILIES = (
             "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted",
+            # lane/saved-model-reference-gaps (2026-09-16): DBSCAN.predict and
+            # AgglomerativeClustering.predict from a saved model, both through
+            # `labeled_reference_predict` on this binding (DEVIATION 2740).
+            "dbscan", "agglomerative",
         ),
         forest_kinds=(),
         classes=(
@@ -1251,7 +1255,11 @@ FAMILIES = (
         # umap-pca, 2026-09-15). Its answer depends on the query batch by the
         # transform's contract, so the claim is the GPU's bytes for the same
         # batch; `inference_display` says so in the README sentence.
-        inference_lanes=("umap",),
+        # SpectralClustering.predict joins it (lane/saved-model-reference-gaps,
+        # 2026-09-16, DEVIATION 2860): the Nystrom extension from a saved
+        # `prediction_data=True` fit, through `spectral_predict` on this
+        # binding, for both affinities the estimator accepts.
+        inference_lanes=("umap", "spectral", "spectral-precomputed"),
         inference_display="UMAP transform of a saved embedding (the GPU's bytes for the same query batch; a row's embedding depends on the batch it is asked in)",
         forest_kinds=(),
         classes=(
@@ -2487,22 +2495,14 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: reference. Every entry here is therefore waiting on ONE thing, a GPU
 #: recording, not on code. They are listed so the gap is in the file rather
 #: than only in the reader's head.
+#:
+#: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
+#: entries that were waiting only on a recording. `dbscan`, `agglomerative`,
+#: `spectral` and `spectral-precomputed` are declared inference lanes now,
+#: recorded under bench/results/classical_host/. What is left is the one entry
+#: that is NOT waiting on a box: KMeans has no `save`, so there is no file for
+#: a recording to be about.
 SAVED_MODEL_INFERENCE_OWED = {
-    "dbscan": "DBSCAN.predict shipped with lane/inference-transductive-predict (DEVIATION 2740) "
-              "and mojolearn-dbscan-1 is in _classical_host._FORMATS; the GPU recording under "
-              "bench/results/classical_host/ is owed.",
-    "agglomerative": "AgglomerativeClustering.predict shipped with the same lane and "
-                     "mojolearn-agglomerative-1 is dispatched; the GPU recording is owed.",
-    "spectral": "SpectralClustering.predict shipped with lane/spectral-predict (DEVIATION 2860, "
-                "docs/lanes/DESIGN_spectral_predict_2026-09-15.md) and mojolearn-spectral-1 is "
-                "dispatched; the GPU recording is owed. Training-row agreement is measured, not "
-                "promised (0.9874), which is a property of the Nystrom extension, not a defect. "
-                "NOTE: this lane was shrunk from 2000 rows to 512 by the fixture shrink "
-                "(e2bb9e541), so the recording is owed AT THE NEW SIZE and any cell taken before "
-                "that commit is superseded.",
-    "spectral-precomputed": "The same predict on a precomputed affinity, the same saved "
-                            "mojolearn-spectral-1 file, the caller passing the (n_new, n_train) "
-                            "affinity instead of the fit's k-NN graph; the GPU recording is owed.",
     "kmeans": "KMeans.predict shipped with lane/kmeans-predict; the class has no `save`, so the "
               "saved-model route needs a serialization format before a recording can be made.",
 }
