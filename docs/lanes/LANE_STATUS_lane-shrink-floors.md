@@ -155,6 +155,37 @@ to be regenerated anyway. Deferring would have cost a whole re-record. This is
 the same reasoning applied to the UMAP fixes, and it is written here so it can
 be reversed if the release plan changes.
 
+### 2d. THE REFACTOR MOVED NOTHING ELSE, checked rather than argued
+
+Thirteen lanes had a fixture size rewritten from a literal into a floored
+local (`X[:1500]` became `rows = 1500; X[:rows]`). Eleven of those are meant
+to be a RENAME. Reading the diff and declaring it obvious is a check that
+cannot fail, so it was measured two ways, both CPU only and both derived from
+the two sources rather than typed out.
+
+**Every size site in the file, both sources, resolved the way the gate
+resolves it** (`eq_sites.py`): the before source through literals, this branch
+through its floored locals, across all 158 lanes and 146 sites.
+
+```
+  byte-lm                          steps      before [1]      after [2]      MOVED  ok
+  samba-untied-dropout-accum       steps      before [1]      after [3]      MOVED  ok
+  samba-untied-dropout-accum       batch      before [32]     after [96]     MOVED  ok
+  ... 143 more sites, all `same`
+ok: only the two reversals moved a number
+```
+
+(`samba-untied-dropout-accum batch` reads 96 after because the site is
+`_ids(X, steps * batch, 17)`, three steps of 32 rows; the floored local is
+still 32, which is what the floor holds.)
+
+**And the arrays those sites build are byte-identical** (`eq.py`), on three
+fixtures rather than one, `base`, `ties` and `odd`: the gbdt row slices, both
+hdbscan slices, spectral, holtwinters, both mamba2 slabs, samba's windows,
+byte-lm's one-step ids and the tokenizer's 4096 bytes all hash the same on
+both sources, while the two reversals' ids are DIFFERENT and of the expected
+new shape. Neither check needs a binding, so neither is a GPU cost.
+
 ## 3. THE FLOOR MECHANISM
 
 ### 3a. What went wrong, exactly
