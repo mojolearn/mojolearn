@@ -113,8 +113,8 @@ numbers in the table above, are this one coupling. The counter is
 and `row` is a position in the request, not a property of the query.
 
 **2. The batch maximum edge weight (`:141`, used at `:147`). LIVE ALWAYS, at
-milli-unit size here.** At nsr=0, `SOLO` moves 7 of 8 rows by `3e-4` to
-`5e-3`. The eighth is query 2, bitwise unchanged, and the reason is exact:
+milli-unit size here.** At nsr=0, `SOLO` moves 7 of 8 rows, by `2.8e-4` (query 6
+component 1) to `5.4e-3` (query 7 component 0). The eighth is query 2, bitwise unchanged, and the reason is exact:
 `solo2` reports `max_weight_bits 1061399533`, the same bits as the full
 batch. Query 2 IS the batch argmax, so it is the one row for which
 `weights[edge] / maximum` does not move. That is positive attribution, not
