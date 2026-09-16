@@ -168,7 +168,11 @@ def test_packaged_harness_import_has_no_tools_dependency(tmp_path):
 
 def test_chunking_does_not_bypass_release_guard(monkeypatch, tmp_path):
     import identity_iterate as runner
-    selection = dict(lanes=[f"lane{i}" for i in range(30)], fallback=False, reasons={})
+    import lane_applicability
+    lanes = [n for n, scope in lane_applicability.scopes().items()
+             if scope.applicable("apple-metal")[0]][:30]
+    assert len(lanes) == 30
+    selection = dict(lanes=lanes, fallback=False, reasons={})
     monkeypatch.setattr(runner, "plan", lambda *args: selection)
     seen = []
     def guard(lanes, host):

@@ -117,3 +117,30 @@ def test_cpu_staging_excludes_gpu_binaries_and_rejects_contamination(tmp_path):
         iterate.cpu_package(tmp_path / "out", host, source)
     with pytest.raises(ValueError, match="no CPU host bindings"):
         iterate.cpu_package(tmp_path / "other", tmp_path / "missing", source)
+
+
+def test_inapplicable_cpu_lane_refuses_before_staging_or_running(monkeypatch, tmp_path, capsys):
+    import json
+    monkeypatch.setattr(iterate, "cpu_package", lambda *a: pytest.fail("staged inapplicable job"))
+    monkeypatch.setattr(iterate, "run_job", lambda *a: pytest.fail("ran inapplicable job"))
+    iterate.main(["--lane", "par-forest", "--plan"])
+    assert "par-forest" in json.loads(capsys.readouterr().out)["inapplicable"]
+    with pytest.raises(SystemExit):
+        iterate.main(["--lane", "par-forest", "--out", str(tmp_path / "out")])
+    assert not (tmp_path / "out").exists()
+
+
+def test_all_does_not_schedule_inapplicable_batch_job(capsys):
+    import json
+    name = next(n for n in ib.LANES if isinstance(ib.BATCH.get(n), str) and n not in ib.RLPAIR)
+    iterate.main(["--lane", name, "--probe-group", "all", "--plan"])
+    assert [j["group"] for j in json.loads(capsys.readouterr().out)["jobs"]] == ["core"]
+    with pytest.raises(SystemExit):
+        iterate.main(["--lane", name, "--probe-group", "batch", "--plan"])
+
+
+@pytest.mark.parametrize("flag", ["--timeout", "--wait-timeout"])
+@pytest.mark.parametrize("value", ["nan", "inf", "-inf"])
+def test_nonfinite_iteration_limits_refuse(flag, value):
+    with pytest.raises(SystemExit):
+        iterate.main(["--lane", "ridge", f"{flag}={value}", "--plan"])

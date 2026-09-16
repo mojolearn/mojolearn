@@ -41,8 +41,8 @@ protocols differ deliberately.
 
 The `core` group includes training and inference/save/reload. `batch` and
 `rlpair` each rerun that prerequisite, plus only their selected contract.
-`all` expands to separate jobs; undeclared rlpair probes are omitted from its
-plan, and requesting one explicitly refuses. Both fits and fixture sizes stay
+`all` expands to separate jobs; inapplicable batch and undeclared rlpair probes
+are omitted from its plan, and requesting one explicitly refuses. Both fits and fixture sizes stay
 unchanged. Skipped probes are recorded N/A with their skip reason.
 
 Changed-path selection is also supported by `test-identity-changed --base REF`.
@@ -116,3 +116,16 @@ claim a GPU kernel speedup or change floating-point arithmetic.
 Do not lower fixture floors to force a short run. The shrink-blindness audit
 showed why a single training step can hide state/copy and scheduler defects.
 `tools/fixture_floors.py` remains the authority for those floors.
+
+## Applicability preflight
+
+CPU and Metal iteration plans include an `inapplicable` map derived by
+`lane_applicability.py`. Execution refuses those selections before staging a
+package or acquiring a lease: for example, multi-device driver claims cannot
+be tested on the CPU-only route, and a CPU-only lane does not test Metal.
+No rejected lane is silently counted as a pass. `--mode run` leaves backend
+selection to the package and does not infer a column for this preflight.
+
+Batch groups require a callable batch probe. A declared `n/a` batch contract
+no longer creates an extra two-fit job under `--probe-group all`.
+Timeouts must be finite; NaN and infinity are rejected before scheduling.
