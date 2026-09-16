@@ -366,6 +366,42 @@ is recorded a second time on AMD. Two recordings separate a reproducible instabi
 one-off, and the rerun is the evidence either way. A cell that moves is not eligible for the
 shipped record until that question is settled.
 
+### THE RULE FIRED: the fetched column reads MOVED, and the pack is STOPPED
+
+AMD leg 3's authoritative column (fetched, VM deleted and verified gone, evidence in
+`records/amd-leg-3/`) carries the cell as **MOVED**, with the same two hashes the mid-run
+snapshot showed:
+
+    rf-score-weighted/wide   fit1 49be8ea935a47640   fit2 50ce4a9f62cddf8e
+
+and the same clean split, all four `clf_*` parts byte identical across the fits, all four
+`reg_*` parts different. It is the **only** MOVED cell in that column: 882 cells over 98 lanes,
+881 STABLE. So the snapshot was not the artifact, and rule 2 applies.
+
+**Stopped, and staying stopped until Andrew decides:** no `verify --all --emit-reference`, no
+Linux pack, no macOS repack. Column work continues (it is how the second recording is obtained),
+pack work does not.
+
+Every hash anyone holds for this cell, which is the whole table because **no committed record on
+main carries this lane at all** (a `git grep` for `rf-score-weighted/` returns 0 on both
+`release/0.8.6` and `origin/main`, while the same command shape returns 26 for the control lane
+`kmeans-sqrt/wide`, so the zero is real):
+
+| column | verdict | hashes |
+|---|---|---|
+| nvidia-h100-sm_90a (complete, 192 lanes) | STABLE | 49be8ea935a47640, 49be8ea935a47640 |
+| cpu-amd-epyc-7713 (159 lanes) | STABLE | 49be8ea935a47640, 49be8ea935a47640 |
+| amd-mi300x-gfx942 (leg 3) | **MOVED** | 49be8ea935a47640, **50ce4a9f62cddf8e** |
+| apple-m4 | not yet recorded (the lane is in chunk 02) | |
+
+**The column that stands ALONE is the AMD one, and only on its second fit.** Its first fit is
+the value NVIDIA and the CPU column both produce; `50ce4a9f62cddf8e` appears nowhere else. This
+is not a vendor disagreeing with other vendors, it is one machine disagreeing with itself, which
+is why it blocks: the cell is not reproducible where it was recorded.
+
+Leg 4 records the lane a second time (it must be left OUT of the skip list). Two recordings say
+whether the instability is reproducible or was a single event.
+
 ### The decision rule, fixed in advance (coordinator, 2026-09-15 evening)
 
 Written down before the evidence arrives so it is not decided under time pressure. The trigger
