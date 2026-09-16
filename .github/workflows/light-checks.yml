@@ -30,6 +30,8 @@ jobs:
         run: python3 packaging/wheel_ci.py pins .
       - name: Every packaged module is reachable by import
         run: python3 packaging/wheel_ci.py inventory python/mojolearn
+      - name: No source pattern that is always a bug
+        run: python3 tools/source_hygiene_check.py
       - name: Every workflow parses, and only this one starts by itself
         run: |
           python3 -m venv /tmp/yaml-venv
