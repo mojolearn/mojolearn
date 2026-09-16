@@ -47,6 +47,37 @@ The 23 refusals are all the same exception, all in the DBSCAN family:
     HIP call failed: hipErrorOutOfMemory (out of memory)
       density.py:325  dbscan_fit_core
 
+### CORRECTED 2026-09-16 BY lane/amd-dbscan-oom: THE CARD WAS NOT 192 GB
+
+Everything below this heading was written before anyone read the card's free
+memory, and two of its sentences are wrong. They are left standing, because a
+correction that deletes what it supersedes leaves nothing to check it against.
+
+**The refusals are NOT ordered.** This file's own JSON says `dbscan` fitted
+`base`, `ties` and `hashed`, refused `wide`, `denormal` and `denormal_ftz`,
+then FITTED `dupes`, then refused `odd` and `negative`, and that eighteen
+`agglomerative` and `spectral` cells ran clean afterwards. "Every fit after
+them raised" is not what happened, and a fit that succeeds between three that
+failed is not an exhausted card.
+
+**The card was not 192 GB free.** A second RunPod MI300X (pod o3paueazuvo87t,
+gfx942) reproduced the same `hipErrorOutOfMemory`, and its card had **360.4 MiB
+of 196592.0 MiB free before `import mojolearn` ran**, with 178.6 GiB held by a
+kfd pid from outside the container. Across our first fit the card's used memory
+FELL by 12031.2 MiB, which a fit of ours cannot do. The pod sees eight cards
+through `/sys/class/drm` and owns one of them, `card33`, not `card0`.
+
+**It is not an AMD path property.** A dedicated DigitalOcean MI325X (gfx942,
+the same architecture) ran the same three DBSCAN lanes at `cells=27 stable=27
+moved=0 refused=0`, with device memory flat at a 1.5 GiB plateau across 54
+fits in one process and a `wide` fit in 0.44 s against 31.21 s here.
+
+`odd` refusing while `base` succeeded was never explainable by the data: they
+are the same shape and within 3% of the same edge count. Arrival time is the
+only thing that separated them, and what was arriving was a neighbour's
+allocation. The full reading is
+`docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md`.
+
 ### What is established, and what is not
 
 ESTABLISHED, from `logs/identity-predict.log` and `logs/record-predict.log`:

@@ -232,12 +232,19 @@ CLASSICAL_RECORDED = (
     # MI300X (gfx942): `gate verdict IDENTICAL (54 fixtures, exit 0)` and the
     # predict-define sabotage arm caught on all 54 under --every-fixture. The
     # AMD PREDICT recording from the same box is 3 of 36 and is deliberately
-    # NOT listed here: its `record` died on the fourth fixture with
-    # hipErrorOutOfMemory in dbscan_fit_core after four DBSCAN fits had
-    # succeeded, so it is kept, named partial, at
-    # bench/results/classical_host/2026-09-16-amd-predict-partial with the
-    # finding written up in
-    # bench/results/identity_break/2026-09-16_amd-mi300x/README.md.
+    # NOT listed here: its `record` died with hipErrorOutOfMemory in
+    # dbscan_fit_core, so it is kept, named partial, at
+    # bench/results/classical_host/2026-09-16-amd-predict-partial.
+    #
+    # WHY IT DIED, ANSWERED BY lane/amd-dbscan-oom THE SAME DAY: not a leak
+    # and not the code. A second RunPod MI300X reproduced the same refusal,
+    # and its card had 360.4 MiB of 196592.0 MiB FREE before `import
+    # mojolearn` ran, with 178.6 GiB held by a kfd process outside the
+    # container. A dedicated DigitalOcean MI325X ran the same three DBSCAN
+    # lanes at `cells=27 stable=27 moved=0 refused=0` with device memory flat
+    # at a 1.5 GiB plateau. The AMD predict column is owed on a card that is
+    # ours, and there is nothing to fix first. See
+    # docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md.
     "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 
@@ -2418,9 +2425,15 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: rule predicted: NINE lost every cell, because each record that carried
 #: them predates the fixture shrink, so what they owe is a RECORD and their
 #: reason is now `no reference`; FOUR kept cells at the current revision and
-#: owe only the watched run, so their reason is now `unwatched`. No lane is
-#: `stale reference` today. The reason stays in the vocabulary because the
-#: next fixture change recreates it.
+#: owe only the watched run, so their reason is now `unwatched`.
+#:
+#: AND THE REASON CAME BACK THE SAME DAY, which is the point of keeping it in
+#: the vocabulary. `samba-untied-dropout-accum` (lane/shrink-floors) and then
+#: four more from lane/dead-arms are `stale reference` again: `mamba2-dtlimit`,
+#: whose dt clamp moved, and `mamba3`, `transformer` and `transformer-window`,
+#: whose two same-shape norm weights stopped being one tensor. The last three
+#: were PUBLIC that morning. A fixture change recreates this reason on the
+#: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
@@ -2440,7 +2453,22 @@ PUBLIC_PENDING_LANES = {
     "gbdt-pair-logit": "no reference",
     "hdbscan": "no reference",
     "hdbscan-leaf": "no reference",
-    "mamba2-dtlimit": "unwatched",
+    # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
+    # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
+    # harness no longer produces. `unwatched` would be the wrong reason and
+    # the test below says so by name.
+    "mamba2-dtlimit": "stale reference",
+    # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
+    # two same-shape RMSNorm weights were both a vector of ones, so they were
+    # the SAME TENSOR and exchanging them on the way in was the identity
+    # function; `_block_weights(near_one=...)` gives each its own vector,
+    # which moves each cell once. The shipped table carries the all-ones
+    # bytes (63de4bf6b9f8262a, 295d4e62d4c78b14, 49ffb2316f238e6d on `base`),
+    # so leaving them public would have a user read DIVERGENT for something
+    # that is not their machine. They come back at the next release record.
+    "mamba3": "stale reference",
+    "transformer": "stale reference",
+    "transformer-window": "stale reference",
     "samba": "unwatched",
     # lane/shrink-floors (2026-09-16) put this lane in identity_break's
     # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash

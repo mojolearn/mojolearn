@@ -106,9 +106,32 @@ The merge is where a sharded run can lie, so it is checked three ways:
 
 ## Tier 3, PER RELEASE ONLY: the three GPU vendor columns
 
-One AMD, one NVIDIA, one Apple column, once, at a PyPI release. Never
-routinely. Between releases, write what needs a GPU as OWED to the next
-release record. This rule is not new and is not this lane's to relax.
+NVIDIA and AMD are RENTED, run in parallel and cost cents: four GPU columns
+came to about $0.42 on 2026-09-16 and a whole day of rentals to about $3. Send
+cross-vendor questions there.
+
+**APPLE IS NOT TAKEN BY A LANE AT ALL** (Andrew, 2026-09-16). Not a column, not
+"my lane's own cells". The Apple column is recorded ONCE, at the release record.
+
+Why this had to be said twice. This document already said Apple was per-release,
+and `identity_break.refuse_routine_apple_column` still told a lane to pass
+`--lanes` under a limit and take its own cells, so five lanes did exactly that
+in one afternoon. Each was defensible alone. Together they made the one Mac the
+serial bottleneck for every lane, because Metal runs ONE JOB AT A TIME and
+cannot be rented or parallelized.
+
+The substitute is not weaker. The CPU host route IS the device kernel restated
+as a serial host loop, so it returns the same bits, and it is about 600x
+cheaper: one decode step measured 0.37 ms on the CPU host route against
+225.71 ms on Metal, and the CPU runs in parallel while Metal queues.
+
+**The one exception, kept narrow:** a Metal SMOKE check, "does my change
+compile and RUN on Apple at all", is allowed at one lane through the slot
+helper. No cross-compile can answer it. On 2026-09-16
+`fence[ordering = Ordering.ACQUIRE]()` generated valid AIR and then failed at
+PIPELINE CREATION on Apple, breaking random forests, extratrees and the fused
+kNN on main for 37 minutes, while every `--emit asm` check passed throughout.
+That is the check worth one Metal acquisition. An identity column is not.
 
 ## What Metal is for
 
