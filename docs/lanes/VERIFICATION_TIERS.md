@@ -140,7 +140,28 @@ It is conservative in three specific places, and says so each time:
 * `tools/identity_break.py` selects every lane unless the diff touches only
   lane function bodies, in which case it selects exactly those lanes.
 
-Only prose and evidence paths select nothing.
+Two more kinds of path select nothing, and each says which it is:
+
+* a Python file whose code is IDENTICAL to the ref once docstrings are
+  stripped. Comments never reach an AST and a dump without attributes has no
+  line numbers, so the comparison is of code alone. Only the first statement
+  of a module, class or function is dropped, so an edited error message is a
+  code change and is attributed normally. There is no parser for Mojo here, so
+  a Mojo comment edit still falls back. The exception is a file whose BYTES are
+  hashed while the library runs, such as the six sources
+  `python/mojolearn/_byte_lm_impl.py` publishes under `source_sha256`; those
+  are found by looking for the modules that hash a file, and are never exempt.
+* `tools/identity_break.py` when the diff only ADDS lanes. Additive is checked,
+  not assumed: every existing top-level statement must be present unchanged and
+  in order, and each addition must be an undecorated `def` with a new name,
+  constant defaults and no mention in any existing lane's code.
+
+Both of these WIDEN what returns a narrow answer, so both are tested from the
+failing side first: seven code-change pairs must compare different before six
+docstring pairs may compare equal, and eight harness edits must answer every
+lane. See `tools/test_lane_select.py`.
+
+Only prose and evidence paths select nothing unconditionally.
 
 ```sh
 python3 tools/lane_select.py --lanes-for-paths <path>     # what does this touch

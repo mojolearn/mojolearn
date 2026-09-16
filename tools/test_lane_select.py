@@ -334,6 +334,166 @@ def test_shard_count_never_exceeds_the_lane_count():
     assert sorted(sum(groups, [])) == ["ols", "ridge"]
 
 
+#: Pairs that differ in DOCSTRINGS AND COMMENTS ONLY. `code_dump` must call
+#: these equal.
+SAME_CODE = (
+    ("a comment", '# one\nx = 1\n', '# two\nx = 1\n'),
+    ("a module docstring", '"""old."""\nx = 1\n', '"""new, and longer."""\nx = 1\n'),
+    ("a docstring added", 'def f():\n    return 1\n', 'def f():\n    """added."""\n    return 1\n'),
+    ("a class docstring", 'class C:\n    """a."""\n    x = 1\n', 'class C:\n    """b."""\n    x = 1\n'),
+    ("blank lines", 'x = 1\ny = 2\n', 'x = 1\n\n\ny = 2\n'),
+    ("a docstring that was the whole body",
+     'def f():\n    """only this."""\n', 'def f():\n    pass\n'),
+)
+
+#: Pairs that differ in CODE. `code_dump` must call these different. This is
+#: the half that matters: a stripper that is subtly too greedy turns a real
+#: change into "nothing affected", which is far worse than an extra sweep.
+DIFFERENT_CODE = (
+    ("a string that is not a docstring",
+     'def f():\n    """d."""\n    raise ValueError("old message")\n',
+     'def f():\n    """d."""\n    raise ValueError("new message")\n'),
+    ("a constant", 'TOL = 1\n', 'TOL = 2\n'),
+    ("an operator", 'def f(a, b):\n    return a + b\n', 'def f(a, b):\n    return a - b\n'),
+    ("a docstring AND an operator",
+     'def f(a, b):\n    """old."""\n    return a + b\n',
+     'def f(a, b):\n    """new."""\n    return a - b\n'),
+    ("a string moved out of the docstring position",
+     'def f():\n    """d."""\n    x = 1\n', 'def f():\n    x = 1\n    """d."""\n'),
+    ("a bare string used as a value",
+     'MESSAGE = "old"\n', 'MESSAGE = "new"\n'),
+    ("an f-string opening a function, which is not a docstring",
+     'def f(n):\n    f"{n}"\n    return n\n', 'def f(n):\n    f"{n}!"\n    return n\n'),
+)
+
+
+def test_docstring_stripping_keeps_every_real_change():
+    """BOTH ARMS, and the different-code arm first. A comparison that called
+    everything equal would satisfy the same-code arm on its own."""
+    for label, old, new in DIFFERENT_CODE:
+        a, b = lane_select.code_dump(old), lane_select.code_dump(new)
+        assert a is not None and b is not None, f"{label}: a fixture does not parse"
+        assert a != b, f"{label}: a CODE change was called docstring-only"
+    for label, old, new in SAME_CODE:
+        a, b = lane_select.code_dump(old), lane_select.code_dump(new)
+        assert a is not None and b is not None, f"{label}: a fixture does not parse"
+        assert a == b, f"{label}: a docstring or comment change was called a code change"
+    assert lane_select.code_dump("def f(:\n") is None, "a file that does not parse must not compare"
+
+
+def test_a_source_that_is_hashed_at_runtime_is_never_docstring_only():
+    """`_byte_lm_impl.py` publishes `source_sha256` over six named sources and
+    over itself, so a COMMENT in one of them moves a recorded value. Those
+    files are derived from the modules that hash a file, not listed."""
+    hashed = lane_select.source_hashed_files()
+    assert "python/mojolearn/_byte_lm_impl.py" in hashed, "the module that hashes was not found"
+    for rel in ("python/mojolearn/language_model.py", "bindings/_mojolearn_byte_lm.mojo",
+                "training/byte_lm.mojo", "python/mojolearn/_byte_lm_config.py"):
+        assert rel in hashed, f"{rel} is hashed by _binding_metadata but is not in the derived set"
+    for rel in hashed:
+        assert not lane_select.docstring_only("HEAD", rel), \
+            f"{rel} is hashed at run time and must never be exempt"
+    # and a module that hashes ARRAYS, not files, is not swept in
+    assert "python/mojolearn/model_selection.py" not in hashed
+
+
+#: A miniature `identity_break.py`: a constant, a helper, two lanes, and a
+#: registration loop, in that order.
+HARNESS_BASE = '''TOL = 1
+
+
+def helper(x):
+    return x + TOL
+
+
+@lane("alpha")
+def _alpha():
+    return helper(1)
+
+
+@lane("beta")
+def _beta():
+    return helper(2)
+
+
+for name in ("gamma-1", "gamma-2"):
+    lane(name)(lambda: helper(3))
+'''
+
+NEW_LANE_IN_THE_MIDDLE = HARNESS_BASE.replace(
+    '@lane("beta")', '@lane("delta")\ndef _delta():\n    return helper(9)\n\n\n@lane("beta")')
+
+#: Each must return None, meaning every lane. Ordered failure first.
+HARNESS_MUST_FALL_BACK = (
+    ("the helper changed", HARNESS_BASE.replace("return x + TOL", "return x - TOL")),
+    ("a constant changed", HARNESS_BASE.replace("TOL = 1", "TOL = 2")),
+    ("the registration loop changed", HARNESS_BASE.replace('"gamma-2"', '"gamma-3"')),
+    ("a helper was deleted", HARNESS_BASE.replace("def helper(x):\n    return x + TOL", "pass")),
+    ("a new lane AND a new module-level assignment",
+     NEW_LANE_IN_THE_MIDDLE.replace("TOL = 1", "TOL = 1\nEXTRA = 2")),
+    ("a new lane AND a new helper that shadows a name an existing lane calls",
+     NEW_LANE_IN_THE_MIDDLE.replace("TOL = 1", "TOL = 1\n\n\ndef helper(x):\n    return 0")),
+    ("a new lane AND a new class, whose body runs when it is defined",
+     NEW_LANE_IN_THE_MIDDLE.replace("TOL = 1", "TOL = 1\n\n\nclass Extra:\n    v = 1")),
+    ("a new lane AND a new helper with a non-constant default",
+     NEW_LANE_IN_THE_MIDDLE.replace(
+         "TOL = 1", "TOL = 1\n\n\ndef fresh(x=helper(1)):\n    return x")),
+)
+
+
+def _harness_answer(new_text, old_text=HARNESS_BASE):
+    """`harness_lanes` over two texts, with no file and no commit involved."""
+    ref, path = "<fake ref>", "<fake harness>"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = old_text
+    lane_select._read.cache[path] = new_text
+    try:
+        return lane_select.harness_lanes(ref, path)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache.pop(path, None)
+
+
+def test_the_harness_falls_back_on_anything_that_is_not_a_lane_body():
+    """THE ARM THAT MUST FAIL, run first. Every one of these reaches beyond
+    the lane it looks like it edits, so every one must answer every lane."""
+    for label, text in HARNESS_MUST_FALL_BACK:
+        assert _harness_answer(text) is None, \
+            f"{label}: the harness narrowed a change that can reach any lane"
+
+
+def test_an_added_lane_selects_only_that_lane():
+    """The defect lane/data-ordering-determinism hit on 2026-09-16: ONE
+    additive hunk, no existing lane body touched, and the selector answered
+    212 of 212. The old spelling keyed a bare top-level statement by its LINE
+    NUMBER, so inserting a lane renumbered everything below it and every key
+    changed. The keys are AST dumps now, which have no positions."""
+    assert _harness_answer(NEW_LANE_IN_THE_MIDDLE) == ["delta"]
+
+    # the same insertion with a helper that nothing existing names
+    with_helper = NEW_LANE_IN_THE_MIDDLE.replace(
+        "TOL = 1", "TOL = 1\n\n\ndef fresh(x):\n    return x")
+    assert _harness_answer(with_helper) == ["delta"]
+
+    # one existing body edited
+    assert _harness_answer(HARNESS_BASE.replace("return helper(1)", "return helper(11)")) == ["alpha"]
+
+    # a comment and a docstring in the harness reach no lane at all
+    commented = HARNESS_BASE.replace("def _alpha():", 'def _alpha():\n    """what alpha does."""')
+    assert _harness_answer("# a new comment\n" + commented) == []
+
+
+def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
+    """A narrow answer has to name what made it narrow. These two rules are
+    the only ones that may call a non-prose path inert, and each prints its
+    own sentence."""
+    ref = "HEAD"
+    sel = lane_select.select(["tools/identity_break.py"], ref=ref)
+    assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
+        or "docstrings and comments only" in sel["reasons"]["tools/identity_break.py"], \
+        f"unexpected reason: {sel['reasons']['tools/identity_break.py']}"
+    assert not sel["fallback"], "the harness against its own HEAD should not fall back"
+
+
 def _main():
     failures = 0
     for name, fn in sorted(globals().items()):
