@@ -215,7 +215,20 @@ at two steps and at three. The one-step cells still see the optimizer.
 does not move the `hdbscan` or `hdbscan-leaf` cell, because both lanes fit
 `X[:n, :4]` by construction. That is the slice, not a blindness.
 
-## 5. Dead arms the shrink did NOT cause, all live today
+## 5. Dead arms the shrink did NOT cause
+
+**5a, 5b and 5d ARE FIXED**, on `lane/dead-arms`, 2026-09-16. Each mechanism
+below was reproduced independently before anything was changed, each fix was
+watched to fire with the differing values printed, and the reference cost is
+written down. `docs/lanes/LANE_STATUS_dead-arms.md` has the measurements. Two
+corrections to what is below: 5b reaches `transformer-window` as well, which
+carries the same pair through the same helper, and 5d is worse than one-sided,
+because `dt_limit=(0.1, 0.1)`, a clamp returning a CONSTANT, read IDENTICAL to
+production at both lengths. 5c and 5f are not fixed and stand as written.
+Sections 2 and 3 were applied the same day by `lane/shrink-floors`, which
+took `byte-lm` back to two steps and `samba-untied-dropout-accum` back to
+three.
+
 
 These are not shrink regressions. They were measured in the course of the
 audit, they are the same defect class, and each one is a cell that cannot fail
@@ -346,8 +359,11 @@ machinery should know how thin that coverage is.
   (`split <tree> <level> <feature> <bin>` and Lossguide's
   `node <tree> <idx> <feature> <bin> <l> <r>`), which is archive inspection,
   not a second evaluator.
-- Nothing here was merged or pushed, and no reversal proposed in sections 2, 3
-  or 5 has been applied.
+- Nothing here was merged or pushed at the time of writing, and no reversal
+  proposed in sections 2, 3 or 5 had been applied. Sections 5a, 5b and 5d were
+  applied afterwards on `lane/dead-arms` (see the note at the head of section
+  5); and sections 2 and 3 by `lane/shrink-floors`. 5c and 5f are still
+  open.
 
 ## Rules this lane ran under
 
