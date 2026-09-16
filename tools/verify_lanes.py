@@ -19,6 +19,10 @@ The lane set always comes from `tools/lane_select.py`, which reads
 
 THREE PROPERTIES, IN THE ORDER THEY BITE.
 
+  0. A REFUSED LANE IS NOT A CHECKED LANE. A shard can exit 0, write its part
+     and merge cleanly with every cell reading REFUSED, which is how a stale
+     host binding set produced `verdict COMPLETE` in 3 seconds on 2026-09-16.
+     COMPLETE means every selected lane carries a cell that RAN.
   1. A SHARD THAT FAILS IS NOT DROPPED. A shard that exits non-zero, or whose
      part file never appeared, makes the run INCOMPLETE. The merged column is
      then written as `<out>/column.incomplete.json` and the exit code is 1.
@@ -179,10 +183,23 @@ def _verdict(lanes, parts, codes, out_dir, elapsed):
             failures.append(f"identity_break --merge exited {res.returncode}")
     else:
         failures.append("no part file was written at all")
-    covered = set()
+    covered, verdicts = set(), {}
     if os.path.exists(merged):
         with open(merged) as fh:
-            covered = {k.split("/")[0] for k in (json.load(fh).get("cells") or {})}
+            cells = json.load(fh).get("cells") or {}
+        covered = {k.split("/")[0] for k in cells}
+        for key, cell in cells.items():
+            verdicts.setdefault(key.split("/")[0], set()).add(cell.get("verdict"))
+    # A CELL THAT SAYS REFUSED IS NOT A CHECK. Measured 2026-09-16: one lane on
+    # a stale host binding set exited 0, wrote its part, merged, and printed
+    # `verdict COMPLETE` in 3 s with its only cell reading REFUSED. That is the
+    # `verify --all` failure this file was written against, reached through the
+    # one door it did not cover: every SHARD reported, so nothing looked wrong.
+    # COMPLETE now means every selected lane carries a cell that actually ran.
+    unchecked = sorted(n for n in lanes if n in verdicts and verdicts[n] <= {"REFUSED"})
+    if unchecked:
+        failures.append(f"{len(unchecked)} selected lane(s) REFUSED every cell, so they were not "
+                        f"checked at all: {unchecked[:8]}{' ...' if len(unchecked) > 8 else ''}")
     missing = [n for n in lanes if n not in covered]
     extra = sorted(covered - set(lanes))
     if missing:
@@ -190,13 +207,22 @@ def _verdict(lanes, parts, codes, out_dir, elapsed):
                         f"{' ...' if len(missing) > 8 else ''}")
     if extra:
         failures.append(f"cells for lanes that were not selected: {extra[:8]}")
-    print(f"\n# lanes selected {len(lanes)}, lanes with cells {len(covered)}, "
-          f"shards {len(parts)}, {elapsed:.0f} s")
+    ran = sum(1 for n in lanes if n in verdicts and verdicts[n] - {"REFUSED"})
+    print(f"\n# lanes selected {len(lanes)}, lanes with cells {len(covered)}, lanes actually "
+          f"checked {ran}, shards {len(parts)}, {elapsed:.0f} s")
     for f in failures:
         print(f"# FAIL: {f}")
+    if failures and merged.endswith("column.json") and os.path.exists(merged):
+        # The refusal check above can only run AFTER the merge, so the name is
+        # corrected here. `column.json` must never exist for an incomplete run.
+        incomplete = os.path.join(out_dir, "column.incomplete.json")
+        os.replace(merged, incomplete)
+        merged = incomplete
     print(f"# verdict {'COMPLETE' if not failures else 'INCOMPLETE'} -> {merged}")
     if failures:
-        print("# An incomplete run is NOT a pass. Rerun the shards that failed and merge again.")
+        print("# An incomplete run is NOT a pass. Rerun the shards that failed and merge again. "
+              "A REFUSED lane needs its host family built, or its own GPU column; it is not "
+              "evidence either way.")
     return 1 if failures else 0
 
 
