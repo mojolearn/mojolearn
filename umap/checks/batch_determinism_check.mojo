@@ -333,6 +333,27 @@ def _floor_arm() raises:
     var moved = _report_row(String("FLOOR"), 0, left, 0, right, 0)
     print("ARM FLOOR same maximum, different mean, moves the row:", moved)
 
+    # The floor arm's own fail-first. `sigma = max(sigma, 0.001 * mean)` binds
+    # only when the batch mean exceeds a thousand times the row's own sigma,
+    # so a companion far enough away must move the row, or this arm is a check
+    # that cannot fail and its null above means nothing.
+    var absurd = duplicate.copy()
+    for c in range(D):
+        absurd.append(Float32(3000.0))
+    var absurd_scalars = _scalars(training, absurd, 2)
+    print(
+        "FLOOR_SCALARS absurd rows 2 mean", absurd_scalars[0],
+        "max_weight_bits", bitcast[DType.uint32](absurd_scalars[1]),
+        "max_weight", absurd_scalars[1],
+    )
+    if bitcast[DType.uint32](absurd_scalars[1]) != bitcast[DType.uint32](near_scalars[1]):
+        raise Error("the floor control failed to hold the maximum edge weight constant")
+    var extreme = host_umap_transform(training, embedding, absurd, N_TRAIN, 2, D, params)
+    var control_moved = _report_row(String("FLOOR_CONTROL"), 0, left, 0, extreme, 0)
+    if not control_moved:
+        raise Error("the sigma floor moved nothing even at a thousandfold mean; this arm cannot fail")
+    print("ARM FLOOR_CONTROL the sigma floor does bind and does move the row:", control_moved)
+
 
 def main() raises:
     print("UMAP transform batch-determinism measurement, CPU host route")
