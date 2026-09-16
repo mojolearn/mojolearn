@@ -4121,8 +4121,9 @@ def _ksplit_run[
     var st = gemm_operand_strides(op, m, n, k)
     step_count_device_alloc()
     var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721: the wait between this allocation and the launch that
+    # consumes it is gone, same in-order argument as `identical_gemm`. The
+    # trailing wait before `_ = gws` stays, and has to.
     _ksplit_groups_launch[
         GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, SAB
     ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
@@ -6103,8 +6104,9 @@ def _kfold_run[
     var rg = _ksplit_resolve_leaves(group_leaves, p_count)
     step_count_device_alloc()
     var gws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721: the wait between this allocation and the launch that
+    # consumes it is gone, same in-order argument as `identical_gemm`. The
+    # trailing wait before `_ = gws` stays, and has to.
     _ksplit_groups_launch[
         GEMM_KSPLIT_RPT, GEMM_KSPLIT_CPT, TUNED_TC, GEMM_KSPLIT_KS, SAB
     ](ctx, gws, a, b, m, n, k, leaf, p_count, st, rg[0], rg[1])
@@ -6492,9 +6494,25 @@ def identical_gemm[allow_vendor: Bool = True](
     var nws = identical_gemm_workspace_max_floats(m, n, k)
     step_count_device_alloc()
     var ws = ctx.enqueue_create_buffer[DType.float32](nws)
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal, 2026-09-16). THE WAIT THAT USED TO
+    # SIT HERE IS GONE. It waited for an allocation that the very next
+    # submission on the SAME in-order context consumes, so it ordered
+    # nothing. The host does not touch `ws`, only the kernel does. This is
+    # the pattern `core/gram_splitk.mojo:1029-1030` and
+    # `gemm_identical._kpack_run` already ship: enqueue the workspace,
+    # enqueue the kernel that writes it, wait once at the end.
+    #
+    # THIS IS THE LARGEST SINGLE BLOCK OF WAITS ON THE STEP PATH. The byte
+    # LM census (docs/lanes/LAUNCH_BOUND_LANE_CENSUS.md 0.3) records 391
+    # GEMM launches and 782 GEMM waits per instrumented run, exactly 2.0
+    # per launch, and these two lines were both of them.
     identical_gemm_into[allow_vendor](ctx, c, a, b, ws, m, n, k, op)
+    # LOAD-BEARING, category (c) and NOT removable. `[[mojo-buffer-freed-
+    # at-last-use]]`: `_ = ws` below is `ws`'s last use, so the runtime is
+    # free to release it there. Without this wait the kernel that is still
+    # reading and writing `ws` reads freed memory. Section 5 of
+    # docs/lanes/LANE_STATUS_wait-removal.md removes this one on purpose and
+    # shows the identity fingerprints move.
     step_count_sync()
     ctx.synchronize()
     _ = ws

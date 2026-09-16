@@ -39,9 +39,11 @@ oracle builds ("NaN in" or "infinity in") can be built from a device
 result. It is the only download these helpers perform.
 
 `DeviceScanScratch` holds the partials buffer and its pinned host mirror
-so a step that runs ten scans allocates nothing per scan and waits twice
-per scan. The free nonfinite scan uses an owning host List and one wait;
-the free negative scan retains its pinned staging and four waits.
+so a step that runs ten scans allocates nothing per scan. DEVIATION 2721
+(2026-09-16) took every scan here down to ONE wait, the one that feeds the
+host fold, so the scratch now saves the two allocations and not a wait.
+The free functions keep the allocate-per-call form for callers that scan
+once.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
@@ -187,6 +189,16 @@ def device_first_nonfinite(
     var blocks = _scan_blocks(n)
     step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.int32](blocks)
+    # DEVIATION 2721 (lane/wait-removal, 2026-09-16). THREE WAITS REMOVED
+    # HERE, one after the allocation, one after the launch and one after
+    # the host allocation. `ctx` is ONE in-order context: the allocation,
+    # the kernel and the copy are submitted to it in program order and it
+    # runs them in that order, so none of those three waits ordered
+    # anything the queue was not already ordering. The ONLY host read in
+    # this function is `_fold_partials`, and the wait below the copy is
+    # the one that feeds it. The shape is `arima/impl/batched_arima.mojo`
+    # :194-196, which has shipped a host allocation followed straight by
+    # its copy and a single wait since before this file existed.
     step_count_launch()
     ctx.enqueue_function[nonfinite_partial_kernel](
         part.unsafe_ptr(),
@@ -195,20 +207,19 @@ def device_first_nonfinite(
         grid_dim=(blocks, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
-    # The owning host List and device partials survive the single fence.
-    # Same-stream kernel -> copy ordering needs no intermediate host waits.
-    var host = List[Int32](length=blocks, fill=NONFINITE_NONE)
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    # LOAD-BEARING, category (a). `_fold_partials` reads `host` on the
+    # host on the next line. Removing this one is the sabotage in
+    # docs/lanes/LANE_STATUS_wait-removal.md section 5.
     step_count_sync()
     ctx.synchronize()
-    var best = NONFINITE_NONE
-    for i in range(blocks):
-        if host[i] < best:
-            best = host[i]
+    var best = _fold_partials(host, blocks)
     _ = host^
     _ = part^
-    return -1 if best == NONFINITE_NONE else Int(best)
+    return best
 
 
 def device_first_negative(
@@ -223,8 +234,16 @@ def device_first_negative(
     var blocks = _scan_blocks(n)
     step_count_device_alloc()
     var part = ctx.enqueue_create_buffer[DType.int32](blocks)
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721 (lane/wait-removal, 2026-09-16). THREE WAITS REMOVED
+    # HERE, one after the allocation, one after the launch and one after
+    # the host allocation. `ctx` is ONE in-order context: the allocation,
+    # the kernel and the copy are submitted to it in program order and it
+    # runs them in that order, so none of those three waits ordered
+    # anything the queue was not already ordering. The ONLY host read in
+    # this function is `_fold_partials`, and the wait below the copy is
+    # the one that feeds it. The shape is `arima/impl/batched_arima.mojo`
+    # :194-196, which has shipped a host allocation followed straight by
+    # its copy and a single wait since before this file existed.
     step_count_launch()
     ctx.enqueue_function[negative_partial_kernel](
         part.unsafe_ptr(),
@@ -233,14 +252,13 @@ def device_first_negative(
         grid_dim=(blocks, 1, 1),
         block_dim=(SCAN_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.int32](blocks)
-    step_count_sync()
-    ctx.synchronize()
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
+    # LOAD-BEARING, category (a). `_fold_partials` reads `host` on the
+    # host on the next line. Removing this one is the sabotage in
+    # docs/lanes/LANE_STATUS_wait-removal.md section 5.
     step_count_sync()
     ctx.synchronize()
     var best = _fold_partials(host, blocks)
@@ -261,10 +279,11 @@ def device_classify_nonfinite(
     var one = buf.create_sub_buffer[DType.float32](idx, 1)
     step_count_host_alloc()
     var host = ctx.enqueue_create_host_buffer[DType.float32](1)
-    step_count_sync()
-    ctx.synchronize()
+    # DEVIATION 2721. ONE WAIT REMOVED, the one between the host
+    # allocation and its copy; same in-order argument as above.
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=one)
+    # LOAD-BEARING, category (a): the host loads `host[0]` next.
     step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
@@ -277,9 +296,9 @@ def device_classify_nonfinite(
 struct DeviceScanScratch(Movable):
     """The partials buffer and its pinned host mirror, allocated ONCE, for
     a caller that scans many buffers per step (design section 0: ten scans
-    per LM step). Each scan is one launch, one 2 KB copy and two waits.
-    The answers are the free functions' answers: same kernels, same
-    geometry, same fold.
+    per LM step). Each scan is one launch, one 2 KB copy and ONE wait
+    (DEVIATION 2721). The answers are the free functions' answers: same
+    kernels, same geometry, same fold.
 
     `[[mojo-buffer-freed-at-last-use]]`: both buffers are fields, alive as
     long as the scratch is, so nothing here hands out a pointer to a
@@ -297,11 +316,13 @@ struct DeviceScanScratch(Movable):
         ctx.synchronize()
 
     def _finish(mut self, ctx: DeviceContext, blocks: Int) raises -> Int:
-        step_count_sync()
-        ctx.synchronize()
+        # DEVIATION 2721. ONE WAIT REMOVED, the one that stood between the
+        # caller's launch and this copy. Both are on `ctx`, which is
+        # in-order, so the copy already reads what the kernel wrote.
         var view = self.part.create_sub_buffer[DType.int32](0, blocks)
         step_count_d2h()
         ctx.enqueue_copy(dst_ptr=self.host.unsafe_ptr(), src_buf=view)
+        # LOAD-BEARING, category (a): `_fold_partials` reads `self.host`.
         step_count_sync()
         ctx.synchronize()
         _ = view^
