@@ -1557,6 +1557,39 @@ leg_local_card() {
         leg_say "  nothing here can check it came from this commit. That is on the operator."
         return 0
     fi
+    # THE SHARED METAL LOCK (2026-09-16). What follows is a LOCAL Metal job.
+    # Until today this function ran one without taking, or even looking at,
+    # the lock every other Metal job on this Mac goes through. On 2026-09-16
+    # it fired twice, at 12:27 and 12:29, while another lane had held that
+    # lock since 12:03. Concurrent Metal on this M4 has returned NaN,
+    # constant and zero outputs in two lanes with solo reruns clean, so the
+    # cost of this is not a slow card, it is another lane's evidence being
+    # inadmissible without anyone noticing.
+    #
+    # This deliberately does NOT implement a second lock. One lock with two
+    # implementations grows two ideas of who holds it. It READS the lock that
+    # mac_slot.sh writes and REFUSES rather than racing. The supported ways
+    # through are to pass --local-card (no local Metal at all) or to run the
+    # whole leg under `mac_slot.sh metal`, which makes this process the
+    # holder's descendant and is detected below.
+    _ml="${MOJOLEARN_METAL_LOCK:-/tmp/mojolearn-metal-slot}"
+    _holder=$(cat "$_ml/pid" 2>/dev/null || true)
+    case "$_holder" in ''|*[!0-9]*) _holder="" ;; esac
+    if [ -n "$_holder" ] && kill -0 "$_holder" 2>/dev/null; then
+        _p=$$
+        _mine=no
+        while [ -n "$_p" ] && [ "$_p" != 0 ] && [ "$_p" != 1 ]; do
+            if [ "$_p" = "$_holder" ]; then _mine=yes; break; fi
+            _p=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')
+        done
+        if [ "$_mine" != yes ]; then
+            leg_die "the Metal lock is held by pid $_holder ($(cat "$_ml/what" 2>/dev/null | cut -c1-90)) since $(cat "$_ml/since" 2>/dev/null).
+    Generating the Apple card here would run a second Metal job beside it, and a
+    Metal cell taken under contention is not evidence for either side. Either
+    pass --local-card PATH to skip local Metal, or run this leg under
+    'mac_slot.sh metal' so it waits its turn."
+        fi
+    fi
     leg_say "generating the Apple reference card (device arm, IDENTICAL)"
     LOCAL_CARD="$OUT/local/apple.card"
     # NOT `cmd 2>&1 | sed`. A pipeline's status is its LAST command's, so

@@ -399,9 +399,9 @@ implemented and already dispatched by `mojolearn.host_model()`:
 | `agglomerative` | `AgglomerativeClustering.predict` shipped; GPU recording owed |
 | `spectral` | `SpectralClustering.predict` shipped (DEVIATION 2860); GPU recording owed |
 | `spectral-precomputed` | same on a precomputed affinity; GPU recording owed |
-| `kmeans` | `KMeans.predict` shipped, but the class has **no `save`** |
+| `kmeans` | `KMeans.predict` and `transform` shipped; `save` and `load` landed with lane/kmeans-save (2026-09-16), so this row now waits on the same recording as the rest |
 
-The first four wait on one thing: a recording from
+All five wait on one thing: a recording from
 `tools/classical_host_gate.py record`, which refuses a CPU-only install by
 design so a host binding can never record its own answer as its own reference.
 That needs a GPU leg, and GPU legs are release-record only.

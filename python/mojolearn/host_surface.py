@@ -2510,8 +2510,14 @@ SAVED_MODEL_INFERENCE_OWED = {
     "spectral-precomputed": "The same predict on a precomputed affinity, the same saved "
                             "mojolearn-spectral-1 file, the caller passing the (n_new, n_train) "
                             "affinity instead of the fit's k-NN graph; the GPU recording is owed.",
-    "kmeans": "KMeans.predict shipped with lane/kmeans-predict; the class has no `save`, so the "
-              "saved-model route needs a serialization format before a recording can be made.",
+    "kmeans": "KMeans.predict and KMeans.transform shipped with lane/kmeans-predict, and "
+              "lane/kmeans-save (2026-09-16) gave the class `save` and `load`: "
+              "mojolearn-kmeans-1 is in _classical_host._FORMATS and host_model returns a "
+              "HostKMeans on _mojolearn_core_host. What is left is the GPU recording under "
+              "bench/results/classical_host/, as for dbscan, agglomerative and spectral. The "
+              "one format carries every k-means lane (the metric and the start are members of "
+              "the file, not tags of their own), so the kmeans, kmeans-random, kmeans-array, "
+              "kmeans-weighted, kmeans-sqrt and kmeans-classic-pp lanes all load through it.",
 }
 
 

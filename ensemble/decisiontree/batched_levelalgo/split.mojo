@@ -145,20 +145,106 @@ order is now pinned. The mutex spin itself (DEVIATION 106) stays in
 both modes.
 
 DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
-(`:251`, `:270-271`) is not expressible on Metal in that spelling: Mojo 1.0
-comptime-asserts that `threadfence` "is only implemented on NVIDIA GPUs",
-the Apple backend rejects strong compare-exchange by name, and it rejects
-`acquire` success ordering on a compare-exchange. This implementation therefore uses
-the translation this repository already established and enqueued for
-cuVS's own cross-block mutex (`neighbors/mutex_probe_main.mojo`): spin on
-an ACQUIRE load until the mutex reads free, claim it with a WEAK RELAXED
-compare-exchange, hand it back with a RELEASE store. The synchronizes-with
-edge is a load-acquire observing a store-release, which is the C++11
-statement of what their CAS-spin plus `__threadfence` accomplishes -- CUDA
-defines `__threadfence()` as `cuda::atomic_thread_fence(seq_cst,
-thread_scope_device)`. Only the mutex HOLDER ever writes the release value
-and their own code discards the exchanged value too, so no ABA hides in the
-relaxed claim. This changes HOW the handoff is said, never WHAT is said.
+(`:251`, `:270-271`) is not expressible on Metal in that spelling. Mojo 1.0
+comptime-asserts that `std.gpu.intrinsics.threadfence` "is only implemented
+on NVIDIA GPUs", the Apple backend rejects strong compare-exchange by name,
+and it rejects `acquire` ordering on EVERY read-modify-write, not only on a
+compare-exchange. The claim therefore lives in `core/device_mutex.mojo` and
+this file CALLS it: spin on an ACQUIRE load until the mutex reads free,
+claim it with a WEAK RELAXED compare-exchange, execute an ACQUIRE FENCE,
+and hand it back with a RELEASE store. Read that file for the memory-model
+argument; it is the one definition and every claim site in this repository
+shares it. This changes HOW the handoff is said, never WHAT is said.
+
+AMENDED 2026-09-16, and the amendment is why the mutex moved into `core/`.
+Until that date this paragraph justified the protocol by "the
+synchronizes-with edge is a load-acquire observing a store-release". That
+holds only when the spin's acquire LOAD and the claiming COMPARE-EXCHANGE
+observe the SAME release, and they need not. A thread can leave the spin on
+a free value written by holder A, lose it to holder B, and win its relaxed
+claim on the free value written by B's LATER release, having performed no
+acquire that reads B's release. B's plain store to `split[node]` is then
+unordered against this thread's plain load of it, so this thread merges
+into a STALE slot and writes it back, and B's candidate is ERASED. That is
+a LOST CANDIDATE, one direction only, which is what the MI300X traces
+showed (`docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md`). The retained
+claim that "only the HOLDER writes the release value, so no ABA hides"
+is true and does NOT make the two reads equivalent; reuse of the free value
+across them is exactly the interleaving above.
+
+THE ACQUIRE FENCE IS THE REPAIR, and two other spellings are not. A
+DISCARDED acquire load after the claim emits ZERO instructions on AIR, PTX
+and GCN alike, so it is not a fence and never was. An acquire
+compare-exchange is formally equivalent but Apple rejects it. Note that
+`std.atomic.fence` is a DIFFERENT SYMBOL from `std.gpu.intrinsics.threadfence`;
+the older text above reasoned from the latter and wrongly concluded that no
+fence was available on this path at all.
+
+WHY MI300X IS WHERE IT FIRED IS A HYPOTHESIS, NOT A FINDING. Each XCD has
+its own L2 and a plain load can be served from a line cached before another
+XCD's holder wrote the slot back. That is plausible and unmeasured. The
+formal hole exists on every column.
+
+THE EMISSION, DISASSEMBLED (2026-09-16). The repair is only a repair if the
+fence reaches the instruction stream, and this file's previous spelling did
+not: `_ = Atomic.load[ordering = Ordering.ACQUIRE](mutex)` compiled to NOTHING
+on Metal AIR, PTX and GCN alike. So the fence carries its disassembly rather
+than an assertion.
+
+Apple, AIR read out of the shipped metallib. The fence sits between the claim's
+compare-exchange loop and the plain loads of `split[node]`'s fields, which is
+where the argument above requires it:
+
+    br i1 %1402, label %1403, label %1398
+  1403:
+    fence acquire
+    %.elt175 = getelementptr inbounds { i32, float, i32, float, i64, i64, i32, i32 }, ...
+    %.unpack176 = load float, float addrspace(1)* %.elt175, align 4
+
+gfx942, four spellings of one kernel, cross-compiled. STOCK AND DISCARD ARE
+BYTE-IDENTICAL in this region, which is the discarded load's inertness stated
+as a diff, and the fence adds exactly one instruction:
+
+    stock and discard:          fence:
+      s_or_b64 exec, ...          s_or_b64 exec, ...
+      v_mov_b32_e32 v0, 0         v_mov_b32_e32 v0, 0
+                                  buffer_inv sc0 sc1        <- the repair
+      global_load_dword v1, ...   global_load_dword v1, ...
+
+READ THAT DIFF CAREFULLY, BECAUSE ONE TOKEN DOES NOT DISCRIMINATE. There is a
+SECOND `buffer_inv sc0 sc1` earlier in the same kernel, immediately after the
+spin's `global_load_dword ... sc0 sc1`, and it is present in ALL FOUR ARMS
+INCLUDING STOCK. That one is the SPIN's acquire, which was never in doubt.
+The instruction that distinguishes the repair is the one AFTER the CAS loop
+exits and BEFORE the protected load. Anyone who greps this kernel for
+`buffer_inv sc0 sc1` alone will find it in the stock arm and conclude the
+repair was always there.
+
+What these excerpts are NOT. The gfx942 arms are CROSS-COMPILED and have never
+executed on gfx942 hardware. AIR is code GENERATION, not GPU machine code.
+
+AND THE FENCE DID NOT SURVIVE THAT LAST STAGE ON APPLE. Settled 2026-09-16,
+solo under the Metal lock, on main's own binary: `fence[ordering =
+Ordering.ACQUIRE]()` generates valid AIR and then FAILS AT PIPELINE CREATION,
+"GPU machine code generation ... XPC_ERROR_CONNECTION_INTERRUPTED", while the
+stock arm runs. Two sessions reproduced it independently, one with arm order
+rotated 6 of 6 against stock 6 of 6 OK, one running this file's own
+`core/device_mutex_check.mojo` and watching the fence arm exit 1 with that
+message and the repaired arm PASS both claim pairs with its sabotage rejected.
+It broke random forests, extratrees and the fused kNN on this vendor for the
+thirty-seven minutes it was on main. Every cross-compile check passed
+throughout, because AIR generation is not the stage that fails, which is
+precisely why a disassembly is necessary and not sufficient.
+
+WHAT SHIPS INSTEAD is an acquire LOAD WHOSE VALUE IS CONSUMED, spinning until
+the mutex reads the value this claim itself wrote. The memory-model argument
+above is untouched: the claim is a read-modify-write, so its write sits in the
+release sequence headed by the release it consumed, and an acquire that reads a
+value in that sequence synchronizes with the release heading it. Only the
+spelling changed. It emits on AIR, PTX and GCN, and unlike the fence it runs.
+The value compared against must be the claim's own, never a literal 1, because
+the kNN consumer claims `-2 -> -1`; a loop waiting on the wrong value does not
+fail, it HANGS.
 
 DEVIATION 107. `printSplits` (`:291-308`) is a debug printer built on
 `raft::linalg::writeOnlyUnaryOp` and is NOT implemented. Price of declining it:
@@ -182,6 +268,7 @@ counts, and local counts are filled just before partitioning."
 """
 
 from std.atomic import Atomic, Ordering
+from core.device_mutex import claim_device_mutex
 from std.bit import log2_floor
 from max.gpu.memory import AddressSpace
 
@@ -628,21 +715,11 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         inline text, unchanged."""
         self.select_split_range_midpoint(quantiles, n_bins)
 
-        # `:251-252` -- their `while (atomicCAS(mutex, 0, 1));`
-        # as an acquire-load spin plus a weak relaxed claim.
-        while True:
-            if (
-                Atomic.load[ordering = Ordering.ACQUIRE](mutex)
-                != Int32(0)
-            ):
-                continue
-            var expected = Int32(0)
-            if Atomic.compare_exchange[
-                success_ordering = Ordering.RELAXED,
-                failure_ordering = Ordering.RELAXED,
-                weak=True,
-            ](mutex, expected, Int32(1)):
-                break
+        # `:251-252` -- their `while (atomicCAS(mutex, 0, 1));` plus the
+        # `__threadfence()` at `:255`, as the shared claim: acquire-load
+        # spin, weak relaxed claim, ACQUIRE FENCE. See DEVIATION 106 above
+        # and `core/device_mutex.mojo` for why the fence is the repair.
+        claim_device_mutex(mutex, Int32(0), Int32(1))
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because
