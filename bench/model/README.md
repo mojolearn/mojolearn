@@ -26,37 +26,116 @@ ours takes longer. No other speed statement is made in this directory.
 
 Default `HuggingFaceTB/SmolLM2-360M` (Llama architecture, ungated, about
 720 MB of bf16 safetensors). Selectable: `TinyLlama/TinyLlama-1.1B-Chat-v1.0`
-(ungated) and `meta-llama/Llama-3.2-1B` (gated: `HF_TOKEN` must reach the
-harness, which none of the guarded runners passes to a rented box, so that
-model is a local-M4 or CPU-pod run only). The record carries the model's
-`config_sha256` (canonical config.json) and `weights_sha256` (the sorted list
-of safetensors file hashes), so two columns that loaded different bytes are
-refused by the diff rather than read as DIVERGENT.
+and `meta-llama/Llama-3.2-1B` (gated on Hugging Face; the gate is met ONCE, on
+the Mac that populates the store with `HF_TOKEN`, and never on a box). The
+record carries the model's `config_sha256` (canonical config.json) and
+`weights_sha256` (the sorted list of safetensors file hashes), so two columns
+that loaded different bytes are refused by the diff rather than read as
+DIVERGENT.
 
-### The model source
+### The model source: the R2 dataset store, never a download on a box
 
-The leg scripts fetch the files with `huggingface_hub.snapshot_download` into
-a directory OUTSIDE the checkout (`/root/model-leg-models/<repo with / as __>`
-on a box, `$MOJOLEARN_EVIDENCE_ROOT/model-leg/models/<slug>` on the M4),
-before any clock starts. A download is never inside a timing; the harness
-refuses a path without `config.json`.
+DEVIATION 2704 (`tools/stage_from_r2.sh`; Andrew, 2026-09-13: "cloudflare has
+datasets already saved and when using runpod we should ALWAYS use them; make
+sure all of our shit ships corpora from R2 instead of downloading"). The model
+is held in the store like every corpus, pinned by size and sha256 in
+`bench/results/dataset_store/manifest.tsv`, one key per checkpoint file under
+`models/<name>/`, and staged onto a rented box by the runner right after the
+source is unpacked (`tools/gemm_remote_leg.sh` and `tools/do_extra_leg.sh`
+call `sh tools/stage_from_r2.sh "<ssh target>"` there and read
+`MOJOLEARN_STAGE_KEYS`; the model-leg wrappers export
+`MOJOLEARN_STAGE_KEYS=models/<name>` and `MOJOLEARN_STAGE_STRICT=1`). The
+store presigns on the Mac; the box receives only a short-lived URL inside a
+piped script and refuses any file whose size or sha256 differs from the pin.
+No credential ever reaches a box, and no `R2_*` variable exists in this
+directory. A `HOME/`-rooted key lands at `/root/<path under $HOME>` on a box,
+so the group `models/<name>` (local `$HOME/models/<name>/`) is
+`/root/models/<name>/` there, and that is the harness's `--model` and the
+twin's model path on every column. The body REFUSES an unstaged model; the
+runners' `--allow-hf-download` is the one opt-in (a Hugging Face fetch on
+the box, off by default, printing a warning that names DEVIATION 2704 and
+marking the record `model_source=huggingface-on-box`).
 
-OPTIONAL, documented, not a default: `MODEL_SOURCE_R2=<bucket/prefix>` pulls
-the files from a Cloudflare R2 bucket in the S3-compatible form
+The keys, one per checkpoint file (the store's key scheme, `<group>/<file>`):
 
-    AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY \
-      aws s3 cp --recursive s3://<bucket/prefix> <model dir> --endpoint-url $R2_ENDPOINT
+    models/SmolLM2-360M/config.json
+    models/SmolLM2-360M/generation_config.json
+    models/SmolLM2-360M/model.safetensors
+    models/SmolLM2-360M/tokenizer.json
+    models/SmolLM2-360M/tokenizer_config.json
+    models/SmolLM2-360M/special_tokens_map.json
+    models/TinyLlama-1.1B-Chat-v1.0/config.json
+    models/TinyLlama-1.1B-Chat-v1.0/generation_config.json
+    models/TinyLlama-1.1B-Chat-v1.0/model-0000N-of-0000M.safetensors   (one key per shard)
+    models/TinyLlama-1.1B-Chat-v1.0/model.safetensors.index.json
+    models/TinyLlama-1.1B-Chat-v1.0/tokenizer.json
+    models/TinyLlama-1.1B-Chat-v1.0/tokenizer.model
+    models/TinyLlama-1.1B-Chat-v1.0/tokenizer_config.json
+    models/TinyLlama-1.1B-Chat-v1.0/special_tokens_map.json
+    models/Llama-3.2-1B/config.json
+    models/Llama-3.2-1B/generation_config.json
+    models/Llama-3.2-1B/model-0000N-of-0000M.safetensors               (one key per shard)
+    models/Llama-3.2-1B/model.safetensors.index.json
+    models/Llama-3.2-1B/tokenizer.json
+    models/Llama-3.2-1B/tokenizer_config.json
+    models/Llama-3.2-1B/special_tokens_map.json
 
-when `R2_ENDPOINT`, `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY` are set.
-The owner has not said what the bucket holds. Two facts bound it: the RunPod
-runner passes no environment to the body and the DigitalOcean runner passes
-only `MOJOLEARN_*`/`MODULAR_*` names, so on those legs the variables never
-reach the box and the Hugging Face fetch runs; and this repository's rule is
-that credentials never reach a rented box (`tools/dataset_store.sh` mints
-presigned URLs instead). So the option is for the M4 and for a box the
-operator holds a shell on. `R2_ENDPOINT` is the full endpoint
-(`https://<account id>.r2.cloudflarestorage.com`, the form
-`tools/dataset_store.sh` derives from `R2_ACCOUNT_ID`).
+The shard names are whatever the repository ships at fetch time (a single
+`model.safetensors` where there is no index); the `ls` in step 2 below is
+the list, and every file listed becomes a key.
+
+The store declares a multi-file model as a GROUP (a group's rows are carried
+forward by `manifest` on a Mac that lacks the files; a catalog key missing
+locally would be dropped). Patch text for `tools/dataset_store.sh`, `groups()`,
+one row per model, tab separated, the third field the file names from step 2:
+
+    models/SmolLM2-360M	HOME/models/SmolLM2-360M	config.json generation_config.json model.safetensors tokenizer.json tokenizer_config.json special_tokens_map.json
+    models/TinyLlama-1.1B-Chat-v1.0	HOME/models/TinyLlama-1.1B-Chat-v1.0	config.json generation_config.json model-00001-of-0000M.safetensors ... model.safetensors.index.json tokenizer.json tokenizer.model tokenizer_config.json special_tokens_map.json
+    models/Llama-3.2-1B	HOME/models/Llama-3.2-1B	config.json generation_config.json model-00001-of-0000M.safetensors ... model.safetensors.index.json tokenizer.json tokenizer_config.json special_tokens_map.json
+
+and the same group names in the header's key list beside
+`corpus/fineweb-edu-10BT`.
+
+POPULATING THE STORE, ONCE, on the Mac (every line RUN OWED; `manifest`
+hashes only catalog keys, so a group's rows are written the way the FineWeb
+shards' were, from the bytes' own size and sha256):
+
+    RUN OWED (1): python3 -m pip install --user huggingface_hub   # or a throwaway venv
+    RUN OWED (2): python3 -c 'from huggingface_hub import snapshot_download; import os; snapshot_download("HuggingFaceTB/SmolLM2-360M", local_dir=os.path.expanduser("~/models/SmolLM2-360M"), allow_patterns=["*.json","*.safetensors","*.txt","*.model","tokenizer*"])' && ls -l ~/models/SmolLM2-360M
+    RUN OWED (3): add the groups() row above to tools/dataset_store.sh with exactly the files (2) listed
+    RUN OWED (4): (cd ~/models && for f in SmolLM2-360M/*; do printf 'models/%s\t%s\t%s\n' "$f" "$(wc -c < "$f" | tr -d ' ')" "$(shasum -a 256 "$f" | cut -d' ' -f1)"; done) >> bench/results/dataset_store/manifest.tsv && LC_ALL=C sort -o bench/results/dataset_store/manifest.tsv bench/results/dataset_store/manifest.tsv
+    RUN OWED (5): sh tools/dataset_store.sh push models/SmolLM2-360M        # expands the group, one object per key
+    RUN OWED (6): sh tools/dataset_store.sh verify models/SmolLM2-360M      # every shard against its pin
+    RUN OWED (7): sh tools/dataset_store.sh manifest                        # rewrites the pins, carrying the group rows forward; must print the same rows
+    RUN OWED (8): commit tools/dataset_store.sh and bench/results/dataset_store/manifest.tsv together
+
+The same eight lines for `TinyLlama/TinyLlama-1.1B-Chat-v1.0` and, with
+`HF_TOKEN` set for step (2) only, `meta-llama/Llama-3.2-1B`. The rows the
+orchestrator adds to `manifest.tsv` in step (4) have this shape (size and
+sha256 from the bytes on the Mac):
+
+    models/SmolLM2-360M/config.json	<size>	<sha256>
+    models/SmolLM2-360M/generation_config.json	<size>	<sha256>
+    models/SmolLM2-360M/model.safetensors	<size>	<sha256>
+    models/SmolLM2-360M/special_tokens_map.json	<size>	<sha256>
+    models/SmolLM2-360M/tokenizer.json	<size>	<sha256>
+    models/SmolLM2-360M/tokenizer_config.json	<size>	<sha256>
+
+The FineWeb route is the alternative when the Mac's uplink is the cost (a
+1.1B checkpoint is about 2.2 GB): a rented box fetches the repository, hashes
+each file, and PUTs it to a write URL minted here with
+`sh tools/dataset_store.sh presign-put models/<name>` (one URL per shard),
+then the rows are added from the box's `sha256sum` output; the bytes never
+pass through the Mac. Either way the model is pinned in
+`bench/results/dataset_store/manifest.tsv` like every corpus before any leg
+rents a box, and the wrappers refuse to rent without a `models/<name>/` row.
+
+On the M4, `tools/model_leg/run_local_m4.sh` runs `tools/dataset_store.sh
+verify` on every key of the group at `$HOME/models/<name>/` and `pull`s a
+missing one; on the CPU pod, whose runner has no staging hook,
+`run_leg_cpu.sh` writes the store's own `box-cmd` fetch per key, presigned on
+the Mac, into the generated command file (0600, outside the checkout), which
+is the `stage` mechanism spelled out.
 
 ## The prompts
 
@@ -159,26 +238,35 @@ never re-run to refresh it.
 
 ## The commands, in order (every one RUN OWED; none was executed by this lane)
 
+Before any column: the store holds the model (the eight RUN OWED lines of
+"The model source" above), and `bench/results/dataset_store/manifest.tsv`
+carries its `models/<name>/` rows; every wrapper refuses to rent without them.
+
 Apple M4 first, on the release Mac, from a clean worktree (it compiles the
-four GPU bindings and four host bindings, fetches the model, runs the Metal
-column, the CPU column and the incumbent on `mps`):
+four GPU bindings and four host bindings, verifies the model against the
+store's pins at `$HOME/models/<name>/`, runs the Metal column, the CPU column
+and the incumbent on `mps`):
 
     RUN OWED: sh tools/model_leg/run_local_m4.sh
     RUN OWED: python3 bench/model/diff.py --diff ~/mojolearn-evidence/model-leg/<stamp>-apple-m4/model-leg/ours.apple-m4-metal.json ~/mojolearn-evidence/model-leg/<stamp>-apple-m4/model-leg/ours.apple-m4-metal-cpu.json --require-columns 2
     RUN OWED: python3 bench/model/diff.py --ratio ~/mojolearn-evidence/model-leg/<stamp>-apple-m4/model-leg/ours.apple-m4-metal.json ~/mojolearn-evidence/model-leg/<stamp>-apple-m4/model-leg/torch.apple-m4-metal.json
 
-NVIDIA H100 on RunPod (dry run first; `--rent` bills one hour; the runner's
-gemm gate needs an existing Apple card):
+NVIDIA H100 on RunPod (dry run first; `--rent` bills one hour; the runner
+stages `models/<name>` from the store right after the source is unpacked,
+strict; its gemm gate needs an existing Apple card):
 
     RUN OWED: sh tools/model_leg/run_leg.sh
     RUN OWED: MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key MOJOLEARN_MODEL_LEG_LOCAL_CARD=bench/results/e1g/<stamp>/local/apple.card sh tools/model_leg/run_leg.sh --rent
 
-AMD MI325X on DigitalOcean (dry run first; `--rent` bills one hour):
+AMD MI325X on DigitalOcean (dry run first; `--rent` bills one hour; the same
+staging by the runner):
 
     RUN OWED: sh tools/model_leg/run_leg_amd.sh
     RUN OWED: MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token sh tools/model_leg/run_leg_amd.sh --rent
 
-The CPU column on a RunPod CPU pod (dry run first; the rate scales with `--vcpu`):
+The CPU column on a RunPod CPU pod (dry run first; the rate scales with
+`--vcpu`; the wrapper presigns the group's keys on the Mac and the pod fetches
+and verifies them before the body):
 
     RUN OWED: sh tools/model_leg/run_leg_cpu.sh
     RUN OWED: sh tools/model_leg/run_leg_cpu.sh --rent --vcpu 16
@@ -192,9 +280,12 @@ Then, on the Mac, with the four records copied into one dated directory:
     RUN OWED: pixi run -e test test-model-diff
 
 Each leg's `remote/model-leg/status.tsv` names every phase with its exit code
-and seconds; `gate.txt` the label, commit and the `cells=` lines; `ratio.txt`
-the ratio output. A phase that failed is a finding, not a reason to re-run
-silently.
+and seconds; `gate.txt` the label, commit, the `cells=` lines and
+`model_source=` when the opt-in download ran; the runner's `stage.log` the
+staging summary line; `ratio.txt` the ratio output. A phase that failed is a
+finding, not a reason to re-run silently; a body that read
+`refused=model-not-staged` is a staging failure, and the leg is re-run only
+after the store is fixed, never with `--allow-hf-download` as a shortcut.
 
 ## What the harness assumes about `mojolearn.models`
 

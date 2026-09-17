@@ -31,11 +31,13 @@ The step API (allocate_state, step) is NOT timed here: its per-step contract
 time is the generate time minus the prefill time of the same run, which is
 what a user's generate call costs. Nothing here moves a bit.
 
-`--model` may be a Hugging Face repo id; then `huggingface_hub` fetches it
-into --model-dir (default $MOJOLEARN_MODEL_DIR/<repo with / as __>, else
-~/.cache/mojolearn-models/<repo>) BEFORE any clock, and the leg scripts fetch
-it before this file runs anyway. The fetch is never inside a timing, and
-nothing lands under bench/results.
+`--model` is the STAGED directory: on a rented box /root/models/<name>, put
+there from the R2 dataset store by tools/stage_from_r2.sh before any body
+runs (DEVIATION 2704, never a download on the box); on the Mac
+$HOME/models/<name>, the store's local path. A repo id is accepted only with
+--allow-hf-download, which fetches with huggingface_hub into --model-dir
+BEFORE any clock and prints a warning naming DEVIATION 2704. Nothing lands
+under bench/results.
 """
 import argparse
 import os
@@ -47,20 +49,23 @@ import _common as C  # noqa: E402
 FORMATS = ("float32", "bfloat16", "int8")
 
 
-def resolve_model(model, model_dir, no_download):
+def resolve_model(model, model_dir, allow_hf_download):
     if os.path.isdir(model):
         return os.path.abspath(model), model
-    target = model_dir or os.path.join(os.environ.get("MOJOLEARN_MODEL_DIR", os.path.expanduser("~/.cache/mojolearn-models")),
-                                       model.replace("/", "__"))
+    target = model_dir or os.path.join(os.path.expanduser("~/models"), os.path.basename(model.rstrip("/")))
     if os.path.isfile(os.path.join(target, "config.json")):
         return target, model
-    if no_download:
-        raise SystemExit(f"REFUSING: {model} is not on disk at {target} and --no-download is set")
+    if not allow_hf_download:
+        raise SystemExit(f"REFUSING: {model} is not on disk at {target}. The model is staged from the R2 dataset "
+                         "store (tools/stage_from_r2.sh, DEVIATION 2704), never downloaded on a box; "
+                         "--allow-hf-download is the explicit opt-in")
+    print(f"WARNING: --allow-hf-download: fetching {model} from Hugging Face into {target}, against "
+          "DEVIATION 2704 (models are staged from the R2 dataset store); this record is not store-pinned",
+          flush=True)
     try:
         from huggingface_hub import snapshot_download
     except ImportError:
-        raise SystemExit("huggingface_hub is not importable here; fetch the model first "
-                         "(tools/model_leg/*.sh do) and pass the directory") from None
+        raise SystemExit("huggingface_hub is not importable here") from None
     snapshot_download(repo_id=model, local_dir=target,
                       allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "tokenizer*"],
                       token=os.environ.get("HF_TOKEN") or None)
@@ -172,9 +177,10 @@ def run_prompt(lm, tok, text, max_new, runs, clock):
 
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--model", required=True, help="local model directory, or a Hugging Face repo id")
-    ap.add_argument("--model-dir", default=None, help="where a repo id is fetched to (before any clock)")
-    ap.add_argument("--no-download", action="store_true")
+    ap.add_argument("--model", required=True, help="the staged model directory (/root/models/<name> on a box)")
+    ap.add_argument("--model-dir", default=None, help="with --allow-hf-download: where a repo id is fetched to")
+    ap.add_argument("--allow-hf-download", action="store_true",
+                    help="fetch a repo id from Hugging Face, against DEVIATION 2704; warns")
     ap.add_argument("--formats", default="float32,bfloat16,int8")
     ap.add_argument("--prompts", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "prompts.txt"))
     ap.add_argument("--max-new", type=int, default=64)
@@ -189,7 +195,7 @@ def main(argv=None):
     for f in formats:
         if f not in FORMATS:
             raise SystemExit(f"unknown format {f!r}; one of {FORMATS}")
-    path, model_id = resolve_model(args.model, args.model_dir, args.no_download)
+    path, model_id = resolve_model(args.model, args.model_dir, args.allow_hf_download)
     C.require_model_dir(path)
     prompts = C.read_prompts(args.prompts)
 
