@@ -98,10 +98,26 @@ The ten ONE-COLUMN cells: the AFTER CPU column REFUSED `gbdt-symmetric` and
 that build (`_mojolearn_gbdt_host`) did not export `gbdt_sigmoid_pair`, and
 a CPU-only install's binding proxy raises ImportError by name. `e08ce80cb`
 adds the entry point to that family and makes the Python layer treat the
-ImportError as absence. Those ten cells are OWED a rerun of the CPU
-column; on the CUDA column and through `host_model` (the AFTER CPU column's
-`infer` cells of every other Logloss lane, and the Mac gate) the pair reads
-IDENTICAL.
+ImportError as absence. Rerun at the lane HEAD `7e22945de` on a RunPod CPU
+pod (`gve6saiv25yhft`, AMD EPYC 9754, 8 vCPU, $0.24 per hour, 676 s billed,
+$0.0451, deleted and verified gone; `tools/runpod_cpu_leg.sh`, no GPU):
+the six lanes `gbdt-symmetric`, `gbdt-pointwise-l2-bayesian-eval`,
+`gbdt-rmse`, `gbdt-multiclass`, `rf-clf`, `et-reg` on the five fixtures,
+two repeats, `MOJOLEARN_IDENTITY_HOST_INFER=1` as the BEFORE column. Against
+`before-cpu` (main at `e3213a59a`): train 30 IDENTICAL, infer and model 50
+IDENTICAL and 10 REFUSED, batch 30 IDENTICAL, 0 MOVED, 0 DIVERGENT. The ten
+formerly REFUSED cells read IDENTICAL x2 with the BEFORE column's hashes
+(train, infer, model and batch, every fixture). The ten REFUSED are
+`gbdt-multiclass` infer and model on both columns: `HostGBDT.predict_proba`
+does not carry the MultiClass transform, refused by name on main and on
+every earlier CPU column, not this lane's path. Against
+`sabotage-cpu-head` (the same six families under
+`-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`): train 30 DIVERGENT, infer 25
+DIVERGENT, batch 30 DIVERGENT, model 25 IDENTICAL (the saved file, which the
+predict-side sabotage does not touch); the two Logloss proba lanes diverge
+on predict and proba. Summary
+`bench/results/infer_speed_trees_2026-09-17/identity_cpu_head.json`,
+diffs and JSON under `~/mojolearn-evidence/infer-speed-trees/cpu_head/`.
 
 Mac, one core: `tools/forest_host_gate.py check` on the 24 recorded
 fixtures under `bench/results/forest_host/2026-09-13-*` reads IDENTICAL
@@ -147,8 +163,9 @@ nice -n 19 env OMP_NUM_THREADS=1 MOJOLEARN_CPU_THREADS=1 PYTHONPATH=python MOJOL
   parse alone is 34 ms of a 100 ms call for a 1000-tree model on the 4090;
   a parsed-model cache keyed on the text is the fix the header names and was
   not built here.
-- A rerun of the CPU identity column at `e08ce80cb` or later for the ten
-  `gbdt-symmetric` and `gbdt-pointwise-l2-bayesian-eval` cells above.
+- (closed 2026-09-17) The CPU identity column at the lane HEAD for the ten
+  `gbdt-symmetric` and `gbdt-pointwise-l2-bayesian-eval` cells: IDENTICAL,
+  see above.
 - One-core timings of the host paths (the Mac rule allowed no more than one
   core and the pod ran 16 threads).
 - The GPU `predict_proba` and the 100-iteration host `predict` AFTER cells
