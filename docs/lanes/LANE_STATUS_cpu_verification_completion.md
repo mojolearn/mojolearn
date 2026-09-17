@@ -191,3 +191,11 @@ SSH `-p 54936 root@103.196.86.88`, remote `/root/leg_out/`. External
 and preserve failures. The initial 40GB create request was rejected by the
 provider before allocating a pod; a fleet read confirmed absence. Its request,
 response and log remain under `cloud-native-nine/`; the live retry uses 20GB.
+
+All 29 reference gaps are now repaired in the candidate: 249 numerical
+references added, all equal to the frozen wheel's independently measured
+values; zero existing numerical references changed. Source records are
+complete, repeated and input/protocol witnessed. The five new Mac records
+are under `identity_break/2026-09-17_cpu-reference-repair/`. Admission audit
+and 374 passing tests are retained in probe `reference-repairs/`. Installed
+replays of the twelve low-bit lanes and the 29 repairs are next.
