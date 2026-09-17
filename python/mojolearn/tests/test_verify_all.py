@@ -767,6 +767,25 @@ def test_harness_overrides_are_refused(monkeypatch):
         va.load_harness("/nonexistent/identity_break.py")
 
 
+def test_missing_numpy_has_an_actionable_verification_refusal(monkeypatch):
+    def missing(*args):
+        raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
+
+    monkeypatch.setattr(va, "_load_by_path", missing)
+    with pytest.raises(va.CannotRun, match="python -m pip install numpy"):
+        va.load_harness("identity_break.py")
+
+
+def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypatch):
+    def broken(*args):
+        raise ModuleNotFoundError("No module named 'internal_missing'", name="internal_missing")
+
+    monkeypatch.setattr(va, "_load_by_path", broken)
+    with pytest.raises(ModuleNotFoundError) as error:
+        va.load_harness("identity_break.py")
+    assert error.value.name == "internal_missing"
+
+
 # ---------------------------------------------------------------- portable models
 
 def test_models_manifest_points_at_small_files():

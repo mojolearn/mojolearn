@@ -123,7 +123,13 @@ def load_harness(path=None):
                         "one-device record. Unset it.")
     if path is None:
         path, _ = harness_path()
-    return _load_by_path("mojolearn_verify_all_harness", path)
+    try:
+        return _load_by_path("mojolearn_verify_all_harness", path)
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        raise CannotRun("Verification requires NumPy. Install it with: "
+                        "python -m pip install numpy") from exc
 
 
 def family_map(lanes):
