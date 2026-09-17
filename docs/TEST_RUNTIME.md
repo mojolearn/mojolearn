@@ -232,3 +232,18 @@ backend when needed. Gate logs and atomic summaries preserve failures and
 unrun gates. The release task uses a ten-minute total budget, with each gate
 still bounded to one minute. Other broad qualifications can explicitly set
 `--all`, their backend and their budget.
+
+## Recovery and exact coverage
+
+The shard runner validates the requested **lane × fixture** set after merging.
+Having one stable cell per lane is insufficient when several fixtures were
+requested. Missing/extra cells, missing training verdicts, malformed JSON and
+records not marked complete all produce an incomplete result. Failed merged
+output is kept under `column.incomplete.json`, never `column.json`.
+
+Before a resume changes manifests, logs or merged output, it compares the
+commit, selected lanes, shard membership, fixtures, repeat count, backend and
+probe group with the original manifest. A changed scope refuses and leaves the
+existing evidence untouched. A fresh budget or a different CPU concurrency
+limit is allowed; changing shard membership requires a new output directory.
+The harness still checks source, binary and protocol provenance per checkpoint.
