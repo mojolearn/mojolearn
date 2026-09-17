@@ -1,4 +1,4 @@
-import hashlib,json,os,subprocess,sys,zipfile
+import hashlib,json,os,subprocess,sys,zipfile,shutil
 from pathlib import Path
 base=Path(__file__).resolve().parent
 lanes=sys.argv[1].split(',')
@@ -32,5 +32,8 @@ with zipfile.ZipFile(wheel) as z:
         source_commit=z.read('mojolearn/identity_columns/COMMIT').decode().strip(),lanes=lanes,counts=r['counts'],
         bindings={n:hashlib.sha256(z.read(n)).hexdigest() for n in z.namelist() if n.endswith(('.so','.dylib'))},
         scope='Installed CPU development wheel, reused Mac native bindings, no path overrides; not final release qualification')
+archive=base/'wheel-artifacts'/receipt['sha256']
+archive.mkdir(parents=True,exist_ok=True)
+shutil.copy2(wheel,archive/wheel.name)
 (base/(label+'-wheel-receipt.json')).write_text(json.dumps(receipt,indent=2)+'\n')
 print(label,r['counts'],c['counts'],flush=True)
