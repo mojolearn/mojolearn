@@ -1226,6 +1226,7 @@ check-neural-stage-init = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 check-neural-stage-init-poison = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_MAMBA_POISON=1 training/checks/neural_stage_init.mojo"
 check-device-scan = "mojo run -j 1 -I . core/device_scan_check.mojo"
 check-device-scan-batch = "mojo run -j 1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . core/device_scan_batch_check.mojo"
+check-transformer-weight-validation = "mojo run -j 1 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -I . transformer/checks/weight_validation_check.mojo"
 # COMPILE ONLY, and the name says so. Builds the mamba backward's routing
 # layer AND, since 2026-09-03, its two kernel files
 # (mamba/impl/ops/selective_scan_backward.mojo and

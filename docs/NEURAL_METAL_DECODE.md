@@ -138,3 +138,10 @@ finished in 14.57 seconds. All 30 output/state arrays matched the earlier
 candidate bytewise. Each integration command had a 60-second execution limit.
 The timings in the table above remain measurements of the earlier candidate,
 not of the final merged implementation.
+
+## Batched weight validation
+
+The next setup reduction batches all nine Transformer weight scans into shared
+scratch, one result copy, and one completion wait. Mutable weights are still
+validated on every construction. See [Transformer weight setup](TRANSFORMER_WEIGHT_SETUP.md)
+for bounded checks, measurements, and cross-vendor qualification limits.
