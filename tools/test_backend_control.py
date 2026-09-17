@@ -92,7 +92,7 @@ def test_invalid_resource_controls_refuse(option, value):
 def test_failed_probe_cannot_be_hidden_by_stable_training(monkeypatch, tmp_path, field, value):
     cell = dict(verdict='STABLE', infer_verdict='STABLE')
     cell[field] = value
-    record = dict(cells={'ridge/base': cell})
+    record = dict(complete=True, cells={'ridge/base': cell})
     part = tmp_path / 'part0.json'
     part.write_text(json.dumps(record))
     (tmp_path / 'run-summary.json').write_text('{}')
@@ -108,3 +108,50 @@ def test_failed_probe_cannot_be_hidden_by_stable_training(monkeypatch, tmp_path,
 def test_explicit_unsupported_probe_refuses():
     with pytest.raises(SystemExit):
         verify_lanes.main(['--lane', 'ridge', '--probe-group', 'rlpair', '--plan'])
+
+
+@pytest.mark.parametrize('record,success', [
+    ({'complete': True, 'cells': {'ridge/base': {'verdict': 'STABLE'}, 'ridge/odd': {'verdict': 'STABLE'}}}, True),
+    ({'complete': True, 'cells': {'ridge/base': {'verdict': 'STABLE'}}}, False),
+    ({'complete': False, 'cells': {'ridge/base': {'verdict': 'STABLE'}, 'ridge/odd': {'verdict': 'STABLE'}}}, False),
+    ({'complete': True, 'cells': {'ridge/base': {}, 'ridge/odd': {'verdict': 'STABLE'}}}, False),
+    ({'complete': True, 'cells': {'ridge/base': {'verdict': 'STABLE'}, 'ridge/odd': {'verdict': 'STABLE'}, 'ridge/ties': {'verdict': 'STABLE'}}}, False),
+    ('broken-json', False),
+])
+def test_verdict_requires_exact_fixture_coverage(monkeypatch, tmp_path, record, success):
+    part = tmp_path / 'part0.json'
+    part.write_text('{}')
+    (tmp_path / 'run-summary.json').write_text('{}')
+    def merge(cmd, **kwargs):
+        Path(cmd[-1]).write_text(record if isinstance(record, str) else json.dumps(record))
+        return SimpleNamespace(returncode=0)
+    monkeypatch.setattr(verify_lanes.subprocess, 'run', merge)
+    result = verify_lanes._verdict(['ridge'], [str(part)], {0: 0}, str(tmp_path), .1, fixtures=['base', 'odd'])
+    assert (result == 0) == success
+    assert (tmp_path / 'column.json').exists() == success
+    assert json.loads((tmp_path / 'run-summary.json').read_text())['complete'] == success
+
+
+def test_resume_rejects_scope_change_before_touching_evidence(monkeypatch, tmp_path):
+    monkeypatch.setattr(verify_lanes.lane_select, 'shard', lambda *a: ([['ridge']], [1]))
+    monkeypatch.setattr(verify_lanes, '_run_local', lambda *a: pytest.fail('changed scope launched'))
+    manifest = dict(commit=verify_lanes._commit(), lanes=['ridge'], shards=[['ridge']],
+                    fixtures='base', repeats=2, backend='cpu', probe_group='core')
+    (tmp_path / 'manifest.json').write_text(json.dumps(manifest))
+    (tmp_path / 'column.json').write_text('previous evidence')
+    (tmp_path / 'part0.json').write_text('previous part')
+    before = {p.name: p.read_bytes() for p in tmp_path.iterdir()}
+    with pytest.raises(SystemExit):
+        verify_lanes.main(['--lane', 'ridge', '--resume', '--fixtures', 'odd', '--out', str(tmp_path)])
+    assert {p.name: p.read_bytes() for p in tmp_path.iterdir()} == before
+
+
+def test_resume_can_change_budget_and_concurrency(tmp_path):
+    manifest = dict(commit='same', lanes=['ridge'], shards=[['ridge']], fixtures='base',
+                    repeats=2, backend='cpu', probe_group='core', budget=1, jobs=1)
+    (tmp_path / 'manifest.json').write_text(json.dumps(manifest))
+    verify_lanes.validate_resume(tmp_path, dict(manifest, budget=300, jobs=2))
+    (tmp_path / 'manifest.json').unlink()
+    (tmp_path / 'part0.json').write_text('{}')
+    with pytest.raises(ValueError, match='without their manifest'):
+        verify_lanes.validate_resume(tmp_path, manifest)

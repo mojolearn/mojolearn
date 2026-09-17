@@ -222,7 +222,7 @@ def _run_local(groups, load, args, out_dir):
     return parts, codes, time.monotonic() - args.started
 
 
-def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None):
+def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None, fixtures=None):
     """COMPLETE only when every shard reported and the cells cover exactly the
     lanes selected. Anything else is INCOMPLETE and exits 1."""
     failures = []
@@ -244,17 +244,34 @@ def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None):
             failures.append("result merge exceeded the remaining run budget")
     else:
         failures.append("no merge: no part records or total run budget exhausted")
-    covered, verdicts = set(), {}
+    covered, verdicts, cells = set(), {}, {}
     if os.path.exists(merged):
-        with open(merged) as fh:
-            cells = json.load(fh).get("cells") or {}
-        covered = {k.split("/")[0] for k in cells}
+        try:
+            record = json.loads(Path(merged).read_text())
+            if not isinstance(record, dict) or not isinstance(record.get("cells"), dict):
+                raise ValueError("expected a record with a cells object")
+            cells = record["cells"]
+            if record.get("complete") is not True:
+                failures.append("merged record is not marked complete")
+        except (OSError, ValueError) as exc:
+            failures.append(f"invalid merged record: {exc}")
         for key, cell in cells.items():
+            if not isinstance(cell, dict) or cell.get("verdict") != "STABLE":
+                failures.append(f"{key}: missing or non-STABLE training verdict")
+            if not isinstance(cell, dict):
+                continue
+            covered.add(key.split("/")[0])
             for field, value in cell.items():
-                if ((field == "verdict" and value != "STABLE")
-                        or (field.endswith("_verdict") and value not in ("STABLE", "N/A"))):
+                if field.endswith("_verdict") and value not in ("STABLE", "N/A"):
                     failures.append(f"{key}: {field}={value}")
-            verdicts.setdefault(key.split("/")[0], set()).add(cell.get("verdict"))
+            verdicts.setdefault(key.split("/")[0], set()).add(str(cell.get("verdict")))
+    if fixtures is not None:
+        expected = {f"{lane}/{fixture}" for lane in lanes for fixture in fixtures}
+        missing_cells, extra_cells = sorted(expected - set(cells)), sorted(set(cells) - expected)
+        if missing_cells:
+            failures.append(f"missing requested cells: {missing_cells}")
+        if extra_cells:
+            failures.append(f"unexpected cells: {extra_cells}")
     # A CELL THAT SAYS REFUSED IS NOT A CHECK. Measured 2026-09-16: one lane on
     # a stale host binding set exited 0, wrote its part, merged, and printed
     # `verdict COMPLETE` in 3 s with its only cell reading REFUSED. That is the
@@ -272,7 +289,7 @@ def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None):
                         f"{' ...' if len(missing) > 8 else ''}")
     if extra:
         failures.append(f"cells for lanes that were not selected: {extra[:8]}")
-    ran = sum(1 for n in lanes if n in verdicts and verdicts[n] - {"REFUSED"})
+    ran = sum(1 for n in lanes if verdicts.get(n, set()) & {"STABLE", "MOVED"})
     print(f"\n# lanes selected {len(lanes)}, lanes with cells {len(covered)}, lanes actually "
           f"checked {ran}, shards {len(parts)}, {elapsed:.0f} s")
     for f in failures:
@@ -296,6 +313,26 @@ def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None):
         tmp.write_text(json.dumps(result, indent=2) + "\n")
         tmp.replace(summary)
     return 1 if failures else 0
+
+
+
+def validate_resume(out_dir, manifest):
+    """Reject changed work before replacing manifests, logs or merged results."""
+    path = Path(out_dir) / "manifest.json"
+    if not path.exists():
+        if any(Path(out_dir).glob("part*.json")):
+            raise ValueError("cannot resume part records without their manifest")
+        return
+    try:
+        previous = json.loads(path.read_text())
+    except (OSError, ValueError) as exc:
+        raise ValueError(f"cannot read resume manifest: {exc}") from exc
+    if not isinstance(previous, dict):
+        raise ValueError("invalid resume manifest")
+    fields = ("commit", "lanes", "shards", "fixtures", "repeats", "backend", "probe_group")
+    changed = [name for name in fields if previous.get(name) != manifest.get(name)]
+    if changed:
+        raise ValueError(f"resume scope changed: {', '.join(changed)}; use a new output directory")
 
 
 def main(argv=None):
@@ -390,9 +427,6 @@ def main(argv=None):
                 ap.error("one Metal lane/fixture/probe per round; use test-algo for expanded diagnostics")
         if not args.resume and any(Path(out_dir).glob("part*.json")):
             ap.error("records already exist; use --resume or a new output directory")
-        os.makedirs(out_dir, exist_ok=True)
-        for filename in ("column.json", "column.incomplete.json"):
-            Path(out_dir, filename).unlink(missing_ok=True)
     manifest = dict(commit=_commit(), lanes=lanes, shards=[list(g) for g in groups], weights=load,
                     fixtures=args.fixtures, repeats=args.repeats, runner=args.runner, backend=args.backend,
                     probe_group=args.probe_group, budget=args.budget, timeout=args.timeout, jobs=args.jobs,
@@ -401,13 +435,23 @@ def main(argv=None):
     if args.plan or args.runner == "pods":
         _plan(groups, load, args, out_dir)
         return 0
-    with open(os.path.join(out_dir, "manifest.json"), "w") as fh:
-        json.dump(manifest, fh, indent=1)
+    if args.resume:
+        try:
+            validate_resume(out_dir, manifest)
+        except ValueError as exc:
+            ap.error(str(exc))
+    os.makedirs(out_dir, exist_ok=True)
+    for filename in ("column.json", "column.incomplete.json"):
+        Path(out_dir, filename).unlink(missing_ok=True)
+    manifest_path = Path(out_dir) / "manifest.json"
+    temporary = manifest_path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps(manifest, indent=1) + "\n")
+    temporary.replace(manifest_path)
     try:
         parts, codes, elapsed = _run_local(groups, load, args, out_dir)
     except ValueError as exc:
         ap.error(str(exc))
-    return _verdict(lanes, parts, codes, out_dir, elapsed, args.deadline)
+    return _verdict(lanes, parts, codes, out_dir, elapsed, args.deadline, fixtures)
 
 
 if __name__ == "__main__":
