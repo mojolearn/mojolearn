@@ -107,7 +107,7 @@ from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
-from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for
+from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 from neighbors.checks.smem_distance_tile import (
     SMT_MAX_K,
@@ -295,7 +295,7 @@ def block_topk_applies(
         return (
             not use_vendor_topk
             and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
-            and k >= 1 and k <= SMT_MAX_K and k <= n_index
+            and k >= 1 and k <= SMT_MAX_K and k <= KNN_BLOCK_TOPK_MAX_K and k <= n_index
             and n_features > 0 and n_features <= 2147483647
             and n_index <= 2147483647
         )

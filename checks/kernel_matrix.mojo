@@ -1706,7 +1706,16 @@ def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
         return identical
-    return False
+    # 2026-09-17 (lane/knn-tiled-distance, DEVIATION 3000): ON where the
+    # shared-memory tile runs, which admits per BLOCK from the same
+    # request-local metadata. There the flush IS what the distance class
+    # pays for: on the RTX 4090 at 400k x 4k x d220 the smem tile's distance
+    # class went 37.9 to 31.4 ms (k10) and the request 60.9 to 56.5 ms
+    # (paired medians 0.754 to 0.695 of base), every bit equal on the cuda
+    # column against the cpu host route and the sabotage arm DIVERGENT
+    # (bench/results/knn_tiled_2026-09-17/). The register tile keeps the
+    # 2026-09-11 reading (neutral, off).
+    return knn_smem_distance_tile_for[column, identical]()
 
 
 #: DEVIATION 2631's measured tile, FLIPPED 2026-09-11 on the H200 (pod
@@ -1771,7 +1780,15 @@ def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
         return True
     if column == COLUMN_CPU:
         return False  # scheduling; the measured schedule is NVIDIA's
-    return False
+    # FLIPPED ON NVIDIA 2026-09-17 (RTX 4090, bench/results/knn_tiled_2026-09-17/):
+    # the distance class at 400k x 4k, 4,000 queries, 7 column tiles went
+    # 59.4 to 37.9 ms on Istella-S (d 220, k 10) and 14.6 to 13.7 ms on taxi
+    # (d 11); kneighbors paired medians 0.754 (Istella-S) and 0.938 (taxi)
+    # of base. Every knn, radius and kde lane IDENTICAL on the cuda column
+    # against the cpu host route (five fixtures, two repeats), the sabotage
+    # arm DIVERGENT on every knn infer and batch cell. Apple and AMD are
+    # untimed and keep the register tile.
+    return column == COLUMN_NVIDIA
 
 
 def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
@@ -1784,7 +1801,22 @@ def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
         return knn_smem_distance_tile_for[column, identical]()
     if column == COLUMN_CPU:
         return False  # scheduling; the measured schedule is NVIDIA's
-    return False
+    # FLIPPED ON NVIDIA 2026-09-17 for k <= KNN_BLOCK_TOPK_MAX_K (RTX 4090,
+    # bench/results/knn_tiled_2026-09-17/): with the tile's rank loop paid
+    # inside the distance class and the 1 GiB matrix never written, 4,000
+    # queries against 400,000 rows went (paired medians of base) 0.649 on
+    # Istella-S and 0.764 on taxi at k 10 against the tile alone at 0.695
+    # and 0.982, and 42.5 against 55.1 ms (Istella-S) and 10.7 against 27.8
+    # ms (taxi) at k 1. At k 64 the in-block rank loop costs more than the
+    # selector it replaces (147 against 127 ms Istella-S, 116 against 97 ms
+    # taxi), so above the bound the matrix and the small-k selector stay.
+    return column == COLUMN_NVIDIA and knn_smem_distance_tile_for[column, identical]()
+
+
+#: The widest k the block top-k (DEVIATION 3001) serves by default; larger
+#: k keeps the matrix and the small-k selector (measured above).
+#: `-D MOJOLEARN_KNN_BLOCK_TOPK_ALL_K=1` lifts it to the selector's 64.
+comptime KNN_BLOCK_TOPK_MAX_K = 64 if is_defined["MOJOLEARN_KNN_BLOCK_TOPK_ALL_K"]() else 16
 
 
 @always_inline

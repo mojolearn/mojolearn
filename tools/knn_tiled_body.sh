@@ -462,6 +462,45 @@ cuvs)
     : > "$OUT/cuvs.done"
     ;;
 
+final-build)
+    # The shipped defaults (no -D): the arm the merge ships.
+    cd "$R" || exit 9
+    step build_final_core 1800 sh "$0" _build_core "$R" "" final
+    make_tree final "$R" after0
+    ( cd /root/t-final && env $(tree_env final) "$P" -c "import mojolearn as ml; print('final import OK', ml.vendor(), ml.numeric_mode())" ) > "$OUT/imports.txt" 2>&1
+    note final_build_done
+    : > "$OUT/final-build.done"
+    ;;
+
+final-run)
+    BRANCH_SHA=$(cat "$R/SHIPPED_COMMIT.txt")
+    I1=/root/ktd_out/identity
+    ( cd /root/t-final && env $(tree_env final) MOJOLEARN_COMMIT="$BRANCH_SHA" \
+      "$PIXI" run --manifest-path "$R/pixi.toml" python3 tools/identity_break.py --require-backend cuda --lanes "$ALL_LANES" --fixtures "$FIX5" --repeats 2 \
+      --json "$OUT/cuda-final.json" > "$OUT/logs/cuda-final.log" 2>&1; echo "cuda-final rc=$?" ) | tee -a "$OUT/progress.txt"
+    cd "$R"
+    D() { PYTHONPATH="$R/python:$R/tools" "$PIXI" run python3 tools/identity_break.py --diff "$@"; }
+    D "$OUT/cuda-final.json" "$I1/cpu-after.json" "$I1/cpu-base.json" > "$OUT/diff.final.cuda-vs-cpu-after-cpu-base.txt" 2>&1; echo "diff final cuda-cpu rc=$?" | tee -a "$OUT/progress.txt"
+    D "$I1/cuda-base.json" "$OUT/cuda-final.json" > "$OUT/diff.final.cuda-base-vs-final.txt" 2>&1; echo "diff final cuda base-final rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-final.json" "/root/ktd_out/identity2/cuda-sabox.json" > "$OUT/diff.final.cuda-final-vs-sabox.txt" 2>&1; echo "diff final vs sabox rc=$?" | tee -a "$OUT/progress.txt"
+    cat > "$OUT/arms_knn.json" <<JSON
+{
+ "base":  {"python": "$P", "cwd": "/root/t-base",  "cpu": false, "env": {"PYTHONPATH": "/root/t-base/python:/root/t-base/tools",   "MOJOLEARN_NUMERIC_MODE": "identical"}},
+ "final": {"python": "$P", "cwd": "/root/t-final", "cpu": false, "env": {"PYTHONPATH": "/root/t-final/python:/root/t-final/tools", "MOJOLEARN_NUMERIC_MODE": "identical"}}
+}
+JSON
+    env PYTHONPATH=/root/t-after0/python "$P" "$R/bench/speed/classical_ladder_infer.py" race --data "$DATA" --models "$MODELS" --arms "$OUT/arms_knn.json" --out "$OUT/race_knn" --lanes knn,kde --datasets taxi,istella --outer 5 --rounds 3 --warmup 1 > "$OUT/race_knn.console" 2>&1
+    note "race_final=$?"
+    cp /root/ktd_out/race/floor_probe.py "$OUT/floor_probe.py"
+    sed -i 's|/root/ktd_out/race/floor_%s.json|/root/ktd_out/final-run/floor_%s.json|' "$OUT/floor_probe.py"
+    ( cd /root/t-final && env $(tree_env final) "$P" "$OUT/floor_probe.py" final > "$OUT/floor_final.console" 2>&1 ); note "floor_final=$?"
+    SYSPY=$(command -v python3)
+    ( cd "$R" && MOJOLEARN_REPO_COMMIT="$BRANCH_SHA" "$SYSPY" tools/classical_two_datasets.py race --lane knn --dataset istella --data "$DATA" --out "$OUT/ctd_knn" --work /root/ctd-work --root /root/t-final --arms ours,cuml-gpu --rounds 5 --ours-python "$PIXI run --manifest-path $R/pixi.toml python3" --theirs-python "$SYSPY" > "$OUT/ctd_knn_istella.console" 2>&1 ); note "ctd_knn_istella=$?"
+    ( cd "$R" && MOJOLEARN_REPO_COMMIT="$BRANCH_SHA" "$SYSPY" tools/classical_two_datasets.py race --lane knn --dataset taxi --data "$DATA" --out "$OUT/ctd_knn" --work /root/ctd-work --root /root/t-final --arms ours,cuml-gpu --rounds 5 --ours-python "$PIXI run --manifest-path $R/pixi.toml python3" --theirs-python "$SYSPY" > "$OUT/ctd_knn_taxi.console" 2>&1 ); note "ctd_knn_taxi=$?"
+    note final_run_done
+    : > "$OUT/final-run.done"
+    ;;
+
 *)
     echo "unknown stage $STAGE" >&2; exit 2 ;;
 esac
