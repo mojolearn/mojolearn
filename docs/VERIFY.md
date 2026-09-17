@@ -286,6 +286,22 @@ If the hashes match, two people have demonstrated the claim **to each other**,
 with us entirely absent. That is stronger than anything we can publish about
 ourselves, and it needs no GPU, no bindings and no network to run.
 
+### If you have nobody to swap with
+
+`bench/results/verify_reports/` carries OUR OWN evidence documents, one per
+device class, each taken at the commit named inside it, so
+`verify --compare mine.json ours.json` works on the day you install the wheel.
+
+**It is weaker than two strangers comparing and it does not replace it.**
+Comparing against our document puts us back in the loop: the answer then
+depends on our having run what we say we ran, on the hardware we say we ran
+it on. The paragraph above is the protocol that removes us; this is the
+fallback for someone who has not yet found a second party, and a way to check
+that your install produces a comparable document at all. The comparison is
+also `INCOMPARABLE` rather than an agreement whenever the harness digest, the
+fixture fingerprints or a property protocol differ, so a document of ours from
+another commit will refuse to agree with yours rather than appear to.
+
 ### A comparer's one failure mode is agreeing too easily
 
 This command is meant to be pointed at us, so the interesting question is not
