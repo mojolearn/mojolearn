@@ -1,6 +1,6 @@
 import copy
 import pytest
-from verify_cpu_batch import evaluate_pair
+from verify_cpu_batch import evaluate_pair, expected_oracle_failure
 
 
 def records():
@@ -16,6 +16,21 @@ def records():
 
 def test_stable_changed_native_result_passes():
     assert evaluate_pair(*records(), 'x', ['base'])['passed']
+
+
+def test_only_repeated_explicit_oracle_failures_allow_nonzero_sabotage_exit():
+    clean, bad = records()
+    cell = bad['cells']['x/base']
+    cell.update(verdict='DIVERGENT', oracle_errors=['wrong result'] * 2)
+    assert expected_oracle_failure(bad)
+    assert evaluate_pair(clean, bad, 'x', ['base'])['passed']
+    cell['oracle_errors'].pop()
+    assert not expected_oracle_failure(bad)
+    cell['oracle_errors'].append('wrong result')
+    cell['hashes'][1] = 'c' * 16
+    assert not expected_oracle_failure(bad)
+    cell['verdict'] = 'REFUSED'
+    assert not expected_oracle_failure(bad)
 
 
 @pytest.mark.parametrize('part', ['infer', 'model', 'batch', 'stepfull', 'batchgrad', 'rlpair'])

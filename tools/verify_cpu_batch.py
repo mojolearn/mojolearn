@@ -44,6 +44,18 @@ def evaluate_pair(clean, sabotage, lane, fixtures):
                             and all(r['detected'] for r in rows)))
 
 
+def expected_oracle_failure(record):
+    """Exit one is expected only for repeated, explicit numerical failures."""
+    cells = record.get('cells', {})
+    return bool(cells and all(
+        c.get('verdict') == 'DIVERGENT'
+        and len(c.get('hashes', [])) >= 2
+        and len(set(c['hashes'])) == 1
+        and len(c.get('oracle_errors', [])) == len(c['hashes'])
+        and all(c['oracle_errors'])
+        for c in cells.values()))
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lanes', required=True)
@@ -100,7 +112,9 @@ def main():
             records[arm] = json.loads(path.read_text()) if path.exists() else {}
         result = evaluate_pair(records['clean'], records['sabotage'], lane, harness.FIXTURES)
         result['exit_codes'] = statuses
-        result['passed'] &= all(code == 0 for code in statuses.values())
+        result['passed'] &= (statuses['clean'] == 0 and
+                             (statuses['sabotage'] == 0 or
+                              (statuses['sabotage'] == 1 and expected_oracle_failure(records['sabotage']))))
         (directory / 'negative-controls.json').write_text(json.dumps(result, indent=2) + '\n')
         summary['lanes'][lane] = result
         (args.out / 'summary.json').write_text(json.dumps(summary, indent=2) + '\n')

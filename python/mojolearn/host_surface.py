@@ -2472,7 +2472,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "ordered-gradient-sum": "no reference",
     # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
     # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
     # harness no longer produces. `unwatched` would be the wrong reason and
