@@ -180,12 +180,6 @@ holds the gate reports at `450addf1` with `--threads 3`, the user path through
 `from_checkpoint` on both paths, both Mojo check outputs, every A/B row, the
 same-window PyTorch rows, a profile and the benchmark scripts.
 
-The Python admission of the ids (`_byte_lm_host._refuse_ids`, shared with the
-GPU trainer's `logits`) settles the common case with two C-speed scans of the
-view since 2026-09-17 (lane/infer-speed-neural) and keeps its loop only to name
-the first offender with the same message; at `[256, 32]` that removes a
-Python loop over 8192 ids from every call. No kernel changed.
-
 ## Certified CPUs
 
 | CPU | host | build | loss bytes equal | sabotage caught | evidence |
