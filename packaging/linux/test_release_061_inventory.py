@@ -12,6 +12,13 @@ spec.loader.exec_module(packer)
 
 
 class ReleaseInventory(unittest.TestCase):
+    def test_python_payload_includes_imported_model_subpackage(self):
+        entries = packer.python_package_entries()
+        for name in ("__init__", "causal_lm", "config", "safetensors", "tokenizer"):
+            path = f"mojolearn/models/{name}.py"
+            self.assertEqual(entries[path].read_bytes(), (packer.PKG / "models" / (name + ".py")).read_bytes())
+        self.assertFalse(any("/tests/" in path for path in entries))
+
     def fixture(self, root):
         # DEVIATION 2290: the fixture root declares its own version; the tests
         # read it back through the packer's shared reader and pin no number.

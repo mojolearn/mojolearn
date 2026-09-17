@@ -18,7 +18,8 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
     mapped = {l for e in ENTRIES for l in e['lanes']}
     assert set(report['additional_lanes']) == set(h.LANES) - mapped
     assert report['execution'] == 'not run'
-    assert report['lanes']['select-d']['status'] == 'withheld'
+    assert report['lanes']['select-d']['status'] == 'available'
+    assert report['lanes']['holtwinters']['status'] == 'available'
     assert report['lanes']['select-d']['properties']['batch']['kind'] == 'check'
     assert report['lanes']['bpe-trainer']['properties']['batch']['kind'] == 'not_applicable'
     assert report['lanes']['transformer']['properties']['batchgrad']['command'] == 'verify --batch-checks'
@@ -31,9 +32,9 @@ def test_inspection_and_batch_flags_route_to_suite():
 
 def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted():
     h = va.load_harness()
-    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['select-d'])
-    assert lanes == ['select-d']
-    assert 'select-d' not in va.host_surface().public_reference_lanes()
+    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['samba'])
+    assert lanes == ['samba']
+    assert 'samba' not in va.host_surface().public_reference_lanes()
     for name in ('bpe-trainer', 'cross-val-folds'):
         assert name in va.host_surface().public_reference_lanes()
 

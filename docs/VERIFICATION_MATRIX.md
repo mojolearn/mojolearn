@@ -27,9 +27,9 @@ The four kinds, for one lane:
 ## The numbers
 
 - Lanes: **229** (179 single-device, 50 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **222**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **60** of 222.
-- Source public API entries with NO IDENTITY LANE AT ALL: **17**.
+- Source public API entries enumerated from the public API: **224**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **60** of 224.
+- Source public API entries with NO IDENTITY LANE AT ALL: **19**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
 
@@ -37,10 +37,10 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 197 | 25 |
-| cpu verifier | 167 | 55 |
-| sabotage seen to move a build | 67 | 155 |
-| batch part or named n/a | 203 | 19 |
+| gpu column | 197 | 27 |
+| cpu verifier | 167 | 57 |
+| sabotage seen to move a build | 67 | 157 |
+| batch part or named n/a | 203 | 21 |
 
 Per kind, over the lanes:
 
@@ -85,7 +85,9 @@ means a CPU path exists and only the identity lane is missing.
 | `lowbit.is_packed` | function | - | `python/mojolearn/lowbit.py` |
 | `lowbit.materialize_one` | function | - | `python/mojolearn/lowbit.py` |
 | `lowbit.pack_one` | function | - | `python/mojolearn/lowbit.py` |
+| `lowbit.widen_bf16` | function | - | `python/mojolearn/lowbit.py` |
 | `mamba.Mamba1DecodeSession` | class | - | `python/mojolearn/_mamba_impl.py` |
+| `models` | name | - | `python/mojolearn/__init__.py` |
 | `tokenizer.TrainedBpeVocabulary` | class | - | `python/mojolearn/tokenizer.py` |
 | `transformer.TransformerDecodeSession` | class | - | `python/mojolearn/_transformer_impl.py` |
 
@@ -236,6 +238,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `lowbit.pack` | 12 | apple | training | declared | part | NO |
 | `lowbit.pack_one` | **0** |  |  |  |  | NO |
 | `lowbit.unpack` | 4 | apple | training | declared | n/a | NO |
+| `lowbit.widen_bf16` | **0** |  |  |  |  | NO |
 | `mamba.Mamba1Block` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `mamba.Mamba1DecodeSession` | **0** |  |  |  |  | NO |
 | `mamba.Mamba2Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -270,6 +273,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `model_pool_training.PooledByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
 | `model_selection.cross_val_score` | 1 | amd,apple,nvidia | training | declared | part | NO |
 | `model_selection.split_descriptor` | 1 |  |  | none | n/a | NO |
+| `models` | **0** |  |  |  |  | NO |
 | `neural_network.SmallMLPTrainer` | 4 | amd,apple,nvidia | training | declared | part | NO |
 | `offload_training.OffloadedByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
 | `parallel_classical.apply_kernel_method` | 2 | amd,nvidia |  | none | part | NO |

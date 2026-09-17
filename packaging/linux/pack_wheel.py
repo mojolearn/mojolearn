@@ -45,7 +45,7 @@ it saved, are printed and written into SIZES.json beside the wheel.
 
 WHAT IS IN THE WHEEL, and why it matches the macOS one file for file except
 for the binaries: `mojolearn_diagnostics.py`, every `.py` directly under
-`python/mojolearn/` (no subpackage, no tests), the identity payload the
+`python/mojolearn/` and each explicitly declared subpackage (no tests), the identity payload the
 macOS build copies in (since 0.8.6: `mojolearn/_identity_trace_diff.py`,
 `mojolearn/_identity_break.py`, `mojolearn/reference_cards/`,
 `mojolearn/identity_columns/<record>/` and its COMMIT witness), one copy of
@@ -459,6 +459,17 @@ def sha(path):
     return h.digest()
 
 
+def python_package_entries():
+    """Use the same explicit Python package inventory as the macOS wheel."""
+    config = tomllib.loads((PY_DIR / "pyproject.toml").read_text())
+    entries = {}
+    for package in config["tool"]["setuptools"]["packages"]:
+        directory = PY_DIR.joinpath(*package.split("."))
+        for source in sorted(directory.glob("*.py")):
+            entries[source.relative_to(PY_DIR).as_posix()] = source
+    return entries
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", action="append", required=True,
@@ -512,8 +523,7 @@ def main():
                     f"{[k[1] for k in ks]}")
     entries = {}  # archive path -> filesystem path
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
-    for py in sorted(PKG.glob("*.py")):
-        entries[f"mojolearn/{py.name}"] = py
+    entries.update(python_package_entries())
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     seen_vendor_libs = set()
     for vendor, arch, files, libs, _, _ in sets:

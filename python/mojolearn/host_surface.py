@@ -2466,7 +2466,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "select-d": "no reference",
     "ordered-gradient-sum": "no reference",
     "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
@@ -2479,7 +2478,6 @@ PUBLIC_PENDING_LANES = {
     # user's CPU-only `verify --all` would read OWED for umap on a machine
     # that is fine.
     "umap": "no reference",
-    "holtwinters": "no reference",
     "gbdt-nan-modes": "no reference",
     "gbdt-parametric-losses": "no reference",
     "gbdt-lossguide-newtoncosine": "no reference",
