@@ -128,6 +128,21 @@ comptime SMT_META_REFUSED = -100000
 
 
 @always_inline
+def _smt_epilogue(
+    acc: Float32, qn: Float32, yn: Float32, is_sqrt: Bool
+) -> Float32:
+    """The register tile's epilogue, statement for statement."""
+    var dist = ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(yn))))
+    if dist <= Float32(0.0):
+        dist = Float32(0.0)
+    if is_sqrt:
+        dist = ftz(identical_sqrt(dist))
+    comptime if SMT_SABOTAGE:
+        dist = bitcast[DType.float32](bitcast[DType.uint32](dist) ^ UInt32(1))
+    return dist
+
+
+@always_inline
 def _smt_warp_min_u32(v: UInt32) -> UInt32:
     """The minimum over the SMT_TX lanes of one thread row (five xor levels;
     an integer minimum, so the same value under any tree)."""
