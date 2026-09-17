@@ -832,11 +832,11 @@ def _block_store(a, offset, length):
     helper and the helper is absent. One memcpy instead of one Python object
     per element (0.2 ns against 22); see `_buffer._same_dtype_store` for the
     one float32 subtlety."""
+    if length < _NATIVE_MIN:
+        return None  # a short run: the per-element copy is as fast as the detour
     from . import _buffer
     if not _buffer.hotpath_enabled():
         return None
-    if length == 0:
-        return array.array(_CODE[a.dtype])
     raw = a._mv[offset:offset + length].cast("B")
     return _buffer._same_dtype_store(raw, a.dtype)
 

@@ -1115,6 +1115,8 @@ def _native_classification_labels(values):
         return None  # `_classification_labels` names the refusal
     if arr.ndim != 1 or arr.size < _NATIVE_MIN_LABELS:
         return None
+    if arr.dtype in ("<u2", "<i1"):
+        arr = arr.astype("<i4")  # exact; the encoder has no 8- or 16-bit arm
     if arr.dtype not in ("<i4", "<i8", "<u4", "<u1"):
         return None  # floats are refused by `_classification_labels`
     try:

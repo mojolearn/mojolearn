@@ -42,10 +42,25 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
+from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
 
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+
+#: THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` is the core host
+#: binding's existing sabotage define (`core_host_sabotage()` reports it and
+#: `_backend` refuses to load such a binary without
+#: MOJOLEARN_HOST_ALLOW_SABOTAGE=1). Under it every helper here answers
+#: WRONG ON PURPOSE in a way that keeps its output well formed: the cast
+#: writes each run of eight elements reversed, min and max trade places,
+#: the float sum folds descending, argmax takes the LAST maximum, equality
+#: is inverted, the encoder's codes are reversed, the
+#: gather reads the next table slot, a duplicate index is accepted, an
+#: overlap is denied and the fold ids are rotated by one.
+#: `tests/test_hotpath_native.py` must FAIL against such a build in every
+#: group; a differential test that passes against it compares nothing.
+comptime HOTPATH_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: dtype codes shared with `python/mojolearn/_array.py::_NATIVE_CODE`.
 comptime HP_F32 = 0
@@ -158,7 +173,10 @@ def _cast_run[src: DType, dst: DType](src_addr: Int, dst_addr: Int, n: Int) rais
             if _refused[src, dst, HP_W](v):
                 bad = True
                 break
-            dp.unsafe_store[width=HP_W](i, _convert[src, dst, HP_W](v))
+            comptime if HOTPATH_SABOTAGE:
+                dp.unsafe_store[width=HP_W](i, _convert[src, dst, HP_W](v.reversed()))
+            else:
+                dp.unsafe_store[width=HP_W](i, _convert[src, dst, HP_W](v))
             i += HP_W
         while i < hi and not bad:
             var s = SIMD[src, 1](sp.unsafe_load(i))
@@ -251,12 +269,15 @@ def _reduce[dt: DType](addr: Int, n: Int, what: Int) raises -> PythonObject:
     var total = Float64(0.0)
     var integral = 1
     with GILReleased(Python()):
-        if what == HP_MIN:
+        var want_min = what == HP_MIN
+        comptime if HOTPATH_SABOTAGE:
+            want_min = what == HP_MAX
+        if want_min:
             for i in range(1, n):
                 var v = p.unsafe_load(i)
                 if v < best:
                     best = v
-        elif what == HP_MAX:
+        elif what == HP_MIN or what == HP_MAX:
             for i in range(1, n):
                 var v = p.unsafe_load(i)
                 if v > best:
@@ -264,12 +285,20 @@ def _reduce[dt: DType](addr: Int, n: Int, what: Int) raises -> PythonObject:
         elif what == HP_ARGMAX:
             for i in range(1, n):
                 var v = p.unsafe_load(i)
+                comptime if HOTPATH_SABOTAGE:
+                    if v >= best:
+                        best = v
+                        at = i
+                    continue
                 if v > best:
                     best = v
                     at = i
         elif what == HP_SUM:
             for i in range(n):
-                total = total + p.unsafe_load(i).cast[DType.float64]()
+                comptime if HOTPATH_SABOTAGE:
+                    total = total + p.unsafe_load(n - 1 - i).cast[DType.float64]()
+                else:
+                    total = total + p.unsafe_load(i).cast[DType.float64]()
         else:
             comptime if dt.is_floating_point():
                 for i in range(n):
@@ -342,6 +371,8 @@ def _equal[dt: DType](a_addr: Int, b_addr: Int, n: Int, dst_addr: Int) raises:
         var hi = min(i + chunk, n)
         while i + HP_W <= hi:
             var eq = ap.unsafe_load[width=HP_W](i).eq(bp.unsafe_load[width=HP_W](i))
+            comptime if HOTPATH_SABOTAGE:
+                eq = ~eq
             dp.unsafe_store[width=HP_W](i, eq.cast[DType.uint8]())
             i += HP_W
         while i < hi:
@@ -449,6 +480,9 @@ def _encode_labels[dt: DType](
         codes.unsafe_store(i, Int32(lo))
         last = v
         last_code = lo
+    comptime if HOTPATH_SABOTAGE:
+        for i in range(n):
+            codes.unsafe_store(i, Int32(k - 1) - codes.unsafe_load(i))
     return k
 
 
@@ -543,11 +577,14 @@ def gather_i32_binding(
             var tasks = _tasks(count)
             var chunk = host_predict_chunk(count, tasks)
 
-            def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk}:
+            def _range(t: Int) {imm tp, imm cp, imm dp, imm count, imm chunk, imm nt}:
                 var lo = t * chunk
                 var hi = min(lo + chunk, count)
                 for i in range(lo, hi):
-                    dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
+                    comptime if HOTPATH_SABOTAGE:
+                        dp.unsafe_store(i, tp.unsafe_load((Int(cp.unsafe_load(i)) + 1) % nt))
+                    else:
+                        dp.unsafe_store(i, tp.unsafe_load(Int(cp.unsafe_load(i))))
 
             if tasks == 1:
                 _range(0)
@@ -596,8 +633,9 @@ def check_indices_i64_binding(
             var bp = rebind[MutPointer[UInt64, MutUntrackedOrigin]](bits.unsafe_ptr())
             for i in range(count):
                 if _bit_test_set(bp, Int(p.unsafe_load(i))):
-                    status = 2
-                    break
+                    comptime if not HOTPATH_SABOTAGE:
+                        status = 2
+                        break
             _ = len(bits)
     return PythonObject(status)
 
@@ -635,8 +673,9 @@ def indices_overlap_i64_binding(
                     break
                 var word = wp.unsafe_load(v >> 6)
                 if (word & (UInt64(1) << UInt64(v & 63))) != 0:
-                    hit = 1
-                    break
+                    comptime if not HOTPATH_SABOTAGE:
+                        hit = 1
+                        break
         _ = len(bits)
     if bad:
         raise Error("indices_overlap_i64: index out of range")
@@ -750,7 +789,10 @@ def select_fold_i64_binding(
     with GILReleased(Python()):
         var n_train = 0
         for i in range(rows):
-            if fp.unsafe_load(i) == want:
+            var at = i
+            comptime if HOTPATH_SABOTAGE:
+                at = (i + 1) % rows  # the row-to-fold assignment, rotated by one
+            if fp.unsafe_load(at) == want:
                 tp.unsafe_store(n_test, Int64(i))
                 n_test += 1
             else:
