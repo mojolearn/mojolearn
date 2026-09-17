@@ -2,14 +2,14 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sequential forest prediction on the host, for a box with no GPU.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
-and the GPU bindings do not import this file, so building it changes no byte
-of theirs. It exists because the two forest loops the GPU bindings run for
-`inference_engine="sequential"` live in modules that import `max.gpu.host` at
+HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`.
+It exists because the two forest loops the GPU bindings ran for
+`inference_engine="sequential"` lived in modules that import `max.gpu.host` at
 module level (`ensemble/randomforest.mojo:8`,
 `extratrees/impl/randomforest/randomforest.mojo:100`), while the per-tree walks
 they call are GPU-free. This module imports those walks as they are and
-restates the loops around them.
+restates the loops around them; since DEVIATION 2900 the GPU rf and trees
+bindings import this file too and run these loops for that engine.
 
 WHAT IS REUSED, NOT RESTATED. `DecisionTree.predict` and its `predict_one`
 (`ensemble/decisiontree/decisiontree.mojo:529-654`, with the DEVIATION 1942
@@ -22,12 +22,14 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS. `rf_host_predict` MIRRORS
 `RandomForest.predict_proba`, `ensemble/randomforest.mojo:1140-1161` (and the
 regression branch of `RandomForest.predict`, `:1033-1074`, which is the same
 loop read at output 0). `et_host_predict` MIRRORS `forest_vote`,
-`extratrees/impl/randomforest/randomforest.mojo:516-547`. Each is three
+`extratrees/impl/randomforest/randomforest.mojo:611-641`. Each is three
 statements. Zero a float32 vector, add every tree's leaf vector into it in
 increasing tree order, divide each element by `Float32(n_trees)`. The tree
 rebuilds MIRROR `_rebuild_trees` (`bindings/_mojolearn_rf.mojo:635-668`) and
 `et_predict_binding`'s loop (`bindings/_mojolearn_trees.mojo:500-523`) and add
-the bounds checks a file read off disk needs.
+the bounds checks a file read off disk needs. Since DEVIATION 2900 the two
+GPU bindings call these functions for their `sequential` engine instead of
+carrying their own copies of the loops, and the rows fan out to host threads.
 
 The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement, and the brief in docs/lanes/ records what it has shown.

@@ -43,7 +43,9 @@ hash is checked for shape only (two unsigned 32-bit halves); the Mojo reader
 recomputes it from the sources and splits, which this parser does not.
 
 This module holds no arithmetic beyond the `1 - p` column
-`GradientBoosting.predict_proba` also computes in Python (DEVIATION 2333).
+`GradientBoosting.predict_proba` also computes in Python (DEVIATION 2333),
+and with a binding that carries `forest_host_gbdt_sigmoid_pair` (DEVIATION
+2902) not even that: both columns come from the binding in one pass.
 What it promises is what the gate measured: tools/forest_host_gate.py
 compares the host predictions of a recorded model and fixture against the
 SHA-256 a GPU run recorded, and the brief in
