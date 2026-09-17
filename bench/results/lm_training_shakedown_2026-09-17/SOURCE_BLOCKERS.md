@@ -68,14 +68,55 @@ the M4 by extrapolating a synthetic `array.array` scan (linear by construction):
 that is a 70x per-step tax on the stateless path and a fixed ~16 s per
 checkpoint on the resident path. `all_finite` is native and is not part of this.
 
-## D. No gradient accumulation on the LM trainer
+## D. Gradient accumulation exists, but only through a second trainer class
 
-`accumulation_steps` / microbatch carry exist for Samba (`_samba_impl.py:214`),
-the MLP (`_mlp_impl.py:397`) and Embedding (`embedding.py:37`). `train_step` on
-`SmallByteLanguageModelTrainer` is forward + backward + AdamW update in one
-call with no way to accumulate a gradient across microbatches. That matters
-because it is the obvious way to satisfy blocker A (large effective batch) when
-blocker E caps the batch that fits in memory.
+CORRECTED 2026-09-17, after this file first claimed there was none.
+`SmallByteLanguageModelTrainer.train_step` is forward + backward + AdamW update
+in one call and has no accumulation of its own, which is what the first reading
+saw. But `ParallelByteLanguageModelTrainer`
+(`python/mojolearn/parallel_training.py:89`) takes `logical_shards`
+microbatches per `train_step`, sums their gradients in a fixed order and
+advances the optimizer exactly ONCE:
+
+    self._state['completed_steps'] = before + 1
+
+`logical_shards` is admitted in [1, 1024] and `devices=(0,)` replays every
+shard on ONE GPU. `training/byte_lm_parallel.mojo:117` builds one `ByteTrainer`
+per DEVICE, not per shard, plus two `n_total` float32 accumulator buffers, so
+on one device the extra cost over the plain path should be about 1.30 GB and
+nothing that scales with K.
+
+That is the way past blocker A. At batch 1, length 2048:
+
+| logical shards | tokens per optimizer step | steps for 10B | steps for 25B |
+|---|---|---|---|
+| 1 | 2,048 | 4,882,813 (over the cap) | 12,207,032 (over the cap) |
+| 4 | 8,192 | 1,220,704 (over the cap) | 3,051,758 (over the cap) |
+| 8 | 16,384 | 610,352 | 1,525,879 (over the cap) |
+| 16 | 32,768 | 305,176 | 762,940 |
+| 64 | 131,072 | 76,294 | 190,735 |
+
+So logical_shards >= 8 clears the step cap for 10BT and >= 16 clears it for
+25B, without needing a batch that fits in device memory.
+
+THREE THINGS ARE UNMEASURED AND ONE IS A SEMANTIC CHANGE:
+
+  * this class has only ever run at toy shapes (the checks in
+    `tools/byte_lm_parallel_check.py` and its siblings use
+    `Shape(batch=2, length=7, d_model=24, ..., n_layers=3, vocab_size=256)`).
+    Nothing has run it at 162M;
+  * whether the device peak really stays flat in K on one device is a
+    prediction from reading the allocation, not a measurement;
+  * whether K microbatches per optimizer step BEATS K separate steps on
+    throughput is unmeasured. It should, because the AdamW update over
+    162,147,840 parameters is a fixed per-step cost that K shards amortize,
+    but that is an argument, not a number;
+  * the reduction is an ordered SUM of per-shard mean cross-entropies, not a
+    mean over the effective batch (`parallel_training.py:5`). The gradient is
+    therefore K times a single shard's, which is a learning-rate decision for
+    a real run. It does not affect determinism.
+
+`tools/lm_shards_probe.py` in this lane measures the first three.
 
 ## E. Signed 32-bit span check caps batch at 20 at this shape
 
