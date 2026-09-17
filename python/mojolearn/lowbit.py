@@ -38,10 +38,23 @@ float32, because they never enter a GEMM and the profiles are about the
 GEMM's operands. `pack` and `unpack` are inverses on the packed tensors up to
 the rounding `pack` performs, and `unpack(pack(unpack(p)))` is `unpack(p)`.
 """
-import numpy as np
-
 from . import _backend
 from ._bufcheck import dtype_name, is_native_f32, probe
+
+
+class _LazyNumpy:
+    """NumPy is NOT a runtime dependency of this package
+    (python/mojolearn/NUMPY_FREE_CONTRACT.md). This module reaches for it
+    only when a packing or materialization call runs, never at import, and
+    a NumPy-free spelling of these paths over `mojolearn.Array` is owed
+    (lane/model-loader)."""
+
+    def __getattr__(self, name):
+        import numpy
+        return getattr(numpy, name)
+
+
+np = _LazyNumpy()
 
 FORMATS = ("float32", "bfloat16", "int8")
 

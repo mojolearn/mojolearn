@@ -59,3 +59,6 @@ build/
 # the byte LM host build writes its .so here (bindings/build_byte_lm_host.sh);
 # the sibling identical/ directory is already ignored above
 mojolearn/host/*.so
+
+# Copies of the checked-in GPU-trained CTR verification fixtures.
+mojolearn/verify_reference/ctr_models/

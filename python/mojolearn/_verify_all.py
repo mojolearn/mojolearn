@@ -358,6 +358,7 @@ def _device_block(ml, harness):
         numeric_mode=_backend.numeric_mode(),
         vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
         device=_verify.describe_device(), cpu_model=harness.cpu_model(),
+        requested_parallel_devices=list(harness._par_devices()),
         platform=platform.platform(), python=platform.python_version(),
         numpy=__import__("numpy").__version__,
     )
@@ -903,6 +904,41 @@ def _read_cells(doc, label):
     return out, states, problems
 
 
+def comparison_context_problems(a, b, keys):
+    """Hash agreement is meaningful only under the same recorded input contract."""
+    if not keys:
+        return []
+    ac, bc = a.get('verification_contract'), b.get('verification_contract')
+    if not isinstance(ac, dict) or not isinstance(bc, dict):
+        return ['missing verification_contract; rerun verification with a current wheel']
+    problems = []
+    if not ac.get('harness_sha256') or ac.get('harness_sha256') != bc.get('harness_sha256'):
+        problems.append('different or missing harness digest')
+    for lane, fixture, part in keys:
+        for field in ('fixtures', 'heldout'):
+            av, bv = ac.get(field, {}).get(fixture), bc.get(field, {}).get(fixture)
+            if not av or av != bv:
+                problems.append(f'{fixture}: different or missing {field} fingerprints')
+        if part not in ('train', 'infer', 'model', 'file'):
+            av, bv = ac.get('protocols', {}).get(part), bc.get('protocols', {}).get(part)
+            if not av or av != bv:
+                problems.append(f'{part}: different or missing protocol')
+    return sorted(set(problems))
+
+
+def verification_contract(harness, harness_file, data, held, extra_parts):
+    protocols = dict(batch=dict(alone=harness.BATCH_ALONE,
+        split=list(harness.BATCH_SPLIT) + ['n'], prefix='1,7,full-1', enabled=True))
+    for part in ('stepfull', *extra_parts):
+        protocols[part] = (harness._rlpair_protocol() if part == 'rlpair'
+                           else harness._part_protocol(part, harness.BATCH_ALONE))
+    return dict(harness_sha256=vref.sha256_file(harness_file),
+                fixtures={f: dict(zip(('X', 'y_clf', 'y_reg'), map(harness._h, values)))
+                          for f, values in data.items()},
+                heldout={f: dict(X=harness._h(x)) for f, x in held.items()},
+                protocols=protocols)
+
+
 def compare_documents(a, b, label_a="A", label_b="B"):
     """Diff two evidence documents: where two machines agree, and where they do not.
 
@@ -960,6 +996,9 @@ def compare_documents(a, b, label_a="A", label_b="B"):
     # of an unreadable file produces a cell count, and a cell count next to a
     # complaint is exactly the shape a reader skims as a result.
     shared = [] if problems else sorted(set(ca) & set(cb), key=_sortkey)
+    context_problems = comparison_context_problems(a, b, shared) if not problems else []
+    if context_problems:
+        shared = []
     agree, differ, moved, uncomputed, na, na_differ, agreed_div = [], [], [], [], [], [], []
     for key in shared:
         va_, vb_ = ca[key], cb[key]
@@ -1018,6 +1057,8 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         verdict_, code = "MALFORMED", EXIT_USAGE
     elif same_document:
         verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
+    elif context_problems:
+        verdict_, code = "INCOMPARABLE", EXIT_CANNOT_RUN
     elif differ:
         verdict_, code = "MISMATCH", EXIT_MISMATCH
     elif moved:
@@ -1032,6 +1073,7 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
     return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
                 labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
+                context_problems=context_problems,
                 agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
                 uncomputed=len(uncomputed), n_a_differing=len(na_differ),
                 agreed_divergent=len(agreed_div),
@@ -1120,7 +1162,10 @@ def format_compare(r):
             if len(keys) > 20:
                 lines.append(f"  ... and {len(keys) - 20} more")
     lines.append("")
-    if r["verdict"] == "AGREE":
+    if r["verdict"] == "INCOMPARABLE":
+        lines.append("RESULT: INCOMPARABLE. Input or protocol provenance is missing or differs.")
+        lines.extend("  " + problem for problem in r['context_problems'])
+    elif r["verdict"] == "AGREE":
         lines.append(f"RESULT: AGREE. {r['agree']} cell parts match across both documents, none")
         lines.append("differ, and none is present in only one. Neither machine trusted the other,")
         lines.append("and neither had to trust us.")
@@ -1457,6 +1502,10 @@ def cmd_verify_all(args):
     # fit reported at zero milliseconds did not happen, so a fabricated run is
     # obvious in the document (lane/expose-inference-surface, 2026-09-16).
     extra_parts = vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()
+    contract_data, contract_held = dict(data), dict(held)
+    if not getattr(args, "no_models", False) and 'base' not in contract_data:
+        contract_data['base'], contract_held['base'] = harness.fixture('base'), harness.heldout('base')
+    contract = verification_contract(harness, harness_file, contract_data, contract_held, extra_parts)
     lane_seconds, cell_seconds = {}, {}
     with reference_training():
         for lane in lanes:
@@ -1499,7 +1548,7 @@ def cmd_verify_all(args):
                    records=len(table["records"]), harness_sha256=table.get("harness_sha256")),
         counts=counts, families=fams, cells=rows,
         lane_seconds=lane_seconds,
-        coverage=coverage_report, scope_gaps=scope_gaps,
+        coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
