@@ -55,16 +55,31 @@ entry in front of it:
                                    `ftz(fma(1, ftz(left), ftz(right)))` per
                                    cell, until one piece remains.
 
-THE NEGATIVE CONTROL. `gemm_oracle` walks every leaf DESCENDING under
+THE NEGATIVE CONTROL. `gemm_oracle` flips a VALUE in every leaf under
 `-D MOJOLEARN_HOST_SABOTAGE=1` (`GEMM_ORACLE_HOST_SABOTAGE`), which moves the
-linear forward and backward and the RMSNorm weight gradient. The embedding
-and the accumulate carry no arm of their own: a gather and a pairwise add
-have no fold order to move (an addition commutes), so a sabotage arm there
-would be inert, and the lanes that reach them also reach a GEMM (the
-training-primitives lane's linear and RMSNorm) or the optimizer's
-GEMM-backed clip (optim-adam-clip), which move.
+linear forward and backward and the RMSNorm weight gradient.
+
+THE ACCUMULATE CARRIES ITS OWN ARM, and the sentence that stood here until
+2026-09-17 is why it has to. It read: the accumulate needs no arm of its own,
+because "a pairwise add has no fold order to move (an addition commutes), so a
+sabotage arm there would be inert, and the lanes that reach them also reach a
+GEMM ... which move". The first half is an argument against an ORDER arm and
+is correct; it is the same argument the shared GEMM leaf arm lost on the `ties`
+fixture (`docs/lanes/SABOTAGE_AUDIT_2026-09-16.md`), and the remedy there was a
+VALUE flip, which no commuting add can absorb. The second half is FALSE, and
+was measured false: `ordered-gradient-sum` reaches `ordered_sum_gradients`,
+which reaches `accumulate_grads`, which reaches THIS function and nothing
+else. Under the training family's sabotage build the lane read INERT on `base`
+and on `ties`, both repeats, the same `gradients` hash in both arms
+(`bench/results/identity_break/2026-09-17_sabotage-sweep/d-neural/`). A public
+lane had no negative control at all. `SAMBA_ACCUMULATE_HOST_SABOTAGE` steps
+every returned cell of `host_samba_accumulate` by one unit in the last place
+through `gemm_oracle_sabotage_value_flip`, which no order and no exact fold can
+undo. The embedding gather still carries no arm, and still needs none: every
+lane that reaches it also reaches a GEMM.
 """
 from std.math import isfinite
+from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_rsqrt
 from embedding.checks.embedding_oracle import (
@@ -77,8 +92,22 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.host.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.host.gemm_oracle import (
+    OP_NN,
+    OP_NT,
+    gemm_oracle,
+    gemm_oracle_sabotage_value_flip,
+)
 from training.checks.optimizer_oracle import microbatch_split_is_identical
+
+
+#: The gate's negative control for the accumulate (see THE ACCUMULATE CARRIES
+#: ITS OWN ARM above). The training family's define, the one
+#: `python/mojolearn/host_surface.py` declares and
+#: `training_host_sabotage()` reads back, so a build carrying it says so and
+#: is refused outside the gate by `_backend.py::load_host_module`. Production
+#: compiles nothing below it.
+comptime SAMBA_ACCUMULATE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 #: `transformer/checks/transformer_backward.mojo:85-86`.
@@ -285,6 +314,9 @@ def host_samba_accumulate(
         var single = List[Float32](capacity=n)
         for i in range(n):
             single.append(ftz(cur[i]))
+        comptime if SAMBA_ACCUMULATE_HOST_SABOTAGE:
+            for i in range(n):
+                single[i] = gemm_oracle_sabotage_value_flip(single[i])
         return single^
     var pieces = a
     while pieces > 1:
@@ -297,4 +329,7 @@ def host_samba_accumulate(
                 nxt.append(ftz(identical_mul_add(Float32(1.0), left, right)))
         cur = nxt^
         pieces = pairs
+    comptime if SAMBA_ACCUMULATE_HOST_SABOTAGE:
+        for i in range(len(cur)):
+            cur[i] = gemm_oracle_sabotage_value_flip(cur[i])
     return cur^
