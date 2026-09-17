@@ -23,7 +23,7 @@ set -u
 STAGE=${1:?stage}
 R=/root/mojolearn
 B=/root/mojolearn-base
-case "$STAGE" in _*) OUT=/root/ktd_out/setup ;; *) OUT=/root/ktd_out/$STAGE ;; esac
+case "$STAGE" in _*) OUT=/root/ktd_out/${KTD_PARENT:-setup} ;; *) OUT=/root/ktd_out/$STAGE; export KTD_PARENT=$STAGE ;; esac
 mkdir -p "$OUT/logs"
 export PATH="$HOME/.pixi/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
@@ -107,6 +107,33 @@ setup)
     step fit_models 1500 env PYTHONPATH=/root/t-after0/python "$P" bench/speed/classical_ladder_infer.py fit --data "$DATA" --models "$MODELS" --lanes knn,kde
     note setup_done
     : > "$OUT/setup.done"
+    ;;
+
+rebuild)
+    # The branch arms again after a source push (the base arms and the host
+    # sets stand); then the trees, the import check and the fits.
+    cd "$R" || exit 9
+    step build_after0_core 1800 sh "$0" _build_core "$R" "" after0
+    step build_after0_est 1800 sh "$0" _build_est "$R" "" after0
+    step build_smem_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1" smem
+    step build_topk_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1 -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1" topk
+    step build_sabo_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1 -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1 -D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1" sabo
+    step build_phase0_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_KNN_PHASE_TIMERS=1" phase0
+    step build_phasesmem_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_KNN_PHASE_TIMERS=1 -D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1" phasesmem
+    step build_phasetopk_core 1800 sh "$0" _build_core "$R" "-D MOJOLEARN_KNN_PHASE_TIMERS=1 -D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1 -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1" phasetopk
+    MOJOLEARN_HOST_OUTDIR=/root/hostbins/after step host_core_after 1500 sh bindings/build_core_host.sh
+    MOJOLEARN_HOST_OUTDIR=/root/hostbins/after step host_est_after 1500 sh bindings/build_estimators_host.sh
+    sha256sum /root/gpubins/*/*.so /root/hostbins/*/*.so > "$OUT/so_sha256.txt" 2>&1
+    for a in after0 smem topk sabo phase0 phasesmem phasetopk; do make_tree "$a" "$R" after0; done
+    make_tree base "$B" base
+    rm -rf /root/mojolearn-cpu && mkdir -p /root/mojolearn-cpu && ( cd "$R" && tar cf - --exclude=.pixi --exclude='*.so' . ) | ( cd /root/mojolearn-cpu && tar xf - )
+    : > "$OUT/imports.txt"
+    for a in base after0 smem topk; do
+        ( cd "/root/t-$a" && env $(tree_env "$a") "$P" -c "import mojolearn as ml; m = ml.NearestNeighbors(); print('$a import OK', ml.vendor(), ml.numeric_mode())" ) >> "$OUT/imports.txt" 2>&1
+    done
+    step fit_models 1500 env PYTHONPATH=/root/t-after0/python "$P" bench/speed/classical_ladder_infer.py fit --data "$DATA" --models "$MODELS" --lanes knn,kde
+    note rebuild_done
+    : > "$OUT/rebuild.done"
     ;;
 
 phase)

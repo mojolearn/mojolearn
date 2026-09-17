@@ -437,7 +437,6 @@ def knn_regress_binding(
 
 
 def knn_classify_resident_binding(
-    handle: PythonObject,
     index_addr: PythonObject,
     queries_addr: PythonObject,
     y_addr: PythonObject,
@@ -448,32 +447,34 @@ def knn_classify_resident_binding(
     dist_params: PythonObject,
 ) raises -> PythonObject:
     """`knn_classify` over a resident index (DEVIATION 3002): the same
-    `params` and `dist_params` as `knn_classify_binding`, plus the handle
-    `knn_index_prepare` returned first; `index_addr` is still the host
-    bytes, read for the host-side refusals only."""
-    if len(params) < 7:
+    arguments as `knn_classify_binding`, with the handle `knn_index_prepare`
+    returned PREPENDED to `params` (a Python binding takes at most eight
+    arguments, and the classifier already uses them all): params[0] is the
+    handle, params[1..] the classifier's own list. `index_addr` is still
+    the host bytes, read for the host-side refusals only."""
+    if len(params) < 8:
         raise Error(
-            "knn_classify: params must hold at least 7 values, got "
+            "knn_classify_resident: params must hold at least 8 values, got "
             + String(len(params))
         )
-    var ni = Int(py=params[0])
-    var nq = Int(py=params[1])
-    var nf = Int(py=params[2])
-    var kk = Int(py=params[3])
-    var qt = Int(py=params[4])
-    var no = Int(py=params[5])
-    var want_proba = Int(py=params[6]) != 0
-    if len(params) != 7 + no:
+    var h = Int(py=params[0])
+    var ni = Int(py=params[1])
+    var nq = Int(py=params[2])
+    var nf = Int(py=params[3])
+    var kk = Int(py=params[4])
+    var qt = Int(py=params[5])
+    var no = Int(py=params[6])
+    var want_proba = Int(py=params[7]) != 0
+    if len(params) != 8 + no:
         raise Error(
-            "knn_classify: params must hold 7 + n_outputs ("
-            + String(7 + no)
+            "knn_classify_resident: params must hold 8 + n_outputs ("
+            + String(8 + no)
             + ") values, got "
             + String(len(params))
         )
     var n_classes = List[Int]()
     for i in range(no):
-        n_classes.append(Int(py=params[7 + i]))
-    var h = Int(py=handle)
+        n_classes.append(Int(py=params[8 + i]))
     var ip = _f32_ptr(Int(py=index_addr))
     var qp = _f32_ptr(Int(py=queries_addr))
     var yp = _i32_ptr(Int(py=y_addr))

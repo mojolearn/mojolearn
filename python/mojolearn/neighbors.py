@@ -1042,15 +1042,16 @@ class KNeighborsClassifier(NearestNeighbors):
         params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out,
                   1 if want_proba else 0] + n_classes
         if handle is not None:
+            # The handle rides at the front of `params`: a binding takes at
+            # most eight arguments and the classifier uses all eight.
             self.used_query_tile_ = resident(
-                handle,
                 addr_ro(idx, name="idx"),
                 addr_ro(q, name="q"),
                 addr_ro(y_cols, name="y_cols"),
                 addr(labels, name="labels"),
                 addr(proba, name="proba"),
                 addr(uniq, name="uniq"),
-                params,
+                [handle] + params,
                 # metric, metric_arg, weights -- see _dist_triple there.
                 self._dist_params(),
             )
