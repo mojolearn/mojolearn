@@ -1,0 +1,5 @@
+build	core	0	25
+build	tsa	0	1
+build	forecast	0	1
+sabotage-build	tsa	0	1
+sabotage-build	forecast	0	1
