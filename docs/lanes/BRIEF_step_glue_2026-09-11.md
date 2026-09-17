@@ -26,8 +26,14 @@ Evidence
 bench/results/e1g/2026-09-11_190725-nvidia-h100-80gb-hbm3-step-breakdown/remote/step-breakdown/breakdown.tsv
 (H100 80GB HBM3, 1980 MHz, lean shipped step 295.8 / 294.7 ms, timed
 envelope 299.8 ms, witnesses equal with timers compiled in, off and on).
-Target shape B2 L1024 DM768 FF2048 V50257, 12 layers, n = 162,147,840
-parameters, M = 2,048 token rows.
+Target shape B1 L2048 DM768 FF2048 V50257, 12 layers, n = 162,147,840
+parameters, M = 2,048 token rows. (CORRECTED 2026-09-17, lane
+`lane/attention-speed`: this line read "B2 L1024" and the cited leg's own
+`lean-shipped-enwik8/result.json` reads `"batch": 1, "length": 2048`. M is
+2,048 token rows either way, so no number in this section moves, but the
+wrong spelling had already propagated into a planning document as a reason
+to discount the breakdown as measured at the wrong shape. It was not: it is
+the target shape.)
 
 Outside GEMM (144.9 ms) and the attention kernels (116.2 ms), per step:
 
