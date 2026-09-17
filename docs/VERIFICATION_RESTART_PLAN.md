@@ -21,6 +21,21 @@ The rest of this document's counts describe the original baseline. See
 packaging fixes, limitations and the remaining queue. Full reference regeneration
 and final artifact qualification remain owed.
 
+## Follow-up: CPU completion, 2026-09-17
+
+CPU availability is now 144, with 35 withheld and 50 parallel exclusions.
+The installed development wheel passed 16 changed/reference-filled lanes over
+all nine fixtures twice (423 IDENTICAL, 297 N/A, no failures or owed parts).
+Every available lane has core references on all nine fixtures. Scoped strict
+admission preserves unrelated references and exposes each lane's policy in
+installed coverage. Historical native-control coverage is 60/246 appendix
+entries; this is not all-fixture/current-artifact qualification.
+
+[The active checkpoint](lanes/LANE_STATUS_cpu_verification_completion.md)
+tracks the next 25-lane cloud batch, resource limits, retained failures and
+remaining work. It must be read before resuming or renting another pod.
+No PyPI publication or final release qualification has occurred.
+
 ## Objective and current position
 
 Finish honest, user-runnable verification for every exposed algorithm and

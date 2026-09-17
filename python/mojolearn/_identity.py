@@ -305,7 +305,11 @@ def cmd_identity(args):
     cpu_only = _backend.vendor() == "cpu"
     # Public CPU checks use only the small probes supported by inference
     # wheel dependencies. Full source verification has its own lane list.
-    lanes = [l for l in record_lanes if not cpu_only or l in host_surface.public_reference_lanes()]
+    # verify --all can admit later per-lane records. This legacy command
+    # compares its fixed bundled columns, so a promoted fix-record lane must
+    # not accidentally compare against an older, pre-fix answer here.
+    cpu_record_lanes = set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())
+    lanes = [l for l in record_lanes if not cpu_only or l in cpu_record_lanes]
     if args.lanes:
         asked = [x for x in args.lanes.split(",") if x]
         unknown = [x for x in asked if x not in record_lanes]

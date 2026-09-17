@@ -1762,8 +1762,19 @@ def _cmd_emit_reference(args):
         _emit(f"CANNOT RUN: {exc}", sys.stderr)
         return EXIT_CANNOT_RUN
     logs = []
-    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append,
+    lanes = [lane.strip() for lane in getattr(args, "lanes", "").split(",") if lane.strip()]
+    unknown = set(lanes) - set(harness.LANES)
+    if unknown:
+        _emit(f"USAGE: unknown reference lanes: {sorted(unknown)}", sys.stderr)
+        return EXIT_USAGE
+    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append, lanes=lanes or None,
                              parts=vref.PARTS + (vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()))
+    if getattr(args, "reference_table", None):
+        try:
+            table = vref.merge_reference_lanes(vref.load_table(args.reference_table), table, lanes)
+        except vref.TableError as exc:
+            _emit(f"REFUSED: {exc}", sys.stderr)
+            return EXIT_USAGE
     vref.write_table(table, args.emit_reference)
     for line in logs:
         _emit(line, sys.stderr)
