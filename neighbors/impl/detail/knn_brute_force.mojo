@@ -932,11 +932,13 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # summation order nothing here can pin, so under IDENTICAL
                     # the product and the epilogue are ONE kernel with the
                     # feature axis walked ascending in a single chain per
-                    # cell. Three spellings of that one chain, chosen by the
+                    # cell. Four spellings of that one chain, chosen by the
                     # kernel matrix: row-major index one cell per thread
                     # (`pinned_distance_tile_kernel`), transposed index one
-                    # cell per thread, and transposed index with an
-                    # RT_ROWS x 4 register tile per thread. Same bits from all three.
+                    # cell per thread, transposed index with an RT_ROWS x 4
+                    # register tile per thread, and (DEVIATION 3000, the
+                    # NVIDIA default since 2026-09-17) the transposed index
+                    # staged through shared memory. Same bits from all four.
                     var is_sqrt_arg = Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0)
                     var layout_distance_launched = False
                     comptime if KNN_SMEM_TILE:

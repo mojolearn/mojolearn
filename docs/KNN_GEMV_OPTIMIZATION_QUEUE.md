@@ -9,10 +9,11 @@ historical artifacts. Do not promote a candidate from this document alone.
 
 The paper's approximately 25x kNN and 21x GEMV AMD ratios compare existing
 IDENTICAL and FAST implementations. They do not isolate an unavoidable cost
-of the identity contract. kNN's pinned distance calculation lacks the operand
-reuse of a fast matrix-product implementation. That source observation does
-not establish that operand reuse explains GEMV's gap, or how much of either
-end-to-end gap each mechanism contributes.
+of the identity contract. kNN's pinned distance calculation LACKED the operand
+reuse of a fast matrix-product implementation until 2026-09-17 (the smem
+tile item below; the attribution it produced is in the lane file). That
+source observation does not establish that operand reuse explains GEMV's
+gap, or how much of the GEMV end-to-end gap each mechanism contributes.
 
 The [transposed index candidate](../neighbors/checks/transposed_index_distance_candidate.mojo)
 keeps each distance's ascending feature FMA/FTZ chain, original row-major norm
@@ -71,6 +72,29 @@ provenance when using it; do not treat a log footer alone as a new certificate.
   queries 140 ms, so the upload and its staging were the floor of the call.
   DEVIATION 2921 keeps the index on the device across `kneighbors` calls
   (`neighbors/resident_index.mojo`); the search body is unchanged.
+- [x] kNN: OPERAND REUSE, the thing the first paragraph of this document
+  said the pinned distance lacked. Since 2026-09-17 (lane/knn-tiled-distance,
+  DEVIATION 3000, `neighbors/checks/smem_distance_tile.mojo`) the NVIDIA
+  IDENTICAL column stages each 16-feature slice of the query rows and of
+  the transposed index columns into shared memory once and every thread
+  advances its 8 x 4 chains from three 16-byte shared loads per step; the
+  chain per cell is unchanged. With it DEVIATION 2629's exact-chain
+  admission is ON per block (row `knn_distance_exact_chain_for`, NVIDIA)
+  and DEVIATION 3001's block top-k (row `knn_block_topk_select_for`, k <=
+  16) writes no distance matrix. Measured on an RTX 4090
+  (bench/results/knn_tiled_2026-09-17/, docs/lanes/LANE_STATUS_lane-knn-
+  tiled-distance.md): 4,000 queries against 400,000 rows at k 10 went from
+  82.5 to 53.5 ms on Istella-S (d 220) and 33.7 to 25.0 ms on taxi (d 11),
+  the distance class alone 59.4 to 31.4 ms on Istella-S; the phase table
+  in that file is the attribution this document asked for. cuML brute
+  force and cuVS on the same box and blocks read 63.6 and 63.1 ms
+  (Istella-S) and 7.2 and 6.9 ms (taxi), so the Istella-S shape is now
+  at their number and the taxi shape is 3.5x theirs. Apple and AMD keep
+  the register tile until timed.
+- [x] The per-call index upload of `KNeighborsClassifier` and
+  `KNeighborsRegressor` (DEVIATION 3002) and the per-call upload and
+  validation of the KDE fit set (DEVIATION 3003) are gone on the GPU
+  binding; same lane file.
 - [ ] Keep original norms, per-distance FP32 operation order, tie/composite-key
   selection and output offsets unchanged. First extend host dispatch metadata
   with selected flags, query tile, metric and transpose/preparation scope.
