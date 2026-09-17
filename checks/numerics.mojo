@@ -1098,3 +1098,141 @@ def identical_clamp(x: Float32, lo: Float32, hi: Float32) -> Float32:
     from std.math import max, min
 
     return min(max(x, lo), hi)
+
+
+# ===========================================================================
+# LOW-BIT STORAGE SEAMS (lane/identical-lowbit-inference, 2026-09-17)
+# ===========================================================================
+# DEVIATION 2900 to 2905. The bf16 and int8 profiles of
+# `gemm/IDENTICAL_LOWBIT_CONTRACT.md` are built from these six helpers and
+# from nothing else, and the oracle in `gemm/host/gemm_lowbit_oracle.mojo`
+# imports them rather than spelling them a second time. Every one is a
+# bit-level construction: no conversion here trusts a backend's `cast`,
+# because a cast's rounding at a tie is a codegen decision on Metal and a
+# documented one on CUDA, and the contract needs it to be neither.
+
+
+def bf16_bits_to_f32(bits: UInt16) -> Float32:
+    """DEVIATION 2900: the exact widening. A bf16 is the top half of a
+    float32, so this is a shift and cannot round. Contract L-1."""
+    return bitcast[DType.float32](UInt32(bits) << UInt32(16))
+
+
+def f32_to_bf16_bits_rne(x_in: Float32) -> UInt16:
+    """DEVIATION 2901: the narrowing seam, round to nearest even on the
+    discarded 16 bits, after the flush. Contract L-2.
+
+    A NaN keeps its sign and top payload bits and is forced quiet, so a NaN
+    never narrows to an infinity. An overflow rounds up into the infinity
+    encoding, which is what round-to-nearest means at the top of the range.
+    """
+    var x = ftz(x_in)
+    var b = bitcast[DType.uint32](x)
+    if (b & UInt32(0x7F800000)) == UInt32(0x7F800000) and (
+        b & UInt32(0x007FFFFF)
+    ) != UInt32(0):
+        return UInt16((b >> UInt32(16)) | UInt32(0x0040))
+    var lsb = (b >> UInt32(16)) & UInt32(1)
+    var rounded = b + UInt32(0x7FFF) + lsb
+    return UInt16(rounded >> UInt32(16))
+
+
+#: `1.5 * 2^23`. Adding and subtracting it rounds a float32 of magnitude at
+#: most `2^22` to an integer under the default rounding mode, and nothing
+#: else: no multiply, so contraction has nothing to fuse, and no operation
+#: below the smallest normal.
+comptime RNE_MAGIC_F32 = Float32(12582912.0)
+
+
+def f32_round_half_even(x: Float32) -> Float32:
+    """DEVIATION 2902: round to the nearest integer, ties to even, for
+    `|x| <= 2^22`. Contract L-4. Spelled with the magic constant rather than
+    a library `round`, whose tie rule is the library's."""
+    if x >= Float32(0.0):
+        return (x + RNE_MAGIC_F32) - RNE_MAGIC_F32
+    return (x - RNE_MAGIC_F32) + RNE_MAGIC_F32
+
+
+def pow2_f32(e: Int) -> Float32:
+    """DEVIATION 2903: `2^e` as a float32 built from its exponent field.
+    Above 127 it is the infinity; below -126 it is `+0.0`, because the
+    contract has no subnormal scales (contract L-3)."""
+    if e > 127:
+        return bitcast[DType.float32](UInt32(0x7F800000))
+    if e < -126:
+        return Float32(0.0)
+    return bitcast[DType.float32](UInt32(e + 127) << UInt32(23))
+
+
+def f32_exponent(x: Float32) -> Int:
+    """`floor(log2 |x|)` for a normal `x`, read off the exponent field.
+    Zero and every subnormal answer -127."""
+    var b = bitcast[DType.uint32](x)
+    return Int((b >> UInt32(23)) & UInt32(0xFF)) - 127
+
+
+def i32_to_f32_pinned(v: Int32) -> Float32:
+    """DEVIATION 2904: the integer accumulator as a float32, contract L-5.
+
+    Exact below `2^24` and rounded to nearest even above it, spelled as two
+    exact conversions (a 20-bit high part and a 12-bit low part, each below
+    `2^24`), one exact scaling by `2^12`, and ONE float32 addition, so the
+    only rounding is the addition's and that one is IEEE's. A backend's own
+    int-to-float instruction rounds the same way on every vendor this tree
+    ships to, and this spelling is what makes that a construction rather
+    than a survey."""
+    var neg = v < Int32(0)
+    var wide = Int64(v)
+    if neg:
+        wide = -wide
+    var mag = UInt32(wide)
+    var hi = Float32(Int(mag >> UInt32(12)))
+    var lo = Float32(Int(mag & UInt32(0xFFF)))
+    var r = hi * Float32(4096.0) + lo
+    if neg:
+        return -r
+    return r
+
+
+#: The quantizer scales a row so its largest magnitude lands in `[64, 128)`:
+#: one exponent below the int8 ceiling, which keeps `rne(x * 2^-e)` at most
+#: 128 and the clamp below a one-sided event.
+comptime INT8_TARGET_EXPONENT = 6
+
+
+def int8_row_exponent(absmax: Float32) -> Int:
+    """DEVIATION 2905: the power-of-two scale of a row, contract L-3.
+    `e = floor(log2 absmax) - 6`, so `absmax * 2^-e` is in `[64, 128)`.
+    An all-zero row (absmax `0`, after the flush) takes `e = 0`."""
+    var a = ftz(absmax)
+    if a == Float32(0.0) or a != a:
+        return 0
+    return f32_exponent(a) - INT8_TARGET_EXPONENT
+
+
+def quantize_int8_value(x: Float32, e: Int) -> Int8:
+    """DEVIATION 2905: `q = clamp(rne(x * 2^-e), -127, 127)`, contract L-4.
+    The scaling is one multiply by a power of two, exact unless it lands
+    below the smallest normal, where the flush makes it zero; the rounding
+    is `f32_round_half_even`; the clamp is symmetric so `-q` is always
+    representable. A NaN quantizes to zero: the caller refuses NaN weights
+    before it ever gets here, and this is the one answer that cannot
+    corrupt a neighbor."""
+    if x != x:
+        return Int8(0)
+    var s = ftz(identical_mul(ftz(x), pow2_f32(-e)))
+    var r = f32_round_half_even(s)
+    if r > Float32(127.0):
+        r = Float32(127.0)
+    if r < Float32(-127.0):
+        r = Float32(-127.0)
+    return Int8(Int(r))
+
+
+def dequant_int8_pinned(acc: Int32, e_sum: Int) -> Float32:
+    """DEVIATION 2904: the dequantization seam, contract L-5 and L-6.
+    `ftz(acc_f32 * 2^(ea + eb))`: one multiply by a power of two, exact
+    unless it overflows or lands below the smallest normal, then the flush.
+    The multiply is `identical_mul` so that FAST and IDENTICAL builds spell
+    it the same way and only the pins differ."""
+    return ftz(identical_mul(i32_to_f32_pinned(acc), pow2_f32(e_sum)))
