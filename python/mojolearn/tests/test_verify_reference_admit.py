@@ -205,3 +205,11 @@ def test_scoped_admission_refuses_incomplete_or_incomparable_evidence(failure):
         base['cells']['new/base'] = {'stepfull': {'ref': 'c' * 16, 'cols': {'cpu': 0}}}
     with pytest.raises(vref.TableError):
         vref.merge_reference_lanes(base, candidate, ['new'])
+
+
+def test_incomplete_checkpoint_is_refused_even_with_a_clean_filename():
+    column = clean_column()
+    column['complete'] = False
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') == 'incomplete identity_break checkpoint'
+    column['complete'] = True
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None

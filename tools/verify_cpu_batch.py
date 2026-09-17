@@ -22,7 +22,9 @@ def evaluate_pair(clean, sabotage, lane, fixtures):
     rows = []
     for key in sorted(expected):
         a, b = clean.get('cells', {}).get(key), sabotage.get('cells', {}).get(key)
-        context = evidence.same_cell_context(clean, sabotage, key, 'train')
+        context = (evidence.same_cell_context(clean, sabotage, key, 'train')
+                   and clean.get('vendor') == sabotage.get('vendor')
+                   and evidence.devices(clean) == evidence.devices(sabotage))
         rows.append(dict(cell=key, context_matches=context,
                          clean=matrix.stable_digest(a, 'train') if a else None,
                          sabotage=matrix.stable_digest(b, 'train') if b else None,

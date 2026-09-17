@@ -254,6 +254,8 @@ def admit(j, path):
         return "sabotage, partial, probe, unfixed or smoke run (by name)"
     if not isinstance(j, dict) or not isinstance(j.get("cells"), dict):
         return "not an identity_break column"
+    if j.get("complete") is False:
+        return "incomplete identity_break checkpoint"
     if j.get("mode") != "identical":
         return f"mode {j.get('mode')!r}"
     if not _COMMIT.match(str(j.get("commit") or "")):
