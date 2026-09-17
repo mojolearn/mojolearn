@@ -2503,13 +2503,8 @@ PUBLIC_PENDING_LANES = {
     # inference replay, not CPU CTR training or final release qualification.
     # The other fix-record lanes passed installed reference-table replay;
     # legacy `identity` still restricts itself to its original column scope.
-    # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
-    "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
-    "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
-    "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
-    "mamba3-bf16w": "no reference", "mamba3-int8w": "no reference",
-    "mlp-bf16w": "no reference", "mlp-int8w": "no reference",
-    "samba-bf16w": "no reference", "samba-int8w": "no reference",
+    # All twelve low-bit weight lanes gained strict all-nine CPU references
+    # and complete native control pairs in 2026-09-17_cpu-complete-dependencies.
 }
 
 

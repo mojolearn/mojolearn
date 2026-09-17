@@ -104,16 +104,24 @@ VERIFIED DELETED, $0.0433. All 25 records retained at
 Its original training-only success summaries are NOT full qualification;
 `reevaluated-controls.json` is authoritative. These issues were subsequently fixed.
 
-**LIVE third pod `17o53wuev9wtbr`**, source `1d7fc53fe`, created 16:19 EDT,
-120-minute watchdog and external dead-man, two vCPUs, $0.06/hr. Root session
-95156. SSH `-p 39174 root@38.80.152.147`. Remote output `/root/leg_out/`.
-External `cloud-complete-dependencies/`, log `cloud-complete-dependencies-run.log`.
-Seventeen production and fifteen sabotage families, including neural, run 24
-lanes with two single-thread workers and 2400-second per-arm limits. First six
-Transformer/Mamba1/Mamba2 low-bit pairs pass; Mamba3 pairs in progress.
-Do not kill an owed run to start another rental. Collect results and verify
-DELETE/404/not-listed before renting again. Records are nested
-`records/<lane>/<lane>/cpu-*.json`; exits are `records/batch-exits.json`.
+Third pod `17o53wuev9wtbr` is VERIFIED DELETED (DELETE 204, GET 404,
+not listed). Source `1d7fc53fe`, two vCPUs, 120-minute watchdog/dead-man,
+$0.0365 total (build 253s, run 1844s, billed 2189s). No rental from this
+workstream remains active. Records and teardown are committed under
+`identity_break/2026-09-17_cpu-complete-dependencies/`.
+All twelve low-bit lanes and ten vendor-held candidates pass complete clean
+properties plus all-nine native training controls. `gp-normalize-y` and
+`gp-sample-y-normalize` refused because preprocessing was omitted; keep these
+failures. Future batches should build all 32 families to cover transitive
+native dependencies. The vendor-held candidates remain held for GPU evidence.
+
+The twelve low-bit lanes now have scoped strict candidate references, bringing
+candidate availability to 162 and withholding to 17. Their installed replay
+is still owed before merging this promotion into main. The ongoing frozen
+150-lane fresh-wheel replay has exposed stale N/A batch references in bootstrap
+and cross-val. These are OWED, not numerical divergence. Completed records on
+`lane/reference-regen` cover both; inspect and integrate them with strict scoped
+admission, preserving the original failed artifact reports.
 
 Concurrent sessions: `reference-regen` records eight ordinary neural lanes with
 all optional properties; `sabotage-sweep` records broader controls on base/ties
@@ -125,7 +133,8 @@ tracked main and these handoffs before starting overlapping work.
 1. Finish all-family Mac host build, stage the runtime closure, install its
    development wheel and replay CPU references. Preserve every failure.
    Commit and merge verified batches, including the export gate fix.
-2. Monitor and finish live CPU job; preserve failures and teardown evidence.
+2. Admit and replay the twelve low-bit lanes, then merge the verified batch.
+   All cloud outputs and verified teardown have been retained.
 3. Admit only fully passing low-bit lanes through scoped strict generation,
    regenerate packaged evidence/matrix, and replay installed wheel. Vendor-held
    lanes stay held even if all CPU checks pass.
