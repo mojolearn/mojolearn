@@ -197,6 +197,8 @@ def _collapse(values, errors):
     for v in values:
         if isinstance(v, str) and (v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED") or v.startswith("RLPAIR_MOVED")):
             return v, None
+    if errors:
+        return None, errors[0]
     return (values[0], None) if len(set(values)) == 1 else ("MOVED", None)
 
 

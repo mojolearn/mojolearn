@@ -85,6 +85,8 @@ def inventory(harness, table, vendor_class):
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
                 evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
                 evidence_snapshot_matches_harness=snapshot_matches,
+                reference_admission_policy=table.get('admission_policy',
+                    dict(status='legacy', reason='predates repeated-value and protocol admission; regenerate before release')),
                 declared_ctr_model_sha256=CTR_MODELS,
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
@@ -114,6 +116,9 @@ def format_human(report):
               "Use --json for sabotage pairs, backend records and one-versus-multiple GPU comparisons."]
     if not report['evidence_snapshot_matches_harness']:
         lines.append("Historical snapshot was generated from a different harness; newer lanes may lack evidence entries.")
+    policy = report['reference_admission_policy']
+    if policy.get('status') == 'legacy':
+        lines.append("Bundled reference admission: legacy; regeneration under the stricter policy is still owed.")
     lines += ["", "Saved-model entries (portable CPU probes plus dedicated gates):"]
     lines += [f"- {e['title']}: {e.get('alternative_gate', 'unmapped')}"
               for e in report["entries"] if not e["lanes"]]

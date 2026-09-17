@@ -114,3 +114,47 @@ def test_partial_and_smoke_directories_are_still_refused():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+@pytest.mark.parametrize('values,verdict', [
+    (['a'*16], 'STABLE'), (['a'*16,'b'*16], 'STABLE'),
+    (['ERROR: bad']*2, 'STABLE'), (['n/a:skipped']*2, 'N/A'),
+    (['a'*16]*2, 'N/A'), (['n/a:no-check']*2, 'STABLE'),
+    ('a'*16, 'STABLE'), ([None,None], 'STABLE')])
+def test_reference_requires_consistent_repeated_typed_values(values, verdict):
+    assert vref._part_value(dict(batch=values, batch_verdict=verdict), 'batch', min_repeats=2) is None
+
+
+def test_reference_accepts_real_repeats_and_explicit_nonapplicability():
+    assert vref._part_value(dict(hashes=['a'*16]*2, verdict='STABLE'), 'train') == 'a'*16
+    assert vref._part_value(dict(batch=['n/a:global-reduction']*2, batch_verdict='N/A'), 'batch') == 'n/a:global-reduction'
+
+
+@pytest.mark.parametrize('broken', ['none','one_repeat','missing_input','missing_heldout','batch_protocol','decode_protocol'])
+def test_builder_requires_witnesses_repeats_and_standard_property_protocols(tmp_path, monkeypatch, broken):
+    import json, types
+    h=types.SimpleNamespace(LANES={'x':None}, FIXTURES=['base'], LANE_REVISIONS={}, __file__=__file__,
+        _h=lambda x:'f'*16, fixture=lambda f:(0,0,0), heldout=lambda f:0,
+        BATCH_ALONE=16,BATCH_SPLIT=(3,7),_part_protocol=lambda part,alone:dict(length=32))
+    c=dict(verdict='STABLE',hashes=['a'*16]*2)
+    for part in ('infer','batch','stepfull'):
+        c[part]=['b'*16]*2;c[part+'_verdict']='STABLE'
+    j=dict(mode='identical',commit='a'*40,vendor='cpu-test',cells={'x/base':c},
+        fixtures={'base':dict(X='f'*16,y_clf='f'*16,y_reg='f'*16)},heldout={'base':dict(X='f'*16)},
+        batch_protocol=dict(alone=16,split=[3,7,'n'],prefix='1,7,full-1',enabled=True),
+        stepfull_protocol=dict(length=32))
+    if broken=='one_repeat':
+        for part in ('hashes','infer','batch','stepfull'):c[part]=c[part][:1]
+    elif broken=='missing_input':j['fixtures']={}
+    elif broken=='missing_heldout':j['heldout']={}
+    elif broken=='batch_protocol':j['batch_protocol']['alone']=1
+    elif broken=='decode_protocol':j.pop('stepfull_protocol')
+    path=tmp_path/'cpu.json';path.write_text(json.dumps(j))
+    monkeypatch.setattr(vref,'_commit_time',lambda *a:1)
+    table=vref.build_table([str(path)],h,str(tmp_path))
+    parts=set(table['cells'].get('x/base',{}))
+    expected={'none':{'train','infer','batch','stepfull'},'one_repeat':set(),'missing_input':set(),
+        'missing_heldout':{'train'},'batch_protocol':{'train','infer','stepfull'},
+        'decode_protocol':{'train','infer','batch'}}
+    assert parts==expected[broken]
+    assert table['admission_policy']['min_repeats']==2

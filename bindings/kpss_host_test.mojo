@@ -29,6 +29,7 @@ THE SABOTAGE ARM is that oracle's own `KPSS_ORACLE_HOST_SABOTAGE`, raised by
 re-exported here so both bindings' `*_host_sabotage` read-backs report it and
 a sabotage build is refused outside the gate.
 """
+from std.sys.compile import is_defined
 from std.math import isfinite
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -43,6 +44,12 @@ def _kpss_index(value: PythonObject) raises -> Int:
         raise Error("kpss host: integers expected, not booleans")
     var operator_module = Python.import_module("operator")
     return Int(py=operator_module.index(value))
+
+
+# A reduction-order perturbation can change the statistic without crossing the
+# stationarity threshold. This separate negative control targets the decision
+# consumed by select_d. Production builds contain neither arm.
+comptime KPSS_DECISION_SABOTAGE = is_defined["MOJOLEARN_KPSS_DECISION_SABOTAGE"]()
 
 
 def kpss_test_binding(
@@ -117,5 +124,7 @@ def kpss_test_binding(
         var st = kpss_host_f32(y, batch_size, n_obs, d, D, s, pval)
         for b in range(batch_size):
             fp[b] = Int32(1) if st.stationary[b] else Int32(0)
+            comptime if KPSS_DECISION_SABOTAGE:
+                fp[b] = Int32(1) - fp[b]
             sp[b] = st.stat[b]
     return PythonObject(batch_size)

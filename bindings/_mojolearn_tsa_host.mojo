@@ -66,7 +66,7 @@ from holtwinters.impl.runner import (
     holtwinters_validate_params,
 )
 from holtwinters.impl.tsa.holtwinters_params import seasonal_from_name
-from bindings.kpss_host_test import kpss_test_binding
+from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, kpss_test_binding
 from tsa.checks.kpss_oracle import KPSS_ORACLE_HOST_SABOTAGE
 
 
@@ -109,7 +109,7 @@ def tsa_host_sabotage_binding() raises -> PythonObject:
     KPSS series sums descending on purpose (-D MOJOLEARN_HOST_SABOTAGE=1,
     the gate's negative control; one define, every arm, the lowest-bit flip
     of `bindings/holtwinters_host_predict.mojo` included)."""
-    return PythonObject(HW_ORACLE_HOST_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE or HW_PREDICT_SABOTAGE)
+    return PythonObject(HW_ORACLE_HOST_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE or KPSS_DECISION_SABOTAGE or HW_PREDICT_SABOTAGE)
 
 
 # The GPU binding's names, same contract.

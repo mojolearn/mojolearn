@@ -198,3 +198,31 @@ def test_bundled_ctr_models_are_complete_and_digest_checked(tmp_path):
         ctr.resolve_model('gbdt-categorical-ctr-tables', 'base', tmp_path)
     with pytest.raises(RuntimeError, match='missing verification'):
         ctr.resolve_model('gbdt-tensor-ctr-tables', 'base', tmp_path)
+
+
+def test_probe_error_cannot_be_hidden_by_matching_hashes():
+    value='0123456789abcdef'
+    assert va._collapse([value,value],['model reload failed']) == (None,'model reload failed')
+    state, detail=vr.judge(value,dict(ref=value),error='model reload failed')
+    assert state == vr.REFUSED and detail == 'model reload failed'
+    assert vr.judge('BATCH_MOVED: broken row',dict(ref=value),error='other failure')[0] == vr.DIVERGENT
+
+
+@pytest.mark.parametrize('value', [123, [], {}, True, '', 'error: failed', 'n/a:'])
+def test_invalid_probe_value_cannot_become_a_matching_reference(value):
+    assert vr.judge(value,dict(ref=value))[0] == vr.REFUSED
+
+
+def test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match():
+    digest='0123456789abcdef'
+    h=types.SimpleNamespace(LANES={'x':lambda *a:object()},BATCH_ALONE=1,
+        EXTRA_PARTS={'stepfull':()},_train_hash=lambda f:digest,
+        _probe_fit=lambda *a:(digest,digest,None,'model: reload failed'),
+        _probe_batch=lambda *a:('n/a:function',None),
+        _probe_part=lambda *a:('n/a:no-decode-state',None,[]))
+    parts=va.run_cell(h,None,'x','base',(None,None,None),np.zeros((1,1)),2)
+    assert parts['train']==(digest,None)
+    assert parts['model']==(None,'model: reload failed')
+    rows=va.judge_rows([dict(lane='x',fixture='base',part='model',value=parts['model'][0],error=parts['model'][1])],
+                      dict(cells={'x/base':{'model':dict(ref=digest)}}))
+    assert rows[0]['state']==vr.REFUSED
