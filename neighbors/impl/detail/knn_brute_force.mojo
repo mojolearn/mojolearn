@@ -111,6 +111,7 @@ from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_sele
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 from neighbors.checks.smem_distance_tile import (
     SMT_MAX_K,
+    partial_keys_select_launch,
     smem_block_topk_launch,
     smem_distance_tile_launch,
     smem_tile_col_blocks,
@@ -244,15 +245,15 @@ comptime KNN_RADIX_SCRATCH_SHRINK = (
 )
 # DEVIATION 3000 (kernel-matrix row `knn_smem_distance_tile_for`): the
 # transposed IDENTICAL arm's distance tile through shared memory. It carries
-# the register tile's chain only, so the Apple metadata and the exact-chain
-# variants keep the register tile; the fused select (2667) keeps its own.
+# the register tile's chain and DEVIATION 2629's exact-chain admission (per
+# block, from the same request-local metadata); the Apple metadata variant
+# keeps the register tile and the fused select (2667) keeps its own.
 comptime KNN_SMEM_TILE = (
     knn_smem_distance_tile_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
     and KNN_REGISTER_TILE_IDENTICAL
     and not KNN_PREFLIGHT_METADATA
     and not KNN_PREFLIGHT_METADATA_DEFAULT
-    and not KNN_EXACT_CHAIN
     and not KNN_FUSED_SELECT
 )
 # DEVIATION 3001 (kernel-matrix row `knn_block_topk_select_for`): the
@@ -732,7 +733,6 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     comptime if KNN_SMEM_TILE:
         use_smem = (
             use_transposed_index and not use_vendor_topk and not use_metadata
-            and not use_exact
             and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
         )
 
@@ -813,14 +813,32 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 comptime if KNN_BLOCK_TOPK:
                     smem_block_topk_launch(
                         ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        sel_dist, sel_idx,
+                        sel_dist,
                         queries.unsafe_ptr().unsafe_offset(q * n_features).unsafe_origin_cast[MutAnyOrigin](),
                         transposed_index.value().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
                         query_norm.unsafe_ptr().unsafe_offset(q).unsafe_origin_cast[MutAnyOrigin](),
                         index_norm.unsafe_ptr().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                        q_minima.unsafe_offset(q if use_exact else 0),
+                        y_minima.unsafe_offset(c if use_exact else 0),
                         rows, cols, n_index, n_features, k,
-                        mtr == DIST_L2_SQRT_EXPANDED,
+                        mtr == DIST_L2_SQRT_EXPANDED, use_exact,
                     )
+                    comptime if KNN_PHASE_TIMERS:
+                        ctx.synchronize()
+                        ns_distance += perf_counter_ns() - t_class
+                        n_distance += 1
+                        t_class = perf_counter_ns()
+                    # The partial-key selector, timed under the selection
+                    # class (the selection block below adds nothing).
+                    partial_keys_select_launch(
+                        ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                        sel_dist, sel_idx, rows, cols, k,
+                    )
+                    comptime if KNN_PHASE_TIMERS:
+                        ctx.synchronize()
+                        ns_select += perf_counter_ns() - t_class
+                        n_select += 1
+                        t_class = perf_counter_ns()
             elif use_fused:
                 # DEVIATION 2667 (kernel-matrix row
                 # `knn_fused_distance_select_for`): distances and the
@@ -931,8 +949,10 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                 transposed_index.value().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
                                 query_norm.unsafe_ptr().unsafe_offset(q).unsafe_origin_cast[MutAnyOrigin](),
                                 index_norm.unsafe_ptr().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                                q_minima.unsafe_offset(q if use_exact else 0),
+                                y_minima.unsafe_offset(c if use_exact else 0),
                                 rows, cols, n_index, n_features,
-                                mtr == DIST_L2_SQRT_EXPANDED,
+                                mtr == DIST_L2_SQRT_EXPANDED, use_exact,
                             )
                             layout_distance_launched = True
                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
@@ -1115,10 +1135,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     )
 
             comptime if KNN_PHASE_TIMERS:
-                ctx.synchronize()
-                ns_distance += perf_counter_ns() - t_class
-                n_distance += 1
-                t_class = perf_counter_ns()
+                if not use_block_topk:
+                    ctx.synchronize()
+                    ns_distance += perf_counter_ns() - t_class
+                    n_distance += 1
+                    t_class = perf_counter_ns()
             # THE SELECTION. Three implementations, and which one runs is a
             # parameter or a kernel-matrix row, never a preference.
             #
@@ -1225,10 +1246,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                 block_dim=(SELECT_BLOCK, 1, 1),
                             )
                     comptime if KNN_PHASE_TIMERS:
-                        ctx.synchronize()
-                        ns_select += perf_counter_ns() - t_class
-                        n_select += 1
-                        t_class = perf_counter_ns()
+                        if not use_block_topk:
+                            ctx.synchronize()
+                            ns_select += perf_counter_ns() - t_class
+                            n_select += 1
+                            t_class = perf_counter_ns()
                     if not first:
                         partial_topk_merge_launch(
                             ctx,

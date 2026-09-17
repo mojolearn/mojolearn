@@ -156,7 +156,7 @@ for _ in range(3):
     print("PROBE_CALL_BEGIN", flush=True)
     t0 = time.perf_counter(); d, i = m.kneighbors(q); ms.append((time.perf_counter() - t0) * 1000.0)
     print("PROBE_CALL_END", flush=True)
-print("PROBE_MS", json.dumps(ms), "DIGEST", __import__("hashlib").sha256(d.tobytes() + i.tobytes()).hexdigest()[:16], flush=True)
+print("PROBE_MS", json.dumps(ms, separators=(",", ":")), "DIGEST", __import__("hashlib").sha256(d.tobytes() + i.tobytes()).hexdigest()[:16], flush=True)
 '''
 for ds in ("istella", "taxi"):
     for k in (1, 10, 64):
@@ -292,13 +292,22 @@ identity)
     : > "$OUT/identity.done"
     ;;
 
-opponents)
+pip)
+    # The opponents' Python, installable while the GPU stages run.
     SYSPY=$(command -v python3)
-    note "opponents start syspy=$SYSPY"
+    note "pip start syspy=$SYSPY"
     step pip_base 900 "$SYSPY" -m pip install --no-input --disable-pip-version-check scikit-learn pyarrow threadpoolctl
     step pip_cuml 1800 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuml-cu12==26.8.0
     step pip_cuvs 1200 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuvs-cu12==26.8.0
     "$SYSPY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    note pip_done
+    : > "$OUT/pip.done"
+    ;;
+
+opponents)
+    SYSPY=$(command -v python3)
+    note "opponents start syspy=$SYSPY"
+    while [ ! -f /root/ktd_out/pip/pip.done ]; do sleep 15; done
     OURS="$PIXI run --manifest-path $R/pixi.toml python3"
     for ds in istella taxi; do
         ( cd "$R" && MOJOLEARN_REPO_COMMIT="$(cat "$R/SHIPPED_COMMIT.txt")" "$SYSPY" tools/classical_two_datasets.py race --lane knn --dataset $ds --data "$DATA" --out "$OUT/ctd_knn" --work /root/ctd-work --root /root/t-topk --arms ours,cuml-gpu --rounds 5 --ours-python "$OURS" --theirs-python "$SYSPY" > "$OUT/ctd_knn_$ds.console" 2>&1 ); note "ctd_knn_$ds=$?"
@@ -357,6 +366,102 @@ PY
     note opponents_done
     : > "$OUT/opponents.done"
     ;;
+rebuild2)
+    # Second round (the rank loop, the exact-chain admission, the split
+    # selector launch): every arm that compiles smem_distance_tile.mojo's
+    # reached code, plus the exact arms and their reach control.
+    cd "$R" || exit 9
+    SM="-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1"
+    TK="$SM -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1"
+    EX="-D MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN=1"
+    PT="-D MOJOLEARN_KNN_PHASE_TIMERS=1"
+    step build_smem_core 1800 sh "$0" _build_core "$R" "$SM" smem
+    step build_topk_core 1800 sh "$0" _build_core "$R" "$TK" topk
+    step build_sabo_core 1800 sh "$0" _build_core "$R" "$TK -D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1" sabo
+    step build_smemx_core 1800 sh "$0" _build_core "$R" "$SM $EX" smemx
+    step build_topkx_core 1800 sh "$0" _build_core "$R" "$TK $EX" topkx
+    step build_sabox_core 1800 sh "$0" _build_core "$R" "$TK $EX -D MOJOLEARN_KNN_EXACT_CHAIN_SABOTAGE=1" sabox
+    step build_phasesmem_core 1800 sh "$0" _build_core "$R" "$PT $SM" phasesmem
+    step build_phasetopk_core 1800 sh "$0" _build_core "$R" "$PT $TK" phasetopk
+    step build_phasesmemx_core 1800 sh "$0" _build_core "$R" "$PT $SM $EX" phasesmemx
+    step build_phasetopkx_core 1800 sh "$0" _build_core "$R" "$PT $TK $EX" phasetopkx
+    sha256sum /root/gpubins/*/*.so > "$OUT/so_sha256.txt" 2>&1
+    for a in smem topk sabo smemx topkx sabox phasesmem phasetopk phasesmemx phasetopkx; do make_tree "$a" "$R" after0; done
+    : > "$OUT/imports.txt"
+    for a in smem topk smemx topkx; do
+        ( cd "/root/t-$a" && env $(tree_env "$a") "$P" -c "import mojolearn as ml; m = ml.NearestNeighbors(); print('$a import OK', ml.vendor(), ml.numeric_mode())" ) >> "$OUT/imports.txt" 2>&1
+    done
+    note rebuild2_done
+    : > "$OUT/rebuild2.done"
+    ;;
+
+phase2)
+    cp /root/ktd_out/phase/phase_probe.py "$OUT/phase_probe.py"
+    sed -i 's|/root/ktd_out/phase/phase_%s.json|/root/ktd_out/phase2/phase_%s.json|' "$OUT/phase_probe.py"
+    for a in phasesmem phasetopk phasesmemx phasetopkx; do
+        ( cd "/root/t-$a" && env $(tree_env "$a") "$P" "$OUT/phase_probe.py" "$a" > "$OUT/phase_$a.console" 2>&1 )
+        note "phase_$a=$?"
+    done
+    note phase2_done
+    : > "$OUT/phase2.done"
+    ;;
+
+race2)
+    {
+        echo "{"
+        first=1
+        for a in base after0 smem topk smemx topkx; do
+            [ $first = 1 ] || echo ","
+            first=0
+            printf ' "%s": {"python": "%s", "cwd": "/root/t-%s", "cpu": false, "env": {"PYTHONPATH": "/root/t-%s/python:/root/t-%s/tools", "MOJOLEARN_NUMERIC_MODE": "identical"}}' "$a" "$P" "$a" "$a" "$a"
+        done
+        echo; echo "}"
+    } > "$OUT/arms_knn.json"
+    note race2_knn_start
+    env PYTHONPATH=/root/t-after0/python "$P" "$R/bench/speed/classical_ladder_infer.py" race --data "$DATA" --models "$MODELS" --arms "$OUT/arms_knn.json" --out "$OUT/race_knn" --lanes knn --datasets taxi,istella --outer 5 --rounds 3 --warmup 1 > "$OUT/race_knn.console" 2>&1
+    note "race_knn=$?"
+    cp /root/ktd_out/race/floor_probe.py "$OUT/floor_probe.py"
+    sed -i 's|/root/ktd_out/race/floor_%s.json|/root/ktd_out/race2/floor_%s.json|' "$OUT/floor_probe.py"
+    for a in smem topk smemx topkx; do
+        ( cd "/root/t-$a" && env $(tree_env "$a") "$P" "$OUT/floor_probe.py" "$a" > "$OUT/floor_$a.console" 2>&1 )
+        note "floor_$a=$?"
+    done
+    note race2_done
+    : > "$OUT/race2.done"
+    ;;
+
+identity2)
+    BRANCH_SHA=$(cat "$R/SHIPPED_COMMIT.txt")
+    I1=/root/ktd_out/identity
+    gpu_run() { # arm lanes fixtures commit
+        ( cd "/root/t-$1" && env $(tree_env "$1") MOJOLEARN_COMMIT="$4" \
+          "$PIXI" run --manifest-path "$R/pixi.toml" python3 tools/identity_break.py --require-backend cuda --lanes "$2" --fixtures "$3" --repeats 2 \
+          --json "$OUT/cuda-$1.json" > "$OUT/logs/cuda-$1.log" 2>&1; echo "cuda-$1 rc=$?" ) | tee -a "$OUT/progress.txt"
+    }
+    note identity2_start
+    for a in smem topk smemx topkx sabo sabox; do gpu_run "$a" "$KNN_LANES" "$FIX5" "$BRANCH_SHA"; done
+    cd "$R"
+    D() { PYTHONPATH="$R/python:$R/tools" "$PIXI" run python3 tools/identity_break.py --diff "$@"; }
+    D "$I1/cuda-base.json" "$OUT/cuda-smem.json" "$OUT/cuda-topk.json" "$OUT/cuda-smemx.json" "$OUT/cuda-topkx.json" > "$OUT/diff.cuda.base-smem-topk-smemx-topkx.txt" 2>&1; echo "diff cuda arms rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-topkx.json" "$I1/cpu-after.json" > "$OUT/diff.after.cuda-topkx-vs-cpu.txt" 2>&1; echo "diff topkx cuda-cpu rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-smemx.json" "$I1/cpu-after.json" > "$OUT/diff.after.cuda-smemx-vs-cpu.txt" 2>&1; echo "diff smemx cuda-cpu rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-topk.json" "$I1/cpu-after.json" > "$OUT/diff.after.cuda-topk-vs-cpu.txt" 2>&1; echo "diff topk cuda-cpu rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-topk.json" "$OUT/cuda-sabo.json" > "$OUT/diff.sabotage.topk-vs-sabo.txt" 2>&1; echo "diff sabotage rc=$?" | tee -a "$OUT/progress.txt"
+    D "$OUT/cuda-topkx.json" "$OUT/cuda-sabox.json" > "$OUT/diff.sabotage.topkx-vs-sabox.txt" 2>&1; echo "diff exact sabotage rc=$?" | tee -a "$OUT/progress.txt"
+    D "$I1/cpu-after.json" "$OUT/cuda-sabox.json" > "$OUT/diff.sabotage.cpu-vs-sabox.txt" 2>&1; echo "diff exact sabotage cpu rc=$?" | tee -a "$OUT/progress.txt"
+    note identity2_done
+    : > "$OUT/identity2.done"
+    ;;
+
+cuvs)
+    SYSPY=$(command -v python3)
+    "$SYSPY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    "$SYSPY" /root/ktd_out/opponents/cuvs_probe.py > "$OUT/opponents_probe.console" 2>&1; note "opponents_probe=$?"
+    cp /root/ktd_out/opponents/opponents_probe.json "$OUT/" 2>/dev/null
+    note cuvs_done
+    : > "$OUT/cuvs.done"
+    ;;
+
 *)
     echo "unknown stage $STAGE" >&2; exit 2 ;;
 esac

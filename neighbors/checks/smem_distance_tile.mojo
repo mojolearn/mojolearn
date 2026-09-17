@@ -72,7 +72,9 @@ SABOTAGE (reach proof, never shipped): `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`
 flips the lowest mantissa bit of every distance AFTER its chain and
 epilogue, so any request that ran through this file returns moved bits.
 """
+from std.bit import count_trailing_zeros
 from std.gpu import block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_xor, vote
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
@@ -88,7 +90,12 @@ from checks.numerics import (
     identical_sqrt,
 )
 from neighbors.checks.lane_minimum import shuffle_min_u64
-from neighbors.checks.pinned_distance_tile import _rt_step
+from neighbors.checks.pinned_distance_tile import (
+    RT_EXACT_MAX_EXPONENT_SUM,
+    RT_EXACT_MIN_EXPONENT_SUM,
+    _rt_step,
+    _rt_step_exact,
+)
 from neighbors.checks.select_radix_identical import composite_key
 from neighbors.impl.matrix.detail.select_warpsort import twiddle_out
 
@@ -112,131 +119,128 @@ comptime SMT_Y_PER_THREAD = SMT_BK * SMT_BN // SMT_TPB  # 8
 comptime SMT_SENTINEL = UInt64(18446744073709551615)
 comptime SMT_SABOTAGE = is_defined["MOJOLEARN_KNN_SMEM_TILE_SABOTAGE"]()
 comptime SMT_MAX_K = 64
+#: The ballot's width on this column: a 64-lane wave holds two thread rows,
+#: and a thread row takes its own half of the mask.
+comptime SMT_MASK_DT = DType.uint64 if lib_lane_width_for[TARGET_COLUMN]() == 64 else DType.uint32
+#: A row whose admission metadata is nonfinite takes this minimum exponent,
+#: so the sum test below can never pass for it.
+comptime SMT_META_REFUSED = -100000
 
 
 @always_inline
-def _smt_epilogue(
-    acc: Float32, qn: Float32, yn: Float32, is_sqrt: Bool
-) -> Float32:
-    """The register tile's epilogue, statement for statement."""
-    var dist = ftz(identical_mul_add(Float32(-2.0), acc, ftz(qn + ftz(yn))))
-    if dist <= Float32(0.0):
-        dist = Float32(0.0)
-    if is_sqrt:
-        dist = ftz(identical_sqrt(dist))
-    comptime if SMT_SABOTAGE:
-        dist = bitcast[DType.float32](bitcast[DType.uint32](dist) ^ UInt32(1))
-    return dist
+def _smt_warp_min_u32(v: UInt32) -> UInt32:
+    """The minimum over the SMT_TX lanes of one thread row (five xor levels;
+    an integer minimum, so the same value under any tree)."""
+    var r = v
+    comptime for i in range(5):
+        var o = shuffle_xor(r, UInt32(1 << i))
+        if o < r:
+            r = o
+    return r
 
 
-def smem_distance_tile_kernel[TOPK: Bool](
-    z: MutPointer[Float32, MutAnyOrigin],
-    part: MutPointer[UInt64, MutAnyOrigin],
+@always_inline
+def _smt_ballot(predicate: Bool, ty: Int) -> UInt32:
+    """The thread row's 32-lane ballot; every lane must reach it."""
+    var m = vote[SMT_MASK_DT](predicate)
+    comptime if SMT_MASK_DT == DType.uint64:
+        return UInt32((UInt64(m) >> UInt64((ty & 1) * 32)) & UInt64(0xffffffff))
+    else:
+        return UInt32(m)
+
+
+@always_inline
+def _smt_slices[qo: MutOrigin, yo: MutOrigin, //, EXACT: Bool](
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
-    q_norm: MutPointer[Float32, MutAnyOrigin],
-    y_norm: MutPointer[Float32, MutAnyOrigin],
-    n_rows_in: Int32,
-    n_cols_in: Int32,
-    y_stride_in: Int32,
-    n_features_in: Int32,
-    is_sqrt_in: Int32,
-    k_in: Int32,
-):
-    """`z[row, col] = ||q_row||^2 + ||y_col||^2 - 2 q_row . y_col` for the
-    block's SMT_BM x SMT_BN cells, clamped, rooted when asked, one ascending
-    chain per cell; or, with TOPK, the block's per-row k smallest composite
-    keys into `part` and nothing into `z`. `q` is the query tile's first
-    row, `yt` the transposed index at the column tile's first column with
-    stride `y_stride`; `n_cols` is the column tile's width, so a key's index
-    half is the TILE-LOCAL column, as the small-k selector writes it.
-    """
-    comptime assert SMT_BK * SMT_BM % SMT_TPB == 0 and SMT_BK * SMT_BN % SMT_TPB == 0
-    comptime assert SMT_TPB % SMT_BK == 0 and SMT_TPB % SMT_BN == 0
-    var n_rows = Int(n_rows_in)
-    var n_cols = Int(n_cols_in)
-    var y_stride = Int(y_stride_in)
-    var d = Int(n_features_in)
-    var tid = Int(thread_idx.x)
-    var ty = tid // SMT_TX
-    var tx = tid % SMT_TX
-    var row0 = Int(block_idx.y) * SMT_BM
-    var col0 = Int(block_idx.x) * SMT_BN
-    if row0 >= n_rows or col0 >= n_cols:
-        return
-
-    var qs = stack_allocation[
-        SMT_BK * SMT_QS_STRIDE, Scalar[DType.float32],
-        alignment=16, address_space=AddressSpace.SHARED,
-    ]()
-    var ys = stack_allocation[
-        SMT_BK * SMT_BN, Scalar[DType.float32],
-        alignment=16, address_space=AddressSpace.SHARED,
-    ]()
-
-    # The staging assignment: query element `tid + i * SMT_TPB` of the
-    # SMT_BM x SMT_BK slice is row `tid // SMT_BK + i * (SMT_TPB // SMT_BK)`,
-    # feature `tid % SMT_BK`, so SMT_BK consecutive threads read SMT_BK
-    # consecutive features of one row; index element `tid + i * SMT_TPB`
-    # of the SMT_BK x SMT_BN slice is feature `tid // SMT_BN + i *
-    # (SMT_TPB // SMT_BN)`, column `tid % SMT_BN`, so a warp reads
-    # consecutive columns of one feature row of the transposed index.
-    # Rows and columns past the edge are clamped to the last valid one
-    # (their chains are computed and discarded, never stored).
-    var rq = tid // SMT_BK
-    var fq = tid % SMT_BK
-    var q_off = SIMD[DType.int32, SMT_Q_PER_THREAD](0)
-    comptime for i in range(SMT_Q_PER_THREAD):
-        var rr = row0 + rq + i * (SMT_TPB // SMT_BK)
-        if rr > n_rows - 1:
-            rr = n_rows - 1
-        q_off[i] = Int32(rr * d + fq)
-    var fy = tid // SMT_BN
-    var cy = tid % SMT_BN
-    var ycol = col0 + cy
-    if ycol > n_cols - 1:
-        ycol = n_cols - 1
-
-    var acc = SIMD[DType.float32, SMT_TM * SMT_TN](0.0)
-    var f0 = 0
-    while f0 < d:
-        var kk = d - f0
-        if kk > SMT_BK:
-            kk = SMT_BK
-        comptime for i in range(SMT_Q_PER_THREAD):
-            var v = Float32(0.0)
-            if fq < kk:
-                v = ftz(q.unsafe_load(Int(q_off[i]) + f0))
-            qs.unsafe_store(fq * SMT_QS_STRIDE + rq + i * (SMT_TPB // SMT_BK), v)
-        comptime for i in range(SMT_Y_PER_THREAD):
-            var f = fy + i * (SMT_TPB // SMT_BN)
-            var v = Float32(0.0)
-            if f < kk:
-                v = ftz(yt.unsafe_load((f0 + f) * y_stride + ycol))
-            ys.unsafe_store(f * SMT_BN + cy, v)
+    qs: MutPointer[Float32, qo, address_space = AddressSpace.SHARED],
+    ys: MutPointer[Float32, yo, address_space = AddressSpace.SHARED],
+    q_off: SIMD[DType.int32, SMT_Q_PER_THREAD],
+    rq: Int, fq: Int, fy: Int, cy: Int, ycol: Int, ty: Int, tx: Int,
+    d: Int, y_stride: Int,
+) -> SIMD[DType.float32, SMT_TM * SMT_TN]:
+    """The staged feature slices and the chains, f ascending over each
+    slice's real length only. EXACT takes DEVIATION 2629's unflushed step,
+    admitted by the caller for the whole block."""
+    var acc: SIMD[DType.float32, SMT_TM * SMT_TN]
+    comptime if EXACT:
+        # DEVIATION 2629's admission for the whole block: the minimum nonzero
+        # and maximum exponents over the block's rows and columns, reduced
+        # through shared memory; a nonfinite row refuses the block.
+        var s_qlo = stack_allocation[SMT_TPB, Int32, address_space=AddressSpace.SHARED]()
+        var s_qhi = stack_allocation[SMT_TPB, Int32, address_space=AddressSpace.SHARED]()
+        var s_ylo = stack_allocation[SMT_TPB, Int32, address_space=AddressSpace.SHARED]()
+        var s_yhi = stack_allocation[SMT_TPB, Int32, address_space=AddressSpace.SHARED]()
+        var qlo = 255
+        var qhi = 0
+        var ylo = 255
+        var yhi = 0
+        if tid < SMT_BM:
+            var rr = row0 + tid
+            if rr > n_rows - 1:
+                rr = n_rows - 1
+            var m = q_meta.unsafe_load(rr)
+            if m < Float32(0.0):
+                qlo = SMT_META_REFUSED
+            else:
+                var v = Int(UInt32(m))
+                qlo = v & 255
+                qhi = v >> 8
+        elif tid < SMT_BM + SMT_BN:
+            var cc = col0 + tid - SMT_BM
+            if cc > n_cols - 1:
+                cc = n_cols - 1
+            var m = y_meta.unsafe_load(cc)
+            if m < Float32(0.0):
+                ylo = SMT_META_REFUSED
+            else:
+                var v = Int(UInt32(m))
+                ylo = v & 255
+                yhi = v >> 8
+        s_qlo.unsafe_store(tid, Int32(qlo))
+        s_qhi.unsafe_store(tid, Int32(qhi))
+        s_ylo.unsafe_store(tid, Int32(ylo))
+        s_yhi.unsafe_store(tid, Int32(yhi))
         barrier()
-        # THE CHAIN: f ascending over the slice's real length only.
-        for f in range(kk):
-            var qv = qs.unsafe_load[width=SMT_TM, alignment=16](
-                f * SMT_QS_STRIDE + ty * SMT_TM
-            )
-            var yv = ys.unsafe_load[width=SMT_TN, alignment=16](
-                f * SMT_BN + tx * SMT_TN
-            )
-            comptime for r in range(SMT_TM):
-                comptime for c in range(SMT_TN):
-                    acc[r * SMT_TN + c] = _rt_step(qv[r], yv[c], acc[r * SMT_TN + c])
-        barrier()
-        f0 += SMT_BK
+        var stride = SMT_TPB // 2
+        while stride > 0:
+            if tid < stride:
+                var a = s_qlo.unsafe_load(tid + stride)
+                if a < s_qlo.unsafe_load(tid):
+                    s_qlo.unsafe_store(tid, a)
+                var b = s_qhi.unsafe_load(tid + stride)
+                if b > s_qhi.unsafe_load(tid):
+                    s_qhi.unsafe_store(tid, b)
+                var e = s_ylo.unsafe_load(tid + stride)
+                if e < s_ylo.unsafe_load(tid):
+                    s_ylo.unsafe_store(tid, e)
+                var g = s_yhi.unsafe_load(tid + stride)
+                if g > s_yhi.unsafe_load(tid):
+                    s_yhi.unsafe_store(tid, g)
+            barrier()
+            stride //= 2
+        var log2d = 0
+        while (1 << log2d) < d:
+            log2d += 1
+        var admitted = (
+            Int(s_qlo.unsafe_load(0)) + Int(s_ylo.unsafe_load(0)) >= RT_EXACT_MIN_EXPONENT_SUM
+            and Int(s_qhi.unsafe_load(0)) + Int(s_yhi.unsafe_load(0)) + log2d <= RT_EXACT_MAX_EXPONENT_SUM
+        )
+        if admitted:
+            acc = _smt_slices[True](q, yt, qs, ys, q_off, rq, fq, fy, cy, ycol, ty, tx, d, y_stride)
+        else:
+            acc = _smt_slices[False](q, yt, qs, ys, q_off, rq, fq, fy, cy, ycol, ty, tx, d, y_stride)
+    else:
+        acc = _smt_slices[False](q, yt, qs, ys, q_off, rq, fq, fy, cy, ycol, ty, tx, d, y_stride)
 
     var is_sqrt = is_sqrt_in != 0
     comptime if TOPK:
         var k = Int(k_in)
         var n_cb = (n_cols + SMT_BN - 1) // SMT_BN
         var cb = Int(block_idx.x)
+        var keys = SIMD[DType.uint64, SMT_TM * SMT_TN](SMT_SENTINEL)
         comptime for r in range(SMT_TM):
             var row = row0 + ty * SMT_TM + r
-            var keys = SIMD[DType.uint64, SMT_TN](SMT_SENTINEL)
             if row < n_rows:
                 var qn = ftz(q_norm.unsafe_load(row))
                 comptime for c in range(SMT_TN):
@@ -245,24 +249,41 @@ def smem_distance_tile_kernel[TOPK: Bool](
                         var dist = _smt_epilogue(
                             acc[r * SMT_TN + c], qn, y_norm.unsafe_load(col), is_sqrt
                         )
-                        keys[c] = composite_key(dist, UInt32(col), True)
-            # The warp-uniform rank loop: every lane offers its smallest
-            # remaining key, the lane holding the block minimum retires it.
-            # A row past the edge takes part with sentinels only, so the
-            # shuffles stay convergent; its list is never written.
-            var out_base = (row * n_cb + cb) * k
-            for rank in range(k):
-                var mine = keys[0]
+                        keys[r * SMT_TN + c] = composite_key(dist, UInt32(col), True)
+        # THE RANK LOOP, the SMT_TM rows of the thread row interleaved so
+        # their shuffle chains overlap. Per rank and row: every lane offers
+        # its smallest remaining key; the row's minimum key is the one with
+        # the smallest distance half, and among equal halves the smallest
+        # column, which is the LOWEST LANE that holds that half (lane order
+        # is column order: lane tx owns columns tx * SMT_TN .. + SMT_TN - 1),
+        # so a 32-bit warp minimum and one ballot name it. That lane writes
+        # the key (a sentinel where the row has no key left, so every slot
+        # of the partial list is written) and retires it. Rows past the edge
+        # take part with sentinels only, so the shuffles stay convergent.
+        var lane_row = row0 + ty * SMT_TM
+        for rank in range(k):
+            var mine = SIMD[DType.uint64, SMT_TM](SMT_SENTINEL)
+            var hi = SIMD[DType.uint32, SMT_TM](0)
+            comptime for r in range(SMT_TM):
+                var m = keys[r * SMT_TN]
                 comptime for c in range(1, SMT_TN):
-                    if keys[c] < mine:
-                        mine = keys[c]
-                var winner = shuffle_min_u64[SMT_TX](mine)
-                if tx == 0 and row < n_rows:
-                    part.unsafe_store(out_base + rank, winner)
-                if mine == winner and winner != SMT_SENTINEL:
+                    if keys[r * SMT_TN + c] < m:
+                        m = keys[r * SMT_TN + c]
+                mine[r] = m
+                hi[r] = UInt32(m >> UInt64(32))
+            var wmin = SIMD[DType.uint32, SMT_TM](0)
+            comptime for r in range(SMT_TM):
+                wmin[r] = _smt_warp_min_u32(hi[r])
+            comptime for r in range(SMT_TM):
+                var mask = _smt_ballot(hi[r] == wmin[r], ty)
+                var wl = Int(count_trailing_zeros(mask))
+                if tx == wl:
+                    var row = lane_row + r
+                    if row < n_rows:
+                        part.unsafe_store((row * n_cb + cb) * k + rank, mine[r])
                     comptime for c in range(SMT_TN):
-                        if keys[c] == winner:
-                            keys[c] = SMT_SENTINEL
+                        if keys[r * SMT_TN + c] == mine[r]:
+                            keys[r * SMT_TN + c] = SMT_SENTINEL
     else:
         comptime for r in range(SMT_TM):
             var row = row0 + ty * SMT_TM + r
@@ -355,6 +376,28 @@ def smem_tile_col_blocks(cols: Int) -> Int:
     return (cols + SMT_BN - 1) // SMT_BN
 
 
+@always_inline
+def _smt_enqueue[TOPK: Bool, EXACT: Bool](
+    ctx: DeviceContext,
+    z: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[UInt64, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    q_norm: MutPointer[Float32, MutAnyOrigin],
+    y_norm: MutPointer[Float32, MutAnyOrigin],
+    q_meta: MutPointer[Float32, MutAnyOrigin],
+    y_meta: MutPointer[Float32, MutAnyOrigin],
+    rows: Int, cols: Int, y_stride: Int, d: Int, k: Int, is_sqrt: Bool,
+) raises:
+    ctx.enqueue_function[smem_distance_tile_kernel[TOPK, EXACT]](
+        z, part, q, yt, q_norm, y_norm, q_meta, y_meta,
+        Int32(rows), Int32(cols), Int32(y_stride), Int32(d),
+        Int32(1 if is_sqrt else 0), Int32(k),
+        grid_dim=(smem_tile_col_blocks(cols), (rows + SMT_BM - 1) // SMT_BM, 1),
+        block_dim=(SMT_TPB, 1, 1),
+    )
+
+
 def smem_distance_tile_launch(
     ctx: DeviceContext,
     z: MutPointer[Float32, MutAnyOrigin],
@@ -362,23 +405,24 @@ def smem_distance_tile_launch(
     yt: MutPointer[Float32, MutAnyOrigin],
     q_norm: MutPointer[Float32, MutAnyOrigin],
     y_norm: MutPointer[Float32, MutAnyOrigin],
-    rows: Int, cols: Int, y_stride: Int, d: Int, is_sqrt: Bool,
+    q_meta: MutPointer[Float32, MutAnyOrigin],
+    y_meta: MutPointer[Float32, MutAnyOrigin],
+    rows: Int, cols: Int, y_stride: Int, d: Int, is_sqrt: Bool, exact: Bool,
 ) raises:
     """One column tile's distance matrix, `rows x cols`, through the
-    shared-memory tile (DEVIATION 3000)."""
+    shared-memory tile (DEVIATION 3000). `exact` hands the block DEVIATION
+    2629's admission metadata (`q_meta`, `y_meta`); otherwise both are
+    placeholders the kernel never reads."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("the shared-memory distance tile requires IDENTICAL")
     if rows <= 0 or rows > 2147483647 or cols <= 0 or cols > 2147483647:
         raise Error("smem distance tile requires positive Int32 dimensions")
     if d <= 0 or d > 2147483647 or y_stride <= 0 or y_stride > 2147483647:
         raise Error("smem distance tile requires positive Int32 feature and stride")
-    ctx.enqueue_function[smem_distance_tile_kernel[False]](
-        z, z.bitcast[UInt64](), q, yt, q_norm, y_norm,
-        Int32(rows), Int32(cols), Int32(y_stride), Int32(d),
-        Int32(1 if is_sqrt else 0), Int32(0),
-        grid_dim=(smem_tile_col_blocks(cols), (rows + SMT_BM - 1) // SMT_BM, 1),
-        block_dim=(SMT_TPB, 1, 1),
-    )
+    if exact:
+        _smt_enqueue[False, True](ctx, z, z.bitcast[UInt64](), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
+    else:
+        _smt_enqueue[False, False](ctx, z, z.bitcast[UInt64](), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
 
 
 @always_inline
@@ -399,17 +443,18 @@ def smem_block_topk_launch(
     ctx: DeviceContext,
     part: MutPointer[UInt64, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
-    out_indices: MutPointer[UInt32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
     q_norm: MutPointer[Float32, MutAnyOrigin],
     y_norm: MutPointer[Float32, MutAnyOrigin],
-    rows: Int, cols: Int, y_stride: Int, d: Int, k: Int, is_sqrt: Bool,
+    q_meta: MutPointer[Float32, MutAnyOrigin],
+    y_meta: MutPointer[Float32, MutAnyOrigin],
+    rows: Int, cols: Int, y_stride: Int, d: Int, k: Int, is_sqrt: Bool, exact: Bool,
 ) raises:
-    """One column tile's top-k (DEVIATION 3001): the block top-k launch into
-    `part` (at least `rows * smem_tile_col_blocks(cols) * k` keys), then the
-    partial-key selector into the selection destination. `cols >= k` is the
-    caller's to guarantee, as it is for the small-k selector."""
+    """One column tile's block top-k (DEVIATION 3001) into `part` (at least
+    `rows * smem_tile_col_blocks(cols) * k` keys); `partial_keys_select_launch`
+    is the second launch. `cols >= k` is the caller's to guarantee, as it is
+    for the small-k selector. `out_values` is the unread matrix placeholder."""
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("the block top-k requires IDENTICAL")
     if rows <= 0 or rows > 2147483647 or cols <= 0 or cols > 2147483647:
@@ -418,14 +463,26 @@ def smem_block_topk_launch(
         raise Error("block top-k requires positive Int32 feature and stride")
     if k < 1 or k > SMT_MAX_K or k > cols:
         raise Error("block top-k supports only 1 <= k <= min(64, cols)")
+    if exact:
+        _smt_enqueue[True, True](ctx, out_values, part, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+    else:
+        _smt_enqueue[True, False](ctx, out_values, part, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+
+
+def partial_keys_select_launch(
+    ctx: DeviceContext,
+    part: MutPointer[UInt64, MutAnyOrigin],
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    out_indices: MutPointer[UInt32, MutAnyOrigin],
+    rows: Int, cols: Int, k: Int,
+) raises:
+    """The row's k smallest from the per-block lists `smem_block_topk_launch`
+    wrote, into the selection destination."""
+    if rows <= 0 or rows > 2147483647 or cols <= 0 or cols > 2147483647:
+        raise Error("partial-key select requires positive Int32 dimensions")
+    if k < 1 or k > SMT_MAX_K or k > cols:
+        raise Error("partial-key select supports only 1 <= k <= min(64, cols)")
     var n_cb = smem_tile_col_blocks(cols)
-    ctx.enqueue_function[smem_distance_tile_kernel[True]](
-        out_values, part, q, yt, q_norm, y_norm,
-        Int32(rows), Int32(cols), Int32(y_stride), Int32(d),
-        Int32(1 if is_sqrt else 0), Int32(k),
-        grid_dim=(n_cb, (rows + SMT_BM - 1) // SMT_BM, 1),
-        block_dim=(SMT_TPB, 1, 1),
-    )
     if k <= 16:
         _pks_enqueue[16](ctx, part, out_values, out_indices, rows, n_cb, k)
     elif k <= 32:
