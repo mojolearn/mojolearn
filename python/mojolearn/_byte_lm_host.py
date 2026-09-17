@@ -150,6 +150,28 @@ def _thread_count(value):
     return value
 
 
+def _flatten_parameters(params, shape):
+    """The registry dict (names from `shape.parameter_names`, values float32
+    or packed) to the flat float32 vector the binding takes, and the one
+    format the packed tensors share."""
+    import numpy as np
+    from . import lowbit as _lowbit
+    names = shape.parameter_names
+    missing = [n for n in names if n not in params]
+    extra = [n for n in params if n not in names]
+    if missing or extra:
+        raise ValueError(f"mojolearn.LanguageModelInference: parameter dict mismatch; missing {missing!r}, unknown {extra!r}")
+    fmt = _lowbit.format_of(params)
+    flat = np.empty((shape.n_total,), np.float32)
+    offsets = shape.offsets
+    for j, (name, shp) in enumerate(zip(names, shape.parameter_shapes)):
+        a = np.ascontiguousarray(_lowbit.materialize_one(params[name], name), dtype=np.float32)
+        if a.shape != tuple(shp):
+            raise ValueError(f"mojolearn.LanguageModelInference: {name} has shape {a.shape}, want {tuple(shp)}")
+        flat[offsets[j]:offsets[j + 1]] = a.reshape(-1)
+    return flat, fmt
+
+
 class LanguageModelInference:
     """Forward-only byte LM on the CPU. The parameters are copied at
     construction and never change afterward.
@@ -172,6 +194,13 @@ class LanguageModelInference:
         _thread_count(threads)
         self._threaded = threaded
         self._threads = threads
+        # lane/identical-lowbit-inference (2026-09-17): a dict keyed by
+        # `shape.parameter_names` whose matrices may be packed
+        # (mojolearn.lowbit) is materialized exactly and flattened; the
+        # host forward runs unchanged on the float32 vector.
+        self.weight_format = "float32"
+        if hasattr(parameters, "keys"):
+            parameters, self.weight_format = _flatten_parameters(parameters, shape)
         array, _ = as_f32_c(parameters, ndim=1, name='parameters')
         if tuple(array.shape) != (shape.n_total,):
             raise ValueError(f'parameters must be float32 [{shape.n_total}]')

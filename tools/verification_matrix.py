@@ -95,6 +95,7 @@ import glob
 import importlib.util
 import json
 import os
+from pathlib import Path
 import re
 import sys
 
@@ -116,7 +117,7 @@ SAB_NAME = re.compile(r"sabotage|(^|[-_.])g?sab([-_.]|$)")
 #: can be argued with rather than hidden in a heuristic.
 NOT_ALGORITHMS = frozenset({
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch",
-    "gpu_arch_how", "Array", "select_d",
+    "gpu_arch_how", "Array",
     "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
     "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
     "training.numeric_mode_used", "training.vendor_used",
@@ -218,7 +219,9 @@ def gpu_coverage(cols):
     for c in cols:
         if c["admit"] is not None or c["cls"] not in GPU_CLASSES:
             continue
-        for key in c["cells"]:
+        for key, cell in c["cells"].items():
+            if cell.get("verdict") != "STABLE" or not cell.get("hashes"):
+                continue
             out[key.split("/", 1)[0]].setdefault(c["cls"], c["rel"])
     return out
 
@@ -229,7 +232,9 @@ def cpu_recorded(cols):
     for c in cols:
         if c["admit"] is not None or c["cls"] != "cpu":
             continue
-        for key in c["cells"]:
+        for key, cell in c["cells"].items():
+            if cell.get("verdict") != "STABLE" or not cell.get("hashes"):
+                continue
             out.setdefault(key.split("/", 1)[0], c["rel"])
     return out
 
@@ -274,7 +279,7 @@ def sabotage_moves(cols):
 
 def module_all(path):
     try:
-        tree = ast.parse(open(path).read())
+        tree = ast.parse(Path(path).read_text())
     except (OSError, SyntaxError):
         return []
     for node in tree.body:
@@ -295,7 +300,7 @@ def package_index():
     kinds, aliases = {}, {}
     for path in sorted(glob.glob(os.path.join(ROOT, "python/mojolearn/*.py"))):
         try:
-            tree = ast.parse(open(path).read())
+            tree = ast.parse(Path(path).read_text())
         except (OSError, SyntaxError):
             continue
         rel = os.path.relpath(path, ROOT)
@@ -309,6 +314,16 @@ def package_index():
                   and isinstance(node.value, ast.Name)):
                 aliases.setdefault(node.targets[0].id, node.value.id)
     return kinds, aliases
+
+
+# These modules are public import paths even though they are not re-exported
+# by mojolearn.__all__. Omitting them hid the pooled/offloaded trainers and
+# parallel drivers from the algorithm axis while their lanes were counted.
+EXTRA_PUBLIC_MODULES = (
+    "parallel_preprocessing", "parallel_classical", "parallel_ensemble",
+    "parallel_graph", "parallel_neighbors", "parallel_neighbors_reference",
+    "parallel_training", "model_pool_training", "offload_training",
+)
 
 
 def public_surface():
@@ -338,10 +353,21 @@ def public_surface():
     if "metrics" in top and os.path.exists(impl):
         modules.append("metrics")
         surface.pop("metrics", None)
-        for node in ast.parse(open(impl).read()).body:
+        for node in ast.parse(Path(impl).read_text()).body:
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and not node.name.startswith("_"):
                 surface[f"metrics.{node.name}"] = (
                     "function", "python/mojolearn/_metrics_impl.py", node.name)
+    for module in EXTRA_PUBLIC_MODULES:
+        path = os.path.join(ROOT, f"python/mojolearn/{module}.py")
+        tree = ast.parse(Path(path).read_text())
+        declared = module_all(path)
+        modules.append(module)
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name.startswith("_") or (declared and node.name not in declared):
+                    continue
+                kind = "class" if isinstance(node, ast.ClassDef) else "function"
+                surface[f"{module}.{node.name}"] = (kind, f"python/mojolearn/{module}.py", node.name)
     for m in modules:
         surface.pop(m, None)
     return surface, sorted(set(modules))
@@ -365,7 +391,7 @@ def harness_references(harness):
     Counting either as "no lane at all" would be wrong, and counting either as
     a lane of its own would be wrong too. They get their own bucket."""
     import inspect
-    src = open(os.path.join(ROOT, "tools/identity_break.py")).read()
+    src = (Path(ROOT) / "tools/identity_break.py").read_text()
     lane_lines = set()
     for fn in harness.LANES.values():
         try:
@@ -423,6 +449,10 @@ def lane_references(src):
                 for t in node.targets:
                     if isinstance(t, ast.Name):
                         alias[t.id] = v.attr
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ImportFrom) and node.module == "mojolearn":
+            for item in node.names:
+                alias[item.asname or item.name] = item.name
     refs = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
@@ -514,17 +544,37 @@ def has_four(row):
 def algorithm_rows(harness, lanes, surface, harness_refs, family_of):
     refs = {}
     import inspect
-    for lane, fn in harness.LANES.items():
+    def reachable_references(fn, seen):
+        # Follow helpers defined in the same harness, such as _rsn. Looking
+        # only at a lane body falsely called ReferenceShardedNeighbors
+        # uncovered even though two lanes execute it through that helper.
+        if fn in seen:
+            return set()
+        seen.add(fn)
         try:
-            refs[lane] = lane_references(inspect.getsource(fn))
-        except (OSError, TypeError):
-            refs[lane] = set()
+            source = inspect.getsource(fn)
+            import textwrap
+            tree = ast.parse(textwrap.dedent(source))
+        except (OSError, TypeError, SyntaxError):
+            return set()
+        found = lane_references(source)
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Name):
+                continue
+            helper = fn.__globals__.get(node.func.id)
+            if (inspect.isfunction(helper)
+                    and helper.__module__ == fn.__module__):
+                found.update(reachable_references(helper, seen))
+        return found
+
+    for lane, fn in harness.LANES.items():
+        refs[lane] = reachable_references(fn, set())
     algos = {}
     for name, (kind, where, target) in sorted(surface.items()):
         if name in NOT_ALGORITHMS or kind == "module":
             continue
         short = name.split(".")[-1]
-        want = {name, short, target}
+        want = {name} if name.split(".")[0] in EXTRA_PUBLIC_MODULES else {name, short, target}
         mine = sorted(l for l, r in refs.items() if want & r)
         rowset = [lanes[l] for l in mine]
         algos[name] = dict(
@@ -564,6 +614,11 @@ def render(data):
     w("`python/mojolearn/host_surface.py` and the committed columns under")
     w("`bench/results/`. The tool's own docstring says how each cell is decided.")
     w("")
+    w("This is a historical coverage inventory, not qualification of the current wheel.")
+    w("Public API entries include aliases, wrappers and helpers; they are not a count")
+    w("of distinct algorithms. A lane with all four kinds still needs current, matching")
+    w("release artifacts and all applicable backend/property checks.")
+    w("")
     w("The four kinds, for one lane:")
     w("")
     w("1. **gpu**, a recorded GPU column carries the lane, on 1, 2 or 3 of the")
@@ -581,16 +636,16 @@ def render(data):
     w("")
     w(f"- Lanes: **{len(lanes)}** ({sum(1 for r in lanes if not r['two_device'])} single-device, "
       f"{sum(1 for r in lanes if r['two_device'])} `par-*` multi-GPU drivers).")
-    w(f"- Shipped algorithms enumerated from the public API: **{len(algos)}**.")
-    w(f"- Shipped algorithms with ALL FOUR kinds on at least one lane: "
+    w(f"- Source public API entries enumerated from the public API: **{len(algos)}**.")
+    w(f"- Source public API entries with ALL FOUR kinds on at least one lane: "
       f"**{sum(1 for a in algos if a['four'])}** of {len(algos)}.")
-    w(f"- Shipped algorithms with NO IDENTITY LANE AT ALL: **{len(no_lane)}**.")
-    w(f"- Shipped algorithms with no lane of their own, but reached by the harness's")
+    w(f"- Source public API entries with NO IDENTITY LANE AT ALL: **{len(no_lane)}**.")
+    w(f"- Source public API entries with no lane of their own, but reached by the harness's")
     w(f"  CPU inference routing: **{len(routed_only)}**.")
     w("")
-    w("Per kind, over the algorithms:")
+    w("Per kind, over the public API entries:")
     w("")
-    w("| kind | algorithms that have it | missing |")
+    w("| kind | API entries that have it | missing |")
     w("|---|---|---|")
     for label, key in (("gpu column", "gpu"), ("cpu verifier", "cpu"),
                        ("sabotage seen to move a build", "sabotage"),
@@ -631,7 +686,7 @@ def render(data):
         w(f"| {v} | {sum(1 for r in lanes if r['sabotage'] == v)} | {meaning} |")
     w("")
 
-    w("## Shipped algorithms with no identity lane at all")
+    w("## Source public API entries with no identity lane at all")
     w("")
     if not no_lane:
         w("None.")
@@ -775,7 +830,7 @@ def main():
         return 0
     if args.check:
         try:
-            have = open(path).read()
+            have = Path(path).read_text()
         except OSError:
             print(f"verification_matrix: {DOC} is missing; run --write", file=sys.stderr)
             return 1

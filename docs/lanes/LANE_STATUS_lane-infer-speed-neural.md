@@ -194,6 +194,25 @@ pixi run python tools/bench_neural_decode.py --resident-ab --kind mamba1 --dm 10
 - Apple and AMD columns for the session paths and for the byte LM changes:
   owed at the next release record, as every column is.
 
+## Merge with main, 2026-09-17
+
+Main moved 21 commits past this lane's base (`e3213a59a` to `423f7fa28`).
+Two of them (`9da5c4685`, `1b7dc811b`, `docs/TRANSFORMER_SESSION_REUSE.md`)
+added a `TransformerSession` to `bindings/_mojolearn_transformer.mojo`, the
+per-call route's retained per-model context and workspace, registered as
+`transformer_session_{create,close,info,forward}`. The lane's decode session
+had registered the same four names. Resolution: the lane's entry points are
+now `transformer_decode_session_{create,open,step,forward,export_state,
+load_state,info,close}` (definitions, registrations and the Python class);
+main's names and semantics are untouched. The two coexist on one block: the
+per-call `forward`/`step` go through main's retained context (weights and
+cache reread every call), `decode_session` opens its own context and owns
+the copies, and `_refuse_resident` applies to both per-call routes because
+it lives in `_call_impl`. Mamba had no collision; `mamba1_session_*` stays.
+`docs/NEURAL_METAL_DECODE.md` keeps both appended sections, this lane's
+first. The merged tree's re-verification on a rented RTX 4090 is recorded
+below under "Re-verification after the merge".
+
 ## False claims found in owned docs
 
 None edited away. `docs/NEURAL_METAL_DECODE.md` says a resident decode API

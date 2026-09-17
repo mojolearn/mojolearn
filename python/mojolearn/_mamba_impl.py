@@ -95,6 +95,7 @@ from ._arrays import _addr, _addr_ro
 import math
 
 from . import _backend
+from . import lowbit as _lowbit
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, memcopy, probe
 from ._mode import NumericModeMixin
@@ -446,6 +447,9 @@ class Mamba1Block(_MambaBase):
 
     def __init__(self, weights):
         what = "Mamba1Block"
+        # lane/identical-lowbit-inference (2026-09-17): packed projection
+        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
+        weights, self.weight_format = _lowbit.unpack(weights, what)
         arrs = _take(weights, what, self._W_NAMES)
         norm_w = _f32_strict(arrs[0], what, "norm.weight")
         if norm_w.ndim != 1 or norm_w.shape[0] < 1:
@@ -860,6 +864,9 @@ class Mamba2Block(_MambaBase):
 
     def __init__(self, weights, *, dt_limit=(0.0, float("inf"))):
         what = "Mamba2Block"
+        # lane/identical-lowbit-inference (2026-09-17): packed projection
+        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
+        weights, self.weight_format = _lowbit.unpack(weights, what)
         arrs = _take(weights, what, self._W_NAMES)
         norm_w = _f32_strict(arrs[0], what, "block_norm.weight")
         if norm_w.ndim != 1 or norm_w.shape[0] < 1:
@@ -1198,6 +1205,9 @@ class Mamba3Block(_MambaBase):
 
     def __init__(self, weights):
         what = "Mamba3Block"
+        # lane/identical-lowbit-inference (2026-09-17): packed projection
+        # weights (mojolearn.lowbit) materialized exactly, fp32 path after.
+        weights, self.weight_format = _lowbit.unpack(weights, what)
         arrs = _take(weights, what, self._W_NAMES)
         norm_w = _f32_strict(arrs[0], what, "block_norm.weight")
         if norm_w.ndim != 1 or norm_w.shape[0] < 1:

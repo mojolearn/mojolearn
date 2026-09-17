@@ -67,7 +67,9 @@ def _wants_suite(args):
                 or getattr(args, "emit_models", None)
                 or getattr(args, "self_test", False)
                 or getattr(args, "cross_check", None)
-                or getattr(args, "compare", None))
+                or getattr(args, "compare", None)
+                or getattr(args, "coverage", False)
+                or getattr(args, "batch_checks", False))
 
 
 def _verify_dispatch(args):
@@ -112,6 +114,10 @@ def build_parser():
                         "portable GPU-trained models, each cell part compared "
                         "with the reference table shipped in the wheel "
                         "(docs/VERIFY.md, python/mojolearn/_verify_all.py)")
+    v.add_argument("--batch-checks", action="store_true",
+                   help="also run gradient, batch-size, ragged and sampler/replay probes; missing references read OWED")
+    v.add_argument("--coverage", action="store_true",
+                   help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--quick", action="store_true",
                    help="implies --all: one lane per family on the base "
                         "fixture")

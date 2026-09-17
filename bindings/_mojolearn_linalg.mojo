@@ -56,7 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr
+from bindings.hostptr import f32_ptr, i8_ptr, i32_ptr, u16_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -67,6 +67,18 @@ from checks.vendor import COMPILED_VENDOR
 from max.gpu.host import DeviceContext
 
 from gemm.host_entry import identical_gemm_host
+from gemm.checks.gemm_lowbit import (
+    LowbitWorkspace,
+    bf16_narrow,
+    bf16_widen,
+    dequantize_rows_int8_device,
+    identical_gemm_bf16w_into,
+    identical_gemm_int8_into,
+    quantize_rows_int8_device,
+)
+from gemm.host.gemm_lowbit_oracle import INT8_MAX_K, LOWBIT_PROFILE_VERSION
+from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN
+from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -176,6 +188,287 @@ def linalg_vendor_binding() raises -> PythonObject:
     return PythonObject(String(COMPILED_VENDOR))
 
 
+
+# ===========================================================================
+# THE LOW-BIT PROFILES (lane/identical-lowbit-inference, 2026-09-17)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md. Same conventions as `gemm_binding`:
+# output address first, scalars in one `params` list whose order is written
+# out on both sides in the same words, the GIL released around the device.
+# ===========================================================================
+
+
+def _dev_f32(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.float32]:
+    var n = count
+    if n < 1:
+        n = 1
+    var d = ctx.enqueue_create_buffer[DType.float32](n)
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=d, src_ptr=f32_ptr(addr))
+    return d^
+
+
+def _dev_u16(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.uint16]:
+    var n = count
+    if n < 1:
+        n = 1
+    var d = ctx.enqueue_create_buffer[DType.uint16](n)
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=d, src_ptr=u16_ptr(addr))
+    return d^
+
+
+def _dev_i8(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.int8]:
+    var n = count
+    if n < 1:
+        n = 1
+    var d = ctx.enqueue_create_buffer[DType.int8](n)
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=d, src_ptr=i8_ptr(addr))
+    return d^
+
+
+def _dev_i32(ctx: DeviceContext, addr: Int, count: Int) raises -> DeviceBuffer[DType.int32]:
+    var n = count
+    if n < 1:
+        n = 1
+    var d = ctx.enqueue_create_buffer[DType.int32](n)
+    if count > 0:
+        ctx.enqueue_copy(dst_buf=d, src_ptr=i32_ptr(addr))
+    return d^
+
+
+def _refuse_lowbit_shape(m: Int, n: Int, k: Int, op: Int, who: String) raises:
+    if m <= 0 or n <= 0 or k <= 0:
+        raise Error(
+            who + ": m, n and k must all be positive, got m=" + String(m)
+            + " n=" + String(n) + " k=" + String(k)
+        )
+    if op != OP_NN and op != OP_NT and op != OP_TN:
+        raise Error(who + ": op must be 0 (OP_NN), 1 (OP_NT) or 2 (OP_TN), got " + String(op))
+
+
+def lowbit_profile_version_binding() raises -> PythonObject:
+    """The MAJOR VERSION of the two low-bit profiles this binary implements:
+    1, for `mojolearn.identical.gemm.bf16f32.v1` and
+    `mojolearn.identical.gemm.int8i32.v1`."""
+    return PythonObject(LOWBIT_PROFILE_VERSION)
+
+
+def gemm_bf16_binding(
+    c_addr: PythonObject,
+    a_addr: PythonObject,
+    b_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`C = op(A) . op(B)` under `mojolearn.identical.gemm.bf16f32.v1`.
+    `B` is bf16 bits in a uint16 buffer; `A` is float32, or bf16 bits when
+    `params[4]` is 1. `C` is float32. Returns `m * n`.
+
+    `params` is, in this exact order (mirrored word for word in
+    `python/mojolearn/_linalg_impl.py` and in the host binding):
+
+        0  m         rows of C
+        1  n         columns of C
+        2  k         the contracted extent
+        3  op        0 = OP_NN, 1 = OP_NT, 2 = OP_TN
+        4  a_bf16    1 when A is bf16 bits, 0 when A is float32
+    """
+    if len(params) != 5:
+        raise Error("gemm_bf16: params must contain 5 values (m, n, k, op, a_bf16), got " + String(len(params)))
+    var c_address = Int(py=c_addr)
+    var a_address = Int(py=a_addr)
+    var b_address = Int(py=b_addr)
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    var op = Int(py=params[3])
+    var a_bf16 = Int(py=params[4]) != 0
+    _refuse_lowbit_shape(m, n, k, op, String("gemm_bf16"))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var db = _dev_u16(ctx, b_address, n * k)
+        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+        var work = LowbitWorkspace(ctx)
+        if a_bf16:
+            var da_bits = _dev_u16(ctx, a_address, m * k)
+            var da = ctx.enqueue_create_buffer[DType.float32](m * k)
+            bf16_widen(ctx, da, da_bits, m * k)
+            identical_gemm_bf16w_into(ctx, dc, da, db, work, m, n, k, op)
+            ctx.synchronize()
+            _ = da_bits
+            _ = da
+        else:
+            var da2 = _dev_f32(ctx, a_address, m * k)
+            identical_gemm_bf16w_into(ctx, dc, da2, db, work, m, n, k, op)
+            ctx.synchronize()
+            _ = da2
+        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
+        ctx.synchronize()
+        _ = db
+        _ = dc
+        _ = work^
+    return PythonObject(m * n)
+
+
+def gemm_int8_binding(
+    c_addr: PythonObject,
+    qa_addr: PythonObject,
+    ea_addr: PythonObject,
+    qb_addr: PythonObject,
+    eb_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`C[m x n] = Q_a[m x k] . Q_b[n x k]^T` dequantized, under
+    `mojolearn.identical.gemm.int8i32.v1` (OP_NT only). `qa`, `qb` are int8
+    codes; `ea` (m entries) and `eb` (n entries) are int32 row exponents; `C`
+    is float32. Returns `m * n`. `params` is `[m, n, k]`."""
+    if len(params) != 3:
+        raise Error("gemm_int8: params must contain 3 values (m, n, k), got " + String(len(params)))
+    var c_address = Int(py=c_addr)
+    var qa_address = Int(py=qa_addr)
+    var ea_address = Int(py=ea_addr)
+    var qb_address = Int(py=qb_addr)
+    var eb_address = Int(py=eb_addr)
+    var m = Int(py=params[0])
+    var n = Int(py=params[1])
+    var k = Int(py=params[2])
+    _refuse_lowbit_shape(m, n, k, OP_NT, String("gemm_int8"))
+    if k > INT8_MAX_K:
+        raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var dqa = _dev_i8(ctx, qa_address, m * k)
+        var dea = _dev_i32(ctx, ea_address, m)
+        var dqb = _dev_i8(ctx, qb_address, n * k)
+        var deb = _dev_i32(ctx, eb_address, n)
+        var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+        identical_gemm_int8_into(ctx, dc, dqa, dea, dqb, deb, m, n, k)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
+        ctx.synchronize()
+        _ = dqa
+        _ = dea
+        _ = dqb
+        _ = deb
+        _ = dc
+    return PythonObject(m * n)
+
+
+def quantize_int8_binding(
+    q_addr: PythonObject,
+    e_addr: PythonObject,
+    x_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Row-wise int8 codes (`q`, rows x cols) and int32 exponents (`e`, rows)
+    of a float32 matrix, by contract L-3 and L-4, on the device. `params`
+    is `[rows, cols]`. Returns `rows * cols`."""
+    if len(params) != 2:
+        raise Error("quantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var q_address = Int(py=q_addr)
+    var e_address = Int(py=e_addr)
+    var x_address = Int(py=x_addr)
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var dx = _dev_f32(ctx, x_address, rows * cols)
+        var dq = ctx.enqueue_create_buffer[DType.int8](rows * cols)
+        var de = ctx.enqueue_create_buffer[DType.int32](rows)
+        quantize_rows_int8_device(ctx, dq, de, dx, rows, cols)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=i8_ptr(q_address), src_buf=dq)
+        ctx.enqueue_copy(dst_ptr=i32_ptr(e_address), src_buf=de)
+        ctx.synchronize()
+        _ = dx
+        _ = dq
+        _ = de
+    return PythonObject(rows * cols)
+
+
+def dequantize_int8_binding(
+    y_addr: PythonObject,
+    q_addr: PythonObject,
+    e_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`y = q * 2^e` row by row, exact, on the device. `params` is
+    `[rows, cols]`. Returns `rows * cols`."""
+    if len(params) != 2:
+        raise Error("dequantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var y_address = Int(py=y_addr)
+    var q_address = Int(py=q_addr)
+    var e_address = Int(py=e_addr)
+    var rows = Int(py=params[0])
+    var cols = Int(py=params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var dq = _dev_i8(ctx, q_address, rows * cols)
+        var de = _dev_i32(ctx, e_address, rows)
+        var dy = ctx.enqueue_create_buffer[DType.float32](rows * cols)
+        dequantize_rows_int8_device(ctx, dy, dq, de, rows, cols)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
+        ctx.synchronize()
+        _ = dq
+        _ = de
+        _ = dy
+    return PythonObject(rows * cols)
+
+
+def to_bf16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """float32 to bf16 bits by contract L-2 (flush, then round to nearest
+    even), on the device. `params` is `[count]`. Returns `count`."""
+    if len(params) != 1:
+        raise Error("to_bf16: params must contain 1 value (count)")
+    var dst_address = Int(py=dst_addr)
+    var src_address = Int(py=src_addr)
+    var count = Int(py=params[0])
+    if count <= 0:
+        raise Error("to_bf16: count must be positive, got " + String(count))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var dsrc = _dev_f32(ctx, src_address, count)
+        var ddst = ctx.enqueue_create_buffer[DType.uint16](count)
+        bf16_narrow(ctx, ddst, dsrc, count)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=u16_ptr(dst_address), src_buf=ddst)
+        ctx.synchronize()
+        _ = dsrc
+        _ = ddst
+    return PythonObject(count)
+
+
+def from_bf16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """bf16 bits to float32 by contract L-1 (exact), on the device.
+    `params` is `[count]`. Returns `count`."""
+    if len(params) != 1:
+        raise Error("from_bf16: params must contain 1 value (count)")
+    var dst_address = Int(py=dst_addr)
+    var src_address = Int(py=src_addr)
+    var count = Int(py=params[0])
+    if count <= 0:
+        raise Error("from_bf16: count must be positive, got " + String(count))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        var dsrc = _dev_u16(ctx, src_address, count)
+        var ddst = ctx.enqueue_create_buffer[DType.float32](count)
+        bf16_widen(ctx, ddst, dsrc, count)
+        ctx.synchronize()
+        ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
+        ctx.synchronize()
+        _ = dsrc
+        _ = ddst
+    return PythonObject(count)
+
 @export
 def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
     try:
@@ -186,6 +479,13 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[linalg_profile_version_binding](
             "linalg_profile_version"
         )
+        m.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
+        m.def_function[gemm_bf16_binding]("gemm_bf16")
+        m.def_function[gemm_int8_binding]("gemm_int8")
+        m.def_function[quantize_int8_binding]("quantize_int8")
+        m.def_function[dequantize_int8_binding]("dequantize_int8")
+        m.def_function[to_bf16_binding]("to_bf16")
+        m.def_function[from_bf16_binding]("from_bf16")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_linalg: ", e))

@@ -1,11 +1,12 @@
 # Small neural decode calls on Metal
 
-A healthy command queue does not make our current host-array API efficient.
-`TransformerBlock.step` and `Mamba1Block.step` cross the native boundary once
-per token. The binding constructs a DeviceContext, uploads weights and carried
-state, allocates stages, executes the block, then downloads output and state.
-The next token repeats this setup. Python model reuse does not imply resident
-GPU weights or GPU state.
+A healthy command queue does not make a host-array API efficient. At the
+start of this investigation, `TransformerBlock.step` and `Mamba1Block.step`
+constructed a DeviceContext, uploaded weights and carried state, allocated
+stages, executed the block, then downloaded output and state on every token.
+The [Transformer follow-up](TRANSFORMER_SESSION_REUSE.md) reuses compatible
+context/workspace ownership. Python model reuse still does not imply resident
+GPU weights or authoritative GPU cache state.
 
 The reported 225.71 ms Transformer and 211.67 ms Mamba-1 measurements used
 B=1, L=16, d_model=32, and timed 16 separate step calls. They are tiny-call
@@ -153,6 +154,14 @@ explicit: the session copies the weights and the state at open, the per-call
 is a new session. The per-call entries are unchanged, and a session's outputs
 are bytewise the per-call entries' on the same block and state.
 
+The binding exports it as `transformer_decode_session_{create,open,step,
+forward,export_state,load_state,info,close}`, beside and distinct from the
+[retained per-model setup](TRANSFORMER_SESSION_REUSE.md)'s
+`transformer_session_*`, which the per-call `forward` and `step` use and
+which rereads the weights and the caller's cache on every call. A block that
+holds that retained context still opens a decode session; the decode session
+holds its own context.
+
 Measured on one RunPod RTX 4090 (IDENTICAL, `sm_89`) with
 `tools/bench_neural_decode.py --resident-ab`, a fresh state prefilled to 1024
 positions and 64 decode tokens at d_model 1024, five interleaved rounds after a
@@ -170,3 +179,15 @@ owed at the next release record. The CPU host route exports no session
 (`TransformerBlockInference.decode_session` refuses by name); its per-call
 `step` is the path there. Records, commands and the identity evidence:
 `docs/lanes/LANE_STATUS_lane-infer-speed-neural.md`.
+
+## Batched weight validation
+
+The next setup reduction batches all nine Transformer weight scans into shared
+scratch, one result copy, and one completion wait. Mutable weights are still
+validated on every construction. See [Transformer weight setup](TRANSFORMER_WEIGHT_SETUP.md)
+for bounded checks, measurements, and cross-vendor qualification limits.
+
+The subsequent [retained Transformer setup](TRANSFORMER_SESSION_REUSE.md)
+reuses compatible per-model context/workspace ownership. Mutable weights and
+caller cache state are still refreshed on every call; this does not change the
+Mamba setup path or remove any release identity fixtures.

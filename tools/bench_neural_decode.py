@@ -110,8 +110,11 @@ def _decode_arm(kind, blk, x, prefill, tokens, arm):
     """One arm over the same inputs: a fresh state prefilled to `prefill`
     positions through the PER-CALL forward, then `tokens` decode steps
     through the per-call `step` (arm 'percall') or a resident session
-    (arm 'resident'). Returns per-token seconds, the decoded outputs and the
-    final state pieces."""
+    (arm 'resident': `decode_session`, the binding's
+    `transformer_decode_session_*` / `mamba1_session_*` entry points; the
+    per-call arm goes through the block's own retained per-model context
+    where the binding has one). Returns per-token seconds, the decoded
+    outputs and the final state pieces."""
     b = x.shape[0]
     state = blk.allocate_state(b, prefill + tokens) if kind == 'transformer' else blk.allocate_state(b)
     blk.forward(np.ascontiguousarray(x[:, :prefill]), state)

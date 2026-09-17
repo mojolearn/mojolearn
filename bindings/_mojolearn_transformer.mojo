@@ -64,18 +64,18 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   capacity, `s_max`) is a params scalar too, because the packing stride
   and every refusal about growth are functions of it.
 
-  (iii) THE ROTARY TABLE AND THE ATTENTION SCALE ARE REBUILT PER CALL
-  FROM FROZEN CONSTANTS, NEVER PARAMETERS. rms eps (1e-6, bits
+  (iii) THE ROTARY TABLE AND THE ATTENTION SCALE USE FROZEN CONSTANTS,
+  NEVER PARAMETERS. rms eps (1e-6, bits
   0x358637BD) and rope theta (10000.0, bits 0x461C4000) are contract
   section 3 FROZEN constants, imported from
   `transformer/checks/transformer_fixture.mojo` (the fixture is their
   bit authority); changing either is a v2 profile, not a knob. The
   rotary table is `LlamaRopeTable(ctx, dims, ROPE_THETA, max_tokens)`,
-  computed on-device per call exactly as the lane's own check driver
-  builds it -- a caching layer would be state this surface deliberately
-  does not hold (the reference computes it once per config; recomputing is
-  bit-inert because S6-S8 are pure functions of (theta, head_dim,
-  position)).
+  computed on-device exactly as the lane's own check driver builds it.
+  Legacy entry points rebuild it per call. The Python-owned session reuses
+  it only for an exactly matching workspace configuration; S6-S8 are pure
+  functions of (theta, head_dim, position). See
+  docs/TRANSFORMER_SESSION_REUSE.md for ownership and refresh rules.
 
   (iv) WHAT IS REFUSED HERE, AND WHAT GOES DOWN UNJUDGED (DEVIATION
   793's split, applied). Refused HERE: a null address, an
@@ -329,6 +329,236 @@ def _load_transformer_weights(
             _read_f32(a[8], it * dm),
             _read_f32(a[9], dm * it),
         )
+
+
+
+struct TransformerWorkspace(Movable):
+    var key: List[Int]
+    var kv: LlamaKVCache
+    var rope: LlamaRopeTable
+    var stages: LlamaDeviceStages
+    var x: DeviceBuffer[DType.float32]
+
+    def __init__(out self, ctx: DeviceContext, dims: LlamaDims,
+                 b: Int, l: Int, smax: Int, window: Int, lean: Bool) raises:
+        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
+                    dims.head_dim, dims.intermediate, smax, window, Int(lean)]
+        self.kv = LlamaKVCache(ctx, b, dims, smax, window)
+        self.rope = LlamaRopeTable(ctx, dims, ROPE_THETA, smax)
+        self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
+        self.x = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
+
+    def retained_bytes(self) -> Int:
+        var cells = len(self.x) + len(self.kv.k) + len(self.kv.v)
+        cells += len(self.rope.inv_freq) + len(self.rope.cos) + len(self.rope.sin)
+        cells += len(self.stages.gemm_workspace.buffer)
+        cells += len(self.stages.norm1_sumsq)
+        cells += len(self.stages.norm1_out)
+        cells += len(self.stages.q_proj)
+        cells += len(self.stages.k_proj)
+        cells += len(self.stages.v_proj)
+        cells += len(self.stages.q_rope)
+        cells += len(self.stages.k_rope)
+        cells += len(self.stages.k_cache)
+        cells += len(self.stages.v_cache)
+        cells += len(self.stages.scores)
+        cells += len(self.stages.masked)
+        cells += len(self.stages.amax)
+        cells += len(self.stages.aexp)
+        cells += len(self.stages.denom)
+        cells += len(self.stages.weights)
+        cells += len(self.stages.ctxv)
+        cells += len(self.stages.o_proj)
+        cells += len(self.stages.residual1)
+        cells += len(self.stages.norm2_sumsq)
+        cells += len(self.stages.norm2_out)
+        cells += len(self.stages.gate_proj)
+        cells += len(self.stages.up_proj)
+        cells += len(self.stages.silu_out)
+        cells += len(self.stages.gated)
+        cells += len(self.stages.down_proj)
+        cells += len(self.stages.residual2)
+        cells += len(self.stages.qbh)
+        cells += len(self.stages.kbh)
+        cells += len(self.stages.sbh)
+        return cells * 4
+
+    def matches(self, key: List[Int]) -> Bool:
+        if len(key) != len(self.key):
+            return False
+        for i in range(len(key)):
+            if key[i] != self.key[i]:
+                return False
+        return True
+
+
+struct TransformerSession(Movable, Writable):
+    """One Python-owned context/workspace; no retained host pointers or weights."""
+    var ctx: Optional[DeviceContext]
+    var workspace: Optional[TransformerWorkspace]
+    var busy: Bool
+    var closed: Bool
+    var contexts: Int
+    var workspaces: Int
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+        self.workspace = Optional[TransformerWorkspace]()
+        self.busy = False
+        self.closed = False
+        self.contexts = 0
+        self.workspaces = 0
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("TransformerSession")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("TransformerSession")
+
+    def __deinit__(deinit self):
+        # Same teardown order as ByteLMSession (DEVIATION 2520): buffer
+        # destruction enqueues frees, which must drain before context death.
+        _ = self.workspace^
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
+        _ = self.ctx^
+
+    def clear(mut self) raises:
+        if self.ctx:
+            self.ctx.value().synchronize()
+        self.workspace = None
+        if self.ctx:
+            self.ctx.value().synchronize()
+
+
+def _transformer_run_session(
+    mut session: TransformerSession, a: List[Int], b: Int, l: Int,
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+    smax: Int, s0: Int, window: Int,
+) raises -> Int:
+    var dims = LlamaDims(dm, nh, nkv, hd, it)
+    dims.validate()
+    if s0 < 0 or s0 > smax:
+        raise Error(String("transformer: cached_tokens must be in [0, ")
+            + String(smax) + "] (the cache capacity, max_tokens), got "
+            + String(s0) + "; the two sides of this boundary disagree about the state")
+    if window < 0:
+        raise Error("transformer: window must be >= 0 (0 = full causal)")
+    if not session.ctx:
+        session.ctx = DeviceContext()
+        session.contexts += 1
+    ref ctx = session.ctx.value()
+    var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
+    var tk = Int(perf_counter_ns())
+    var lean = transformer_lean_stages(hd)
+    var key: List[Int] = [b, l, dm, nh, nkv, hd, it, smax, window, Int(lean)]
+    var reused = False
+    if session.workspace:
+        reused = session.workspace.value().matches(key)
+    if not reused:
+        ctx.synchronize()
+        session.workspace = None
+        ctx.synchronize()
+    # Always reread and revalidate weights; a Python address is not a version.
+    var w = _load_transformer_weights(ctx, dims, a)
+    _btick(ton, tk, "surface.weights_up")
+    if not reused:
+        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean)
+        session.workspaces += 1
+    ref ws = session.workspace.value()
+    if reused:
+        ws.stages.reset(ctx)
+    # Host cache state is authoritative on EVERY call, including resets and
+    # same-address edits. Copy into retained allocations, never trust a pointer.
+    ctx.enqueue_copy(dst_buf=ws.kv.k, src_ptr=_f32_ptr(a[10]))
+    ctx.enqueue_copy(dst_buf=ws.kv.v, src_ptr=_f32_ptr(a[11]))
+    ctx.enqueue_copy(dst_buf=ws.x, src_ptr=_f32_ptr(a[0]))
+    ctx.synchronize()
+    ws.kv.s = s0
+    _btick(ton, tk, "surface.cache_stages_x_up")
+    var trace = IdentityTrace.disabled()
+    llama_decoder_layer_forward(ctx, ws.stages, ws.kv, ws.rope, w, ws.x,
+                                b, l, s0, trace, String("py"))
+    _btick(ton, tk, "surface.forward")
+    _download_addr(ctx, ws.stages.residual2, b * l * dm, a[12])
+    _download_addr(ctx, ws.kv.k, len(ws.kv.k), a[10])
+    _download_addr(ctx, ws.kv.v, len(ws.kv.v), a[11])
+    _btick(ton, tk, "surface.outputs_down")
+    var result = ws.kv.s
+    # Bound retained device-buffer storage per model. Large legal calls still
+    # run, but release their workspace after completion rather than pinning it.
+    var retain = ws.retained_bytes() <= 64 * 1024 * 1024
+    _ = w^
+    # Drain the per-call weight frees before returning to the next call.
+    ctx.synchronize()
+    if not retain:
+        session.workspace = None
+        ctx.synchronize()
+    return result
+
+
+def transformer_session_create_binding() raises -> PythonObject:
+    return PythonObject(alloc=TransformerSession())
+
+
+def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy:
+        raise Error("transformer: session is busy")
+    owner[].closed = True
+    owner[].clear()
+    owner[].ctx = None
+    return PythonObject(0)
+
+
+def transformer_session_info_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy:
+        raise Error("transformer: session is busy")
+    var out = Python.list()
+    out.append(PythonObject(owner[].contexts))
+    out.append(PythonObject(owner[].workspaces))
+    out.append(PythonObject(owner[].closed))
+    var retained_bytes = 0
+    if owner[].workspace:
+        retained_bytes = owner[].workspace.value().retained_bytes()
+    out.append(PythonObject(retained_bytes))
+    return out
+
+
+def transformer_session_forward_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[TransformerSession]()
+    if owner[].busy or owner[].closed:
+        raise Error("transformer: session is busy or closed")
+    var a = _transformer_addrs(addrs, "transformer_forward")
+    if len(params) != 10:
+        raise Error("transformer_forward: params must contain 10 values")
+    var p = List[Int]()
+    for i in range(10):
+        p.append(Int(py=params[i]))
+    owner[].busy = True
+    var result = 0
+    try:
+        with GILReleased(Python()):
+            try:
+                result = _transformer_run_session(owner[], a,
+                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9])
+            except error:
+                # A failed call must not leave partially written scratch or
+                # queued references for the next caller. Caller arrays are
+                # still owned by its Python frame during this drain.
+                owner[].clear()
+                raise error
+    except error:
+        owner[].busy = False
+        raise error
+    owner[].busy = False
+    return PythonObject(result)
 
 
 def _transformer_run[discard_cache: Bool = False](
@@ -649,6 +879,12 @@ def transformer_decode_step_binding(
 # The Python owner (`_transformer_impl.py::TransformerDecodeSession`) marks
 # the state object resident so the per-call `forward`/`step` refuse it until
 # it is synced back.
+#
+# NOT `TransformerSession` above (`transformer_session_*`): that one is the
+# per-call route's retained context and workspace, holding no weights and
+# no authoritative cache (both reread every call). This one owns the weights
+# and the cache for the life of the session. The entry points are
+# `transformer_decode_session_*` so both are exported from one binding.
 # ===========================================================================
 
 
@@ -721,35 +957,35 @@ struct TransformerDecodeSession(Movable, Writable):
 
     def close(mut self) raises:
         if self.busy:
-            raise Error("transformer session: busy")
+            raise Error("transformer decode session: busy")
         self.usable = False
         self.release()
 
 
 def _require_session_open(s: TransformerDecodeSession) raises:
     if s.busy:
-        raise Error("transformer session: busy")
+        raise Error("transformer decode session: busy")
     if not s.is_open():
-        raise Error("transformer session: not open (transformer_session_open first)")
+        raise Error("transformer decode session: not open (transformer_decode_session_open first)")
     if not s.usable:
-        raise Error("transformer session: lost after a failed call; close it and open a new one")
+        raise Error("transformer decode session: lost after a failed call; close it and open a new one")
 
 
 def _session_open_run(
     mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
     hd: Int, it: Int, smax: Int, s0: Int, window: Int,
 ) raises -> Int:
-    """The GIL-free half of `transformer_session_open`: one context, the nine
+    """The GIL-free half of `transformer_decode_session_open`: one context, the nine
     weight uploads, the cache uploads over fresh zeros, the rotary table at
     `smax`, the L = 1 stages and the resident x buffer."""
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
     if s0 < 0 or s0 > smax:
         raise Error(
-            String("transformer session: cached_tokens must be in [0, ") + String(smax)
+            String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
             + "], got " + String(s0))
     if window < 0:
-        raise Error("transformer session: window must be >= 0 (0 = full causal)")
+        raise Error("transformer decode session: window must be >= 0 (0 = full causal)")
     var cap = smax
     if window > 0:
         cap = window
@@ -789,7 +1025,7 @@ def _session_step_run(mut s: TransformerDecodeSession, px: Int, py: Int) raises 
         ctx, s.stages.value(), s.kv.value(), s.rope.value(), s.w.value(), s.dx.value(),
         s.b, 1, pos0, trace, String("py.session"))
     if n != len(s.stages.value().residual2):
-        raise Error("transformer session: the L = 1 stages hold a different output length")
+        raise Error("transformer decode session: the L = 1 stages hold a different output length")
     ctx.enqueue_copy(dst_ptr=_f32_ptr(py), src_buf=s.stages.value().residual2)
     ctx.synchronize()
     return s.kv.value().s
@@ -829,7 +1065,7 @@ def _session_export_run(mut s: TransformerDecodeSession, pk: Int, pv: Int) raise
 def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int) raises -> Int:
     if s0 < 0 or s0 > s.smax:
         raise Error(
-            String("transformer session: cached_tokens must be in [0, ") + String(s.smax)
+            String("transformer decode session: cached_tokens must be in [0, ") + String(s.smax)
             + "], got " + String(s0))
     ref ctx = s.ctx.value()
     var cap = s.smax
@@ -842,12 +1078,12 @@ def _session_load_run(mut s: TransformerDecodeSession, pk: Int, pv: Int, s0: Int
     return s0
 
 
-def transformer_session_create_binding() raises -> PythonObject:
+def transformer_decode_session_create_binding() raises -> PythonObject:
     """A closed session. Creation performs no GPU operation."""
     return PythonObject(alloc=TransformerDecodeSession())
 
 
-def transformer_session_open_binding(
+def transformer_decode_session_open_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """Open a closed session on a block and a carried cache. `addrs` is
@@ -859,17 +1095,17 @@ def transformer_session_open_binding(
     cached_tokens. Refused on an open session."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 11 or len(params) != 9:
-        raise Error("transformer_session_open: expected 11 addresses and 9 scalars")
+        raise Error("transformer_decode_session_open: expected 11 addresses and 9 scalars")
     if owner[].busy:
-        raise Error("transformer session: busy")
+        raise Error("transformer decode session: busy")
     if owner[].is_open():
-        raise Error("transformer session: already open; close it first")
+        raise Error("transformer decode session: already open; close it first")
     var a = List[Int]()
     a.append(0)  # slot 0 (x) is not part of an open
     for i in range(11):
         var address = Int(py=addrs[i])
         if address == 0:
-            raise Error("transformer_session_open: null buffer address at slot " + String(i))
+            raise Error("transformer_decode_session_open: null buffer address at slot " + String(i))
         a.append(address)
     var b = Int(py=params[0])
     var dm = Int(py=params[1])
@@ -881,7 +1117,7 @@ def transformer_session_open_binding(
     var s0 = Int(py=params[7])
     var window = Int(py=params[8])
     if b <= 0:
-        raise Error("transformer_session_open: B must be positive")
+        raise Error("transformer_decode_session_open: B must be positive")
     owner[].busy = True
     owner[].usable = False
     var out_len = 0
@@ -897,7 +1133,7 @@ def transformer_session_open_binding(
     return PythonObject(out_len)
 
 
-def transformer_session_step_binding(
+def transformer_decode_session_step_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """One decode token on an open session: `addrs` = [x, y_out], both
@@ -907,16 +1143,16 @@ def transformer_session_step_binding(
     post-call cached_tokens. A failed call marks the session lost."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 2 or len(params) != 1:
-        raise Error("transformer_session_step: expected 2 addresses and 1 scalar")
+        raise Error("transformer_decode_session_step: expected 2 addresses and 1 scalar")
     var px = Int(py=addrs[0])
     var py = Int(py=addrs[1])
     if px == 0 or py == 0:
-        raise Error("transformer_session_step: null buffer address")
+        raise Error("transformer_decode_session_step: null buffer address")
     var claimed = Int(py=params[0])
     _require_session_open(owner[])
     if owner[].kv.value().s != claimed:
         raise Error(
-            String("transformer session: the caller believes cached_tokens = ") + String(claimed)
+            String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
             + " but the resident cache holds " + String(owner[].kv.value().s))
     owner[].busy = True
     var out_len = 0
@@ -931,7 +1167,7 @@ def transformer_session_step_binding(
     return PythonObject(out_len)
 
 
-def transformer_session_forward_binding(
+def transformer_decode_session_forward_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """`L` tokens per row on an open session (a prefill or a chunked
@@ -940,19 +1176,19 @@ def transformer_session_forward_binding(
     post-call cached_tokens."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 2 or len(params) != 2:
-        raise Error("transformer_session_forward: expected 2 addresses and 2 scalars")
+        raise Error("transformer_decode_session_forward: expected 2 addresses and 2 scalars")
     var px = Int(py=addrs[0])
     var py = Int(py=addrs[1])
     if px == 0 or py == 0:
-        raise Error("transformer_session_forward: null buffer address")
+        raise Error("transformer_decode_session_forward: null buffer address")
     var l = Int(py=params[0])
     var claimed = Int(py=params[1])
     if l <= 0:
-        raise Error("transformer_session_forward: L must be positive")
+        raise Error("transformer_decode_session_forward: L must be positive")
     _require_session_open(owner[])
     if owner[].kv.value().s != claimed:
         raise Error(
-            String("transformer session: the caller believes cached_tokens = ") + String(claimed)
+            String("transformer decode session: the caller believes cached_tokens = ") + String(claimed)
             + " but the resident cache holds " + String(owner[].kv.value().s))
     owner[].busy = True
     var out_len = 0
@@ -967,7 +1203,7 @@ def transformer_session_forward_binding(
     return PythonObject(out_len)
 
 
-def transformer_session_export_state_binding(
+def transformer_decode_session_export_state_binding(
     session: PythonObject, addrs: PythonObject,
 ) raises -> PythonObject:
     """Copy the resident cache into the caller's buffers: `addrs` =
@@ -975,11 +1211,11 @@ def transformer_session_export_state_binding(
     cached_tokens. The session stays open."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 2:
-        raise Error("transformer_session_export_state: expected 2 addresses")
+        raise Error("transformer_decode_session_export_state: expected 2 addresses")
     var pk = Int(py=addrs[0])
     var pv = Int(py=addrs[1])
     if pk == 0 or pv == 0:
-        raise Error("transformer_session_export_state: null buffer address")
+        raise Error("transformer_decode_session_export_state: null buffer address")
     _require_session_open(owner[])
     owner[].busy = True
     var out_len = 0
@@ -994,7 +1230,7 @@ def transformer_session_export_state_binding(
     return PythonObject(out_len)
 
 
-def transformer_session_load_state_binding(
+def transformer_decode_session_load_state_binding(
     session: PythonObject, addrs: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
     """Replace the resident cache with the caller's bytes: `addrs` =
@@ -1002,11 +1238,11 @@ def transformer_session_load_state_binding(
     for the state half; the weight half is close and open."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     if len(addrs) != 2 or len(params) != 1:
-        raise Error("transformer_session_load_state: expected 2 addresses and 1 scalar")
+        raise Error("transformer_decode_session_load_state: expected 2 addresses and 1 scalar")
     var pk = Int(py=addrs[0])
     var pv = Int(py=addrs[1])
     if pk == 0 or pv == 0:
-        raise Error("transformer_session_load_state: null buffer address")
+        raise Error("transformer_decode_session_load_state: null buffer address")
     var s0 = Int(py=params[0])
     _require_session_open(owner[])
     owner[].busy = True
@@ -1022,7 +1258,7 @@ def transformer_session_load_state_binding(
     return PythonObject(out_len)
 
 
-def transformer_session_info_binding(session: PythonObject) raises -> PythonObject:
+def transformer_decode_session_info_binding(session: PythonObject) raises -> PythonObject:
     """[open, usable, cached_tokens, B, max_tokens, window] as ints."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
     var out = Python.list()
@@ -1039,7 +1275,7 @@ def transformer_session_info_binding(session: PythonObject) raises -> PythonObje
     return out
 
 
-def transformer_session_close_binding(session: PythonObject) raises -> PythonObject:
+def transformer_decode_session_close_binding(session: PythonObject) raises -> PythonObject:
     """Release every device buffer and the context. The caller's cache
     buffers are NOT written here; export_state first if the bytes matter."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
@@ -1215,6 +1451,11 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
             "transformer_numeric_mode"
         )
         m.def_function[transformer_forward_binding]("transformer_forward")
+        _ = m.add_type[TransformerSession]("_TransformerSession")
+        m.def_function[transformer_session_create_binding]("transformer_session_create")
+        m.def_function[transformer_session_close_binding]("transformer_session_close")
+        m.def_function[transformer_session_info_binding]("transformer_session_info")
+        m.def_function[transformer_session_forward_binding]("transformer_session_forward")
         # NVIDIA's full public A/B gate admits discarded-cache prefill.
         # Apple retains its prior default until separately priced; the explicit
         # force flag remains available for its completed arithmetic gate.
@@ -1226,14 +1467,14 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         m.def_function[transformer_backward_binding]("transformer_backward")
         # DEVIATION 2940: the resident decode session.
         _ = m.add_type[TransformerDecodeSession]("_TransformerDecodeSession")
-        m.def_function[transformer_session_create_binding]("transformer_session_create")
-        m.def_function[transformer_session_open_binding]("transformer_session_open")
-        m.def_function[transformer_session_step_binding]("transformer_session_step")
-        m.def_function[transformer_session_forward_binding]("transformer_session_forward")
-        m.def_function[transformer_session_export_state_binding]("transformer_session_export_state")
-        m.def_function[transformer_session_load_state_binding]("transformer_session_load_state")
-        m.def_function[transformer_session_info_binding]("transformer_session_info")
-        m.def_function[transformer_session_close_binding]("transformer_session_close")
+        m.def_function[transformer_decode_session_create_binding]("transformer_decode_session_create")
+        m.def_function[transformer_decode_session_open_binding]("transformer_decode_session_open")
+        m.def_function[transformer_decode_session_step_binding]("transformer_decode_session_step")
+        m.def_function[transformer_decode_session_forward_binding]("transformer_decode_session_forward")
+        m.def_function[transformer_decode_session_export_state_binding]("transformer_decode_session_export_state")
+        m.def_function[transformer_decode_session_load_state_binding]("transformer_decode_session_load_state")
+        m.def_function[transformer_decode_session_info_binding]("transformer_decode_session_info")
+        m.def_function[transformer_decode_session_close_binding]("transformer_decode_session_close")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_transformer: ", e))
