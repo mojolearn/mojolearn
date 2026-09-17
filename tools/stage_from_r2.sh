@@ -20,6 +20,11 @@
 #                           gbm-bench/istella/istella_speed.npz
 #                           corpus/enwik8/input.txt
 #                           corpus/pile_github/input.txt
+#                         The forest datasets are pinned too and land where
+#                         tools/speed_gbdt_arm.py reads them (added 2026-09-17)
+#                           gbm-bench/higgs/higgs_speed.npz
+#                           gbm-bench/covtype/covtype_speed.npz
+#                           gbm-bench/year/year_speed.npz
 #                         MOJOLEARN_STAGE_KEYS="" (empty, set) stages nothing.
 #   MOJOLEARN_STAGE_REMOTE_SH   the shell that runs the staging commands on the
 #                         box (default `sh -s`; Hot Aisle needs `sudo -n -H sh -s`

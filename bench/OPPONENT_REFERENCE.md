@@ -27,8 +27,13 @@ on their first leg and land in this file under the GPU's section.
 Every number is a median in milliseconds unless stated. Paths are relative
 to the repository root. `e1g/<stamp>` means `bench/results/e1g/<stamp>/remote/logs/`.
 "Config" is the opponent's FAST arm as pinned by `bench/speed/`; the
-opponent's deterministic modes are not measured (see
-`docs/` and the standing rule in the memory index).
+opponent's deterministic modes are not measured here (see
+`docs/` and the standing rule in the memory index). The one exception is
+the model leg (`bench/model/torch_twin.py`, 2026-09-17), which records
+PyTorch under `torch.use_deterministic_algorithms(True)` as an extra
+column beside the fast arm, so that the incumbent's own determinism cost
+is on the same record; the reported ratio is still ours against the fast
+arm.
 
 ## NVIDIA H100 80GB HBM3, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124
 

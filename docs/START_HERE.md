@@ -1,5 +1,8 @@
 # Start here
 
+> Resuming the low-bit inference work of 2026-09-17? Read
+> [docs/lanes/HANDOFF_2026-09-17_lowbit_inference.md](lanes/HANDOFF_2026-09-17_lowbit_inference.md) first.
+
 This is the whole path from a clone to a merged change. It is deliberately
 short. **You do not need to read the rest of this repository's documentation
 before your first contribution.** The long documents exist so that a claim can
@@ -106,3 +109,5 @@ Read these when you need them, not before.
 | [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) | what the three numeric tiers promise, measured rather than argued |
 | [IDENTITY_PATHS.md](../IDENTITY_PATHS.md) | which code paths carry a bit-level claim |
 | [GOVERNANCE.md](../GOVERNANCE.md) | how decisions are made and how maintainership transfers |
+
+Verification restart: [coverage, remaining gates, evidence and resource limits](VERIFICATION_RESTART_PLAN.md).

@@ -25,6 +25,14 @@ are not distinct Python classes and mappings are not execution certificates.
 For every lane the inventory shows CPU availability, withheld-reference reasons,
 batch applicability and reference-fixture counts. It executes no algorithms.
 
+The candidate's default CPU selection now includes spectral clustering,
+Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
+lanes, including applicable batch and saved-model checks:
+
+```sh
+python -m mojolearn verify --lanes spectral,metrics-fowlkes-mallows,arima-exog,arima-exog-seasonal --repeats 2
+```
+
 `--all` runs standard whole/individual/split/prefix batch checks where declared,
 and the applicable step-versus-full sequence checks. For the additional gradient,
 batch-size, ragged-batch and sampler/replay properties, opt in explicitly (these cost more work):
@@ -441,6 +449,14 @@ commit is kept as superseded, and classes that differ at the same commit
 leave the part without a reference. `--records DIR` names other record
 directories.
 
+New tables require at least two identical, valid digest samples per part,
+matching input witnesses on each cell, held-out witnesses on non-training
+parts, and matching protocols for batch and other numerical properties.
+A probe error refuses the part even if it also returned a matching hash.
+Historical tables remain readable; `--coverage` explicitly labels a table
+without the new admission policy as legacy. Regenerate and replay references
+from the release artifacts before treating them as release qualification.
+
 The portable models are saved on a GPU install and kept only when their file
 bytes equal the table's model reference, so a shipped file is byte for byte
 the file every recorded vendor wrote:
@@ -530,3 +546,30 @@ carry `batchgrad`, `batchscale`, `ragged` and `rlpair` results. The builder
 uses the same admission, fixture, revision and conflict rules as the five
 standard parts; missing observations remain missing. Generating a table is
 not final-wheel qualification or permission to publish it.
+
+### Historical evidence and verification inputs
+
+The 0.8.7 candidate's `verify --coverage --json` includes source paths and
+SHA-256 digests for historical backend records, build versus harness negative
+controls, and matched one-device/multiple-device records. It retains all 246
+appendix entries. These are recorded observations on named fixtures and parts,
+not qualification of the installed wheel. Missing evidence stays visible.
+A parallel lane is not a multi-GPU pass merely because it exists or ran on
+one device. The report names requested device indices; it does not independently
+attest physical device use.
+
+New execution reports include `verification_contract`: input and held-out
+fingerprints, the harness digest, and the actual batch/decode protocols.
+`verify --compare A.json B.json` refuses missing or differing contracts with
+`INCOMPARABLE` (exit 4), even when output hashes happen to match. Older reports
+without these fields must be regenerated before this comparison can pass.
+
+The CPU verifier now bundles the 18 GPU-trained CTR fixtures used by
+`gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables`. Both builders validate
+their SHA-256 digests. CPU replay finds and validates them automatically; an
+external model directory is no longer needed. These lanes test CPU inference
+of GPU-trained models, not CPU training of CTR tables. Both lanes passed all
+nine fixtures twice from an installed development wheel and join the default
+CPU set. This does not replace final release-wheel qualification.
+
+See [the evidence audit and remaining work](lanes/LANE_STATUS_verification_evidence_audit.md).

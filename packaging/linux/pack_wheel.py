@@ -583,6 +583,10 @@ def main():
     for src in sorted(verify_ref.glob("*.json")) + sorted((verify_ref / "models").glob("*")):
         if src.is_file():
             entries[f"mojolearn/{src.relative_to(PKG).as_posix()}"] = src
+    # The shared stager validates every fixture digest before either platform packs it.
+    from verification_ctr_payload import model_entries
+    for name, src in model_entries(REPO).items():
+        entries[f"mojolearn/verify_reference/ctr_models/{name}"] = src
     record_dir = host_surface.training_gpu_column_record()
     for col in host_surface.TRAINING_GPU_COLUMNS:
         src = REPO / col

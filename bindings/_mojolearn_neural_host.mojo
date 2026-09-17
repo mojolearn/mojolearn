@@ -106,6 +106,25 @@ from training.host.samba_ops_oracle import (
 from transformer.host.transformer_block_host import (
     transformer_host_forward,
     transformer_host_weights,
+    transformer_host_weights_opts,
+)
+from transformer.checks.transformer_fixture import TransformerWeights
+# lane/block-options (2026-09-17): the block options record and its two
+# tails; `bindings/_mojolearn_transformer_host.mojo`'s comment and
+# `transformer/block_options.mojo` carry the order word for word (17 params:
+# rope_theta_bits, rope_scaling, rope_factor_bits, rope_low_freq_factor_bits,
+# rope_high_freq_factor_bits, rope_original_max_positions, rope_dim,
+# max_positions, qkv_bias, o_bias, norm_kind, norm_eps_bits, norm_bias,
+# mlp_kind, mlp_bias, qk_norm, attn_softcap_bits; 11 addrs: q_proj.bias,
+# k_proj.bias, v_proj.bias, o_proj.bias, input_layernorm.bias,
+# post_attention_layernorm.bias, up_proj.bias, down_proj.bias,
+# gate_proj.bias, q_norm.weight, k_norm.weight). Each transformer entry
+# accepts its old lists or the old lists plus the tails; with an ungated
+# MLP the base gate_proj.weight slot carries 0.
+from transformer.block_options import (
+    BLOCK_OPTION_ADDRS,
+    BLOCK_OPTION_PARAMS,
+    BlockOptions,
 )
 
 
@@ -127,6 +146,86 @@ def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:
             raise Error(what + ": address " + String(i) + " is null")
         out.append(a)
     return out^
+
+
+def _addrs_tail(addrs: PythonObject, n: Int, gate_slot: Int, what: String) raises -> List[Int]:
+    """`n` addresses or `n + BLOCK_OPTION_ADDRS`, returned as the longer
+    form with zeros where the tail was not sent; base slots null-checked
+    except `gate_slot` (0 under an ungated MLP)."""
+    var got = Int(py=len(addrs))
+    if got != n and got != n + BLOCK_OPTION_ADDRS:
+        raise Error(
+            what + ": expected " + String(n) + " addresses, or " + String(n)
+            + " + " + String(BLOCK_OPTION_ADDRS)
+            + " with the block options tail, got " + String(got)
+        )
+    var out = List[Int](capacity=n + BLOCK_OPTION_ADDRS)
+    for i in range(got):
+        var a = _index(addrs[i])
+        if i < n and i != gate_slot and a == 0:
+            raise Error(what + ": address " + String(i) + " is null")
+        out.append(a)
+    while len(out) < n + BLOCK_OPTION_ADDRS:
+        out.append(0)
+    return out^
+
+
+def _params_tail(params: PythonObject, n: Int, what: String) raises -> List[Int]:
+    var got = Int(py=len(params))
+    if got != n and got != n + BLOCK_OPTION_PARAMS:
+        raise Error(
+            what + ": expected " + String(n) + " scalars, or " + String(n)
+            + " + " + String(BLOCK_OPTION_PARAMS)
+            + " with the block options tail, got " + String(got)
+        )
+    var out = List[Int](capacity=got)
+    for i in range(got):
+        out.append(_index(params[i]))
+    return out^
+
+
+def _opt_read(addr: Int, n: Int, on: Bool, name: String, what: String) raises -> List[Float32]:
+    if on:
+        if addr == 0:
+            raise Error(what + ": " + name + " is required by its option and its address is null")
+        return read_f32(addr, n)
+    if addr != 0:
+        raise Error(what + ": " + name + " was passed but its option is off; pass the option or drop the tensor")
+    return List[Float32]()
+
+
+def _transformer_weights_from(
+    a: List[Int], dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
+    rope_positions: Int, opts: BlockOptions, what: String,
+) raises -> TransformerWeights:
+    """`_mojolearn_transformer_host.mojo::_host_weights_from`, word for
+    word: the oracle's weights from the 13 + 11 address layout."""
+    var qw = nh * hd
+    var kw = nkv * hd
+    var w_gate = List[Float32]()
+    if opts.gated():
+        if a[7] == 0:
+            raise Error(what + ": gate_proj.weight address is null (a gated MLP needs it)")
+        w_gate = read_f32(a[7], it * dm)
+    elif a[7] != 0:
+        raise Error(what + ": gate_proj.weight was passed but the MLP is ungated (mlp gelu / gelu_tanh)")
+    return transformer_host_weights_opts(
+        dm, nh, nkv, hd, it, rope_positions, opts,
+        read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
+        read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
+        w_gate, read_f32(a[8], it * dm), read_f32(a[9], dm * it),
+        _opt_read(a[13], qw, opts.qkv_bias, "q_proj.bias", what),
+        _opt_read(a[14], kw, opts.qkv_bias, "k_proj.bias", what),
+        _opt_read(a[15], kw, opts.qkv_bias, "v_proj.bias", what),
+        _opt_read(a[16], dm, opts.o_bias, "o_proj.bias", what),
+        _opt_read(a[17], dm, opts.norm_bias, "input_layernorm.bias", what),
+        _opt_read(a[18], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+        _opt_read(a[19], it, opts.mlp_bias, "up_proj.bias", what),
+        _opt_read(a[20], dm, opts.mlp_bias, "down_proj.bias", what),
+        _opt_read(a[21], it, opts.has_gate_bias(), "gate_proj.bias", what),
+        _opt_read(a[22], hd, opts.qk_norm, "q_norm.weight", what),
+        _opt_read(a[23], hd, opts.qk_norm, "k_norm.weight", what),
+    )
 
 
 def _finite(values: List[Float32], what: String) raises:
@@ -209,17 +308,27 @@ def transformer_forward_fresh_binding(
     """Stateless prefill from a zero cache of capacity L (or a window ring),
     only y written. Eleven pointers: x, nine weights, y. Eight scalars: B,
     L, d_model, n_heads, n_kv_heads, head_dim, intermediate, window."""
-    var a = _addrs(addrs, 11, String("transformer_forward_fresh"))
-    if Int(py=len(params)) != 8:
-        raise Error("transformer_forward_fresh: expected 11 addresses and 8 scalars")
-    var b = _index(params[0])
-    var l = _index(params[1])
-    var dm = _index(params[2])
-    var nh = _index(params[3])
-    var nkv = _index(params[4])
-    var hd = _index(params[5])
-    var it = _index(params[6])
-    var window = _index(params[7])
+    var what = String("transformer_forward_fresh")
+    var a0 = _addrs_tail(addrs, 11, 7, what)
+    var p = _params_tail(params, 8, what)
+    var opts = BlockOptions.from_params(p, 8)
+    # Into `transformer_forward`'s 13 + 11 layout (slots 10 and 11 unused).
+    var a = List[Int]()
+    for i in range(10):
+        a.append(a0[i])
+    a.append(0)
+    a.append(0)
+    a.append(a0[10])
+    for i in range(BLOCK_OPTION_ADDRS):
+        a.append(a0[11 + i])
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var nh = p[3]
+    var nkv = p[4]
+    var hd = p[5]
+    var it = p[6]
+    var window = p[7]
     if b <= 0 or l <= 0:
         raise Error("transformer: B and L must be positive")
     if window < 0:
@@ -228,19 +337,12 @@ def transformer_forward_fresh_binding(
         raise Error("transformer: d_model, n_heads, n_kv_heads, head_dim and intermediate must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        var qw = nh * hd
-        var kw = nkv * hd
-        var w = transformer_host_weights(
-            dm, nh, nkv, hd, it, l,
-            read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-            read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-            read_f32(a[7], it * dm), read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-        )
+        var w = _transformer_weights_from(a, dm, nh, nkv, hd, it, l, opts, what)
         var x = read_f32(a[0], b * l * dm)
         var out = transformer_host_forward(
             w, x, b, l, l, 0, window, List[Float32](), List[Float32]()
         )
-        copy_f32(out.y.unsafe_ptr(), f32_ptr(a[10]), len(out.y))
+        copy_f32(out.y.unsafe_ptr(), f32_ptr(a[12]), len(out.y))
         out_len = out.cached_tokens
     return PythonObject(out_len)
 
@@ -259,10 +361,11 @@ def transformer_forward_fresh_binding(
 
 def _run_forward(
     a: List[Int], b: Int, l: Int, dm: Int, nh: Int, nkv: Int, hd: Int,
-    it: Int, smax: Int, s0: Int, window: Int,
+    it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
     """`a` is the device binding's thirteen: x, the nine weights, k_cache,
-    v_cache, y_out. The caches are read at entry and written back."""
+    v_cache, y_out, then the eleven optional addresses (zeros when
+    absent). The caches are read at entry and written back."""
     if b <= 0 or l <= 0:
         raise Error("transformer: B and L must be positive")
     if smax <= 0:
@@ -273,12 +376,7 @@ def _run_forward(
         raise Error("transformer: d_model, n_heads, n_kv_heads, head_dim and intermediate must be positive")
     var qw = nh * hd
     var kw = nkv * hd
-    var w = transformer_host_weights(
-        dm, nh, nkv, hd, it, smax,
-        read_f32(a[1], dm), read_f32(a[2], dm), read_f32(a[3], qw * dm),
-        read_f32(a[4], kw * dm), read_f32(a[5], kw * dm), read_f32(a[6], dm * qw),
-        read_f32(a[7], it * dm), read_f32(a[8], it * dm), read_f32(a[9], dm * it),
-    )
+    var w = _transformer_weights_from(a, dm, nh, nkv, hd, it, smax, opts, String("transformer"))
     var cap = smax
     if window > 0:
         cap = window
@@ -301,26 +399,30 @@ def transformer_forward_binding(
     down), 10 k_cache, 11 v_cache, 12 y_out. `params`: 0 B, 1 L, 2 d_model,
     3 n_heads, 4 n_kv_heads, 5 head_dim, 6 intermediate, 7 max_tokens,
     8 cached_tokens, 9 window. Returns the post-call cached_tokens."""
-    var a = _addrs(addrs, 13, String("transformer_forward"))
-    if Int(py=len(params)) != 10:
+    var what = String("transformer_forward")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    if Int(py=len(params)) != 10 and Int(py=len(params)) != 10 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_forward: params must contain 10 values (B, L,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens, window)"
+            " max_tokens, cached_tokens, window), optionally followed by"
+            " the 17-value block options tail"
         )
-    var b = _index(params[0])
-    var l = _index(params[1])
-    var dm = _index(params[2])
-    var nh = _index(params[3])
-    var nkv = _index(params[4])
-    var hd = _index(params[5])
-    var it = _index(params[6])
-    var smax = _index(params[7])
-    var s0 = _index(params[8])
-    var window = _index(params[9])
+    var p = _params_tail(params, 10, what)
+    var opts = BlockOptions.from_params(p, 10)
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var nh = p[3]
+    var nkv = p[4]
+    var hd = p[5]
+    var it = p[6]
+    var smax = p[7]
+    var s0 = p[8]
+    var window = p[9]
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _run_forward(a, b, l, dm, nh, nkv, hd, it, smax, s0, window)
+        out_len = _run_forward(a, b, l, dm, nh, nkv, hd, it, smax, s0, window, opts)
     return PythonObject(out_len)
 
 
@@ -331,25 +433,29 @@ def transformer_decode_step_binding(
     point. `addrs`: the same thirteen. `params`: 0 B, 1 d_model, 2 n_heads,
     3 n_kv_heads, 4 head_dim, 5 intermediate, 6 max_tokens, 7 cached_tokens,
     8 window."""
-    var a = _addrs(addrs, 13, String("transformer_decode_step"))
-    if Int(py=len(params)) != 9:
+    var what = String("transformer_decode_step")
+    var a = _addrs_tail(addrs, 13, 7, what)
+    if Int(py=len(params)) != 9 and Int(py=len(params)) != 9 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_decode_step: params must contain 9 values (B,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens, window)"
+            " max_tokens, cached_tokens, window), optionally followed by"
+            " the 17-value block options tail"
         )
-    var b = _index(params[0])
-    var dm = _index(params[1])
-    var nh = _index(params[2])
-    var nkv = _index(params[3])
-    var hd = _index(params[4])
-    var it = _index(params[5])
-    var smax = _index(params[6])
-    var s0 = _index(params[7])
-    var window = _index(params[8])
+    var p = _params_tail(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    var b = p[0]
+    var dm = p[1]
+    var nh = p[2]
+    var nkv = p[3]
+    var hd = p[4]
+    var it = p[5]
+    var smax = p[6]
+    var s0 = p[7]
+    var window = p[8]
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _run_forward(a, b, 1, dm, nh, nkv, hd, it, smax, s0, window)
+        out_len = _run_forward(a, b, 1, dm, nh, nkv, hd, it, smax, s0, window, opts)
     return PythonObject(out_len)
 
 

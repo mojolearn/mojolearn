@@ -57,7 +57,7 @@ from bindings.holtwinters_host_predict import (
     holtwinters_forecast_binding,
     holtwinters_predict_binding,
 )
-from bindings.kpss_host_test import KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding
+from bindings.kpss_host_test import KPSS_DECISION_SABOTAGE, KPSS_ORACLE_HOST_SABOTAGE, kpss_test_binding
 
 
 def forecast_host_numeric_mode_binding() raises -> PythonObject:
@@ -89,7 +89,7 @@ def forecast_host_sabotage_binding() raises -> PythonObject:
     read-back over every arm this binary carries, so a sabotage build of it
     is refused outside the gate whichever arm was raised."""
     return PythonObject(
-        ARIMA_ORACLE_PREDICT_SABOTAGE or HW_PREDICT_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE
+        ARIMA_ORACLE_PREDICT_SABOTAGE or HW_PREDICT_SABOTAGE or KPSS_ORACLE_HOST_SABOTAGE or KPSS_DECISION_SABOTAGE
     )
 
 

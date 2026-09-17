@@ -20,10 +20,11 @@ shapes across eight plans with six sabotages all shown to fail, the launch,
 batch and batch-composition invariance gates, the fold ladder, and the price
 harness wired.
 
-OWED. `tools/gemm_remote_leg.sh` (DEVIATION 536) has never created a pod; leg
-11 went through `tools/e1_bootstrap.sh` phase 8 instead. No pixi task is
-registered for the oracle or device checks. Section 13.6's six measurements are
-unrun and the price harness has kept no number. Section 7.6's two bit-moving
+OWED. (Corrected 2026-09-17, lane/int8-mma: `tools/gemm_remote_leg.sh`
+(DEVIATION 536) has created hundreds of pods since, `bench/results/e1g/`
+holds them, and `pixi run check-gemm-oracle` is registered; no pixi task
+exists for the device check.) Section 13.6's six measurements are unrun and
+the price harness has kept no number. Section 7.6's two bit-moving
 migrations of committed behaviour are unstarted.
 
 DEVIATIONS 530-539 are this lane's.
