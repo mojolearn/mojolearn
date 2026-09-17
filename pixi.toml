@@ -1033,6 +1033,11 @@ ols-card = "sh tools/ols_card.sh"
 # from a serial one, and the signed-zero and cancellation cases. Run in both
 # modes; two of its fixtures refused themselves before they worked.
 check-gemm-oracle = "mojo run -I . gemm/checks/gemm_oracle_check.mojo"
+# The low-bit profiles (gemm/IDENTICAL_LOWBIT_CONTRACT.md): the honest build
+# must pass every gate, the two sabotage builds must FAIL the oracle gates.
+check-gemm-lowbit = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+check-gemm-lowbit-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
+check-gemm-lowbit-host-sabotage = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo"
 
 
 # The three identity check files ALONE, in whatever mode the tree is

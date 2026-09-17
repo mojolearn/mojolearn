@@ -126,6 +126,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
 from . import _backend
+from . import lowbit as _lowbit
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, probe
@@ -481,6 +482,10 @@ class TransformerBlock(NumericModeMixin):
         self._native_session = None
         self._session_binding = None
         what = "TransformerBlock"
+        # lane/identical-lowbit-inference (2026-09-17): packed bf16 or int8
+        # projection weights (mojolearn.lowbit) are materialized exactly here
+        # and the block runs its certified fp32 path on the result.
+        weights, self.weight_format = _lowbit.unpack(weights, what)
         arrs = _take(weights, what, self._W_NAMES)
         win = int(window)
         if win < 0:

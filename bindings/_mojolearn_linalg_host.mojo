@@ -64,6 +64,19 @@ from gemm.host.gemm_oracle import (
     OP_TN,
     gemm_oracle,
 )
+from gemm.host.gemm_lowbit_oracle import (
+    INT8_MAX_K,
+    LOWBIT_PROFILE_VERSION,
+    Int8Rows,
+    dequantize_rows_int8,
+    gemm_bf16_both_oracle,
+    gemm_bf16_oracle,
+    gemm_int8_oracle,
+    narrow_bf16,
+    quantize_rows_int8,
+    widen_bf16,
+)
+from bindings.hostptr import i8_ptr, i32_ptr, read_i8, read_i32, read_u16, u16_ptr
 
 
 #: Cells per output, so `m * n` and `m * k` stay far from any Int edge.
@@ -306,6 +319,195 @@ def cholesky_solve_binding(
     return PythonObject(0)
 
 
+
+# ===========================================================================
+# THE LOW-BIT PROFILES, on the host (lane/identical-lowbit-inference)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md. The GPU binding's names, the oracles'
+# arithmetic; `params` orders mirrored word for word.
+# ===========================================================================
+
+
+def lowbit_profile_version_binding() raises -> PythonObject:
+    return PythonObject(LOWBIT_PROFILE_VERSION)
+
+
+def gemm_bf16_binding(
+    c_addr: PythonObject,
+    a_addr: PythonObject,
+    b_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`params`: 0 m, 1 n, 2 k, 3 op, 4 a_bf16 (1 when A is bf16 bits)."""
+    if len(params) != 5:
+        raise Error("gemm_bf16: params must contain 5 values (m, n, k, op, a_bf16), got " + String(len(params)))
+    var cp = f32_ptr(_index(c_addr))
+    var a_address = _index(a_addr)
+    var b_address = _index(b_addr)
+    var m = _index(params[0])
+    var n = _index(params[1])
+    var k = _index(params[2])
+    var op = _index(params[3])
+    var a_bf16 = _index(params[4]) != 0
+    if m <= 0 or n <= 0 or k <= 0:
+        raise Error("gemm_bf16: m, n and k must all be positive, got m=" + String(m) + " n=" + String(n) + " k=" + String(k))
+    if op != OP_NN and op != OP_NT and op != OP_TN:
+        raise Error("gemm_bf16: op must be 0 (OP_NN), 1 (OP_NT) or 2 (OP_TN), got " + String(op))
+    if m > LINALG_HOST_MAX_EXTENT or n > LINALG_HOST_MAX_EXTENT or k > LINALG_HOST_MAX_EXTENT:
+        raise Error("gemm_bf16: m, n and k must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var b = read_u16(b_address, n * k)
+        var c = List[Float32]()
+        if a_bf16:
+            var a_bits = read_u16(a_address, m * k)
+            c = gemm_bf16_both_oracle(a_bits, b, op, m, n, k)
+        else:
+            var a = read_f32(a_address, m * k)
+            c = gemm_bf16_oracle(a, b, op, m, n, k)
+        for i in range(m * n):
+            cp[i] = c[i]
+        wrote = m * n
+    return PythonObject(wrote)
+
+
+def gemm_int8_binding(
+    c_addr: PythonObject,
+    qa_addr: PythonObject,
+    ea_addr: PythonObject,
+    qb_addr: PythonObject,
+    eb_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`params`: 0 m, 1 n, 2 k. OP_NT only."""
+    if len(params) != 3:
+        raise Error("gemm_int8: params must contain 3 values (m, n, k), got " + String(len(params)))
+    var cp = f32_ptr(_index(c_addr))
+    var qa_address = _index(qa_addr)
+    var ea_address = _index(ea_addr)
+    var qb_address = _index(qb_addr)
+    var eb_address = _index(eb_addr)
+    var m = _index(params[0])
+    var n = _index(params[1])
+    var k = _index(params[2])
+    if m <= 0 or n <= 0 or k <= 0:
+        raise Error("gemm_int8: m, n and k must all be positive, got m=" + String(m) + " n=" + String(n) + " k=" + String(k))
+    if k > INT8_MAX_K:
+        raise Error("gemm_int8: k must be at most " + String(INT8_MAX_K) + " (contract L-7), got " + String(k))
+    if m > LINALG_HOST_MAX_EXTENT or n > LINALG_HOST_MAX_EXTENT:
+        raise Error("gemm_int8: m and n must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var qa = read_i8(qa_address, m * k)
+        var ea = read_i32(ea_address, m)
+        var qb = read_i8(qb_address, n * k)
+        var eb = read_i32(eb_address, n)
+        var c = gemm_int8_oracle(qa, ea, qb, eb, m, n, k)
+        for i in range(m * n):
+            cp[i] = c[i]
+        wrote = m * n
+    return PythonObject(wrote)
+
+
+def quantize_int8_binding(
+    q_addr: PythonObject,
+    e_addr: PythonObject,
+    x_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`params`: 0 rows, 1 cols."""
+    if len(params) != 2:
+        raise Error("quantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var qp = i8_ptr(_index(q_addr))
+    var ep = i32_ptr(_index(e_addr))
+    var x_address = _index(x_addr)
+    var rows = _index(params[0])
+    var cols = _index(params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("quantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    if rows > LINALG_HOST_MAX_EXTENT or cols > LINALG_HOST_MAX_EXTENT:
+        raise Error("quantize_int8: rows and cols must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var x = read_f32(x_address, rows * cols)
+        var qr = quantize_rows_int8(x, rows, cols)
+        for i in range(rows * cols):
+            qp[i] = qr.q[i]
+        for r in range(rows):
+            ep[r] = qr.e[r]
+        wrote = rows * cols
+    return PythonObject(wrote)
+
+
+def dequantize_int8_binding(
+    y_addr: PythonObject,
+    q_addr: PythonObject,
+    e_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`params`: 0 rows, 1 cols."""
+    if len(params) != 2:
+        raise Error("dequantize_int8: params must contain 2 values (rows, cols), got " + String(len(params)))
+    var yp = f32_ptr(_index(y_addr))
+    var q_address = _index(q_addr)
+    var e_address = _index(e_addr)
+    var rows = _index(params[0])
+    var cols = _index(params[1])
+    if rows <= 0 or cols <= 0:
+        raise Error("dequantize_int8: rows and cols must be positive, got " + String(rows) + " x " + String(cols))
+    if rows > LINALG_HOST_MAX_EXTENT or cols > LINALG_HOST_MAX_EXTENT:
+        raise Error("dequantize_int8: rows and cols must each be at most 2^30")
+    var wrote = 0
+    with GILReleased(Python()):
+        var q = read_i8(q_address, rows * cols)
+        var e = read_i32(e_address, rows)
+        var y = dequantize_rows_int8(Int8Rows(q^, e^, rows, cols))
+        for i in range(rows * cols):
+            yp[i] = y[i]
+        wrote = rows * cols
+    return PythonObject(wrote)
+
+
+def to_bf16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`params`: 0 count."""
+    if len(params) != 1:
+        raise Error("to_bf16: params must contain 1 value (count)")
+    var dp = u16_ptr(_index(dst_addr))
+    var src_address = _index(src_addr)
+    var count = _index(params[0])
+    if count <= 0:
+        raise Error("to_bf16: count must be positive, got " + String(count))
+    if count > LINALG_HOST_MAX_EXTENT:
+        raise Error("to_bf16: count must be at most 2^30")
+    with GILReleased(Python()):
+        var x = read_f32(src_address, count)
+        var bits = narrow_bf16(x)
+        for i in range(count):
+            dp[i] = bits[i]
+    return PythonObject(count)
+
+
+def from_bf16_binding(
+    dst_addr: PythonObject, src_addr: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`params`: 0 count."""
+    if len(params) != 1:
+        raise Error("from_bf16: params must contain 1 value (count)")
+    var dp = f32_ptr(_index(dst_addr))
+    var src_address = _index(src_addr)
+    var count = _index(params[0])
+    if count <= 0:
+        raise Error("from_bf16: count must be positive, got " + String(count))
+    if count > LINALG_HOST_MAX_EXTENT:
+        raise Error("from_bf16: count must be at most 2^30")
+    with GILReleased(Python()):
+        var bits = read_u16(src_address, count)
+        var x = widen_bf16(bits)
+        for i in range(count):
+            dp[i] = x[i]
+    return PythonObject(count)
+
 @export
 def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
     try:
@@ -321,6 +523,13 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[cholesky_profile_jitter_binding]("cholesky_profile_jitter")
         module.def_function[cholesky_factor_binding]("cholesky_factor")
         module.def_function[cholesky_solve_binding]("cholesky_solve")
+        module.def_function[lowbit_profile_version_binding]("lowbit_profile_version")
+        module.def_function[gemm_bf16_binding]("gemm_bf16")
+        module.def_function[gemm_int8_binding]("gemm_int8")
+        module.def_function[quantize_int8_binding]("quantize_int8")
+        module.def_function[dequantize_int8_binding]("dequantize_int8")
+        module.def_function[to_bf16_binding]("to_bf16")
+        module.def_function[from_bf16_binding]("from_bf16")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_linalg_host: ", error))

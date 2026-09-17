@@ -52,6 +52,7 @@ from pathlib import Path
 
 from . import _backend
 from . import _ragged
+from . import lowbit as _lowbit
 from ._buffer import addr, addr_ro, all_finite, empty
 from ._mlp_impl import (
     _FILE_LIMIT, _FILE_SCHEMA, _NAMES, _SHAPES, _array, _batch, _canonical,
@@ -83,6 +84,11 @@ class MLPInference:
     row alone (the GEMM profile's cells are row-independent)."""
 
     def __init__(self, weight1, bias1, weight2, bias2):
+        # lane/identical-lowbit-inference (2026-09-17): the two matrices may
+        # arrive packed (mojolearn.lowbit); materialized exactly, fp32 after.
+        self.weight_format = _lowbit.format_of([weight1, weight2])
+        weight1 = _lowbit.materialize_one(weight1, "weight1")
+        weight2 = _lowbit.materialize_one(weight2, "weight2")
         self._weights = [_array(value, shape, name) for value, shape, name in
                          zip((weight1, bias1, weight2, bias2), _SHAPES, _NAMES)]
         self._m = _binding()
@@ -227,6 +233,9 @@ class SambaInference:
             raise TypeError("mojolearn.SambaInference: config must be a SambaConfig")
         if not hasattr(weights, "keys"):
             raise TypeError("mojolearn.SambaInference: weights must be a dict keyed by the registry names")
+        # lane/identical-lowbit-inference (2026-09-17): packed registry
+        # matrices (mojolearn.lowbit) materialized exactly, fp32 path after.
+        weights, self.weight_format = _lowbit.unpack(weights, "SambaInference")
         shapes = dict(config.registry())
         missing = [n for n in shapes if n not in weights]
         extra = [n for n in weights if n not in shapes]

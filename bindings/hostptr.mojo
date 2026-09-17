@@ -68,3 +68,36 @@ def read_i32(addr: Int, n: Int) raises -> List[Int32]:
     if n > 0:
         memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
+
+
+def u16_ptr(addr: Int) raises -> MutPointer[UInt16, MutUntrackedOrigin]:
+    """bf16 bits cross the boundary as uint16 (lane/identical-lowbit-inference)."""
+    if addr == 0:
+        raise Error("mojolearn: null uint16 buffer address")
+    return MutPointer[UInt16, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def i8_ptr(addr: Int) raises -> MutPointer[Int8, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null int8 buffer address")
+    return MutPointer[Int8, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
+def read_u16(addr: Int, n: Int) raises -> List[UInt16]:
+    var src = u16_ptr(addr)
+    if n < 0:
+        raise Error("mojolearn: negative uint16 copy length")
+    var out = List[UInt16](length=n, fill=UInt16(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
+
+
+def read_i8(addr: Int, n: Int) raises -> List[Int8]:
+    var src = i8_ptr(addr)
+    if n < 0:
+        raise Error("mojolearn: negative int8 copy length")
+    var out = List[Int8](length=n, fill=Int8(0))
+    if n > 0:
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    return out^
