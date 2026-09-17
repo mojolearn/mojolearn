@@ -6,20 +6,18 @@ worktrees, commit coherent verified batches, and merge them into main.
 Worktree: `~/mojolearn-wt/cpu-verification-completion`, branch
 `fix/cpu-verification-completion`. External evidence:
 `~/mojolearn-evidence/cpu-verification-completion/`.
-Main includes completed work through `06622158a`. No PyPI upload or final
+Main includes completed work through `680afead4`; the next verified batch is
+being prepared for main integration. No PyPI upload or final
 release qualification is claimed. Earlier checkpoints remain in git history.
 
 ## Current coverage and remaining work
 
 Baseline was 128 available CPU lanes, 51 withheld, 50 parallel exclusions.
-Last installed/merged batch: **150 available, 29 withheld, 50 excluded** (229 harness
+Installed candidate: **162 available, 17 withheld, 50 excluded** (229 harness
 lanes; 246 appendix entries and the source API inventory are separate counts).
 All available lanes have all-nine core references, including explicit N/A.
-The remaining 29 are:
+The remaining 17 are:
 
-- Twelve low-bit weight lanes: Transformer, Mamba1/2/3, MLP and Samba, each
-  BF16 and INT8. The live cloud run below records these with complete native
-  dependencies, clean properties and all-nine native training controls.
 - Five ordinary neural lanes: mamba3, transformer, transformer-window, samba,
   samba-untied-dropout-accum. Concurrent `reference-regen` work is recording
   full properties. Inspect its records and admission policy before integrating;
@@ -212,3 +210,15 @@ raise repeated RLPAIR_MOVED. The original exit-one evaluator missed this
 valid evidence; the corrected evaluator accepts only explicit repeated
 numerical mismatches. Original and reevaluated records remain separate in
 probe native-property-exit-recheck; both real records validate, 54 tests pass.
+
+
+## Installed candidate replay complete
+
+Source a44a6e2f9, all 32 fresh host bindings from 7f5b786ae; both groups
+use the identical archived wheel. Twelve low-bit lanes: 396 IDENTICAL, 144
+N/A. Twenty-nine repaired lanes: 954 IDENTICAL, 351 N/A. All nine fixtures,
+two repetitions, self-test passed, zero DIVERGENT/OWED/REFUSED, default CPU
+selection includes every lane. Probe installed-162 retains compressed full
+reports, receipts and replay scripts. No claim of a single all-162 replay.
+The DBSCAN control repair is being compiled and recorded locally; cloud
+99-lane run remains active and must finish before another rental.
