@@ -2148,8 +2148,6 @@ def bwd_attention_weight_grad(
                 grid_dim=(_grid(s * hd), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
-            step_count_sync()
-            ctx.synchronize()
             bst.gemm_workspace.run(
                 ctx, bst.head_c, bst.head_a, bst.head_b, l, s, hd, OP_NT
             )
@@ -2165,8 +2163,13 @@ def bwd_attention_weight_grad(
                 grid_dim=(_grid(l * s), 1, 1),
                 block_dim=(BWD_TPB, 1, 1),
             )
-            step_count_sync()
-            ctx.synchronize()
+
+    # All gather/GEMM/scatter operations share one in-order context. Scratch
+    # belongs to bst; the next head cannot overwrite it before this head's
+    # scatter consumes it. Keep completion-on-return, once for the whole loop.
+    step_count_sync()
+    ctx.synchronize()
+
 
 
 def bwd_attention_grads(
@@ -2259,8 +2262,8 @@ def bwd_attention_grads(
             grid_dim=(_grid(b * l * qw), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
-        step_count_sync()
-        ctx.synchronize()
+        # Caller-owned outputs stay live; the final dv completion wait
+        # drains this kernel too. The intervening work only enqueues.
 
     # ---- dk ------------------------------------------------------------
     comptime if SAB_B11_DK_VIA_GEMM:
@@ -2341,8 +2344,8 @@ def bwd_attention_grads(
             grid_dim=(_grid(b * nkv * s * hd), 1, 1),
             block_dim=(BWD_TPB, 1, 1),
         )
-        step_count_sync()
-        ctx.synchronize()
+        # Caller-owned outputs stay live; the final dv completion wait
+        # drains this kernel too. The intervening work only enqueues.
 
     # ---- dv ------------------------------------------------------------
     comptime if SAB_B19_DV_VIA_GEMM:
