@@ -164,3 +164,30 @@ with fewer than nine qualifying training controls. A follow-up CPU batch is
 being prepared with all 32 native families and the required saved CTR models;
 no rental has been started for it yet. The fresh-wheel 150-lane replay remains
 active; keep its frozen installed environment unchanged.
+
+## Full fresh-wheel replay and next live batch
+
+The initial fresh-wheel replay is COMPLETE: 150 lanes, all nine fixtures twice,
+1451s, 121 passing and 29 OWED. Zero DIVERGENT or REFUSED cells. The failures
+are missing or old N/A references for model, batch and step/full parts. Every
+original report is retained losslessly in `fresh-cpu-wheel-initial/reports.json.gz`
+with a byte-exact reconstruction tool and per-report SHA-256.
+374 post-integration focused tests pass. CI now additionally requires a positive
+DIVERGENT count, so a failed diff with zero mismatches cannot count as a catch.
+
+A strict repair audit finds complete source columns for 24 of those 29 lanes,
+with no existing numeric reference changed and all newly admitted numeric bytes
+matching the independent frozen Mac wheel run. Five still need complete current
+records: mamba1, optim-adam-clip, rbf-sampler, standard-scaler and
+standard-scaler-no-mean. The audit rejects rather than overwrites these gaps.
+
+**LIVE pod `l521898scta1lj`**, fourth CPU batch, source `763565275`, session
+89750. Two vCPUs, 32 production and 32 sabotage families, 99 lanes, all nine
+fixtures, two repeats, default properties, 1200s per arm. Two single-thread
+workers. All direct-loader overrides and saved CTR models are included.
+120-minute watchdog armed about 17:16 EDT, plus external dead-man; $0.06/hr.
+SSH `-p 54936 root@103.196.86.88`, remote `/root/leg_out/`. External
+`cloud-native-nine-20g/`, log `cloud-native-nine-20g-run.log`. Verify deletion
+and preserve failures. The initial 40GB create request was rejected by the
+provider before allocating a pod; a fleet read confirmed absence. Its request,
+response and log remain under `cloud-native-nine/`; the live retry uses 20GB.
