@@ -331,6 +331,8 @@ from transformer.impl.llama.fused_attention import (
     fused_forward_launch_estash_ran,
     fused_supported_head_dim,
 )
+from core.device_scan import DeviceNonfiniteBatch
+
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -1033,15 +1035,7 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = _upload(ctx, w_gate)
         self.w_up = _upload(ctx, w_up)
         self.w_down = _upload(ctx, w_down)
-        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
-        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
-        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
-        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
-        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
-        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
-        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
-        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
-        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
+        self._validate_finite(ctx)
 
 
     def __init__(
@@ -1086,15 +1080,39 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = w_gate^
         self.w_up = w_up^
         self.w_down = w_down^
-        _refuse_nonfinite_device(ctx, "input_layernorm.weight", self.norm1_w, dm)
-        _refuse_nonfinite_device(ctx, "post_attention_layernorm.weight", self.norm2_w, dm)
-        _refuse_nonfinite_device(ctx, "q_proj.weight", self.w_q, qw * dm)
-        _refuse_nonfinite_device(ctx, "k_proj.weight", self.w_k, kw * dm)
-        _refuse_nonfinite_device(ctx, "v_proj.weight", self.w_v, kw * dm)
-        _refuse_nonfinite_device(ctx, "o_proj.weight", self.w_o, dm * qw)
-        _refuse_nonfinite_device(ctx, "gate_proj.weight", self.w_gate, it * dm)
-        _refuse_nonfinite_device(ctx, "up_proj.weight", self.w_up, it * dm)
-        _refuse_nonfinite_device(ctx, "down_proj.weight", self.w_down, dm * it)
+        self._validate_finite(ctx)
+
+
+    def _validate_finite(mut self, ctx: DeviceContext) raises:
+        """Validate all weights before use, preserving named refusal order.
+
+        Sources are owned by self throughout the batch. No value or validation
+        result survives construction, so mutable Python weights are reread.
+        """
+        var batch = DeviceNonfiniteBatch(ctx, [
+            len(self.norm1_w), len(self.norm2_w), len(self.w_q),
+            len(self.w_k), len(self.w_v), len(self.w_o),
+            len(self.w_gate), len(self.w_up), len(self.w_down),
+        ])
+        batch.enqueue(ctx, 0, self.norm1_w)
+        batch.enqueue(ctx, 1, self.norm2_w)
+        batch.enqueue(ctx, 2, self.w_q)
+        batch.enqueue(ctx, 3, self.w_k)
+        batch.enqueue(ctx, 4, self.w_v)
+        batch.enqueue(ctx, 5, self.w_o)
+        batch.enqueue(ctx, 6, self.w_gate)
+        batch.enqueue(ctx, 7, self.w_up)
+        batch.enqueue(ctx, 8, self.w_down)
+        var indices = batch.finish(ctx)
+        _refuse_nonfinite_at(ctx, "input_layernorm.weight", self.norm1_w, indices[0])
+        _refuse_nonfinite_at(ctx, "post_attention_layernorm.weight", self.norm2_w, indices[1])
+        _refuse_nonfinite_at(ctx, "q_proj.weight", self.w_q, indices[2])
+        _refuse_nonfinite_at(ctx, "k_proj.weight", self.w_k, indices[3])
+        _refuse_nonfinite_at(ctx, "v_proj.weight", self.w_v, indices[4])
+        _refuse_nonfinite_at(ctx, "o_proj.weight", self.w_o, indices[5])
+        _refuse_nonfinite_at(ctx, "gate_proj.weight", self.w_gate, indices[6])
+        _refuse_nonfinite_at(ctx, "up_proj.weight", self.w_up, indices[7])
+        _refuse_nonfinite_at(ctx, "down_proj.weight", self.w_down, indices[8])
 
 
 struct LlamaKVCache(Movable):
@@ -2576,6 +2594,14 @@ def _refuse_nonfinite_device(
     brought back to classify it, so the message is character for character
     the host loop's message at the same flat index."""
     var idx = device_first_nonfinite(ctx, buf, n)
+    _refuse_nonfinite_at(ctx, name, buf, idx)
+
+
+def _refuse_nonfinite_at(
+    ctx: DeviceContext, name: String,
+    mut buf: DeviceBuffer[DType.float32], idx: Int,
+) raises:
+    """Classify an already completed scan without changing refusal messages."""
     if idx < 0:
         return
     var one = buf.create_sub_buffer[DType.float32](idx, 1)
