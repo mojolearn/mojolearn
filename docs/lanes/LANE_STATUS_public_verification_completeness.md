@@ -3,7 +3,9 @@
 The MLSys appendix does list **246 algorithms and variants in 12 groups**.
 Its source is `mlsys/results/algorithm-variants-2026-09-16.json`, a census of
 a dirty source tree at `a2f05dbe8`. It is a different unit from this tree's
-215 harness lanes or 202 enumerated Python API entries. The previous statement
+229 harness lanes or 220 enumerated Python API entries after integration with
+the concurrent low-bit work (215 lanes and 202 entries at this audit's start).
+The previous statement
 that the inventory was not 246 conflated these counts.
 
 `python/mojolearn/_verification_catalog.py` preserves every appendix title and
@@ -49,6 +51,8 @@ The sister repository was read, not edited.
 256 focused tests passed, including actual CLI exit codes and verifier/harness
 parity on `ols` and `select-d`. CPU work used single-thread numerical libraries
 and bounded scheduler jobs; no compiler or more-than-three-core work was used.
+The same 256 tests passed again after merging the concurrent Transformer and
+low-bit changes. The inventory automatically includes the 14 new low-bit lanes.
 
 `select-d` passed all nine CPU fixtures twice, with all batch parts stable.
 Metal base passed twice within a 60-second total budget; the final run took
@@ -81,6 +85,8 @@ Evidence is retained under
 `bench/results/public-verification-probe/2026-09-17/`; the probe path prevents
 these development diagnostics from entering the reference table. Full installed
 reports are gzip-compressed JSON. The development wheel is not published.
+Its receipt describes this audit before the concurrent Transformer/low-bit
+integration; it is not installed-wheel qualification of the combined tree.
 
 ## Still owed before claiming comprehensive 0.8.7 verification
 
