@@ -454,7 +454,7 @@ jobs:
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
-      # batch part and 31 par-* lanes, AMD column MI325X): 1493 train cells
+      # batch part and 31 par-* lanes, AMD column MI325X): 1331 comparable train cells
       # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
       # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
@@ -472,9 +472,13 @@ jobs:
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
             > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
           cat "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1493' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1899, N/A=1089' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (batch): IDENTICAL=1188, N/A=306' "$GATE_OUT/diff_gpu3.txt"
+          # Current lane revisions invalidate 18 x 9 historical cells per
+          # vendor. Assert those exclusions as well as every remaining total;
+          # this record cannot certify the revised lanes by its old hashes.
+          [ "$(grep -c '^NOTE: column .*its 162 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=1331' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1701, N/A=963' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (batch): IDENTICAL=1080, N/A=252' "$GATE_OUT/diff_gpu3.txt"
           grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
           [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
