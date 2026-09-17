@@ -89,6 +89,7 @@ class count is derived from them, as their `TClassificationTargetHelper`
 derives it.
 """
 
+import itertools
 import numbers
 import math
 import struct
@@ -180,6 +181,14 @@ def _group_sizes(group_id, n_rows):
         )
     if n_rows > 0xFFFFFFFF:
         raise ValueError("mojolearn: group_id needs at most 2**32 - 1 rows")
+    sizes = _group_sizes_by_runs(ids)
+    if sizes is None:
+        sizes = _group_sizes_rowwise(ids)
+    return sizes
+
+
+def _group_sizes_rowwise(ids):
+    """The definition: one key per row, in row order, and every refusal."""
     sizes = []
     seen = set()
     last = None
@@ -197,6 +206,45 @@ def _group_sizes(group_id, n_rows):
         seen.add(key)
         sizes.append(1)
         last = key
+    return sizes
+
+
+def _group_sizes_by_runs(ids):
+    """`_group_sizes_rowwise`'s answer with one key per RUN of equal ids, or
+    None when the row walk must decide.
+
+    The row walk spent 1,278 ms on Istella-S's 2,043,304 ids
+    (bench/results/istella_ranking_2026-09-15), a fixed cost of every
+    ranking fit. `itertools.groupby` finds the runs of `==` ids in C. Equal
+    ids of ONE type (int, str or bytes, exactly) spell the same key, so a
+    run is keyed once, by its first id, and adjacent runs with the same key
+    (7 then "7") merge as the row walk merges them. Everything else returns
+    None: a run mixing types (5 and 5.0, or 1 and True, compare equal), an
+    id of any other type, an id whose `==` raises, and a repeated group,
+    so the row walk owns every refusal, its wording and its row index.
+    """
+    sizes = []
+    seen = set()
+    last = None
+    try:
+        for value, run in itertools.groupby(ids):
+            kind = type(value)
+            if kind is not int and kind is not str and kind is not bytes:
+                return None
+            members = list(run)
+            if set(map(type, members)) != {kind}:
+                return None
+            key = _group_id_key(value, 0)
+            if key == last:
+                sizes[-1] += len(members)
+                continue
+            if key in seen:
+                return None
+            seen.add(key)
+            sizes.append(len(members))
+            last = key
+    except Exception:
+        return None
     return sizes
 
 
