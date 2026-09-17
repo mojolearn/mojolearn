@@ -104,11 +104,11 @@ cores total. Local numerical/compiler work uses nice 19 and mac_slot.py;
 all numerical thread variables one. Every rental needs watchdog plus external
 dead-man and verified teardown; preserve failures. No new unrelated lane.
 
-Next: finish focused validation, expose the refreshed native evidence in an
-installed wheel, audit the five ordinary neural holds, then push and merge
-this verified batch into main. Remaining vendor/device and optional-property
-work must keep its holds until independently measured. Never silently replace
-references to make a disagreement disappear.
+Next: record the missing current neural parts and independent GPU columns,
+then continue vendor/device and optional-property qualification. Keep all
+holds until independently measured. Never silently replace references to
+make a disagreement disappear. This completed batch is committed and pushed
+from the isolated worktree, with main integration as the final workflow step.
 
 
 ## Validation checkpoint
@@ -119,3 +119,16 @@ harness and verifier across all public CPU lanes. Updated evidence reports
 controls. The strict five-neural admission audit retains missing parts and
 single-class references; no new lane is promoted by this audit. Evidence and
 counts are being checked in the refreshed installed wheel before main merge.
+
+
+## Final installed evidence check
+
+The refreshed f41682fb2 wheel passes the five repaired-control lanes: 180
+IDENTICAL, 45 N/A, zero DIVERGENT/OWED/REFUSED over nine fixtures twice.
+Installed coverage shows 162 available / 17 withheld / 50 excluded and all
+176 numerical non-parallel lanes with historical all-nine native training
+controls. All release_qualified flags remain false. Bytewise comparison with
+the passing 41-lane wheel shows only evidence metadata, COMMIT and wheel
+RECORD changed; every numerical code/reference/model/native byte is identical.
+Probe native-nine-installed retains full reports and receipts. No local job
+or cloud rental remains active from this lane. No PyPI publication occurred.

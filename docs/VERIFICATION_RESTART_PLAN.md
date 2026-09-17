@@ -37,8 +37,12 @@ numerical reference. This is scoped installed CPU verification, not final
 release qualification or a PyPI publication.
 
 [The active checkpoint](lanes/LANE_STATUS_cpu_verification_completion.md)
-tracks the ongoing 99-lane native-control audit, resource limits, failures,
-remaining five ordinary neural lanes and twelve vendor-held lanes. Read it
+tracks the completed 99-lane native-control audit, resource limits, failures,
+remaining five ordinary neural lanes and twelve vendor-held lanes. All 176
+numerical non-parallel lanes now have all-nine historical native training
+controls, exposed in the installed wheel. The refreshed wheel passes 180
+additional numerical checks on the repaired-control lanes; release qualification
+remains incomplete. All rentals from this lane are verified deleted. Read it
 before resuming or renting another pod.
 
 ## Objective and current position
