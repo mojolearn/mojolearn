@@ -181,6 +181,10 @@ pixi run python tools/bench_neural_decode.py --resident-ab --kind mamba1 --dm 10
 
 ## Not done, and why
 
+- Main's `hasattr` probe defect on the CPU route (fixed here, see "Merge
+  with main") is also the shape of `_mamba_impl.py`'s `mamba3_forward_fresh`
+  probe and any other bare `hasattr` on a binding; those were not audited
+  in this lane.
 - Mamba-2, Mamba-3 and Samba resident sessions. Mamba-3's state is ten
   pieces with a chunk buffer and a pending flag, Samba is a stack of blocks;
   both fit the same object shape and are the next step, not this one.
@@ -212,6 +216,75 @@ it lives in `_call_impl`. Mamba had no collision; `mamba1_session_*` stays.
 `docs/NEURAL_METAL_DECODE.md` keeps both appended sections, this lane's
 first. The merged tree's re-verification on a rented RTX 4090 is recorded
 below under "Re-verification after the merge".
+
+One defect found by that run and fixed on this branch (`4378a30fc`): main's
+`TransformerBlock._call` probes `hasattr(ext, "transformer_session_forward")`
+on every call, and on a CPU-only install the stand-in for the GPU binding
+raises `ImportError` BY NAME from `__getattr__`, which `hasattr` does not
+swallow, so every `transformer` and `samba` cell of the CPU identity column
+REFUSED on the merged tree (first pod, EPYC 7642: `summary: IDENTICAL=18,
+ONE-COLUMN=12`). `_transformer_impl._exports` treats `ImportError` as "not
+exported", the way `_backend.py`'s own mode read-back does, and the two
+decode-session constructors get the same guard. With it the CPU column reads
+IDENTICAL on every cell (second pod).
+
+## Re-verification after the merge (RTX 4090, driver 580.159.03, 2026-09-17)
+
+Record: `bench/results/infer_speed_neural_2026-09-17/merged_reverify_2026-09-17.json`;
+full outputs in `~/mojolearn-evidence/infer-speed-neural/pod3_out/infer_out/`.
+Pod `2qlz5pciaofluz` (rented with `TREES_LEG_CUDA_VERSIONS=13.0`, $0.74/h,
+15.1 minutes, reaped and HTTP 404 verified), merged tree `7ccefc445` shipped
+by the runner plus the two Python files of `4378a30fc` pushed by hash, all
+eleven bindings built there from source. A first pod (`0m4jd39wsn5izm`,
+13.2 minutes, same price) came up with driver 570.195.03, which Mojo's GPU
+runtime refuses; its GPU column is no evidence and it was reaped.
+
+BEFORE is the lane's own BEFORE column (`e3213a59a`, RTX 4090 driver
+580.126.20 and EPYC 7532); MERGED is `identity_{cuda,cpu}_merged.json`, diffed
+with `tools/identity_break.py --diff`:
+
+| column | train | infer/model | batch | stepfull | MOVED or DIVERGENT |
+|---|---|---|---|---|---|
+| cuda (12 lanes x 3 fixtures) | IDENTICAL=36 | IDENTICAL=51, N/A=21 | IDENTICAL=36 | IDENTICAL=24, N/A=12 | 0 |
+| cpu (10 lanes x 3, EPYC 7282 against EPYC 7532) | IDENTICAL=30 | IDENTICAL=39, N/A=21 | IDENTICAL=30 | IDENTICAL=24, N/A=6 | 0 |
+
+Byte LM on the merged build: `tools/byte_lm_gpu_logits_sweep.py` PASS
+(768 resident logits, 96 stateless, 48 loss bit patterns, 768 next bytes
+compared), the three per-state digests equal the CPU sweep's (`6db55997`,
+`30a89281`, `b518e71e`), negative control differs; `tools/byte_lm_host_gate.py
+--steps every:16` PASS, 25 of 25 equal.
+
+Resident A/B on the merged build (`--dm 1024 --batch 1 --prefill 1024
+--tokens 64 --rounds 3`), every output and state piece bytewise equal to the
+fresh full forward and across arms and rounds:
+
+| model | per-call ms | resident ms | paired ratio | lane record |
+|---|---|---|---|---|
+| Transformer B1 | 7.273 | 0.850 | 8.56 | 11.54 (per-call 9.440) |
+| Mamba-1 B1 | 33.762 | 0.944 | 35.78 | 33.61 |
+
+The transformer per-call arm is faster than the lane's record because it
+now runs through main's retained `TransformerSession` (one context and
+workspace per model, weights and cache reread per call); the resident arm is
+unchanged within spread, so the ratio fell from 11.5x to 8.6x. Mamba has no
+retained per-model context on main and reads as before.
+
+Coexistence, shown not assumed: main's own checks on the merged binding,
+`tools/transformer_session_check.py` groups reuse (75 arrays), refusals (15),
+lifetime (9), budget (2) and `tools/transformer_session_surface_check.py`
+groups state (22), serialization (4), threads (3, worker init), all exit 0
+against `transformer_forward`; and a probe on ONE block
+(`pod3_out/infer_out/logs/coexist_probe.log`, PASS): per-call prefill and
+decode through the retained context, then `decode_session` opened on the
+same block while the retained context is alive (its workspace count keeps
+growing across the probe, 1 to 6), per-call `step` and `forward` refused
+by name while the state is resident, sixteen session tokens bytewise the
+per-call tokens, the synced cache bytewise the per-call cache, a second
+session on the same block after close, and every tail token bytewise a
+fresh full forward. The binding exports both name sets.
+
+Not re-run here: the three sabotage controls (unchanged code paths, seen to
+fail on the lane's first pod), and the B=8 A/B rows.
 
 ## False claims found in owned docs
 
