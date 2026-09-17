@@ -630,8 +630,8 @@ def _selfcheck():
     want(s["holtwinters"].oracle == "self",
          "holtwinters holds `forecast` to `predict` on ONE fitted object; it must read self")
     want(len(set(s[n].anchor for n in s)) == 4, "fewer than four anchor classes appear")
-    want(s["gp-optimize"].anchor == "recorded-only",
-         "gp-optimize has no CPU route and no in-cell oracle; it must read recorded-only")
+    want(s["gp-optimize"].anchor == "cross-route",
+         "gp-optimize has a CPU host gradient route; it must read cross-route")
     want(s["kmeans"].anchor == "cross-route",
          "kmeans has a CPU host route and no in-cell oracle; it must read cross-route")
 
