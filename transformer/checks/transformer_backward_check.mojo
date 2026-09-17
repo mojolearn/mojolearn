@@ -296,12 +296,13 @@ kept alive past the `ctx.synchronize()` that reads it, with explicit
 `.unsafe_ptr()` and this repository has lost a night to that.
 """
 
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
+from core.step_phase import step_count_host_alloc, step_count_d2h, step_count_sync
 from gemm.checks.gemm_backward import gemm_backward_sabotage_name
 from gemm.checks.gemm_identical import gemm_sabotage_name
 from checks.numerics import (
@@ -833,9 +834,9 @@ def guard_d_out_separates(c: FixtureCase, dims: TransformerDims) raises -> Strin
 # does. That is the repository's existing habit for gate files
 # (`glm/checks/qn_losses_check.mojo:73`, `checks/
 # portable_fmax_check.mojo:85-86`) and the alternative -- a second upload and
-# download here -- is a second spelling of a device copy that can drift from
-# the one the block itself uses. **A gate whose plumbing is not the block's
-# plumbing is a gate that can pass because its plumbing is different.**
+# download per stage here -- is a second spelling of a device copy. The
+# all-stage dump below batches the same logical sub-buffer copies into one
+# retained host allocation; it changes scheduling, not the compared cells.
 # ===========================================================================
 
 
@@ -855,44 +856,110 @@ def backward_device_dump(
     disagree the card and the gate are looking at different arrays**, and the
     four `[B, nh, L, S]` buffers are the ones that would: they are allocated
     at `s_max` and used packed at `s`."""
+    # Retain all logical views before enqueueing any copies. In particular,
+    # attention storage can be larger than the used, packed S dimension.
+    var views = List[DeviceBuffer[DType.float32]]()
+    views.append(bst.in_d_residual2.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(0, dims, b, l, s)))
+    views.append(bst.d_down_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(1, dims, b, l, s)))
+    views.append(bst.d_mlp_gated.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(2, dims, b, l, s)))
+    views.append(bst.dw_down.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(3, dims, b, l, s)))
+    views.append(bst.d_silu_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(4, dims, b, l, s)))
+    views.append(bst.d_up_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(5, dims, b, l, s)))
+    views.append(bst.d_gate_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(6, dims, b, l, s)))
+    views.append(bst.dw_gate.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(7, dims, b, l, s)))
+    views.append(bst.dw_up.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(8, dims, b, l, s)))
+    views.append(bst.d_norm2_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(9, dims, b, l, s)))
+    views.append(bst.norm2_dot.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(10, dims, b, l, s)))
+    views.append(bst.dw_norm2.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(11, dims, b, l, s)))
+    views.append(bst.norm2_dx.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(12, dims, b, l, s)))
+    views.append(bst.d_residual1.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(13, dims, b, l, s)))
+    views.append(bst.d_o_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(14, dims, b, l, s)))
+    views.append(bst.d_attn_ctx.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(15, dims, b, l, s)))
+    views.append(bst.dw_o.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(16, dims, b, l, s)))
+    views.append(bst.d_attn_weights.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(17, dims, b, l, s)))
+    views.append(bst.attn_zdot.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(18, dims, b, l, s)))
+    views.append(bst.d_attn_masked.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(19, dims, b, l, s)))
+    views.append(bst.d_attn_scores.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(20, dims, b, l, s)))
+    views.append(bst.d_qk_cell.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(21, dims, b, l, s)))
+    views.append(bst.d_q_rope.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(22, dims, b, l, s)))
+    views.append(bst.d_k_cache.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(23, dims, b, l, s)))
+    views.append(bst.d_v_cache.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(24, dims, b, l, s)))
+    views.append(bst.d_k_rope.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(25, dims, b, l, s)))
+    views.append(bst.d_v_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(26, dims, b, l, s)))
+    views.append(bst.d_q_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(27, dims, b, l, s)))
+    views.append(bst.d_k_proj_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(28, dims, b, l, s)))
+    views.append(bst.dw_q.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(29, dims, b, l, s)))
+    views.append(bst.dw_k.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(30, dims, b, l, s)))
+    views.append(bst.dw_v.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(31, dims, b, l, s)))
+    views.append(bst.d_norm1_out.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(32, dims, b, l, s)))
+    views.append(bst.norm1_dot.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(33, dims, b, l, s)))
+    views.append(bst.dw_norm1.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(34, dims, b, l, s)))
+    views.append(bst.norm1_dx.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(35, dims, b, l, s)))
+    views.append(bst.d_x.create_sub_buffer[DType.float32](
+        0, bwd_stage_cells(36, dims, b, l, s)))
+    var cells = 0
+    for i in range(len(views)):
+        cells += len(views[i])
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](cells)
+    step_count_sync()
+    ctx.synchronize()
+    var offset = 0
+    for i in range(len(views)):
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+        offset += len(views[i])
+    # All sources and the packed destination survive this completion fence.
+    # Do not inspect or release any host region before the whole batch drains.
+    step_count_sync()
+    ctx.synchronize()
     var out = List[List[Float32]]()
-    out.append(_download(ctx, bst.in_d_residual2, bwd_stage_cells(0, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_down_proj_out, bwd_stage_cells(1, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_mlp_gated, bwd_stage_cells(2, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_down, bwd_stage_cells(3, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_silu_out, bwd_stage_cells(4, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_up_proj_out, bwd_stage_cells(5, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_gate_proj_out, bwd_stage_cells(6, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_gate, bwd_stage_cells(7, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_up, bwd_stage_cells(8, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_norm2_out, bwd_stage_cells(9, dims, b, l, s)))
-    out.append(_download(ctx, bst.norm2_dot, bwd_stage_cells(10, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_norm2, bwd_stage_cells(11, dims, b, l, s)))
-    out.append(_download(ctx, bst.norm2_dx, bwd_stage_cells(12, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_residual1, bwd_stage_cells(13, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_o_proj_out, bwd_stage_cells(14, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_attn_ctx, bwd_stage_cells(15, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_o, bwd_stage_cells(16, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_attn_weights, bwd_stage_cells(17, dims, b, l, s)))
-    out.append(_download(ctx, bst.attn_zdot, bwd_stage_cells(18, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_attn_masked, bwd_stage_cells(19, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_attn_scores, bwd_stage_cells(20, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_qk_cell, bwd_stage_cells(21, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_q_rope, bwd_stage_cells(22, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_k_cache, bwd_stage_cells(23, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_v_cache, bwd_stage_cells(24, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_k_rope, bwd_stage_cells(25, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_v_proj_out, bwd_stage_cells(26, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_q_proj_out, bwd_stage_cells(27, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_k_proj_out, bwd_stage_cells(28, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_q, bwd_stage_cells(29, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_k, bwd_stage_cells(30, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_v, bwd_stage_cells(31, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_norm1_out, bwd_stage_cells(32, dims, b, l, s)))
-    out.append(_download(ctx, bst.norm1_dot, bwd_stage_cells(33, dims, b, l, s)))
-    out.append(_download(ctx, bst.dw_norm1, bwd_stage_cells(34, dims, b, l, s)))
-    out.append(_download(ctx, bst.norm1_dx, bwd_stage_cells(35, dims, b, l, s)))
-    out.append(_download(ctx, bst.d_x, bwd_stage_cells(36, dims, b, l, s)))
+    offset = 0
+    for i in range(len(views)):
+        var n = len(views[i])
+        var values = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+        out.append(values^)
+        offset += n
+    _ = host^
+    _ = views^
     return out^
 
 
