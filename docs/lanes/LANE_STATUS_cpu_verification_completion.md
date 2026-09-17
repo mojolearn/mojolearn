@@ -15,7 +15,9 @@ on at least one fixture, not all-fixture/current-artifact qualification.
 At `0dcf5b5a0`, candidate availability is 142, with 37 withheld. Historical
 native-control entry coverage is 60/246. All available lanes now have core
 references on all nine fixtures (including N/A where actually applicable).
-The installed candidate is replaying the 16 changed/reference-filled lanes.
+The installed candidate passed the 16 changed/reference-filled lanes: 423
+IDENTICAL, 297 N/A, zero DIVERGENT, REFUSED or OWED. The comparator self-test
+passed; receipts and reports are in the CPU completion probe directory.
 
 ## Implemented and observed
 
