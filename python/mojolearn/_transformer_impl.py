@@ -119,6 +119,9 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
+import os
+import threading
+
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
@@ -475,6 +478,9 @@ class TransformerBlock(NumericModeMixin):
 
     def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None,
                  window=0):
+        self._runtime_lock = threading.RLock()
+        self._native_session = None
+        self._session_binding = None
         what = "TransformerBlock"
         # lane/identical-lowbit-inference (2026-09-17): packed bf16 or int8
         # projection weights (mojolearn.lowbit) are materialized exactly here
@@ -558,6 +564,20 @@ class TransformerBlock(NumericModeMixin):
                         what, "down_proj.weight", (dm, it)),
         ]
 
+    def __getstate__(self):
+        # Device contexts and thread locks cannot cross serialization/copy.
+        # Only ordinary model state is saved; GPU ownership is recreated lazily.
+        state = self.__dict__.copy()
+        for name in ("_runtime_lock", "_native_session", "_session_binding"):
+            state.pop(name, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._runtime_lock = threading.RLock()
+        self._native_session = None
+        self._session_binding = None
+
     def allocate_state(self, batch_size, max_tokens):
         """The zero KV cache for `batch_size` sequences of up to
         `max_tokens` total positions each (prefill plus every later
@@ -602,15 +622,31 @@ class TransformerBlock(NumericModeMixin):
         return y
 
     def _call(self, x, state, step):
+        what = "TransformerBlock.step" if step else "TransformerBlock.forward"
+        x = _batch_tokens(x, what, self.d_model, step)
+        ext = self._extension()
+        reuse = (hasattr(ext, "transformer_session_forward")
+                 and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1")
+        if not reuse and self._native_session is None:
+            # CPU and older extensions keep the existing path, without a lock.
+            return self._call_impl(x, state, step, ext, False)
+        with self._runtime_lock:
+            if self._native_session is not None and (
+                    not reuse or self._session_binding is not ext):
+                self._session_binding.transformer_session_close(self._native_session)
+                self._native_session = None
+                self._session_binding = None
+            return self._call_impl(x, state, step, ext, reuse)
+
+    def _call_impl(self, x, state, step, ext, reuse):
         what = ("TransformerBlock.step" if step
                 else "TransformerBlock.forward")
-        x = _batch_tokens(x, what, self.d_model, step)
         b, l = int(x.shape[0]), int(x.shape[1])
         fresh_ext = None
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if (state is None and not step and b > 0 and l > 0
                 and self.window >= 0 and mode == "identical"):
-            fresh_ext = self._extension()
+            fresh_ext = ext
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)
         if state is None:
@@ -646,7 +682,7 @@ class TransformerBlock(NumericModeMixin):
         # the addresses alive (_buffer.py). `addr` (writable) for the
         # cache and the output, `addr_ro` for x and the weights.
         w = self._w
-        ext = fresh_ext if fresh_ext is not None else self._extension()
+        ext = fresh_ext if fresh_ext is not None else ext
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
             # transformer_forward_binding: x, input_layernorm.weight,
@@ -659,7 +695,16 @@ class TransformerBlock(NumericModeMixin):
             + [addr(kc, name="k_cache"), addr(vc, name="v_cache"),
                addr(y, name="y")]
         )
-        if step:
+        if reuse:
+            if self._native_session is None:
+                self._native_session = ext.transformer_session_create()
+                self._session_binding = ext
+            new_len = ext.transformer_session_forward(
+                self._native_session, addrs,
+                [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                 self.head_dim, self.intermediate, smax, s0, self.window],
+            )
+        elif step:
             # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,
             # max_tokens, cached_tokens, window.
             new_len = ext.transformer_decode_step(
