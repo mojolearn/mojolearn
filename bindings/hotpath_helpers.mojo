@@ -49,9 +49,11 @@ from max.algorithm import sync_parallelize
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 #: THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` is the core host
-#: binding's existing sabotage define (`core_host_sabotage()` reports it and
+#: binding's existing sabotage define, and `-D MOJOLEARN_HOTPATH_SABOTAGE=1`
+#: sabotages THESE HELPERS ALONE, so a divergence under it cannot be the
+#: k-NN or k-means fold's (`core_host_sabotage()` reports either and
 #: `_backend` refuses to load such a binary without
-#: MOJOLEARN_HOST_ALLOW_SABOTAGE=1). Under it every helper here answers
+#: MOJOLEARN_HOST_ALLOW_SABOTAGE=1). Under either every helper here answers
 #: WRONG ON PURPOSE in a way that keeps its output well formed: the cast
 #: writes each run of eight elements reversed, min and max trade places,
 #: the float sum folds descending, argmax takes the LAST maximum, equality
@@ -60,7 +62,9 @@ from core.host_predict_threads import host_predict_chunk, host_predict_task_coun
 #: overlap is denied and the fold ids are rotated by one.
 #: `tests/test_hotpath_native.py` must FAIL against such a build in every
 #: group; a differential test that passes against it compares nothing.
-comptime HOTPATH_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+comptime HOTPATH_SABOTAGE = (
+    is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined["MOJOLEARN_HOTPATH_SABOTAGE"]()
+)
 
 #: dtype codes shared with `python/mojolearn/_array.py::_NATIVE_CODE`.
 comptime HP_F32 = 0

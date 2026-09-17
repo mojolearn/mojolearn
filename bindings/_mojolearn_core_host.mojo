@@ -103,6 +103,7 @@ from bindings.host_helpers import (
     scale_rows_f32_binding,
 )
 from bindings.hotpath_helpers import (
+    HOTPATH_SABOTAGE,
     cast_elements_binding,
     check_indices_i64_binding,
     encode_labels_f32_binding,
@@ -201,10 +202,15 @@ def core_host_sabotage_binding() raises -> PythonObject:
     entries walk every distance chain descending under it and the k-means
     fit adds one unit to every quantized centroid-sum cell (the gate's
     negative control); refused outside the gate as one set."""
+    # lane/python-hotpath: -D MOJOLEARN_HOTPATH_SABOTAGE=1 sabotages ONLY the
+    # helpers of bindings/hotpath_helpers.mojo (so a divergence under it is
+    # theirs and not the k-NN fold's), and is refused outside the gate the
+    # same way, by being reported here.
     return PythonObject(
         CORE_HOST_SABOTAGE_DEFINE
         or KNN_HOST_SABOTAGE
         or KMEANS_ORACLE_HOST_SABOTAGE
+        or HOTPATH_SABOTAGE
     )
 
 
