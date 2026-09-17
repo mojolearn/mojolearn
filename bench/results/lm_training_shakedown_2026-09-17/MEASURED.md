@@ -100,3 +100,55 @@ At the $2.2 to $2.5 per H100-hour the original estimate was costed with,
 10BT at batch 4 is about **$490 to $560** against the $700 quoted at batch 1,
 and 25B is about **$1,230 to $1,390** against $2,000. The bill is 21% lower
 than the batch-1 estimate and remains the least interesting number here.
+
+## 5. Bit-exact resume DOES still hold at 162,147,840 parameters
+
+`export_checkpoint` refuses this shape (blocker B), so the arm went through the
+substitute its own docstring names: `export_state()` arrays as the checkpoint,
+restored by constructing a trainer from the saved parameters, optimizer
+configuration, shape and data schedule and then calling `load_state_dict` --
+the same two calls `from_checkpoint_bytes` makes, minus the size-bounded JSON
+envelope. `tools/lm_shakedown_resume.py`. Three arms, three FRESH processes,
+the broken one before the one being trusted.
+
+Control shape first (20,453,376 parameters, warmup 4, tail 3): PASS, save
+1.30 s, restore 1.00 s. Then the target shape, warmup 8, tail 4:
+
+    saved_at_step                     8
+    save_seconds                      11.19
+    restore_seconds                   7.63
+    control_missing_moments_differs   true
+    resume_bitwise_equal              true
+    verdict                           PASS
+
+**Every witness of every tail step matched the uninterrupted run**: loss,
+flat gradients, parameters, m, v and flags, by sha256, printed by name rather
+than counted.
+
+**The control is the part that makes that mean anything.** Zeroing m and v
+leaves the parameters untouched, so the first resumed step must read the same
+weights and produce the same loss and gradient; the optimizer state can only
+show up in what the update does. All eight checks landed on the side the
+arithmetic requires:
+
+    CHECK pass: first tail step loss matches (the parameter restore is sound)
+    CHECK pass: first tail step gradients matches (the parameter restore is sound)
+    CHECK pass: first tail step m differs (the zeroed moments reached the update)
+    CHECK pass: first tail step v differs (the zeroed moments reached the update)
+    CHECK pass: first tail step parameters differs (the zeroed moments reached the update)
+    CHECK pass: last tail step loss differs (the witnesses can see the optimizer)
+    CHECK pass: last tail step gradients differs (the witnesses can see the optimizer)
+    CHECK pass: last tail step parameters differs (the witnesses can see the optimizer)
+
+A control that matched everywhere would have meant the witnesses cannot see the
+optimizer and the resume arm proved nothing. It did not match, and the two
+places it was REQUIRED to match are the proof that the parameter half of the
+restore is sound and that the moments are the only thing the control changed.
+
+This is ONE GPU and ONE shape. It is not a cross-vendor resume claim; the
+NVIDIA/AMD bidirectional result on record is the 34,944-parameter model and
+this does not extend it.
+
+At 11.19 s to save and 7.63 s to restore, checkpointing is not a cost worth
+thinking about: every 10 minutes of a 223-hour run is a 1.9% tax, every hour
+is 0.3%.
