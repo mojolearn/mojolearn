@@ -339,11 +339,27 @@ from checks.numerics import (
     identical_div,
     identical_exp,
     identical_fmax,
+    identical_gelu_erf,
+    identical_gelu_tanh,
     identical_mul_add,
     identical_rsqrt,
     identical_silu,
     identical_sin,
+    identical_tanh,
     portable_powf,
+)
+# lane/block-options (2026-09-17): the block's options record, PACKAGE
+# LEVEL (`transformer/block_options.mojo`), so that this file still imports
+# nothing from `transformer/checks/`. Every option's seam below cites its
+# DEVIATION number from that file's table (2930-2939, 2943-2948).
+from transformer.block_options import (
+    BlockOptions,
+    NORM_LAYERNORM,
+    NORM_RMSNORM,
+    NORM_RMSNORM_OFFSET,
+    ROPE_SCALING_LINEAR,
+    ROPE_SCALING_LLAMA3,
+    rope_angle_domain,
 )
 
 
@@ -966,6 +982,114 @@ struct LlamaDeviceWeights(Movable):
     var w_gate: DeviceBuffer[DType.float32]  # [intermediate, d_model]
     var w_up: DeviceBuffer[DType.float32]  # [intermediate, d_model]
     var w_down: DeviceBuffer[DType.float32]  # [d_model, intermediate]
+    # lane/block-options (2026-09-17): the options record and the eleven
+    # OPTIONAL tensors, in `transformer/block_options.mojo`'s addrs-tail
+    # order. The two constructors above this comment's era set the default
+    # record and ONE-ELEMENT PLACEHOLDERS here (never read: every launch
+    # below is guarded by the record's flag); the third constructor takes
+    # the record and the tensors. `eps` is `opts.norm_eps` always.
+    var opts: BlockOptions
+    var b_q: DeviceBuffer[DType.float32]  # [n_heads*head_dim]      qkv_bias
+    var b_k: DeviceBuffer[DType.float32]  # [n_kv*head_dim]         qkv_bias
+    var b_v: DeviceBuffer[DType.float32]  # [n_kv*head_dim]         qkv_bias
+    var b_o: DeviceBuffer[DType.float32]  # [d_model]               o_bias
+    var norm1_b: DeviceBuffer[DType.float32]  # [d_model]           norm_bias
+    var norm2_b: DeviceBuffer[DType.float32]  # [d_model]           norm_bias
+    var b_up: DeviceBuffer[DType.float32]  # [intermediate]         mlp_bias
+    var b_down: DeviceBuffer[DType.float32]  # [d_model]            mlp_bias
+    var b_gate: DeviceBuffer[DType.float32]  # [intermediate]       mlp_bias, gated
+    var qn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
+    var kn_w: DeviceBuffer[DType.float32]  # [head_dim]             qk_norm
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        dims: LlamaDims,
+        opts: BlockOptions,
+        var norm1_w: DeviceBuffer[DType.float32],
+        var norm2_w: DeviceBuffer[DType.float32],
+        var w_q: DeviceBuffer[DType.float32],
+        var w_k: DeviceBuffer[DType.float32],
+        var w_v: DeviceBuffer[DType.float32],
+        var w_o: DeviceBuffer[DType.float32],
+        var w_gate: DeviceBuffer[DType.float32],
+        var w_up: DeviceBuffer[DType.float32],
+        var w_down: DeviceBuffer[DType.float32],
+        var b_q: DeviceBuffer[DType.float32],
+        var b_k: DeviceBuffer[DType.float32],
+        var b_v: DeviceBuffer[DType.float32],
+        var b_o: DeviceBuffer[DType.float32],
+        var norm1_b: DeviceBuffer[DType.float32],
+        var norm2_b: DeviceBuffer[DType.float32],
+        var b_up: DeviceBuffer[DType.float32],
+        var b_down: DeviceBuffer[DType.float32],
+        var b_gate: DeviceBuffer[DType.float32],
+        var qn_w: DeviceBuffer[DType.float32],
+        var kn_w: DeviceBuffer[DType.float32],
+    ) raises:
+        """THE OPTIONS CONSTRUCTOR (lane/block-options). The nine device
+        buffers of the constructor below, then the eleven optional ones in
+        the addrs-tail order; an absent tensor is a placeholder of at most
+        one element and a present one has its exact length, both checked
+        against the record's flags BY NAME. Under an ungated MLP `w_gate`
+        is a placeholder too. The default record with placeholders
+        everywhere is exactly the constructor below."""
+        dims.validate()
+        opts.validate(dims.head_dim)
+        self.dims = dims.copy()
+        self.opts = opts.copy()
+        self.eps = opts.norm_eps
+        var dm = dims.d_model
+        var qw = dims.q_width()
+        var kw = dims.kv_width()
+        var it = dims.intermediate
+        var hd = dims.head_dim
+        _expect_len("norm1.weight", len(norm1_w), dm)
+        _expect_len("norm2.weight", len(norm2_w), dm)
+        _expect_len("q_proj.weight", len(w_q), qw * dm)
+        _expect_len("k_proj.weight", len(w_k), kw * dm)
+        _expect_len("v_proj.weight", len(w_v), kw * dm)
+        _expect_len("o_proj.weight", len(w_o), dm * qw)
+        if opts.gated():
+            _expect_len("gate_proj.weight", len(w_gate), it * dm)
+        else:
+            _expect_optional("gate_proj.weight", len(w_gate), 0, False)
+        _expect_len("up_proj.weight", len(w_up), it * dm)
+        _expect_len("down_proj.weight", len(w_down), dm * it)
+        _expect_optional("q_proj.bias", len(b_q), qw, opts.qkv_bias)
+        _expect_optional("k_proj.bias", len(b_k), kw, opts.qkv_bias)
+        _expect_optional("v_proj.bias", len(b_v), kw, opts.qkv_bias)
+        _expect_optional("o_proj.bias", len(b_o), dm, opts.o_bias)
+        _expect_optional("input_layernorm.bias", len(norm1_b), dm, opts.norm_bias)
+        _expect_optional(
+            "post_attention_layernorm.bias", len(norm2_b), dm, opts.norm_bias
+        )
+        _expect_optional("up_proj.bias", len(b_up), it, opts.mlp_bias)
+        _expect_optional("down_proj.bias", len(b_down), dm, opts.mlp_bias)
+        _expect_optional("gate_proj.bias", len(b_gate), it, opts.has_gate_bias())
+        _expect_optional("q_norm.weight", len(qn_w), hd, opts.qk_norm)
+        _expect_optional("k_norm.weight", len(kn_w), hd, opts.qk_norm)
+        self.norm1_w = norm1_w^
+        self.norm2_w = norm2_w^
+        self.w_q = w_q^
+        self.w_k = w_k^
+        self.w_v = w_v^
+        self.w_o = w_o^
+        self.w_gate = w_gate^
+        self.w_up = w_up^
+        self.w_down = w_down^
+        self.b_q = b_q^
+        self.b_k = b_k^
+        self.b_v = b_v^
+        self.b_o = b_o^
+        self.norm1_b = norm1_b^
+        self.norm2_b = norm2_b^
+        self.b_up = b_up^
+        self.b_down = b_down^
+        self.b_gate = b_gate^
+        self.qn_w = qn_w^
+        self.kn_w = kn_w^
+        self._validate_finite(ctx)
 
     def __init__(
         out self,
@@ -1035,6 +1159,26 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = _upload(ctx, w_gate)
         self.w_up = _upload(ctx, w_up)
         self.w_down = _upload(ctx, w_down)
+        # lane/block-options: the default record and placeholders. The
+        # frozen `eps` argument is kept for this constructor's callers and
+        # copied INTO the record so that `self.eps == self.opts.norm_eps`
+        # holds on every path (the gates pass RMS_EPS; one bench passes
+        # another value on purpose and gets it).
+        var dflt = BlockOptions()
+        dflt.norm_eps = eps
+        self.opts = dflt^
+        var ph = _zeros[False](ctx, 1)
+        self.b_q = ph.copy()
+        self.b_k = ph.copy()
+        self.b_v = ph.copy()
+        self.b_o = ph.copy()
+        self.norm1_b = ph.copy()
+        self.norm2_b = ph.copy()
+        self.b_up = ph.copy()
+        self.b_down = ph.copy()
+        self.b_gate = ph.copy()
+        self.qn_w = ph.copy()
+        self.kn_w = ph^
         self._validate_finite(ctx)
 
 
@@ -1080,6 +1224,23 @@ struct LlamaDeviceWeights(Movable):
         self.w_gate = w_gate^
         self.w_up = w_up^
         self.w_down = w_down^
+        # lane/block-options: the default record and placeholders (see the
+        # host-list constructor above).
+        var dflt = BlockOptions()
+        dflt.norm_eps = eps
+        self.opts = dflt^
+        var ph = _zeros[False](ctx, 1)
+        self.b_q = ph.copy()
+        self.b_k = ph.copy()
+        self.b_v = ph.copy()
+        self.b_o = ph.copy()
+        self.norm1_b = ph.copy()
+        self.norm2_b = ph.copy()
+        self.b_up = ph.copy()
+        self.b_down = ph.copy()
+        self.b_gate = ph.copy()
+        self.qn_w = ph.copy()
+        self.kn_w = ph^
         self._validate_finite(ctx)
 
 
@@ -1088,12 +1249,50 @@ struct LlamaDeviceWeights(Movable):
 
         Sources are owned by self throughout the batch. No value or validation
         result survives construction, so mutable Python weights are reread.
+
+        lane/block-options: the optional tensors that the record switches
+        on join the batch AFTER the nine, in the addrs-tail order, under
+        their reference names; a placeholder is never scanned.
         """
-        var batch = DeviceNonfiniteBatch(ctx, [
-            len(self.norm1_w), len(self.norm2_w), len(self.w_q),
-            len(self.w_k), len(self.w_v), len(self.w_o),
-            len(self.w_gate), len(self.w_up), len(self.w_down),
-        ])
+        var lens = List[Int]()
+        lens.append(len(self.norm1_w))
+        lens.append(len(self.norm2_w))
+        lens.append(len(self.w_q))
+        lens.append(len(self.w_k))
+        lens.append(len(self.w_v))
+        lens.append(len(self.w_o))
+        lens.append(len(self.w_gate))
+        lens.append(len(self.w_up))
+        lens.append(len(self.w_down))
+        var o = self.opts.copy()
+        var flags = List[Bool]()
+        flags.append(o.qkv_bias)
+        flags.append(o.qkv_bias)
+        flags.append(o.qkv_bias)
+        flags.append(o.o_bias)
+        flags.append(o.norm_bias)
+        flags.append(o.norm_bias)
+        flags.append(o.mlp_bias)
+        flags.append(o.mlp_bias)
+        flags.append(o.has_gate_bias())
+        flags.append(o.qk_norm)
+        flags.append(o.qk_norm)
+        var opt_lens = List[Int]()
+        opt_lens.append(len(self.b_q))
+        opt_lens.append(len(self.b_k))
+        opt_lens.append(len(self.b_v))
+        opt_lens.append(len(self.b_o))
+        opt_lens.append(len(self.norm1_b))
+        opt_lens.append(len(self.norm2_b))
+        opt_lens.append(len(self.b_up))
+        opt_lens.append(len(self.b_down))
+        opt_lens.append(len(self.b_gate))
+        opt_lens.append(len(self.qn_w))
+        opt_lens.append(len(self.kn_w))
+        for i in range(len(flags)):
+            if flags[i]:
+                lens.append(opt_lens[i])
+        var batch = DeviceNonfiniteBatch(ctx, lens)
         batch.enqueue(ctx, 0, self.norm1_w)
         batch.enqueue(ctx, 1, self.norm2_w)
         batch.enqueue(ctx, 2, self.w_q)
@@ -1103,6 +1302,34 @@ struct LlamaDeviceWeights(Movable):
         batch.enqueue(ctx, 6, self.w_gate)
         batch.enqueue(ctx, 7, self.w_up)
         batch.enqueue(ctx, 8, self.w_down)
+        var slot = 9
+        var slots = List[Int](length=11, fill=-1)
+        for i in range(len(flags)):
+            if flags[i]:
+                slots[i] = slot
+                if i == 0:
+                    batch.enqueue(ctx, slot, self.b_q)
+                elif i == 1:
+                    batch.enqueue(ctx, slot, self.b_k)
+                elif i == 2:
+                    batch.enqueue(ctx, slot, self.b_v)
+                elif i == 3:
+                    batch.enqueue(ctx, slot, self.b_o)
+                elif i == 4:
+                    batch.enqueue(ctx, slot, self.norm1_b)
+                elif i == 5:
+                    batch.enqueue(ctx, slot, self.norm2_b)
+                elif i == 6:
+                    batch.enqueue(ctx, slot, self.b_up)
+                elif i == 7:
+                    batch.enqueue(ctx, slot, self.b_down)
+                elif i == 8:
+                    batch.enqueue(ctx, slot, self.b_gate)
+                elif i == 9:
+                    batch.enqueue(ctx, slot, self.qn_w)
+                else:
+                    batch.enqueue(ctx, slot, self.kn_w)
+                slot += 1
         var indices = batch.finish(ctx)
         _refuse_nonfinite_at(ctx, "input_layernorm.weight", self.norm1_w, indices[0])
         _refuse_nonfinite_at(ctx, "post_attention_layernorm.weight", self.norm2_w, indices[1])
@@ -1113,6 +1340,53 @@ struct LlamaDeviceWeights(Movable):
         _refuse_nonfinite_at(ctx, "gate_proj.weight", self.w_gate, indices[6])
         _refuse_nonfinite_at(ctx, "up_proj.weight", self.w_up, indices[7])
         _refuse_nonfinite_at(ctx, "down_proj.weight", self.w_down, indices[8])
+        if slots[0] >= 0:
+            _refuse_nonfinite_at(ctx, "q_proj.bias", self.b_q, indices[slots[0]])
+        if slots[1] >= 0:
+            _refuse_nonfinite_at(ctx, "k_proj.bias", self.b_k, indices[slots[1]])
+        if slots[2] >= 0:
+            _refuse_nonfinite_at(ctx, "v_proj.bias", self.b_v, indices[slots[2]])
+        if slots[3] >= 0:
+            _refuse_nonfinite_at(ctx, "o_proj.bias", self.b_o, indices[slots[3]])
+        if slots[4] >= 0:
+            _refuse_nonfinite_at(ctx, "input_layernorm.bias", self.norm1_b, indices[slots[4]])
+        if slots[5] >= 0:
+            _refuse_nonfinite_at(ctx, "post_attention_layernorm.bias", self.norm2_b, indices[slots[5]])
+        if slots[6] >= 0:
+            _refuse_nonfinite_at(ctx, "up_proj.bias", self.b_up, indices[slots[6]])
+        if slots[7] >= 0:
+            _refuse_nonfinite_at(ctx, "down_proj.bias", self.b_down, indices[slots[7]])
+        if slots[8] >= 0:
+            _refuse_nonfinite_at(ctx, "gate_proj.bias", self.b_gate, indices[slots[8]])
+        if slots[9] >= 0:
+            _refuse_nonfinite_at(ctx, "q_norm.weight", self.qn_w, indices[slots[9]])
+        if slots[10] >= 0:
+            _refuse_nonfinite_at(ctx, "k_norm.weight", self.kn_w, indices[slots[10]])
+
+
+def _expect_optional(name: String, got: Int, want: Int, on: Bool) raises:
+    """lane/block-options: an optional device tensor is PRESENT at its exact
+    length iff its option is on, and a PLACEHOLDER (at most one element)
+    otherwise. Both mismatches are refused by the tensor's name."""
+    if on:
+        if got != want:
+            raise Error(
+                String("llama: ")
+                + name
+                + " is required by its option and has "
+                + String(got)
+                + " floats, expected "
+                + String(want)
+            )
+    elif got > 1:
+        raise Error(
+            String("llama: ")
+            + name
+            + " is present ("
+            + String(got)
+            + " floats) but its option is off; pass the option or drop the"
+            + " tensor"
+        )
 
 
 struct LlamaKVCache(Movable):
@@ -1153,6 +1427,7 @@ struct LlamaKVCache(Movable):
         dims: LlamaDims,
         s_max: Int,
         window: Int = 0,
+        max_positions: Int = MAX_ABS_POSITION,
     ) raises:
         """`window == 0`: the linear cache above, packed at stride `s`.
         `window > 0`: a RING of `window` slots per (batch, kv head), slot
@@ -1161,22 +1436,31 @@ struct LlamaKVCache(Movable):
         and DEVIATION 812's ceiling are per position, not per slot). A
         call gathers the keys it reads out of the ring into the packed
         work span (`kv_window_gather_kernel`) before writing its own
-        tokens back (`kv_ring_write_kernel`)."""
+        tokens back (`kv_ring_write_kernel`).
+
+        `max_positions` (DEVIATION 2933, lane/block-options): the model's
+        declared absolute-position ceiling, `BlockOptions.max_positions`;
+        the default is DEVIATION 812's 8192, so every pre-existing caller
+        keeps its refusal word for word. The ANGLE domain of the rotary
+        reduction is enforced where the table is built (`LlamaRopeTable`),
+        which is where it can be, since it depends on the inverse
+        frequencies and not on the position alone."""
         if b <= 0:
             raise Error("llama: KV cache needs B > 0")
         if s_max <= 0:
             raise Error("llama: KV cache needs s_max > 0")
         if window < 0:
             raise Error("llama: KV cache window must be >= 0 (0 = full causal)")
-        if s_max > MAX_ABS_POSITION:
+        if s_max > max_positions:
             raise Error(
                 String("llama: s_max ")
                 + String(s_max)
                 + " exceeds the absolute-position ceiling "
-                + String(MAX_ABS_POSITION)
-                + " (DEVIATION 812: the Cody-Waite domain of"
-                + " _cephes_sincosf_core, shared by portable_sinf and"
-                + " portable_cosf)"
+                + String(max_positions)
+                + " (the model's max_positions, DEVIATION 2933; at the"
+                + " default it is DEVIATION 812's 8192, the Cody-Waite"
+                + " domain of _cephes_sincosf_core, shared by portable_sinf"
+                + " and portable_cosf)"
             )
         self.b = b
         self.n_kv = dims.n_kv
@@ -1245,6 +1529,12 @@ struct LlamaDeviceStages(Movable):
     var qbh: DeviceBuffer[DType.float32]  # [L, head_dim]     (no tag)
     var kbh: DeviceBuffer[DType.float32]  # [s_max, head_dim] (no tag)
     var sbh: DeviceBuffer[DType.float32]  # [L, s_max]        (no tag)
+    var qk_sumsq: DeviceBuffer[DType.float32]  # [M * n_heads]  (no tag)
+    """DEVIATION 2946 (lane/block-options): the per-head sum of squares
+    scratch of the q/k RMSNorm under `qk_norm`; an internal, never
+    recorded, sized for q (`n_heads >= n_kv`). Allocated always because it
+    is `M * n_heads` floats and a conditional field is a second struct
+    shape to get wrong."""
     var gemm_workspace: GemmWorkspace
     var attn_materialized: Bool
     """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
@@ -1349,10 +1639,11 @@ struct LlamaDeviceStages(Movable):
         self.qbh = _zeros[False](ctx, l * hd)
         self.kbh = _zeros[False](ctx, sc * hd)
         self.sbh = _zeros[False](ctx, sbh_n)
+        self.qk_sumsq = _zeros[False](ctx, m * nh)
         self.attn_materialized = False
         self.attn_estash_cells = 0
 
-        # All 29 buffers are owned by self through this fence. Preserve every
+        # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
         # See docs/NEURAL_METAL_DECODE.md for the lifetime boundary.
         step_count_sync()
@@ -1424,6 +1715,8 @@ struct LlamaDeviceStages(Movable):
         self.kbh.enqueue_fill(Float32(0))
         step_count_launch()
         self.sbh.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.qk_sumsq.enqueue_fill(Float32(0))
         self.attn_materialized = False
         self.attn_estash_cells = 0
         step_count_sync()
@@ -1587,6 +1880,117 @@ def llama_rms_norm(
     )
 
 
+def llama_norm_variant_kernel(
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    bias: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+    eps_in: Float32,
+    kind_in: Int32,
+    has_bias_in: Int32,
+):
+    """lane/block-options (2026-09-17): the norm VARIANTS, one thread per
+    row, the DEVICE spelling of `transformer_oracle.mojo::norm_into`'s
+    non-default arms. `llama_rms_norm_kernel` above is UNTOUCHED and is
+    what the default record launches, so no default bit moves.
+
+    DEVIATION 2936, `kind == NORM_LAYERNORM` (`nn.LayerNorm`): two SERIAL
+    ASCENDING folds per row, mean first (plain adds from +0.0) then the sum
+    of squared deviations (fma chain from +0.0), `rstd =
+    identical_rsqrt(var + eps)`, `y = pinned_mul(w, pinned_mul(dev, rstd))`
+    and, with `has_bias`, one plain add of the bias. The recorded
+    `norm*.sumsq` stage is the sum of squared DEVIATIONS.
+
+    DEVIATION 2938, `kind == NORM_RMSNORM_OFFSET` (Gemma's `(1 + w)`):
+    S1-S4 verbatim with S4's weight `ftz(1.0 + ftz(w_j))`.
+
+    `kind == NORM_RMSNORM` is spelled here too (S1-S4 with the eps
+    argument, DEVIATION 2937) so that the q/k norm (DEVIATION 2946) has one
+    launcher, but the block's own norms take `llama_rms_norm` for it.
+    """
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var kind = Int(kind_in)
+    var has_bias = Int(has_bias_in) != 0
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m:
+        return
+    if kind == NORM_LAYERNORM:
+        var acc = Float32(0.0)
+        for j in range(dm):
+            acc = ftz(ftz(acc) + ftz(x.unsafe_load(t * dm + j)))
+        var mean = ftz(identical_div(acc, Float32(dm)))
+        var acc2 = Float32(0.0)
+        for j in range(dm):
+            var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
+            acc2 = ftz(identical_mul_add(dev, dev, acc2))
+        sumsq.unsafe_store(t, acc2)
+        var variance = ftz(identical_div(acc2, Float32(dm)))
+        var rstd = ftz(identical_rsqrt(ftz(variance + eps_in)))
+        for j in range(dm):
+            var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
+            var inner = ftz(pinned_mul(dev, rstd))
+            var y = ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+            if has_bias:
+                y = ftz(ftz(y) + ftz(bias.unsafe_load(j)))
+            out_buf.unsafe_store(t * dm + j, y)
+        return
+    var acc = Float32(0.0)
+    for j in range(dm):
+        var xj = ftz(x.unsafe_load(t * dm + j))
+        acc = ftz(identical_mul_add(xj, xj, acc))
+    sumsq.unsafe_store(t, acc)
+    var mean = ftz(identical_div(acc, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    for j in range(dm):
+        var inner = ftz(pinned_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        var wj = ftz(weight.unsafe_load(j))
+        if kind == NORM_RMSNORM_OFFSET:
+            wj = ftz(Float32(1.0) + wj)
+        out_buf.unsafe_store(t * dm + j, ftz(pinned_mul(wj, inner)))
+
+
+def llama_norm(
+    ctx: DeviceContext,
+    mut sumsq: DeviceBuffer[DType.float32],
+    mut out_buf: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut bias: DeviceBuffer[DType.float32],
+    m: Int,
+    d_model: Int,
+    eps: Float32,
+    kind: Int,
+    has_bias: Bool,
+) raises:
+    """The block's normalization under the record (lane/block-options):
+    the plain RMSNorm without a bias is `llama_rms_norm`, UNCHANGED, and
+    every other form is `llama_norm_variant_kernel`. ASYNCHRONOUS."""
+    if kind == NORM_RMSNORM and not has_bias:
+        llama_rms_norm(ctx, sumsq, out_buf, x, weight, m, d_model, eps)
+        return
+    if has_bias and kind != NORM_LAYERNORM:
+        raise Error("llama: an RMSNorm carries no bias (norm_bias needs layernorm)")
+    step_count_launch()
+    ctx.enqueue_function[llama_norm_variant_kernel](
+        sumsq.unsafe_ptr(),
+        out_buf.unsafe_ptr(),
+        x.unsafe_ptr(),
+        weight.unsafe_ptr(),
+        bias.unsafe_ptr(),
+        Int32(m),
+        Int32(d_model),
+        eps,
+        Int32(kind),
+        Int32(1 if has_bias else 0),
+        grid_dim=(_grid(m), 1, 1),
+        block_dim=(LLAMA_TPB, 1, 1),
+    )
+
+
 # ===========================================================================
 # `LlamaRotaryEmbedding` (:73-127). Seams S6, S7, S8.
 #
@@ -1638,6 +2042,96 @@ def llama_rope_inv_freq_host(
         var p = portable_powf(theta, e)
         out.append(ftz(identical_div(Float32(1.0), p)))
     return out^
+
+
+def llama_rope_inv_freq_scaled_host(
+    opts: BlockOptions, rope_dim: Int
+) raises -> List[Float32]:
+    """S6 under the record, the DEVICE FILE's transcription (the oracle's
+    is `transformer_oracle.mojo::rope_inv_freq_scaled`; the two share
+    only the seam functions). HOST, once per configuration, like S6 has
+    always been.
+
+    DEVIATION 2930: the base is `opts.rope_theta`, S6's arithmetic otherwise
+    (`e = 2i / rope_dim`, `inv = 1 / theta**e`, `identical_div` and
+    `portable_powf`; `_compute_default_rope_parameters`,
+    modeling_rope_utils.py:95-135).
+    DEVIATION 2931, linear: `inv = inv / factor`, one `identical_div`
+    (`_compute_linear_scaling_rope_parameters`, :138-176).
+    DEVIATION 2932, llama3 (`_compute_llama3_parameters`, :384-432), in the
+    reference's operation order, every intermediate Float32 and flushed:
+    the two wavelength thresholds `old / low` and `old / high`; the
+    column's wavelength `2*pi / inv` (2*pi = 0x40C90FDB); `inv / factor`
+    where the wavelength exceeds the low threshold; and on the medium band
+    (`not (wl < high_wl) and not (wl > low_wl)`) the smoothed value
+    `((1 - s) * inv_l) / factor + s * inv_l` with `s = (old / wl - low) /
+    (high - low)`, products through `pinned_mul`, the final add UNFUSED.
+    `attention_factor` is 1.0 for all three, so nothing scales cos or sin.
+    """
+    if rope_dim <= 0 or rope_dim % 2 != 0:
+        raise Error("llama: rope needs an even positive rope_dim")
+    var half = rope_dim // 2
+    var out = List[Float32]()
+    var theta = opts.rope_theta
+    for i in range(half):
+        var e = ftz(identical_div(Float32(2 * i), Float32(rope_dim)))
+        var p = portable_powf(theta, e)
+        var inv = ftz(identical_div(Float32(1.0), p))
+        if opts.rope_scaling == ROPE_SCALING_LINEAR:
+            inv = ftz(identical_div(inv, ftz(opts.rope_factor)))
+        elif opts.rope_scaling == ROPE_SCALING_LLAMA3:
+            var factor = ftz(opts.rope_factor)
+            var lo_f = ftz(opts.rope_low_freq_factor)
+            var hi_f = ftz(opts.rope_high_freq_factor)
+            var old = Float32(opts.rope_original_max_positions)
+            var low_wl = ftz(identical_div(old, lo_f))
+            var high_wl = ftz(identical_div(old, hi_f))
+            var two_pi = bitcast[DType.float32](UInt32(0x40C90FDB))
+            var wl = ftz(identical_div(two_pi, inv))
+            var inv_l = inv
+            if wl > low_wl:
+                inv_l = ftz(identical_div(inv, factor))
+            if (not (wl < high_wl)) and (not (wl > low_wl)):
+                var ratio = ftz(identical_div(old, wl))
+                var smooth = ftz(identical_div(ftz(ratio - lo_f), ftz(hi_f - lo_f)))
+                var t1 = ftz(pinned_mul(ftz(Float32(1.0) - smooth), inv_l))
+                t1 = ftz(identical_div(t1, factor))
+                var t2 = ftz(pinned_mul(smooth, inv_l))
+                inv_l = ftz(ftz(t1) + ftz(t2))
+            inv = inv_l
+        out.append(inv)
+    return out^
+
+
+def llama_refuse_rope_angle_domain(
+    inv_freq: List[Float32], positions: Int
+) raises:
+    """DEVIATION 2933: the rotary reduction's domain, on the ANGLE. The
+    largest angle the table will hold, `(positions - 1) * inv_freq[i]` at
+    the column with the largest inverse frequency, spelled as S7 spells it,
+    must be strictly below 8192.0 (`_cephes_sincosf_core`'s Cody-Waite
+    domain, DEVIATION 812). At the default record `inv_freq[0] == 1.0` and
+    this is `positions > 8192` exactly. REFUSED BY NAME; never clamped."""
+    var worst = Float32(0.0)
+    var worst_i = 0
+    for i in range(len(inv_freq)):
+        var angle = ftz(pinned_mul(Float32(positions - 1), ftz(inv_freq[i])))
+        if angle > worst:
+            worst = angle
+            worst_i = i
+    if worst >= rope_angle_domain():
+        raise Error(
+            String("llama: a rotary table of ")
+            + String(positions)
+            + " positions puts the RoPE angle at column "
+            + String(worst_i)
+            + " at "
+            + String(worst)
+            + ", at or beyond the Cody-Waite ceiling of"
+            + " _cephes_sincosf_core (8192.0; DEVIATION 812 restated as"
+            + " DEVIATION 2933). Fewer positions, a rope_scaling factor or"
+            + " a wider reduction in checks/numerics.mojo are the exits"
+        )
 
 
 def llama_rope_table_kernel(
@@ -1712,6 +2206,10 @@ struct LlamaRopeTable(Movable):
     var half: Int
     var p_max: Int
     var theta: Float32
+    var rope_dim: Int
+    """DEVIATION 2948 (lane/block-options): the rotated width; `half` is
+    `rope_dim // 2` and the table is `[p_max, half]`. `head_dim` for every
+    table built through the `theta` constructor."""
     var inv_freq: DeviceBuffer[DType.float32]  # [half]
     var cos: DeviceBuffer[DType.float32]  # [p_max, half]
     var sin: DeviceBuffer[DType.float32]  # [p_max, half]
@@ -1723,23 +2221,46 @@ struct LlamaRopeTable(Movable):
         theta: Float32,
         p_max: Int,
     ) raises:
+        """Today's table: the default record with `theta` in place of the
+        frozen base. Every pre-existing caller (the gates, the byte LM, the
+        benches) reaches this constructor and the bits it always produced;
+        `theta == 10000.0` is the default record exactly and any other
+        value is DEVIATION 2930 through the same spelling."""
+        var opts = BlockOptions()
+        opts.rope_theta = theta
+        self = Self(ctx, dims, opts, p_max)
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        dims: LlamaDims,
+        opts: BlockOptions,
+        p_max: Int,
+    ) raises:
+        """The table under the record (lane/block-options): DEVIATIONS
+        2930-2932 (S6 through `llama_rope_inv_freq_scaled_host`), 2933
+        (the ceiling: `p_max <= opts.max_positions` and the ANGLE domain)
+        and 2948 (`rope_dim` columns)."""
         dims.validate()
+        opts.validate(dims.head_dim)
         if p_max <= 0:
             raise Error("llama: the rotary table needs p_max > 0")
-        if p_max > MAX_ABS_POSITION:
+        if p_max > opts.max_positions:
             raise Error(
                 String("llama: p_max ")
                 + String(p_max)
                 + " exceeds the absolute-position ceiling "
-                + String(MAX_ABS_POSITION)
-                + " (contract section 3, DEVIATION 812)"
+                + String(opts.max_positions)
+                + " (the model's max_positions, DEVIATION 2933; contract"
+                + " section 3's DEVIATION 812 at the default)"
             )
-        self.half = dims.half()
+        self.rope_dim = opts.rope_dim_of(dims.head_dim)
+        self.half = self.rope_dim // 2
         self.p_max = p_max
-        self.theta = theta
-        self.inv_freq = _upload(
-            ctx, llama_rope_inv_freq_host(theta, dims.head_dim)
-        )
+        self.theta = opts.rope_theta
+        var inv = llama_rope_inv_freq_scaled_host(opts, self.rope_dim)
+        llama_refuse_rope_angle_domain(inv, p_max)
+        self.inv_freq = _upload(ctx, inv)
         self.cos = _zeros(ctx, p_max * self.half)
         self.sin = _zeros(ctx, p_max * self.half)
         step_count_launch()
@@ -1780,8 +2301,15 @@ def apply_rotary_pos_emb_kernel(
     nh_in: Int32,
     hd_in: Int32,
     pos0_in: Int32,
+    rd_in: Int32,
 ):
     """One thread per output cell of `[M, n_h*head_dim]`, token-major.
+
+    DEVIATION 2948 (lane/block-options): `rd_in` is the ROTATED WIDTH.
+    Columns `d >= rd` pass through, flushed on load (a copy, not a seam;
+    DEVIATION 1026's per-load rule), and the table is `[p_max, rd/2]`. At
+    `rd == head_dim` (every call before this lane) the pass-through branch
+    is never taken and the arithmetic below is unchanged.
 
     THE POSITION IS THE ABSOLUTE POSITION, ALWAYS (contract S7, 5.5, 7.2).
     Token `t` of this launch is at absolute position `pos0 + t`, so a decode
@@ -1805,7 +2333,8 @@ def apply_rotary_pos_emb_kernel(
     var nh = Int(nh_in)
     var hd = Int(hd_in)
     var pos0 = Int(pos0_in)
-    var half = hd // 2
+    var rd = Int(rd_in)
+    var half = rd // 2
     var width = nh * hd
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if i >= m * width:
@@ -1816,6 +2345,11 @@ def apply_rotary_pos_emb_kernel(
     var h = rem // hd
     var d = rem - h * hd
     var t = tok - (tok // l) * l
+
+    if d >= rd:
+        # DEVIATION 2948: outside the rotated width, a flushed copy.
+        out_buf.unsafe_store(i, ftz(x.unsafe_load(i)))
+        return
 
     var pos = pos0 + t
     comptime if SAB_S07_ROPE_RELATIVE_POSITION:
@@ -1864,9 +2398,20 @@ def apply_rotary_pos_emb(
     n_h: Int,
     head_dim: Int,
     pos0: Int,
+    rope_dim: Int,
 ) raises:
     """`apply_rotary_pos_emb(q, k, cos, sin)` (:138-160), one tensor per
-    call. `n_h` is `n_heads` for q and `n_kv` for k. ASYNCHRONOUS."""
+    call. `n_h` is `n_heads` for q and `n_kv` for k. `rope_dim` is the
+    rotated width (`head_dim` for the full rotary; DEVIATION 2948).
+    ASYNCHRONOUS."""
+    if rope_dim <= 0 or rope_dim > head_dim or rope_dim % 2 != 0:
+        raise Error(
+            String("llama: rope_dim ")
+            + String(rope_dim)
+            + " must be even and in (0, head_dim="
+            + String(head_dim)
+            + "]"
+        )
     step_count_launch()
     ctx.enqueue_function[apply_rotary_pos_emb_kernel](
         out_buf.unsafe_ptr(),
@@ -1878,6 +2423,7 @@ def apply_rotary_pos_emb(
         Int32(n_h),
         Int32(head_dim),
         Int32(pos0),
+        Int32(rope_dim),
         grid_dim=(_grid(m * n_h * head_dim), 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
@@ -2622,6 +3168,77 @@ def mlp_gated_kernel(
 
 
 # ===========================================================================
+# lane/block-options (2026-09-17): the three elementwise kernels the
+# options add. Each is one thread per cell, one seam, through
+# `checks/numerics.mojo`; the oracle spellings are `add_bias_into`, the
+# softcap lines in `transformer_block_oracle`'s score loop, and the S20
+# branch there.
+# ===========================================================================
+
+
+def add_bias_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    bias: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+):
+    """DEVIATIONS 2934, 2935, 2945: `nn.Linear`'s bias as ONE plain add per
+    cell AFTER the profile's GEMM, `ftz(ftz(y) + ftz(b[col]))`. IN PLACE,
+    one thread per cell. The reference's `addmm` may seed its accumulator
+    with the bias or add it in an epilogue, which is cuBLAS's choice and
+    not a pinnable spelling; the one-add-after form is OURS."""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var col = i - (i // width) * width
+    y.unsafe_store(i, ftz(ftz(y.unsafe_load(i)) + ftz(bias.unsafe_load(col))))
+
+
+def attn_softcap_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    cap_in: Float32,
+):
+    """DEVIATION 2947, `attn_softcap` (Gemma2's `attn_logit_softcapping`):
+    `s = cap * tanh(s / cap)`, applied to the SCALED score before the mask,
+    as `modeling_gemma2.py::eager_attention_forward` orders it. One
+    `identical_div`, one `identical_tanh` (DEVIATION 821), one `pinned_mul`,
+    each flushed. IN PLACE."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var cap = ftz(cap_in)
+    var s = ftz(scores.unsafe_load(i))
+    var th = ftz(identical_tanh(ftz(identical_div(s, cap))))
+    scores.unsafe_store(i, ftz(pinned_mul(th, cap)))
+
+
+def gelu_kernel(
+    act_out: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    tanh_form_in: Int32,
+):
+    """DEVIATIONS 2939, 2943, 2944: the GELU activations in S20's place.
+    `identical_gelu_erf` (DEVIATION 823, `GELUActivation` verbatim) or
+    `identical_gelu_tanh` (DEVIATION 824, `GELUTanh` verbatim); nothing is
+    spelled here. Reads the gate projection (gated forms) or the up
+    projection (ungated forms), which the launcher decides."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var z = ftz(src.unsafe_load(i))
+    if Int(tanh_form_in) != 0:
+        act_out.unsafe_store(i, ftz(identical_gelu_tanh(z)))
+    else:
+        act_out.unsafe_store(i, ftz(identical_gelu_erf(z)))
+
+
+# ===========================================================================
 # THE REFUSAL, contract section 8. Before ANY recorded stage.
 # ===========================================================================
 
@@ -2904,8 +3521,15 @@ def eager_attention_forward(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool,
+    softcap: Float32 = Float32(0.0),
 ) raises -> Int:
     """The attention interface, eager or fused, ONE set of bits.
+
+    `softcap` (DEVIATION 2947, lane/block-options): a nonzero value FORCES
+    the eager kernels, because the fused path computes the scaled score
+    and its softmax in one pass and spells no softcap; the eager path
+    applies it between S12 and S13. Zero (the default record) changes
+    nothing here.
 
     `materialize`: run the eager stage kernels even with the trace off, so
     that `scores`, `masked`, `aexp` and `weights` hold this call's stages
@@ -2922,6 +3546,8 @@ def eager_attention_forward(
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
     var choice = attention_path_choice(plant_at)
+    if softcap != Float32(0.0):
+        choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     var status = -1
     # DEVIATION 2652: nothing kept until this call keeps it.
@@ -2929,7 +3555,7 @@ def eager_attention_forward(
     if need_eager:
         attention_eager_core(
             ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
-            plant_idx, plant_bits, trace, prefix,
+            plant_idx, plant_bits, trace, prefix, softcap,
         )
     if choice != ATTN_PATH_EAGER:
         var kept_estash = False
@@ -2962,7 +3588,7 @@ def eager_attention_forward(
         if status != FUSED_RAN and not need_eager:
             attention_eager_core(
                 ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
-                plant_idx, plant_bits, trace, prefix,
+                plant_idx, plant_bits, trace, prefix, softcap,
             )
         elif status == FUSED_RAN and not need_eager:
             stages.attn_materialized = False
@@ -3014,6 +3640,7 @@ def attention_eager_core(
     plant_bits: List[UInt32],
     mut trace: IdentityTrace,
     prefix: String,
+    softcap: Float32 = Float32(0.0),
 ) raises:
     """`eager_attention_forward(module, query, key, value, attention_mask,
     scaling, dropout)` (:191-213), inference only, `dropout = 0.0` and
@@ -3126,6 +3753,20 @@ def attention_eager_core(
     )
     step_count_sync()
     ctx.synchronize()
+    # DEVIATION 2947 (lane/block-options): the softcap, after the scale and
+    # before the mask and the plant, recorded INTO `attn.scores`. Skipped
+    # entirely at the default record (softcap 0.0).
+    if softcap != Float32(0.0):
+        step_count_launch()
+        ctx.enqueue_function[attn_softcap_kernel](
+            stages.scores.unsafe_ptr(),
+            Int32(cells),
+            softcap,
+            grid_dim=(_grid(cells), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        step_count_sync()
+        ctx.synchronize()
     # The score plant, injection point 1. Applied AFTER S12 and BEFORE the
     # stage is recorded, so the planted bits are IN `attn.scores` -- which
     # is the oracle's order and the only order under which clause (a) can
@@ -3408,9 +4049,42 @@ def llama_attention_forward(
     # Retain FP32 operands in every tier. The vendor fast route can select
     # TF32 projections, exceeding the block's unchanged accuracy contract.
     # IDENTICAL already uses this plan; its arithmetic remains unchanged.
+    var opts = w.opts.copy()
     stages.gemm_workspace.run[False](
         ctx, stages.q_proj, stages.norm1_out, w.w_q, m, qw, dm, _gemm_op_nt()
     )
+    # DEVIATION 2934 (lane/block-options), `qkv_bias`: one plain add per
+    # cell after the GEMM, in place, BEFORE the stage is recorded so the
+    # card's `q_proj.out` is the projection with its bias, as the oracle's.
+    if opts.qkv_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.q_proj.unsafe_ptr(),
+            w.b_q.unsafe_ptr(),
+            Int32(m * qw),
+            Int32(qw),
+            grid_dim=(_grid(m * qw), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    # DEVIATION 2946, `qk_norm`: an RMSNorm over each head's `head_dim`
+    # vector of q (and of k below), BEFORE RoPE, `M * n_heads` rows of
+    # width `head_dim` in the token-major layout, the shared `[head_dim]`
+    # weight, the block's eps, the block's RMSNorm form (plain or Gemma's
+    # offset), no bias. Written into `q_rope` as a TEMPORARY and copied
+    # back over `q_proj` (a device copy, not a seam; `q_rope` is
+    # overwritten by RoPE below and one buffer may not be both operands of
+    # one launcher under Mojo's exclusivity rule). The sum of squares goes
+    # to the untagged `qk_sumsq` scratch. Recorded INTO `q_proj.out`.
+    if opts.qk_norm:
+        # `w.norm1_b` fills the bias slot and is NEVER READ (has_bias is
+        # False); one buffer may not be two arguments of one call.
+        llama_norm(
+            ctx, stages.qk_sumsq, stages.q_rope, stages.q_proj, w.qn_w,
+            w.norm1_b, m * dims.n_heads, hd, opts.norm_eps, opts.qk_norm_kind(),
+            False,
+        )
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=stages.q_proj, src_buf=stages.q_rope)
     trace.record_device[DType.float32](
         ctx, prefix + ".q_proj.out", stages.q_proj, m * qw
     )
@@ -3418,6 +4092,23 @@ def llama_attention_forward(
     stages.gemm_workspace.run[False](
         ctx, stages.k_proj, stages.norm1_out, w.w_k, m, kw, dm, _gemm_op_nt()
     )
+    if opts.qkv_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.k_proj.unsafe_ptr(),
+            w.b_k.unsafe_ptr(),
+            Int32(m * kw),
+            Int32(kw),
+            grid_dim=(_grid(m * kw), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    if opts.qk_norm:
+        llama_norm(
+            ctx, stages.qk_sumsq, stages.k_rope, stages.k_proj, w.kn_w,
+            w.norm2_b, m * nkv, hd, opts.norm_eps, opts.qk_norm_kind(), False,
+        )
+        step_count_d2d()
+        ctx.enqueue_copy(dst_buf=stages.k_proj, src_buf=stages.k_rope)
     trace.record_device[DType.float32](
         ctx, prefix + ".k_proj.out", stages.k_proj, m * kw
     )
@@ -3425,6 +4116,16 @@ def llama_attention_forward(
     stages.gemm_workspace.run[False](
         ctx, stages.v_proj, stages.norm1_out, w.w_v, m, kw, dm, _gemm_op_nt()
     )
+    if opts.qkv_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.v_proj.unsafe_ptr(),
+            w.b_v.unsafe_ptr(),
+            Int32(m * kw),
+            Int32(kw),
+            grid_dim=(_grid(m * kw), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".v_proj.out", stages.v_proj, m * kw
     )
@@ -3435,8 +4136,10 @@ def llama_attention_forward(
     #      RECORDED every call. DEVIATION 1024: contract section 9 says
     #      "once" and also lists these three inside a thirty-tag card order
     #      the differ aligns on; this file resolves toward the differ.
+    #      `rope.half` is `rope_dim / 2` (DEVIATION 2948), `head_dim / 2`
+    #      at the default.
     trace.record_device[DType.float32](
-        ctx, prefix + ".rope.inv_freq", rope.inv_freq, dims.half()
+        ctx, prefix + ".rope.inv_freq", rope.inv_freq, rope.half
     )
     trace.record_device[DType.float32](
         ctx, prefix + ".rope.cos", rope.cos, rope.p_max * rope.half
@@ -3458,6 +4161,7 @@ def llama_attention_forward(
         dims.n_heads,
         hd,
         pos0,
+        rope.rope_dim,
     )
     apply_rotary_pos_emb(
         ctx,
@@ -3470,6 +4174,7 @@ def llama_attention_forward(
         nkv,
         hd,
         pos0,
+        rope.rope_dim,
     )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
@@ -3622,16 +4327,27 @@ def llama_attention_forward(
         trace,
         prefix,
         materialize,
+        opts.attn_softcap,
     )
     timing_tick(ctx, ton, tk, "attn.core")
     pc.mark(ctx)
 
     # ---- o_proj (:280). `nn.Linear(n_heads*head_dim, d_model,
-    #      bias=attention_bias)`, no bias.
+    #      bias=attention_bias)`; the bias under `o_bias` (DEVIATION 2935).
     #      C[M, dm] = ctx[M, qw] . w_o[dm, qw]^T, `k = n_heads*head_dim`.
     stages.gemm_workspace.run[False](
         ctx, stages.o_proj, stages.ctxv, w.w_o, m, dm, qw, _gemm_op_nt()
     )
+    if opts.o_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.o_proj.unsafe_ptr(),
+            w.b_o.unsafe_ptr(),
+            Int32(m * dm),
+            Int32(dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".o_proj.out", stages.o_proj, m * dm
     )
@@ -3668,21 +4384,47 @@ def llama_mlp_forward(
     # only under -D MOJOLEARN_STEP_PHASE_TIMERS=1; on any other build the
     # clock stores three fields and every method returns at once.
     var pc = StepPhaseClock(ctx)
+    # lane/block-options, the MLP axis (the oracle's S20 section has the
+    # same table): DEVIATION 2939 gelu, 2943 gelu_tanh (ungated,
+    # `down(act(up(x)))`, no gate GEMM, `gate_proj.out` and `mlp.gated`
+    # recorded EMPTY so the card keeps its thirty tags), 2944 geglu and
+    # geglu_tanh (gated, GELU in S20's place), 2945 mlp_bias (one plain add
+    # after gate, up and down). The default record is the code that was
+    # here before, launch for launch.
+    var opts = w.opts.copy()
+    var gated = opts.gated()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
-    stages.gemm_workspace.run[False](
-        ctx,
-        stages.gate_proj,
-        stages.norm2_out,
-        w.w_gate,
-        m,
-        it,
-        dm,
-        _gemm_op_nt(),
-    )
-    trace.record_device[DType.float32](
-        ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
-    )
+    if gated:
+        stages.gemm_workspace.run[False](
+            ctx,
+            stages.gate_proj,
+            stages.norm2_out,
+            w.w_gate,
+            m,
+            it,
+            dm,
+            _gemm_op_nt(),
+        )
+        if opts.mlp_bias:
+            step_count_launch()
+            ctx.enqueue_function[add_bias_kernel](
+                stages.gate_proj.unsafe_ptr(),
+                w.b_gate.unsafe_ptr(),
+                Int32(m * it),
+                Int32(it),
+                grid_dim=(_grid(m * it), 1, 1),
+                block_dim=(LLAMA_TPB, 1, 1),
+            )
+        trace.record_device[DType.float32](
+            ctx, prefix + ".gate_proj.out", stages.gate_proj, m * it
+        )
+    else:
+        # EMPTY stage, recorded as the oracle records it (a zero-count
+        # host record; a zero-length device sub-buffer is not a thing to
+        # ask a backend for).
+        var no_gate = List[Float32]()
+        trace.record_list_f32(prefix + ".gate_proj.out", no_gate)
     pc.tick(ctx, "fwd.gate_proj", "gateup_fwd")
     stages.gemm_workspace.run[False](
         ctx,
@@ -3694,20 +4436,53 @@ def llama_mlp_forward(
         dm,
         _gemm_op_nt(),
     )
+    if opts.mlp_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.up_proj.unsafe_ptr(),
+            w.b_up.unsafe_ptr(),
+            Int32(m * it),
+            Int32(it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".up_proj.out", stages.up_proj, m * it
     )
     pc.tick(ctx, "fwd.up_proj", "gateup_fwd")
 
-    # ---- act_fn (:175). S20.
-    step_count_launch()
-    ctx.enqueue_function[silu_kernel](
-        stages.silu_out.unsafe_ptr(),
-        stages.gate_proj.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
+    #      otherwise, over the gate projection (gated) or the up
+    #      projection (ungated).
+    if opts.act_is_silu():
+        step_count_launch()
+        ctx.enqueue_function[silu_kernel](
+            stages.silu_out.unsafe_ptr(),
+            stages.gate_proj.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    elif gated:
+        step_count_launch()
+        ctx.enqueue_function[gelu_kernel](
+            stages.silu_out.unsafe_ptr(),
+            stages.gate_proj.unsafe_ptr(),
+            Int32(m * it),
+            Int32(1 if opts.act_is_gelu_tanh() else 0),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        step_count_launch()
+        ctx.enqueue_function[gelu_kernel](
+            stages.silu_out.unsafe_ptr(),
+            stages.up_proj.unsafe_ptr(),
+            Int32(m * it),
+            Int32(1 if opts.act_is_gelu_tanh() else 0),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3718,24 +4493,28 @@ def llama_mlp_forward(
     )
     pc.tick(ctx, "fwd.silu")
 
-    # ---- the gate product (:175). S21.
-    step_count_launch()
-    ctx.enqueue_function[mlp_gated_kernel](
-        stages.gated.unsafe_ptr(),
-        stages.silu_out.unsafe_ptr(),
-        stages.up_proj.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
-    # statement is a trace record. `IdentityTrace.record_device` returns
-    # at once when tracing is off; when it is on it enqueues its OWN copy
-    # behind this kernel on the same in-order context and drains AFTER
-    # it. This wait ordered nothing in either branch.
-    trace.record_device[DType.float32](
-        ctx, prefix + ".mlp.gated", stages.gated, m * it
-    )
+    # ---- the gate product (:175). S21. Absent under an ungated MLP.
+    if gated:
+        step_count_launch()
+        ctx.enqueue_function[mlp_gated_kernel](
+            stages.gated.unsafe_ptr(),
+            stages.silu_out.unsafe_ptr(),
+            stages.up_proj.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+        # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
+        # statement is a trace record. `IdentityTrace.record_device` returns
+        # at once when tracing is off; when it is on it enqueues its OWN copy
+        # behind this kernel on the same in-order context and drains AFTER
+        # it. This wait ordered nothing in either branch.
+        trace.record_device[DType.float32](
+            ctx, prefix + ".mlp.gated", stages.gated, m * it
+        )
+    else:
+        var no_gated = List[Float32]()
+        trace.record_list_f32(prefix + ".mlp.gated", no_gated)
     pc.tick(ctx, "fwd.gate_mul")
 
     # ---- down_proj (:175). C[M, dm] = gated[M, it] . w_down[dm, it]^T,
@@ -3745,16 +4524,39 @@ def llama_mlp_forward(
     #      profile; at `intermediate_size = 300` this one has `P = 3` with a
     #      ragged 44-element last leaf and one carry (contract section 3).
     #      Without that fixture the tree sits unexercised inside the block.
-    stages.gemm_workspace.run[False](
-        ctx,
-        stages.down_proj,
-        stages.gated,
-        w.w_down,
-        m,
-        dm,
-        it,
-        _gemm_op_nt(),
-    )
+    #      An ungated MLP feeds the activation itself.
+    if gated:
+        stages.gemm_workspace.run[False](
+            ctx,
+            stages.down_proj,
+            stages.gated,
+            w.w_down,
+            m,
+            dm,
+            it,
+            _gemm_op_nt(),
+        )
+    else:
+        stages.gemm_workspace.run[False](
+            ctx,
+            stages.down_proj,
+            stages.silu_out,
+            w.w_down,
+            m,
+            dm,
+            it,
+            _gemm_op_nt(),
+        )
+    if opts.mlp_bias:
+        step_count_launch()
+        ctx.enqueue_function[add_bias_kernel](
+            stages.down_proj.unsafe_ptr(),
+            w.b_down.unsafe_ptr(),
+            Int32(m * dm),
+            Int32(dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     trace.record_device[DType.float32](
         ctx, prefix + ".down_proj.out", stages.down_proj, m * dm
     )
@@ -3904,18 +4706,22 @@ def llama_decoder_layer_forward_planted(
             + " is past the rotary table's p_max "
             + String(rope.p_max)
         )
-    if pos0 + l > MAX_ABS_POSITION:
+    # DEVIATION 2933 (lane/block-options): the model's declared ceiling;
+    # the rotary reduction's ANGLE domain was enforced when the table was
+    # built, which is the only place it can be.
+    if pos0 + l > w.opts.max_positions:
         raise Error(
             String("llama_decoder_layer_forward: absolute position ")
             + String(pos0 + l - 1)
-            + " reaches the Cody-Waite ceiling "
-            + String(MAX_ABS_POSITION)
-            + " (contract section 3, DEVIATION 812)"
+            + " reaches the model's max_positions ceiling "
+            + String(w.opts.max_positions)
+            + " (DEVIATION 2933; contract section 3's DEVIATION 812 at the"
+            + " default)"
         )
-    if rope.half != dims.half():
+    if rope.rope_dim != w.opts.rope_dim_of(dims.head_dim) or rope.half != rope.rope_dim // 2:
         raise Error(
             "llama_decoder_layer_forward: the rotary table was built for a"
-            " different head_dim"
+            " different head_dim or rope_dim"
         )
 
     # Contract section 8, before ANY recorded stage.
@@ -3933,15 +4739,21 @@ def llama_decoder_layer_forward_planted(
     #      again at S22 and nothing writes it.
     # ---- self.input_layernorm(...) (:306) == LlamaRMSNorm.forward
     #      (:62-67). S1-S4.
-    llama_rms_norm(
+    # lane/block-options: `llama_norm` is `llama_rms_norm` (this launch,
+    # unchanged) at the default record and the variant kernel otherwise
+    # (DEVIATIONS 2936-2938).
+    llama_norm(
         ctx,
         stages.norm1_sumsq,
         stages.norm1_out,
         x,
         w.norm1_w,
+        w.norm1_b,
         m,
         dm,
         w.eps,
+        w.opts.norm_kind,
+        w.opts.norm_bias,
     )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
@@ -4001,15 +4813,18 @@ def llama_decoder_layer_forward_planted(
     # ---- residual = hidden_states (:320), then
     #      self.post_attention_layernorm(...) (:321). S1-S4 again, the SAME
     #      kernel with the SAME eps and a different weight.
-    llama_rms_norm(
+    llama_norm(
         ctx,
         stages.norm2_sumsq,
         stages.norm2_out,
         stages.residual1,
         w.norm2_w,
+        w.norm2_b,
         m,
         dm,
         w.eps,
+        w.opts.norm_kind,
+        w.opts.norm_bias,
     )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns

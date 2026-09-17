@@ -172,6 +172,128 @@ from transformer.checks.transformer_backward import (
     LlamaBackwardStages,
     llama_decoder_layer_backward,
 )
+# lane/block-options (2026-09-17): the block options record and the two
+# tails. `transformer/block_options.mojo` is the order's authority; the
+# docstrings below repeat it word for word because a binding docstring is
+# what the Python side is written against.
+from transformer.block_options import (
+    BLOCK_OPTION_ADDRS,
+    BLOCK_OPTION_PARAMS,
+    BlockOptions,
+)
+from transformer.impl.llama.modeling_llama import _zeros as _llama_zeros
+
+
+# ===========================================================================
+# THE TWO OPTION TAILS (lane/block-options, 2026-09-17).
+#
+# Every forward entry point below accepts its OLD address and params lists
+# (every option at its default, the code path that existed before this
+# lane) OR the old lists with these tails appended, and refuses any other
+# length by name. The Python side sends the tails only for a non-default
+# record, so a default block reaches the old lengths exactly.
+#
+#   params tail, 17 ints, appended after the entry's own scalars:
+#     +0  rope_theta_bits            Float32 bits of the RoPE base
+#     +1  rope_scaling               0 none, 1 linear, 2 llama3
+#     +2  rope_factor_bits           Float32 bits
+#     +3  rope_low_freq_factor_bits  Float32 bits (llama3)
+#     +4  rope_high_freq_factor_bits Float32 bits (llama3)
+#     +5  rope_original_max_positions  int (llama3)
+#     +6  rope_dim                   int, 0 = head_dim
+#     +7  max_positions              int, the declared ceiling (8192 default)
+#     +8  qkv_bias                   0 / 1
+#     +9  o_bias                     0 / 1
+#     +10 norm_kind                  0 rmsnorm, 1 layernorm, 2 rmsnorm_offset
+#     +11 norm_eps_bits              Float32 bits
+#     +12 norm_bias                  0 / 1
+#     +13 mlp_kind                   0 swiglu, 1 gelu, 2 gelu_tanh, 3 geglu, 4 geglu_tanh
+#     +14 mlp_bias                   0 / 1
+#     +15 qk_norm                    0 / 1
+#     +16 attn_softcap_bits          Float32 bits, 0 = none
+#
+#   addrs tail, 11 addresses (0 = absent), appended after the entry's own:
+#     +0  q_proj.bias                +1 k_proj.bias        +2 v_proj.bias
+#     +3  o_proj.bias                +4 input_layernorm.bias
+#     +5  post_attention_layernorm.bias                    +6 up_proj.bias
+#     +7  down_proj.bias             +8 gate_proj.bias
+#     +9  q_norm.weight              +10 k_norm.weight
+#
+# With an ungated MLP (mlp_kind 1 or 2) the base list's gate_proj.weight
+# slot carries 0. A present tensor whose flag is off, an absent one whose
+# flag is on, and every unsupported combination are refused BY NAME in
+# `LlamaDeviceWeights`' options constructor and `BlockOptions.validate`.
+# ===========================================================================
+
+
+def _read_params(params: PythonObject, base: Int, what: String) raises -> List[Int]:
+    """The entry's scalars, `base` of them or `base + BLOCK_OPTION_PARAMS`."""
+    var n = len(params)
+    if n != base and n != base + BLOCK_OPTION_PARAMS:
+        raise Error(
+            what
+            + ": params must contain "
+            + String(base)
+            + " values, or "
+            + String(base)
+            + " + "
+            + String(BLOCK_OPTION_PARAMS)
+            + " with the block options tail, got "
+            + String(n)
+        )
+    var p = List[Int]()
+    for i in range(n):
+        p.append(Int(py=params[i]))
+    return p^
+
+
+def _read_addrs_tail(
+    addrs: PythonObject, base: Int, what: String
+) raises -> List[Int]:
+    """The entry's addresses, `base` or `base + BLOCK_OPTION_ADDRS` of them,
+    returned as exactly `base + BLOCK_OPTION_ADDRS` (zeros where the tail
+    was not sent). Null checks are the CALLER's, per slot, because the
+    gate slot may legitimately be 0 under an ungated MLP."""
+    var n = len(addrs)
+    if n != base and n != base + BLOCK_OPTION_ADDRS:
+        raise Error(
+            what
+            + ": addrs must contain "
+            + String(base)
+            + " addresses, or "
+            + String(base)
+            + " + "
+            + String(BLOCK_OPTION_ADDRS)
+            + " with the block options tail, got "
+            + String(n)
+        )
+    var a = List[Int]()
+    for i in range(n):
+        a.append(Int(py=addrs[i]))
+    while len(a) < base + BLOCK_OPTION_ADDRS:
+        a.append(0)
+    return a^
+
+
+def _optional_upload(
+    ctx: DeviceContext, addr: Int, n: Int, on: Bool, name: String, what: String,
+) raises -> DeviceBuffer[DType.float32]:
+    """One optional tensor: uploaded at its length when its flag is on,
+    a one-element placeholder otherwise; a presence/flag mismatch is refused
+    by the tensor's name HERE, before any device work."""
+    if on:
+        if addr == 0:
+            raise Error(
+                what + ": " + name + " is required by its option and its"
+                " address is null"
+            )
+        return _upload_addr(ctx, addr, n)
+    if addr != 0:
+        raise Error(
+            what + ": " + name + " was passed but its option is off; pass"
+            " the option or drop the tensor"
+        )
+    return _llama_zeros[False](ctx, 1)
 
 
 def _f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -295,41 +417,141 @@ def transformer_lean_stages(hd: Int) -> Bool:
 
 def _load_transformer_weights(
     ctx: DeviceContext, dims: LlamaDims, a: List[Int],
+    opts: BlockOptions = BlockOptions(), tail: List[Int] = List[Int](),
 ) raises -> LlamaDeviceWeights:
     """One-call uploads; IDENTICAL skips intermediate host weight Lists.
     Mutable caller arrays are reread and refused on every call as before.
+
+    lane/block-options: `opts` and `tail` (the eleven optional addresses,
+    zeros where absent) select the options constructor. At the DEFAULT
+    record with an all-zero tail this is the code that was here before,
+    upload for upload, so a default block's weights take the old path.
     """
     var dm = dims.d_model
     var qw = dims.q_width()
     var kw = dims.kv_width()
     var it = dims.intermediate
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
-        return LlamaDeviceWeights(
-            ctx, dims, RMS_EPS,
-            _upload_addr(ctx, a[1], dm),
-            _upload_addr(ctx, a[2], dm),
-            _upload_addr(ctx, a[3], qw * dm),
-            _upload_addr(ctx, a[4], kw * dm),
-            _upload_addr(ctx, a[5], kw * dm),
-            _upload_addr(ctx, a[6], dm * qw),
-            _upload_addr(ctx, a[7], it * dm),
-            _upload_addr(ctx, a[8], it * dm),
-            _upload_addr(ctx, a[9], dm * it),
-        )
+    var hd = dims.head_dim
+    var extended = not opts.is_default()
+    for i in range(len(tail)):
+        if tail[i] != 0:
+            extended = True
+    if not extended:
+        if a[7] == 0:
+            raise Error(
+                "transformer: gate_proj.weight address is null (the default"
+                " options carry a gated MLP)"
+            )
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
+            return LlamaDeviceWeights(
+                ctx, dims, RMS_EPS,
+                _upload_addr(ctx, a[1], dm),
+                _upload_addr(ctx, a[2], dm),
+                _upload_addr(ctx, a[3], qw * dm),
+                _upload_addr(ctx, a[4], kw * dm),
+                _upload_addr(ctx, a[5], kw * dm),
+                _upload_addr(ctx, a[6], dm * qw),
+                _upload_addr(ctx, a[7], it * dm),
+                _upload_addr(ctx, a[8], it * dm),
+                _upload_addr(ctx, a[9], dm * it),
+            )
+        else:
+            return LlamaDeviceWeights(
+                ctx, dims, RMS_EPS,
+                _read_f32(a[1], dm),
+                _read_f32(a[2], dm),
+                _read_f32(a[3], qw * dm),
+                _read_f32(a[4], kw * dm),
+                _read_f32(a[5], kw * dm),
+                _read_f32(a[6], dm * qw),
+                _read_f32(a[7], it * dm),
+                _read_f32(a[8], it * dm),
+                _read_f32(a[9], dm * it),
+            )
+    # The options constructor. `opts.validate` fires inside it by name.
+    var what = String("transformer options")
+    var t = tail.copy()
+    while len(t) < BLOCK_OPTION_ADDRS:
+        t.append(0)
+    var w_gate: DeviceBuffer[DType.float32]
+    if opts.gated():
+        if a[7] == 0:
+            raise Error(what + ": gate_proj.weight address is null (a gated MLP needs it)")
+        w_gate = _upload_addr(ctx, a[7], it * dm)
     else:
-        return LlamaDeviceWeights(
-            ctx, dims, RMS_EPS,
-            _read_f32(a[1], dm),
-            _read_f32(a[2], dm),
-            _read_f32(a[3], qw * dm),
-            _read_f32(a[4], kw * dm),
-            _read_f32(a[5], kw * dm),
-            _read_f32(a[6], dm * qw),
-            _read_f32(a[7], it * dm),
-            _read_f32(a[8], it * dm),
-            _read_f32(a[9], dm * it),
-        )
+        if a[7] != 0:
+            raise Error(
+                what + ": gate_proj.weight was passed but the MLP is ungated"
+                " (mlp gelu / gelu_tanh); drop it or pick a gated form"
+            )
+        w_gate = _llama_zeros[False](ctx, 1)
+    return LlamaDeviceWeights(
+        ctx, dims, opts,
+        _upload_addr(ctx, a[1], dm),
+        _upload_addr(ctx, a[2], dm),
+        _upload_addr(ctx, a[3], qw * dm),
+        _upload_addr(ctx, a[4], kw * dm),
+        _upload_addr(ctx, a[5], kw * dm),
+        _upload_addr(ctx, a[6], dm * qw),
+        w_gate^,
+        _upload_addr(ctx, a[8], it * dm),
+        _upload_addr(ctx, a[9], dm * it),
+        _optional_upload(ctx, t[0], qw, opts.qkv_bias, "q_proj.bias", what),
+        _optional_upload(ctx, t[1], kw, opts.qkv_bias, "k_proj.bias", what),
+        _optional_upload(ctx, t[2], kw, opts.qkv_bias, "v_proj.bias", what),
+        _optional_upload(ctx, t[3], dm, opts.o_bias, "o_proj.bias", what),
+        _optional_upload(ctx, t[4], dm, opts.norm_bias, "input_layernorm.bias", what),
+        _optional_upload(ctx, t[5], dm, opts.norm_bias, "post_attention_layernorm.bias", what),
+        _optional_upload(ctx, t[6], it, opts.mlp_bias, "up_proj.bias", what),
+        _optional_upload(ctx, t[7], dm, opts.mlp_bias, "down_proj.bias", what),
+        _optional_upload(ctx, t[8], it, opts.has_gate_bias(), "gate_proj.bias", what),
+        _optional_upload(ctx, t[9], hd, opts.qk_norm, "q_norm.weight", what),
+        _optional_upload(ctx, t[10], hd, opts.qk_norm, "k_norm.weight", what),
+    )
 
+
+def _tail_of(a: List[Int], base: Int) -> List[Int]:
+    """The eleven optional addresses out of a base + tail list (zeros when
+    the list is the base alone)."""
+    var t = List[Int]()
+    for i in range(BLOCK_OPTION_ADDRS):
+        if base + i < len(a):
+            t.append(a[base + i])
+        else:
+            t.append(0)
+    return t^
+
+
+def _check_base_addrs(a: List[Int], slots: List[Int], what: String) raises:
+    """Null refusals for the base slots a caller must fill (the gate slot is
+    checked by `_load_transformer_weights` against the MLP form)."""
+    for i in range(len(slots)):
+        if a[slots[i]] == 0:
+            raise Error(what + ": null buffer address at slot " + String(slots[i]))
+
+
+def _lean_for(hd: Int, opts: BlockOptions) -> Bool:
+    """`transformer_lean_stages`, and never lean under a softcap, which
+    forces the eager kernels (DEVIATION 2947); the eager fallback would
+    grow a lean struct anyway, so this is a cost choice, not a correctness
+    one."""
+    if opts.has_softcap():
+        return False
+    return transformer_lean_stages(hd)
+
+
+def _workspace_key(
+    b: Int, l: Int, dims: LlamaDims, smax: Int, window: Int, lean: Bool,
+    opts: BlockOptions,
+) -> List[Int]:
+    """The retained workspace's identity: the shape, and the whole options
+    record (a different theta or rope_dim is a different rotary table)."""
+    var key: List[Int] = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
+                          dims.head_dim, dims.intermediate, smax, window, Int(lean)]
+    var tail = opts.to_params()
+    for i in range(len(tail)):
+        key.append(tail[i])
+    return key^
 
 
 struct TransformerWorkspace(Movable):
@@ -340,11 +562,13 @@ struct TransformerWorkspace(Movable):
     var x: DeviceBuffer[DType.float32]
 
     def __init__(out self, ctx: DeviceContext, dims: LlamaDims,
-                 b: Int, l: Int, smax: Int, window: Int, lean: Bool) raises:
-        self.key = [b, l, dims.d_model, dims.n_heads, dims.n_kv,
-                    dims.head_dim, dims.intermediate, smax, window, Int(lean)]
-        self.kv = LlamaKVCache(ctx, b, dims, smax, window)
-        self.rope = LlamaRopeTable(ctx, dims, ROPE_THETA, smax)
+                 b: Int, l: Int, smax: Int, window: Int, lean: Bool,
+                 opts: BlockOptions) raises:
+        self.key = _workspace_key(b, l, dims, smax, window, lean, opts)
+        self.kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
+        # The table from the record: DEVIATIONS 2930-2933 and 2948; the
+        # default record is `LlamaRopeTable(ctx, dims, ROPE_THETA, smax)`.
+        self.rope = LlamaRopeTable(ctx, dims, opts, smax)
         self.stages = LlamaDeviceStages(ctx, b, l, smax, dims, window, lean=lean)
         self.x = ctx.enqueue_create_buffer[DType.float32](b * l * dims.d_model)
 
@@ -437,10 +661,11 @@ struct TransformerSession(Movable, Writable):
 def _transformer_run_session(
     mut session: TransformerSession, a: List[Int], b: Int, l: Int,
     dm: Int, nh: Int, nkv: Int, hd: Int, it: Int,
-    smax: Int, s0: Int, window: Int,
+    smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
+    opts.validate(hd)
     if s0 < 0 or s0 > smax:
         raise Error(String("transformer: cached_tokens must be in [0, ")
             + String(smax) + "] (the cache capacity, max_tokens), got "
@@ -453,8 +678,8 @@ def _transformer_run_session(
     ref ctx = session.ctx.value()
     var ton = String(getenv("MOJOLEARN_TRANSFORMER_TIMING")) != ""
     var tk = Int(perf_counter_ns())
-    var lean = transformer_lean_stages(hd)
-    var key: List[Int] = [b, l, dm, nh, nkv, hd, it, smax, window, Int(lean)]
+    var lean = _lean_for(hd, opts)
+    var key = _workspace_key(b, l, dims, smax, window, lean, opts)
     var reused = False
     if session.workspace:
         reused = session.workspace.value().matches(key)
@@ -463,10 +688,10 @@ def _transformer_run_session(
         session.workspace = None
         ctx.synchronize()
     # Always reread and revalidate weights; a Python address is not a version.
-    var w = _load_transformer_weights(ctx, dims, a)
+    var w = _load_transformer_weights(ctx, dims, a, opts, _tail_of(a, 13))
     _btick(ton, tk, "surface.weights_up")
     if not reused:
-        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean)
+        session.workspace = TransformerWorkspace(ctx, dims, b, l, smax, window, lean, opts)
         session.workspaces += 1
     ref ws = session.workspace.value()
     if reused:
@@ -535,19 +760,19 @@ def transformer_session_forward_binding(
     var owner = session.downcast_value_ptr[TransformerSession]()
     if owner[].busy or owner[].closed:
         raise Error("transformer: session is busy or closed")
-    var a = _transformer_addrs(addrs, "transformer_forward")
-    if len(params) != 10:
-        raise Error("transformer_forward: params must contain 10 values")
-    var p = List[Int]()
-    for i in range(10):
-        p.append(Int(py=params[i]))
+    # `transformer_forward`'s lists, with or without the two option tails
+    # (the header of this section); the same contract word for word.
+    var a = _read_addrs_tail(addrs, 13, String("transformer_forward"))
+    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
+    var p = _read_params(params, 10, String("transformer_forward"))
+    var opts = BlockOptions.from_params(p, 10)
     owner[].busy = True
     var result = 0
     try:
         with GILReleased(Python()):
             try:
                 result = _transformer_run_session(owner[], a,
-                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9])
+                    p[0], p[1], p[2], p[3], p[4], p[5], p[6], p[7], p[8], p[9], opts)
             except error:
                 # A failed call must not leave partially written scratch or
                 # queued references for the next caller. Caller arrays are
@@ -573,6 +798,7 @@ def _transformer_run[discard_cache: Bool = False](
     smax: Int,
     s0: Int,
     window: Int,
+    opts: BlockOptions,
 ) raises -> Int:
     """The GIL-free half of the two entry points: everything after the
     `PythonObject`s have been read. Builds the device weights, uploads
@@ -580,6 +806,10 @@ def _transformer_run[discard_cache: Bool = False](
     writes the output and the post-call state back into the caller's
     buffers. Returns the post-call `cached_tokens` (DEVIATION 795(ii):
     the one integer piece of the state).
+
+    `opts` (lane/block-options) is the record decoded from the params
+    tail; `a` is the 13 base addresses plus the 11-address tail (zeros
+    where absent).
 
     `[[mojo-buffer-freed-at-last-use]]`: every device buffer below is
     still alive when `llama_decoder_layer_forward` returns because that
@@ -591,6 +821,7 @@ def _transformer_run[discard_cache: Bool = False](
     # from them, which is why nothing here pre-judges the shape.
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
+    opts.validate(hd)
     if s0 < 0 or s0 > smax:
         raise Error(
             String("transformer: cached_tokens must be in [0, ")
@@ -616,24 +847,26 @@ def _transformer_run[discard_cache: Bool = False](
     # reference shape authority, and its constructor is where the weights
     # are refused non-finite ONCE, DEVIATION 1875); values arrive as
     # given bits, unjudged.
-    var w = _load_transformer_weights(ctx, dims, a)
+    var w = _load_transformer_weights(ctx, dims, a, opts, _tail_of(a, 13))
     # The caller's cache over the fresh zeros. LlamaKVCache's own
-    # constructor refuses b <= 0, smax <= 0 and smax > 8192 (the
-    # absolute-position ceiling, DEVIATION 812) BY NAME before the
-    # uploads below. Zeros in with s0 == 0 IS a fresh sequence; anything
-    # else is a carried one, packed at stride s0 (DEVIATION 795(ii)).
+    # constructor refuses b <= 0, smax <= 0 and smax > max_positions (the
+    # absolute-position ceiling, DEVIATION 812's 8192 at the default
+    # record, DEVIATION 2933) BY NAME before the uploads below. Zeros in
+    # with s0 == 0 IS a fresh sequence; anything else is a carried one,
+    # packed at stride s0 (DEVIATION 795(ii)).
     _btick(ton, tk, "surface.weights_up")
-    var kv = LlamaKVCache(ctx, b, dims, smax, window)
+    var kv = LlamaKVCache(ctx, b, dims, smax, window, opts.max_positions)
     comptime if not discard_cache:
         kv.k = _upload_addr(ctx, a[10], cache_n)
         kv.v = _upload_addr(ctx, a[11], cache_n)
     kv.s = s0
-    # Per call, from the FROZEN theta (DEVIATION 795(iii)). p_max is the
-    # cache capacity: pos0 + l <= kv.s_max <= p_max holds for every legal
-    # call, so the table always covers the absolute positions used.
-    var rope = LlamaRopeTable(ctx, dims, ROPE_THETA, smax)
+    # Per call, from the record (DEVIATION 795(iii) at the default record:
+    # the FROZEN theta). p_max is the cache capacity: pos0 + l <= kv.s_max
+    # <= p_max holds for every legal call, so the table always covers the
+    # absolute positions used.
+    var rope = LlamaRopeTable(ctx, dims, opts, smax)
     var stages = LlamaDeviceStages(
-        ctx, b, l, smax, dims, window, lean=transformer_lean_stages(hd)
+        ctx, b, l, smax, dims, window, lean=_lean_for(hd, opts)
     )
     var dx = _upload_addr(ctx, a[0], b * l * dm)
     _btick(ton, tk, "surface.cache_stages_x_up")
@@ -669,20 +902,21 @@ def _transformer_run[discard_cache: Bool = False](
 
 
 def _transformer_addrs(addrs: PythonObject, what: String) raises -> List[Int]:
-    if len(addrs) != 13:
+    """The thirteen base addresses, or the thirteen plus the eleven-address
+    options tail (this file's tail section), returned as twenty-four with
+    zeros where the tail was not sent."""
+    if len(addrs) != 13 and len(addrs) != 13 + BLOCK_OPTION_ADDRS:
         raise Error(
             what
             + ": addrs must contain 13 addresses (x,"
             " input_layernorm.weight, post_attention_layernorm.weight,"
             " q_proj.weight, k_proj.weight, v_proj.weight, o_proj.weight,"
             " gate_proj.weight, up_proj.weight, down_proj.weight, k_cache,"
-            " v_cache, y_out), got "
+            " v_cache, y_out), optionally followed by the 11-address block"
+            " options tail, got "
             + String(len(addrs))
         )
-    var a = List[Int]()
-    for i in range(13):
-        a.append(Int(py=addrs[i]))
-    return a^
+    return _read_addrs_tail(addrs, 13, what)
 
 
 def transformer_forward_fresh_binding(
@@ -694,34 +928,41 @@ def transformer_forward_fresh_binding(
     n_heads, n_kv_heads, head_dim, intermediate, window. Capacity remains
     L (or a window-sized ring), exactly as Python allocate_state(B, L).
     The zero sentinel cache pointers never reach a transfer in this arm.
+
+    lane/block-options: or 11 + 11 pointers and 8 + 17 scalars, the two
+    option tails appended (this file's tail section, word for word). The
+    gate_proj.weight pointer (slot 7) is 0 under an ungated MLP.
     """
-    if len(addrs) != 11 or len(params) != 8:
-        raise Error("transformer_forward_fresh: expected 11 addresses and 8 scalars")
+    var what = String("transformer_forward_fresh")
+    var raw = _read_addrs_tail(addrs, 11, what)
+    var p = _read_params(params, 8, what)
+    var opts = BlockOptions.from_params(p, 8)
+    # Into `transformer_forward`'s 13 + 11 layout: x, nine weights, the
+    # two absent cache slots, y, then the tail.
     var a = List[Int]()
     for i in range(10):
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer_forward_fresh: null buffer address at slot " + String(i))
-        a.append(address)
+        a.append(raw[i])
     a.append(0)
     a.append(0)
-    var y = Int(py=addrs[10])
-    if y == 0:
+    a.append(raw[10])
+    for i in range(BLOCK_OPTION_ADDRS):
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9], what)
+    if a[12] == 0:
         raise Error("transformer_forward_fresh: null output address")
-    a.append(y)
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    var nh = Int(py=params[3])
-    var nkv = Int(py=params[4])
-    var hd = Int(py=params[5])
-    var it = Int(py=params[6])
-    var window = Int(py=params[7])
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var nh = p[3]
+    var nkv = p[4]
+    var hd = p[5]
+    var it = p[6]
+    var window = p[7]
     if b <= 0 or l <= 0:
         raise Error("transformer_forward_fresh: B and L must be positive")
     var out_len = 0
     with GILReleased(Python()):
-        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window)
+        out_len = _transformer_run[True](a, b, l, dm, nh, nkv, hd, it, l, 0, window, opts)
     return PythonObject(out_len)
 
 
@@ -789,27 +1030,31 @@ def transformer_forward_binding(
     parameters: changing one is a v2 profile, not a knob. There is no
     bias address and no dropout: the profile REFUSES both by absence."""
     var a = _transformer_addrs(addrs, String("transformer_forward"))
-    if len(params) != 10:
+    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_forward"))
+    if len(params) != 10 and len(params) != 10 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_forward: params must contain 10 values (B, L,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens, window), got "
+            " max_tokens, cached_tokens, window), optionally followed by"
+            " the 17-value block options tail, got "
             + String(len(params))
         )
-    var b = Int(py=params[0])
-    var l = Int(py=params[1])
-    var dm = Int(py=params[2])
-    var nh = Int(py=params[3])
-    var nkv = Int(py=params[4])
-    var hd = Int(py=params[5])
-    var it = Int(py=params[6])
-    var smax = Int(py=params[7])
-    var s0 = Int(py=params[8])
-    var window = Int(py=params[9])
+    var p = _read_params(params, 10, String("transformer_forward"))
+    var opts = BlockOptions.from_params(p, 10)
+    var b = p[0]
+    var l = p[1]
+    var dm = p[2]
+    var nh = p[3]
+    var nkv = p[4]
+    var hd = p[5]
+    var it = p[6]
+    var smax = p[7]
+    var s0 = p[8]
+    var window = p[9]
     var out_len = 0
     with GILReleased(Python()):
         out_len = _transformer_run(
-            a, b, l, dm, nh, nkv, hd, it, smax, s0, window
+            a, b, l, dm, nh, nkv, hd, it, smax, s0, window, opts
         )
     return PythonObject(out_len)
 
@@ -830,26 +1075,30 @@ def transformer_decode_step_binding(
     2 n_heads, 3 n_kv_heads, 4 head_dim, 5 intermediate, 6 max_tokens,
     7 cached_tokens, 8 window. Returns the post-call cached_tokens."""
     var a = _transformer_addrs(addrs, String("transformer_decode_step"))
-    if len(params) != 9:
+    _check_base_addrs(a, [0, 1, 2, 3, 4, 5, 6, 8, 9, 10, 11, 12], String("transformer_decode_step"))
+    if len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS:
         raise Error(
             "transformer_decode_step: params must contain 9 values (B,"
             " d_model, n_heads, n_kv_heads, head_dim, intermediate,"
-            " max_tokens, cached_tokens, window), got "
+            " max_tokens, cached_tokens, window), optionally followed by"
+            " the 17-value block options tail, got "
             + String(len(params))
         )
-    var b = Int(py=params[0])
-    var dm = Int(py=params[1])
-    var nh = Int(py=params[2])
-    var nkv = Int(py=params[3])
-    var hd = Int(py=params[4])
-    var it = Int(py=params[5])
-    var smax = Int(py=params[6])
-    var s0 = Int(py=params[7])
-    var window = Int(py=params[8])
+    var p = _read_params(params, 9, String("transformer_decode_step"))
+    var opts = BlockOptions.from_params(p, 9)
+    var b = p[0]
+    var dm = p[1]
+    var nh = p[2]
+    var nkv = p[3]
+    var hd = p[4]
+    var it = p[5]
+    var smax = p[6]
+    var s0 = p[7]
+    var window = p[8]
     var out_len = 0
     with GILReleased(Python()):
         out_len = _transformer_run(
-            a, b, 1, dm, nh, nkv, hd, it, smax, s0, window
+            a, b, 1, dm, nh, nkv, hd, it, smax, s0, window, opts
         )
     return PythonObject(out_len)
 
@@ -973,13 +1222,15 @@ def _require_session_open(s: TransformerDecodeSession) raises:
 
 def _session_open_run(
     mut s: TransformerDecodeSession, a: List[Int], b: Int, dm: Int, nh: Int, nkv: Int,
-    hd: Int, it: Int, smax: Int, s0: Int, window: Int,
+    hd: Int, it: Int, smax: Int, s0: Int, window: Int, opts: BlockOptions,
 ) raises -> Int:
     """The GIL-free half of `transformer_decode_session_open`: one context, the nine
     weight uploads, the cache uploads over fresh zeros, the rotary table at
-    `smax`, the L = 1 stages and the resident x buffer."""
+    `smax`, the L = 1 stages and the resident x buffer. `a` is the
+    `transformer_forward` 13 + 11 layout with slots 0 and 12 unused."""
     var dims = LlamaDims(dm, nh, nkv, hd, it)
     dims.validate()
+    opts.validate(hd)
     if s0 < 0 or s0 > smax:
         raise Error(
             String("transformer decode session: cached_tokens must be in [0, ") + String(smax)
@@ -991,14 +1242,14 @@ def _session_open_run(
         cap = window
     var cache_n = b * nkv * cap * hd
     s.ctx = DeviceContext()
-    s.w = _load_transformer_weights(s.ctx.value(), dims, a)
-    var kv = LlamaKVCache(s.ctx.value(), b, dims, smax, window)
+    s.w = _load_transformer_weights(s.ctx.value(), dims, a, opts, _tail_of(a, 13))
+    var kv = LlamaKVCache(s.ctx.value(), b, dims, smax, window, opts.max_positions)
     kv.k = _upload_addr(s.ctx.value(), a[10], cache_n)
     kv.v = _upload_addr(s.ctx.value(), a[11], cache_n)
     kv.s = s0
     s.kv = kv^
-    s.rope = LlamaRopeTable(s.ctx.value(), dims, ROPE_THETA, smax)
-    s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=transformer_lean_stages(hd))
+    s.rope = LlamaRopeTable(s.ctx.value(), dims, opts, smax)
+    s.stages = LlamaDeviceStages(s.ctx.value(), b, 1, smax, dims, window, lean=_lean_for(hd, opts))
     s.dx = s.ctx.value().enqueue_create_buffer[DType.float32](b * dm)
     s.ctx.value().synchronize()
     s.b = b
@@ -1038,7 +1289,7 @@ def _session_forward_run(mut s: TransformerDecodeSession, px: Int, py: Int, l: I
     ref ctx = s.ctx.value()
     var dims = LlamaDims(s.dm, s.nh, s.nkv, s.hd, s.it)
     var n = s.b * l * s.dm
-    var stages = LlamaDeviceStages(ctx, s.b, l, s.smax, dims, s.window, lean=transformer_lean_stages(s.hd))
+    var stages = LlamaDeviceStages(ctx, s.b, l, s.smax, dims, s.window, lean=_lean_for(s.hd, s.w.value().opts))
     var dx = _upload_addr(ctx, px, n)
     var trace = IdentityTrace.disabled()
     var pos0 = s.kv.value().s
@@ -1094,28 +1345,40 @@ def transformer_decode_session_open_binding(
     later edits to the caller's arrays are not observed. Returns
     cached_tokens. Refused on an open session."""
     var owner = session.downcast_value_ptr[TransformerDecodeSession]()
-    if len(addrs) != 11 or len(params) != 9:
-        raise Error("transformer_decode_session_open: expected 11 addresses and 9 scalars")
+    var what = String("transformer_decode_session_open")
+    if (len(addrs) != 11 and len(addrs) != 11 + BLOCK_OPTION_ADDRS) or (
+        len(params) != 9 and len(params) != 9 + BLOCK_OPTION_PARAMS
+    ):
+        raise Error(
+            "transformer_decode_session_open: expected 11 addresses and 9"
+            " scalars, each optionally followed by its block options tail"
+        )
     if owner[].busy:
         raise Error("transformer decode session: busy")
     if owner[].is_open():
         raise Error("transformer decode session: already open; close it first")
+    # lane/block-options: into `transformer_forward`'s 13 + 11 layout;
+    # slot 0 (x) and slot 12 (y) are not part of an open.
+    var raw = _read_addrs_tail(addrs, 11, what)
     var a = List[Int]()
-    a.append(0)  # slot 0 (x) is not part of an open
+    a.append(0)
     for i in range(11):
-        var address = Int(py=addrs[i])
-        if address == 0:
-            raise Error("transformer_decode_session_open: null buffer address at slot " + String(i))
-        a.append(address)
-    var b = Int(py=params[0])
-    var dm = Int(py=params[1])
-    var nh = Int(py=params[2])
-    var nkv = Int(py=params[3])
-    var hd = Int(py=params[4])
-    var it = Int(py=params[5])
-    var smax = Int(py=params[6])
-    var s0 = Int(py=params[7])
-    var window = Int(py=params[8])
+        a.append(raw[i])
+    a.append(0)
+    for i in range(BLOCK_OPTION_ADDRS):
+        a.append(raw[11 + i])
+    _check_base_addrs(a, [1, 2, 3, 4, 5, 6, 8, 9, 10, 11], what)
+    var p = _read_params(params, 9, what)
+    var opts = BlockOptions.from_params(p, 9)
+    var b = p[0]
+    var dm = p[1]
+    var nh = p[2]
+    var nkv = p[3]
+    var hd = p[4]
+    var it = p[5]
+    var smax = p[6]
+    var s0 = p[7]
+    var window = p[8]
     if b <= 0:
         raise Error("transformer_decode_session_open: B must be positive")
     owner[].busy = True
@@ -1123,7 +1386,7 @@ def transformer_decode_session_open_binding(
     var out_len = 0
     try:
         with GILReleased(Python()):
-            out_len = _session_open_run(owner[], a, b, dm, nh, nkv, hd, it, smax, s0, window)
+            out_len = _session_open_run(owner[], a, b, dm, nh, nkv, hd, it, smax, s0, window, opts)
     except error:
         owner[].busy = False
         owner[].release()

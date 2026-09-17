@@ -119,7 +119,9 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
+import math
 import os
+import struct
 import threading
 
 from . import _buffer as _buffers, _bufcheck as _checks
@@ -143,6 +145,196 @@ _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
 #: domain of _cephes_sincosf_core). NOT a parameter -- documented here,
 #: REFUSED BY NAME in Mojo (LlamaKVCache), where the authority stays.
 _MAX_ABS_POSITION = 8192
+
+# lane/block-options (2026-09-17): the block options record, mirrored from
+# `transformer/block_options.mojo` (the order's authority) and from the
+# bindings' tail sections, word for word. A default block sends NEITHER
+# tail and reaches the old lists and the old code path; a non-default block
+# appends both.
+#
+#   params tail, 17 ints (floats as IEEE-754 float32 bit patterns):
+#     +0  rope_theta_bits  +1 rope_scaling (0 none, 1 linear, 2 llama3)
+#     +2  rope_factor_bits +3 rope_low_freq_factor_bits
+#     +4  rope_high_freq_factor_bits  +5 rope_original_max_positions
+#     +6  rope_dim (0 = head_dim)     +7 max_positions
+#     +8  qkv_bias         +9 o_bias
+#     +10 norm_kind (0 rmsnorm, 1 layernorm, 2 rmsnorm_offset)
+#     +11 norm_eps_bits    +12 norm_bias
+#     +13 mlp_kind (0 swiglu, 1 gelu, 2 gelu_tanh, 3 geglu, 4 geglu_tanh)
+#     +14 mlp_bias         +15 qk_norm      +16 attn_softcap_bits (0 = none)
+#   addrs tail, 11 addresses (0 = absent), the names in `_OPT_NAMES` order.
+_OPT_NAMES = (
+    "q_proj.bias", "k_proj.bias", "v_proj.bias", "o_proj.bias",
+    "input_layernorm.bias", "post_attention_layernorm.bias",
+    "up_proj.bias", "down_proj.bias", "gate_proj.bias",
+    "q_norm.weight", "k_norm.weight",
+)
+_NORM_KINDS = {"rmsnorm": 0, "layernorm": 1, "rmsnorm_offset": 2}
+_MLP_KINDS = {"swiglu": 0, "gelu": 1, "gelu_tanh": 2, "geglu": 3, "geglu_tanh": 4}
+_GATED_MLPS = ("swiglu", "geglu", "geglu_tanh")
+_ROPE_SCALINGS = {"linear": 1, "llama3": 2}
+_ROPE_THETA_BITS = 0x461C4000  # 10000.0, contract section 3
+_NORM_EPS_BITS = 0x358637BD  # 1e-6, LlamaConfig.rms_norm_eps: TODAY's eps
+_DEFAULT_TAIL_LEN = 17
+
+
+def _f32_bits(value, what, name, positive=True):
+    """`value` rounded to float32 and returned as its bit pattern (the
+    params spelling), refusing a non-finite or, when `positive`, a
+    non-positive value BY NAME with the value in the message."""
+    try:
+        f = float(value)
+    except (TypeError, ValueError):
+        raise TypeError(
+            f"mojolearn {what}: {name} must be a float, got {value!r}"
+        ) from None
+    if not math.isfinite(f) or (positive and f <= 0.0):
+        raise ValueError(
+            f"mojolearn {what}: {name} must be a finite"
+            + (" positive" if positive else "")
+            + f" float, got {value!r}"
+        )
+    return struct.unpack("<I", struct.pack("<f", f))[0]
+
+
+def _block_options(what, head_dim, rope_theta, rope_scaling, rope_dim,
+                   max_positions, qkv_bias, o_bias, norm, norm_eps,
+                   norm_bias, mlp, mlp_bias, qk_norm, attn_softcap):
+    """The constructor's option keywords as (tail, flags): the 17-int
+    params tail in the order above, and the flags the weight-dict check
+    reads. Every unsupported value or combination is refused here BY
+    NAME with the exact value; Mojo repeats the same refusals
+    (`BlockOptions.validate`) for raw-binding callers."""
+    tail = [0] * _DEFAULT_TAIL_LEN
+    tail[0] = _f32_bits(rope_theta, what, "rope_theta")
+    if rope_scaling is None:
+        tail[1] = 0
+        tail[2] = _f32_bits(1.0, what, "rope_factor")
+        tail[3] = _f32_bits(1.0, what, "low_freq_factor")
+        tail[4] = _f32_bits(4.0, what, "high_freq_factor")
+        tail[5] = _MAX_ABS_POSITION
+    else:
+        if not hasattr(rope_scaling, "get"):
+            raise TypeError(
+                f"mojolearn {what}: rope_scaling must be None or a dict with "
+                f"a 'type' key ('linear' or 'llama3'), got {rope_scaling!r}"
+            )
+        kind = rope_scaling.get("type", rope_scaling.get("rope_type"))
+        if kind not in _ROPE_SCALINGS:
+            raise ValueError(
+                f"mojolearn {what}: rope_scaling type {kind!r} is not "
+                "supported; 'linear' and 'llama3' are (dynamic, yarn and "
+                "longrope carry an attention_factor this profile does not "
+                "spell)"
+            )
+        tail[1] = _ROPE_SCALINGS[kind]
+        if "factor" not in rope_scaling:
+            raise ValueError(
+                f"mojolearn {what}: rope_scaling {kind!r} needs 'factor'"
+            )
+        tail[2] = _f32_bits(rope_scaling["factor"], what, "rope_scaling factor")
+        if kind == "llama3":
+            for key in ("low_freq_factor", "high_freq_factor",
+                        "original_max_position_embeddings"):
+                if key not in rope_scaling:
+                    raise ValueError(
+                        f"mojolearn {what}: rope_scaling 'llama3' needs "
+                        f"{key!r}"
+                    )
+            lo = float(rope_scaling["low_freq_factor"])
+            hi = float(rope_scaling["high_freq_factor"])
+            tail[3] = _f32_bits(lo, what, "rope_scaling low_freq_factor")
+            tail[4] = _f32_bits(hi, what, "rope_scaling high_freq_factor")
+            if hi <= lo:
+                raise ValueError(
+                    f"mojolearn {what}: rope_scaling 'llama3' needs "
+                    f"high_freq_factor > low_freq_factor, got {hi!r} <= {lo!r}"
+                )
+            old = int(rope_scaling["original_max_position_embeddings"])
+            if old <= 0:
+                raise ValueError(
+                    f"mojolearn {what}: rope_scaling 'llama3' "
+                    "original_max_position_embeddings must be positive, "
+                    f"got {old!r}"
+                )
+            tail[5] = old
+        else:
+            tail[3] = _f32_bits(1.0, what, "low_freq_factor")
+            tail[4] = _f32_bits(4.0, what, "high_freq_factor")
+            tail[5] = _MAX_ABS_POSITION
+    if rope_dim is None:
+        tail[6] = 0
+    else:
+        rd = int(rope_dim)
+        if rd <= 0 or rd > head_dim or rd % 2 != 0:
+            raise ValueError(
+                f"mojolearn {what}: rope_dim must be an even integer in "
+                f"(0, head_dim={head_dim}], got {rope_dim!r}"
+            )
+        tail[6] = 0 if rd == head_dim else rd
+    mp = int(max_positions)
+    if mp <= 0:
+        raise ValueError(
+            f"mojolearn {what}: max_positions must be positive, got "
+            f"{max_positions!r}"
+        )
+    tail[7] = mp
+    tail[8] = 1 if qkv_bias else 0
+    tail[9] = 1 if o_bias else 0
+    if norm not in _NORM_KINDS:
+        raise ValueError(
+            f"mojolearn {what}: norm={norm!r} is not supported; one of "
+            f"{sorted(_NORM_KINDS)}"
+        )
+    tail[10] = _NORM_KINDS[norm]
+    tail[11] = _f32_bits(norm_eps, what, "norm_eps")
+    if norm_bias and norm != "layernorm":
+        raise ValueError(
+            f"mojolearn {what}: norm_bias=True needs norm='layernorm', got "
+            f"norm={norm!r} (an RMSNorm carries no bias)"
+        )
+    tail[12] = 1 if norm_bias else 0
+    if mlp not in _MLP_KINDS:
+        raise ValueError(
+            f"mojolearn {what}: mlp={mlp!r} is not supported; one of "
+            f"{sorted(_MLP_KINDS)}"
+        )
+    tail[13] = _MLP_KINDS[mlp]
+    tail[14] = 1 if mlp_bias else 0
+    if qk_norm and norm == "layernorm":
+        raise ValueError(
+            f"mojolearn {what}: qk_norm=True with norm='layernorm' is not "
+            "supported (no reference family normalizes q and k with "
+            "LayerNorm; use norm='rmsnorm' or 'rmsnorm_offset')"
+        )
+    tail[15] = 1 if qk_norm else 0
+    if attn_softcap is None:
+        tail[16] = 0
+    else:
+        tail[16] = _f32_bits(attn_softcap, what, "attn_softcap")
+    gated = mlp in _GATED_MLPS
+    flags = {
+        "q_proj.bias": bool(qkv_bias), "k_proj.bias": bool(qkv_bias),
+        "v_proj.bias": bool(qkv_bias), "o_proj.bias": bool(o_bias),
+        "input_layernorm.bias": bool(norm_bias),
+        "post_attention_layernorm.bias": bool(norm_bias),
+        "up_proj.bias": bool(mlp_bias), "down_proj.bias": bool(mlp_bias),
+        "gate_proj.bias": bool(mlp_bias) and gated,
+        "q_norm.weight": bool(qk_norm), "k_norm.weight": bool(qk_norm),
+    }
+    return tail, flags, gated
+
+
+def _default_tail():
+    tail = [0] * _DEFAULT_TAIL_LEN
+    tail[0] = _ROPE_THETA_BITS
+    tail[2] = _f32_bits(1.0, "TransformerBlock", "rope_factor")
+    tail[3] = _f32_bits(1.0, "TransformerBlock", "low_freq_factor")
+    tail[4] = _f32_bits(4.0, "TransformerBlock", "high_freq_factor")
+    tail[5] = _MAX_ABS_POSITION
+    tail[7] = _MAX_ABS_POSITION
+    tail[11] = _NORM_EPS_BITS
+    return tail
 
 
 def _f32_strict(a, what, name):
@@ -424,21 +616,44 @@ class TransformerBlock(NumericModeMixin):
                                     this class are asked by the batch
                                     part of tools/identity_break.py
                                     since 4230ab5b0, first record owed
-        rms eps           FIXED    1e-6 (bits 0x358637BD); rope theta
-          rope theta               10000.0 (0x461C4000); rope type
-                                    "default" only -- frozen profile
-                                    constants, a different value is a v2
+        norm_eps          honored  1e-6 (bits 0x358637BD) is today's bits
+          rope_theta               and the default; rope_theta 10000.0
+                                    (0x461C4000) likewise. Any other
+                                    value is DEVIATIONS 2937 / 2930
+                                    (lane/block-options): the same
+                                    seams with the parameter in place of
+                                    the frozen constant
+        rope_scaling      honored  None (default), {"type": "linear",
+          rope_dim                  "factor"} or {"type": "llama3",
+          max_positions             "factor", "low_freq_factor",
+                                    "high_freq_factor",
+                                    "original_max_position_embeddings"};
+                                    rope_dim (partial rotary; None =
+                                    head_dim); max_positions (the
+                                    declared ceiling, 8192 default; the
+                                    rotary reduction's ANGLE domain of
+                                    8192.0 is refused by name in Mojo
+                                    whatever the ceiling)
+        norm, norm_bias   honored  "rmsnorm" (default), "layernorm"
+                                    (+ norm_bias, the *.bias tensors),
+                                    "rmsnorm_offset" (Gemma's 1 + w)
+        mlp, mlp_bias     honored  "swiglu" (default), "gelu",
+                                    "gelu_tanh" (ungated, no gate_proj),
+                                    "geglu", "geglu_tanh"; mlp_bias adds
+                                    up_proj.bias, down_proj.bias and,
+                                    when gated, gate_proj.bias
+        qkv_bias, o_bias  honored  the q/k/v (Qwen2) and o biases
+        qk_norm           honored  q_norm.weight / k_norm.weight over
+                                    head_dim before RoPE (Qwen3)
+        attn_softcap      honored  Gemma2's tanh softcap of the scores
+                                    (forces the eager attention path)
         attention impl    FIXED    the EAGER path only (contract section
                                     6): FlashAttention, SDPA, paged
                                     attention and chunked prefill are
                                     out of scope BY CONTRACT, not
                                     missing
-        biases/dropout    refused  by absence: attention_bias, mlp_bias
-                                    and attention_dropout are the config
-                                    defaults (False/False/0.0) and the
-                                    profile refuses a nonzero value
-                                    rather than specifying where it
-                                    would round; no bias key exists
+        dropout           refused  attention_dropout is 0.0 and has no
+                                    inference meaning; nothing spells it
         window            honored  `window=0` (default) is full causal
                                     attention, today's bits exactly;
                                     `window=W > 0` is sliding-window
@@ -447,14 +662,15 @@ class TransformerBlock(NumericModeMixin):
                                     the KV cache a RING of W slots; the
                                     same one spelling serves prefill,
                                     split prefill and decode bit for bit
-        rope_scaling,     refused  contract section 11's list, by
-          masks beyond              absence
-          causal/window
+        masks beyond      refused  contract section 11's list, by
+          causal/window             absence
         backward          honored  `backward(x, grad_output)`: the
                                     zero-state prefill VJP for x and the
                                     nine weights, IDENTICAL tier only
                                     (the lane's `transformer_backward
-                                    .mojo` chains, window included)
+                                    .mojo` chains, window included);
+                                    DEFAULT OPTIONS ONLY, refused by
+                                    name otherwise
         dtype             refused  float32 ONLY; bf16/fp16/float64 by
                                     name
 
@@ -477,7 +693,11 @@ class TransformerBlock(NumericModeMixin):
     )
 
     def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None,
-                 window=0):
+                 window=0, rope_theta=10000.0, rope_scaling=None,
+                 rope_dim=None, max_positions=8192, qkv_bias=False,
+                 o_bias=False, norm="rmsnorm", norm_eps=1e-6,
+                 norm_bias=False, mlp="swiglu", mlp_bias=False,
+                 qk_norm=False, attn_softcap=None):
         self._runtime_lock = threading.RLock()
         self._native_session = None
         self._session_binding = None
@@ -486,7 +706,74 @@ class TransformerBlock(NumericModeMixin):
         # projection weights (mojolearn.lowbit) are materialized exactly here
         # and the block runs its certified fp32 path on the result.
         weights, self.weight_format = _lowbit.unpack(weights, what)
-        arrs = _take(weights, what, self._W_NAMES)
+        # lane/block-options (2026-09-17): the option keywords. `head_dim`
+        # is needed for rope_dim's bound and the q/k norm widths, so the
+        # shape is read first from the norm weight and the head arguments.
+        if not hasattr(weights, "keys") or "input_layernorm.weight" not in weights:
+            _take(weights, what, self._W_NAMES)  # raises with the key set
+        dm0 = int(_f32_strict(weights["input_layernorm.weight"], what,
+                              "input_layernorm.weight").shape[0])
+        nh0 = int(n_heads)
+        if nh0 < 1:
+            raise ValueError(
+                f"mojolearn {what}: n_heads must be positive, got "
+                f"{n_heads!r}"
+            )
+        hd0 = int(head_dim) if head_dim is not None else dm0 // nh0
+        tail, flags, gated = _block_options(
+            what, hd0, rope_theta, rope_scaling, rope_dim, max_positions,
+            qkv_bias, o_bias, norm, norm_eps, norm_bias, mlp, mlp_bias,
+            qk_norm, attn_softcap)
+        self._opts_tail = tail
+        self._opts_flags = flags
+        self._gated = gated
+        self._extended = tail != _default_tail()
+        self.rope_theta = float(rope_theta)
+        self.rope_scaling = None if rope_scaling is None else dict(rope_scaling)
+        self.rope_dim = hd0 if rope_dim is None else int(rope_dim)
+        self.max_positions = int(max_positions)
+        self.qkv_bias = bool(qkv_bias)
+        self.o_bias = bool(o_bias)
+        self.norm = norm
+        self.norm_eps = float(norm_eps)
+        self.norm_bias = bool(norm_bias)
+        self.mlp = mlp
+        self.mlp_bias = bool(mlp_bias)
+        self.qk_norm = bool(qk_norm)
+        self.attn_softcap = None if attn_softcap is None else float(attn_softcap)
+        # The exact key set: the nine (minus gate_proj.weight under an
+        # ungated MLP) plus every optional tensor whose flag is on. A bias
+        # present with its flag off, or missing with its flag on, is
+        # refused by ITS name before the generic key-set message.
+        if hasattr(weights, "keys"):
+            for name in _OPT_NAMES:
+                present = name in weights
+                if present and not flags[name]:
+                    raise ValueError(
+                        f"mojolearn {what}: {name} is present in the weight "
+                        "dict but its option is off (pass the option that "
+                        "carries it, or drop the tensor; a silently ignored "
+                        "tensor is a wrong model that looks right)"
+                    )
+                if flags[name] and not present:
+                    raise ValueError(
+                        f"mojolearn {what}: {name} is required by the "
+                        "options passed and is missing from the weight dict"
+                    )
+            if not gated and "gate_proj.weight" in weights:
+                raise ValueError(
+                    f"mojolearn {what}: gate_proj.weight is present but "
+                    f"mlp={mlp!r} is ungated (down_proj(act(up_proj(x)))); "
+                    "drop it or pick a gated form"
+                )
+        base_names = tuple(n for n in self._W_NAMES
+                           if gated or n != "gate_proj.weight")
+        opt_names = tuple(n for n in _OPT_NAMES if flags[n])
+        arrs_all = _take(weights, what, base_names + opt_names)
+        arrs = list(arrs_all[:len(base_names)])
+        if not gated:
+            arrs.insert(6, None)  # the gate slot, absent
+        opt_arrs = list(arrs_all[len(base_names):])
         win = int(window)
         if win < 0:
             raise ValueError(
@@ -526,13 +813,17 @@ class TransformerBlock(NumericModeMixin):
                 f"mojolearn {what}: n_kv_heads must be positive, got "
                 f"{n_kv_heads!r}"
             )
-        gate_w = _f32_strict(arrs[6], what, "gate_proj.weight")
-        if gate_w.ndim != 2 or gate_w.shape[0] < 1 or gate_w.shape[1] != dm:
+        # `intermediate` is read from gate_proj.weight (gated) or from
+        # up_proj.weight (ungated); the other is checked against it below.
+        it_src = "gate_proj.weight" if gated else "up_proj.weight"
+        it_w = _f32_strict(arrs[6] if gated else arrs[7], what, it_src)
+        if it_w.ndim != 2 or it_w.shape[0] < 1 or it_w.shape[1] != dm:
             raise ValueError(
-                f"mojolearn {what}: gate_proj.weight must be "
-                f"(intermediate, d_model={dm}), got shape {gate_w.shape}"
+                f"mojolearn {what}: {it_src} must be "
+                f"(intermediate, d_model={dm}), got shape {it_w.shape}"
             )
-        it = int(gate_w.shape[0])
+        it = int(it_w.shape[0])
+        gate_w = it_w if gated else None
         qw = nh * hd
         kw = nkv * hd
         self.d_model = dm
@@ -557,12 +848,49 @@ class TransformerBlock(NumericModeMixin):
                         what, "v_proj.weight", (kw, dm)),
             _want_shape(_f32_strict(arrs[5], what, "o_proj.weight"),
                         what, "o_proj.weight", (dm, qw)),
-            _want_shape(gate_w, what, "gate_proj.weight", (it, dm)),
+            (_want_shape(gate_w, what, "gate_proj.weight", (it, dm))
+             if gated else None),
             _want_shape(_f32_strict(arrs[7], what, "up_proj.weight"),
                         what, "up_proj.weight", (it, dm)),
             _want_shape(_f32_strict(arrs[8], what, "down_proj.weight"),
                         what, "down_proj.weight", (dm, it)),
         ]
+        # The optional tensors, in `_OPT_NAMES` order, None where absent;
+        # each present one float32 and exactly its shape.
+        opt_shapes = {
+            "q_proj.bias": (qw,), "k_proj.bias": (kw,), "v_proj.bias": (kw,),
+            "o_proj.bias": (dm,), "input_layernorm.bias": (dm,),
+            "post_attention_layernorm.bias": (dm,), "up_proj.bias": (it,),
+            "down_proj.bias": (dm,), "gate_proj.bias": (it,),
+            "q_norm.weight": (hd,), "k_norm.weight": (hd,),
+        }
+        present = iter(opt_arrs)
+        self._wopt = []
+        for name in _OPT_NAMES:
+            if flags[name]:
+                a = next(present)
+                self._wopt.append(_want_shape(_f32_strict(a, what, name),
+                                              what, name, opt_shapes[name]))
+            else:
+                self._wopt.append(None)
+
+    def _weight_addrs(self):
+        """The nine base weight addresses in the binding's order; the gate
+        slot is 0 under an ungated MLP. The arrays are alive on `self`."""
+        return [0 if a is None else _addr_ro(a) for a in self._w]
+
+    def _tail_addrs(self):
+        """The eleven optional addresses in `_OPT_NAMES` order, 0 where
+        absent -- the addrs tail, sent only when `_extended`."""
+        return [0 if a is None else _addr_ro(a) for a in self._wopt]
+
+    def _with_tails(self, addrs, params):
+        """The two lists as the binding wants them: the old lists for a
+        default block (the old code path exactly), the tails appended
+        otherwise."""
+        if not self._extended:
+            return addrs, params
+        return addrs + self._tail_addrs(), params + list(self._opts_tail)
 
     def __getstate__(self):
         # Device contexts and thread locks cannot cross serialization/copy.
@@ -614,11 +942,12 @@ class TransformerBlock(NumericModeMixin):
         y = _buffers.empty((b, l, self.d_model), '<f4')
         # All pointer owners remain live until the synchronous native return.
         w = self._w
-        addrs = [_addr_ro(x)] + [_addr_ro(a) for a in w] + [_addr(y)]
-        ext.transformer_forward_fresh(
-            addrs, [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                    self.head_dim, self.intermediate, self.window],
-        )
+        wopt = self._wopt  # noqa: F841  (keeps the optional arrays alive)
+        addrs, params = self._with_tails(
+            [_addr_ro(x)] + self._weight_addrs() + [_addr(y)],
+            [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+             self.head_dim, self.intermediate, self.window])
+        ext.transformer_forward_fresh(addrs, params)
         return y
 
     def _call(self, x, state, step):
@@ -683,16 +1012,19 @@ class TransformerBlock(NumericModeMixin):
         # the addresses alive (_buffer.py). `addr` (writable) for the
         # cache and the output, `addr_ro` for x and the weights.
         w = self._w
+        wopt = self._wopt  # noqa: F841  (keeps the optional arrays alive)
         ext = fresh_ext if fresh_ext is not None else ext
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
             # transformer_forward_binding: x, input_layernorm.weight,
             # post_attention_layernorm.weight, q_proj.weight,
             # k_proj.weight, v_proj.weight, o_proj.weight,
-            # gate_proj.weight, up_proj.weight, down_proj.weight,
-            # k_cache, v_cache, y_out
+            # gate_proj.weight (0 under an ungated MLP), up_proj.weight,
+            # down_proj.weight, k_cache, v_cache, y_out -- then, for a
+            # non-default block only, the 11-address options tail
+            # (`_OPT_NAMES` order) and the 17-int params tail.
             [addr_ro(x, name="x")]
-            + [addr_ro(a, name="weight") for a in w]
+            + [0 if a is None else addr_ro(a, name="weight") for a in w]
             + [addr(kc, name="k_cache"), addr(vc, name="v_cache"),
                addr(y, name="y")]
         )
@@ -700,26 +1032,27 @@ class TransformerBlock(NumericModeMixin):
             if self._native_session is None:
                 self._native_session = ext.transformer_session_create()
                 self._session_binding = ext
-            new_len = ext.transformer_session_forward(
-                self._native_session, addrs,
+            a2, p2 = self._with_tails(
+                addrs,
                 [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                 self.head_dim, self.intermediate, smax, s0, self.window],
-            )
+                 self.head_dim, self.intermediate, smax, s0, self.window])
+            new_len = ext.transformer_session_forward(
+                self._native_session, a2, p2)
         elif step:
             # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,
             # max_tokens, cached_tokens, window.
-            new_len = ext.transformer_decode_step(
+            a2, p2 = self._with_tails(
                 addrs,
                 [b, self.d_model, self.n_heads, self.n_kv_heads,
-                 self.head_dim, self.intermediate, smax, s0, self.window],
-            )
+                 self.head_dim, self.intermediate, smax, s0, self.window])
+            new_len = ext.transformer_decode_step(a2, p2)
         else:
             # B, L, then the same seven.
-            new_len = ext.transformer_forward(
+            a2, p2 = self._with_tails(
                 addrs,
                 [b, l, self.d_model, self.n_heads, self.n_kv_heads,
-                 self.head_dim, self.intermediate, smax, s0, self.window],
-            )
+                 self.head_dim, self.intermediate, smax, s0, self.window])
+            new_len = ext.transformer_forward(a2, p2)
         state.cached_tokens = int(new_len)
         return y
 
@@ -801,6 +1134,22 @@ class TransformerBlock(NumericModeMixin):
         gradient is a sum over this call's `B*L` tokens. IDENTICAL tier
         only; no incoming-cache or carried-state cotangent."""
         what = "TransformerBlock.backward"
+        if getattr(self, "_extended", False):
+            # lane/block-options: the backward chains spell the frozen
+            # profile's seams and none of the options'.
+            raise NotImplementedError(
+                f"mojolearn {what}: the backward is implemented for the "
+                "default block options only (rope_theta 10000.0, no "
+                "rope_scaling, full rotary, max_positions 8192, no bias, "
+                "norm='rmsnorm' at eps 1e-6, mlp='swiglu', no qk_norm, no "
+                f"attn_softcap); this block has norm={self.norm!r}, "
+                f"mlp={self.mlp!r}, rope_theta={self.rope_theta!r}, "
+                f"rope_scaling={self.rope_scaling!r}, rope_dim={self.rope_dim!r}, "
+                f"max_positions={self.max_positions!r}, qkv_bias={self.qkv_bias!r}, "
+                f"o_bias={self.o_bias!r}, norm_eps={self.norm_eps!r}, "
+                f"norm_bias={self.norm_bias!r}, mlp_bias={self.mlp_bias!r}, "
+                f"qk_norm={self.qk_norm!r}, attn_softcap={self.attn_softcap!r}"
+            )
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if mode != "identical":
             raise NotImplementedError(
@@ -939,13 +1288,14 @@ class TransformerDecodeSession:
         self._native = create()
         self._open = False
         w = block._w
-        addrs = ([addr_ro(a, name="weight") for a in w]
-                 + [addr(kc, name="k_cache"), addr(vc, name="v_cache")])
-        s0 = int(ext.transformer_decode_session_open(
-            self._native, addrs,
+        wopt = block._wopt  # noqa: F841  (keeps the optional arrays alive)
+        addrs, params = block._with_tails(
+            [0 if a is None else addr_ro(a, name="weight") for a in w]
+            + [addr(kc, name="k_cache"), addr(vc, name="v_cache")],
             [b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
              block.intermediate, int(state.max_tokens), int(state.cached_tokens),
-             block.window]))
+             block.window])
+        s0 = int(ext.transformer_decode_session_open(self._native, addrs, params))
         self._open = True
         state.cached_tokens = s0
         state._resident_session = self

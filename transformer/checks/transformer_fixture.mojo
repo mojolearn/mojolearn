@@ -11,6 +11,11 @@ from checks.numerics import (
     identical_rsqrt,
     numeric_mode_name,
 )
+# lane/block-options (2026-09-17): the block's options record and the
+# eleven optional tensors it can switch on. `transformer/block_options.mojo`
+# is package level on purpose: the device file may not import this fixture
+# and this fixture may not import the device file.
+from transformer.block_options import BlockOptions
 
 
 
@@ -111,14 +116,18 @@ struct TransformerDims(Copyable, Movable):
                 + " is odd; RoPE pairs j with j + head_dim/2 REFUSED"
                 + " (contract section 3)"
             )
-        if self.rope_positions <= 0 or self.rope_positions > MAX_ABS_POSITION:
+        # DEVIATION 2933 (lane/block-options): the ceiling is no longer a
+        # property of the SHAPE. It is the ROTATION ANGLE's domain, checked
+        # where the angles are computed (`build_rope_table_opts`), and the
+        # model's declared `max_positions` (`BlockOptions`), checked where a
+        # call is admitted. At the default options both reduce to exactly
+        # DEVIATION 812's 8192; a linear-scaled table admits more positions
+        # because its largest angle is `(positions - 1) / factor`.
+        if self.rope_positions <= 0:
             raise Error(
                 String("transformer: rope_positions ")
                 + String(self.rope_positions)
-                + " outside (0, "
-                + String(MAX_ABS_POSITION)
-                + "] REFUSED (DEVIATION 812: the Cody-Waite domain of"
-                + " _cephes_sincosf_core)"
+                + " must be positive REFUSED"
             )
 
 
@@ -142,6 +151,23 @@ struct TransformerWeights(Copyable, Movable):
     var w_gate: List[Float32]
     var w_up: List[Float32]
     var w_down: List[Float32]
+    # lane/block-options (2026-09-17): the options record and the eleven
+    # OPTIONAL tensors, in `transformer/block_options.mojo`'s addrs-tail
+    # order. Each is EMPTY unless its option is on; `refuse_bad_weights`
+    # refuses a present tensor whose flag is off and a missing one whose
+    # flag is on, by name. `w_gate` is empty under an ungated MLP.
+    var opts: BlockOptions
+    var b_q: List[Float32]  # [n_heads*head_dim]      qkv_bias
+    var b_k: List[Float32]  # [n_kv*head_dim]         qkv_bias
+    var b_v: List[Float32]  # [n_kv*head_dim]         qkv_bias
+    var b_o: List[Float32]  # [d_model]               o_bias
+    var norm1_b: List[Float32]  # [d_model]           norm_bias
+    var norm2_b: List[Float32]  # [d_model]           norm_bias
+    var b_up: List[Float32]  # [intermediate]         mlp_bias
+    var b_down: List[Float32]  # [d_model]            mlp_bias
+    var b_gate: List[Float32]  # [intermediate]       mlp_bias and gated
+    var qn_w: List[Float32]  # [head_dim]             qk_norm
+    var kn_w: List[Float32]  # [head_dim]             qk_norm
 
     def __init__(out self, dims: TransformerDims):
         self.dims = dims.copy()
@@ -154,6 +180,18 @@ struct TransformerWeights(Copyable, Movable):
         self.w_gate = List[Float32]()
         self.w_up = List[Float32]()
         self.w_down = List[Float32]()
+        self.opts = BlockOptions()
+        self.b_q = List[Float32]()
+        self.b_k = List[Float32]()
+        self.b_v = List[Float32]()
+        self.b_o = List[Float32]()
+        self.norm1_b = List[Float32]()
+        self.norm2_b = List[Float32]()
+        self.b_up = List[Float32]()
+        self.b_down = List[Float32]()
+        self.b_gate = List[Float32]()
+        self.qn_w = List[Float32]()
+        self.kn_w = List[Float32]()
 
 
 
