@@ -159,6 +159,10 @@ def cmd_worker(args):
               "pid": os.getpid(), "ms": ms, "digests": digests,
               "env": {k: os.environ.get(k) for k in ("PYTHONPATH", "MOJOLEARN_HOST_DIR",
                                                      "MOJOLEARN_CPU_THREADS", "MOJOLEARN_NUMERIC_MODE")}}
+    # DEVIATION 2921 witness: a kNN GPU arm that took the resident-index door
+    # holds a handle after the call; the CPU arms and a binding without the
+    # door hold none. Read, never assumed.
+    result["resident_index"] = getattr(m, "_resident", None) is not None
     if hasattr(m, "model_sha256"):
         try:
             result["model_sha256"] = m.model_sha256()
