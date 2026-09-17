@@ -123,7 +123,7 @@ hostafter)
 probe)
     TAG=${2:?tag}; ARM=${3:?arm}; shift 3
     OUT=$TOP/$TAG; mkdir -p "$OUT/logs"
-    ( cd "/root/t-$ARM" && env $(tree_env "$ARM") "$@" "$P" "$R/tools/knn_selector_probe.py" --arm "$ARM" --json "$OUT/probe_$ARM.json" > "$OUT/probe_$ARM.console" 2>&1 )
+    ( cd "/root/t-$ARM" && env $(tree_env "$ARM") "$@" "$P" "$R/tools/knn_selector_probe.py" --arm "$ARM" --json "$OUT/probe_$ARM${KSS_SUFFIX:-}.json" > "$OUT/probe_$ARM${KSS_SUFFIX:-}.console" 2>&1 )
     note "probe_$ARM=$? $*"
     ;;
 race)

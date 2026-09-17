@@ -108,6 +108,8 @@ from neighbors.checks.pinned_distance_tile import (
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
 from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
+from checks.kernel_matrix import knn_selector_bound_compact_for, KNN_SELECTOR_BOUND_MIN_K
+from neighbors.checks.knn_selector_bound_compact import bound_compact_select_launch
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 from neighbors.checks.smem_distance_tile import (
     SMT_MAX_K,
@@ -262,6 +264,17 @@ comptime KNN_SMEM_TILE = (
 comptime KNN_BLOCK_TOPK = (
     knn_block_topk_select_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and KNN_SMEM_TILE
+    and EXPERIMENTAL_SMALLK_IDENTICAL
+    and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
+)
+
+
+# DEVIATION 3060 (kernel-matrix row `knn_selector_bound_compact_for`): a
+# column tile's top-k for k >= KNN_SELECTOR_BOUND_MIN_K through the
+# bound-and-compact selector. Trial builds keep the small-k selector so a
+# selector arm from the environment still runs.
+comptime KNN_SELECTOR_BOUND = (
+    knn_selector_bound_compact_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and EXPERIMENTAL_SMALLK_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
@@ -726,6 +739,13 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     if use_block_topk:
         part_key_cells = query_tile * smem_tile_col_blocks(index_tile) * k
     var part_keys = ctx.enqueue_create_buffer[DType.uint64](part_key_cells)
+    # DEVIATION 3060: the bound-and-compact selector's per-row flags, one
+    # cell when that selector does not serve this request.
+    var select_flag_cells = 1
+    comptime if KNN_SELECTOR_BOUND:
+        if k >= KNN_SELECTOR_BOUND_MIN_K and k <= SMALLK_MAX_K:
+            select_flag_cells = query_tile
+    var select_flags = ctx.enqueue_create_buffer[DType.uint32](select_flag_cells)
     # DEVIATION 3000: the shared-memory distance tile serves the requests
     # the register tile served with no metadata and no exact-chain
     # admission; those two keep the register tile.
@@ -1210,11 +1230,24 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                             # wrote this tile's top-k.
                             selected_smallk = True
                         elif cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
-                            smallk_select_launch(
-                                ctx,
-                                dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                                sel_dist, sel_idx, rows, cols, k, True, select_arm,
-                            )
+                            var bound_compact = False
+                            comptime if KNN_SELECTOR_BOUND:
+                                # DEVIATION 3060: the same ascending
+                                # (distance, tile-local index) rows from the
+                                # same tile cells, without the k-deep lists.
+                                if k >= KNN_SELECTOR_BOUND_MIN_K:
+                                    bound_compact_select_launch(
+                                        ctx,
+                                        dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                        sel_dist, sel_idx, select_flags, rows, cols, k, True,
+                                    )
+                                    bound_compact = True
+                            if not bound_compact:
+                                smallk_select_launch(
+                                    ctx,
+                                    dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                    sel_dist, sel_idx, rows, cols, k, True, select_arm,
+                                )
                             selected_smallk = True
                     if not selected_smallk:
                         # Preserve the historical shared-memory footprint for
@@ -1339,6 +1372,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     _ = part_dist^
     _ = part_idx^
     _ = part_keys^
+    _ = select_flags^
 
 
 #: WHICH SIDE OF `knn_brute_force.cuh:443` THIS IMPLEMENTATION TAKES BY DEFAULT.

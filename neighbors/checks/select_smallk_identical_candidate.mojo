@@ -1072,6 +1072,7 @@ def smallk_bucket_kernel[
     CAP: Int, K: Int = 0, UNIFORM: Bool = False, BOUND: Bool = False, SABOTAGE: Bool = False,
     WARPBOUND: Bool = False, PHASE: Int = SMALLK_PHASE_FULL, DEFERRED: Bool = False,
     SELP: Bool = False, CHAIN: Int = SMALLK_CHAIN_INSERT, WB_EVERY: Int = SMALLK_WARPBOUND_EVERY,
+    FLAGGED: Bool = False,
 ](
     values: MutPointer[Float32, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
@@ -1080,6 +1081,14 @@ def smallk_bucket_kernel[
     counters: MutPointer[UInt32, MutAnyOrigin],
 ):
     """The small-k selector, one block of SMALLK_BLOCK threads per row.
+
+    FLAGGED (DEVIATION 3060, lane/knn-selector-speed): `counters` is a
+    per-row flag array and a block whose row's flag is 0 returns at its first
+    statement, before any barrier (the flag is one value per block, so the
+    whole block returns together). A flagged row runs this kernel unchanged.
+    It is how `knn_selector_bound_compact.mojo` hands the rows its fast path
+    cannot serve to this selector. Never combined with VOTECOUNT, the other
+    reader of `counters`. Every instantiation without it is untouched.
 
     `counters` (DEVIATION 2522) is read or written by the VOTECOUNT chain
     form only: two UInt64 slots (warp-steps, warp-steps with any admission)
@@ -1162,6 +1171,10 @@ def smallk_bucket_kernel[
     comptime assert not (CHAIN == SMALLK_CHAIN_NOSHIFT and SABOTAGE), "noshift is timing-only and carries no sabotage"
     comptime assert not (CHAIN == SMALLK_CHAIN_VOTECOUNT and SABOTAGE), "votecount is a counter arm and carries no sabotage"
     comptime assert not (CHAIN == SMALLK_CHAIN_NOSHIFT and SELP), "noshift has no chain to make branch-free"
+    comptime assert not (FLAGGED and CHAIN == SMALLK_CHAIN_VOTECOUNT), "the flag array and the vote counter share one argument"
+    comptime if FLAGGED:
+        if counters.unsafe_load(Int(block_idx.x)) == UInt32(0):
+            return
     # The list's storage width: Mojo's SIMD width must be a power of two, so
     # a CAP of 10 or 15 (CAP = K, DEVIATION 2521) is stored in 16 lanes of
     # which only the first CAP are ever touched after the fill below; the
@@ -1977,6 +1990,42 @@ def _smallk_launch_bucket[CAP: Int, K: Int](
             DEFAULT_CAP, K, SMALLK_UNIFORM_TRIP_DEFAULT, SMALLK_HEAD_BOUND_DEFAULT, False, DEFAULT_WARPBOUND,
             SMALLK_PHASE_FULL, SMALLK_DEFERRED_DEFAULT, SMALLK_SELP_DEFAULT, DEFAULT_CHAIN,
         ](ctx, values, out_values, out_indices, rows, length, k, select_min)
+
+
+def smallk_flagged_launch[SABOTAGE: Bool = False](
+    ctx: DeviceContext,
+    values: MutPointer[Float32, MutAnyOrigin],
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    out_indices: MutPointer[UInt32, MutAnyOrigin],
+    flags: MutPointer[UInt32, MutAnyOrigin],
+    rows: Int, length: Int, k: Int, select_min: Bool = True,
+) raises:
+    """The small-k selector for the rows whose `flags[row]` is nonzero
+    (DEVIATION 3060): the uniform scan form (DEVIATION 2497), no bound, the
+    capacity bucket of `smallk_select_launch`, runtime k. Rows whose flag is
+    0 are not touched. SABOTAGE is the uniform arm's reach flip, so a flagged
+    row is seen to have been served here."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("small-k selector requires IDENTICAL")
+    if rows <= 0 or rows > 2147483647 or length <= 0 or length > 2147483647:
+        raise Error("small-k selector requires positive Int32 dimensions")
+    if k < 1 or k > SMALLK_MAX_K or k > length:
+        raise Error("small-k selector supports only 1 <= k <= min(64, length)")
+    if k <= 16:
+        ctx.enqueue_function[smallk_bucket_kernel[16, 0, True, False, SABOTAGE, FLAGGED=True]](
+            values, out_values, out_indices, Int32(length), Int32(k), Int32(select_min), flags,
+            grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+        )
+    elif k <= 32:
+        ctx.enqueue_function[smallk_bucket_kernel[32, 0, True, False, SABOTAGE, FLAGGED=True]](
+            values, out_values, out_indices, Int32(length), Int32(k), Int32(select_min), flags,
+            grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[smallk_bucket_kernel[64, 0, True, False, SABOTAGE, FLAGGED=True]](
+            values, out_values, out_indices, Int32(length), Int32(k), Int32(select_min), flags,
+            grid_dim=(rows, 1, 1), block_dim=(SMALLK_BLOCK, 1, 1),
+        )
 
 
 def smallk_select_launch(

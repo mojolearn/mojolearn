@@ -1820,6 +1820,25 @@ comptime KNN_BLOCK_TOPK_MAX_K = 64 if is_defined["MOJOLEARN_KNN_BLOCK_TOPK_ALL_K
 
 
 @always_inline
+def knn_selector_bound_compact_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3060, 2026-09-17, lane/knn-selector-speed): whether a column tile's top-k for KNN_SELECTOR_BOUND_MIN_K <= k <= 64 is taken by the bound-and-compact selector (`neighbors/checks/knn_selector_bound_compact.mojo`) instead of the small-k selector's per-thread k-deep lists and k rank rounds. Every thread keeps its C smallest composite keys (C = 4), the rank k - 1 of the 256 thread minima is a bound with at least k keys at or below it, every key at or below the bound is compacted into shared memory and ranked by counting; a row with a thread whose list is full below the bound, or with more than 256 candidates, is flagged and served by the UNCHANGED small-k kernel in a second launch that returns at once on every other row. Same composite key, unique keys, integer counts and compares only, the distance copied from the same tile cell, so neighbors and distances are the same bits; the gate is `neighbors/checks/knn_selector_bound_compact_check.mojo` (host oracle and the small-k selector, both paths reached), the 400,000 x 4,000 digests at k 32 and 64 against the small-k selector, `tools/identity_break.py` on the knn lanes, and `-D MOJOLEARN_KNN_SELECTOR_BOUND_SABOTAGE=1`. Needs the small-k selector row. `-D MOJOLEARN_EXPERIMENTAL_KNN_SELECTOR_BOUND=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_LIST_SELECT=1` keeps the small-k selector."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LIST_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SELECTOR_BOUND"]():
+        return knn_smallk_select_for[column, identical]()
+    # OFF on every column until measured.
+    return False
+
+
+#: The smallest k the bound-and-compact selector (DEVIATION 3060) serves;
+#: below it the small-k selector stays. `-D MOJOLEARN_KNN_SELECTOR_BOUND_ALL_K=1`
+#: lowers it to 1 for an A/B.
+comptime KNN_SELECTOR_BOUND_MIN_K = 1 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_ALL_K"]() else 17
+
+
+@always_inline
 def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
     """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor, and the 2668 fold's 20,000-row fingerprint is one value (4040033352384472344) across launch widths 64, 128 and 256 with both UMAP identity checks passing. OFF BY DEFAULT: measured on the H200 2026-09-11 it SPLITS on the two datasets, which ENGINEERING_RULES section 9 gates per dataset. Sampled trustworthiness and 10-neighbor retention at 100,000 rows, 200 epochs: taxi 0.9062 / 0.3736 to 0.9323 / 0.3627 (trust up, retention down) and Istella-S 0.9737 / 0.4832 to 0.9636 / 0.4264 (both down), with the time flat on both (1.003 and 1.000). Quality worse on a dataset is a regression a user on that data sees, so the row stays opt-in through `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`; `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even then. What the measurement DID establish is the cause of the cuML gap on taxi (the update order: our own serial host loop scores 0.9796 on the same graph and init against cuML's 0.9657), and that on Istella-S the shipped fold already beats cuML by a wide margin."""
     comptime if not identical:
