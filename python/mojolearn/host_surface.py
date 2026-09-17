@@ -2480,7 +2480,6 @@ PUBLIC_PENDING_LANES = {
     # that is fine.
     "umap": "no reference",
     "holtwinters": "no reference",
-    "spectral": "unwatched",
     "gbdt-nan-modes": "no reference",
     "gbdt-parametric-losses": "no reference",
     "gbdt-lossguide-newtoncosine": "no reference",
@@ -2514,12 +2513,12 @@ PUBLIC_PENDING_LANES = {
     "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "no reference",
     "byte-lm-resident": "no reference",
-    "metrics-fowlkes-mallows": "unwatched",
     "gbdt-adapter-score-weighted": "no reference",
     "rf-score-weighted": "no reference",
     "gbdt-yeti-rank": "unwatched",
-    "arima-exog": "unwatched",
-    "arima-exog-seasonal": "unwatched",
+    # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
+    # fixtures twice through the public CPU verifier, with native negative
+    # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
     # CTR saved-model lanes were promoted after all nine fixtures passed twice
     # from an installed CPU development wheel with bundled, digest-checked models.
     # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU

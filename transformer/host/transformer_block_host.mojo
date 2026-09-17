@@ -47,9 +47,14 @@ from transformer.checks.transformer_fixture import (
 from transformer.checks.transformer_oracle import (
     TransformerKVCache,
     build_rope_table,
+    build_rope_table_opts,
     refuse_bad_weights,
     transformer_block_oracle,
 )
+# lane/block-options (2026-09-17): the options record the bindings decode
+# from their params tail and the eleven optional tensors from their addrs
+# tail (`transformer/block_options.mojo` has both orders).
+from transformer.block_options import BlockOptions
 from transformer.checks.transformer_backward_oracle import (
     transformer_block_backward_oracle,
 )
@@ -79,6 +84,52 @@ def transformer_host_weights(
     w.w_gate = w_gate.copy()
     w.w_up = w_up.copy()
     w.w_down = w_down.copy()
+    refuse_bad_weights(w)
+    return w^
+
+
+def transformer_host_weights_opts(
+    dm: Int, nh: Int, nkv: Int, hd: Int, it: Int, rope_positions: Int,
+    opts: BlockOptions,
+    norm1_w: List[Float32], norm2_w: List[Float32], w_q: List[Float32],
+    w_k: List[Float32], w_v: List[Float32], w_o: List[Float32],
+    w_gate: List[Float32], w_up: List[Float32], w_down: List[Float32],
+    b_q: List[Float32], b_k: List[Float32], b_v: List[Float32],
+    b_o: List[Float32], norm1_b: List[Float32], norm2_b: List[Float32],
+    b_up: List[Float32], b_down: List[Float32], b_gate: List[Float32],
+    qn_w: List[Float32], kn_w: List[Float32],
+) raises -> TransformerWeights:
+    """`transformer_host_weights` with the options record and the eleven
+    optional tensors in the addrs-tail order (q_proj.bias, k_proj.bias,
+    v_proj.bias, o_proj.bias, input_layernorm.bias,
+    post_attention_layernorm.bias, up_proj.bias, down_proj.bias,
+    gate_proj.bias, q_norm.weight, k_norm.weight); an absent tensor is an
+    EMPTY list and `w_gate` is empty under an ungated MLP.
+    `refuse_bad_weights` refuses every presence/flag mismatch by name."""
+    var dims = TransformerDims(dm, nh, nkv, hd, it, rope_positions)
+    dims.validate()
+    var w = TransformerWeights(dims)
+    w.opts = opts.copy()
+    w.norm1_w = norm1_w.copy()
+    w.norm2_w = norm2_w.copy()
+    w.w_q = w_q.copy()
+    w.w_k = w_k.copy()
+    w.w_v = w_v.copy()
+    w.w_o = w_o.copy()
+    w.w_gate = w_gate.copy()
+    w.w_up = w_up.copy()
+    w.w_down = w_down.copy()
+    w.b_q = b_q.copy()
+    w.b_k = b_k.copy()
+    w.b_v = b_v.copy()
+    w.b_o = b_o.copy()
+    w.norm1_b = norm1_b.copy()
+    w.norm2_b = norm2_b.copy()
+    w.b_up = b_up.copy()
+    w.b_down = b_down.copy()
+    w.b_gate = b_gate.copy()
+    w.qn_w = qn_w.copy()
+    w.kn_w = kn_w.copy()
     refuse_bad_weights(w)
     return w^
 
@@ -153,7 +204,9 @@ def transformer_host_forward(
                             cache.k[dst] = k_in[src]
                             cache.v[dst] = v_in[src]
     cache.used = s0
-    var rope = build_rope_table(dims)
+    # lane/block-options: the table from the record (theta, scaling,
+    # rope_dim, max_positions); the default record is `build_rope_table`.
+    var rope = build_rope_table_opts(dims, w.opts)
     var st = transformer_block_oracle(w, x, b, l, cache, rope, ScorePlant.none())
     var out = TransformerHostForward()
     out.y = st.residual2_out.copy()
@@ -192,6 +245,15 @@ def transformer_host_backward(
     input_layernorm, post_attention_layernorm, q, k, v, o, gate, up, down."""
     if window < 0:
         raise Error("transformer backward: window must be >= 0")
+    # lane/block-options: the backward chains are the frozen profile's and
+    # know none of the options; refused by name rather than run wrong.
+    if not w.opts.is_default():
+        raise Error(
+            String("transformer backward: only the default block options are")
+            + " supported (got "
+            + w.opts.describe()
+            + "); the backward oracle spells none of the option seams"
+        )
     var dims = w.dims.copy()
     var rope = build_rope_table(dims)
     var cache = TransformerKVCache(b, dims, l, window)

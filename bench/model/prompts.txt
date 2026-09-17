@@ -1,0 +1,25 @@
+## bench/model/prompts.txt: the fixed prompt set of the model leg. One prompt per line as
+## <id><TAB><text>; `\n` and `\t` in the text are expanded. Lines starting with ## are comments.
+## The set is part of the record (protocol.prompts_sha256): never edit a prompt, add one with a
+## new id. p01 to p16 are English, 8 to 64 tokens under a Llama-style tokenizer; a01 to a04 are
+## adversarial: near-empty, one token repeated, long, and non-ASCII.
+p01	The quick brown fox jumps over the lazy dog and then
+p02	Write one sentence that explains why the sky looks blue during the day.
+p03	In 1969, the first people to walk on the Moon were
+p04	A recipe for a simple tomato soup starts with
+p05	The capital of Australia is not Sydney; it is
+p06	Explain, in plain words, what a hash function does and why two different inputs rarely share an output.
+p07	Once upon a time, in a small town by the sea, there lived a lighthouse keeper who
+p08	List three differences between a compiler and an interpreter.
+p09	The main reason the Roman Republic became an empire was
+p10	To sort a list of numbers from smallest to largest, one simple method is to
+p11	Dear committee, I am writing to ask whether the deadline for the spring application can be moved, because
+p12	Water boils at 100 degrees Celsius at sea level, but on a high mountain it boils at a lower temperature because
+p13	def fibonacci(n):\n    """Return the n-th Fibonacci number."""\n
+p14	Question: What is the sum of the interior angles of a triangle?\nAnswer:
+p15	The three most common causes of a slow computer are
+p16	Translate to French: "The library closes at nine o'clock tonight."
+a01	.
+a02	the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the the
+a03	The history of the printing press begins in the fifteenth century, when a goldsmith in Mainz combined several existing technologies, the screw press, oil-based ink, movable metal type cast from a hand mould, and paper made from rags, into one workshop process. Within fifty years presses operated in more than two hundred cities. The price of a book fell by an order of magnitude, literacy spread beyond the clergy and the courts, and the same text could be read in Lisbon and in Krakow with the same words on the same page, which had never been true of manuscripts. Scholars could cite a page number and expect a reader elsewhere to find the same passage. Errors, once introduced, were copied a thousand times instead of once, so the craft of proofreading grew up beside the press. Summarize the paragraph above in one sentence, then name one consequence it does not mention.
+a04	日本の首都は東京です。Straße, naïve, façade, and Ærø are words with marks. Emoji: 🐍🔥🧪 « the arrow → points right »… ¿Verdad?

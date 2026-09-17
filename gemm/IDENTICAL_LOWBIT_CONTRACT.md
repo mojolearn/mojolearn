@@ -1,15 +1,21 @@
 # The low-bit profiles: `mojolearn.identical.gemm.bf16f32.v1` and `mojolearn.identical.gemm.int8i32.v1`
 
 Lane lane/identical-lowbit-inference, 2026-09-17. DEVIATIONS 2900 to 2909.
-Answers: `gemm/host/gemm_lowbit_oracle.mojo`. Device: `gemm/checks/gemm_lowbit.mojo`.
+Clause L-9 (matrix units): lane lane/int8-mma, 2026-09-17, DEVIATION 2910.
+Answers: `gemm/host/gemm_lowbit_oracle.mojo`. Device: `gemm/checks/gemm_lowbit.mojo`
+and, for the int8 matrix-unit plan, `gemm/checks/gemm_int8_mma.mojo`.
 Gates: `gemm/checks/gemm_lowbit_check.mojo`. Seams: `checks/numerics.mojo`
 (the block headed LOW-BIT STORAGE SEAMS).
 
 ## STATUS
 
-Both profiles are built and gated on one Apple M4 (Metal) against their host
-oracles, with the value-flip sabotage arm of each seen to fail the oracle
-gates. Neither has a three-vendor card yet. Until one exists, every sentence
+Both profiles are built and gated on an Apple M4 (Metal, flat int8), an NVIDIA
+H100 (`bench/results/lowbit/2026-09-17_h100-lowbit-mma/`, int8 on the IMMA
+units) and an AMD MI325X (`bench/results/lowbit/2026-09-17_mi325x-lowbit-mma/`,
+int8 on the MFMA units), each against the same host oracles, each with the
+value-flip sabotage arm of each profile seen to fail the oracle gates. That is
+three vendor columns on the nine gate shapes of both profiles. The fourteen
+harness lanes that store block weights low-bit have the M4 columns only. Until one exists, every sentence
 below is a construction argument and the M4 measurement, not a certificate.
 
 `gemm/IDENTICAL_FP32_CONTRACT.md` (fp32.v1) forbids a flag inside itself that
@@ -47,6 +53,7 @@ both sides describes a per-cell scale.
 | L-6 | dequantization | `dequant_int8_pinned`: `ftz(identical_mul(f, 2^(ea + eb)))`, one multiply by a power of two built from its exponent field (`pow2_f32`), then the flush; exponents above 127 give the infinity and below -126 give `+0.0` | 2903, 2904 |
 | L-7 | int8 accumulation | Int32, `p` ascending, one product per step. Exact for `k <= 131072` (`INT8_MAX_K`); a larger `k` is refused by name | 2907 |
 | L-8 | bf16 execution plans | FUSED (`identical_gemm_bf16w_flat_kernel`, the fp32 flat plan with the right operand widened at the load) below `BF16W_FUSED_MAX_CELLS` output cells, WIDEN (`bf16_widen_kernel` then `identical_gemm_into[False]`) above; both are the profile and `check_bf16_plans_agree` requires their bits to match on every shape, so the threshold is scheduling | 2906 |
+| L-9 | int8 execution plans, matrix units | FLAT (`identical_gemm_int8_flat_kernel`, one thread per cell) on every column; MMA (`identical_gemm_int8_mma_kernel`, the vendor's integer matrix unit, Int32 accumulation, zero-code padding) on a column whose kernel-matrix row `lib_int8_matrix_unit_for` says True; both are the profile and `check_int8_mma_matches_flat` requires their bits to match on every shape, so the choice is scheduling; section 1.1 | 2910 |
 
 The narrowing seam L-2 is ordered flush-then-round. They do not commute at
 the subnormal boundary: a float32 subnormal rounds to a bf16 subnormal or to
@@ -55,6 +62,50 @@ fp32 profile has already declared zero. Flushing first keeps the bf16 image
 of a flushed float32 equal to the bf16 image the fp32 profile's own output
 seam (5g) would have produced. Every bf16 subnormal therefore narrows to a
 signed zero, and the gate counts all 254 of them.
+
+### 1.1 Clause L-9, the integer matrix units
+
+**The construction.** An int8 product is an integer of magnitude at most
+`127 * 127 = 16129` and is exact. A sum of exact integers in an Int32 that
+cannot overflow (L-7 bounds `k` so that `16129 * k < 2^31`) is the same
+integer under every order and every grouping of its terms. So the k-tile of
+a matrix unit (32 on both vendors), the fragment a thread holds, and the
+order in which the unit adds the products of one step are SCHEDULING: the
+Int32 that leaves the unit's last step is the Int32 `int8_dot_cell` produces
+with `p` ascending, and the profile's only floating steps, L-5 and L-6, run
+on that Int32 through the same `dequant_int8_pinned` on either plan. This is
+the direction section 3 declines for a vendor's bf16 or fp8 unit, and it is
+admissible here for one reason only: an integer unit has no rounding to be
+undocumented.
+
+**The units.** NVIDIA: IMMA, `mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32`
+(sm_80 and later), reached as the NVVM intrinsic
+`llvm.nvvm.mma.m16n8k32.row.col.s8`. AMD CDNA: MFMA `v_mfma_i32_16x16x32_i8`
+(gfx942, gfx950), reached as `llvm.amdgcn.mfma.i32.16x16x32.i8`. The public
+`mma` of the shipped stdlib (`max.gpu.compute.mma.mma`, MAX 26.5) dispatches
+float shapes only, so the int8 forms are reached by name through
+`llvm_intrinsic`, as `llvm.nvvm.fma.rn.f` already is in this tree.
+
+**The padding rule.** A `k` that is not a multiple of the unit's k-tile,
+and a row or column of a warp tile that lies beyond `m` or `n`, are filled
+with the ZERO CODE, never with a float: a zero code contributes exactly
+nothing to an integer sum, so the padded product is the unpadded product.
+Rows beyond `m` and columns beyond `n` are masked at the store.
+
+**The capability row.** `checks/kernel_matrix.mojo::lib_int8_matrix_unit_for`:
+True on NVIDIA and AMD, False on Apple and on the CPU column. Apple stays on
+the flat kernel: Metal's simdgroup matrix takes half and float operands
+only. `-D MOJOLEARN_INT8_FORCE_FLAT=1` keeps the flat plan on every column
+without changing the row, so a box that has the unit can run every gate
+through the flat plan and compare.
+
+**What is promised under L-9.** The same output bits from either plan on
+every shape, and the same bits as `gemm_int8_oracle`. **What is not.**
+Speed: neither plan has been timed on any vendor. And this clause is a
+construction argument until the gate runs on a box that has a unit:
+`check_int8_mma_matches_flat` and `check_int8_device_matches_oracle` on an
+H100 and on an MI300X or MI325X (`tools/lowbit_mma_leg.sh`), with the
+sabotage arms seen to fail; the M4 cannot run the MMA plan at all.
 
 ## 2. What is promised
 
@@ -71,13 +122,17 @@ quantized on another carry the same codes.
   an int8 weight is a rounded weight with a coarser step; the profiles pin
   the rounded computation, not its distance from the unrounded one.
 - Agreement between the two profiles, or between either and a vendor's
-  bf16 or int8 matrix unit. A tensor core's internal rounding is the
-  vendor's and undocumented; nothing here emulates one (the direction
-  `gemm/IDENTICAL_FP32_CONTRACT.md` section 0 declines by name).
+  bf16 or fp8 matrix unit. A floating tensor core's internal rounding is
+  the vendor's and undocumented; nothing here emulates one (the direction
+  `gemm/IDENTICAL_FP32_CONTRACT.md` section 0 declines by name). The
+  INTEGER matrix units are the one exception, and clause L-9 says why: an
+  int8 by int8 product into an Int32 has no rounding to document, so the
+  int8 profile may run on one and still be the profile.
 - Speed. The fused bf16 plan reads half the weight bytes of the fp32 plan;
-  the int8 plan is one thread per cell with no tiling. Neither has been
-  timed against the fp32 plans, and no number in this tree says either is
-  faster.
+  the int8 flat plan is one thread per cell with no tiling, and the int8
+  MMA plan (L-9) runs on the integer matrix unit of NVIDIA and AMD. None
+  has been timed against the fp32 plans, and no number in this tree says
+  any is faster.
 - Any orientation but OP_NT for int8i32.v1.
 
 ## 4. The sabotage arms
@@ -96,7 +151,10 @@ not reach a device kernel.
 ## 5. Owed
 
 A three-vendor card for both profiles at the nine shapes of the gate, the
-same way `gemm/README.md` records fp32.v1's 62 shapes; a tiled int8 plan if
-the flat one is ever the step's cost; and a bf16 activation seam (L-2 applied
+same way `gemm/README.md` records fp32.v1's 62 shapes; the first run of the
+int8 MMA plan (L-9) on an H100 and on an MI300X or MI325X, whose fragment
+layouts are read from the two ISA documents and unverified until
+`check_int8_mma_matches_flat` runs there; a CDNA2 (gfx90a) form of that
+plan, which needs the k16 MFMA; and a bf16 activation seam (L-2 applied
 between blocks), which no block uses today because the inference classes
 keep activations in float32 and store only weights low-bit.

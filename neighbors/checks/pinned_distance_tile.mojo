@@ -29,10 +29,15 @@ irreproducibility, and this file is where the two part company.
 
 CURRENT IMPLEMENTATIONS
 -----------------------
-The scalar kernel below owns one output cell per thread. The production
-register-tiled kernel later in this file shares loads across RT_ROWS x RT_COLS
-cells (currently 8x4 on NVIDIA, 4x4 on Apple). Both walk each cell's feature
+The scalar kernel below owns one output cell per thread. The register-tiled
+kernel later in this file shares loads across RT_ROWS x RT_COLS cells
+(currently 8x4 on NVIDIA, 4x4 on Apple). Both walk each cell's feature
 axis in ascending order, then apply the same expanded-distance epilogue.
+SINCE 2026-09-17 THE NVIDIA COLUMN'S DEFAULT IS NEITHER: it is the
+shared-memory tile of `neighbors/checks/smem_distance_tile.mojo`
+(DEVIATION 3000, kernel-matrix row `knn_smem_distance_tile_for`), which
+calls this file's `_rt_step` and `_rt_step_exact` per cell and so keeps
+the chain written here; Apple and AMD keep the register tile until timed.
 Neither splits or reorders an output's accumulation chain. Apple register
 tiles retain exact zero-FMA repair unless complete-chain exponent admission
 proves the repair unnecessary. Kernel-matrix policy selects the layout and

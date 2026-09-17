@@ -112,12 +112,28 @@ from checks.numerics import (
     identical_div,
     identical_exp,
     identical_fmax,
+    identical_gelu_erf,
+    identical_gelu_tanh,
     identical_mul,
     identical_mul_add,
     identical_rsqrt,
     identical_silu,
     identical_sin,
+    identical_tanh,
     portable_powf,
+)
+# lane/block-options (2026-09-17): the options record. Every option's seam
+# below cites its DEVIATION number from `transformer/block_options.mojo`.
+from transformer.block_options import (
+    BlockOptions,
+    MLP_SWIGLU,
+    NORM_LAYERNORM,
+    NORM_RMSNORM,
+    NORM_RMSNORM_OFFSET,
+    ROPE_SCALING_LINEAR,
+    ROPE_SCALING_LLAMA3,
+    ROPE_SCALING_NONE,
+    rope_angle_domain,
 )
 from transformer.checks.transformer_fixture import (
     MAX_ABS_POSITION,
@@ -204,15 +220,37 @@ def refuse_bad_weights(w: TransformerWeights) raises:
     a five-second diagnosis and an afternoon."""
     var d = w.dims.copy()
     var dm = d.d_model
+    var o = w.opts.copy()
+    o.validate(d.head_dim)
     _refuse_wrong_length("input_layernorm.weight", len(w.norm1_w), dm)
     _refuse_wrong_length("post_attention_layernorm.weight", len(w.norm2_w), dm)
     _refuse_wrong_length("q_proj.weight", len(w.w_q), d.q_width() * dm)
     _refuse_wrong_length("k_proj.weight", len(w.w_k), d.kv_width() * dm)
     _refuse_wrong_length("v_proj.weight", len(w.w_v), d.kv_width() * dm)
     _refuse_wrong_length("o_proj.weight", len(w.w_o), dm * d.q_width())
-    _refuse_wrong_length("gate_proj.weight", len(w.w_gate), d.intermediate * dm)
+    # lane/block-options: an ungated MLP carries no gate projection.
+    if o.gated():
+        _refuse_wrong_length("gate_proj.weight", len(w.w_gate), d.intermediate * dm)
+    else:
+        _refuse_optional("gate_proj.weight", len(w.w_gate), 0, False)
     _refuse_wrong_length("up_proj.weight", len(w.w_up), d.intermediate * dm)
     _refuse_wrong_length("down_proj.weight", len(w.w_down), dm * d.intermediate)
+    # The eleven optional tensors: present iff their flag is on.
+    _refuse_optional("q_proj.bias", len(w.b_q), d.q_width(), o.qkv_bias)
+    _refuse_optional("k_proj.bias", len(w.b_k), d.kv_width(), o.qkv_bias)
+    _refuse_optional("v_proj.bias", len(w.b_v), d.kv_width(), o.qkv_bias)
+    _refuse_optional("o_proj.bias", len(w.b_o), dm, o.o_bias)
+    _refuse_optional("input_layernorm.bias", len(w.norm1_b), dm, o.norm_bias)
+    _refuse_optional(
+        "post_attention_layernorm.bias", len(w.norm2_b), dm, o.norm_bias
+    )
+    _refuse_optional("up_proj.bias", len(w.b_up), d.intermediate, o.mlp_bias)
+    _refuse_optional("down_proj.bias", len(w.b_down), dm, o.mlp_bias)
+    _refuse_optional(
+        "gate_proj.bias", len(w.b_gate), d.intermediate, o.has_gate_bias()
+    )
+    _refuse_optional("q_norm.weight", len(w.qn_w), d.head_dim, o.qk_norm)
+    _refuse_optional("k_norm.weight", len(w.kn_w), d.head_dim, o.qk_norm)
     refuse_nonfinite("input_layernorm.weight", w.norm1_w)
     refuse_nonfinite("post_attention_layernorm.weight", w.norm2_w)
     refuse_nonfinite("q_proj.weight", w.w_q)
@@ -222,6 +260,45 @@ def refuse_bad_weights(w: TransformerWeights) raises:
     refuse_nonfinite("gate_proj.weight", w.w_gate)
     refuse_nonfinite("up_proj.weight", w.w_up)
     refuse_nonfinite("down_proj.weight", w.w_down)
+    refuse_nonfinite("q_proj.bias", w.b_q)
+    refuse_nonfinite("k_proj.bias", w.b_k)
+    refuse_nonfinite("v_proj.bias", w.b_v)
+    refuse_nonfinite("o_proj.bias", w.b_o)
+    refuse_nonfinite("input_layernorm.bias", w.norm1_b)
+    refuse_nonfinite("post_attention_layernorm.bias", w.norm2_b)
+    refuse_nonfinite("up_proj.bias", w.b_up)
+    refuse_nonfinite("down_proj.bias", w.b_down)
+    refuse_nonfinite("gate_proj.bias", w.b_gate)
+    refuse_nonfinite("q_norm.weight", w.qn_w)
+    refuse_nonfinite("k_norm.weight", w.kn_w)
+
+
+def _refuse_optional(name: String, got: Int, want: Int, on: Bool) raises:
+    """An optional tensor is PRESENT (at its exact length) iff its option is
+    on. Both mismatches are refused by the tensor's name, because a bias
+    that is silently ignored and a bias that is silently zero are the same
+    plausible-wrong-answer class as a mis-sized weight."""
+    if on:
+        if got != want:
+            raise Error(
+                String("transformer: ")
+                + name
+                + " is required by its option and has "
+                + String(got)
+                + " elements where the config wants "
+                + String(want)
+                + " REFUSED"
+            )
+    elif got != 0:
+        raise Error(
+            String("transformer: ")
+            + name
+            + " is present ("
+            + String(got)
+            + " elements) but its option is off REFUSED (pass the option"
+            + " or drop the tensor; a silently ignored tensor is a wrong"
+            + " model that looks like a right one)"
+        )
 
 
 # ===========================================================================
@@ -256,6 +333,11 @@ struct RopeTable(Copyable, Movable):
 
     var head_dim: Int
     var positions: Int
+    var rope_dim: Int
+    """DEVIATION 2948 (lane/block-options): how many leading columns of a
+    head are rotated. `head_dim` for the full rotary (every table built
+    before this lane); a smaller even number for the partial rotary of the
+    GPT-NeoX/Phi families. The table is `[positions, rope_dim/2]`."""
     var inv_freq: List[Float32]
     var cos: List[Float32]
     var sin: List[Float32]
@@ -263,12 +345,148 @@ struct RopeTable(Copyable, Movable):
     def __init__(out self, head_dim: Int, positions: Int):
         self.head_dim = head_dim
         self.positions = positions
+        self.rope_dim = head_dim
         self.inv_freq = List[Float32]()
         self.cos = List[Float32]()
         self.sin = List[Float32]()
 
+    def __init__(out self, head_dim: Int, positions: Int, rope_dim: Int):
+        self.head_dim = head_dim
+        self.positions = positions
+        self.rope_dim = rope_dim
+        self.inv_freq = List[Float32]()
+        self.cos = List[Float32]()
+        self.sin = List[Float32]()
+
+    def half(self) -> Int:
+        return self.rope_dim // 2
+
 
 def build_rope_table(dims: TransformerDims) raises -> RopeTable:
+    """Today's table: `build_rope_table_opts` at the default record, which
+    is theta 10000.0, no scaling, the full rotary. Every pre-existing
+    caller (the byte LM host, the host forward, the gates) reaches this and
+    gets the bits it always got."""
+    return build_rope_table_opts(dims, BlockOptions())
+
+
+def rope_inv_freq_scaled(opts: BlockOptions, rope_dim: Int) raises -> List[Float32]:
+    """Seam S6 with the options, ORACLE spelling (the device file carries
+    its own transcription, `llama_rope_inv_freq_scaled_host`).
+
+    DEVIATION 2930, `rope_theta` as a parameter: the base is `opts.rope_theta`
+    where it was the frozen `ROPE_THETA`; the arithmetic is S6's unchanged,
+    `e = 2i / rope_dim`, `inv = 1 / theta**e`, through `identical_div` and
+    `portable_powf`. `modeling_rope_utils.py::_compute_default_rope_parameters`
+    (huggingface/transformers d56c55b, :95-135, `dim = head_dim *
+    partial_rotary_factor`).
+
+    DEVIATION 2931, `rope_scaling = linear`:
+    `_compute_linear_scaling_rope_parameters` (:138-176) is the default
+    inverse frequencies then `inv_freq /= factor`, ONE division, and an
+    `attention_factor` of exactly 1.0. Spelled `ftz(identical_div(inv, factor))`.
+
+    DEVIATION 2932, `rope_scaling = llama3`: `_compute_llama3_parameters`
+    (:384-432), in the reference's own operation order with every
+    intermediate a Float32 and every division through `identical_div`:
+
+        low_wl  = old / low_freq_factor
+        high_wl = old / high_freq_factor
+        wl      = 2*pi / inv                        (2*pi = 0x40C90FDB)
+        inv_l   = inv / factor if wl > low_wl else inv
+        medium  = not (wl < high_wl) and not (wl > low_wl)
+        if medium:
+            smooth = (old / wl - low_freq_factor) / (high_freq_factor - low_freq_factor)
+            inv_l  = ((1 - smooth) * inv_l) / factor + smooth * inv_l
+
+    The reference evaluates `(1 - s) * inv_l / factor` left to right, so the
+    product is rounded before the division; both products are `identical_mul`
+    (uncontractible) and the final add is a plain add of two rounded
+    terms, UNFUSED, for the same reason S10 is. The comparisons are exact
+    Float32 compares on flushed values. `attention_factor` is 1.0 for
+    llama3 too (:431), so no scaling of cos and sin is spelled. **This is
+    OUR spelling of the reference's arithmetic, not agreement with torch**:
+    torch mixes Python float64 scalars into these expressions and rounds
+    where its promotion rules say; contract section 11's "not agreement
+    with HuggingFace" covers it.
+    """
+    if rope_dim <= 0 or rope_dim % 2 != 0:
+        raise Error("transformer: rope needs an even positive rope_dim")
+    var half = rope_dim // 2
+    var out = List[Float32]()
+    var theta = opts.rope_theta
+    for i in range(half):
+        var e = ftz(identical_div(Float32(2 * i), Float32(rope_dim)))
+        var inv = ftz(identical_div(Float32(1.0), portable_powf(theta, e)))
+        if opts.rope_scaling == ROPE_SCALING_LINEAR:
+            inv = ftz(identical_div(inv, ftz(opts.rope_factor)))
+        elif opts.rope_scaling == ROPE_SCALING_LLAMA3:
+            var factor = ftz(opts.rope_factor)
+            var lo_f = ftz(opts.rope_low_freq_factor)
+            var hi_f = ftz(opts.rope_high_freq_factor)
+            var old = Float32(opts.rope_original_max_positions)
+            var low_wl = ftz(identical_div(old, lo_f))
+            var high_wl = ftz(identical_div(old, hi_f))
+            var two_pi = bitcast[DType.float32](UInt32(0x40C90FDB))
+            var wl = ftz(identical_div(two_pi, inv))
+            var inv_l = inv
+            if wl > low_wl:
+                inv_l = ftz(identical_div(inv, factor))
+            var medium = (not (wl < high_wl)) and (not (wl > low_wl))
+            if medium:
+                var ratio = ftz(identical_div(old, wl))
+                var num = ftz(ratio - lo_f)
+                var den = ftz(hi_f - lo_f)
+                var smooth = ftz(identical_div(num, den))
+                var one_minus = ftz(Float32(1.0) - smooth)
+                var t1 = ftz(identical_mul(one_minus, inv_l))
+                t1 = ftz(identical_div(t1, factor))
+                var t2 = ftz(identical_mul(smooth, inv_l))
+                inv_l = ftz(ftz(t1) + ftz(t2))
+            inv = inv_l
+        out.append(inv)
+    return out^
+
+
+def refuse_rope_angle_domain(
+    inv_freq: List[Float32], positions: Int, what: String
+) raises:
+    """DEVIATION 2933: the ceiling is the ANGLE's domain. The largest angle
+    the table will hold is `(positions - 1) * inv_freq[i]` at the column
+    whose inverse frequency is largest, spelled exactly as S7 spells the
+    angle; if it is at or above 8192.0 the Cody-Waite reduction of
+    `_cephes_sincosf_core` has no certified answer and the table is REFUSED
+    BY NAME rather than filled with numbers the reduction lost. At the
+    default options `inv_freq[0] == 1.0` and this is DEVIATION 812's
+    `positions > 8192`, exactly; under a linear factor `f` it admits
+    `f` times as many positions, and a wider reduction in
+    `checks/numerics.mojo` (the numerics lane's edit, not this lane's) is
+    the only way past it."""
+    var worst = Float32(0.0)
+    var worst_i = 0
+    for i in range(len(inv_freq)):
+        var angle = ftz(identical_mul(Float32(positions - 1), ftz(inv_freq[i])))
+        if angle > worst:
+            worst = angle
+            worst_i = i
+    if worst >= rope_angle_domain():
+        raise Error(
+            what
+            + ": a rotary table of "
+            + String(positions)
+            + " positions puts the RoPE angle at column "
+            + String(worst_i)
+            + " at "
+            + String(worst)
+            + ", at or beyond the Cody-Waite domain of _cephes_sincosf_core"
+            + " (8192.0; DEVIATION 812 restated as DEVIATION 2933). Fewer"
+            + " positions, a rope_scaling factor, or a wider reduction in"
+            + " checks/numerics.mojo are the exits; a clamped angle is a"
+            + " wrong answer that looks like a right one"
+        )
+
+
+def build_rope_table_opts(dims: TransformerDims, opts: BlockOptions) raises -> RopeTable:
     """Seams S6, S7 and S8, on the HOST, once.
 
     S6, the inverse frequencies (`compute_default_rope_parameters`,
@@ -327,27 +545,32 @@ def build_rope_table(dims: TransformerDims) raises -> RopeTable:
     position is therefore the binding constraint. A refusal, not a clamp: a
     clamped angle is a wrong answer that looks like a right one."""
     dims.validate()
-    if dims.rope_positions >= MAX_ABS_POSITION:
+    opts.validate(dims.head_dim)
+    var hd = dims.head_dim
+    # DEVIATION 2948: the rotated width. `half` columns of table, and the
+    # card stage `rope.cos` is `[P_max, rope_dim/2]` (head_dim/2 today).
+    var rd = opts.rope_dim_of(hd)
+    var half = rd // 2
+    var t = RopeTable(hd, dims.rope_positions, rd)
+    if dims.rope_positions > opts.max_positions:
         raise Error(
             String("transformer: rope table of ")
             + String(dims.rope_positions)
-            + " positions REFUSED; the angle at inv_freq[0] == 1.0 is the"
-            + " position itself and _cephes_sincosf_core's Cody-Waite"
-            + " reduction is valid only on |x| < "
-            + String(MAX_ABS_POSITION)
-            + " (DEVIATION 812)"
+            + " positions exceeds the model's declared max_positions "
+            + String(opts.max_positions)
+            + " REFUSED (DEVIATION 2933)"
         )
-    var hd = dims.head_dim
-    var half = dims.half_head()
-    var t = RopeTable(hd, dims.rope_positions)
 
-    # ---- S6 -----------------------------------------------------------
-    for i in range(half):
-        var e = ftz(identical_div(Float32(2 * i), Float32(hd)))
-        t.inv_freq.append(ftz(identical_div(Float32(1.0), portable_powf(ROPE_THETA, e))))
+    # ---- S6, with DEVIATIONS 2930-2932 ----------------------------------
+    t.inv_freq = rope_inv_freq_scaled(opts, rd)
+    # DEVIATION 2933: the ceiling, on the ANGLE. Was `rope_positions >=
+    # MAX_ABS_POSITION` here, which refused a table of exactly 8192
+    # positions whose largest angle (8191) is inside the domain while the
+    # device admitted it; the two sides now agree by construction.
+    refuse_rope_angle_domain(t.inv_freq, dims.rope_positions, "transformer")
 
     # ---- S7 then S8, position major, so the table's flat order is the
-    #      card stage's `[P_max, head_dim/2]` -----------------------------
+    #      card stage's `[P_max, rope_dim/2]` -----------------------------
     for p in range(dims.rope_positions):
         for i in range(half):
             var angle = ftz(identical_mul(Float32(p), ftz(t.inv_freq[i])))
@@ -852,6 +1075,120 @@ def rms_norm_into(
             out.append(ftz(identical_mul(ftz(wnorm[j]), inner)))
 
 
+def norm_into(
+    src: List[Float32],
+    wnorm: List[Float32],
+    bnorm: List[Float32],
+    m: Int,
+    dm: Int,
+    eps: Float32,
+    kind: Int,
+    has_bias: Bool,
+    mut sumsq: List[Float32],
+    mut out: List[Float32],
+) raises:
+    """The block's normalization under the options (lane/block-options,
+    2026-09-17). `rms_norm_into` above is UNTOUCHED and is the frozen
+    profile's spelling; this function's `NORM_RMSNORM` arm is that
+    arithmetic verbatim with `eps` an argument, so the default record
+    reproduces its bits by construction, and the block oracle routes every
+    call through here so that one function owns the norm's variants.
+
+    DEVIATION 2937, `norm_eps` as a parameter: S2's `mean + eps` reads the
+    record's eps (today's `RMS_EPS`, 1e-6, at the default). No other bit
+    moves.
+
+    DEVIATION 2936, `norm = layernorm` (+ `norm_bias`): `nn.LayerNorm`
+    (`torch.nn.functional.layer_norm`, biased variance over the last axis)
+
+        mean  = sum_j x_j / d                        plain adds, serial ascending from +0.0
+        dev_j = x_j - mean
+        var   = sum_j dev_j^2 / d                    fma chain, serial ascending from +0.0
+        rstd  = rsqrt(var + eps)
+        y_j   = w_j * (dev_j * rstd) + b_j
+
+    pinned, per row: `acc = ftz(ftz(acc) + ftz(x_j))`; `mean =
+    ftz(identical_div(acc, d))`; `dev_j = ftz(ftz(x_j) - mean)`; `acc2 =
+    ftz(fma(dev_j, dev_j, acc2))`; the recorded `norm*.sumsq` stage IS
+    `acc2` (the sum of squared deviations; the mean is an internal);
+    `rstd = ftz(identical_rsqrt(ftz(var + eps)))` with `var =
+    ftz(identical_div(acc2, d))`; `inner = pinned_mul(dev_j, rstd)`;
+    `y = pinned_mul(w_j, inner)`; with a bias `y = ftz(ftz(y) + ftz(b_j))`,
+    one plain add of two rounded values. Two serial folds per row, no
+    tree, one thread per row on the device. The two-pass (mean, then
+    deviations) form is chosen over `E[x^2] - E[x]^2` because the latter
+    cancels catastrophically and no reference spells it.
+
+    DEVIATION 2938, `norm = rmsnorm_offset`: `GemmaRMSNorm.forward`
+    (modeling_gemma.py, `output * (1.0 + self.weight.float())`): S4's
+    weight is `ftz(Float32(1.0) + ftz(w_j))`, one plain add, and the rest is
+    S1-S4 unchanged. Gemma keeps the whole norm in float32, which is this
+    profile's dtype anyway.
+    """
+    if kind == NORM_LAYERNORM:
+        for t in range(m):
+            var acc = Float32(0.0)
+            for j in range(dm):
+                acc = ftz(ftz(acc) + ftz(src[t * dm + j]))
+            var mean = ftz(identical_div(acc, Float32(dm)))
+            var acc2 = Float32(0.0)
+            for j in range(dm):
+                var dev = ftz(ftz(src[t * dm + j]) - mean)
+                acc2 = ftz(identical_mul_add(dev, dev, acc2))
+            sumsq.append(acc2)
+            var variance = ftz(identical_div(acc2, Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(variance + eps)))
+            for j in range(dm):
+                var dev = ftz(ftz(src[t * dm + j]) - mean)
+                var inner = ftz(identical_mul(dev, rstd))
+                var y = ftz(identical_mul(ftz(wnorm[j]), inner))
+                if has_bias:
+                    y = ftz(ftz(y) + ftz(bnorm[j]))
+                out.append(y)
+        return
+    if kind != NORM_RMSNORM and kind != NORM_RMSNORM_OFFSET:
+        raise Error(
+            String("transformer: norm kind ") + String(kind) + " is not spelled"
+        )
+    if has_bias:
+        raise Error("transformer: an RMSNorm carries no bias (norm_bias needs layernorm)")
+    for t in range(m):
+        var acc = Float32(0.0)
+        for j in range(dm):
+            var xj = ftz(src[t * dm + j])
+            acc = ftz(identical_mul_add(xj, xj, acc))
+        sumsq.append(acc)
+        var mean = ftz(identical_div(acc, Float32(dm)))
+        var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+        for j in range(dm):
+            var inner = ftz(identical_mul(ftz(src[t * dm + j]), rstd))
+            var wj = ftz(wnorm[j])
+            if kind == NORM_RMSNORM_OFFSET:
+                wj = ftz(Float32(1.0) + wj)
+            out.append(ftz(identical_mul(wj, inner)))
+
+
+def add_bias_into(mut buf: List[Float32], bias: List[Float32], rows: Int, width: Int) raises:
+    """DEVIATIONS 2934, 2935 and 2945: a projection's bias, `nn.Linear`'s
+    `y = x @ W^T + b`, spelled as the profile's GEMM cell followed by ONE
+    plain add per output cell, `ftz(ftz(y) + ftz(b_col))`. The reference's
+    `addmm` may fold the bias into its accumulator's seed or its epilogue,
+    which is cuBLAS's decision and not a spelling this profile can pin; the
+    one-add-after form is OURS, and every side spells it. In place."""
+    if len(bias) != width:
+        raise Error(
+            String("transformer: a bias of ")
+            + String(len(bias))
+            + " elements cannot be added across "
+            + String(width)
+            + " columns"
+        )
+    for t in range(rows):
+        for j in range(width):
+            var i = t * width + j
+            buf[i] = ftz(ftz(buf[i]) + ftz(bias[j]))
+
+
 def apply_rope_into(
     src: List[Float32],
     n_head: Int,
@@ -909,9 +1246,26 @@ def apply_rope_into(
     step, which is sabotage `S07_ROPE_RELATIVE_POSITION` and which is why
     contract section 10 says it will look inert and be deleted if clause (d)
     is written late."""
-    var half = head_dim // 2
+    # DEVIATION 2948 (lane/block-options): the PARTIAL rotary. Only the
+    # first `rope.rope_dim` columns of a head are rotated; the rest pass
+    # through, FLUSHED ON LOAD like every other operand (DEVIATION 1026's
+    # per-load rule; a pass-through is a copy and not a seam, and the flush
+    # is what every consumer of the column would apply anyway). `rope_dim
+    # == head_dim` is today's full rotation and takes the `j < rd` branch
+    # for every column. GPT-NeoX's `rotary_ndims = head_size *
+    # rotary_pct` (modeling_gpt_neox.py) is the reference shape.
+    var rd = rope.rope_dim
+    var half = rope.half()
     var width = n_head * head_dim
     var m = b * l
+    if rd > head_dim or rd <= 0 or rd % 2 != 0:
+        raise Error(
+            String("transformer: the rotary table's rope_dim ")
+            + String(rd)
+            + " does not fit head_dim "
+            + String(head_dim)
+            + " REFUSED"
+        )
     for t in range(m):
         var li = t % l
         var p = pos0 + li
@@ -928,6 +1282,9 @@ def apply_rope_into(
         for h in range(n_head):
             var base = t * width + h * head_dim
             for j in range(head_dim):
+                if j >= rd:
+                    out.append(ftz(src[base + j]))
+                    continue
                 var ci: Int
                 var rot: Float32
                 if j < half:
@@ -1061,6 +1418,17 @@ def transformer_block_oracle(
         raise Error("transformer: the KV cache does not match the config")
     if rope.head_dim != hd:
         raise Error("transformer: the rotary table does not match head_dim")
+    # lane/block-options: the record every option below reads.
+    var opts = w.opts.copy()
+    opts.validate(hd)
+    if rope.rope_dim != opts.rope_dim_of(hd):
+        raise Error(
+            String("transformer: the rotary table rotates ")
+            + String(rope.rope_dim)
+            + " columns but the options say rope_dim "
+            + String(opts.rope_dim_of(hd))
+            + " REFUSED"
+        )
     refuse_nonfinite("x", x)
     refuse_bad_weights(w)
     # THE WHOLE ALLOCATION, not just the used prefix. Stricter than the
@@ -1086,12 +1454,16 @@ def transformer_block_oracle(
             + String(cache.cap)
             + " REFUSED"
         )
-    if s_abs > MAX_ABS_POSITION:
+    # DEVIATION 2933: the model's declared ceiling. The angle domain itself
+    # was enforced when the table was built (`refuse_rope_angle_domain`),
+    # and a position past the table is refused by `apply_rope_into`.
+    if s_abs > opts.max_positions:
         raise Error(
             String("transformer: absolute position ")
             + String(s_abs - 1)
-            + " is at or beyond the Cody-Waite domain of"
-            + " _cephes_sincosf_core (DEVIATION 812)"
+            + " is at or beyond the model's max_positions "
+            + String(opts.max_positions)
+            + " (DEVIATION 2933; DEVIATION 812's 8192 at the default)"
         )
     # THE KEY SPAN THIS CALL READS: absolute keys `[key_lo, pos0 + l)`.
     # Full causal has `key_lo == 0` and `s == pos0 + l` exactly as before;
@@ -1113,7 +1485,12 @@ def transformer_block_oracle(
     # author to find out. The cost is one move per stage.
     var n1_sumsq = List[Float32]()
     var n1_out = List[Float32]()
-    rms_norm_into(x, w.norm1_w, m, dm, n1_sumsq, n1_out)
+    # lane/block-options: `norm_into`'s RMSNorm arm is `rms_norm_into`
+    # verbatim with eps an argument (DEVIATIONS 2936-2938 for the others).
+    norm_into(
+        x, w.norm1_w, w.norm1_b, m, dm, opts.norm_eps, opts.norm_kind,
+        opts.norm_bias, n1_sumsq, n1_out,
+    )
     st.norm1_sumsq = n1_sumsq^
     st.norm1_out = n1_out^
 
@@ -1134,6 +1511,44 @@ def transformer_block_oracle(
     st.q_proj_out = gemm_oracle(st.norm1_out, w.w_q, OP_NT, m, qw, dm)
     st.k_proj_out = gemm_oracle(st.norm1_out, w.w_k, OP_NT, m, kw, dm)
     st.v_proj_out = gemm_oracle(st.norm1_out, w.w_v, OP_NT, m, kw, dm)
+    # DEVIATION 2934, `qkv_bias` (Qwen2's `attention_bias=True`): one plain
+    # add per cell AFTER the GEMM, recorded INTO the `*_proj.out` stages so
+    # the card keeps its thirty tags.
+    if opts.qkv_bias:
+        var qb = st.q_proj_out.copy()
+        add_bias_into(qb, w.b_q, m, qw)
+        st.q_proj_out = qb^
+        var kb = st.k_proj_out.copy()
+        add_bias_into(kb, w.b_k, m, kw)
+        st.k_proj_out = kb^
+        var vb = st.v_proj_out.copy()
+        add_bias_into(vb, w.b_v, m, kw)
+        st.v_proj_out = vb^
+    # DEVIATION 2946, `qk_norm` (Qwen3's `q_norm`/`k_norm`, Gemma3's): an
+    # RMSNorm over EACH HEAD's `head_dim` vector of q and of k, BEFORE RoPE
+    # (`Qwen3Attention.forward`: `query_states = self.q_norm(self.q_proj(
+    # hidden_states).view(hidden_shape))` then `apply_rotary_pos_emb`). The
+    # token-major `[M, n_h*head_dim]` layout already has each head's vector
+    # contiguous, so it is `norm_into` over `M * n_h` rows of width
+    # `head_dim` with the shared `[head_dim]` weight; the form (plain or
+    # Gemma's offset) follows the block's norm, `qk_norm_kind`. The sum of
+    # squares is an internal (no card stage); the normed q and k are
+    # recorded INTO `q_proj.out` / `k_proj.out`.
+    if opts.qk_norm:
+        var qn_sumsq = List[Float32]()
+        var qn_out = List[Float32]()
+        norm_into(
+            st.q_proj_out, w.qn_w, w.qn_w, m * nh, hd, opts.norm_eps,
+            opts.qk_norm_kind(), False, qn_sumsq, qn_out,
+        )
+        st.q_proj_out = qn_out^
+        var kn_sumsq = List[Float32]()
+        var kn_out = List[Float32]()
+        norm_into(
+            st.k_proj_out, w.kn_w, w.kn_w, m * nkv, hd, opts.norm_eps,
+            opts.qk_norm_kind(), False, kn_sumsq, kn_out,
+        )
+        st.k_proj_out = kn_out^
 
     # ---- S6-S8, the rotary table, computed once, recorded here ----------
     # DEVIATION 1004: recorded on every call. The values are `rope`'s and
@@ -1239,9 +1654,21 @@ def transformer_block_oracle(
             var cell = gemm_oracle(qmat, kmat, OP_NT, l, s, hd)
             for qi in range(l):
                 for j in range(s):
-                    scores.append(
-                        ftz(identical_mul(ftz(cell[qi * s + j]), scale))
-                    )
+                    var sc = ftz(identical_mul(ftz(cell[qi * s + j]), scale))
+                    # DEVIATION 2947, `attn_softcap` (Gemma2's
+                    # `attn_logit_softcapping`, `eager_attention_forward` in
+                    # modeling_gemma2.py: `attn_weights = attn_weights /
+                    # softcap; attn_weights = torch.tanh(attn_weights);
+                    # attn_weights = attn_weights * softcap`), AFTER the scale
+                    # and BEFORE the mask: one `identical_div`, one
+                    # `identical_tanh` (DEVIATION 821's portable tanh), one
+                    # `identical_mul`, each flushed. Recorded into
+                    # `attn.scores`.
+                    if opts.has_softcap():
+                        var cap = ftz(opts.attn_softcap)
+                        var th = ftz(identical_tanh(ftz(identical_div(sc, cap))))
+                        sc = ftz(identical_mul(th, cap))
+                    scores.append(sc)
     _apply_plant(scores, plant, PLANT_AT_SCORES)
 
     # ---- S13: the additive causal mask (EAF:205-206) ---------------------
@@ -1453,6 +1880,11 @@ def transformer_block_oracle(
 
     # ---- S5, o_proj (:280). The flatten before it is a COPY (:279). ------
     st.o_proj_out = gemm_oracle(st.attn_ctx, w.w_o, OP_NT, m, dm, qw)
+    # DEVIATION 2935, `o_bias`: one plain add per cell after the GEMM.
+    if opts.o_bias:
+        var ob = st.o_proj_out.copy()
+        add_bias_into(ob, w.b_o, m, dm)
+        st.o_proj_out = ob^
 
     # ---- S22, the first residual (LDL:317) -------------------------------
     # `hidden_states = residual + hidden_states`, where `residual` is the
@@ -1464,14 +1896,42 @@ def transformer_block_oracle(
     # ---- S1-S4 again, post_attention_layernorm (LDL:321) -----------------
     var n2_sumsq = List[Float32]()
     var n2_out = List[Float32]()
-    rms_norm_into(st.residual1_out, w.norm2_w, m, dm, n2_sumsq, n2_out)
+    norm_into(
+        st.residual1_out, w.norm2_w, w.norm2_b, m, dm, opts.norm_eps,
+        opts.norm_kind, opts.norm_bias, n2_sumsq, n2_out,
+    )
     st.norm2_sumsq = n2_sumsq^
     st.norm2_out = n2_out^
 
     # ---- S5, S20, S21, S5: the MLP (LMLP:174-176) ------------------------
-    # `down_proj(act_fn(gate_proj(x)) * up_proj(x))`.
-    st.gate_proj_out = gemm_oracle(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
+    # `down_proj(act_fn(gate_proj(x)) * up_proj(x))` at the default record.
+    #
+    # lane/block-options, the MLP axis, all of it in one place:
+    #   DEVIATION 2939  mlp = gelu       ungated: down(gelu_erf(up(x)))
+    #   DEVIATION 2943  mlp = gelu_tanh  ungated: down(gelu_tanh(up(x)))
+    #   DEVIATION 2944  mlp = geglu / geglu_tanh: gated, GELU for SiLU
+    #                   (Gemma's `hidden_act = gelu_pytorch_tanh` is
+    #                   geglu_tanh: `down(act(gate(x)) * up(x))`)
+    #   DEVIATION 2945  mlp_bias: one plain add after gate, up and down
+    # The activations are `identical_gelu_erf` (DEVIATION 823,
+    # `GELUActivation` verbatim) and `identical_gelu_tanh` (DEVIATION 824,
+    # `GELUTanh`/`NewGELUActivation` verbatim); nothing is spelled here. The
+    # card keeps its thirty tags: under an ungated MLP `gate_proj.out` and
+    # `mlp.gated` are recorded EMPTY (the `stage_tag` docstring's rule: a
+    # stage that is empty for a shape is still recorded), `silu.out` holds
+    # the activation of `up_proj.out` and feeds `down_proj` directly.
+    var gated = opts.gated()
+    if gated:
+        st.gate_proj_out = gemm_oracle(st.norm2_out, w.w_gate, OP_NT, m, inter, dm)
+        if opts.mlp_bias:
+            var gb = st.gate_proj_out.copy()
+            add_bias_into(gb, w.b_gate, m, inter)
+            st.gate_proj_out = gb^
     st.up_proj_out = gemm_oracle(st.norm2_out, w.w_up, OP_NT, m, inter, dm)
+    if opts.mlp_bias:
+        var ub = st.up_proj_out.copy()
+        add_bias_into(ub, w.b_up, m, inter)
+        st.up_proj_out = ub^
 
     # S20: `identical_silu` (DEVIATION 744), which is ATen's `z / (1 +
     # exp(-z))`, ONE DIVISION. **Not** `x * sigmoid(x)`, which is two
@@ -1479,17 +1939,35 @@ def transformer_block_oracle(
     # (`max/kernels/src/nn/activations.mojo:249`). Sabotage
     # `S20_SILU_MUL_SIGMOID` must move `silu.out`.
     for i in range(m * inter):
-        st.silu_out.append(ftz(identical_silu(ftz(st.gate_proj_out[i]))))
+        var z: Float32
+        if gated:
+            z = ftz(st.gate_proj_out[i])
+        else:
+            z = ftz(st.up_proj_out[i])
+        if opts.act_is_silu():
+            st.silu_out.append(ftz(identical_silu(z)))
+        elif opts.act_is_gelu_tanh():
+            st.silu_out.append(ftz(identical_gelu_tanh(z)))
+        else:
+            st.silu_out.append(ftz(identical_gelu_erf(z)))
 
-    # S21: one product, so `pinned_mul`.
-    for i in range(m * inter):
-        st.mlp_gated.append(
-            ftz(identical_mul(ftz(st.silu_out[i]), ftz(st.up_proj_out[i])))
+    # S21: one product, so `pinned_mul`. Absent under an ungated MLP.
+    if gated:
+        for i in range(m * inter):
+            st.mlp_gated.append(
+                ftz(identical_mul(ftz(st.silu_out[i]), ftz(st.up_proj_out[i])))
+            )
+        st.down_proj_out = gemm_oracle(
+            st.mlp_gated, w.w_down, OP_NT, m, dm, inter
         )
-
-    st.down_proj_out = gemm_oracle(
-        st.mlp_gated, w.w_down, OP_NT, m, dm, inter
-    )
+    else:
+        st.down_proj_out = gemm_oracle(
+            st.silu_out, w.w_down, OP_NT, m, dm, inter
+        )
+    if opts.mlp_bias:
+        var db = st.down_proj_out.copy()
+        add_bias_into(db, w.b_down, m, dm)
+        st.down_proj_out = db^
 
     # ---- S23, the second residual (LDL:323) ------------------------------
     for i in range(m * dm):

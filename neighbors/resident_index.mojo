@@ -36,7 +36,13 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from neighbors.estimator import DEFAULT_QUERY_TILE, knn_search_resident
+from neighbors.impl.selection.distance_weights import WEIGHTS_UNIFORM
+from neighbors.estimator import (
+    DEFAULT_QUERY_TILE,
+    knn_classifier_predict_resident,
+    knn_regressor_predict_resident,
+    knn_search_resident,
+)
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
@@ -152,4 +158,80 @@ def knn_index_search(
         entry.ctx, entry.index, index_ptr, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
+    )
+
+
+def _resident_entry_check(handle: Int, n_index: Int, n_features: Int) raises:
+    """The handle exists and holds the shape the call names."""
+    var state = KNN_INDEX_REGISTRY.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released resident k-NN index handle")
+    ref entry = state[].entries[handle]
+    if entry.n_index != n_index or entry.n_features != n_features:
+        raise Error(
+            "knn resident predict: the handle holds a "
+            + String(entry.n_index) + " x " + String(entry.n_features)
+            + " index, the call names " + String(n_index) + " x "
+            + String(n_features)
+        )
+
+
+def knn_index_classify(
+    handle: Int,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_outputs: Int,
+    n_classes: List[Int],
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    want_proba: Bool,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+) raises -> Int:
+    """`knn_classifier_predict_resident` over the handle's index and
+    context (DEVIATION 3002)."""
+    _resident_entry_check(handle, n_index, n_features)
+    var state = KNN_INDEX_REGISTRY.get_or_create_ptr()
+    ref entry = state[].entries[handle]
+    return knn_classifier_predict_resident(
+        entry.ctx, entry.index, index_ptr, n_index, queries_ptr, n_queries,
+        n_features, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
+        out_proba_ptr, out_uniq_ptr, want_proba, requested_query_tile,
+        metric, metric_arg, weights,
+    )
+
+
+def knn_index_regress(
+    handle: Int,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+) raises -> Int:
+    """`knn_regressor_predict_resident` over the handle's index and
+    context (DEVIATION 3002)."""
+    _resident_entry_check(handle, n_index, n_features)
+    var state = KNN_INDEX_REGISTRY.get_or_create_ptr()
+    ref entry = state[].entries[handle]
+    return knn_regressor_predict_resident(
+        entry.ctx, entry.index, index_ptr, n_index, queries_ptr, n_queries,
+        n_features, k, y_ptr, n_outputs, out_ptr, requested_query_tile,
+        metric, metric_arg, weights,
     )

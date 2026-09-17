@@ -114,5 +114,7 @@ native build, cloud rental or PyPI publication occurred in this change.
    run release admission, then publish. Missing references, stale fixtures and
    failed or absent negative controls stay open until observed.
 
-Paid hardware work is awaiting the user's cloud spending cap, requested during
-this session. The local Mac cannot supply NVIDIA/AMD multi-GPU evidence.
+The user subsequently authorized RunPod and R2-backed staging. Follow-up CPU
+controls and admission hardening are recorded in
+`LANE_STATUS_reference_admission_integrity.md`. NVIDIA/AMD multi-GPU
+qualification remains open; the local Mac cannot supply that evidence.

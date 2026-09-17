@@ -83,7 +83,7 @@ def test_load_table_refuses_a_missing_or_foreign_file(tmp_path):
 
 def _column(vendor, commit, cells, fixtures):
     return dict(mode="identical", commit=commit, vendor=vendor, repeats=2, heldout_seed=1,
-                fixtures=fixtures, heldout={}, cells=cells, package=dict(par_devices="0"))
+                fixtures=fixtures, heldout={f: dict(X=v["X"]) for f,v in fixtures.items()}, cells=cells, package=dict(par_devices="0"))
 
 
 def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_path):
@@ -109,15 +109,15 @@ def test_build_table_newest_wins_and_same_commit_disagreement_is_a_conflict(tmp_
     d = tmp_path / "bench" / "results" / "identity_break" / "r"
     d.mkdir(parents=True)
     files = {
-        "apple-m4.json": _column("apple-m4", "a" * 40, {"lane-a/base": stable("1111"), "lane-b/base": stable("5555")}, fx),
-        "nvidia-h100.json": _column("nvidia-h100", "a" * 40, {"lane-a/base": stable("1111"), "lane-b/base": stable("6666")}, fx),
-        "amd-mi300x.sabotage.json": _column("amd-mi300x", "a" * 40, {"lane-a/base": stable("ffff")}, fx),
+        "apple-m4.json": _column("apple-m4", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("5555555555555555")}, fx),
+        "nvidia-h100.json": _column("nvidia-h100", "a" * 40, {"lane-a/base": stable("1111111111111111"), "lane-b/base": stable("6666666666666666")}, fx),
+        "amd-mi300x.sabotage.json": _column("amd-mi300x", "a" * 40, {"lane-a/base": stable("ffffffffffffffff")}, fx),
     }
     for name, body in files.items():
         (d / name).write_text(json.dumps(body))
     table = vref.build_table([str(d / n) for n in files], H, str(tmp_path))
     a = table["cells"]["lane-a/base"]["train"]
-    assert a["ref"] == "1111" and set(a["cols"]) == {"apple", "nvidia"}, "a sabotage file must never be admitted"
+    assert a["ref"] == "1111111111111111" and set(a["cols"]) == {"apple", "nvidia"}, "a sabotage file must never be admitted"
     b = table["cells"]["lane-b/base"]["train"]
     assert b.get("conflict") and b["ref"] is None
     assert table["cells"]["lane-a/base"]["infer"]["ref"] == "n/a:function"
@@ -143,7 +143,7 @@ ENT = dict(ref="0123456789abcdef", cols={"apple": 0})
     ("n/a:function", ENT, vref.OWED),
 ])
 def test_judge_states(value, ent, state):
-    got, _ = vref.judge(value, ent, error="NotImplementedError: no CPU implementation of x.y yet")
+    got, _ = vref.judge(value, ent, error="NotImplementedError: no CPU implementation of x.y yet" if value is None else None)
     assert got == state
 
 

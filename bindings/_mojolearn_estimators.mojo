@@ -23,6 +23,11 @@ from max.gpu.host import DeviceContext
 from core.labeled_reference_predict import labeled_reference_predict
 from dbscan.estimator import dbscan_fit
 from kde.estimator import kde_score_samples_host_ptr
+from kde.resident_fit import (
+    kde_fit_prepare,
+    kde_fit_release,
+    kde_score_samples_resident,
+)
 from decomposition.estimator import (
     inverse_transform_host,
     pca_fit_host,
@@ -676,6 +681,81 @@ def kde_score_samples_binding(
     return PythonObject(n_query)
 
 
+def kde_fit_prepare_binding(
+    train_addr: PythonObject,
+    weights_addr: PythonObject,
+    params: PythonObject,
+    kernel: PythonObject,
+    metric: PythonObject,
+) raises -> PythonObject:
+    """Validate and upload a KDE fit set once (DEVIATION 3003); returns the
+    handle `kde_score_samples_resident` scores through. `params`, in this
+    order (mirrored in `python/mojolearn/density.py`):
+
+        0  n_train
+        1  n_features
+        2  bandwidth   (float)
+        3  has_weights (0/1; weights_addr is read only when 1)
+
+    Refuses, by name, everything `kde_score_samples` refuses about the fit
+    set. Release with `kde_fit_release`."""
+    if len(params) != 4:
+        raise Error(
+            "kde_fit_prepare: params must contain 4 values, got "
+            + String(len(params))
+        )
+    var tp = _f32_ptr(Int(py=train_addr))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var bandwidth = Float32(Float64(py=params[2]))
+    var has_weights = Int(py=params[3]) != 0
+    var kname = String(py=kernel)
+    var mname = String(py=metric)
+    var weights = List[Float32]()
+    if has_weights:
+        var wp = _f32_ptr(Int(py=weights_addr))
+        weights = read_f32(Int(wp), max(0, n_train))
+    var handle: Int
+    with GILReleased(Python()):
+        handle = kde_fit_prepare(tp, n_train, n_features, bandwidth, kname, mname, weights, has_weights)
+    return PythonObject(handle)
+
+
+def kde_fit_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident KDE fit set (DEVIATION 3003)."""
+    kde_fit_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def kde_score_samples_resident_binding(
+    handle: PythonObject,
+    query_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    kernel: PythonObject,
+    metric: PythonObject,
+) raises -> PythonObject:
+    """`kde_score_samples` over a resident fit set (DEVIATION 3003).
+    `params`: [n_query, n_features, bandwidth]. Writes `n_query` float32
+    to `out_addr`; returns n_query."""
+    if len(params) != 3:
+        raise Error(
+            "kde_score_samples_resident: params must contain 3 values, got "
+            + String(len(params))
+        )
+    var h = Int(py=handle)
+    var qp = _f32_ptr(Int(py=query_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var n_query = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var bandwidth = Float32(Float64(py=params[2]))
+    var kname = String(py=kernel)
+    var mname = String(py=metric)
+    with GILReleased(Python()):
+        kde_score_samples_resident(h, qp, n_query, n_features, bandwidth, kname, mname, op)
+    return PythonObject(n_query)
+
+
 def estimators_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST, 1
     IDENTICAL, 2 DETERMINISTIC. The same shape as `svm_numeric_mode`. This
@@ -712,6 +792,9 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[dbscan_fit_core_binding]("dbscan_fit_core")
         m.def_function[labeled_reference_predict_binding]("labeled_reference_predict")
         m.def_function[kde_score_samples_binding]("kde_score_samples")
+        m.def_function[kde_fit_prepare_binding]("kde_fit_prepare")
+        m.def_function[kde_fit_release_binding]("kde_fit_release")
+        m.def_function[kde_score_samples_resident_binding]("kde_score_samples_resident")
         m.def_function[pca_fit_binding]("pca_fit")
         m.def_function[pca_fit_full_binding]("pca_fit_full")
         m.def_function[pca_transform_binding]("pca_transform")
