@@ -56,6 +56,15 @@ MODELS = {
     "rf-covtype-100x16": ("rf", "covtype", 100, 16),
     "et-year-100x16": ("et", "year", 100, 16),
     "rf-higgs-500x16": ("rf", "higgs", 500, 16),
+    # The two benchmark datasets of different kind (ENGINEERING_RULES.md
+    # section 9): taxi is narrow (16 columns), Istella-S is wide (220). HIGGS
+    # is retired as a result dataset and never decides; the regression
+    # models have ONE output and so take the scalar grove kernel, which the
+    # classifiers above never reach. Prediction rows are every row.
+    "rf-taxi-100x16": ("rf", "taxi", 100, 16),
+    "et-taxireg-100x16": ("et", "taxireg", 100, 16),
+    "rf-istella-100x16": ("rf", "istella", 100, 16),
+    "et-istellareg-100x16": ("et", "istellareg", 100, 16),
 }
 
 
@@ -84,6 +93,11 @@ def prepare(args):
     os.makedirs(args.out, exist_ok=True)
     names = [n for n in args.models.split(",") if n] if args.models else list(MODELS)
     manifest = dict(models={}, higgs_train_rows=args.higgs_train)
+    existing = os.path.join(args.out, "manifest.json")
+    if os.path.exists(existing):
+        # a later prepare adds models; it never drops the ones already saved
+        with open(existing) as fh:
+            manifest = json.load(fh)
     datasets = {}
     for name in names:
         lane, dataset, trees, depth = MODELS[name]
