@@ -3446,3 +3446,191 @@ that kernel, and the bits did not move. So this section's flip merges.
 No Apple estash measurement exists and none is owed: Apple's default carries
 no estash bit, so a shipped Apple build compiles none of this branch, which
 M4 gate C confirmed by still resolving `stash_tiled` with no knob.
+
+## 22. The causal block-index map (2026-09-17, lane `lane/attention-speed`): DEVIATION 2900, `_bswz`
+
+STATUS at the time of writing: source built, the M4 gates run, the H100 leg
+owed. Section 22.6 records the leg. A build without
+`-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles one instantiation of each of the
+four kernels, the one its column default resolves to, and no column default
+carries the bit yet, so a shipped build is byte for byte what it was.
+
+### 22.1 Where the step is now, and what is left in attention
+
+Evidence `bench/results/e1g/2026-09-12_133007-nvidia-h100-owed-rest/remote/attention-step/lmtiming-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32-enwik8/result.json`
+(commit bb679f19, H100 80GB HBM3, the target shape, `component_timing_ms` of
+ONE serialized step, a breakdown and never a price; envelope 231.5 ms). The
+untimed lean step at that commit is 0.2326 / 0.2309 s
+(bench/OPPONENT_REFERENCE.md, the 2026-09-12 13:45Z table) and 0.2106 s at
+07707794 after the GEMM `_hg` flip
+(`bench/results/e1g/2026-09-13_183737-nvidia-h100-gemm-hg-flip/remote/gemm-kernel/lm-shipped-enwik8/result.json`),
+which is the number this section's ratios should be applied to.
+
+| phase | ms per step | ms per call | grid per layer | regs | blocks per SM |
+|---|---:|---:|---:|---:|---:|
+| `attn.fwd_r2_keep_kernel` | 21.06 | 1.755 | 768 | 100 | 2 |
+| `attn.bwd_zdot_estash_dres_pf` | 14.92 | 1.243 | 3,072 | 64 | 4 |
+| `attn.bwd_dq_tiled_pf` | 12.57 | 1.047 | 384 | 118 | 2 |
+| `attn.bwd_kvgrid_dkdv_pf` | 10.10 | 0.842 | 768 | 63 | 4 |
+| regime scans, corner flags, scratch alloc | 3.25 | | | | |
+| attention, all of it | 61.90 | | | | |
+
+Register counts and `blocks_per_sm_256` from the readbacks of sections 20.11
+and 21.1 and of `docs/lanes/BRIEF_attention_regs_2026-09-11.md` section 5.
+Attention is 26.7 percent of the timed envelope, so the old framing (61
+percent, forward 81.3 ms and backward 262.5 ms) is four flips out of date and
+the ceiling of anything this section can win is about 62 ms of a 211 ms step.
+
+### 22.2 The reading: the grid is dispatched smallest block first
+
+Every one of the four kernels is a CAUSAL triangle, and every one of them
+decodes `block_idx.x` the same way: the tile index is the FASTEST-varying
+part and counts UP.
+
+```
+var tb = raw % ntb
+var rest = raw // ntb
+var h = rest % nh
+var bb = rest // nh
+```
+
+Counted at the target shape (batch 1, `l == s == 2048`, 12 heads, head_dim
+64, window 0, so row `t` sees keys `0 .. t`):
+
+| kernel | tile | tiles per head | iterations in the lightest block | in the heaviest | ratio |
+|---|---|---:|---:|---:|---:|
+| forward `r2[64, 32, qres, pf]` | 32 query rows | 64 | 1 key block of 32 | 64 | 64 |
+| dq `tiled_pf[64]` | 64 query rows | 32 | 4 key tiles of 16 | 128 | 32 |
+| zdot `estash[64, 8, dres]` | 8 query rows | 256 | 1 key block of 32 | 64 | 64 |
+| dk/dv `r2[64, 32]` | 32 keys | 64 | 2 query tiles of 16 | 128 | 64 |
+
+The hardware dispatches blocks in increasing `block_idx.x`. For the three
+QUERY-tiled kernels the shipped map therefore hands out the shortest blocks
+first and the longest last, which is the worst of the `ntb!` orders: the
+kernel ends in a tail in which the few longest blocks run with most of the
+machine idle. For the KEY-tiled dk/dv kernel a key tile's visible query count
+FALLS with the key index, so the shipped map is already descending WITHIN a
+head; what it is not is descending ACROSS heads, because the head is the
+slower index, so the heaviest blocks of the last heads are queued behind
+every block of the first ones.
+
+Resident slots on an H100 (132 SMs, the `blocks_per_sm_256` column of 22.1):
+264 for the forward and dq, 528 for zdot and dk/dv. Against the grids that is
+2.9, 1.45, 5.8 and 1.45 waves. dq is the sharpest case: 384 blocks into 264
+slots, total work 25,344 key tiles, so the ideal makespan is 96 tiles and the
+single longest block is 128; under the shipped ascending order the last block
+dispatched IS that 128-tile block and it does not start until about 120 of
+the 264 running blocks have finished. That is the mechanism this section
+attacks, and it is a mechanism no earlier section of this brief touched:
+DEVIATIONS 2525 to 2657 changed what a block computes, how many chains a
+thread holds and how many registers it needs. None of them changed which
+block index owns which tile.
+
+### 22.3 The arm, and why no bit can move
+
+`_blk_map[SWZ, REV](raw, ntb, nh, b)` is the whole of it:
+
+```
+comptime if SWZ:
+    var nbh = b * nh
+    var ti = raw // nbh
+    var rest = raw - ti * nbh
+    var tile = ti
+    comptime if REV:
+        tile = ntb - 1 - ti
+    return (tile, rest % nh, rest // nh)
+else:
+    var tile = raw % ntb
+    var rest = raw // ntb
+    return (tile, rest % nh, rest // nh)
+```
+
+`REV` is True for the three query-tiled kernels and False for the key-tiled
+dk/dv kernel. The map is a BIJECTION of `[0, b * nh * ntb)` onto itself: for
+every `(tile, head, batch)` triple there is exactly one `block_idx.x` under
+either map, so the set of blocks, the set of cells each block owns, and the
+work each block does are identical. What changes is only which block index
+owns which triple, and therefore the order in which the hardware hands them
+slots.
+
+Identity argument. A block's entire computation is a function of
+`(tile, head, batch)` and of the buffers, which it reads at the same
+addresses under either map. Every chain is folded inside one block by one
+thread from `+0.0` in the same order over the same terms; the visibility
+tests (`_row_range`, `_key_query_range`) are the shipped ones, applied to the
+same `(t, j)`; every staged operand goes through the same `ftz` from the same
+index; the corner tests are the shipped statements on the shipped values. No
+chain crosses a block, so no reordering of blocks can reassociate anything.
+Which `block_idx.x` a triple has is an execution-plan choice the contract
+does not read, exactly as "which thread holds which chain" was in section
+4.3. So an arm that moves a bit is a defect in the map's arithmetic, not a
+contract question, and the gate is bit equality against the arm it sits on.
+
+Mechanism, per file:
+
+- `transformer/impl/llama/fused_attention.mojo`: `ATTN_ARM_BSWZ` (8388608,
+  token `_bswz`, after `_kvsplit` in the name grammar, refused without
+  `_estash` and `_kvgrid`); `_blk_map`; a trailing comptime `SWZ: Bool =
+  False` on `fused_attn_forward_r2_kernel`, `fused_bwd_dq_tiled_pf_kernel`,
+  `fused_bwd_zdot_estash_kernel` and `fused_bwd_dkdv_r2_kernel`, threaded
+  through `_launch_fwd_r2`, `_launch_fwd_r2_keep`, `_launch_bwd_estash` and
+  `_estash_dkdv_launch`; `fused_attention_arm_bswz_runs` (the estash pattern:
+  a trial build honors the bit for any arm, a shipped build only when its
+  column default carries it, `ATTN_DEFAULT_BSWZ`); the bit riding the
+  BACKWARD `ran` word, as the estash bits do, and not the forward's, whose
+  predicted word has no slot for it.
+- `transformer/checks/transformer_attention_arms_check.mojo`: two arms (the
+  estash word and the estash_dres word, each with `_bswz`), four good
+  spellings and four refused ones.
+- `bench/attention_step_price_main.mojo`: `bswz=` on every PATH line and four
+  RESOURCES readbacks of the swizzled instantiations, so a register or
+  occupancy regression from the index math is read back and not assumed away.
+- `tools/attention_bswz_leg.sh`: the leg body.
+
+The default is unchanged on every column, so `ATTN_ARM_DEFAULT_REFUSED_BITS`
+does not need the bit and a shipped build compiles what it compiled.
+
+### 22.4 What the counts do NOT say
+
+They do not say how much of each kernel's time is the tail. A block's
+"iterations" are a proxy for its length and the four kernels have different
+per-iteration costs, the schedulers may not dispatch strictly in index order
+on every driver, and an L2 effect could run the other way (the shipped map
+keeps one head's K and V hot across consecutive blocks; the new one spreads
+12 heads across the first wave, 12 MB against an H100's 50 MB L2, which
+should fit but is not measured). The expectation from the counts alone is
+that dq moves most (1.45 waves, ratio 32), the forward and zdot less (2.9 and
+5.8 waves), and dk/dv least (already descending within a head). A leg that
+reads a different ranking is reporting a different mechanism and the ranking
+is the thing to look at, not the total.
+
+### 22.5 Gates
+
+1. `arms-check` exit 0: 15 cases x 25 arms, every RAN buffer bit-identical to
+   eager, reach per branch.
+2. `smoke-<arm>` exit 0 on the hashed and adversarial fixtures.
+3. `price-<arm>` on BOTH corpora's real activations: `baseline_vs_eager`
+   MATCH, `<arm>_vs_baseline` MATCH on all seven buffers, REACH with
+   `clean_restored=True`.
+4. `lm-<arm>-<corpus>/result.json` `limited: false` and every
+   `step_witnesses[k].sha256` equal to the baseline arm's
+   (`witnesses_equal_baseline=True`) on both corpora.
+5. The flip rule (ENGINEERING_RULES 9): the geometric mean of the two
+   corpora's lean-step ratios below 1, same pod, same heat window.
+6. `resources.txt`: the swizzled instantiations' `blocks_per_sm_256` not
+   below the ones they mirror.
+
+The M4 gates ran first, one at a time under `nice 19` through
+`tools/mac_slot.py`:
+
+- `transformer_attention_arms_check` PASS, names inverse, 15 cases x 25 arms,
+  every RAN buffer bit-identical to eager, reach proven per branch at
+  head_dim 64 (18.5 s).
+- `bench/attention_step_price_main.mojo` on `hashed,heavytail` with
+  `MOJOLEARN_ATTN_TIMING=0`: 60 BITS lines, every one MATCH, including all
+  seven `_bswz_vs_<estash_dres default>` buffers on both fixtures, with
+  REACH, REACH_E and REACH_KV proven and `clean_restored=True` (6.3 s). This
+  is the Apple column's bit answer for the arm.
+- `transformer_fused_check` with NO trial define: `DEFAULT column=apple
+  arm=stash_tiled word=7 trial_hook=False`, PASS, 15 cases, every buffer
+  bit-identical, so the shipped Apple build is untouched.
