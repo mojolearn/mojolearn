@@ -1,6 +1,24 @@
 import copy
+from pathlib import Path
 import pytest
-from verify_cpu_batch import evaluate_pair, expected_oracle_failure
+from verify_cpu_batch import arm_environment, evaluate_pair, expected_oracle_failure
+
+
+def test_direct_loaders_use_the_selected_arm_and_clean_clears_sabotage_permissions():
+    original = {'MOJOLEARN_FOREST_HOST_BINARY': '/old/forest.so',
+                'MOJOLEARN_BYTE_LM_HOST_BINARY': '/old/byte.so',
+                'MOJOLEARN_HOST_ALLOW_SABOTAGE': '1',
+                'MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE': '1',
+                'MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE': '1'}
+    for sabotage in (False, True):
+        env = arm_environment(original, Path('/selected'), sabotage)
+        assert env['MOJOLEARN_HOST_DIR'] == '/selected'
+        for family in ('FOREST', 'BYTE_LM'):
+            assert env[f'MOJOLEARN_{family}_HOST_BINARY'] == f'/selected/_mojolearn_{family.lower()}_host.so'
+        for key in original:
+            if key.endswith('ALLOW_SABOTAGE'):
+                assert (env.get(key) == '1') == sabotage
+    assert original['MOJOLEARN_FOREST_HOST_BINARY'] == '/old/forest.so'
 
 
 def records():

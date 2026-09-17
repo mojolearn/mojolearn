@@ -22,6 +22,14 @@ def record(lanes=('gemm-pinned', 'kde')):
                                    for lane in lanes for fx in ('base', 'odd')})
 
 
+def oracle_failure_record(lanes=('gemm-pinned', 'kde')):
+    value = record(lanes)
+    value['host']['families']['binding']['sabotage'] = True
+    next(iter(value['cells'].values())).update(
+        verdict='DIVERGENT', oracle_errors=['measured bytes disagree with oracle'] * 2)
+    return value
+
+
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -32,14 +40,57 @@ class GateTests(unittest.TestCase):
         self.redirect.__enter__()
         self.addCleanup(self.redirect.__exit__, None, None, None)
 
-    def column(self, value):
+    def column(self, value, sabotage=False):
         path = self.root / 'column.json'
         path.write_text(json.dumps(value))
         return gate.do_column(SimpleNamespace(json=str(path), covered='gemm-pinned,kde',
-                                             binding='binding', commit='test'))
+                                             binding='binding', commit='test', sabotage=sabotage))
 
     def test_complete_column_passes(self):
         self.assertEqual(self.column(record()), 0)
+
+    def test_native_oracle_failure_is_only_accepted_in_sabotage_arm(self):
+        value = oracle_failure_record()
+        self.assertEqual(self.column(value), 1)
+        self.assertEqual(self.column(value, sabotage=True), 0)
+        for mutation in ('readback', 'oracle', 'unstable', 'incomplete', 'one-repeat', 'property'):
+            bad = copy.deepcopy(value)
+            cell = next(iter(bad['cells'].values()))
+            if mutation == 'readback':
+                bad['host']['families']['binding']['sabotage'] = False
+            elif mutation == 'oracle':
+                cell['oracle_errors'] = []
+            elif mutation == 'unstable':
+                cell['hashes'][1] = 'different'
+            elif mutation == 'incomplete':
+                bad['complete'] = False
+            elif mutation == 'one-repeat':
+                bad['repeats'] = 1
+            else:
+                cell['batch_verdict'] = 'REFUSED'
+            self.assertEqual(self.column(bad, sabotage=True), 1, mutation)
+
+    def test_oracle_shard_exit_is_not_a_general_exit_code_waiver(self):
+        for sabotage, code, kind, expected in ((True, 1, 'oracle', 0),
+                                              (False, 1, 'oracle', 1),
+                                              (True, 7, 'oracle', 1),
+                                              (True, 1, 'stable', 1),
+                                              (True, 1, 'missing', 1)):
+            def worker(cmd, stdout, stderr):
+                lanes = cmd[cmd.index('--lanes') + 1].split(',')
+                value = oracle_failure_record(lanes) if kind != 'stable' else record(lanes)
+                if kind == 'missing':
+                    value['cells'].pop(next(reversed(value['cells'])))
+                Path(cmd[cmd.index('--json') + 1]).write_text(json.dumps(value))
+                return SimpleNamespace(poll=lambda: code)
+
+            args = SimpleNamespace(lanes='gemm-pinned,kde', shards=2, jobs=2,
+                                   json=str(self.root / 'merged.json'), extra=['--repeats', '2'],
+                                   heartbeat=120, sabotage=sabotage)
+            with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+                 patch.object(gate.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(gate.time, 'sleep'):
+                self.assertEqual(gate.do_run_column(args), expected, (sabotage, code, kind))
 
     def test_stable_training_cannot_hide_a_failed_probe(self):
         for field, verdict in (("infer_verdict", "MOVED"),

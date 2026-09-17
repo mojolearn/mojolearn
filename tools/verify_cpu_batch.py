@@ -56,6 +56,19 @@ def expected_oracle_failure(record):
         for c in cells.values()))
 
 
+def arm_environment(env, host, sabotage):
+    """Keep the direct forest/byte-LM loaders on the same native arm."""
+    result = dict(env, MOJOLEARN_HOST_DIR=str(host))
+    for family in ('FOREST', 'BYTE_LM'):
+        result[f'MOJOLEARN_{family}_HOST_BINARY'] = str(host / f'_mojolearn_{family.lower()}_host.so')
+    for flag in ('MOJOLEARN_HOST_ALLOW_SABOTAGE', 'MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE',
+                 'MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE'):
+        result.pop(flag, None)
+        if sabotage:
+            result[flag] = '1'
+    return result
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lanes', required=True)
@@ -90,10 +103,7 @@ def main():
         directory.mkdir(exist_ok=True)
         statuses, records = {}, {}
         for arm, host in (('clean', prod), ('sabotage', bad)):
-            arm_env = dict(env, MOJOLEARN_HOST_DIR=str(host))
-            arm_env.pop('MOJOLEARN_HOST_ALLOW_SABOTAGE', None)
-            if arm == 'sabotage':
-                arm_env['MOJOLEARN_HOST_ALLOW_SABOTAGE'] = '1'
+            arm_env = arm_environment(env, host, arm == 'sabotage')
             path = directory / f'cpu-{arm}.json'
             # Refuse accidental overwrite of a prior run, including failures.
             if path.exists():

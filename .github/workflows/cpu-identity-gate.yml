@@ -628,13 +628,13 @@ jobs:
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
-      # covered lanes (all nine fixtures, one repeat: negative controls
-      # test detection, while production retains two stability repeats;
+      # covered lanes (all nine fixtures, two repeats in both arms;
       # sharded as above; the build is its own step since
       # 2026-09-15 so the run step's time is the lanes'), and the four-way
       # diff must exit non-zero with
-      # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
-      # answer, not a refusal). A fixture on which the moved fold is exact
+      # DIVERGENT on them. Covered cells must be STABLE or carry an explicit
+      # oracle failure with repeated measured bytes and native sabotage
+      # readback; a refusal is never a catch. A fixture on which the moved fold is exact
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
@@ -689,10 +689,10 @@ jobs:
           # same module name, so both must name that file, or the lanes'
           # binary guard refuses them.
           export MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so" MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
-          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
-            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 1 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
+          python3 tools/cpu_identity_gate_check.py run-column --sabotage --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
+            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 2 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+            --sabotage --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2

@@ -12,7 +12,7 @@ release qualification is claimed. Earlier checkpoints remain in git history.
 ## Current coverage and remaining work
 
 Baseline was 128 available CPU lanes, 51 withheld, 50 parallel exclusions.
-Current candidate: **150 available, 29 withheld, 50 excluded** (229 harness
+Last installed/merged batch: **150 available, 29 withheld, 50 excluded** (229 harness
 lanes; 246 appendix entries and the source API inventory are separate counts).
 All available lanes have all-nine core references, including explicit N/A.
 The remaining 29 are:
@@ -141,3 +141,26 @@ tracked main and these handoffs before starting overlapping work.
 4. Audit/integrate concurrent neural records without losing unrelated references.
 5. Continue native artifact, optional-property and hardware qualification. No
    full release claim for development wheels with reused native bindings.
+
+## Concurrent branch integration and CI follow-up
+
+Completed commits from `lane/reference-regen` and `lane/sabotage-sweep` are
+merged into this worktree; the candidate is not yet merged into main. Incomplete
+reference columns remain excluded by our strict admission code. Preserve the
+reference branch's explicit `one column` hold for Samba until qualified.
+
+The sabotage branch parked its alternative ordered-sum fault behind an unused
+define because the old CI gate required STABLE sabotage cells. We retain our
+measured zero corruption and explicit NumericalMismatch results. The CI gate
+now has an explicit sabotage mode that accepts exit one only with complete
+records, native sabotage readback, repeated actual hashes and oracle errors.
+Production, ordinary exceptions, incomplete shards and unstable results still
+fail. Sabotage CI uses two repetitions. The retained real nine-fixture ordered
+control passes this validator; 51 gate/batch tests pass. Direct forest and byte
+LM loaders now point at the selected native arm, with clean permissions reset.
+
+The remaining all-nine native-control audit identifies 99 non-parallel lanes
+with fewer than nine qualifying training controls. A follow-up CPU batch is
+being prepared with all 32 native families and the required saved CTR models;
+no rental has been started for it yet. The fresh-wheel 150-lane replay remains
+active; keep its frozen installed environment unchanged.
