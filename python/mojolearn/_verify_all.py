@@ -1520,7 +1520,17 @@ def format_compare(r):
         if p.get(key):
             lines.append(f"    {lbl}: {p[key]}")
     lines.append("")
-    if p["same_document"]:
+    if commitment["broken"]:
+        # THE INDEPENDENCE SENTENCE IS EXACTLY WHAT A FORGER WANTS A SKIMMER TO
+        # READ, and it is read out of the provenance block, which is the part a
+        # broken commitment says cannot be taken at face value. Printing "two
+        # independent machines reaching the same bits" above a broken
+        # commitment would hand the forgery the strongest line this command has.
+        lines.append("THE PROVENANCE ABOVE CANNOT BE TAKEN AT FACE VALUE. A document here does not")
+        lines.append("match the commitment its party published before the exchange, so the hardware")
+        lines.append("it names is not something this comparison can stand behind. Nothing is said")
+        lines.append("here about how independent the two machines were.")
+    elif p["same_document"]:
         lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
         lines.append("not two parties comparing, and it can only ever agree with itself.")
     elif p["independent"]:

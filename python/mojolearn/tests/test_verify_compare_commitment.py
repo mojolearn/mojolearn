@@ -130,6 +130,13 @@ def test_the_same_attack_is_caught_when_the_forger_committed_first():
     assert "RESULT: COMMITMENT BROKEN" in text, text
     assert "forged.json" in text and published in text, text
     assert "RESULT: AGREE" not in text
+    # AND THE STRONGEST SENTENCE THIS COMMAND HAS MUST NOT APPEAR OVER IT. The
+    # forgery reads as two independent hardware classes precisely because the
+    # provenance block is the lie; printing "two independent machines reaching
+    # the same bits" above a broken commitment hands the forger the line a
+    # skimmer would quote.
+    assert "two independent machines reaching the" not in text, text
+    assert "PROVENANCE ABOVE CANNOT BE TAKEN AT FACE VALUE" in text, text
 
 
 def test_the_forger_cannot_reseal_after_copying():
@@ -147,6 +154,56 @@ def test_the_forger_cannot_reseal_after_copying():
     assert r["verdict"] == "COMMITMENT BROKEN"
     assert r["commitment"]["b"]["state"] == "MISMATCH"
     assert r["commitment"]["b"]["recomputed"] == resealed
+
+
+def test_the_forger_who_keeps_their_own_nonce_and_swaps_only_the_hardware():
+    """THE SHARPEST VERSION, and the one that decides what the commitment
+    covers. The forger ran honestly, sealed, and published. Then, after seeing
+    that the other party is on hardware whose agreement would be worth more,
+    they edit the ONE thing that makes the pair look independent -- the device
+    block -- and keep their own nonce and their own cells.
+
+    A commitment over cells alone matches this exactly, and the comparison
+    would read AGREE across two vendors that never both ran. It is caught only
+    because the commitment covers the provenance, which is why it is held at
+    the comparison level and not only at `commitment_preimage`: it is the test
+    that fails if a later lane narrows what is covered.
+    """
+    honest, forger_own = _honest_pair()
+    honest_line = va.seal_document(honest)
+    published = va.seal_document(forger_own)
+    assert json.dumps(forger_own["cells"], sort_keys=True) \
+        == json.dumps(honest["cells"], sort_keys=True), "their run honestly agreed"
+
+    forger_own["device"].update(vendor="rocm", device="MI300X", device_class="amd")
+    r = va.compare_documents(honest, forger_own, "honest.json", "theirs.json",
+                             commitment_a=honest_line, commitment_b=published)
+    assert r["verdict"] == "COMMITMENT BROKEN" and r["exit"] == va.EXIT_MISMATCH, r["verdict"]
+    assert r["commitment"]["b"]["state"] == "SELF-INCONSISTENT", r["commitment"]["b"]
+    # and if they reseal to repair that, the published line no longer matches
+    resealed = va.seal_document(forger_own)
+    assert resealed != published
+    r2 = va.compare_documents(honest, forger_own, "honest.json", "theirs.json",
+                              commitment_a=honest_line, commitment_b=published)
+    assert r2["verdict"] == "COMMITMENT BROKEN"
+    assert r2["commitment"]["b"]["state"] == "MISMATCH", r2["commitment"]["b"]
+
+
+def test_the_forger_who_keeps_their_own_nonce_and_swaps_only_the_contract():
+    """The same move against the other half of what makes a hash comparable.
+    `comparison_context_problems` refuses two documents whose fixture,
+    held-out and protocol fingerprints differ, so a party who could edit the
+    contract after the exchange could turn an INCOMPARABLE into an AGREE."""
+    honest, forger_own = _honest_pair()
+    honest_line = va.seal_document(honest)
+    published = va.seal_document(forger_own)
+    forger_own["verification_contract"]["fixtures"]["base"] = {"X": "theirs, copied over"}
+    forger_own["verification_contract"]["harness_sha256"] = "f" * 64
+    va.seal_document(forger_own)                        # repair the internal one
+    r = va.compare_documents(honest, forger_own, "honest.json", "theirs.json",
+                             commitment_a=honest_line, commitment_b=published)
+    assert r["verdict"] == "COMMITMENT BROKEN"
+    assert r["commitment"]["b"]["state"] == "MISMATCH"
 
 
 def test_a_commitment_to_cells_alone_would_not_have_caught_the_provenance_swap():
