@@ -40,6 +40,8 @@ def main():
     parser.add_argument('--lanes', required=True)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--timeout', type=int, default=300)
+    parser.add_argument('--properties', action='store_true',
+                        help='also record step/full, gradients, batch-size and ragged properties')
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error('--timeout must be positive')
@@ -77,6 +79,8 @@ def main():
                 raise SystemExit(f'record already exists: {path}')
             command = [sys.executable, str(root / 'tools/identity_break.py'), '--lanes', lane,
                        '--repeats', '2', '--require-cpu', '--json', str(path)]
+            if args.properties:
+                command.extend(['--step-full', '--batch-grad', '--batch-scale', '--ragged'])
             print(f'{lane}: {arm}', flush=True)
             with (directory / f'{arm}.log').open('w') as log:
                 try:
