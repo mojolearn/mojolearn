@@ -1,8 +1,14 @@
 # Verify mojolearn's identity claims yourself
 
-Three recipes at three costs. Each ends in a pass or fail you can read without
+Four recipes at four costs. Each ends in a pass or fail you can read without
 trusting a sentence in this repository. What each one proves, and what it does
 not, is stated beside it.
+
+Recipes 1 to 3 all end in a comparison against something WE recorded, so they
+rest on our records being honest. Recipe 4 does not, and it is the strongest
+evidence here: two people who have never met run the shipped verifier on their
+own machines and compare with us absent. Read it even if you only ever run
+Recipe 1.
 
 The claim under test: for every public estimator at one certified configuration
 (a lane), on nine hostile fixtures, training state, held-out predictions and saved
@@ -119,15 +125,103 @@ have no Metal.
 Cost: two rentals of about an hour each plus a Mac. This is what the maintainer
 does for every record; nothing in it is specific to the maintainer's accounts.
 
+## Recipe 4, no GPU, free: two strangers compare their own documents
+
+This is the only recipe we are not part of. Recipes 1 to 3 all end in a
+comparison against a record this repository ships; if you do not trust the
+record, they prove less than they look like they prove. Here, two people who
+have never met each run the shipped verifier on their own machine, swap one
+file by any means, and compare. Nothing we wrote is an input to the answer
+except the code they both installed from PyPI.
+
+```sh
+# each party, on their own machine, on their own hardware
+python3 -m pip install mojolearn==<version>
+MOJOLEARN_NUMERIC_MODE=identical python3 -m mojolearn verify --all --json-out mine.json
+
+# swap the file by any means at all: email, a gist, a USB stick
+
+# either party, on any machine; this step needs no GPU, no binding and no
+# numeric mode, and it is reached before any of them is checked
+python3 -m mojolearn verify --compare mine.json theirs.json
+```
+
+`--compare` takes the lane set from the two documents. It never enumerates,
+greps or imports a lane list of its own, so it cannot quietly compare a
+different set from the one either party ran.
+
+**The verdict ladder, in the order it is tried. AGREE is LAST, and that
+ordering is the point.** A comparer's one failure mode is agreeing too
+easily, so every way of "matching" without two machines having computed the
+same bits is broken out and given a non-agreeing outcome.
+
+| verdict | exit | what it means |
+|---|---|---|
+| `MALFORMED` | 2 | a document could not be read as an evidence document. A DUPLICATE `(lane, fixture, part)` row makes the WHOLE document unreadable rather than last-wins, because last-wins would let one party paste the other's answer over their own. Nothing is compared, and this is **not** a pass |
+| `SAME DOCUMENT` | 4 | the two files are byte-identical: one document passed twice, which compares nothing |
+| `INCOMPARABLE` | 4 | the two runs do not share a recorded input contract: a different or missing harness digest, different fixture or held-out fingerprints, or a different property protocol. Equal hashes over different inputs are not an agreement |
+| `MISMATCH` | 1 | at least one cell part both sides computed came out with different bits. This is a finding; keep both files |
+| `SELF-CONTRADICTED` | 1 | no cell differs between the documents, but one side's box disagreed with ITSELF (`MOVED`, `BATCH_MOVED`, `RELOAD-MOVED`). Two such documents agree only on the claim being false |
+| `AGREED ON A DIVERGENT ANSWER` | 1 | both sides carry the same hash for a cell that at least one of them judged `DIVERGENT` against its own reference table. They agree on an answer one of them already recorded as wrong |
+| `INCOMPLETE` | 4 | a cell only one document carries, a cell neither side computed (the probe raised on both), or two DIFFERENT `n/a` reasons, which is a disagreement about what the part even is |
+| `AGREE` | 0 | every shared cell part matches and none of the above applies |
+| `NOTHING COMPARED` | 4 | the documents share no cell part at all |
+
+The report also carries, next to the agreement count, each document's OWN
+verdict about its own run, and `provenance.independent`, which is true only
+when the two documents came from different devices, different device classes
+and different files. Two parties can agree with each other while one of them
+checked a fraction of what a reader assumes; that is the only honest place to
+see it, so it is printed there.
+
+What it proves: two machines neither of us controls computed the same bits for
+every cell part both ran, under the same recorded input contract. What it does
+not: anything about a cell only one side ran (that is `INCOMPLETE`, not a
+pass), anything about lanes neither install can run, and nothing at all when
+the verdict is not `AGREE`.
+
+Time: minutes for the comparison; the two `verify --all` runs are whatever
+each machine costs (about 25 minutes on one core of an Apple M4 for the
+CPU-only lane set).
+
+### Comparing against our own published document
+
+We publish our own `verify --all --json-out` documents so that this recipe
+works for someone who does not already know another user:
+`bench/results/verify_reports/`, one per device class, each taken at the
+commit named inside it.
+
+**This is weaker than two strangers comparing, and it is not a substitute for
+it.** Comparing against our document puts us back in the loop: you are
+trusting that we ran what we say we ran on the hardware we say we ran it on.
+Recipe 4 proper removes us from the answer entirely. Use ours to get started,
+to check that your install produces comparable output at all, and as the
+fallback when you have nobody to swap with. Then find a stranger.
+
 ## Two smaller checks
 
 `python -m mojolearn env` prints which binaries and numeric mode the process
 selected and the GPU it found, without running anything.
 
-`python -m mojolearn verify` compares one pinned k-means card against a
-reference card. From a PyPI install today it exits 5, no reference, because
-the wheel does not ship the card; it works from a source checkout. Shipping
-the card is an open item.
+`python -m mojolearn verify --all` is the whole verifier and the command
+recipe 4 uses. It runs every identity cell the install can reach (every lane
+on a GPU install; `host_surface.public_reference_lanes()` on a CPU-only one)
+plus the portable GPU-trained models, and compares each cell part against the
+reference table shipped in the wheel at
+`mojolearn/verify_reference/table.json`. It exits 0 only on `VERIFIED`, which
+requires no divergent, no refused and no owed part and no withheld lane; a
+part that did not run never counts as checked. `--json-out PATH` writes the
+evidence document; `--coverage` inspects what the install would and would not
+check, without fitting anything; `--self-test` shows that the comparison can
+FAIL, by running one lane twice, once untouched and once with the input's
+first column moved by one ULP, and requiring `IDENTICAL` then `DIVERGENT`.
+
+`python -m mojolearn verify` with no flags is a much older and much smaller
+check: it compares one pinned k-means stage card against a reference card in
+`mojolearn/reference_cards/`. No build ships that card yet, only a
+placeholder that refuses by name, so the bare command exits 5 (no reference)
+and says so. That is deliberate rather than broken, and it is not the
+identity claim's verifier; `--all` is.
 
 ## What "identical" does and does not claim
 
