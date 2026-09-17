@@ -3006,7 +3006,7 @@ RELEASE_TOOLS_SETUP
             # THIS device. The driver refuses an architecture override and
             # records the device it actually found.
             MOJOLEARN_EXPECT_VENDOR=cuda \
-              timeout -k 20 "$work_remaining" bash tools/linux_surface_qualification.sh \
+              timeout -k 20 "$work_remaining" bash tools/release_installed_checks.sh \
                 qualify-release-linux3 "/root/@QUALWHEEL@" '@QUALSHA@' cuda \
                 "$OUT/release-build" /root/proofs '@GPUARCHS@' \
                 > "$OUT/release-build-console.log" 2>&1
