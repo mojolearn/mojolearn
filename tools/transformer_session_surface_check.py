@@ -28,6 +28,8 @@ def main():
     ap.add_argument('--binding', type=Path, required=True)
     ap.add_argument('--backend', choices=('cpu', 'metal', 'cuda', 'hip'), required=True)
     ap.add_argument('--group', choices=('state', 'serialization', 'threads'), required=True)
+    ap.add_argument('--thread-init', choices=('main', 'worker'), default='worker',
+                    help='threads group: thread performing the first GPU call')
     ap.add_argument('--out', type=Path, required=True)
     args = ap.parse_args()
     if not __debug__:
@@ -43,7 +45,8 @@ def main():
     spec.loader.exec_module(native)
     assert native.transformer_vendor() == args.backend
     assert native.transformer_numeric_mode() == 1
-    reuse = hasattr(native, 'transformer_session_forward')
+    reuse = (hasattr(native, 'transformer_session_forward')
+             and os.environ.get('MOJOLEARN_TRANSFORMER_LEGACY_SETUP') != '1')
     data = weights('transformer', 32)
     x = np.random.default_rng(330).uniform(-.5, .5, (1, 1, 32)).astype(np.float32)
     outputs = {}
@@ -106,10 +109,20 @@ def main():
                 if reuse:
                     assert clone._native_session is not model._native_session
         else:
+            if args.thread_init == 'main':
+                warm = block()
+                warm.step(x, warm.allocate_state(1, 8))
+                del warm
             # Same-model calls serialize the complete state read/native call/
             # cached-token update, including first-use session initialization.
             state = model.allocate_state(1, 8)
             def same_model(_):
+                if not reuse:
+                    # The old route never promised shared-state serialization.
+                    # Supply that lock only for the legacy control, so it tests
+                    # runtime/thread lifetime rather than a caller-state race.
+                    with model._runtime_lock:
+                        return np.asarray(model.step(x, state)).copy()
                 return np.asarray(model.step(x, state)).copy()
             with ThreadPoolExecutor(max_workers=2) as pool:
                 threaded = list(pool.map(same_model, range(4)))
@@ -135,6 +148,8 @@ def main():
     np.savez(args.out, **outputs)
     report = dict(backend=args.backend, group=args.group, arrays=len(outputs), reuse=reuse,
                   binding_sha256=hashlib.sha256(args.binding.read_bytes()).hexdigest())
+    if args.group == 'threads':
+        report['thread_init'] = args.thread_init
     args.out.with_suffix('.json').write_text(json.dumps(report, indent=2) + '\n')
     print(json.dumps(report))
 

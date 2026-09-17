@@ -64,18 +64,18 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   capacity, `s_max`) is a params scalar too, because the packing stride
   and every refusal about growth are functions of it.
 
-  (iii) THE ROTARY TABLE AND THE ATTENTION SCALE ARE REBUILT PER CALL
-  FROM FROZEN CONSTANTS, NEVER PARAMETERS. rms eps (1e-6, bits
+  (iii) THE ROTARY TABLE AND THE ATTENTION SCALE USE FROZEN CONSTANTS,
+  NEVER PARAMETERS. rms eps (1e-6, bits
   0x358637BD) and rope theta (10000.0, bits 0x461C4000) are contract
   section 3 FROZEN constants, imported from
   `transformer/checks/transformer_fixture.mojo` (the fixture is their
   bit authority); changing either is a v2 profile, not a knob. The
   rotary table is `LlamaRopeTable(ctx, dims, ROPE_THETA, max_tokens)`,
-  computed on-device per call exactly as the lane's own check driver
-  builds it -- a caching layer would be state this surface deliberately
-  does not hold (the reference computes it once per config; recomputing is
-  bit-inert because S6-S8 are pure functions of (theta, head_dim,
-  position)).
+  computed on-device exactly as the lane's own check driver builds it.
+  Legacy entry points rebuild it per call. The Python-owned session reuses
+  it only for an exactly matching workspace configuration; S6-S8 are pure
+  functions of (theta, head_dim, position). See
+  docs/TRANSFORMER_SESSION_REUSE.md for ownership and refresh rules.
 
   (iv) WHAT IS REFUSED HERE, AND WHAT GOES DOWN UNJUDGED (DEVIATION
   793's split, applied). Refused HERE: a null address, an

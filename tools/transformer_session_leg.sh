@@ -30,8 +30,16 @@ for group in reuse refusals lifetime budget; do
         --out "$out/native-$group.npz"
 done
 for group in state serialization threads; do
+    # ROCm 6.4.1/MI300X crashes in HIP exit handlers when the FIRST GPU call
+    # runs on a worker, including with legacy setup. Keep that cold-worker
+    # diagnostic selectable; normal ownership qualification initializes on
+    # main before dispatch. See docs/TRANSFORMER_SESSION_REUSE.md.
+    thread_init=worker
+    if [ "$backend" = hip ]; then thread_init=main; fi
+    thread_init=${MOJOLEARN_SESSION_THREAD_INIT:-$thread_init}
     timeout -k 5s 60s nice -n 19 pixi run python tools/transformer_session_surface_check.py \
         --binding "$binding" --backend "$backend" --group "$group" \
+        --thread-init "$thread_init" \
         --out "$out/surface-$group.npz"
 done
 printf 'PASS transformer session checks\n'
