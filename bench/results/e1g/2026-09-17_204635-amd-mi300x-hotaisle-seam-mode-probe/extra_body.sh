@@ -39,18 +39,4 @@ export MOJOLEARN_TARGET_COLUMN="$VENDOR"
     echo "column=$VENDOR (derived on the box, exported before the build)"
     echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-unset}"
 } > "$OUT/column.txt"
-# NOT `dirname "$0"`. MEASURED 2026-09-17 on a Hot Aisle MI300X
-# (bench/results/e1g/2026-09-17_204635-amd-mi300x-hotaisle-seam-mode-probe,
-# extra_exit=2): every runner copies the extra body to ONE FILE beside the
-# root, `/root/gemm_leg_extra.sh`, and not into the unpacked source tree, so
-# `dirname "$0"` is `/root` and `/root/gemm_seam_probe_leg.sh` does not exist.
-# The body lives in the SOURCE, at $ROOT/tools, which is where
-# tools/gemm_seam_probe_leg.sh itself reads MOJOLEARN_GEMM_STEP_ROOT from.
-# That leg cost one VM and three minutes and is the reason this is spelled out.
-ROOT=${MOJOLEARN_GEMM_STEP_ROOT:-/root/mojolearn}
-BODY="$ROOT/tools/gemm_seam_probe_leg.sh"
-if [ ! -f "$BODY" ]; then
-    echo "no $BODY: the source tree is not at ROOT=$ROOT" >> "$OUT/column.txt"
-    exit 9
-fi
-exec sh "$BODY"
+exec sh "$(dirname "$0")/gemm_seam_probe_leg.sh"
