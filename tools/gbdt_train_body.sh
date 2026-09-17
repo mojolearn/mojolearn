@@ -18,7 +18,7 @@
 #   bash tools/gbdt_train_body.sh identity-diff
 #
 # Layout on the box: /root/mojolearn (AFTER), /root/mojolearn-sab, /root/mojolearn-before,
-# /root/mojolearn-cpu and /root/mojolearn-before-cpu, /root/leg_out (every log and JSON).
+# /root/mojolearn-sab2 (the DEVIATION 3041 negative control), /root/mojolearn-cpu and /root/mojolearn-before-cpu, /root/leg_out (every log and JSON).
 set -u
 R=/root/mojolearn
 B=/root/mojolearn-before
@@ -33,6 +33,7 @@ export PYTHONUNBUFFERED=1
 LANES="${LANES:-gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,gbdt-ordered-rmse,gbdt-feature-freq,gbdt-multiclass,gbdt-onevsall,gbdt-parametric-losses,gbdt-lossguide-newtoncosine,gbdt-pointwise-l2-bayesian-eval,gbdt-exact-mae,gbdt-categorical-ctr,gbdt-categorical-ctr-tables,gbdt-tensor-ctr-tables,gbdt-nan-modes,gbdt-adapter-clf,gbdt-adapter-reg,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank,gbdt-adapter-score-weighted}"
 FIXTURES="${FIXTURES:-base,ties,odd,dupes,wide}"
 SAB_DEFINE="${SAB_DEFINE:--D MOJOLEARN_GBDT_YETI_SABOTAGE=1}"
+SAB2_DEFINE="${SAB2_DEFINE:--D MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE=1}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }
 step() {
@@ -103,9 +104,13 @@ phase_build_after() {
     rsync -a --exclude .pixi "$R/" "$R-sab/"
     ln -sfn "$R/.pixi" "$R-sab/.pixi"
     build_gpu "$R-sab" sab "$SAB_DEFINE"
+    rsync -a --exclude .pixi "$R/" "$R-sab2/"
+    ln -sfn "$R/.pixi" "$R-sab2/.pixi"
+    build_gpu "$R-sab2" sab2 "$SAB2_DEFINE"
     rsync -a --exclude .pixi --exclude 'python/mojolearn/identical' "$R/" "$R-cpu/"
     ln -sfn "$R/.pixi" "$R-cpu/.pixi"
     ls -l --time-style=full-iso "$R/python/mojolearn/identical/_mojolearn_gbdt.so" "$R-sab/python/mojolearn/identical/_mojolearn_gbdt.so" \
+        "$R-sab2/python/mojolearn/identical/_mojolearn_gbdt.so" \
         "$B/python/mojolearn/identical/_mojolearn_gbdt.so" > "$OUT/after_mtimes.txt" 2>&1
     find "$R/gbdt" "$R/bindings/_mojolearn_gbdt.mojo" -name '*.mojo' -newer "$R/python/mojolearn/identical/_mojolearn_gbdt.so" >> "$OUT/after_mtimes.txt" 2>&1
     cat "$OUT/after_mtimes.txt"
@@ -196,7 +201,7 @@ identity_column() {
 
 identity_diffs() {
     cd "$R"
-    for pair in "before-cuda after-cuda" "after-cuda sabotage-cuda" "before-cpu after-cpu" "after-cuda after-cpu" "before-cuda before-cpu"; do
+    for pair in "before-cuda after-cuda" "after-cuda sabotage-cuda" "after-cuda sabotage2-cuda" "before-cpu after-cpu" "after-cuda after-cpu" "before-cuda before-cpu"; do
         set -- $pair
         [ -f "$OUT/identity/$1.json" ] && [ -f "$OUT/identity/$2.json" ] || continue
         PYTHONPATH=python pixi run python3 tools/identity_break.py --diff "$OUT/identity/$1.json" "$OUT/identity/$2.json" \
@@ -214,6 +219,7 @@ phase_identity() {
         [ "${SKIP_BEFORE:-0}" = "1" ] || identity_column "$B" before-cuda "$BC" MOJOLEARN_IDENTITY_HOST_INFER=0
         identity_column "$R" after-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
         identity_column "$R-sab" sabotage-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+        identity_column "$R-sab2" sabotage2-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
     ) &
     (
         [ "${SKIP_BEFORE:-0}" = "1" ] || identity_column "$B-cpu" before-cpu "$BC" MOJOLEARN_IDENTITY_HOST_INFER=1

@@ -193,27 +193,55 @@ def _last_tables(path):
     the boosting loop's (`ensemble/instruments.mojo`, seconds) and the
     searcher's (`depthwise_stage_times.mojo`, milliseconds). Returns
     {stage: ms}."""
-    loop, stages, cur = {}, {}, None
+    # a fit prints SEVERAL tables of each kind (the boosting loop's, the
+    # train bracket's, the searcher's, the estimator's); the last table
+    # under each heading is the last fit's. A loop table has no heading of
+    # its own, so it is keyed by its first stage name.
+    loop_tables, stage_tables, cur, key = {}, {}, None, None
+    per_tree_tables = 0
     for line in open(path, errors="replace"):
         if line.startswith("== MOJOLEARN_STAGE_TIMES"):
-            loop, cur = {}, "loop"
+            cur, key = "loop", None
             continue
         if line.startswith("[stage-times] "):
-            if "NOT a" in line:
-                stages = {}
-            parts = line[len("[stage-times] "):].strip().split("\t")
-            if len(parts) == 2 and parts[1].endswith(" ms"):
-                stages[parts[0].strip()] = float(parts[1][:-3])
+            cur = None
+            body = line[len("[stage-times] "):]
+            if "NOT a" in body:
+                key = body.split(" -- ")[0].strip()
+                if "rows=" in key:
+                    # the non-symmetric searcher prints ONE TABLE PER TREE
+                    # (`lossguide fit: rows=... leaves=...`): summed here
+                    key = "per-tree searcher tables"
+                    per_tree_tables += 1
+                    stage_tables.setdefault(key, {})
+                else:
+                    stage_tables[key] = {}
+                continue
+            parts = body.strip().split("\t")
+            if len(parts) == 2 and parts[1].endswith(" ms") and key in stage_tables:
+                t = stage_tables[key]
+                name = parts[0].strip()
+                if key == "per-tree searcher tables":
+                    t[name] = t.get(name, 0.0) + float(parts[1][:-3])
+                else:
+                    t[name] = float(parts[1][:-3])
             continue
         if cur == "loop" and line.startswith("  ") and "\t" in line:
             name, val = line.strip().split("\t")
             if val.endswith(" s"):
-                loop[name] = float(val[:-2]) * 1000.0
+                if key is None:
+                    key = name
+                    loop_tables[key] = {}
+                loop_tables[key][name] = float(val[:-2]) * 1000.0
             continue
         if cur == "loop" and not line.startswith(" "):
-            cur = None
-    out = {"loop." + k: v for k, v in loop.items()}
-    out.update(stages)
+            cur, key = None, None
+    out = {}
+    for t in loop_tables.values():
+        out.update({"loop." + k: v for k, v in t.items()})
+    for k, t in stage_tables.items():
+        out.update(t)
+    out["(searcher tables summed, warm-up tree included)"] = float(per_tree_tables)
     return out
 
 
