@@ -28,7 +28,7 @@ The four kinds, for one lane:
 
 - Lanes: **229** (179 single-device, 50 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **224**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **60** of 224.
+- Source public API entries with ALL FOUR kinds on at least one lane: **61** of 224.
 - Source public API entries with NO IDENTITY LANE AT ALL: **19**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -39,7 +39,7 @@ Per kind, over the public API entries:
 |---|---|---|
 | gpu column | 197 | 27 |
 | cpu verifier | 167 | 57 |
-| sabotage seen to move a build | 67 | 157 |
+| sabotage seen to move a build | 72 | 152 |
 | batch part or named n/a | 203 | 21 |
 
 Per kind, over the lanes:
@@ -49,17 +49,17 @@ Per kind, over the lanes:
 | gpu column (any class) | 208 | 21 |
 | gpu column on all three classes | 171 | 58 |
 | cpu verifier declared | 190 | 39 |
-| sabotage seen to move a build | 54 | 175 |
+| sabotage seen to move a build | 61 | 168 |
 | batch part or named n/a | 229 | 0 |
-| ALL FOUR | 49 | 180 |
+| ALL FOUR | 54 | 175 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 54 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 61 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 136 | the family declares a define; no committed pair moves this lane |
+| declared | 129 | the family declares a define; no committed pair moves this lane |
 | none | 39 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -139,9 +139,9 @@ A blank cell means no lane of this algorithm has that kind.
 | `GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessClassifier` | 2 | apple | training | declared | part | NO |
 | `GaussianProcessRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GradientBoosting` | 18 | amd,apple,nvidia | training | declared | part | NO |
-| `GradientBoostingClassifier` | 3 | amd,apple,nvidia | training | declared | part | NO |
-| `GradientBoostingRegressor` | 4 | amd,apple,nvidia | training | declared | part | NO |
+| `GradientBoosting` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GradientBoostingClassifier` | 3 | amd,apple,nvidia | training | seen(build) | part | NO |
+| `GradientBoostingRegressor` | 4 | amd,apple,nvidia | training | seen(build) | part | NO |
 | `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HostForest` | **0** |  |  |  |  | NO |
 | `HostGBDT` | **0** |  |  |  |  | NO |
@@ -179,8 +179,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `RBF` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `RadiusNeighbors` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `RandomForestClassifier` | 6 | amd,apple,nvidia | training | declared | part | NO |
-| `RandomForestRegressor` | 5 | amd,apple,nvidia | training | declared | part | NO |
+| `RandomForestClassifier` | 6 | amd,apple,nvidia | training | seen(build) | part | NO |
+| `RandomForestRegressor` | 5 | amd,apple,nvidia | training | seen(build) | part | NO |
 | `Ridge` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SGD` | 1 | amd,apple,nvidia | training | declared | part | NO |
 | `SVC` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -380,26 +380,26 @@ A blank cell means no lane of this algorithm has that kind.
 | et-reg-bootstrap-parallel | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-adapter-clf | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-adapter-reg | amd,apple,nvidia | training | declared | - | part | NO |
-| gbdt-adapter-score-weighted | - | training | declared | - | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | NO |
+| gbdt-adapter-score-weighted | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-adapter-score-weighted/cpu-sabotage.json` | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | NO |
 | gbdt-categorical-ctr | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-categorical-ctr-tables | apple | training | declared | - | part | NO |
 | gbdt-depthwise | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-exact-mae | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-feature-freq | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-lossguide | amd,apple,nvidia | training | declared | - | part | NO |
-| gbdt-lossguide-newtoncosine | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-lossguide-newtoncosine | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-lossguide-newtoncosine/cpu-sabotage.json` | part | yes |
 | gbdt-multiclass | amd,apple,nvidia | training | declared | - | part | NO |
-| gbdt-nan-modes | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-nan-modes | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-nan-modes/cpu-sabotage.json` | part | yes |
 | gbdt-onevsall | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-ordered-rmse | amd,apple,nvidia | training | declared | - | part | NO |
-| gbdt-pair-logit | apple | training | declared | - | part | NO |
-| gbdt-parametric-losses | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-pair-logit | apple | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-pair-logit/cpu-sabotage.json` | part | yes |
+| gbdt-parametric-losses | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-parametric-losses/cpu-sabotage.json` | part | yes |
 | gbdt-pointwise-l2-bayesian-eval | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-query-rmse | apple | training | declared | - | part | NO |
 | gbdt-rmse | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-symmetric | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-tensor-ctr-tables | apple | training | declared | - | part | NO |
-| gbdt-yeti-rank | apple | training | declared | - | part | NO |
+| gbdt-yeti-rank | apple | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-yeti-rank/cpu-sabotage.json` | part | yes |
 | gemm-bf16 | apple | training | declared | - | n/a n/a:profile lane; the products are hashed whole | NO |
 | gemm-int8 | apple | training | declared | - | n/a n/a:profile lane; the products are hashed whole | NO |
 | gemm-pinned | amd,apple,nvidia | training | declared | - | part | NO |
@@ -474,7 +474,7 @@ A blank cell means no lane of this algorithm has that kind.
 | metrics | amd,apple,nvidia | training | declared | - | n/a n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) | NO |
 | metrics-classification | amd,apple,nvidia | training | declared | - | part | NO |
 | metrics-fowlkes-mallows | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-public-promotion/cpu-sabotage.json` | n/a n/a:function | NO |
-| metrics-homogeneity-completeness | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-metrics-constant/cpu-sabotage.json` | n/a n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output) | NO |
+| metrics-homogeneity-completeness | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/metrics-homogeneity-completeness/cpu-sabotage.json` | n/a n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output) | NO |
 | minmax-scaler | amd,apple,nvidia | training | declared | - | part | NO |
 | minmax-scaler-clip | amd,apple,nvidia | training | declared | - | part | NO |
 | mlp | amd,apple,nvidia | training | declared | - | part | NO |
@@ -553,7 +553,7 @@ A blank cell means no lane of this algorithm has that kind.
 | rf-reg | amd,apple,nvidia | training | declared | - | part | NO |
 | rf-reg-gamma-ig | amd,apple,nvidia | training | declared | - | part | NO |
 | rf-reg-poisson | amd,apple,nvidia | training | declared | - | part | NO |
-| rf-score-weighted | - | training | declared | - | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | NO |
+| rf-score-weighted | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/rf-score-weighted/cpu-sabotage.json` | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | NO |
 | ridge | amd,apple,nvidia | training | seen(build) | `bench/results/runpod_cpu/2026-09-15_proof/cold/leg_out/cpu-x86.host-sabotage.json` | part | yes |
 | ridge-no-intercept | amd,apple,nvidia | training | declared | - | part | NO |
 | samba | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
@@ -594,9 +594,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-scaler-minmax, par-svm, par-svm-svr
 
-**Sabotage not seen to move a build: 175**
+**Sabotage not seen to move a build: 168**
 
-> arima, arima-011, arima-seasonal-c, bootstrap, bpe-trainer, byte-lm, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, cross-val, cross-val-folds, dbscan, dbscan-brute-l1, dbscan-weighted, elasticnet, elasticnet-l2end-no-intercept, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-adapter-score-weighted, gbdt-categorical-ctr, gbdt-categorical-ctr-tables, gbdt-depthwise, gbdt-exact-mae, gbdt-feature-freq, gbdt-lossguide, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-nan-modes, gbdt-onevsall, gbdt-ordered-rmse, gbdt-pair-logit, gbdt-parametric-losses, gbdt-pointwise-l2-bayesian-eval, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-tensor-ctr-tables, gbdt-yeti-rank, gemm-bf16, gemm-int8, gemm-pinned, gemm-transposed, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, iforest-tuned, kde, kde-cosine-minkowski, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-tophat-sqeuclidean, kde-weighted, kmeans-cosine, knn, knn-chebyshev, knn-clf, knn-clf-distance, knn-cosine, knn-manhattan, knn-minkowski-p3, knn-rbc, knn-reg, knn-reg-distance, knn-sqeuclidean, lasso, logistic, logistic-elasticnet, logistic-l1, logistic-multiclass, logistic-unpenalized-no-intercept, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, metrics, metrics-classification, minmax-scaler, minmax-scaler-clip, mlp, mlp-bf16w, mlp-int8w, monte-carlo, ols-no-intercept, ols-weighted, optim-adam-clip, optim-sgd, ordered-gradient-sum, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-holtwinters, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, pca, pca-full-whiten, pca-whiten, permutation-test, radius, radius-chebyshev, radius-manhattan, radius-minkowski-p3, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, rf-score-weighted, ridge-no-intercept, samba-bf16w, samba-int8w, spectral-precomputed, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std, training-primitives, transformer-bf16w, transformer-int8w, tsvd, umap
+> arima, arima-011, arima-seasonal-c, bootstrap, bpe-trainer, byte-lm, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, cross-val, cross-val-folds, dbscan, dbscan-brute-l1, dbscan-weighted, elasticnet, elasticnet-l2end-no-intercept, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-categorical-ctr, gbdt-categorical-ctr-tables, gbdt-depthwise, gbdt-exact-mae, gbdt-feature-freq, gbdt-lossguide, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-pointwise-l2-bayesian-eval, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-tensor-ctr-tables, gemm-bf16, gemm-int8, gemm-pinned, gemm-transposed, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, iforest-tuned, kde, kde-cosine-minkowski, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-tophat-sqeuclidean, kde-weighted, kmeans-cosine, knn, knn-chebyshev, knn-clf, knn-clf-distance, knn-cosine, knn-manhattan, knn-minkowski-p3, knn-rbc, knn-reg, knn-reg-distance, knn-sqeuclidean, lasso, logistic, logistic-elasticnet, logistic-l1, logistic-multiclass, logistic-unpenalized-no-intercept, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, metrics, metrics-classification, minmax-scaler, minmax-scaler-clip, mlp, mlp-bf16w, mlp-int8w, monte-carlo, ols-no-intercept, ols-weighted, optim-adam-clip, optim-sgd, ordered-gradient-sum, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-holtwinters, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, pca, pca-full-whiten, pca-whiten, permutation-test, radius, radius-chebyshev, radius-manhattan, radius-minkowski-p3, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, ridge-no-intercept, samba-bf16w, samba-int8w, spectral-precomputed, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std, training-primitives, transformer-bf16w, transformer-int8w, tsvd, umap
 
 **Batch undeclared: 0**
 

@@ -30,11 +30,13 @@ def test_inspection_and_batch_flags_route_to_suite():
         assert cli._wants_suite(cli.build_parser().parse_args(['verify', flag]))
 
 
-def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted():
+def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted(monkeypatch):
+    # Keep testing this behavior even after every real pending lane is closed.
+    monkeypatch.setitem(va.host_surface().PUBLIC_PENDING_LANES, 'ols', 'unwatched')
     h = va.load_harness()
-    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['samba'])
-    assert lanes == ['samba']
-    assert 'samba' not in va.host_surface().public_reference_lanes()
+    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['ols'])
+    assert lanes == ['ols']
+    assert 'ols' not in va.host_surface().public_reference_lanes()
     for name in ('bpe-trainer', 'cross-val-folds'):
         assert name in va.host_surface().public_reference_lanes()
 
