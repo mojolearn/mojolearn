@@ -68,7 +68,88 @@ control) so that column keeps its reach over the GPU proba cells.
 
 ## Evidence
 
-EVIDENCE_PLACEHOLDER
+Box: RunPod `u3g00x1o4wy6fo`, NVIDIA GeForce RTX 4090 (driver 580.159.04),
+AMD EPYC 7K62, $0.74 per hour. BEFORE is `main` at `c85657041`; AFTER is this
+branch at `5f94cd14a`. Small summaries are in
+`bench/results/gbdt_resident_2026-09-17/`; the full pod output is in
+`~/mojolearn-evidence/gbdt-resident/leg_out_tip/`.
+
+THE FIRST RUN DID NOT COVER THE TIP. The session that built this lane was cut
+off after pushing `5f94cd14a` (the threaded MultiClass and OneVsAll
+transforms) to the pod: `gbdt/resident_model.mojo` on the pod was dated
+18:14:22Z and the AFTER binding 17:54:53Z, so the identity and speed columns
+taken at 18:03Z to 18:34Z ran the commit before it. They are kept as
+`leg_out_pre_tip_1855Z/` and `speed_pre_tip_table.md`. Everything below is
+the rerun after `build-after` rebuilt AFTER (`_mojolearn_gbdt.so` f90665ac,
+was bff8559a) and the sabotage arm at 18:56Z to 19:00Z.
+
+### Identity (tools/identity_break.py, 22 GBDT lanes, five fixtures, two repeats)
+
+| diff | train | infer/model | batch |
+|---|---|---|---|
+| before-cuda vs after-cuda | IDENTICAL=110 | IDENTICAL=200, N/A=20 | IDENTICAL=105, N/A=5 |
+| after-cuda vs sabotage-cuda | DIVERGENT=110 | DIVERGENT=105, IDENTICAL=95, N/A=20 | BATCH_MOVED=105, N/A=5 |
+| before-cpu vs after-cpu | IDENTICAL=100, REFUSED=10 | IDENTICAL=150, N/A=10, NOT-COMPARED=20, REFUSED=40 | IDENTICAL=95, N/A=5, NOT-COMPARED=10 |
+| after-cuda vs after-cpu | IDENTICAL=100, ONE-COLUMN=10 | IDENTICAL=150, N/A=20, ONE-COLUMN=50 | IDENTICAL=95, N/A=5, ONE-COLUMN=10 |
+| before-cuda vs before-cpu | IDENTICAL=100, ONE-COLUMN=10 | IDENTICAL=150, N/A=20, ONE-COLUMN=50 | IDENTICAL=95, N/A=5, ONE-COLUMN=10 |
+
+No cell moved. The CPU column refuses `gbdt-multiclass`, `gbdt-onevsall`,
+`gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables` by name in BEFORE
+and AFTER alike (CPU training does not cover them), so the evidence for the
+threaded MultiClass and OneVsAll transforms is the CUDA pair: BEFORE runs
+`multiclass_probabilities` and `one_vs_all_probabilities` themselves, AFTER
+the per-row restatement, and all ten cells of each lane read IDENTICAL x2 on
+train, infer, model and batch. The sabotage arm moves `predict` and `proba`
+on every fixture of both lanes, so the resident door is what those cells
+went through.
+
+### Speed (bench/speed/gbdt_resident_ab.py, ms per call, seven rounds)
+
+Resident against the per-call parse in ONE binary, interleaved, two
+processes per cell; `u` marks a side outside the 1.10 spread gate. CatBoost
+(the version is in `pip_catboost.log`) on the same box and rows, its GPU
+evaluator and its CPU at all cores.
+
+| model | path | calls | rows | per-call ms | resident ms | ratio | qualified | hashes equal | CatBoost GPU ms | CatBoost CPU ms |
+|---|---|---|---|---|---|---|---|---|---|---|
+| covtype-multiclass-100 | predict | 1 | 581012 | 304.8u | 25.5u | 11.96 | False | True | refused | 191.5u |
+| covtype-multiclass-100 | predict | 8 | 581012 | 275.8u | 24.7 | 11.16 | False | True | refused | 174.8u |
+| covtype-multiclass-100 | proba | 1 | 581012 | 353.1u | 28.6u | 12.35 | False | True | refused | 149.8u |
+| covtype-multiclass-100 | proba | 8 | 581012 | 352.1u | 31.5u | 11.18 | False | True | refused | 159.5u |
+| covtype-multiclass-1000 | predict | 1 | 581012 | 765.4u | 63.5u | 12.05 | False | True | refused | 352.7u |
+| covtype-multiclass-1000 | predict | 8 | 581012 | 764.7 | 61.5 | 12.43 | True | True | refused | 352.1u |
+| covtype-multiclass-1000 | proba | 1 | 581012 | 846.9u | 68.5 | 12.37 | False | True | refused | 345.9u |
+| covtype-multiclass-1000 | proba | 8 | 581012 | 845.2 | 64.7 | 13.07 | True | True | refused | 352.1u |
+| higgs-logloss-100 | predict | 1 | 1000000 | 225.8u | 17.0u | 13.30 | False | True | 183.7 | 78.4u |
+| higgs-logloss-100 | predict | 8 | 1000000 | 181.1u | 16.1 | 11.22 | False | True | 186.4 | 81.1u |
+| higgs-logloss-100 | proba | 1 | 1000000 | 262.7u | 18.0u | 14.63 | False | True | 190.5 | 91.6u |
+| higgs-logloss-100 | proba | 8 | 1000000 | 241.2 | 17.4 | 13.88 | True | True | 192.9 | 88.2 |
+| higgs-logloss-1000 | predict | 1 | 1000000 | 286.3u | 28.6u | 10.01 | False | True | 265.6 | 174.3u |
+| higgs-logloss-1000 | predict | 8 | 1000000 | 274.9 | 27.5 | 9.99 | True | True | 267.9 | 191.8u |
+| higgs-logloss-1000 | proba | 1 | 1000000 | 347.6u | 30.2u | 11.52 | False | True | 273.7 | 193.3u |
+| higgs-logloss-1000 | proba | 8 | 1000000 | 340.0u | 29.6 | 11.50 | False | True | 273.9 | 201.7u |
+| taxi-logloss-100 | predict | 1 | 1000000 | 124.0u | 10.5u | 11.75 | False | True | 168.0 | 67.6u |
+| taxi-logloss-100 | predict | 8 | 1000000 | 110.1 | 10.0u | 11.03 | False | True | 164.1 | 64.9u |
+| taxi-logloss-100 | proba | 1 | 1000000 | 172.5u | 13.1u | 13.18 | False | True | 171.9 | 83.9u |
+| taxi-logloss-100 | proba | 8 | 1000000 | 181.2u | 11.7 | 15.46 | False | True | 173.4u | 73.9u |
+| taxi-logloss-1000 | predict | 1 | 1000000 | 203.3u | 24.2u | 8.40 | False | True | 205.2 | 165.9u |
+| taxi-logloss-1000 | predict | 8 | 1000000 | 204.8u | 21.6 | 9.46 | False | True | 225.9 | 160.2u |
+| taxi-logloss-1000 | proba | 1 | 1000000 | 267.6u | 25.7u | 10.43 | False | True | 232.8u | 190.1u |
+| taxi-logloss-1000 | proba | 8 | 1000000 | 263.3u | 24.2 | 10.86 | False | True | 212.6 | 166.6u |
+| taxireg-rmse-100 | predict | 1 | 1000000 | 121.8u | 10.3u | 11.86 | False | True | 121.3 | 64.1u |
+| taxireg-rmse-100 | predict | 8 | 1000000 | 108.0u | 9.6u | 11.30 | False | True | 121.8 | 62.5u |
+| taxireg-rmse-1000 | predict | 1 | 1000000 | 205.8u | 22.7u | 9.07 | False | True | 207.7 | 151.1u |
+| taxireg-rmse-1000 | predict | 8 | 1000000 | 201.0 | 21.0u | 9.55 | False | True | 206.7 | 159.5u |
+
+Every one of the 28 cells hashed equal between the two arms. Four cells pass
+the 1.10 gate on both sides (`covtype-multiclass-1000` predict and proba at
+eight calls, `higgs-logloss-100` proba and `higgs-logloss-1000` predict at
+eight calls); the per-call arm is the jittery side on this pod, and the ratios (9
+to 14) sit far outside any spread in the table. The tip commit is what took
+Covtype `predict_proba` from 119.7 to 28.6 ms (100 trees) and from 143.2 to
+68.5 ms (1000 trees): before it the MultiClass transform ran on one thread
+through two List copies. CatBoost's GPU evaluator refuses a
+multi-dimensional model, so those rows have its CPU only.
 
 ## Commands
 
@@ -98,4 +179,13 @@ only and `tools/dataset_store.sh stage` added the other two.
 
 ## Owed
 
-OWED_PLACEHOLDER
+- The Apple and AMD columns at the next release record. The resident door is
+  compiled on every vendor and was run on NVIDIA only.
+- The CPU column has no `gbdt-multiclass` or `gbdt-onevsall` cell (CPU
+  training refuses both), so the two transforms' identity rests on the CUDA
+  BEFORE and AFTER pair above.
+- Most cells miss the 1.10 spread gate on the per-call side; a quieter box
+  or more rounds would qualify them. No ratio is quoted as a claim.
+- A non-symmetric ensemble (Depthwise, Lossguide) gains the cached parse and
+  the resident compressed index but still applies per tree through
+  `doc_parallel_boosting.mojo::predict`.
