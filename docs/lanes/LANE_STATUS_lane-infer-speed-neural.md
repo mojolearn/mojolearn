@@ -108,11 +108,61 @@ under `MOJOLEARN_TRANSFORMER_TIMING=1`, a kernel matter outside this lane.
 
 ## Identity
 
-IDENTITY_PENDING
+`tools/identity_break.py` on the twelve neural lanes (`mlp`, `transformer`,
+`transformer-window`, `mamba1`, `mamba2`, `mamba2-dtlimit`, `mamba3`, `samba`,
+`samba-untied-dropout-accum`, `byte-lm`, `byte-lm-resident`,
+`byte-lm-host-infer`), fixtures `base,ties,odd`, `--step-full`, repeats 2,
+`--no-rlpair` (the rlpair part needs the training binding on both columns and
+is not an inference part). BEFORE is the unmodified tree at `e3213a59a` with
+its own bindings; AFTER is this branch's tree with its own bindings, the
+transformer, mamba and byte LM `.so` digests differing from BEFORE and every
+other binding's equal (`pod_out/so_sha256_{base,cand}_full.txt`). The AFTER
+JSONs' `commit` field reads the shipped base commit because the candidate tree
+on the pod carried no `COMMIT` file until the sabotage run; the digests are
+the witness. Diffed with `--diff`:
+
+| column | cells | train | infer/model | batch | stepfull | MOVED or DIVERGENT |
+|---|---|---|---|---|---|---|
+| cuda, RTX 4090 | 36 (12 lanes x 3 fixtures) | IDENTICAL=36 | IDENTICAL=51, N/A=21 | IDENTICAL=36 | IDENTICAL=24, N/A=12 | 0 |
+| cpu, EPYC 7532 (host route, ten lanes: no `byte-lm`, `byte-lm-resident`, which are GPU objects) | 30 | IDENTICAL=30 | IDENTICAL=39, N/A=21 | IDENTICAL=30 | IDENTICAL=24, N/A=6 | 0 |
+
+The `stepfull` cells (one fresh-state forward against token-by-token decode
+with a carried state) read IDENTICAL on both columns for the eight decode
+lanes before and after. The resident sessions are additionally checked by the
+A/B above (every token bytewise against the per-call arm and the fresh full
+forward) and by two probes (`~/mojolearn-evidence/infer-speed-neural/
+probe_session.py`, `probe_mamba1.py`): session-only decode, per-call prefill
+then session decode, session prefill then per-call decode after `close`, the
+full-causal and the window-8 block, all bytewise.
+
+Byte LM on the AFTER build: `tools/byte_lm_gpu_logits_sweep.py` PASS, the
+three per-state digests equal the CPU sweep's (`6db55997`, `30a89281`,
+`b518e71e`), negative control differs; `tools/byte_lm_host_gate.py --steps
+every:16` PASS, 25 compared. Both also PASS on BEFORE. Reports:
+`pod_out/bytelm_{sweep,host_gate}_{before,after}.json`.
+
+Files: `~/mojolearn-evidence/infer-speed-neural/pod_out/identity_{cuda,cpu}_
+{before,after}.json`, `pod_out/logs/identity_diff_{cuda,cpu}.log`.
 
 ## Sabotage controls
 
-SABOTAGE_PENDING
+Three controls, each seen to fail (`tools/infer_speed_neural_body.sh`
+phase `sabotage`, logs under `pod_out/logs/sabotage_*` and
+`identity_*sabotage*`):
+
+1. **identity_break under `MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1`** on the
+   cuda column, lanes `transformer`, `transformer-window`, `mamba1`, `mamba2`,
+   `mamba3`, fixture `base`, diffed against the AFTER column: every `batch`
+   and every `stepfull` cell read BATCH_MOVED (`summary (batch):
+   BATCH_MOVED=5`, `summary (stepfull): BATCH_MOVED=5`), the train and infer
+   cells IDENTICAL, so the stepfull comparison this lane leans on can fail.
+2. **The GPU byte LM binding built under `-D MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE=1`**
+   (the define added in `training/byte_lm_logits.mojo`, one output bit
+   flipped after the arithmetic, never in a shipped binary), the host binding
+   clean: `tools/byte_lm_gpu_logits_sweep.py` exited 1: `FAIL: 816/1680 comparisons equal`, 864 of the 1680 GPU-vs-CPU comparisons differed and the per-state digests no longer equal the CPU sweep's (`pod_out/sabotage_sweep.json`, `verdict: FAIL`).
+3. **The host byte LM binding built under `-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1`**
+   (the gate's own DEVIATION 2612 build): `tools/byte_lm_host_gate.py
+   --expect-mismatch` exited 0 only because a mismatch was seen: `PASS: 21/25 loss bytes equal (sabotage build, a mismatch was required)`, four loss bytes moved (`pod_out/sabotage_host_gate.json`).
 
 ## Commands
 

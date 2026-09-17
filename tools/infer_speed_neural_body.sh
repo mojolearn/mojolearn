@@ -134,28 +134,33 @@ bytelm)
     : > "$OUT/bytelm_$LABEL.done"
     ;;
 sabotage)
-    # The controls that must be SEEN TO FAIL. (1) A copy of ROOT with the
-    # byte LM host binding rebuilt under -D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1
-    # and the GPU byte LM binding under -D MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE=1:
-    # the host gate must mismatch (--expect-mismatch exits 0 only then) and
-    # the GPU sweep must exit non-zero. (2) identity_break on the cuda
-    # column under MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1, diffed against the
-    # AFTER column: the batch and stepfull cells must read MOVED.
+    # The controls that must be SEEN TO FAIL. (1) A copy of ROOT with the GPU
+    # byte LM binding rebuilt under -D MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE=1 and
+    # the host binding CLEAN: the GPU sweep must exit non-zero on a real digest
+    # difference. (2) The same copy with the host binding then rebuilt under
+    # -D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1: the host gate must mismatch
+    # (--expect-mismatch exits 0 only then; the loader admits the build only
+    # under MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1). (3) identity_break on the
+    # cuda column under MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1, diffed against the
+    # AFTER column: the batch and stepfull cells must read BATCH_MOVED.
     gpu_arch
     SAB="$ROOT/../sabotage-$(basename "$ROOT")"
     rm -rf "$SAB"; cp -a "$ROOT" "$SAB"
-    rm -f "$SAB/python/mojolearn/identical/_mojolearn_byte_lm.so" "$SAB/python/mojolearn/host/_mojolearn_byte_lm_host.so"
+    rm -f "$SAB/python/mojolearn/identical/_mojolearn_byte_lm.so"
     (cd "$SAB" && step sabotage_build_byte_lm_gpu 1500 env MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE=1" sh bindings/build_byte_lm.sh)
-    (cd "$SAB" && step sabotage_build_byte_lm_host 1500 env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_TARGET_COLUMN MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1" sh bindings/build_byte_lm_host.sh)
     rm -f "$OUT/sabotage_sweep.json" "$OUT/sabotage_host_gate.json" "$OUT/identity_cuda_sabotage.json"
     (cd "$SAB" && step sabotage_sweep_must_fail 2400 env PYTHONPATH="$SAB/python:$SAB/tools" pixi run python -u tools/byte_lm_gpu_logits_sweep.py \
         --stateless-every 8 --report "$OUT/sabotage_sweep.json")
-    (cd "$SAB" && step sabotage_host_gate_expect_mismatch 2400 env PYTHONPATH="$SAB/python:$SAB/tools" MOJOLEARN_HOST_ALLOW_SABOTAGE=1 pixi run python -u tools/byte_lm_host_gate.py \
+    rm -f "$SAB/python/mojolearn/host/_mojolearn_byte_lm_host.so"
+    (cd "$SAB" && step sabotage_build_byte_lm_host 1500 env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_TARGET_COLUMN MOJOLEARN_BUILD_EXTRA_DEFINES="-D MOJOLEARN_BYTE_LM_HOST_SABOTAGE=1" sh bindings/build_byte_lm_host.sh)
+    (cd "$SAB" && step sabotage_host_gate_expect_mismatch 2400 env PYTHONPATH="$SAB/python:$SAB/tools" MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1 pixi run python -u tools/byte_lm_host_gate.py \
         --steps every:16 --expect-mismatch --report "$OUT/sabotage_host_gate.json")
-    step identity_cuda_sabotage 3000 env MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1 pixi run python -u tools/identity_break.py \
-        --lanes "transformer,transformer-window,mamba1,mamba2,mamba3" --fixtures base --step-full --no-rlpair --repeats 2 \
-        --require-backend cuda --json "$OUT/identity_cuda_sabotage.json"
-    step identity_diff_sabotage_must_move 600 pixi run python -u tools/identity_break.py --diff "$OUT/identity_cuda_after.json" "$OUT/identity_cuda_sabotage.json"
+    if [ "${INFER_SABOTAGE_IDENTITY:-1}" = 1 ]; then
+        step identity_cuda_sabotage 3000 env MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1 pixi run python -u tools/identity_break.py \
+            --lanes "transformer,transformer-window,mamba1,mamba2,mamba3" --fixtures base --step-full --no-rlpair --repeats 2 \
+            --require-backend cuda --json "$OUT/identity_cuda_sabotage.json"
+        step identity_diff_sabotage_must_move 600 pixi run python -u tools/identity_break.py --diff "$OUT/identity_cuda_after.json" "$OUT/identity_cuda_sabotage.json"
+    fi
     : > "$OUT/sabotage.done"
     ;;
 diff)
