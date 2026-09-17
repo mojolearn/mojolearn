@@ -132,3 +132,11 @@ the passing 41-lane wheel shows only evidence metadata, COMMIT and wheel
 RECORD changed; every numerical code/reference/model/native byte is identical.
 Probe native-nine-installed retains full reports and receipts. No local job
 or cloud rental remains active from this lane. No PyPI publication occurred.
+
+
+## Follow-up: broader runnable scope
+
+See [the broad verifier checkpoint](LANE_STATUS_verifier_broad_scope.md).
+Pending CPU lanes and 17 CPU logical-shard drivers now have an opt-in execution
+mode; HostForest/HostGBDT have an installed saved-model-only command. These
+changes broaden runnable coverage while retaining the qualification holds.
