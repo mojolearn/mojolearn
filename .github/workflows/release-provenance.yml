@@ -112,6 +112,14 @@ jobs:
     timeout-minutes: 90
     env:
       MOJOLEARN_PACKAGE_BYTE_LM: '1'
+      MOJOLEARN_BUILD_JOBS: '1'
+      MOJOLEARN_COMPILE_JOBS: '1'
+      MOJOLEARN_CPU_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
       ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'
       ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: '1200000'
     permissions:
@@ -335,7 +343,7 @@ jobs:
           esac
           python3 tools/check_linux_release_qualification.py "$WHL" \
             --qualification-root "$DIR/qualification" \
-            --source-root "$GITHUB_WORKSPACE"
+            --source-root "$GITHUB_WORKSPACE" --profile release-linux3
           cp "$WHL" python/dist/
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"
@@ -370,7 +378,7 @@ jobs:
           rm -rf "${RUNNER_TEMP:-/tmp}/isa" && mkdir -p "${RUNNER_TEMP:-/tmp}/isa"
           python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
             "$WHL" "${RUNNER_TEMP:-/tmp}/isa"
-          docker run --rm --cpus 2 --platform linux/amd64 \
+          docker run --rm --cpus 1 --platform linux/amd64 \
             -v "${RUNNER_TEMP:-/tmp}/isa:/w:ro" \
             -v "$PWD/packaging/linux:/g:ro" \
             "${MOJOLEARN_AUDIT_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64}" \

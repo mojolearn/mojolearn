@@ -139,6 +139,8 @@ jobs:
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
+      # Keep release certification within two cloud numerical workers.
+      max-parallel: 1
       matrix:
         # One CPU environment per OS/architecture. GPU release evidence is
         # separately one Apple, one AMD and one NVIDIA column.
@@ -165,6 +167,11 @@ jobs:
       # identity is weekly, explicitly dispatched, or called by a release.
       FULL_CPU_VERIFY: ${{ github.event_name != 'push' }}
       OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+      MOJOLEARN_COMPILE_JOBS: "2"
       MOJOLEARN_CPU_THREADS: "1"
       MOJOLEARN_NUMERIC_MODE: identical
       PYTHONPATH: ${{ github.workspace }}/python
@@ -231,10 +238,9 @@ jobs:
           esac
           echo "MOJOLEARN_TARGET_CPU=$target" >> "$GITHUB_ENV"
           # The covered-lanes steps split their lanes into one identity_break
-          # process per CPU the runner reports (tools/cpu_identity_gate_check.py
-          # run-column); the one-core rule is the developer Mac's, not CI's.
+          # process per available CPU, capped at two; matrix jobs are serial.
           shards="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
-          [ "$shards" -le 4 ] || shards=4
+          [ "$shards" -le 2 ] || shards=2
           echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
           echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy

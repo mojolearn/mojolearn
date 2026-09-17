@@ -76,6 +76,7 @@ parser = argparse.ArgumentParser()
 parser.add_argument('wheel', type=Path)
 parser.add_argument('--qualification-root', required=True, type=Path)
 parser.add_argument('--source-root', required=True, type=Path)
+parser.add_argument('--profile', required=True, choices=['release-linux3'])
 args = parser.parse_args()
 root = Path.cwd().resolve()
 if (args.source_root.resolve() != root or args.qualification_root.resolve() != root / 'stage/qualification'
