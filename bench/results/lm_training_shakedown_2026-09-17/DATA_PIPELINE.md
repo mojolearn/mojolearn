@@ -46,7 +46,13 @@ uint16 file is a contained change to a driver, not to the library.
 
 ## Gap 2: there is no parquet reader and no tokenizer in the training path
 
-Nothing in the repository reads parquet into the trainer. More importantly,
+Nothing in the repository reads parquet into the trainer. That is an absence
+claim, so it was checked repo-wide rather than by looking where I expected:
+`git grep -ln parquet -- '*.py' '*.sh' '*.mojo'` outside `bench/results` gives
+thirteen files, every one of them a taxi, Criteo or gbm-bench fetcher for the
+tree and classical lanes. Exactly one of the thirteen also contains the string
+`byte_lm`, `tools/classical_two_datasets_leg.sh`, and that is a COMMENT at line
+44 about a torch ROCm pin, not a data path. More importantly,
 `CorpusBatches` does not tokenize at all -- it casts RAW BYTES to int32 and
 calls them token ids. Its own docstring says so: "the byte LM's next-byte
 schedule at this shape, no tokenizer, no normalization."
