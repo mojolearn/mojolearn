@@ -101,7 +101,7 @@ def test_refused_cell_is_not_success(run_fixture):
     assert all(c["verdict"] == "REFUSED" for c in json.loads(Path(args.json).read_text())["cells"].values())
 
 
-def test_numerical_mismatch_keeps_repeated_bytes_but_fails_record(run_fixture, monkeypatch):
+def test_numerical_mismatch_keeps_repeated_bytes_but_fails_record(run_fixture, monkeypatch, capsys):
     args, _, _ = run_fixture
     calls = []
     def wrong(*unused):
@@ -116,6 +116,12 @@ def test_numerical_mismatch_keeps_repeated_bytes_but_fails_record(run_fixture, m
         assert len(cell['hashes']) == 2 and len(set(cell['hashes'])) == 1
         assert cell['oracle_errors'] == ['independent oracle disagrees'] * 2
         assert 'infer' not in cell
+    # Two equally wrong results must never rehabilitate the failed oracle.
+    capsys.readouterr()
+    assert ib.diff([args.json, args.json]) == 1
+    output = capsys.readouterr().out
+    assert 'IDENTICAL x2' not in output
+    assert 'DIVERGENT' in output
 
 
 def test_atomic_checkpoint_preserves_old_record_on_write_error(tmp_path, monkeypatch):

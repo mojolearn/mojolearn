@@ -8102,6 +8102,8 @@ def _diff_column(cols, k, col):
             shown.append("(not run)"); continue
         if c.get("verdict") == "REFUSED":
             shown.append("REFUSED"); continue
+        if c.get("verdict") == "DIVERGENT":
+            shown.append("DIVERGENT"); hashes.append("DIVERGENT"); continue
         if f"{col}_verdict" not in c:
             shown.append("(no column)"); missing = True; continue
         v = c[f"{col}_verdict"]
@@ -8112,8 +8114,10 @@ def _diff_column(cols, k, col):
             identical_bm = identical_bm or (v in ("BATCH_MOVED", "RLPAIR_MOVED") and j.get("mode") == "identical")
             continue
         shown.append(c[col][0]); hashes.append(c[col][0])
-    real = [h for h in hashes if h not in ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")]
-    if "RELOAD-MOVED" in hashes:
+    real = [h for h in hashes if h not in ("DIVERGENT", "MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")]
+    if "DIVERGENT" in hashes:
+        verdict = "DIVERGENT"
+    elif "RELOAD-MOVED" in hashes:
         verdict = "RELOAD-MOVED"
     elif "MOVED" in hashes:
         verdict = "MOVED"
@@ -8151,7 +8155,7 @@ def _real_count(verdict):
 
 #: the per-column verdicts that are already a failure on their own; a cell
 #: carrying one is never OWED
-_OWED_BLOCKING = ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
+_OWED_BLOCKING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
 
 
 def _owed_status(cols, key, col):
@@ -8325,11 +8329,13 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
                 shown.append("(not run)"); continue
             if c["verdict"] == "REFUSED":
                 shown.append("REFUSED"); continue
-            if c["verdict"] == "MOVED":
-                shown.append("MOVED"); vals.append("MOVED"); continue
+            if c["verdict"] in ("MOVED", "DIVERGENT"):
+                shown.append(c["verdict"]); vals.append(c["verdict"]); continue
             shown.append(c["hashes"][0]); vals.append(c["hashes"][0])
         ran = [v for v in vals]
-        if "MOVED" in ran:
+        if "DIVERGENT" in ran:
+            verdict = "DIVERGENT"
+        elif "MOVED" in ran:
             verdict = "MOVED"
         elif len(ran) < 2:
             verdict = "ONE-COLUMN" if len(ran) == 1 else "REFUSED"
