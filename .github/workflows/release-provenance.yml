@@ -283,6 +283,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Qualify the installed verifier and portable CPU models
+        run: |
+          set -eu
+          set -- python/dist/mojolearn-*.whl
+          test "$#" -eq 1
+          wheel="$1"
+          set --
+          if [ -n "${MOJOLEARN_QUALIFICATION_WHEELHOUSE:-}" ]; then
+            set -- --wheelhouse "$MOJOLEARN_QUALIFICATION_WHEELHOUSE"
+          fi
+          python3 tools/qualify_verifier_wheel.py "$wheel" "$@" \
+            --output "$RUNNER_TEMP/verifier-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
+      - name: Retain installed verifier qualification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verifier-wheel-qualification
+          path: ${{ runner.temp }}/verifier-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 30
+
       # THE LINUX WHEEL IS NOT BUILT HERE AND CANNOT BE. It is compiled on a
       # rented CUDA box and a rented HIP box (`packaging/linux/leg.sh`),
       # packed on the Mac by `packaging/linux/pack_wheel.py`, and retagged by
