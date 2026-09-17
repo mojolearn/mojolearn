@@ -115,3 +115,9 @@ controls, default selection and comparator self-test. Receipts are committed in
 the completion probe directory. A bounded single-thread local Mamba2 clean
 record is now running with all native dependencies to fill the missing stepfull
 property; external `mamba2-complete-clean.json`, root session 28100.
+
+Oracle diff follow-up: equally wrong numerical outputs remain DIVERGENT when
+compared to each other. A regression exercises the recorder and diff together;
+37 runtime/control tests pass. This small fix was isolated in
+`~/mojolearn-wt/cpu-oracle-diff-fix` while the Mamba2 record retained its frozen
+source worktree for safe checkpoint resumption.
