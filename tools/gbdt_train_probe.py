@@ -21,7 +21,7 @@ slope between the smallest and largest tree count's medians, the fixed cost
 the intercept.
 
 This process is ONE ARM. An A/B is two checkouts (BEFORE and AFTER) running
-this file alternately, one process per round (`tools/gbdt_train_ab.sh`); the
+this file alternately, one process per round (`tools/gbdt_train_body.sh ab`); the
 digests must be equal across arms. Under `nsys profile` the same command is
 the per-kernel attribution. With `MOJOLEARN_STAGE_TIMES=1` it is the stage
 ledger, which drains per stage and is a SPLIT, never a timing.
@@ -90,14 +90,20 @@ def cmd_fit(args):
     _name, drain = rank.make_drain()
     ladder = [int(v) for v in args.trees.split(",")]
     print("GTP CELL label=%s cell=%s %s" % (args.label, args.cell, desc), flush=True)
+    binding_file, mode_used = "?", "?"
     try:
         import mojolearn
         m0 = mojolearn.GradientBoosting()
-        print("GTP BUILD mode=%s vendor=%s file=%s" % (
-            m0.numeric_mode_used(), m0.vendor_used(),
-            getattr(m0._bind("_mojolearn_gbdt"), "__file__", "?")), flush=True)
+        binding_file = os.path.abspath(getattr(m0._bind("_mojolearn_gbdt"), "__file__", "?"))
+        mode_used = m0.numeric_mode_used()
+        print("GTP BUILD mode=%s vendor=%s file=%s mtime=%d" % (
+            mode_used, m0.vendor_used(), binding_file,
+            int(os.path.getmtime(binding_file))), flush=True)
     except Exception as e:                          # noqa: BLE001
         print("GTP BUILD unknown (%s)" % e, flush=True)
+    if args.expect_root and not binding_file.startswith(os.path.abspath(args.expect_root) + os.sep):
+        raise SystemExit("GTP FATAL: arm %s loaded %s, not a binding under %s"
+                         % (args.label, binding_file, args.expect_root))
     fit(1)
     drain()
     times = {n: [] for n in ladder}
@@ -120,6 +126,7 @@ def cmd_fit(args):
     med = {n: statistics.median(v) for n, v in times.items()}
     lo, hi = min(ladder), max(ladder)
     out = {"label": args.label, "cell": args.cell, "dataset": args.dataset,
+           "binding_file": binding_file, "mode": mode_used,
            "desc": desc, "times_ms": {str(n): v for n, v in times.items()},
            "median_ms": {str(n): med[n] for n in ladder},
            "digests": {str(n): sorted(x for x in v if x) for n, v in digests.items()}}
@@ -151,6 +158,13 @@ def cmd_summarize(args):
         if "per_tree_ms" in d:
             e = rows.setdefault((tag, -1), {}).setdefault(arm, {"ms": [], "dig": set()})
             e["ms"].append(d["per_tree_ms"])
+    seen = {}
+    for path in sorted(args.files):
+        d = json.load(open(path))
+        seen.setdefault(os.path.basename(path).split(".")[0], set()).add(
+            "%s (%s)" % (d.get("binding_file"), d.get("mode")))
+    for arm in sorted(seen):
+        print("GTP AB-ARM %s loaded %s" % (arm, sorted(seen[arm])))
     gate = 1.10
     for (tag, n) in sorted(rows):
         arms = rows[(tag, n)]
@@ -186,6 +200,8 @@ def main(argv=None):
     q.add_argument("--label", default="ours")
     q.add_argument("--no-predict", action="store_true")
     q.add_argument("--json", default=None)
+    q.add_argument("--expect-root", default=None,
+                   help="refuse unless the loaded gbdt binding lives under this tree")
     q.set_defaults(fn=cmd_fit)
     q = sub.add_parser("summarize")
     q.add_argument("files", nargs="+")

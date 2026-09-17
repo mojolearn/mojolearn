@@ -140,8 +140,12 @@ phase_ab() {
         [ $((r % 2)) -eq 1 ] || _order=$_rev
         for arm in $_order; do
             _name=${arm%%=*}; _rest=${arm#*=}; _tree=${_rest%%=*}; _mode=${_rest#*=}
-            ( cd "$_tree" && MOJOLEARN_NUMERIC_MODE=$_mode PYTHONPATH=python pixi run python3 "$R/tools/gbdt_train_probe.py" fit \
-                "$@" --label "$_name" --json "$_dir/$_name.$_tag.$r.json" ) > "$_dir/$_name.$_tag.$r.log" 2>&1
+            # the probe puts ITS OWN tree's python/ first on sys.path, so each
+            # arm runs its own copy (2026-09-17: run from $R, both arms loaded
+            # the AFTER binding and the A/B read 1.0)
+            [ "$_tree" = "$R" ] || cp "$R/tools/gbdt_train_probe.py" "$_tree/tools/gbdt_train_probe.py"
+            ( cd "$_tree" && MOJOLEARN_NUMERIC_MODE=$_mode PYTHONPATH=python pixi run python3 tools/gbdt_train_probe.py fit \
+                "$@" --label "$_name" --expect-root "$_tree" --json "$_dir/$_name.$_tag.$r.json" ) > "$_dir/$_name.$_tag.$r.log" 2>&1
             say "ab $_tag round $r $_name: $(grep '^GTP LINE' "$_dir/$_name.$_tag.$r.log")"
         done
     done
