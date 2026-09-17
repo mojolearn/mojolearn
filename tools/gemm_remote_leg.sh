@@ -47,8 +47,8 @@
 #   --payload phase8             `tools/e1_bootstrap.sh`, UNMODIFIED, whose
 #       phase 8 writes SEVEN lanes' cards in both modes (gemm, cd, kde,
 #       linkage, svm, metrics and mamba) into `<run>/lanes/*.card`. That
-#       directory is fetched to `bench/results/e1/<stamp>-runpod-<vendor>/`,
-#       beside the Mac's own bootstrap directory, and the verdict is
+#       directory is fetched to `$OUT/e1/<stamp>-runpod-<vendor>/`,
+#       recorded in `$OUT/e1_dir.txt`, and the verdict is
 #       `tools/e3_round_judge.sh` section 7 -- THIS LEG DOES NOT DIFF THOSE
 #       CARDS. It gets them home, intact, attributed and mode-witnessed.
 #
@@ -295,7 +295,9 @@
 #                                  must be 0600 and outside this repository;
 #                                  both are checked.
 #   MOJOLEARN_GEMM_LEG_MINUTES     lease minutes (default 60, hard cap 60)
-#   MOJOLEARN_GEMM_LEG_OUT         result directory
+#   MOJOLEARN_EVIDENCE_ROOT       raw output root (default $HOME/mojolearn-evidence)
+#   MOJOLEARN_GEMM_LEG_OUT         explicit result directory; otherwise a stamped
+#                                  directory under $MOJOLEARN_EVIDENCE_ROOT/e1g
 #   MOJOLEARN_GEMM_LEG_LOCAL_CARD  reuse an existing Apple card instead of
 #                                  generating one. The card must have come
 #                                  from the same commit; nothing can check
@@ -1067,28 +1069,29 @@ if [ "$MODE" != "reap" ]; then
 fi
 
 STAMP=$(date +%Y-%m-%d_%H%M%S)
+LEG_EVIDENCE_ROOT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}"
 PSUF=""
 if [ "$PAYLOAD" = "phase8" ]; then PSUF="-phase8"; fi
 if [ "$PAYLOAD" = "speed" ]; then PSUF="-speed-$SPEED_FAMILY"; fi
 if [ "$PAYLOAD" = "mamba" ]; then PSUF="-mamba"; fi
 if [ "$MODE" = "dry" ]; then
-    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
+    OUT="${MOJOLEARN_GEMM_LEG_OUT:-$LEG_EVIDENCE_ROOT/e1g/${STAMP}-${VENDOR}${PSUF}-dryrun}"
 else
-    OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-${VENDOR}${PSUF}}"
+    OUT="${MOJOLEARN_GEMM_LEG_OUT:-$LEG_EVIDENCE_ROOT/e1g/${STAMP}-${VENDOR}${PSUF}}"
 fi
 if [ "$NVIDIA_CAMPAIGN" = 6 ] && [ "$MODE" != reap ]; then
     [ ! -e "$OUT" ] && [ ! -L "$OUT" ] || leg_die "Compact resume requires a new local output directory"
 fi
 if [ "$MODE" != "reap" ] && [ "$PAYLOAD" = "phase8" ]; then
     # WHERE THE JUDGE WILL LOOK. tools/e3_round_judge.sh takes one bootstrap
-    # directory per machine out of bench/results/e1/ and labels each column
+    # directory per machine (passed explicitly) and labels each column
     # from the BASENAME (its label_of: *-nv* -> NVIDIA, *-amd* -> AMD). The
     # name is composed HERE rather than taken from the pod, because a RunPod
     # container's hostname is a hex id and `<stamp>-<hex>` would land this
     # column in the judge's default branch under a name nobody can read.
     # tools/e2_remote_leg.sh gets the same effect for free: its droplets are
     # NAMED mojolearn-e2-nv / -amd, so `hostname -s` already carries it.
-    E1_DEST="bench/results/e1/${STAMP}-runpod-${VENDOR}"
+    E1_DEST="$OUT/e1/${STAMP}-runpod-${VENDOR}"
 fi
 
 # ---------------------------------------------------------------------------

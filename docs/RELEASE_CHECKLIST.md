@@ -83,7 +83,7 @@ push. Every build below runs from that commit.
 ```sh
 REF=<40-hex commit>
 # AMD gfx942 on a DigitalOcean MI325X. The output directory
-# bench/results/releases/<release>/hip-gfx942 must not pre-exist; move a stale one aside.
+# ~/mojolearn-evidence/releases/$REF/hip-gfx942/release-build must not pre-exist.
 bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
 # NVIDIA sm_90a (RunPod H100) and sm_89 (RunPod L40S), started 90 s apart
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_90a \
@@ -93,9 +93,13 @@ MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MO
 ```
 
 Launch each with `nohup ... &` from a shell that outlives it. Proofs land at
-`bench/results/releases/<release>/hip-gfx942/release-build/` and
-`bench/results/e1g/<stamp>-nvidia-mamba/remote/release-build/`; each
+`~/mojolearn-evidence/releases/<source-commit>/hip-gfx942/release-build/` and
+`~/mojolearn-evidence/e1g/<stamp>-nvidia-mamba/remote/release-build/`; each
 `build/build-provenance.json` names its commit and architecture.
+Set `MOJOLEARN_EVIDENCE_ROOT` to use another storage root. Existing explicit
+`MOJOLEARN_RELEASE_RESULTS_ROOT` and `MOJOLEARN_GEMM_LEG_OUT` overrides take
+precedence. Keep raw output there; commit only the reviewed summary and
+provenance needed by the release, with links and hashes for external artifacts.
 
 ## 2b. The host bindings, per vendor (the check the CPU gates cannot make)
 

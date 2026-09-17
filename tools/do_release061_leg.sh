@@ -12,7 +12,9 @@
 # AMD silicon this account can rent is a DigitalOcean MI325X, so this file is
 # the third leg. It produces the SAME evidence tree the NVIDIA legs keep under
 # OUT/remote/release-build, here under
-#   bench/results/releases/2026-09-08-linux-0.7.0/hip-gfx942/release-build/
+#   ~/mojolearn-evidence/releases/<commit>/hip-gfx942/release-build/
+# MOJOLEARN_EVIDENCE_ROOT overrides ~/mojolearn-evidence; the existing
+# MOJOLEARN_RELEASE_RESULTS_ROOT overrides the entire release directory.
 # so the packer reads it as
 #   --set .../release-build/build/sets/hip
 #   --build-proof .../release-build/build/build-provenance.json
@@ -73,7 +75,8 @@ esac
 TAG=rel061
 REMOTE_PY=/usr/bin/python3                 # the image's stdlib 3.12 (tools/do_byte_lm_setup.sh)
 REMOTE_OUT=/root/rel061-build; REMOTE_LOG=/root/rel061-build.log
-RELEASE_ROOT="${MOJOLEARN_RELEASE_RESULTS_ROOT:-$REPO/bench/results/releases/2026-09-08-linux-0.7.0}"
+LEG_EVIDENCE_ROOT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}"
+RELEASE_ROOT="${MOJOLEARN_RELEASE_RESULTS_ROOT:-$LEG_EVIDENCE_ROOT/releases/$COMMIT}"
 OUT="$RELEASE_ROOT/$LEG_VENDOR-$LEG_ARCH"
 # DEVIATION 2294: a qualification is not a build proof and must not land where
 # one lives; the packer reads that path and would find a directory of the

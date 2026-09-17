@@ -19,6 +19,18 @@ provenance and evidence needed to support claims. Install the repository hooks
 with `sh tools/hooks/install.sh`; their checks supplement this review and do
 not classify every possible artifact automatically.
 
+`tools/gemm_remote_leg.sh` collects new runs under
+`~/mojolearn-evidence/e1g/`; its Phase 8 bundle stays under the run's `e1/`
+directory, with the destination recorded in `e1_dir.txt`.
+`tools/do_release061_leg.sh` collects under
+`~/mojolearn-evidence/releases/<source-commit>/`.
+Both accept `MOJOLEARN_EVIDENCE_ROOT` for another storage root. Existing explicit
+`MOJOLEARN_GEMM_LEG_OUT` and `MOJOLEARN_RELEASE_RESULTS_ROOT` settings take
+precedence, including older callers that deliberately write into the checkout.
+These defaults retain all fetched files; they do not publish evidence or migrate
+old runs. Review and commit the needed summaries/provenance separately, and
+provide a durable location and hashes before citing external raw artifacts.
+
 Wheels, compiled executables, shared libraries and packed build/source archives
 do not belong in the working source tree. Before removing existing copies,
 verify a recovery copy by SHA-256 and retain a manifest. Do not remove unique
