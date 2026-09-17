@@ -49,6 +49,7 @@ from training.byte_lm import (
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
+    byte_attention_eager_cells, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
 from training.byte_lm_model_pool import ByteModelPool
@@ -726,6 +727,15 @@ def byte_lm_fault_inject_available_binding() raises -> PythonObject:
     return PythonObject(byte_lm_fault_inject_available())
 
 
+def byte_lm_ce_aliased_binding() raises -> PythonObject:
+    """DEVIATION 3011: False in a build carrying
+    -D MOJOLEARN_BYTE_LM_CE_UNALIASED=1, which allocates the five [M, V]
+    cross-entropy buffers separately instead of overlaying three of them.
+    The A/B that claims aliasing moves no bit reads this to prove its two
+    arms are two arms."""
+    return PythonObject(byte_lm_ce_aliased())
+
+
 def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
                                  params: PythonObject, shape: PythonObject) raises -> PythonObject:
     """Admit host state ONCE and upload it ONCE (design 1.1 item 1).
@@ -1036,20 +1046,34 @@ def byte_lm_session_rollback_binding(session: PythonObject) raises -> PythonObje
 
 def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     """[completed_steps, grad_step, usable, open] as integers; -1, -1 for
-    the two steps when no trainer is open. Reads fields only."""
+    the two steps when no trainer is open. Reads fields only.
+
+    DEVIATION 3010 appends six more, all `len()` of buffers the trainer
+    already owns (`byte_attention_eager_cells`, training/byte_lm.mojo):
+    forward eager cells, forward `aexp` cells, backward eager cells,
+    layers grown forward, layers grown backward, layers with a full
+    `aexp`. They are ZERO when no trainer is open. Existing callers index
+    positions 0 to 3 and are unaffected; nothing here launches, downloads
+    or synchronizes."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var completed = -1
     var grad_step = -1
     var is_open = 0
+    var eager = List[Int]()
+    for _ in range(6):
+        eager.append(0)
     if owner[].trainer:
         completed = owner[].trainer.value().completed_steps
         grad_step = owner[].trainer.value().grad_step
         is_open = 1
+        eager = byte_attention_eager_cells(owner[].trainer.value())
     var out = Python.list()
     out.append(PythonObject(completed))
     out.append(PythonObject(grad_step))
     out.append(PythonObject(1 if owner[].usable else 0))
     out.append(PythonObject(is_open))
+    for i in range(len(eager)):
+        out.append(PythonObject(eager[i]))
     return out
 
 
@@ -1615,6 +1639,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
+        module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).

@@ -165,6 +165,30 @@ not refuse the flag for that reason; the gate reads the availability
 witness and skips the controls on a build without it."""
 
 
+comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
+"""DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
+SEPARATE allocations, the way they were before rank 3 of
+`docs/lanes/BRIEF_lm_step_memory_2026-09-10.md` section 3.
+
+THIS DEFINE EXISTS TO BE THE OTHER ARM. Aliasing is a storage decision and
+the whole claim about it is that it moves no bit, so the claim is only worth
+something if the unaliased spelling can still be BUILT and RUN beside it on
+the same fixture. `[[mojotrees-switches-must-flip]]`: a flip nobody can flip
+is prose. The shipped build defines nothing and gets the aliased buffers,
+which are 3 * M * V * 4 bytes smaller."""
+
+
+def byte_lm_ce_aliased() -> Bool:
+    """False in a build carrying `-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1`.
+
+    An A/B that cannot tell its two arms apart is not an A/B: without this
+    witness, building the same arm twice and comparing it with itself reads
+    exactly like a passed identity gate."""
+    comptime if BYTE_LM_CE_UNALIASED:
+        return False
+    return True
+
+
 def byte_lm_fault_inject_available() -> Bool:
     """True only in a build compiled with the G4 fault-injection flag."""
     comptime if BYTE_LM_FAULT_INJECT:
@@ -464,7 +488,43 @@ struct ByteBuffers(Movable):
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
-        self.ce_shift = _zeros(ctx, M * V)
+        # DEVIATION 3011 (BRIEF_lm_step_memory_2026-09-10.md section 3,
+        # rank 3): `ce_shift` IS `logits` and `ce_weights` and `ce_dlogits`
+        # ARE `ce_expo`. Five `[M, V]` allocations become two, which is
+        # 3 * M * V * 4 bytes -- 1,178 MiB at B1/L2048/V50257 and eight
+        # times that at the batch 4 operating point
+        # lane/lm-training-shakedown measured on 2026-09-17.
+        #
+        # A STORAGE DECISION WITH THE SAME OPERANDS, NOT A FOLD CHANGE. Each
+        # of the three kernels involved owns one CELL and reads only that
+        # cell of its input, so writing the result back over the input is
+        # the same arithmetic on the same bytes in the same thread:
+        #   `ce_shift_exp_kernel` loads `logits[cell]` into a register,
+        #       subtracts `max[row]`, THEN stores `shift[cell]` and
+        #       `expo[cell]` (loss.mojo:660-668);
+        #   `ce_weights_kernel` divides `expo[cell]` by `denom[row]` and
+        #       stores `weights[cell]` (:1020-1032);
+        #   `ce_dlogits_kernel` subtracts a host constant from
+        #       `weights[cell]`, divides, stores `dlogits[cell]` (:1034).
+        # No kernel reads a neighbour cell, no kernel folds over `V` here
+        # (L4's denom GEMM and L12's row fold read `expo` and `ce_row`,
+        # both before L14), and the two backward kernels are enqueued back
+        # to back on one in-order context, so `expo` is dead at L14 and
+        # `weights` is dead at L16.
+        #
+        # WHAT IS DEAD WHEN. `logits` is read by the refusal scan (first
+        # statement of the CE forward) and by L2/L3; after L3 the clean
+        # path never reads it again -- L6/L7 read `shift[row*V + y]` and
+        # `logdenom`, and their `logits`/`expo`/`denom` arguments feed the
+        # SAB_NLL_* arms only. Those arms cannot reach a trainer:
+        # `_require_profile` (:297) refuses a build carrying any of them by
+        # name, so the brief's flagged level-2 risk is closed by a check
+        # and not by a promise. The loss lane's own gate fixtures pass
+        # five distinct buffers and are untouched by this.
+        comptime if BYTE_LM_CE_UNALIASED:
+            self.ce_shift = _zeros(ctx, M * V)
+        else:
+            self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
         self.ce_expo = _zeros(ctx, M * V)
         self.ce_denom = _zeros(ctx, M)
         self.ce_logdenom = _zeros(ctx, M)
@@ -476,8 +536,13 @@ struct ByteBuffers(Movable):
         self.ce_row = _zeros(ctx, M)
         self.ce_total = _zeros(ctx, 1)
         self.ce_loss = _zeros(ctx, 1)
-        self.ce_weights = _zeros(ctx, M * V)
-        self.ce_dlogits = _zeros(ctx, M * V)
+        # DEVIATION 3011: both are `ce_expo` (see `ce_shift` above).
+        comptime if BYTE_LM_CE_UNALIASED:
+            self.ce_weights = _zeros(ctx, M * V)
+            self.ce_dlogits = _zeros(ctx, M * V)
+        else:
+            self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+            self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, identical_ce_ones_floats(M, V))
         self.ce_ws = _zeros(
             ctx, identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
@@ -662,6 +727,80 @@ struct ByteTrainer(Movable):
             return
         byte_validate_device_state(ctx, self.scan, self.buffers.param, self.buffers.m_state,
             self.buffers.v_state, self.buffers.buf_initialized, completed, self.config)
+
+
+def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
+    """DEVIATION 3010: THE QUADRATIC ATTENTION STAGES THIS TRAINER IS
+    ACTUALLY HOLDING RIGHT NOW, so that a session which grew them can be
+    told apart from one that never did WITHOUT a second run.
+
+    Returns, in order:
+
+        0  forward eager cells     sum over layers of len(scores) +
+                                   len(masked) + len(weights) + len(sbh)
+        1  forward aexp cells      sum over layers of len(aexp)
+        2  backward eager cells    sum over layers of len(d_attn_weights) +
+                                   len(d_attn_masked) + len(d_attn_scores) +
+                                   len(d_qk_cell) + len(head_c)
+        3  layers grown forward    layers whose len(scores) > 1
+        4  layers grown backward   layers whose len(d_attn_weights) > 1
+        5  layers with a full aexp layers whose len(aexp) > 1
+
+    `aexp` IS REPORTED APART FROM THE OTHER THREE ON PURPOSE. Two
+    different mechanisms grow it and they mean opposite things: the eager
+    fallback grows all four together
+    (`ensure_attention_stage_capacity`, modeling_llama.mojo), while a
+    build carrying the DEVIATION 2652 exp stash grows `aexp` ALONE on a
+    fused call that refused nothing. Summing them would read a healthy
+    stash as a fallback.
+
+    WHY THIS EXISTS. `docs/lanes/BRIEF_lm_step_memory_2026-09-10.md`
+    section 1.5 says these ten arrays are allocated at ONE element and
+    grow on demand, that the growth is data dependent per layer and per
+    step (`regime_product_ok`, `regime_finite`, or a `FUSED_CORNER` hit),
+    and that once grown they are **never released within a session**. So
+    the device footprint of a long run is not a property of its shape: a
+    session can double its device memory at some step nobody chose, and
+    every capacity number taken in the first few steps is then wrong for
+    the rest of the run. Nothing reported that growth, so a run that had
+    it and a run that did not looked the same from outside.
+
+    NO ARITHMETIC AND NO DEVICE WORK. Every term is `len()` of a buffer
+    the trainer already owns, which is host metadata; nothing is
+    launched, downloaded or synchronized, and no step path calls this.
+    It is read between steps.
+    """
+    var fwd_eager = 0
+    var fwd_aexp = 0
+    var bwd_eager = 0
+    var grown_fwd = 0
+    var grown_bwd = 0
+    var grown_aexp = 0
+    for layer in range(tr.config.n_layers):
+        fwd_eager += len(tr.forward[layer].scores)
+        fwd_eager += len(tr.forward[layer].masked)
+        fwd_eager += len(tr.forward[layer].weights)
+        fwd_eager += len(tr.forward[layer].sbh)
+        fwd_aexp += len(tr.forward[layer].aexp)
+        bwd_eager += len(tr.backward[layer].d_attn_weights)
+        bwd_eager += len(tr.backward[layer].d_attn_masked)
+        bwd_eager += len(tr.backward[layer].d_attn_scores)
+        bwd_eager += len(tr.backward[layer].d_qk_cell)
+        bwd_eager += len(tr.backward[layer].head_c)
+        if len(tr.forward[layer].scores) > 1:
+            grown_fwd += 1
+        if len(tr.backward[layer].d_attn_weights) > 1:
+            grown_bwd += 1
+        if len(tr.forward[layer].aexp) > 1:
+            grown_aexp += 1
+    var out = List[Int]()
+    out.append(fwd_eager)
+    out.append(fwd_aexp)
+    out.append(bwd_eager)
+    out.append(grown_fwd)
+    out.append(grown_bwd)
+    out.append(grown_aexp)
+    return out^
 
 
 @fieldwise_init
