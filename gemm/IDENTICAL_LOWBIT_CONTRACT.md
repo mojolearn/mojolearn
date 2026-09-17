@@ -9,12 +9,13 @@ Gates: `gemm/checks/gemm_lowbit_check.mojo`. Seams: `checks/numerics.mojo`
 
 ## STATUS
 
-Both profiles are built and gated on one Apple M4 (Metal) and one NVIDIA H100
-(`bench/results/lowbit/2026-09-17_h100-lowbit-mma/`, where the int8 profile
-ran on the IMMA matrix units and read equal to the flat kernel and the host
-oracle on 15 shapes) against their host oracles, with the value-flip sabotage
-arm of each seen to fail the oracle gates on both boxes. The AMD column is
-owed, so neither has a three-vendor card yet. Until one exists, every sentence
+Both profiles are built and gated on an Apple M4 (Metal, flat int8), an NVIDIA
+H100 (`bench/results/lowbit/2026-09-17_h100-lowbit-mma/`, int8 on the IMMA
+units) and an AMD MI325X (`bench/results/lowbit/2026-09-17_mi325x-lowbit-mma/`,
+int8 on the MFMA units), each against the same host oracles, each with the
+value-flip sabotage arm of each profile seen to fail the oracle gates. That is
+three vendor columns on the nine gate shapes of both profiles. The fourteen
+harness lanes that store block weights low-bit have the M4 columns only. Until one exists, every sentence
 below is a construction argument and the M4 measurement, not a certificate.
 
 `gemm/IDENTICAL_FP32_CONTRACT.md` (fp32.v1) forbids a flag inside itself that
