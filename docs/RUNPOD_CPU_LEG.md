@@ -69,7 +69,20 @@ create the pod.
 
 Every object is content addressed. A PUT URL is minted only for an object that
 does not exist, so nothing is overwritten in place. Datasets and corpora keep
-using `tools/stage_from_r2.sh`.
+using `tools/stage_from_r2.sh`, which lands every `gbm-bench/` key under
+`/root/datasets/gbm-bench` where `tools/speed_gbdt_arm.py` reads it
+(`GBM_BENCH_DATA`), so no rented pod fetches a dataset from its origin. The
+pins are in `bench/results/dataset_store/manifest.tsv`.
+
+| dataset key | bytes | decoded form |
+|---|---|---|
+| `gbm-bench/taxi/taxi_speed.npz` | 419,757,252 | taxi, the regression and binary tasks |
+| `gbm-bench/istella/istella_speed.npz` | 2,248,281,826 | Istella-S, train and test features and grades |
+| `gbm-bench/istella/istella_rank.npz` | 624,022,440 | Istella-S query ids and the ranking test half |
+| `gbm-bench/istella/istella-s-letor.tar.gz` | 472,129,615 | Istella-S source tarball, so the decode is reproducible |
+| `gbm-bench/higgs/higgs_speed.npz` | 1,276,000,490 | HIGGS, 11,000,000 x 28 float32 `x`, float32 `y` |
+| `gbm-bench/covtype/covtype_speed.npz` | 127,823,140 | Covertype, 581,012 x 54 float32 `x`, int32 `target` (1..7; `covtype` and `covtype2` derive from it) |
+| `gbm-bench/year/year_speed.npz` | 187,586,070 | YearPredictionMSD, 515,345 x 90 float32 `x`, float32 `y` |
 
 | object | key | restore check |
 |---|---|---|
