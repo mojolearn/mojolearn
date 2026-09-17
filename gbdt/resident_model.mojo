@@ -47,11 +47,14 @@ resident call is the device work of `gbdt/train.mojo::predict_floats` and
   * a non-symmetric ensemble (DEVIATION 259) is applied by that same
     `predict` function, called here with the resident compressed index, so
     its per-tree path is untouched and it still gains the cached parse;
-  * the transforms are the same host functions over the same readback:
-    `multiclass_probabilities`, `one_vs_all_probabilities`, and for the
-    Logloss and CrossEntropy pair `1 / (1 + identical_exp64(-r))` and
-    `1 - p` in double, the two statements of `gbdt_sigmoid_pair`
-    (DEVIATION 2902) over the exact widening of the float32 raw value.
+  * the transforms are the same statements over the same readback:
+    `multiclass_probabilities`'s loop body per row (the max seeded at zero
+    for the pinned class, `identical_exp64`, one double division per
+    class), `one_vs_all_probabilities`'s element, and for the Logloss and
+    CrossEntropy pair `1 / (1 + identical_exp64(-r))` and `1 - p` in
+    double, the two statements of `gbdt_sigmoid_pair` (DEVIATION 2902)
+    over the exact widening of the float32 raw value; every one is per
+    row, and the rows fan out to host threads.
 
 What moves out of the call: the parse, the `DeviceContext`, the pack and
 its six uploads, the border uploads, and the per-feature staging ring
@@ -105,12 +108,7 @@ from gbdt.models.ctr_value_table import expand_raw_columns
 from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
 from gbdt.models.model_text import load_model_text
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
-from gbdt.train import (
-    TrainedModel,
-    model_input_features,
-    multiclass_probabilities,
-    one_vs_all_probabilities,
-)
+from gbdt.train import TrainedModel, model_input_features
 
 #: `gbdt_resident_predict`'s modes. The first three are
 #: `gbdt/estimator.mojo`'s `PREDICT_RAW`, `PREDICT_SOFTMAX` and
@@ -729,22 +727,62 @@ struct ResidentGbdtModel(Movable):
                 + ". A two-class problem's link is the sigmoid, which"
                 " Logloss's own predict_proba applies."
             )
-        var ap = List[Float32]()
-        ap.reserve(n_rows * dim)
-        for r in range(n_rows):
-            for d in range(dim):
-                ap.append(hc.unsafe_load(d * n_rows + r))
-        if mode == RESIDENT_SOFTMAX:
-            var pr = multiclass_probabilities(ap, n_rows, dim + 1)
-            for i in range(n_rows * (dim + 1)):
-                out_f32.unsafe_store(i, pr[i])
+        if mode != RESIDENT_SOFTMAX and mode != RESIDENT_SIGMOID:
+            raise Error("gbdt_resident_predict: unknown mode " + String(mode))
+        # The two transforms are per row, so the rows fan out to host
+        # threads; a task's row is `multiclass_probabilities`'s loop body
+        # (`gbdt/train.mojo`, the max seeded at ZERO for the pinned class,
+        # `identical_exp64`, one double division per class) or
+        # `one_vs_all_probabilities`'s element, statement for statement,
+        # reading the plane-major readback where those read the row-major
+        # copy `predict_multi_floats` made.
+        var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
+        var workers = host_worker_count()
+        if tasks > workers:
+            tasks = workers
+        if tasks < 1:
+            tasks = 1
+        var chunk = (n_rows + tasks - 1) // tasks
+        var softmax = mode == RESIDENT_SOFTMAX
+
+        def _rows_task(c: Int) {imm hc, imm out_f32, imm chunk, imm n_rows, imm dim, imm softmax}:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > n_rows:
+                hi = n_rows
+            if softmax:
+                var width = dim + 1
+                for r in range(lo, hi):
+                    var mx = Float64(0.0)
+                    for k in range(dim):
+                        var v = Float64(hc.unsafe_load(k * n_rows + r))
+                        if v > mx:
+                            mx = v
+                    var se = Float64(0.0)
+                    for k in range(dim):
+                        se += identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx)
+                    se += identical_exp64(-mx)
+                    for k in range(dim):
+                        out_f32.unsafe_store(
+                            r * width + k,
+                            Float32(identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx) / se),
+                        )
+                    out_f32.unsafe_store(r * width + dim, Float32(identical_exp64(-mx) / se))
+            else:
+                for r in range(lo, hi):
+                    for k in range(dim):
+                        out_f32.unsafe_store(
+                            r * dim + k,
+                            Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(k * n_rows + r))))),
+                        )
+
+        if tasks == 1:
+            _rows_task(0)
+        else:
+            sync_parallelize(_rows_task, tasks)
+        if softmax:
             return dim + 1
-        if mode == RESIDENT_SIGMOID:
-            var ps = one_vs_all_probabilities(ap, n_rows, dim)
-            for i in range(n_rows * dim):
-                out_f32.unsafe_store(i, ps[i])
-            return dim
-        raise Error("gbdt_resident_predict: unknown mode " + String(mode))
+        return dim
 
 
 struct GbdtModelRegistry(Movable):
