@@ -178,11 +178,47 @@ mojolearn.host_predict("forest.npz", X_test)            # the one-call form
 
 `predict` and `predict_proba` return the dtypes the GPU classes return for the
 same file. RF probabilities float32, RF regression float32, ET probabilities
-and regression float64, labels through `classes_`. A `parallel_groves` archive
-is refused by name, because the host engine is the sequential one. On a box
+and regression float64, labels through `classes_`. A `-parallel-groves-1`
+archive predicts through the host grove engine (the next section); until
+lane/forest-groves-cpu-and-speed (2026-09-17) it was refused by name. On a box
 with no GPU binary set the package imports as a CPU-only install when this
 binding is built (DEVIATION 2615 widened), `mojolearn.vendor()` answers
 `cpu`, and every GPU estimator raises by name on use.
+
+### The `parallel_groves` engine on the CPU (lane/forest-groves-cpu-and-speed, 2026-09-17)
+
+Both engines are features of a saved forest, and each has a public CPU door.
+`HostForest.from_file` reads the engine from the archive's format tag and
+`host.inference_engine` answers it: a `mojolearn-randomforest-1` or
+`mojolearn-extratrees-1` archive runs the sequential walk above, and a
+`-parallel-groves-1` archive runs `core/forest_host_groves.mojo`, the host
+restatement of the GPU grove kernels (`core/forest_inference.mojo`): the same
+32 fixed tree groups (lane `g` adds trees `g, g+32, ...` in increasing order,
+both operands and the result flushed), the same 16/8/4/2/1 fold, the same
+RF input flush, equality routing left, `identical_div` and the final flush.
+The shipped forest host binding exports it as `forest_host_groves_prepare`,
+`forest_host_groves_predict` and `forest_host_groves_release` (a validated
+snapshot, prepared on the first prediction and released with the model).
+A groves archive saved under a numeric mode other than `identical` is
+refused by name, because the host binding computes IDENTICAL bits only. A
+GPU class loaded from a groves archive on a CPU-only install predicts
+through the rf and trees host families' resident entries over the same
+module, as it has since 2026-09-15.
+
+DEVIATION 2960: the host grove walk fans its rows out to host threads the way
+DEVIATION 2900 fans the sequential walk out (`MOJOLEARN_CPU_THREADS`, the same
+reading); a thread owns whole rows and its own 32-lane scratch, so no output
+bit depends on the count. Two negative controls, both default off:
+`MOJOLEARN_FOREST_HOST_SABOTAGE` (the forest host gate's existing control)
+divides the grove fold by `trees + 1` as it does the sequential vote, and
+`MOJOLEARN_FOREST_GROVES_SABOTAGE` (DEVIATION 2961) replaces the 16/8/4/2/1
+fold with a left fold over the 32 lanes in lane order, the same additions in
+another association and nothing else, so the comparison against the GPU
+engine is watched to fail on association alone. `tools/forest_groves_identity.py`
+is the comparison: every rf and et lane's fixtures fitted, saved as a groves
+archive, reloaded through `host_model` and diffed against the GPU groves
+predictions bit for bit, then the HIGGS and Covtype sized models. The numbers
+are in [LANE_STATUS_lane-forest-groves-cpu-and-speed.md](lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md).
 
 What this promises is only what has been measured. `tools/forest_host_gate.py
 record` runs on a GPU box and writes the SHA-256 of that box's predictions for

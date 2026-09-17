@@ -43,7 +43,7 @@ comptime FOREST_CHECK_SERIAL = 1 << 16
 @always_inline
 def _nonfinite_lanes(v: SIMD[DType.float32, FOREST_CHECK_W]) -> Int:
     var e = bitcast[DType.uint32](v) & SIMD[DType.uint32, FOREST_CHECK_W](0x7f800000)
-    return Int((e == SIMD[DType.uint32, FOREST_CHECK_W](0x7f800000)).cast[DType.uint32]().reduce_add())
+    return Int(e.eq(SIMD[DType.uint32, FOREST_CHECK_W](0x7f800000)).cast[DType.uint32]().reduce_add())
 
 
 def scan_finite_f32(src: MutPointer[Float32, MutAnyOrigin], dst: MutPointer[Float32, MutAnyOrigin],
