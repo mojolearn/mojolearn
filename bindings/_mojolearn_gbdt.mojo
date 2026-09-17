@@ -72,6 +72,12 @@ from checks.numerics import (
     NUMERIC_IDENTICAL,
     identical_exp64,
 )
+from gbdt.resident_model import (
+    gbdt_resident_info,
+    gbdt_resident_predict,
+    gbdt_resident_prepare,
+    gbdt_resident_release,
+)
 
 
 def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
@@ -566,6 +572,72 @@ def gbdt_predict_multi_binding(
     return PythonObject(width)
 
 
+def gbdt_resident_prepare_binding(model: PythonObject) raises -> PythonObject:
+    """DEVIATION 2980 (lane/gbdt-resident-predict, 2026-09-17): parse the
+    model text once, pack and upload it once, and return the integer
+    handle of the process-wide registry entry (`gbdt/resident_model.mojo`).
+    The wrapper keeps the handle on the instance beside the sha256 of the
+    text it was prepared from, releases it on refit and never pickles it.
+    The GIL is held around the registry and released for the parse and
+    the uploads, as `gbdt_predict` releases it for its work."""
+    var text = String(py=model)
+    var handle: Int
+    with GILReleased(Python()):
+        handle = gbdt_resident_prepare(text)
+    return PythonObject(handle)
+
+
+def gbdt_resident_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a prepared model. A released or unknown handle raises."""
+    gbdt_resident_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def gbdt_resident_info_binding(handle: PythonObject) raises -> PythonObject:
+    """`[approx_dim, n_input_features, workspace_rows, oblivious, n_trees]`
+    of a live handle."""
+    var info = gbdt_resident_info(Int(py=handle))
+    var out = Python.list()
+    for i in range(len(info)):
+        out.append(PythonObject(info[i]))
+    return out
+
+
+def gbdt_resident_predict_binding(
+    handle: PythonObject,
+    x_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Apply a prepared model. Returns the width written per row.
+
+    `params` is `[n_rows, mode]` with mode 0 RAW, 1 SOFTMAX, 2 SIGMOID as
+    `gbdt_predict_multi` takes them, plus 3 SIGMOID_PAIR: the Logloss and
+    CrossEntropy `predict_proba` columns `[1 - p, p]` written as FLOAT64
+    to `out_addr` (`gbdt_sigmoid_pair`'s two statements over the exact
+    widening of the raw float32 value). Every other mode writes float32
+    to `out_addr`, `n_rows * width` values row-major, exactly as
+    `gbdt_predict` and `gbdt_predict_multi` write them. The feature count
+    comes from the prepared model. The caller holds `x` and `out` for the
+    length of the call."""
+    if len(params) != 2:
+        raise Error(
+            "gbdt_resident_predict: params must hold [n_rows, mode], got "
+            + String(len(params))
+        )
+    var h = Int(py=handle)
+    var addr = Int(py=out_addr)
+    var xp = _f32_ptr(Int(py=x_addr))
+    var n_rows = Int(py=params[0])
+    var mode = Int(py=params[1])
+    var op32 = _f32_ptr(addr)
+    var op64 = _f64_ptr(addr)
+    var width: Int
+    with GILReleased(Python()):
+        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, mode)
+    return PythonObject(width)
+
+
 def gbdt_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -693,6 +765,11 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
         m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
         m.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
+        # DEVIATION 2980: the device-resident parsed model
+        m.def_function[gbdt_resident_prepare_binding]("gbdt_resident_prepare")
+        m.def_function[gbdt_resident_predict_binding]("gbdt_resident_predict")
+        m.def_function[gbdt_resident_release_binding]("gbdt_resident_release")
+        m.def_function[gbdt_resident_info_binding]("gbdt_resident_info")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_gbdt module: ", e))
