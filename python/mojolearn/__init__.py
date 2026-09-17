@@ -137,6 +137,7 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 # build therefore still yields an importable package whose missing pieces
 # raise BY NAME when touched, which is `_backend.py`'s whole design.
 from . import linalg
+from . import lowbit
 from .linalg import matmul
 from . import _metrics_impl as metrics
 from ._hierarchy_impl import AgglomerativeClustering
@@ -383,6 +384,7 @@ __all__ = [
     "host_predict_proba",
     "kpss_test",
     "linalg",
+    "lowbit",
     "matmul",
     "mamba",
     "metrics",
