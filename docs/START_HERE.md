@@ -109,3 +109,5 @@ Read these when you need them, not before.
 | [SUPPORT_MATRIX.md](../SUPPORT_MATRIX.md) | what the three numeric tiers promise, measured rather than argued |
 | [IDENTITY_PATHS.md](../IDENTITY_PATHS.md) | which code paths carry a bit-level claim |
 | [GOVERNANCE.md](../GOVERNANCE.md) | how decisions are made and how maintainership transfers |
+
+Verification restart: [coverage, remaining gates, evidence and resource limits](VERIFICATION_RESTART_PLAN.md).

@@ -1,7 +1,14 @@
 # Verification workstream restart plan
 
 Handoff: 2026-09-17. Baseline main: `ab9a3de26`. This plan is committed after
-that baseline. All implementation and evidence from this verification workstream
+that baseline. During handoff, origin/main advanced to `2fa81d74f` with the
+concurrent low-bit/model/block-options integration. Read
+[that handoff](lanes/HANDOFF_2026-09-17_lowbit_inference.md) and reconcile its
+new surfaces, engineering rules and outstanding device jobs before resuming.
+The counts and test results below describe the verification baseline, not
+qualification of those newer native changes. Do not terminate its jobs.
+
+All implementation and evidence from this verification workstream
 are merged into main; this document does not certify a release.
 
 ## Objective and current position
