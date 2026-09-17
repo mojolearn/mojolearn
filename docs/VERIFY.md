@@ -441,6 +441,14 @@ commit is kept as superseded, and classes that differ at the same commit
 leave the part without a reference. `--records DIR` names other record
 directories.
 
+New tables require at least two identical, valid digest samples per part,
+matching input witnesses on each cell, held-out witnesses on non-training
+parts, and matching protocols for batch and other numerical properties.
+A probe error refuses the part even if it also returned a matching hash.
+Historical tables remain readable; `--coverage` explicitly labels a table
+without the new admission policy as legacy. Regenerate and replay references
+from the release artifacts before treating them as release qualification.
+
 The portable models are saved on a GPU install and kept only when their file
 bytes equal the table's model reference, so a shipped file is byte for byte
 the file every recorded vendor wrote:
