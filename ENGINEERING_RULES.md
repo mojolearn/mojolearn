@@ -547,41 +547,40 @@ But they were RUN OWED, which is exactly why they were being measured, and the
 pod had already paid a 472 MB Istella-S fetch, a 2,248,281,826 byte decode and
 four set builds. The rows are still owed and the next pod repays all of it.
 
-## 12. The Apple column is recorded ONCE PER PyPI RELEASE, never routinely
+## 12. Small Mac rounds; installed-wheel Apple checks at PyPI updates
 
-**Routine and occasional verification goes on a rented CPU pod. The Apple
-column is a per-release artifact.**
+Routine development uses the CPU route, selecting the changed algorithm and
+its relevant dependencies. CPU repeatability and reference comparisons do not
+prove Metal compiler or runtime correctness.
 
-There is exactly ONE Mac with ONE GPU. Only one Metal job may run at a time,
-and it cannot be rented, parallelized or bought around. So an Apple column
-does not merely cost its own hours, it SERIALIZES every other GPU need on the
-machine behind it. Measured 2026-09-16: a full pass ran more than seven hours
-and was stopped at 125 of 158 lanes, with nine other lanes queued behind the
-Metal lock.
+Apple qualification runs as part of each PyPI update's installed-wheel release
+gates. Do not add the broad nine-fixture identity matrix to the release. A
+historical full pass exceeded seven hours before it was stopped at 125 of 158
+lanes; that cost is not a requirement for publication.
 
-What to do instead, in order of preference:
+Between releases, use Metal only for an explicit Apple-specific investigation:
 
-1. **Routine or occasional verification: the rented CPU column.** It is
-   BITWISE EQUAL to Metal, runs in parallel on as many pods as you like, and
-   costs about $0.24/hour: `tools/runpod_cpu_leg.sh`, `docs/RUNPOD_CPU_LEG.md`.
-   An x86 EPYC pod is identical to the M4 and to the GPU columns, so a CPU
-   column answers every identity question except one.
-2. **One lane proving its OWN new cells: local Metal, one job at a time**,
-   through the slot helper (`mac_slot.sh metal`), with `--lanes` naming the
-   lanes and usually `--fixtures base`. Never a full column.
-3. **The whole Apple column: at the release, once.** The one question Apple
-   uniquely answers is whether the METAL BACKEND agrees, and that is a
-   per-release question, not a per-lane one.
+```sh
+pixi run -e test test-algo --lane transformer --mode metal \
+  --metal-diagnostic --out /tmp/apple-transformer-core
+```
 
-**This is enforced, not advisory.** `tools/identity_break.py` refuses a
-full-column Apple run (`refuse_routine_apple_column`, more than
-`APPLE_COLUMN_LANE_LIMIT` lanes in one Metal process) unless
-`MOJOLEARN_APPLE_RELEASE_RECORD` names the release being recorded. The
-refusal prints the CPU route. A rule that is only prose is the failure mode
-this repository has hit repeatedly; this one is code.
+One round means one lane, one fixture, one probe group, and two fits. The default
+is the base fixture and core group. Metal has a 60-second **total** budget,
+including queue time, as well as per-job execution and queue caps. CPU rounds
+retain a five-minute total budget. Do not lower fixture floors or remove the
+second fit to obtain a pass. Timeouts are failures with unfinished work recorded.
 
-What this rule is written from: on 2026-09-16 Andrew stopped a seven-hour
-Apple pass mid-record and said, for the third time that day, to run it once
-per PyPI release and not continuously. The pass was not producing an answer
-that a $0.24/hour CPU pod could not have produced, except for the Metal
-backend agreement, which nothing was waiting on.
+`--exhaustive` and `--probe-group all` cannot silently expand a Mac round.
+Multiple jobs require `--metal-expanded`; a longer budget requires `--budget`.
+These are diagnostic escape hatches, not normal development commands. Release
+markers do not bypass the small-round limit. Full multi-lane matrices also
+require the separate `MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1` override.
+
+No automatic full-suite retry follows a timeout. Keep the logs and isolate the
+failing operation. All Metal work uses the shared scheduler. Installed-wheel
+release gates retain their own release budgets; the one-minute rule here is
+for iteration diagnostics, not wheel compilation or claimed-interpreter checks.
+
+See [TEST_RUNTIME.md](docs/TEST_RUNTIME.md) and
+[the release checklist](docs/RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).

@@ -174,3 +174,31 @@ def test_failed_job_is_not_reported_as_completed(monkeypatch, tmp_path):
     assert result["completed"] == []
     assert result["failed"]["exit_code"] == 7
     assert result["pending"][0]["lane"] == "kmeans"
+
+
+def test_metal_plan_has_one_minute_total_budget(capsys):
+    import json
+    iterate.main(["--lane", "transformer", "--mode", "metal", "--plan"])
+    plan = json.loads(capsys.readouterr().out)
+    assert plan["budget"] == 60 and plan["job_count"] == 1
+    iterate.main(["--lane", "transformer", "--mode", "metal", "--budget", "90", "--plan"])
+    assert json.loads(capsys.readouterr().out)["budget"] == 90
+
+
+@pytest.mark.parametrize("extra", [["--exhaustive"], ["--probe-group", "all"]])
+def test_metal_refuses_multi_job_round_even_with_release_marker(monkeypatch, tmp_path, extra):
+    monkeypatch.setenv(ib.APPLE_RELEASE_RECORD_ENV, "0.8.7")
+    monkeypatch.setattr(iterate, "run_job", lambda *a: pytest.fail("multi-job Metal round launched"))
+    with pytest.raises(SystemExit):
+        iterate.main(["--lane", "transformer", "--mode", "metal", "--out", str(tmp_path), *extra])
+    assert not (tmp_path / "selection.json").exists()
+
+
+def test_expanded_metal_diagnostic_is_explicit_and_still_budgeted(monkeypatch, tmp_path):
+    calls = []
+    monkeypatch.setattr(iterate, "run_job", lambda cmd, env: calls.append(cmd) or 0)
+    assert iterate.main(["--lane", "transformer", "--mode", "metal", "--metal-diagnostic",
+                         "--metal-expanded", "--probe-group", "all", "--out", str(tmp_path)]) == 0
+    assert len(calls) == 3
+    deadlines = {cmd[cmd.index("--deadline") + 1] for cmd in calls}
+    assert len(deadlines) == 1

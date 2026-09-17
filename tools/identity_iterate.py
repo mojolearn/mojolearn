@@ -125,17 +125,21 @@ def main(argv=None):
     ap.add_argument("--out", type=Path)
     ap.add_argument("--plan", action="store_true", help="print selection without taking any slot")
     ap.add_argument("--resume", action="store_true")
-    ap.add_argument("--budget", type=float, default=300, help="total seconds including planning, queueing and execution (default 300)")
+    ap.add_argument("--budget", type=float, default=None, help="total seconds including planning, queueing and execution (CPU/run 300; Metal 60)")
     ap.add_argument("--timeout", type=float, default=60, help="maximum seconds per job, excluding wait (default 60)")
     ap.add_argument("--mode", choices=("cpu", "metal", "run"), default="cpu")
     ap.add_argument("--metal-diagnostic", action="store_true",
                     help="explicitly run one bounded Apple diagnostic between releases")
+    ap.add_argument("--metal-expanded", action="store_true",
+                    help="explicitly permit multiple Metal diagnostic jobs; never implied by a release marker")
     ap.add_argument("--host-dir", type=Path, help="prebuilt internal CPU oracle bindings; no builds are launched")
     ap.add_argument("--wait-timeout", type=float, default=60, help="queue limit in seconds (default 60)")
     ap.add_argument("--probe-group", choices=("core", "batch", "rlpair", "all"), default="core",
                     help="core = training/inference/save/reload; all runs separate bounded jobs")
     ap.add_argument("--full-selection", action="store_true", help="explicitly run a selector fallback; Apple release policy still applies")
     args = ap.parse_args(argv)
+    if args.budget is None:
+        args.budget = 60 if args.mode == "metal" else 300
     if any(not math.isfinite(v) or v <= 0 for v in (args.timeout, args.wait_timeout, args.budget)):
         ap.error("timeouts must be finite and positive")
     import identity_break
@@ -187,6 +191,9 @@ def main(argv=None):
     # Splitting into processes must not bypass the harness's release guard.
     import identity_break
     if args.mode == "metal":
+        if len(jobs) > 1 and not args.metal_expanded:
+            ap.error("Mac diagnostic rounds are limited to one lane/fixture/probe group; "
+                     "choose one job or explicitly pass --metal-expanded")
         if not (os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV, "").strip()
                 or args.metal_diagnostic):
             ap.error("Metal iteration is release-only; use --metal-diagnostic for an explicit investigation")

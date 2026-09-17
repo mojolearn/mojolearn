@@ -181,7 +181,7 @@ def test_chunking_does_not_bypass_release_guard(monkeypatch, tmp_path):
     monkeypatch.setattr(ib, "refuse_routine_apple_column", guard)
     monkeypatch.setattr(runner, "run_job", lambda *args: pytest.fail("must not start a job"))
     with pytest.raises(SystemExit):
-        runner.main(["--mode", "metal", "--metal-diagnostic", "--out", str(tmp_path)])
+        runner.main(["--mode", "metal", "--metal-diagnostic", "--metal-expanded", "--out", str(tmp_path)])
     assert seen == [selection["lanes"]]
 
 

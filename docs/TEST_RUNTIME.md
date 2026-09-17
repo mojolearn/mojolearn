@@ -31,7 +31,8 @@ Python sources into the output directory and uses the package's existing
 CPU-only installation route. `identity_break --require-cpu` checks the actual
 backend before fitting. The installed package is untouched.
 
-The whole invocation has a **five-minute budget** (`--budget 300`), including
+CPU/run invocations have a **five-minute budget** (`--budget 300`); Metal
+diagnostics default to **one minute total** (`--budget 60`), including
 planning, staging, queueing and execution. Each job also has a **60-second
 execution limit and 60-second queue limit**. The scheduler receives one shared
 monotonic deadline, so entering a new job or moving from queue to execution
@@ -152,3 +153,20 @@ control changes, not numerical changes. The selector no longer widens those
 paths into a full algorithm sweep. Tooling tests still apply; an import guard
 checks that the package and identity harness do not depend on these tools.
 Unknown paths and shared numerical dependencies retain conservative selection.
+
+## Small Mac diagnostic rounds
+
+```sh
+pixi run -e test test-algo --lane transformer --mode metal \
+  --metal-diagnostic --out /tmp/apple-transformer-core
+```
+
+The default runs one base fixture and one core group, with two fits, under a
+60-second total deadline. To investigate batching or decoding, select just
+`--probe-group batch` or `--probe-group rlpair`. An arbitrary single fixture
+can be selected with `--fixtures NAME` without broadening the round.
+
+The runner refuses multiple jobs unless `--metal-expanded` is explicit, even
+with a release marker. Expanded jobs still share the one-minute budget unless
+`--budget` is also changed. This does not change installed-wheel release gates.
+No Apple runtime speedup is implied: this limits the amount tested per round.

@@ -1,28 +1,22 @@
 # Verification tiers: what to run, and what not to run
 
-Current Apple policy (2026-09-16): real-Metal qualification is part of each
-PyPI update's installed-wheel release gates. The broad Apple identity column
-is no longer required, even at release. Between releases use CPU iteration;
-Apple-specific investigations explicitly use `--metal-diagnostic`, one lane
-with a 60-second job limit. Historical full-column guidance below is superseded
-by [the release checklist](../RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
-
-
 Read this before running anything. It exists because checking a two-file
 change had come to mean running a sweep of identity lanes, usually on the
 Mac's Metal GPU, which is the scarcest resource the project owns: one
-machine, one GPU, one job at a time. A full Apple column measured 10.77
-hours. That cost was being paid for changes that touch two files.
+machine, one GPU, one job at a time. A broad Apple run exceeded seven hours and was stopped before completion. That cost was being paid for changes that touch two files.
 
 There are three tiers. Use the smallest one that covers your change.
 
 ## The one command
 
-All three tiers run through the same tool, `tools/verify_lanes.py`, which
-gets its lane set from `tools/lane_select.py`. There is deliberately NO
-separate full-sweep script: a second code path grows its own bugs and its own
-idea of what the lane set is, and that is how one afternoon produced four
-lane totals (176, 192, 199, 210) that each claimed to be the count.
+For routine rounds use `pixi run -e test test-algo --lane NAME --out DIR`
+with prebuilt CPU host bindings, or `test-identity-changed --base REF` for
+changed-code selection. These use `tools/identity_iterate.py` and enforce the
+budgets and summaries in [TEST_RUNTIME.md](../TEST_RUNTIME.md).
+
+`tools/verify_lanes.py` remains the explicit broader qualification/sharding
+runner. It shares `tools/lane_select.py` but is not the bounded routine entry
+point. Inspect its plan before starting a broader run.
 
 The count is not written down here either, for the same reason. Ask the
 registry:
@@ -40,9 +34,9 @@ questions answered 199 and 176, with the same 23 lanes between them.
 `tools/test_lane_select.py` asserts the property, never the totals.
 
 ```sh
-python3 tools/verify_lanes.py --lane logistic                # one lane
-python3 tools/verify_lanes.py --changed-since origin/main    # this change
-python3 tools/verify_lanes.py --all --shards 16              # everything
+python3 tools/verify_lanes.py --lane logistic --plan         # inspect one lane
+python3 tools/verify_lanes.py --changed-since origin/main --plan
+python3 tools/verify_lanes.py --all --shards 16 --plan       # explicit broad plan
 ```
 
 `--plan` prints what would run and stops. `--runner pods` prints one
@@ -89,7 +83,7 @@ output rather than the exit code alone. Two of its lines matter most:
 The full lane set, sharded across rented CPU pods. Parallel, cheap, and
 bitwise equal to Metal, which is what makes it a substitute for the GPU
 columns rather than a weaker check. NOT on the Mac: a full sweep on one Mac
-is the 10.77 hour problem in a different shirt.
+recreates the oversized-suite problem.
 
 ```sh
 python3 tools/verify_lanes.py --all --shards 16 --runner pods --plan
@@ -119,48 +113,29 @@ The merge is where a sharded run can lie, so it is checked three ways:
 3. **The split is deterministic.** The same lane set always produces the same
    shards, so a rerun is comparable to the run before it.
 
-## Tier 3, PER RELEASE ONLY: the three GPU vendor columns
+## Tier 3: release qualification and explicit GPU diagnostics
 
-NVIDIA and AMD are RENTED, run in parallel and cost cents: four GPU columns
-came to about $0.42 on 2026-09-16 and a whole day of rentals to about $3. Send
-cross-vendor questions there.
+Keep the existing NVIDIA and AMD qualification contracts. Apple qualification
+uses the installed-wheel gates for each PyPI update. A fresh full Apple identity
+column is no longer an additional release requirement.
 
-**APPLE IS NOT TAKEN BY A LANE AT ALL** (Andrew, 2026-09-16). Not a column, not
-"my lane's own cells". The Apple column is recorded ONCE, at the release record.
+Between releases, routine iteration uses CPU. An Apple-specific failure may
+need a real-Metal check: valid compiled AIR does not guarantee successful
+pipeline creation, and CPU results cannot certify Metal buffer lifetimes.
 
-Why this had to be said twice. This document already said Apple was per-release,
-and `identity_break.refuse_routine_apple_column` still told a lane to pass
-`--lanes` under a limit and take its own cells, so five lanes did exactly that
-in one afternoon. Each was defensible alone. Together they made the one Mac the
-serial bottleneck for every lane, because Metal runs ONE JOB AT A TIME and
-cannot be rented or parallelized.
+Use `test-algo --lane NAME --mode metal --metal-diagnostic --out DIR` for that
+investigation. The default is one base/core job with a **60-second total budget**,
+including the queue. Batch or decode can replace core for a focused question.
+Multiple fixtures/groups require `--metal-expanded`; they share the same total
+budget unless `--budget` explicitly changes it. Two fits and fixture floors
+remain intact. Never silently count skipped or timed-out work as coverage.
 
-The substitute is not weaker. The CPU host route IS the device kernel restated
-as a serial host loop, so it returns the same bits, and it is about 600x
-cheaper: one decode step measured 0.37 ms on the CPU host route against
-225.71 ms on Metal, and the CPU runs in parallel while Metal queues.
+CPU checks cover their own implementation and comparisons with named reference
+records. Agreement with an older GPU record is not proof of a changed GPU
+implementation. Keep reference provenance and numerical claims explicit.
 
-**The one exception, kept narrow:** a Metal SMOKE check, "does my change
-compile and RUN on Apple at all", is allowed at one lane through the slot
-helper. No cross-compile can answer it. On 2026-09-16
-`fence[ordering = Ordering.ACQUIRE]()` generated valid AIR and then failed at
-PIPELINE CREATION on Apple, breaking random forests, extratrees and the fused
-kNN on main for 37 minutes, while every `--emit asm` check passed throughout.
-That is the check worth one Metal acquisition. An identity column is not.
-
-## What Metal is for
-
-A lane proving its OWN new cells, one job at a time, through
-`mac_slot.sh metal`. Never a sweep. Concurrent Metal jobs on the shared M4
-have returned NaN, constant and zero outputs, so a Metal cell taken under
-contention is not evidence.
-
-The CPU host route is what makes all of this safe: it reproduces the GPU
-columns bit for bit on the covered lanes, which is what the CPU identity gate
-diffs (`--require-columns 4` against the three committed GPU columns). A lane
-that reads IDENTICAL on the CPU route has not been checked less carefully
-than one that ran on Metal; it has been checked on the column that is cheap
-to run and easy to shard.
+See [TEST_RUNTIME.md](../TEST_RUNTIME.md) and
+[the release checklist](../RELEASE_CHECKLIST.md#5b-apple-qualification-once-per-pypi-update).
 
 ## What stops the map narrowing WRONGLY
 

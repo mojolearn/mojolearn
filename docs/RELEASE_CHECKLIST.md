@@ -199,7 +199,8 @@ pixi run -e test test-algo --lane transformer --mode metal \
   --metal-diagnostic --out /tmp/apple-transformer-diagnostic
 ```
 
-The default execution and queue limits are 60 seconds each. No automatic full
+The diagnostic round has a 60-second total budget, including queue time, and
+allows only one lane/fixture/group unless `--metal-expanded` is explicit. No automatic full
 matrix retry follows a timeout. `MOJOLEARN_APPLE_RELEASE_RECORD=<version>`
 permits a release lane check but no longer unlocks a broad matrix. The full
 matrix remains available solely as an intentional investigation through
