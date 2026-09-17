@@ -1,7 +1,11 @@
 """Installed-package verification scope; inspection never executes a lane."""
+import hashlib
+from pathlib import Path
+
 from . import host_surface
 from . import _verify_reference as vref
 from ._verification_catalog import ENTRIES, PROVENANCE
+from ._verification_evidence_data import DATA as HISTORICAL_EVIDENCE
 
 
 def declaration(spec):
@@ -47,6 +51,15 @@ def inventory(harness, table, vendor_class):
                              for fixture in harness.FIXTURES)
         lanes[name] = dict(status=status, reason=reason, properties=properties,
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES))
+    for name, lane in lanes.items():
+        evidence = HISTORICAL_EVIDENCE['lanes'].get(name, {})
+        lane['historical_evidence'] = evidence
+        lane['multi_gpu_scope'] = ('parallel_lane' if name.startswith('par-')
+                                   else 'no_parallel_lane_declared_here')
+        lane['release_qualified'] = False
+    harness_path = getattr(harness, '__file__', None)
+    snapshot_matches = bool(harness_path and hashlib.sha256(Path(harness_path).read_bytes()).hexdigest()
+                            == HISTORICAL_EVIDENCE['harness_sha256'])
     entries = []
     mapped = set()
     for entry in ENTRIES:
@@ -55,10 +68,22 @@ def inventory(harness, table, vendor_class):
                               for name in entry["lanes"]}
         row["verification"] = "mapped" if entry["lanes"] else "portable_models_and_dedicated_gate"
         mapped.update(entry["lanes"])
+        relevant = [lanes[n]['historical_evidence'] for n in entry['lanes'] if n in lanes]
+        row['evidence_summary'] = dict(
+            release_qualified=False,
+            build_negative_control_for_each_mapped_lane=bool(relevant) and len(relevant) == len(entry['lanes']) and all(
+                all(any(c['kind'] == 'build' and c['part'] == part
+                        for c in e.get('negative_controls', [])) for part in entry['parts'])
+                for e in relevant),
+            backend_records_for_each_mapped_lane=[vendor for vendor in ('cpu', 'apple', 'nvidia', 'amd')
+                if relevant and all(e.get('backend_records', {}).get(vendor) for e in relevant)],
+            multi_gpu_lanes=[n for n in entry['lanes'] if n.startswith('par-')])
         entries.append(row)
     return dict(format="mojolearn.verification-coverage.v1", execution="not run",
                 scope="registered harness and the 246-entry MLSys appendix; mapping is not certification",
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
+                evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
+                evidence_snapshot_matches_harness=snapshot_matches,
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())
@@ -81,6 +106,12 @@ def format_human(report):
         batch = lane["properties"]["batch"]
         lines.append(f"{name} | {lane['status']} | {batch['kind']} | "
                      f"{lane['reason'] or batch['reason'] or ''}")
+    strong = sum(e['evidence_summary']['build_negative_control_for_each_mapped_lane'] for e in report['entries'])
+    lines += ["", f"Historical build negative controls cover every mapped lane/part for {strong} of {c['appendix_entries']} appendix entries.",
+              "This is historical evidence on listed fixtures, not qualification of this wheel.",
+              "Use --json for sabotage pairs, backend records and one-versus-multiple GPU comparisons."]
+    if not report['evidence_snapshot_matches_harness']:
+        lines.append("Historical snapshot was generated from a different harness; newer lanes may lack evidence entries.")
     lines += ["", "Saved-model entries (portable CPU probes plus dedicated gates):"]
     lines += [f"- {e['title']}: {e.get('alternative_gate', 'unmapped')}"
               for e in report["entries"] if not e["lanes"]]

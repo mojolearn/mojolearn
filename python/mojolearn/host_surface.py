@@ -2520,8 +2520,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-yeti-rank": "unwatched",
     "arima-exog": "unwatched",
     "arima-exog-seasonal": "unwatched",
-    "gbdt-categorical-ctr-tables": "unwatched",
-    "gbdt-tensor-ctr-tables": "unwatched",
+    # CTR saved-model lanes were promoted after all nine fixtures passed twice
+    # from an installed CPU development wheel with bundled, digest-checked models.
+    # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
+    # inference replay, not CPU CTR training or final release qualification.
     "kmeans-sqrt": "own record",
     "embedding": "own record",
     "embedding-sort": "own record",

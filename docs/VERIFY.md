@@ -530,3 +530,30 @@ carry `batchgrad`, `batchscale`, `ragged` and `rlpair` results. The builder
 uses the same admission, fixture, revision and conflict rules as the five
 standard parts; missing observations remain missing. Generating a table is
 not final-wheel qualification or permission to publish it.
+
+### Historical evidence and verification inputs
+
+The 0.8.7 candidate's `verify --coverage --json` includes source paths and
+SHA-256 digests for historical backend records, build versus harness negative
+controls, and matched one-device/multiple-device records. It retains all 246
+appendix entries. These are recorded observations on named fixtures and parts,
+not qualification of the installed wheel. Missing evidence stays visible.
+A parallel lane is not a multi-GPU pass merely because it exists or ran on
+one device. The report names requested device indices; it does not independently
+attest physical device use.
+
+New execution reports include `verification_contract`: input and held-out
+fingerprints, the harness digest, and the actual batch/decode protocols.
+`verify --compare A.json B.json` refuses missing or differing contracts with
+`INCOMPARABLE` (exit 4), even when output hashes happen to match. Older reports
+without these fields must be regenerated before this comparison can pass.
+
+The CPU verifier now bundles the 18 GPU-trained CTR fixtures used by
+`gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables`. Both builders validate
+their SHA-256 digests. CPU replay finds and validates them automatically; an
+external model directory is no longer needed. These lanes test CPU inference
+of GPU-trained models, not CPU training of CTR tables. Both lanes passed all
+nine fixtures twice from an installed development wheel and join the default
+CPU set. This does not replace final release-wheel qualification.
+
+See [the evidence audit and remaining work](lanes/LANE_STATUS_verification_evidence_audit.md).
