@@ -76,10 +76,18 @@ Linux packaging gates reject missing callable manifest exports. 167 focused
 packaging/manifest tests pass. Installed rebuilt export/tree replay PASSED: all 32 families have their
 exports; seven tree lanes yield 198 IDENTICAL and 117 N/A, no failures/owed.
 Receipts and both export audit outcomes are retained in the probe directory.
-A fresh build of all 32 host families from frozen `7f5b786ae` is now running
-locally in session 21523, `fresh-host-build.log`. Its source archive and
-`build_fresh_hosts.py` are external. Output `fresh-host-build-7f5b786ae/`;
-per-family build receipt/checkpoints include commands, toolchain and hashes.
+All 32 host families were freshly built from frozen `7f5b786ae` in 244.7s,
+and all installed export audits pass. Source/archive, compiler commands and
+hashes are retained in the probe `fresh-host-build/` directory. An initial
+dependency-free invocation exposed an uncaught missing-NumPy import.
+`b6132eec0` fixes it with an actionable CANNOT RUN response, demonstrated in
+the rebuilt installed wheel before installing NumPy; 56 verifier tests pass.
+The all-150 CPU replay is LIVE in local session 19228, one numerical worker,
+`fresh-cpu-wheel-replay.log`, per-lane compressed reports/checkpoints under
+external `fresh-cpu-wheel-replay/`. Do not change its installed environment
+`fresh-installed-env/` or its frozen wheel in `fresh-dist/` while it runs.
+Python source b6132eec0, all native sources 7f5b786ae. Up to 1200s per lane,
+7200s outer bound; all nine fixtures, two repetitions, default core properties.
 
 ## Cloud ownership and restart
 
@@ -101,8 +109,8 @@ Its original training-only success summaries are NOT full qualification;
 95156. SSH `-p 39174 root@38.80.152.147`. Remote output `/root/leg_out/`.
 External `cloud-complete-dependencies/`, log `cloud-complete-dependencies-run.log`.
 Seventeen production and fifteen sabotage families, including neural, run 24
-lanes with two single-thread workers and 2400-second per-arm limits. First four
-Transformer/Mamba1 low-bit pairs pass; Mamba2 low-bit sabotage arms in progress.
+lanes with two single-thread workers and 2400-second per-arm limits. First six
+Transformer/Mamba1/Mamba2 low-bit pairs pass; Mamba3 pairs in progress.
 Do not kill an owed run to start another rental. Collect results and verify
 DELETE/404/not-listed before renting again. Records are nested
 `records/<lane>/<lane>/cpu-*.json`; exits are `records/batch-exits.json`.
