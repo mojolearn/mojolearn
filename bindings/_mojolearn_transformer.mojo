@@ -214,22 +214,26 @@ def _upload_addr(
     return dev^
 
 
-def _download_addr(
+def _download_addr[wait: Bool = True](
     ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, addr: Int
 ) raises:
     """Copy the first `n` elements into a live caller buffer.
 
-    The synchronized IDENTICAL path avoids a pinned staging allocation and
-    its memcpy. Caller arrays remain owned by the Python frame throughout.
+    IDENTICAL avoids pinned staging and its memcpy. With wait=False, the
+    caller must retain both full-buffer owners until a final completion wait.
+    Temporary views and legacy staging always finish before their owners die.
     """
     var p = _f32_ptr(addr)
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n == len(buf):
             ctx.enqueue_copy(dst_ptr=p, src_buf=buf)
+            comptime if wait:
+                ctx.synchronize()
         else:
             var direct_view = buf.create_sub_buffer[DType.float32](0, n)
             ctx.enqueue_copy(dst_ptr=p, src_buf=direct_view)
-        ctx.synchronize()
+            ctx.synchronize()
+            _ = direct_view^
         return
     var host = ctx.enqueue_create_host_buffer[DType.float32](n)
     ctx.synchronize()
@@ -238,6 +242,8 @@ def _download_addr(
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
         ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
     ctx.synchronize()
     memcpy(dest=p, src=host.unsafe_ptr(), count=n)
     _ = host^
@@ -670,16 +676,19 @@ def _transformer_backward_run(
         offb, String("pyb"),
     )
     _btick(ton, tk, "surface.backward")
-    _download_addr(ctx, bst.d_x, m * dm, a[11])
-    _download_addr(ctx, bst.dw_norm1, dm, a[12])
-    _download_addr(ctx, bst.dw_norm2, dm, a[13])
-    _download_addr(ctx, bst.dw_q, qw * dm, a[14])
-    _download_addr(ctx, bst.dw_k, kw * dm, a[15])
-    _download_addr(ctx, bst.dw_v, kw * dm, a[16])
-    _download_addr(ctx, bst.dw_o, dm * qw, a[17])
-    _download_addr(ctx, bst.dw_gate, it * dm, a[18])
-    _download_addr(ctx, bst.dw_up, it * dm, a[19])
-    _download_addr(ctx, bst.dw_down, dm * it, a[20])
+    # All ten sources remain owned by bst, and destinations by the Python
+    # frame. Queue their copies together and wait before either owner dies.
+    _download_addr[False](ctx, bst.d_x, m * dm, a[11])
+    _download_addr[False](ctx, bst.dw_norm1, dm, a[12])
+    _download_addr[False](ctx, bst.dw_norm2, dm, a[13])
+    _download_addr[False](ctx, bst.dw_q, qw * dm, a[14])
+    _download_addr[False](ctx, bst.dw_k, kw * dm, a[15])
+    _download_addr[False](ctx, bst.dw_v, kw * dm, a[16])
+    _download_addr[False](ctx, bst.dw_o, dm * qw, a[17])
+    _download_addr[False](ctx, bst.dw_gate, it * dm, a[18])
+    _download_addr[False](ctx, bst.dw_up, it * dm, a[19])
+    _download_addr[False](ctx, bst.dw_down, dm * it, a[20])
+    ctx.synchronize()
     _btick(ton, tk, "surface.outputs_down")
     _ = bst^
     _ = stages^
