@@ -654,6 +654,15 @@ class NearestNeighbors(NumericModeMixin):
         except Exception:  # noqa: BLE001
             pass
 
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no device handle: the integer is
+        meaningful only in the process and registry that minted it, and an
+        unpickled instance holding it could release ANOTHER model's live
+        index. The copy uploads its own index at its first call."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
+
     def fit(self, X, y=None):
         """Store the index. There is no index structure to build.
 
@@ -661,6 +670,11 @@ class NearestNeighbors(NumericModeMixin):
         compatibility.
         """
         self._check_refusals()
+        # A refit drops the device copy of the previous index HERE, not at
+        # the next call: the copy is keyed on the array's address and shape,
+        # and a new array of the same shape can land at a freed address, so
+        # a key match after a refit would serve the old bytes.
+        self._release_resident_index()
         idx, _ = as_f32_c(X, ndim=2, name="X")
         # Held on the instance so the memory outlives this call: the Mojo side
         # borrows the address at `kneighbors` time and owns nothing.
