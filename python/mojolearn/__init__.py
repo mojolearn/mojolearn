@@ -292,8 +292,17 @@ from ._transformer_impl import TransformerBlock, TransformerState
 # accumulation, position-keyed RNG, JSON checkpoint) over the training,
 # mamba and transformer bindings. `_samba_impl.py` holds no numerics.
 from ._samba_impl import SambaConfig, SambaStack
+# Existing capacity-oriented trainers are also discoverable at package level.
+# These imports resolve no device bindings; GPU work begins on first use.
+from .parallel_training import ParallelByteLanguageModelTrainer, ParallelNeuralTrainer
+from .model_pool_training import PooledByteLanguageModelTrainer
+from .offload_training import OffloadedByteLanguageModelTrainer
 
 __all__ = [
+    "ParallelByteLanguageModelTrainer",
+    "ParallelNeuralTrainer",
+    "PooledByteLanguageModelTrainer",
+    "OffloadedByteLanguageModelTrainer",
     "model_selection",
     "cross_val_score",
     "preprocessing",

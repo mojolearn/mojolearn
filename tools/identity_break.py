@@ -3442,6 +3442,30 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts)
 
 
+@lane("metrics-homogeneity-completeness")
+def _(ml, X, yc, yr, Xh=None):
+    """The public three-score convenience API, including nondefault beta.
+
+    Its result order and beta forwarding were absent from the harness even
+    though the individual metrics had lanes. Use all fixture labels and a
+    distinct eight-way clustering; global contingency reductions have no
+    row-wise batch-invariance promise.
+    """
+    mt = ml.metrics
+    yt = np.ascontiguousarray(yc).astype(np.int32)
+    split = ((X[:, 3] > 0).astype(np.int32) + 2 * (X[:, 4] > 0).astype(np.int32)
+             + 4 * (X[:, 5] > 0).astype(np.int32)).astype(np.int32)
+    parts = {}
+    for beta in (0.5, 1.0, 2.0):
+        got = np.asarray(mt.homogeneity_completeness_v_measure(yt, split, beta=beta), dtype=np.float64)
+        expected = np.asarray((mt.homogeneity_score(yt, split), mt.completeness_score(yt, split),
+                               mt.v_measure_score(yt, split, beta=beta)), dtype=np.float64)
+        if got.shape != (3,) or got.tobytes() != expected.tobytes():
+            raise AssertionError("homogeneity_completeness_v_measure order/beta differs from scalar APIs")
+        parts[f"hcv:beta{beta}"] = _h(got)
+    return _fit(parts)
+
+
 @lane("metrics-fowlkes-mallows")
 def _(ml, X, yc, yr, Xh=None):
     """fowlkes_mallows_score (lane/cpu-training-small-gaps, 2026-09-15),
@@ -3884,6 +3908,36 @@ def _(ml, X, yc, yr, Xh=None):
         r = rs.monte_carlo_integrate(f, lo, hi, 65536, random_state=1)
         parts[f] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
     return _fit(parts)
+
+
+@lane("ordered-gradient-sum")
+def _(ml, X, yc, yr, Xh=None):
+    """Public ordered shard reduction: preserve shard order and input bytes.
+
+    Normal finite Float32 values keep the independent NumPy left-fold oracle
+    outside FTZ subtleties. The first element cancels 2**100, so a balanced
+    reduction returns zero where the required left fold returns three.
+    """
+    from mojolearn.parallel_training import ordered_sum_gradients
+    seed = np.where(X[:4, :8] >= 0, np.float32(1), np.float32(-1))
+    shards = [[np.ascontiguousarray(seed * np.float32(i + 1)),
+               np.array([i, -i, i + 1], dtype=np.float32)] for i in range(4)]
+    for shard, value in zip(shards, (2.0**100, 1.0, -(2.0**100), 3.0)):
+        shard[0][0, 0] = np.float32(value)
+    before = [[a.tobytes() for a in shard] for shard in shards]
+    expected = [a.copy() for a in shards[0]]
+    for shard in shards[1:]:
+        expected = [np.add(a, b, dtype=np.float32) for a, b in zip(expected, shard)]
+    got = ordered_sum_gradients(iter(shards))
+    if len(got) != len(expected):
+        raise AssertionError("ordered gradient sum lost a tensor")
+    for actual, wanted in zip(got, expected):
+        actual = np.asarray(actual)
+        if actual.shape != wanted.shape or actual.dtype != wanted.dtype or actual.tobytes() != wanted.tobytes():
+            raise AssertionError("ordered gradient sum differs from Float32 left fold")
+    if before != [[a.tobytes() for a in shard] for shard in shards]:
+        raise AssertionError("ordered gradient sum mutated its inputs")
+    return _fit(dict(gradients=_h(*(np.asarray(a) for a in got))))
 
 
 @lane("training-primitives")
@@ -5867,6 +5921,10 @@ _batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measur
             "silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the "
             "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
 _batch_decl(_batch_silhouette_chunks, "metrics-classification")
+_batch_decl("n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+            "metrics-homogeneity-completeness")
+_batch_decl("n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+            "bpe-trainer")
 _batch_decl(_batch_cross_val, "cross-val")
 # The fold PARTITION is metadata, not an inference call: the lane fits nothing
 # and asks nothing for a row's answer, so there is no batch axis to vary
@@ -5983,6 +6041,8 @@ _batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
 _batch_decl(_batch_training_primitives, "training-primitives")
+_batch_decl("n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+            "ordered-gradient-sum")
 _batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
     ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
 _batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")

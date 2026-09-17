@@ -401,6 +401,8 @@ TRAINING_LANE_NAMES = {
     # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
     # through the preprocessing host binding's standard_fit and standard_transform.
     "gp-normalize-y": "the Gaussian process with normalized targets",
+    "gp-optimize": "Gaussian process hyperparameter optimization",
+    "gp-optimize-restarts": "Gaussian process hyperparameter optimization with restarts",
     # Gaussian process classification (lane/gaussian-process-classifier,
     # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
     # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
@@ -491,6 +493,7 @@ TRAINING_LANE_NAMES = {
     # contingency matrix, host_fowlkes_mallows in
     # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
     "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
+    "metrics-homogeneity-completeness": "the combined homogeneity, completeness and V-measure scores",
     # The weighted score lanes (lane/cpu-training-small-gaps, 2026-09-15):
     # score(X, y, sample_weight) of the gradient boosting adapters and the
     # random forests through host_weighted_accuracy and host_weighted_r2 in
@@ -676,6 +679,7 @@ TRAINING_LANE_NAMES = {
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     "cross-entropy-arms": "the cross-entropy loss arms",
     "training-primitives": "the embedding, RMSNorm and linear training primitives",
+    "ordered-gradient-sum": "the ordered shard gradient reduction",
     # CPU training for the workstream D estimators
     # (lane/cpu-training-d-estimators, 2026-09-15). The Cholesky door through
     # the gp host binding's cholesky_factor and cholesky_solve (the factor is
@@ -1333,7 +1337,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                        "metrics-fowlkes-mallows"),
+                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -1622,7 +1626,8 @@ FAMILIES = (
         # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
         # gpc_predict under the GPU binding's contract.
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
-                        "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize"),
+                        "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize",
+                        "gp-optimize", "gp-optimize-restarts"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -1971,7 +1976,7 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp",
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
                         "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
                         "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w"),
         inference_lanes=(),
@@ -2459,6 +2464,8 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    "ordered-gradient-sum": "no reference",
+    "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
     # shipped table describes bytes this build no longer produces. The
@@ -2610,6 +2617,11 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
+    # CPU diagnostics now match all nine fixtures, but the bundled table
+    # has only Apple GPU witnesses for these optimizers. CUDA/HIP release
+    # records and installed-wheel verification are still owed.
+    "gp-optimize",
+    "gp-optimize-restarts",
     # `svc-poly` is here rather than promoted for a reason that is not about
     # its arithmetic: its cells rest on TWO columns (apple and cpu, from
     # 2026-09-15_inference-svm), so it cannot meet `--require-columns 4`.
