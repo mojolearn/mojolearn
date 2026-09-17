@@ -1553,3 +1553,90 @@ replaced) and `kpack_hg` (the arm it was flipped from): `kpack_hg` reads 1.0006 
 shipped (enwik8 1.0019, Pile GitHub 0.9993; GEMM sum 0.9994), the proof that the shipped path
 is that body; `ksplit` reads 1.0342 (1.0366, 1.0318; GEMM sum 1.041), the old default slower
 by the amount the price leg promised; every witness equal on both corpora.
+
+## 19. The Apple seam is STILL LIVE, rechecked on 2026-09-17 (lane `lane/gemm-next`)
+
+### 19.1 The recheck, measured
+
+Section 14.3 measured the Apple GEMM seam as flush-before-round on
+2026-09-13 and section 14.5 called it "a correctness item, not a speed
+one". PLAN_next_2026-09-13.md repeats it. Nothing in the repository has
+addressed it since: `git grep` for the `fbr` hash `f269fc70e5625987` finds
+it in this brief alone, and the four files that name the item at all
+(this brief, that plan, `gemm/checks/gemm_seam_probe.mojo`,
+`tools/gemm_seam_probe_reference.py`) carry no fix.
+
+So the probe was rebuilt and rerun, unchanged, at `origin/main`
+(712eedd16) on the M4, one Metal slot, 0.294 s of GPU time, no dataset.
+Evidence:
+`bench/results/e1g/2026-09-17_162800-apple-m4-seam-probe-recheck/`.
+
+```
+SEAM_HASH lane=shipped fnv1a64=f269fc70e5625987
+SEAM_HASH lane=fma     fnv1a64=f269fc70e5625987
+SEAM_HASH lane=hwftz   fnv1a64=f269fc70e5625987
+SEAM_HASH lane=swrtf   fnv1a64=f269fc70e5625987
+SEAM_BOUNDARY a=3f7fffff b=00800000 acc=00000000 shipped=00000000 ...
+```
+
+and `tools/gemm_seam_probe_reference.py`, which recomputes the three
+semantics exactly on the host and never sees the device:
+
+```
+reference rtf  fnv1a64=62a6b5621e27c707
+reference fbr  fnv1a64=f269fc70e5625987
+lane shipped   fnv1a64=f269fc70e5625987 -> fbr
+boundary i=400 a=3f7fffff b=00800000 acc=00000000 rtf=00800000 fbr=00000000
+```
+
+All 262,144 triples, 0 mismatches between lanes, 315 boundary triples
+separating `rtf` from `fbr`. The contract is `rtf`; the NVIDIA and AMD
+legs of 14.4 read `rtf` on their shipped lanes from this same reference
+script, so the check CAN fail and has been seen to come out the other way
+on two columns. **The Apple shipped GEMM seam does not implement the
+contract at those 315 patterns. STILL LIVE at 712eedd16.**
+
+### 19.2 It is not a GEMM defect; GEMM is one consumer
+
+`_tuned_step` off NVIDIA is `ftz(identical_mul_add(a, b, acc))`, and
+`checks/numerics.mojo::identical_mul_add` is `std.math.fma`, the column's
+native instruction. The outer `ftz` cannot restore a value the hardware
+already flushed to zero inside the FMA, so every Apple IDENTICAL consumer
+of `identical_mul_add` has the same exposure. 245 Mojo files call it. The
+kNN audit of 2026-09-09 repaired ITS consumer only, and the repair is
+still in the tree and is generic:
+`neighbors/checks/zero_fma_boundary.mojo::repair_zero_fma(a, b, c, zero)`,
+integer-only, no floating-point operation in the decision, called only on
+the branch where the flushed FMA returned zero.
+
+So the shape of a GEMM fix is known and small: on the columns whose
+native FMA is `fbr`, spell the seam as the FMA plus a zero-result test
+that calls `repair_zero_fma`. The cost is the per-step compare and branch
+(the repair itself is `@no_inline` and almost never taken), not the 39
+percent the kNN inner loop paid. It has not been priced here.
+
+### 19.3 Why it is not being fixed in this lane without a decision
+
+Changing the Apple seam changes Apple's bits at those 315 patterns and
+therefore, in principle, every Apple reference cell. In practice no card
+and no LM witness has ever landed on one of them (14.5), so the fix may
+move zero published bits; that is checkable but only by a run of the
+Apple column, which `lane/reference-regen` is already doing. Reported to
+Andrew with the hashes rather than fixed silently, and to be sequenced
+with that lane. `[[a-floor-in-prose-is-not-a-floor]]`: this paragraph is
+not the record. The record is the probe and the reference script, which a
+change walks past.
+
+### 19.4 Two corrections to what the lane brief said before
+
+- **The AMD kernel-body row is NOT 0.** Section 18.4 flipped it to 1 on
+  2026-09-13 (gather staging, measured and gated on a Hot Aisle MI300X,
+  GEMM sum 592 -> 559 ms). `checks/kernel_matrix.mojo::lib_gemm_kernel_body_for`
+  returns 1 for NVIDIA and for AMD on main today. Apple's row is the only
+  one still 0, and the fold flush would compile out there anyway, so what
+  Apple is owed is the gather staging alone. Any handoff still saying "the
+  Apple AND AMD rows are 0" is stale.
+- **The one AMD lever section 14.5 named is still unmeasured**: the
+  roughly six-instruction software `ftz` per product step where two would
+  do, and the wave-mode flush question (whether AMD's output flush is
+  post-round). That is untouched by the gather-staging flip.
