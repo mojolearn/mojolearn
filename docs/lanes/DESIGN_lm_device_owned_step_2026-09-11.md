@@ -6,12 +6,12 @@ produces; it changes WHERE the state lives between steps and WHEN each array
 is validated. No test, build or benchmark ran on the Mac. This file is the
 only artifact of the lane; no source was touched.
 
-Parent: [HANDOFF_ai_classical_identical_next_2026-09-10.md](HANDOFF_ai_classical_identical_next_2026-09-10.md)
+Parent: [HANDOFF_ai_classical_identical_next_2026-09-10.md](../../archive/docs/lanes/HANDOFF_ai_classical_identical_next_2026-09-10.md)
 section 1 ("design a device-owned step API with a lean result and explicit
 state, gradient and checkpoint exports"). Measurement it answers:
 [BRIEF_lm_step_memory_2026-09-10.md](BRIEF_lm_step_memory_2026-09-10.md),
 "Run 2 results: the target step itemized" (H100, main b3d4f3e0). Session as it
-exists: [HANDOFF_lm_session_2026-09-10.md](HANDOFF_lm_session_2026-09-10.md).
+exists: [HANDOFF_lm_session_2026-09-10.md](../../archive/docs/lanes/HANDOFF_lm_session_2026-09-10.md).
 
 Sources read (line numbers are the files as read on 2026-09-11; the binding
 was being edited by the lifetime lane, DEVIATION 2513, while this was
@@ -484,7 +484,7 @@ estimates are for the diff.
 | 6 | `python/mojolearn/_byte_lm_impl.py`, `python/mojolearn/language_model.py` | `step_result` keyword; `_state` arrays `None` while a session is open; `_open_session` (admission), `_run_impl` lean branch, `export_state`, `export_gradients`, `export_checkpoint`, `close` exporting first, `_lost_at`; `_run` except path calls rollback; `run_metadata` reports `step_result` and `last_export_step`; the numpy-free docstring updated | +220/-40, +4 | host suite (step 7) |
 | 7 | `python/mojolearn/tests/test_byte_lm_surface.py` (FakeByteLM gains the six session entries and a fake device state so exports and rollback are observable), `python/mojolearn/tests/test_byte_lm_session.py` (lean result keys; export isolation; rollback on `wrong_step` and `nonfinite_after_write` leaves state equal; close exports; lost-session error; `resident=False` refuses `'lean'`), `tools/byte_lm_session_check.py`, `training/byte_lm.mojo` fault-injection arm behind `MOJOLEARN_BYTE_LM_FAULT_INJECT` | +120, +130, +60, +40 | G3, G4 at fixture A; G1, G2 at fixture B |
 | 8 | `tools/lm_step_memory_probe.py` (`--resident-lean`, sha256 of exports at the end and per step under `--witness-every-step`), `tools/byte_lm_real_text_capture.py` (:173, :194 read `flat_gradients`: call `export_gradients()`), `tools/byte_lm_session_bench.py` (:57), `tools/wp67_lm_surface.py` (:22), `tools/byte_lm_runtime_numerical_check.py` (:112-137), `tools/byte_lm_lifetime_diag.py` (:200; the lifetime lane's file, coordinate) | consume `export_gradients()`/`export_state()` when `step_result='lean'` | +30, +15, +10, +5, +15, +10 | G5 RUN OWED on the H100 |
-| 9 | `python/mojolearn/_byte_lm_impl.py` default flip (`step_result='lean'` when `resident=True`), `python/mojolearn/ALPHA_API.md`, `training/BYTE_LM_IMPLEMENTATION.md`, `docs/lanes/HANDOFF_lm_session_2026-09-10.md` ("not yet a minimal-transfer trainer" paragraph), memory brief section 1.6 and rank 7 | docs and the one default | +40 | only after G1 to G6 pass and G5 is filed under `bench/results` |
+| 9 | `python/mojolearn/_byte_lm_impl.py` default flip (`step_result='lean'` when `resident=True`), `python/mojolearn/ALPHA_API.md`, `training/BYTE_LM_IMPLEMENTATION.md`, `archive/docs/lanes/HANDOFF_lm_session_2026-09-10.md` ("not yet a minimal-transfer trainer" paragraph), memory brief section 1.6 and rank 7 | docs and the one default | +40 | only after G1 to G6 pass and G5 is filed under `bench/results` |
 
 Existing tests that change: `test_byte_lm_session.py` (all six tests keep
 passing with the fake's new entries; `test_native_and_python_failures_discard_advanced_session`

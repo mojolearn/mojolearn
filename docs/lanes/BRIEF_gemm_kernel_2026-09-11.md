@@ -10,7 +10,7 @@ and say so. There is no DEVIATIONS register file in the repository, so this
 brief is the record of 2599.
 
 Arithmetic boundary: the one in
-[HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md),
+[HANDOFF_speed_gemm_2026-09-10.md](../../archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md),
 [BRIEF_gemm_step_2026-09-11.md](BRIEF_gemm_step_2026-09-11.md) section 5 and
 [BRIEF_gemm_long_k_2026-09-11.md](BRIEF_gemm_long_k_2026-09-11.md) section 5.
 No tensor cores, no TF32, no reassociation, RN-FMA then the FTZ multiply
@@ -859,7 +859,7 @@ RUN OWED: the H100 leg of section 9 with this branch's commit.
 the contract's ceiling at 33.5 TFLOP/s at 1.98 GHz: the seam is TWO issued
 instructions per product step (`fma.rn` then `mul.rn.ftz`), and the single
 `fma.rn.ftz` was measured wrong at the smallest-normal boundary
-(`docs/lanes/HANDOFF_performance_followup_2026-09-09.md`, 262,144 adversarial
+(`archive/docs/lanes/HANDOFF_performance_followup_2026-09-09.md`, 262,144 adversarial
 triples on L40S and H100). The shipped 11.4 is 34% of what this contract
 can reach on this box, and a kernel rewrite under this contract is bounded
 at about 3x, realistically 2x. The only lever on the ceiling itself is the

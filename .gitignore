@@ -102,3 +102,43 @@ bench/results/**/remote/dump/
 # A release leg fetches the pod's patchelf venv beside its evidence; a
 # venv is a tool, not evidence (2026-09-10, five legs x 800 files).
 bench/results/e1g/*/remote/tools-venv/
+
+# Compiled historical benchmark executables (cleanup 2026-09-17).
+/bench/results/e1/2026-09-03_090654-mojolearn-e2-amd/fast_replication_ab/bin/base
+/bench/results/e1/2026-09-03_090654-mojolearn-e2-amd/fast_replication_ab/bin/pin
+/bench/results/e1/2026-09-03_101937-mojolearn-e2-amd/fast_replication_ab/MOJOLEARN_2041_FAST_CHUNKS_PIN/bin/base
+/bench/results/e1/2026-09-03_101937-mojolearn-e2-amd/fast_replication_ab/MOJOLEARN_2041_FAST_CHUNKS_PIN/bin/pin
+/bench/results/e1/2026-09-03_101937-mojolearn-e2-amd/fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK/bin/base
+/bench/results/e1/2026-09-03_101937-mojolearn-e2-amd/fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK/bin/pin
+/bench/results/e1/2026-09-03_104638-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK/bin/base
+/bench/results/e1/2026-09-03_104638-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2042_FAST_NO_LOOKBACK/bin/pin
+/bench/results/e1/2026-09-03_112707-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2043_FAST_FUSED_ONE_BYTE/bin/base
+/bench/results/e1/2026-09-03_112707-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2043_FAST_FUSED_ONE_BYTE/bin/pin
+/bench/results/e1/2026-09-03_210405-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2044_FAST_NO_RIDX_ONLY/bin/base
+/bench/results/e1/2026-09-03_210405-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2044_FAST_NO_RIDX_ONLY/bin/pin
+/bench/results/e1/2026-09-03_210405-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2045_FAST_NO_QUANT_HIST/bin/base
+/bench/results/e1/2026-09-03_210405-mojolearn-e2-nv/fast_replication_ab/MOJOLEARN_2045_FAST_NO_QUANT_HIST/bin/pin
+/bench/results/e1g/2026-08-25_155542-nvidia-speed-gemmseq/remote/bin_gemmspeed
+/bench/results/e1g/2026-08-25_155542-nvidia-speed-gemmseq/remote/bin_seqspeed
+/bench/results/e1g/2026-08-25_160520-nvidia-speed-gemmseq/remote/bin_gemmspeed
+/bench/results/e1g/2026-08-25_160520-nvidia-speed-gemmseq/remote/bin_seqspeed
+/bench/results/e1g/2026-08-25_235543-nvidia-speed-classical/remote/bin_classicalspeed
+/bench/results/e1g/2026-08-26_040054-nvidia-speed-gemmseq/remote/bin_gemmspeed
+/bench/results/e1g/2026-08-26_040054-nvidia-speed-gemmseq/remote/bin_seqspeed
+/bench/results/e1g/2026-08-26_040100-nvidia-speed-classical/remote/bin_classicalspeed
+/bench/results/e1g/2026-08-28_040316-nvidia-speed-gemmseq/remote/bin_gemmspeed
+/bench/results/e1g/2026-08-28_040316-nvidia-speed-gemmseq/remote/bin_seqspeed
+/bench/results/e1g/2026-08-28_040832-nvidia-speed-classical/remote/bin_classicalspeed
+/bench/results/e1g/2026-09-13_161417-nvidia-h100-seam-probe/remote/seam-probe/seam_probe
+/bench/results/e1g/2026-09-13_161422-amd-mi300x-hotaisle-seam-probe/remote/seam-probe/seam_probe
+/bench/results/fast_speed/mac-2026-08-28_122551-classical/bin_classicalspeed
+/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/bin_gemmspeed
+/bench/results/fast_speed/mac-2026-08-28_122711-gemmseq/bin_seqspeed
+/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_gemmspeed
+/bench/results/fast_speed/mac-2026-08-28_131915-gemmseq/bin_seqspeed
+/bench/results/gemm_resources_2026-09-10/cuda126/kernel.cubin
+/bench/results/gemm_resources_2026-09-10/scalar-cuda126/kernel.cubin
+/bench/results/resume/2026-09-06-root-training-nvidia/run2/remote/training-validation/train-gradient-capture
+/bench/results/resume/2026-09-06-root-training-nvidia/run3/remote/training-validation/train-gradient-capture
+/bench/results/resume/2026-09-06-root-training-nvidia/run4/remote/training-validation/train-gradient-capture
+/bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation/train-gradient-capture

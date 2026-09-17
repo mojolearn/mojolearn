@@ -188,7 +188,7 @@ clean Gram, the shared-slab reuse across back-to-back folds
 
 Statements read for this brief and found false or superseded:
 
-- `docs/lanes/HANDOFF_next_session_2026-09-13.md:107` "Untested architectures worth a cheap leg
+- `archive/docs/lanes/HANDOFF_next_session_2026-09-13.md:107` "Untested architectures worth a cheap leg
   each: RTX 5090 (sm_120a), ...": superseded, the 5090 leg ran on 2026-09-14 and is recorded at
   `bench/results/identity_break/2026-09-14_rtx5090-sm_120a/`. Not this lane's file; left as written
   with this note.

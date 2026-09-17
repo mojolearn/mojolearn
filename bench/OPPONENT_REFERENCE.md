@@ -1047,7 +1047,7 @@ No opponent was retimed in this pass. Initial and final evidence:
 IVF k/probe extensions, fused CDNA logical groups, wide full PCA, and UMAP
 portable host math were correctness/capability work, not new opponent timing
 rows. Their executable gates and limitations are recorded in
-`docs/lanes/HANDOFF_identity_continuation_2026-09-10.md`. Existing cuML/cuBLAS
+`archive/docs/lanes/HANDOFF_identity_continuation_2026-09-10.md`. Existing cuML/cuBLAS
 prices and comparison qualifications remain unchanged.
 
 ### Sep10 GEMM operand staging (IDENTICAL, cached opponents)
@@ -1172,7 +1172,7 @@ used generic `untuned`/`dispatch` labels while actually comparing current 128×1
 against a forced 64×64 candidate. Its 0.747–0.841 ratio documents the rejected
 candidate, not a current dispatch regression. Original logs remain immutable;
 new probe output names baseline/candidate and their selectors explicitly.
-See `docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` for the corrected next steps.
+See `archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` for the corrected next steps.
 
 
 ## 2026-09-10 continuation: own-arm M4 measurement, no new opponent price

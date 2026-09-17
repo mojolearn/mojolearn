@@ -57,7 +57,7 @@
 #             `--dump-sass` on the cubin give REG / STACK / LOCAL / SHARED
 #             and the LDL / STL that execute. Same tools and flags as
 #             tools/gemm_cuda_resources.py (the GEMM lane's H100 pass,
-#             docs/lanes/HANDOFF_speed_gemm_2026-09-10.md, "H100 resource
+#             archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md, "H100 resource
 #             inspection"); NVIDIA's binary-utilities documentation names
 #             them. An offline ptxas is that toolkit's answer, not
 #             necessarily the runtime JIT's: where the two disagree the

@@ -14,7 +14,7 @@ column. Geometry that differs by vendor is a kernel matrix row, never an
 inline vendor branch. The ptxas register/stack/spill readback is an NVIDIA
 instrument, not a gate.
 
-Arithmetic boundary: [HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md)
+Arithmetic boundary: [HANDOFF_speed_gemm_2026-09-10.md](../../archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md)
 (no tensor cores, no TF32, no reassociation, RN-FMA then FTZ multiply kept,
 leaf boundaries and fold topology kept). The scalar shared-load trial was
 negative and is not repeated. Layout of this brief follows

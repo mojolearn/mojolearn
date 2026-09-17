@@ -2,7 +2,7 @@
 
 Written 2026-09-11 about 21:10Z by the neural session (mojolearn-df) for Andrew
 to continue in another session. State and numbers are in
-`docs/lanes/HANDOFF_neural_final_2026-09-11.md`; read it first. This file is the
+`archive/docs/lanes/HANDOFF_neural_final_2026-09-11.md`; read it first. This file is the
 operating plan: what to run, in what order, what to read back, and when to stop.
 
 ## 0. Kickoff prompt (paste into the new session)
@@ -10,7 +10,7 @@ operating plan: what to run, in what order, what to read back, and when to stop.
 ```
 Continue the neural final optimization pass in /Users/andrewhendel/CascadeProjects/mojolearn.
 Read docs/lanes/PLAN_neural_final_continue_2026-09-11.md and
-docs/lanes/HANDOFF_neural_final_2026-09-11.md, then execute the plan from phase 0.
+archive/docs/lanes/HANDOFF_neural_final_2026-09-11.md, then execute the plan from phase 0.
 Neural only (trees and classical belong to session mojolearn-83). Measurements on
 RunPod NVIDIA H100 only, at most 2 pods at once. No heavy compute on the Mac;
 M4 gates one at a time. Commit and push what passes; report honestly whether the
@@ -262,7 +262,7 @@ dumps out of the repository, commit, push.
 
 ## 8. Phase 5, close
 
-1. Update `docs/lanes/HANDOFF_neural_final_2026-09-11.md` with each phase's
+1. Update `archive/docs/lanes/HANDOFF_neural_final_2026-09-11.md` with each phase's
    verdict and the new step numbers, and the memory file
    `mojolearn-neural-perf-lane-sep11.md`.
 2. Tell Andrew plainly: the step before and after on one pod, what flipped, what

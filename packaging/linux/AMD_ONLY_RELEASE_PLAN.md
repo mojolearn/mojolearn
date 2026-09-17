@@ -187,6 +187,6 @@ these failures or imply they were rerun successfully.
    OIDC, verify public hashes remotely and update release/support wording
    with evidence. Confirm rental teardown and preserve failed/stopped jobs.
 
-This plan complements [FEATURE_COMPLETION_PLAN.md](../../FEATURE_COMPLETION_PLAN.md)
+This plan complements [FEATURE_COMPLETION_PLAN.md](../../archive/plans/2026-09-17/FEATURE_COMPLETION_PLAN.md)
 and does not change the original Mamba2/3, symmetric-tree, UMAP or NVIDIA-only
 performance comparison objectives.

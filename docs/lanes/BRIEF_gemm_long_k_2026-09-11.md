@@ -25,7 +25,7 @@ arms check built WITHOUT the trial define. The second is the A/B body
 under the new default against `tuned128`.
 
 Arithmetic boundary is the one of
-[HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md) and
+[HANDOFF_speed_gemm_2026-09-10.md](../../archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md) and
 [BRIEF_gemm_step_2026-09-11.md](BRIEF_gemm_step_2026-09-11.md) section 5.
 The occupancy arms of DEVIATIONS 2540 to 2544 (that brief's sections 10
 and 10.7) lost on the H100 and are not repeated. No tile, register tile,

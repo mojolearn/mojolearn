@@ -33,7 +33,7 @@ Evidence entry points:
 - `bench/results/knn/2026-09-10-residual-final/README.md` and retained compressed
   Apple alternating/coverage logs. The previous 39% Apple repair cost predates
   accepted preflight and is not the current remaining overhead.
-- `docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` and
+- `archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` and
   `bench/results/gemm_swizzle_2026-09-10/`.
 
 ## Required evidence for subsequent performance switches

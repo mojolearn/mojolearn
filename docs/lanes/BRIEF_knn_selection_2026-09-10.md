@@ -1559,7 +1559,7 @@ occupancy question.
    `cuobjdump --dump-resource-usage` (REG / STACK / SHARED / LOCAL) and
    `cuobjdump --dump-sass` (LDL / STL counts) on the cubin. This is the
    GEMM lane's H100 procedure (`tools/gemm_cuda_resources.py`,
-   docs/lanes/HANDOFF_speed_gemm_2026-09-10.md "H100 resource
+   archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md "H100 resource
    inspection": 255 registers, 4144-byte stack, 44-byte spills, one block
    per SM), NVIDIA's binary-utilities tools. An offline `ptxas` is that
    toolkit's answer, not necessarily the runtime JIT's; where they

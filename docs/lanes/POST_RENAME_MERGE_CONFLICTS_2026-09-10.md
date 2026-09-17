@@ -20,7 +20,7 @@ Source comparisons also confirm the older squash integrations:
   must not be restored. Its dirty worktree needs preserving separately.
 
 All three integration commits are ancestors of the audited main. See also
-[the earlier source audit](HANDOFF_lm_device_gradients_2026-09-10.md).
+[the earlier source audit](../../archive/docs/lanes/HANDOFF_lm_device_gradients_2026-09-10.md).
 Clean branches with no unique patches can be removed without another merge.
 A branch being old, or having conflicts, is not sufficient grounds to delete it.
 Dirty worktrees and unfinished branch content must survive cleanup.

@@ -84,7 +84,7 @@ not change. What changed between 58d018c4 and the hanging baseline d330a49d
 - `587a9107` one reused prefill KV cache per trainer (`training/byte_lm.mojo:427`, `:528`).
 
 None of those was run twice in one process on NVIDIA before WP6/WP7
-(`docs/lanes/HANDOFF_lm_session_2026-09-10.md`: "CUDA/HIP session builds and
+(`archive/docs/lanes/HANDOFF_lm_session_2026-09-10.md`: "CUDA/HIP session builds and
 execution remain unqualified"; every other lane in the window qualified on
 Apple). The box also differs (RTX 4090 on a RunPod image versus H100), which
 reading cannot exclude.

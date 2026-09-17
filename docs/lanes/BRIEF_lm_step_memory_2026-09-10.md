@@ -5,7 +5,7 @@ order, rounding or tie rules; no test, build or benchmark was run on the
 Mac. Every byte count below is host arithmetic from the constructors and
 launchers named by file and line; measured peaks are the probe's job
 (RUN OWED at the end). The parent handoff is
-[section 2 of the classical/AI handoff](HANDOFF_ai_classical_identical_next_2026-09-10.md).
+[section 2 of the classical/AI handoff](../../archive/docs/lanes/HANDOFF_ai_classical_identical_next_2026-09-10.md).
 
 Sources read: `training/byte_lm.mojo`, `training/byte_lm_config.mojo`,
 `training/checks/loss.mojo`, `training/checks/optimizer.mojo`,

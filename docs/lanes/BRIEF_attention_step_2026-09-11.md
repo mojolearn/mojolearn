@@ -9,12 +9,12 @@ gate in section 6 held on both corpora, and `ATTN_ARM_DEFAULT` is now
 `stash_tiled` (section 10); the shipped build compiles that arm's clean
 kernels and runs them at head_dim 64.
 
-Parent, [HANDOFF_ai_classical_identical_next_2026-09-10.md](HANDOFF_ai_classical_identical_next_2026-09-10.md)
+Parent, [HANDOFF_ai_classical_identical_next_2026-09-10.md](../../archive/docs/lanes/HANDOFF_ai_classical_identical_next_2026-09-10.md)
 section 3 ("Attention. Profile backward and repeated operand traffic;
 reuse/fuse work only with identical arithmetic and reachable fallback
 checks. Measure forward and forward+backward separately and then the full
 training step."). Arithmetic boundary,
-[HANDOFF_speed_gemm_2026-09-10.md](HANDOFF_speed_gemm_2026-09-10.md)
+[HANDOFF_speed_gemm_2026-09-10.md](../../archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md)
 (IDENTICAL FP32, no tensor cores, no TF32, the RN-FMA then FTZ-multiply
 seam kept, leaf boundaries and fold topology kept). The step this lane
 attacks, [DESIGN_lm_device_owned_step_2026-09-11.md](DESIGN_lm_device_owned_step_2026-09-11.md)
