@@ -77,6 +77,26 @@ every returned cell of `host_samba_accumulate` by one unit in the last place
 through `gemm_oracle_sabotage_value_flip`, which no order and no exact fold can
 undo. The embedding gather still carries no arm, and still needs none: every
 lane that reaches it also reaches a GEMM.
+
+WHY IT IS ITS OWN DEFINE AND NOT THE FAMILY'S. `MOJOLEARN_ACCUMULATE_SABOTAGE`
+is set by no build script and no gate, which is
+`MOJOLEARN_GEMM_ORACLE_SABOTAGE_LEGACY_ORDER`'s arrangement and for a related
+reason. `ordered-gradient-sum` compares `ordered_sum_gradients` against an
+independent NumPy left fold and RAISES when they differ, so the arm does not
+move the lane's hash: the lane catches it and the cell reads REFUSED
+("AssertionError: ordered gradient sum differs from Float32 left fold", all
+nine fixtures, `bench/results/identity_break/2026-09-17_sabotage-sweep/
+g-accumulate-arm/`). The arm is REACHED and DETECTED, which is more than it
+was; what it cannot be is a moved hash. And the CPU identity gate requires
+every covered lane to read STABLE in its sabotage column
+(`tools/cpu_identity_gate_check.py column`), so putting this behind
+`MOJOLEARN_HOST_SABOTAGE` would turn a green gate red for a lane that is
+working correctly. The repair that would earn the family define is the lane's,
+not this file's: hash the comparison instead of raising it, the way
+`cross-val-folds` states the rule ("a raise reads REFUSED ... while a hash that
+moves is a catch"). That changes the lane's cell and every committed record of
+it, so it is owed to a lane that owns `LANE_REVISIONS`, alongside `par-scaler`,
+which has exactly the same shape.
 """
 from std.math import isfinite
 from std.sys.compile import is_defined
@@ -101,13 +121,13 @@ from gemm.host.gemm_oracle import (
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 
-#: The gate's negative control for the accumulate (see THE ACCUMULATE CARRIES
-#: ITS OWN ARM above). The training family's define, the one
-#: `python/mojolearn/host_surface.py` declares and
-#: `training_host_sabotage()` reads back, so a build carrying it says so and
-#: is refused outside the gate by `_backend.py::load_host_module`. Production
-#: compiles nothing below it.
-comptime SAMBA_ACCUMULATE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: The accumulate's negative control (see THE ACCUMULATE CARRIES ITS OWN ARM
+#: above). Its OWN define, set by no build script and no gate, because
+#: `ordered-gradient-sum` answers it with a raise rather than a moved hash and
+#: the CPU identity gate requires covered lanes to read STABLE in the sabotage
+#: column. Production compiles nothing below it, and neither does the gate's
+#: `-D MOJOLEARN_HOST_SABOTAGE=1` build.
+comptime SAMBA_ACCUMULATE_HOST_SABOTAGE = is_defined["MOJOLEARN_ACCUMULATE_SABOTAGE"]()
 
 
 #: `transformer/checks/transformer_backward.mojo:85-86`.
