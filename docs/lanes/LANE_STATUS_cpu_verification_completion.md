@@ -121,3 +121,26 @@ compared to each other. A regression exercises the recorder and diff together;
 37 runtime/control tests pass. This small fix was isolated in
 `~/mojolearn-wt/cpu-oracle-diff-fix` while the Mamba2 record retained its frozen
 source worktree for safe checkpoint resumption.
+
+Standing workflow (user reiterated 2026-09-17): use separate worktrees, commit
+coherent verified batches, and merge them back to main. Completed work through
+`f9bfb711d` is already pushed and the shared checkout was fast-forwarded.
+
+Mamba2-dtlimit now has complete all-nine CPU training, inference, batch,
+step/full and sampler/replay results at `b74de8f54`; model saving is N/A. Seven
+completed fixtures resumed under the exact frozen signature after the first
+600-second bound. Linux native training controls detect all nine and their
+clean training hashes match the Mac column, but the Linux missing-neural
+property refusals remain recorded as failures. Its references were restored in
+`e3ccfd40a`; candidate availability is 145, withholding 34. The old stepfull
+test pin was updated from the superseded clamp to the newly measured record.
+307 focused tests pass. Installed candidate replay is next.
+
+Concurrent work discovered read-only: `reference-regen` is recording eight full
+neural lanes with all optional properties; `sabotage-sweep` is recording wider
+native controls on base/ties. Do not interfere with those jobs. Our prepared
+next two-vCPU job therefore targets 12 low-bit lanes plus the 12 vendor-held
+candidates, all nine fixtures, with the missing neural dependency included.
+The external command is `neural-complete-body.sh`; two single-thread workers,
+compilers at most two, 120-minute watchdog. The dry run created no pod. Rent
+only after our existing pod `4018mzhxmp3prb` is verified deleted.
