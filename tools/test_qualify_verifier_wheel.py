@@ -45,6 +45,27 @@ class VerifierAdmissionTests(unittest.TestCase):
             with self.assertRaises(AssertionError):
                 admit("self-test", broken, [])
 
+    def test_extended_pending_reference_stays_incomplete_and_failures_refuse(self):
+        parts = ("train", "infer", "batch", "batchgrad", "batchscale", "ragged", "rlpair")
+        doc = dict(exit=5, verdict="INCOMPLETE", cells=[
+            dict(lane="knn", fixture="base", part=part,
+                 state="OWED" if part == "batchscale" else "IDENTICAL",
+                 value="0123456789abcdef", error=None) for part in parts])
+        admit("extended", doc, [])
+        for state in ("REFUSED", "DIVERGENT"):
+            broken = copy.deepcopy(doc)
+            broken["cells"][4]["state"] = state
+            with self.assertRaises(AssertionError):
+                admit("extended", broken, [])
+        for value in (None, "MOVED", "BATCH_MOVED:x"):
+            broken = copy.deepcopy(doc)
+            broken["cells"][4]["value"] = value
+            with self.assertRaises((AssertionError, TypeError)):
+                admit("extended", broken, [])
+        doc.update(exit=0, verdict="VERIFIED")
+        with self.assertRaises(AssertionError):
+            admit("extended", doc, [])
+
 
 if __name__ == "__main__":
     unittest.main()

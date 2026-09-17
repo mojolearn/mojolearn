@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import tempfile
@@ -19,9 +20,18 @@ def admit(kind, doc, models):
         assert doc["clean"]["state"] == "IDENTICAL"
         assert doc["perturbed"]["state"] == "DIVERGENT"
     else:
-        assert doc["exit"] == 0 and doc["verdict"] == "VERIFIED"
         cells = {(r["lane"], r["fixture"], r["part"]): r for r in doc["cells"]}
         assert len(cells) == len(doc["cells"]), "duplicate cell"
+        if kind == "extended":
+            owed = [r for r in cells.values() if r["state"] == "OWED"]
+            assert (doc["exit"], doc["verdict"]) == ((5, "INCOMPLETE") if owed else (0, "VERIFIED"))
+            for row in cells.values():
+                assert row["state"] in ("IDENTICAL", "N/A", "OWED")
+                if row["state"] == "OWED":
+                    assert row["part"] in ("batchgrad", "batchscale", "ragged", "rlpair")
+                    assert row.get("error") is None and re.fullmatch("[0-9a-f]{16}", row["value"])
+        else:
+            assert doc["exit"] == 0 and doc["verdict"] == "VERIFIED"
         if kind == "models":
             expected = {(f"portable:{m['lane']}", m["fixture"], part)
                         for m in models for part in ("model", "batch")}
@@ -31,8 +41,9 @@ def admit(kind, doc, models):
         else:
             for part in ("train", "infer", "batch"):
                 assert cells["knn", "base", part]["state"] == "IDENTICAL"
-            assert {"batchgrad", "batchscale", "ragged", "rlpair"} <= {
-                row["part"] for row in cells.values()}
+            if kind == "extended":
+                assert {"batchgrad", "batchscale", "ragged", "rlpair"} <= {
+                    row["part"] for row in cells.values()}
 
 
 def main():
@@ -62,7 +73,7 @@ def main():
     def save():
         receipt.write_text(json.dumps(manifest, indent=2) + "\n")
 
-    def run(name, command, cwd, json_output=False):
+    def run(name, command, cwd, json_output=False, allowed_exits=(0,)):
         path = output / (name + (".json" if json_output else ".log"))
         with path.open("w") as stdout, (output / (name + ".stderr.log")).open("w") as stderr:
             proc = subprocess.Popen(command, cwd=cwd, env=env, stdin=subprocess.DEVNULL,
@@ -75,7 +86,7 @@ def main():
                 code = 124
         manifest["jobs"].append(dict(name=name, exit_code=code, output=str(path)))
         save()
-        if code:
+        if code not in allowed_exits:
             raise RuntimeError(f"{name} failed with exit {code}; see {path}")
         return json.loads(path.read_text()) if json_output else None
 
@@ -99,12 +110,20 @@ print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojole
             commands = {
                 "coverage": ["--coverage"],
                 "models": ["--models-only", "--repeats", "2"],
-                "batch": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--batch-checks", "--no-models"],
+                "batch": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--no-models"],
+                "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--batch-checks", "--no-models"],
                 "self-test": ["--self-test"],
             }
             for kind, flags in commands.items():
-                doc = run(kind, [python, "-m", "mojolearn", "verify", *flags, "--json"], work, True)
+                doc = run(kind, [python, "-m", "mojolearn", "verify", *flags, "--json"], work, True,
+                          (0, 5) if kind == "extended" else (0,))
                 admit(kind, doc, models)
+                if kind == "extended":
+                    # This gate checks the CLI's honest incomplete result;
+                    # it does not qualify properties lacking references.
+                    manifest["unqualified_properties"] = [
+                        dict(lane=r["lane"], fixture=r["fixture"], part=r["part"], state=r["state"])
+                        for r in doc["cells"] if r["state"] == "OWED"]
             assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest, "wheel changed"
             manifest["status"] = "PASSED"
     except Exception as exc:
