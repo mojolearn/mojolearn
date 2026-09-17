@@ -55,6 +55,24 @@ def finite_key(value: Float32) -> UInt32:
 comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]()
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
+#: DEVIATION 2964 (lane/forest-groves-row-schedule, 2026-09-17): the groves
+#: engine's SCHEDULE, not its graph. The 32-lane kernels give one row 32
+#: threads, so the 32 threads of a thread group walk 32 DIFFERENT trees at
+#: once and meet at seven barriers over a shared-memory fold. With
+#: `-D MOJOLEARN_FOREST_ROW_THREADS=1` one thread owns an item: it walks the
+#: trees in ascending order, adds each leaf into lane `tree % 32` (so a lane
+#: still sums trees `lane, lane + 32, ...` in that order from +0.0), and
+#: folds its 32 private sums 16/8/4/2/1 with the same `forest_add` on the
+#: same operand pairs. Every addition has the operands and the order it had;
+#: only the thread that performs it changed, which is the schedule
+#: `core/forest_host_groves.mojo` already runs on the CPU to the GPU's bits.
+#: Neighboring threads now walk the SAME tree on adjacent rows. Default off
+#: until the pod A/B.
+comptime FOREST_ROW_THREADS = is_defined["MOJOLEARN_FOREST_ROW_THREADS"]()
+#: The row schedule's negative control, default off, never shipped: the 32
+#: private sums fold in lane order (a left fold) instead of 16/8/4/2/1.
+comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE"]()
+
 #: The resident node layout. Packed is the default since
 #: lane/forest-groves-cpu-and-speed (2026-09-17, the L40S A/B in
 #: docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md);
@@ -269,6 +287,88 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
                 output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*128+tid]),Float32(trees))))
 
 
+def forest_grove32_row_kernel[RF_INPUT: Bool, PACKED: Bool = False](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
+):
+    """DEVIATION 2964: `forest_grove32_kernel`'s graph, one thread per item.
+
+    Lane `l` sums trees `l, l + 32, ...` ascending from +0.0 and the 32 sums
+    fold 16/8/4/2/1, as there; the sums are thread-private, so there is no
+    shared memory and no barrier.
+    """
+    var rows = Int(rows_in)
+    var features = Int(features_in)
+    var outputs = Int(outputs_in)
+    var trees = Int(trees_in)
+    var item = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if item < rows*outputs:
+        var sums = stack_allocation[32,Float32]()
+        for lane in range(32):
+            sums[unsafe_offset=lane] = Float32(0)
+        var row = item//outputs
+        var out = item%outputs
+        for tree in range(trees):
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+            var lane = tree%32
+            sums[unsafe_offset=lane] = forest_add(sums[unsafe_offset=lane],leaves.unsafe_load(node*outputs+out))
+        comptime if FOREST_ROW_THREADS_SABOTAGE:
+            for lane in range(1, 32):
+                sums[unsafe_offset=0] = forest_add(sums[unsafe_offset=0],sums[unsafe_offset=lane])
+        else:
+            var step = 16
+            while step > 0:
+                for lane in range(step):
+                    sums[unsafe_offset=lane] = forest_add(sums[unsafe_offset=lane],sums[unsafe_offset=lane+step])
+                step //= 2
+        output.unsafe_store(item,ftz(identical_div(ftz(sums[unsafe_offset=0]),Float32(trees))))
+
+
+def forest_vector_grove32_row_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: Bool = False](
+    offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
+    thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
+    leaves: MutPointer[Float32, MutAnyOrigin], x: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], rows_in: Int32, features_in: Int32, outputs_in: Int32, trees_in: Int32,
+):
+    """DEVIATION 2964: `forest_vector_grove32_kernel`'s graph, one thread per
+    row; one traversal per tree serves every output, as there."""
+    var rows = Int(rows_in)
+    var features = Int(features_in)
+    var outputs = Int(outputs_in)
+    var trees = Int(trees_in)
+    var row = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if row < rows:
+        var sums = stack_allocation[32*OUTPUT_CAPACITY,Float32]()
+        for i in range(32*OUTPUT_CAPACITY):
+            sums[unsafe_offset=i] = Float32(0)
+        for tree in range(trees):
+            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+            var lane = tree%32
+            @parameter
+            for c in range(OUTPUT_CAPACITY):
+                if c < outputs:
+                    sums[unsafe_offset=c*32+lane] = forest_add(sums[unsafe_offset=c*32+lane],leaves.unsafe_load(node*outputs+c))
+        comptime if FOREST_ROW_THREADS_SABOTAGE:
+            for lane in range(1, 32):
+                @parameter
+                for c in range(OUTPUT_CAPACITY):
+                    sums[unsafe_offset=c*32] = forest_add(sums[unsafe_offset=c*32],sums[unsafe_offset=c*32+lane])
+        else:
+            var step = 16
+            while step > 0:
+                for lane in range(step):
+                    @parameter
+                    for c in range(OUTPUT_CAPACITY):
+                        sums[unsafe_offset=c*32+lane] = forest_add(sums[unsafe_offset=c*32+lane],sums[unsafe_offset=c*32+lane+step])
+                step //= 2
+        @parameter
+        for c in range(OUTPUT_CAPACITY):
+            if c < outputs:
+                output.unsafe_store(row*outputs+c,ftz(identical_div(ftz(sums[unsafe_offset=c*32]),Float32(trees))))
+
+
 def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     ctx: DeviceContext,
     mut doff: DeviceBuffer[DType.int32], mut dcol: DeviceBuffer[DType.int32],
@@ -286,31 +386,59 @@ def launch_forest_inference[RF_INPUT: Bool, GROVE: Bool, PACKED: Bool = False](
     if n_rows == 0:
         return
     comptime if GROVE:
-        if vector_groves_for(n_outputs):
-            if n_outputs <= 2:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2,PACKED]](
-                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                    grid_dim=(n_rows+3)//4,block_dim=128,
-                )
-            elif n_outputs <= 4:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4,PACKED]](
-                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                    grid_dim=(n_rows+3)//4,block_dim=128,
-                )
+        comptime if FOREST_ROW_THREADS:
+            # DEVIATION 2964: one thread per row (vector leaves) or per item.
+            if vector_groves_for(n_outputs):
+                if n_outputs <= 2:
+                    ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,2,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+127)//128,block_dim=128,
+                    )
+                elif n_outputs <= 4:
+                    ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,4,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+127)//128,block_dim=128,
+                    )
+                else:
+                    ctx.enqueue_function[forest_vector_grove32_row_kernel[RF_INPUT,8,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+127)//128,block_dim=128,
+                    )
             else:
-                ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8,PACKED]](
+                ctx.enqueue_function[forest_grove32_row_kernel[RF_INPUT,PACKED]](
                     doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
                     dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                    grid_dim=(n_rows+3)//4,block_dim=128,
+                    grid_dim=(n_rows*n_outputs+127)//128,block_dim=128,
                 )
         else:
-            ctx.enqueue_function[forest_grove32_kernel[RF_INPUT,PACKED]](
-                doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
-                dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
-                grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
-            )
+            if vector_groves_for(n_outputs):
+                if n_outputs <= 2:
+                    ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,2,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+3)//4,block_dim=128,
+                    )
+                elif n_outputs <= 4:
+                    ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,4,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+3)//4,block_dim=128,
+                    )
+                else:
+                    ctx.enqueue_function[forest_vector_grove32_kernel[RF_INPUT,8,PACKED]](
+                        doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                        dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                        grid_dim=(n_rows+3)//4,block_dim=128,
+                    )
+            else:
+                ctx.enqueue_function[forest_grove32_kernel[RF_INPUT,PACKED]](
+                    doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
+                    dleaf.unsafe_ptr(),dx.unsafe_ptr(),dout.unsafe_ptr(),Int32(n_rows),Int32(n_features),Int32(n_outputs),Int32(trees),
+                    grid_dim=(n_rows*n_outputs+3)//4,block_dim=128,
+                )
     else:
         ctx.enqueue_function[forest_ordered_kernel[RF_INPUT,PACKED]](
             doff.unsafe_ptr(),dcol.unsafe_ptr(),dthr.unsafe_ptr(),dleft.unsafe_ptr(),
