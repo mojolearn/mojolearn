@@ -8,7 +8,7 @@ RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -27,11 +27,63 @@ comptime TPB_DEFAULT = 128
 
 
 comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
-"""Rows each thread of the range and score passes folds -- DEVIATION 2020."""
+"""Rows each thread of the range and score passes folds -- DEVIATION 2020,
+and DEVIATION 3020 for the NVIDIA default."""
 
 
 def _search_rows_per_thread() -> Int:
-    """DEVIATION 2020's measurement arms."""
+    """DEVIATION 2020's arms, and DEVIATION 3020's NVIDIA default of 64.
+
+    ==================================================================
+    DEVIATION 3020 (lane/forest-train-speed, 2026-09-17) -- on an NVIDIA
+    build each search thread folds 64 rows, where cuML's one row per thread
+    (`builder.cuh:393-408`) stays the default on every other column.
+
+    WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod 6x6vfh2zqas3n4,
+    `nsys`, taxi 4.0M x 16, 100 trees depth 16). Two kernels were 99.5
+    percent of device time and the host was idle: the score pass 53.3 s and
+    the range pass 38.3 s of a 94 s fit, at a CONSTANT 1.4 to 1.9 ns per
+    thread from the root level to the deepest. The cost is per BLOCK and
+    it is the publish: every block's thread 0 ends in four (range) or
+    `3 + 2 * n_classes` (score) atomic read-modify-writes on global memory,
+    and a measurement arm that replaced the range publish's four atomics
+    with plain stores (`MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH`, wrong on
+    purpose) took the whole range pass out of a 16-tree fit, 16.5 s to
+    10.0 s. Dropping the explicit barriers moved nothing (16.5 s to 15.1 s).
+    The partition pass tiles the same rows one per thread, publishes with a
+    plain store, and runs the same grid in under 1 ms.
+
+    So the lever is BLOCKS PER LAUNCH, which is what this constant divides.
+    16-tree fits, same pod, one process each: taxi 16.5 s at 1, 9.0 at 2,
+    4.4 at 4, 2.9 at 8, 2.0 at 16, 1.7 at 32, 1.45 at 64, 1.03 at 128,
+    1.02 at 256; Istella-S 2.0M x 220 28.4 s at 1, 4.7 at 16, 3.7 at 64,
+    4.2 at 128, 3.8 at 256. It saturates at 64, where one block per
+    (node, feature) at the deep levels is the floor that remains.
+
+    WHY NO BIT MOVES. The tiling decides only which thread visits a row.
+    The score pass sums Int32 class counts or fixed-point labels (DEVIATION
+    135/171), and integer addition is associative and commutative, so the
+    per-thread, per-block and per-cell sums are the same integers under any
+    tiling; the quantization bounds every partial sum inside
+    `2^REGRESSION_SUM_BITS`, so no grouping can overflow. The range pass
+    folds in key space at R > 1 (the `range_key` compares below), a total
+    order, so min and max are the same elements under any grouping, and
+    the NaN count is an integer sum. Every draw is keyed by (seed, tree,
+    node, feature) and never by a thread or block index. The partition
+    keeps its own TPB tile and restages its plan (`builder.mojo`, the
+    `SEARCH_ROWS_PER_THREAD > 1` arm of the level loop). Held by
+    `identity_break` on et-clf, et-reg and et-clf-entropy-bestfirst, five
+    fixtures, BEFORE against AFTER, and by the equal model hashes of every
+    arm above; `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` is the arm that must move.
+
+    NVIDIA ONLY. `MOJOLEARN_ET_SEARCH_RPT_1` restores one row per thread
+    for the A/B. Apple and AMD keep 1 until their columns are measured.
+    ==================================================================
+    """
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_256"]():
+        return 256
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_128"]():
+        return 128
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_64"]():
         return 64
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_32"]():
@@ -44,7 +96,9 @@ def _search_rows_per_thread() -> Int:
         return 4
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
         return 2
-    return 1
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
+        return 1
+    return 64 if has_nvidia_gpu_accelerator() else 1
 
 
 comptime SEARCH_SAB_RPT_TAIL_DROP = is_defined[
@@ -220,6 +274,16 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
+@always_inline
+def _search_barrier():
+    """The explicit barrier after each block reduction of the range and score
+    passes. `-D MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER=1` is a MEASUREMENT ARM that
+    drops it, to price the barrier per block on one vendor; it is never set by
+    a build script and never a default (Metal needs the barrier)."""
+    comptime if not is_defined["MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER"]():
+        barrier()
+
+
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 """The repo-wide numeric mode (`checks/numerics.mojo`)."""
 
@@ -372,18 +436,18 @@ def node_feature_range_kernel[
     var kmax: UInt32
     comptime if BUILD_MODE == NUMERIC_IDENTICAL:
         kmin = block_min[block_size=TPB](range_key(local_min))
-        barrier()
+        _search_barrier()
         kmax = block_max[block_size=TPB](range_key(local_max))
-        barrier()
+        _search_barrier()
     else:
         var blk_min = block_min[block_size=TPB](local_min)
-        barrier()
+        _search_barrier()
         var blk_max = block_max[block_size=TPB](local_max)
-        barrier()
+        _search_barrier()
         kmin = range_key(blk_min)
         kmax = range_key(blk_max)
     var blk_missing = block_sum[block_size=TPB](local_missing)
-    barrier()
+    _search_barrier()
 
     if Int(thread_idx.x) != 0:
         return
@@ -399,10 +463,21 @@ def node_feature_range_kernel[
     if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
         kmin = range_key(Float32(0.0))
         kmax = range_key(Float32(0.0))
-    Atomic.min(out_minkey.unsafe_offset(slot), kmin)
-    Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
-    _ = Atomic.fetch_add(out_n_missing.unsafe_offset(slot), blk_missing)
-    _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
+    comptime if is_defined["MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH"]():
+        # MEASUREMENT ARM, WRONG ON PURPOSE: plain read-modify-writes where the
+        # shipped publish is four atomics, to price the atomics per block. It
+        # loses updates under contention and must never reach a shipped build.
+        if kmin < out_minkey[unsafe_offset=slot]:
+            out_minkey[unsafe_offset=slot] = kmin
+        if kmax > out_maxkey[unsafe_offset=slot]:
+            out_maxkey[unsafe_offset=slot] = kmax
+        out_n_missing[unsafe_offset=slot] += blk_missing
+        out_n_merges[unsafe_offset=slot] += Int32(1)
+    else:
+        Atomic.min(out_minkey.unsafe_offset(slot), kmin)
+        Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+        _ = Atomic.fetch_add(out_n_missing.unsafe_offset(slot), blk_missing)
+        _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
 
 
 @always_inline
@@ -1312,9 +1387,9 @@ def node_feature_score_kernel[
         barrier()
 
     var blk_n_left = block_sum[block_size=TPB](n_left)
-    barrier()
+    _search_barrier()
     var blk_n_seen = block_sum[block_size=TPB](n_seen)
-    barrier()
+    _search_barrier()
 
     var publishes = not (
         sabotage == SCORE_SAB_BLOCK0_ONLY and offset_blockid != 0
@@ -1355,9 +1430,9 @@ def node_feature_score_kernel[
 
     for k in range(n_acc):
         var bl = block_sum[block_size=TPB](priv_left[unsafe_offset=k])
-        barrier()
+        _search_barrier()
         var bt = block_sum[block_size=TPB](priv_total[unsafe_offset=k])
-        barrier()
+        _search_barrier()
         if Int(thread_idx.x) == 0 and publishes:
             _ = Atomic.fetch_add(
                 out_acc_left.unsafe_offset(slot * n_acc + k), bl

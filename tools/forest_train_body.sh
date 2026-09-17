@@ -10,6 +10,8 @@
 #                                             and (when nsys is present) an nsys kernel
 #                                             summary, rf and et on taxi and istella
 #   bash tools/forest_train_body.sh fast       the FAST tier's rf and trees bindings beside them
+#   bash tools/forest_train_body.sh candidate  /root/mojolearn-cand (main plus the pushed sources):
+#                                             its GPU and host bindings, and the CPU-only copies
 #   bash tools/forest_train_body.sh variants   /root/mojolearn-v-<name>: a source copy with
 #                                             rf+trees rebuilt under one define set each
 #                                             (VARIANTS="name:defines|name:defines")
@@ -138,6 +140,30 @@ phase_fast() {
     : > "$OUT/fast.done"
 }
 
+phase_candidate() {
+    # /root/mojolearn-cand: main's tree plus the lane's pushed sources. The GPU
+    # families in VARIANT_FAMILIES and the trees and rf host families are
+    # rebuilt from it; then CPU-only copies of BEFORE and AFTER (no GPU binding
+    # directory, no FAST binding) for the cpu identity columns.
+    C="$R-cand"
+    cd "$C" || return 1
+    git -C "$C" rev-parse HEAD > /dev/null 2>&1 || true
+    MOJOLEARN_COMPILE_JOBS=32 build_gpu "$C" cand ""
+    cd "$C" || return 1
+    for fam in ${CAND_HOST_FAMILIES:-trees rf}; do
+        step "cand_host_$fam" sh bindings/build_host_family.sh "$fam"
+    done
+    for pair in "$R:$R-cpu" "$C:$C-cpu"; do
+        src=${pair%%:*}; dst=${pair##*:}
+        rsync -a --delete --exclude .pixi --exclude 'python/mojolearn/identical' \
+            --exclude 'python/mojolearn/_mojolearn_*.so' "$src/" "$dst/"
+        ln -sfn "$R/.pixi" "$dst/.pixi"
+        (cd "$dst" && PYTHONPATH=python pixi run python3 -c "import mojolearn; print('$dst vendor', mojolearn.vendor())") > "$OUT/cpu_probe_$(basename "$dst").log" 2>&1
+        cat "$OUT/cpu_probe_$(basename "$dst").log"
+    done
+    : > "$OUT/candidate.done"
+}
+
 phase_variants() {
     # every variant builds in its own copy, in parallel (VARIANT_JOBS each)
     IFS='|' read -r -a _vs <<< "${VARIANTS:-}"
@@ -217,6 +243,7 @@ case "${1:-}" in
     setup) phase_setup ;;
     profile) phase_profile ;;
     fast) phase_fast ;;
+    candidate) phase_candidate ;;
     variants) phase_variants ;;
     identity) phase_identity ;;
     ab) phase_ab ;;
