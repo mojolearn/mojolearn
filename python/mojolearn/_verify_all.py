@@ -295,7 +295,7 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
-def run_models(harness, ml, table, pkg_dir=None, log=None):
+def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=False):
     """The portable models: for each saved model the file's hash against the
     table's model reference, then the harness's batch part of the LOADED
     model against the table's batch reference. Returns result rows."""
@@ -326,21 +326,26 @@ def run_models(harness, ml, table, pkg_dir=None, log=None):
             continue
         rows.append(dict(lane=key, fixture=fixture, part="model", value=file_hash, error=None,
                          reference_part=("model", lane)))
-        try:
-            # a CPU-only install loads a saved model through the documented
-            # CPU door, `mojolearn.host_model(path)`; a GPU install through
-            # the class's own `load`
-            if ml.vendor() == "cpu":
-                est = ml.host_model(path)
-            else:
-                est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
-            if fixture not in held_cache:
-                held_cache[fixture] = harness.heldout(fixture)
-            fit = harness.Fit({})
-            fit.est = est
-            batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
-        except Exception as exc:
-            batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+        values, errors = [], []
+        for _ in range(max(1, repeats)):
+            try:
+                # --models-only explicitly exercises the CPU saved-model door,
+                # even when the process also has GPU bindings.
+                if host_only or ml.vendor() == "cpu":
+                    est = ml.host_model(path)
+                else:
+                    est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
+                if fixture not in held_cache:
+                    held_cache[fixture] = harness.heldout(fixture)
+                fit = harness.Fit({})
+                fit.est = est
+                batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
+            except Exception as exc:
+                batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+            values.append(batch)
+            if berr:
+                errors.append(berr)
+        batch, berr = _collapse(values, errors)
         rows.append(dict(lane=key, fixture=fixture, part="batch", value=batch, error=berr,
                          reference_part=("batch", lane)))
         log(f"  {key:<34} {fixture:<8} {time.time() - t0:6.1f}s")
@@ -2082,7 +2087,7 @@ def cmd_verify_all(args):
                                     seconds=cell_seconds[(lane, f)]))
             lane_seconds[lane] = round(time.time() - t0, 3)
             log(f"  {lane:<34} {families[lane]:<16} {lane_seconds[lane]:6.1f}s")
-    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log)
+    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log, repeats=repeats, host_only=models_only)
     rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale)
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
@@ -2234,8 +2239,9 @@ def lane_counts(rows, lanes, stale=()):
     """Lanes checked, lanes skipped and why. Kept apart from the cell-part
     counts so `39 of 39 lanes` and `1065 of 1412 parts` cannot be confused.
 
-    `stale` are lanes DROPPED before the run because their fixture moved past
-    the reference this table carries (lane/identity-fixtures-light). They are
+    `stale` are lanes whose fixture moved past the reference this table
+    carries. They are dropped by default or executed without references
+    under --include-pending. They are
     logged by `cmd_verify_all`, but a lane that silently vanished from the
     comparison is precisely what this block exists to surface, so they are
     named here too.
@@ -2269,9 +2275,10 @@ def lane_counts(rows, lanes, stale=()):
     checked, skipped = classify(lane_names)
     m_checked, m_skipped = classify(model_names)
     stale_note = "fixture moved past the reference this table carries; not comparable"
-    return dict(requested=len(asked) + len(stale), checked=len(checked), checked_lanes=checked,
-                skipped=len(skipped) + len(stale),
-                skipped_lanes=dict(skipped, **{l: stale_note for l in stale}),
+    skipped.update({l: stale_note for l in stale})
+    return dict(requested=len(asked | set(stale)), checked=len(checked), checked_lanes=checked,
+                attempted=len(lane_names), attempted_lanes=sorted(lane_names),
+                skipped=len(skipped), skipped_lanes=skipped,
                 stale_references=sorted(stale),
                 not_run=sorted(asked - lane_names),
                 portable_models=dict(checked=len(m_checked), checked_models=m_checked,

@@ -1,4 +1,5 @@
 import types
+import json
 
 import pytest
 
@@ -32,6 +33,9 @@ def test_stale_reference_cannot_hide_a_local_failure_or_claim_a_false_match():
     assert row['value'] == 'a'*16 and row['local_check'] == 'passed'
     assert judged('BATCH_MOVED: real mismatch')['state'] == vr.DIVERGENT
     assert judged(None, 'native operation unavailable')['state'] == vr.REFUSED
+    counts = va.lane_counts([row], ['x'], stale=['x'])
+    assert counts['requested'] == counts['attempted'] == counts['skipped'] == 1
+    assert counts['checked'] == 0 and counts['not_run'] == []
 
 
 def test_saved_model_entries_have_installed_commands_and_parallel_scope_is_explicit():
@@ -57,3 +61,21 @@ def test_new_selection_flags_dispatch_and_reject_ambiguous_model_scope():
     for flag in ('no_models', 'lanes', 'fixtures', 'include_pending', 'batch_checks', 'quick'):
         with pytest.raises(ValueError, match='models-only'):
             va._depth(types.SimpleNamespace(models_only=True, **{flag: True}))
+
+
+def test_models_only_uses_cpu_on_gpu_install_and_detects_repeat_instability(tmp_path):
+    base = tmp_path / 'verify_reference' / 'models'
+    base.mkdir(parents=True)
+    (base / 'model.npz').write_bytes(b'fixture model bytes')
+    (base / 'models.json').write_text(json.dumps({'models': [dict(
+        lane='rf-clf', fixture='base', file='model.npz', **{'class': 'MustNotUseGpu'})]}))
+    loaded = []
+    ml = types.SimpleNamespace(vendor=lambda: 'cuda', host_model=lambda p: loaded.append(p))
+    values = iter(['a'*16, 'b'*16])
+    h = types.SimpleNamespace(Fit=lambda _: types.SimpleNamespace(),
+        heldout=lambda _: [], BATCH_ALONE=1,
+        _probe_batch=lambda *args: (next(values), None))
+    rows = va.run_models(h, ml, {}, pkg_dir=str(tmp_path), repeats=2, host_only=True)
+    assert len(loaded) == 2
+    batch = next(row for row in rows if row['part'] == 'batch')
+    assert va.judge_rows([batch], {'cells': {}})[0]['state'] == vr.DIVERGENT
