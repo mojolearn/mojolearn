@@ -110,7 +110,8 @@ from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distanc
 from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
 from checks.kernel_matrix import knn_selector_bound_compact_for, KNN_SELECTOR_BOUND_MIN_K
 from checks.kernel_matrix import knn_resident_derived_cache_for
-from neighbors.checks.knn_selector_bound_compact import bound_compact_select_launch
+from checks.kernel_matrix import knn_block_topk_bounded_for, KNN_BOUNDED_FIRST_TILE
+from neighbors.checks.knn_selector_bound_compact import bound_compact_select_launch, bound_compact_lists_launch
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 from neighbors.checks.smem_distance_tile import (
     SMT_MAX_K,
@@ -334,6 +335,15 @@ comptime KNN_SELECTOR_BOUND = (
 )
 
 
+# DEVIATION 3062 (kernel-matrix row `knn_block_topk_bounded_for`): the block
+# top-k's rank loop bounded by the running top-k on every column tile after
+# the first, its lists sentinel-terminated, and every 1 <= k <= 64 served.
+comptime KNN_BLOCK_TOPK_BOUNDED = (
+    knn_block_topk_bounded_for[TARGET_COLUMN, IDENTICAL_BUILD]() and KNN_BLOCK_TOPK
+)
+comptime KNN_BLOCK_TOPK_LIMIT = SMT_MAX_K if KNN_BLOCK_TOPK_BOUNDED else KNN_BLOCK_TOPK_MAX_K
+
+
 def fused_select_applies(
     n_index: Int, n_features: Int, k: Int, metric: Int, use_vendor_topk: Bool
 ) -> Bool:
@@ -362,7 +372,7 @@ def block_topk_applies(
         return (
             not use_vendor_topk
             and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
-            and k >= 1 and k <= SMT_MAX_K and k <= KNN_BLOCK_TOPK_MAX_K and k <= n_index
+            and k >= 1 and k <= SMT_MAX_K and k <= KNN_BLOCK_TOPK_LIMIT and k <= n_index
             and n_features > 0 and n_features <= 2147483647
             and n_index <= 2147483647
         )
@@ -809,6 +819,11 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             + String(query_tile * index_tile)
         )
     var tiled_index = index_tile < n_index
+    comptime if KNN_BLOCK_TOPK_BOUNDED and KNN_BOUNDED_FIRST_TILE > 0:
+        # DEVIATION 3062: the narrower first column tile (below) tiles an
+        # index that one tile would have held, so the partial scratch exists.
+        if use_block_topk and n_index > KNN_BOUNDED_FIRST_TILE and KNN_BOUNDED_FIRST_TILE >= k:
+            tiled_index = True
     var part_cells = query_tile * k if tiled_index else 1
     # RAFT linalg/detail/contractions.cuh:193-219 loads vectors. Our pinned
     # arithmetic keeps its ascending chain; only the index transport changes.
@@ -847,6 +862,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var select_flag_cells = 1
     comptime if KNN_SELECTOR_BOUND:
         if k >= KNN_SELECTOR_BOUND_MIN_K and k <= SMALLK_MAX_K:
+            select_flag_cells = query_tile
+    comptime if KNN_BLOCK_TOPK_BOUNDED:
+        if use_block_topk:
             select_flag_cells = query_tile
     var select_flags = ctx.enqueue_create_buffer[DType.uint32](select_flag_cells)
     # DEVIATION 3000: the shared-memory distance tile serves the requests
@@ -911,6 +929,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         var c = 0
         while c < n_index:
             var cols = min(index_tile, n_index - c)
+            comptime if KNN_BLOCK_TOPK_BOUNDED and KNN_BOUNDED_FIRST_TILE > 0:
+                # DEVIATION 3062: a narrower first (unbounded) column tile,
+                # so the full rank loop runs over fewer columns. Tiling the
+                # index axis cannot move a bit (the partial merge is exact).
+                if use_block_topk and c == 0 and cols > KNN_BOUNDED_FIRST_TILE and KNN_BOUNDED_FIRST_TILE >= k:
+                    cols = KNN_BOUNDED_FIRST_TILE
             var remainder = n_index - c - cols
             if remainder > 0 and remainder < k:
                 cols = n_index - c - k
@@ -950,6 +974,8 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         y_minima.unsafe_offset(c if use_exact else 0),
                         rows, cols, n_index, n_features, k,
                         mtr == DIST_L2_SQRT_EXPANDED, use_exact,
+                        KNN_BLOCK_TOPK_BOUNDED and not first,
+                        Optional(out_dist.unsafe_ptr().unsafe_offset(q * k).unsafe_origin_cast[MutAnyOrigin]()),
                     )
                     comptime if KNN_PHASE_TIMERS:
                         ctx.synchronize()
@@ -958,10 +984,16 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         t_class = perf_counter_ns()
                     # The partial-key selector, timed under the selection
                     # class (the selection block below adds nothing).
-                    partial_keys_select_launch(
-                        ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                        sel_dist, sel_idx, rows, cols, k,
-                    )
+                    comptime if KNN_BLOCK_TOPK_BOUNDED:
+                        bound_compact_lists_launch(
+                            ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            sel_dist, sel_idx, select_flags, rows, cols, k,
+                        )
+                    else:
+                        partial_keys_select_launch(
+                            ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            sel_dist, sel_idx, rows, cols, k,
+                        )
                     comptime if KNN_PHASE_TIMERS:
                         ctx.synchronize()
                         ns_select += perf_counter_ns() - t_class

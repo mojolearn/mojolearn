@@ -1839,6 +1839,29 @@ comptime KNN_SELECTOR_BOUND_MIN_K = 1 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUN
 
 
 @always_inline
+def knn_block_topk_bounded_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3062, 2026-09-17, lane/knn-selector-speed): whether the block top-k (DEVIATION 3001, required) BOUNDS its rank loop on every column tile after a query tile's first: the tile kernel reads each row's k-th RUNNING distance (the merge of the earlier column tiles) and a thread row leaves the rank loop as soon as none of its rows has a remaining key whose distance half is below that, writing a sentinel terminator; `bound_compact_lists_launch` (`neighbors/checks/knn_selector_bound_compact.mojo`) then selects from the sentinel-terminated lists with DEVIATION 3060's bound-and-compact phases, and `partial_topk_merge_kernel` skips the ABSENT slots of a tile that offered fewer than k keys. Column tiles are taken in ascending column order, so a key at or above the k-th running distance has k smaller composite keys among the running entries alone: the merge would drop it, and dropping it earlier leaves the merged list the same bits. With the rank loop no longer k rounds deep on most blocks the block top-k serves every 1 <= k <= 64 (no distance matrix at any k). The first column tile is unbounded and may be narrower (`KNN_BOUNDED_FIRST_TILE`). The gate is the 400,000 x 4,000 digests against the matrix arm at every k, `tools/identity_break.py` on the knn lanes with a first tile narrow enough that their 4,096-row fixtures take bounded tiles, and `-D MOJOLEARN_KNN_BOUNDED_TOPK_SABOTAGE=1`. `-D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK_BOUNDED=1` forces it wherever the block top-k is on, `-D MOJOLEARN_KNN_IDENTICAL_UNBOUNDED_TOPK=1` keeps the full rank loop."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_UNBOUNDED_TOPK"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK_BOUNDED"]():
+        return knn_block_topk_select_for[column, identical]()
+    # OFF on every column until measured.
+    return False
+
+
+#: The width of a query tile's FIRST (unbounded) column tile under DEVIATION
+#: 3062; 0 means the index tile's own width. The defines are A/B and reach
+#: arms (1024 makes the 4,096-row identity fixtures take bounded tiles).
+comptime KNN_BOUNDED_FIRST_TILE = 1024 if is_defined["MOJOLEARN_KNN_BOUNDED_FIRST_TILE_1024"]() else (
+    8192 if is_defined["MOJOLEARN_KNN_BOUNDED_FIRST_TILE_8192"]() else (
+        16384 if is_defined["MOJOLEARN_KNN_BOUNDED_FIRST_TILE_16384"]() else 0
+    )
+)
+
+
+@always_inline
 def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 3061, 2026-09-17, lane/knn-selector-speed): whether a RESIDENT k-NN index (`neighbors/resident_index.mojo`, DEVIATIONs 2921 and 3002) keeps, beside the uploaded index bytes, what every search derives from those bytes alone: the transposed layout, the index row norms of the metric, and DEVIATION 2629's per-row admission metadata. They are built on the first search that needs them by the SAME kernels over the SAME device bytes (`transpose_kernel`, `compute_norms_for_metric`, `vector_exponent_admission_kernel`) and read by every later search instead of being rebuilt; the device copy of a resident index is never written after its upload and a refit releases the handle, so a later search reads the values it would have computed and no output bit can move. Costs device memory for the life of the handle (the transposed layout is a second copy of the index) in place of a per-call allocation of the same size. The gate is `tools/identity_break.py` on the knn lanes (their infer and batch parts search a fitted index again) plus `-D MOJOLEARN_KNN_RESIDENT_CACHE_SABOTAGE=1`. `-D MOJOLEARN_EXPERIMENTAL_KNN_RESIDENT_CACHE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_NO_RESIDENT_CACHE=1` forces the per-call rebuild."""
     comptime if not identical:

@@ -2125,6 +2125,15 @@ def partial_topk_merge_kernel(
         for j in range(other_start, other_start + k):
             if keys[j] < key:
                 rank += 1
+        # DEVIATION 3062: a partial slot whose index is 0xFFFFFFFF is ABSENT
+        # (a bounded column tile offered fewer than k keys). No tile-local
+        # column is 0xFFFFFFFF, so no real entry is skipped; an absent key
+        # carries the largest distance half and, with `base` added, a column
+        # at or above every running column, so it is never below a running
+        # key and the running ranks are what they are without it.
+        if slot >= k:
+            if partial_indices.unsafe_load(row * k + slot - k) == UInt32(4294967295):
+                rank = 2 * k
         if rank < k:
             running_values.unsafe_store(row * k + rank, vals[slot])
             running_indices.unsafe_store(row * k + rank, UInt32(key & UInt64(4294967295)))

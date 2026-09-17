@@ -86,6 +86,11 @@ from neighbors.checks.select_smallk_identical_candidate import (
     SMALLK_MAX_K,
     smallk_flagged_launch,
 )
+from neighbors.checks.smem_distance_tile import (
+    partial_lists_flagged_launch,
+    smem_tile_col_blocks,
+)
+from neighbors.impl.matrix.detail.select_warpsort import twiddle_out
 
 comptime SBC_BLOCK = 256
 #: Candidate capacity of the block's shared buffer. The bound sits near the
@@ -128,8 +133,9 @@ def _sbc_insert[C: Int](mut keys: SIMD[DType.uint64, C], pending_in: UInt64):
         pending = max(pending, current)
 
 
-def bound_compact_select_kernel[C: Int](
+def bound_compact_select_kernel[C: Int, LISTS: Bool = False](
     values: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[UInt64, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
     out_indices: MutPointer[UInt32, MutAnyOrigin],
     flags: MutPointer[UInt32, MutAnyOrigin],
@@ -137,7 +143,17 @@ def bound_compact_select_kernel[C: Int](
 ):
     """One block of SBC_BLOCK threads per row; see the module docstring.
     `flags[row]` is written by thread 0 on every row: 0 when phase 4 wrote
-    the row's k outputs, 1 when the row is left to the flagged launch."""
+    the row's k outputs, 1 when the row is left to the flagged launch.
+
+    LISTS (DEVIATION 3062): the row's keys are not a row of the distance
+    tile but the block top-k's per-block lists in `part`, `length` lists of
+    up to k ascending composite keys each, a list ending at its first
+    sentinel (the bounded rank loop's terminator) or at k keys. Thread `t`
+    walks lists `t, t + 256, ...`; phases 2 to 4 are the same statements on
+    the same kind of key, and the distance written is `twiddle_out` of the
+    key's high half, the exact inverse of the `twiddle_in` that built it
+    (what `partial_keys_select_kernel` writes). `values` is a placeholder
+    then, and `part` is one without LISTS."""
     comptime assert C >= 1 and C <= 8, "the per-thread list is 1 .. 8 keys"
     var length = Int(length_in)
     var k = Int(k_in)
@@ -147,23 +163,34 @@ def bound_compact_select_kernel[C: Int](
     var base = row * length
     var keys = SIMD[DType.uint64, C](SBC_SENTINEL)
 
-    # ---- 1. SCAN: the small-k selector's unrolled walk, block-uniform trip
-    # count (its DEVIATION 2497), every column of this thread once.
-    var batch_base = 0
-    while batch_base + SBC_SCAN_SPAN <= length:
-        var batch = SIMD[DType.float32, SBC_SCAN_UNROLL](0.0)
-        comptime for u in range(SBC_SCAN_UNROLL):
-            batch[u] = values.unsafe_load(base + batch_base + tid + u * SBC_BLOCK)
-        comptime for u in range(SBC_SCAN_UNROLL):
-            _sbc_insert[C](
-                keys,
-                composite_key(batch[u], UInt32(batch_base + tid + u * SBC_BLOCK), select_min),
-            )
-        batch_base += SBC_SCAN_SPAN
-    var col = batch_base + tid
-    while col < length:
-        _sbc_insert[C](keys, composite_key(values.unsafe_load(base + col), UInt32(col), select_min))
-        col += SBC_BLOCK
+    comptime if LISTS:
+        # ---- 1. SCAN of sentinel-terminated key lists.
+        var lst = tid
+        while lst < length:
+            for s in range(k):
+                var key = part.unsafe_load((base + lst) * k + s)
+                if key == SBC_SENTINEL:
+                    break
+                _sbc_insert[C](keys, key)
+            lst += SBC_BLOCK
+    else:
+        # ---- 1. SCAN: the small-k selector's unrolled walk, block-uniform
+        # trip count (its DEVIATION 2497), every column of this thread once.
+        var batch_base = 0
+        while batch_base + SBC_SCAN_SPAN <= length:
+            var batch = SIMD[DType.float32, SBC_SCAN_UNROLL](0.0)
+            comptime for u in range(SBC_SCAN_UNROLL):
+                batch[u] = values.unsafe_load(base + batch_base + tid + u * SBC_BLOCK)
+            comptime for u in range(SBC_SCAN_UNROLL):
+                _sbc_insert[C](
+                    keys,
+                    composite_key(batch[u], UInt32(batch_base + tid + u * SBC_BLOCK), select_min),
+                )
+            batch_base += SBC_SCAN_SPAN
+        var col = batch_base + tid
+        while col < length:
+            _sbc_insert[C](keys, composite_key(values.unsafe_load(base + col), UInt32(col), select_min))
+            col += SBC_BLOCK
 
     # ---- 2. BOUND: the rank k - 1 thread minimum. Ranks by (key, thread)
     # are a permutation of 0 .. 255 (only sentinels tie), so exactly one
@@ -211,7 +238,15 @@ def bound_compact_select_kernel[C: Int](
         total += c
         if j < tid:
             offset += c
+    # A row of the distance tile always holds k keys at or below the bound.
+    # Bounded lists (LISTS) may hold fewer than k keys in all: the slots past
+    # the last candidate then get the ABSENT pair (index 0xFFFFFFFF, which no
+    # tile-local column is, and the sentinel's distance half), which
+    # `partial_topk_merge_kernel` skips; it is what the partial-key selector
+    # writes when a sentinel wins a rank.
     var fast = total <= SBC_CAND and total >= k
+    comptime if LISTS:
+        fast = total <= SBC_CAND
     if tid == 0:
         flags.unsafe_store(row, UInt32(0) if fast else UInt32(1))
     if fast:
@@ -222,6 +257,10 @@ def bound_compact_select_kernel[C: Int](
             if slot < count:
                 cand[offset + slot] = keys[slot]
         barrier()
+        comptime if LISTS:
+            if tid >= total and tid < k:
+                out_indices.unsafe_store(row * k + tid, UInt32(4294967295))
+                out_values.unsafe_store(row * k + tid, twiddle_out(UInt32(4294967295)))
         if tid < total:
             var key = cand[tid]
             var rank = 0
@@ -230,13 +269,20 @@ def bound_compact_select_kernel[C: Int](
                     rank += 1
             if rank < k:
                 var selected = UInt32(key & UInt64(4294967295))
-                comptime if SBC_SABOTAGE:
-                    if rank == 0:
-                        selected = selected ^ UInt32(1)
-                        if Int(selected) >= length:
-                            selected = UInt32(length - 2) if length >= 2 else UInt32(0)
-                out_indices.unsafe_store(row * k + rank, selected)
-                out_values.unsafe_store(row * k + rank, values.unsafe_load(base + Int(selected)))
+                comptime if LISTS:
+                    comptime if SBC_SABOTAGE:
+                        if rank == 0:
+                            selected = selected ^ UInt32(1)
+                    out_indices.unsafe_store(row * k + rank, selected)
+                    out_values.unsafe_store(row * k + rank, twiddle_out(UInt32(key >> UInt64(32))))
+                else:
+                    comptime if SBC_SABOTAGE:
+                        if rank == 0:
+                            selected = selected ^ UInt32(1)
+                            if Int(selected) >= length:
+                                selected = UInt32(length - 2) if length >= 2 else UInt32(0)
+                    out_indices.unsafe_store(row * k + rank, selected)
+                    out_values.unsafe_store(row * k + rank, values.unsafe_load(base + Int(selected)))
 
 
 def bound_compact_select_launch(
@@ -262,7 +308,7 @@ def bound_compact_select_launch(
         raise Error("bound-and-compact selector: the flag buffer is shorter than the query tile")
     var flag_ptr = flags.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
     ctx.enqueue_function[bound_compact_select_kernel[SBC_DEPTH]](
-        values, out_values, out_indices, flag_ptr,
+        values, values.bitcast[UInt64](), out_values, out_indices, flag_ptr,
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SBC_BLOCK, 1, 1),
     )
@@ -279,4 +325,45 @@ def bound_compact_select_launch(
         for r in range(rows):
             flagged += Int(host.unsafe_ptr().unsafe_load(r))
         print("KNN_SELECT_FALLBACK", "rows", rows, "flagged", flagged, "length", length, "k", k, "depth", SBC_DEPTH)
+        _ = host^
+
+
+def bound_compact_lists_launch(
+    ctx: DeviceContext,
+    part: MutPointer[UInt64, MutAnyOrigin],
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    out_indices: MutPointer[UInt32, MutAnyOrigin],
+    mut flags: DeviceBuffer[DType.uint32],
+    rows: Int, cols: Int, k: Int,
+) raises:
+    """The row's k smallest from the block top-k's sentinel-terminated lists
+    (DEVIATION 3062), into the selection destination: the bound-and-compact
+    launch over the lists, then the flagged launch of the partial-key
+    selector for the rows it left. Replaces `partial_keys_select_launch`
+    where the rank loop is bounded."""
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        raise Error("bound-and-compact list selector requires IDENTICAL")
+    if rows <= 0 or rows > 2147483647 or cols <= 0 or cols > 2147483647:
+        raise Error("bound-and-compact list selector requires positive Int32 dimensions")
+    if k < 1 or k > SMALLK_MAX_K or k > cols:
+        raise Error("bound-and-compact list selector supports only 1 <= k <= min(64, cols)")
+    if len(flags) < rows:
+        raise Error("bound-and-compact list selector: the flag buffer is shorter than the query tile")
+    var n_cb = smem_tile_col_blocks(cols)
+    var flag_ptr = flags.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+    ctx.enqueue_function[bound_compact_select_kernel[SBC_DEPTH, True]](
+        out_values, part, out_values, out_indices, flag_ptr,
+        Int32(n_cb), Int32(k), Int32(1),
+        grid_dim=(rows, 1, 1), block_dim=(SBC_BLOCK, 1, 1),
+    )
+    comptime if not SBC_TIMING_NOFLAG:
+        partial_lists_flagged_launch(ctx, part, out_values, out_indices, flag_ptr, rows, cols, k)
+    comptime if SBC_PHASE_TIMERS:
+        var host = ctx.enqueue_create_host_buffer[DType.uint32](len(flags))
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=flags)
+        ctx.synchronize()
+        var flagged = 0
+        for r in range(rows):
+            flagged += Int(host.unsafe_ptr().unsafe_load(r))
+        print("KNN_SELECT_FALLBACK", "rows", rows, "flagged", flagged, "length", n_cb, "k", k, "depth", SBC_DEPTH, "lists", 1)
         _ = host^

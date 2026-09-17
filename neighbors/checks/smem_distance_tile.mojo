@@ -97,6 +97,7 @@ from neighbors.checks.pinned_distance_tile import (
     _rt_step_exact,
 )
 from neighbors.checks.select_radix_identical import composite_key
+from neighbors.impl.matrix.detail.select_radix import twiddle_in
 from neighbors.impl.matrix.detail.select_warpsort import twiddle_out
 
 #: Query rows per thread and index columns per thread (the register tile's
@@ -119,6 +120,9 @@ comptime SMT_Y_PER_THREAD = SMT_BK * SMT_BN // SMT_TPB  # 8
 comptime SMT_SENTINEL = UInt64(18446744073709551615)
 comptime SMT_SABOTAGE = is_defined["MOJOLEARN_KNN_SMEM_TILE_SABOTAGE"]()
 comptime SMT_MAX_K = 64
+#: Reach control of the bounded rank loop (DEVIATION 3062), never shipped:
+#: the bound is halved in key space, so true neighbors of later tiles drop.
+comptime SMT_BOUNDED_SABOTAGE = is_defined["MOJOLEARN_KNN_BOUNDED_TOPK_SABOTAGE"]()
 #: The ballot's width on this column: a 64-lane wave holds two thread rows,
 #: and a thread row takes its own half of the mask.
 comptime SMT_MASK_DT = DType.uint64 if lib_lane_width_for[TARGET_COLUMN]() == 64 else DType.uint32
@@ -214,9 +218,10 @@ def _smt_slices[qo: MutOrigin, yo: MutOrigin, //, EXACT: Bool](
     return acc
 
 
-def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool](
+def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool, BOUNDED: Bool = False](
     z: MutPointer[Float32, MutAnyOrigin],
     part: MutPointer[UInt64, MutAnyOrigin],
+    bound: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
     q_norm: MutPointer[Float32, MutAnyOrigin],
@@ -242,7 +247,25 @@ def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool](
     takes the unflushed step when its 64 rows and 128 columns are admitted
     together (the same three clauses, over the block's rows and columns);
     a block that fails keeps the flushed chain, bit for bit.
+
+    BOUNDED (DEVIATION 3062, lane/knn-selector-speed; TOPK only): `bound`
+    is the query tile's RUNNING top-k distances (`k` per row, ascending, the
+    merge of every EARLIER column tile), and the rank loop stops as soon as
+    no row of the thread row has a remaining key whose distance half is
+    below its row's k-th running distance, writing one sentinel at that rank
+    as the list's terminator (slots past it are NOT written; the list
+    selector stops at the first sentinel). WHY NO BIT MOVES: column tiles
+    are taken in ascending column order, so the k running entries of a row
+    all carry smaller global columns than any key of this tile; a key whose
+    distance half is at or above the k-th running distance therefore has k
+    smaller composite keys among the running entries alone and cannot be in
+    the row's top-k, and the partial merge would rank it at k or beyond.
+    Dropping it before the merge instead of in the merge leaves the merged
+    list the same. The keys that ARE emitted are popped by the unchanged
+    rank rounds, ascending, so a list is a prefix of the unbounded list.
+    Without BOUNDED `bound` is a placeholder the kernel never reads.
     """
+    comptime assert TOPK or not BOUNDED, "the bound gates the block top-k's rank loop"
     comptime assert SMT_BK * SMT_BM % SMT_TPB == 0 and SMT_BK * SMT_BN % SMT_TPB == 0
     comptime assert SMT_TPB % SMT_BK == 0 and SMT_TPB % SMT_BN == 0
     var n_rows = Int(n_rows_in)
@@ -388,6 +411,16 @@ def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool](
         # of the partial list is written) and retires it. Rows past the edge
         # take part with sentinels only, so the shuffles stay convergent.
         var lane_row = row0 + ty * SMT_TM
+        # DEVIATION 3062: each row's k-th running distance as a key half. A
+        # row past the edge keeps 0, which no key half is below.
+        var bound_hi = SIMD[DType.uint32, SMT_TM](0)
+        comptime if BOUNDED:
+            comptime for r in range(SMT_TM):
+                var brow = lane_row + r
+                if brow < n_rows:
+                    bound_hi[r] = twiddle_in(bound.unsafe_load(brow * k + k - 1), True)
+                    comptime if SMT_BOUNDED_SABOTAGE:
+                        bound_hi[r] = bound_hi[r] >> UInt32(1)
         for rank in range(k):
             var mine = SIMD[DType.uint64, SMT_TM](SMT_SENTINEL)
             var hi = SIMD[DType.uint32, SMT_TM](0)
@@ -401,6 +434,24 @@ def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool](
             var wmin = SIMD[DType.uint32, SMT_TM](0)
             comptime for r in range(SMT_TM):
                 wmin[r] = _smt_warp_min_u32(hi[r])
+            comptime if BOUNDED:
+                # `wmin` and `bound_hi` are the same on every lane of the
+                # thread row, so the thread row leaves the loop together; a
+                # 64-lane wave holds two thread rows and takes one ballot so
+                # that both leave together.
+                var live = False
+                comptime for r in range(SMT_TM):
+                    if wmin[r] < bound_hi[r]:
+                        live = True
+                comptime if SMT_MASK_DT == DType.uint64:
+                    live = vote[SMT_MASK_DT](live) != Scalar[SMT_MASK_DT](0)
+                if not live:
+                    if tx == 0:
+                        comptime for r in range(SMT_TM):
+                            var trow = lane_row + r
+                            if trow < n_rows:
+                                part.unsafe_store((trow * n_cb + cb) * k + rank, SMT_SENTINEL)
+                    break
             comptime for r in range(SMT_TM):
                 var mask = _smt_ballot(hi[r] == wmin[r], ty)
                 var wl = Int(count_trailing_zeros(mask))
@@ -438,10 +489,11 @@ comptime PKS_LANES = lib_lane_width_for[TARGET_COLUMN]()
 comptime PKS_WARPS = PKS_BLOCK // PKS_LANES
 
 
-def partial_keys_select_kernel[CAP: Int](
+def partial_keys_select_kernel[CAP: Int, TERMINATED: Bool = False](
     part: MutPointer[UInt64, MutAnyOrigin],
     out_values: MutPointer[Float32, MutAnyOrigin],
     out_indices: MutPointer[UInt32, MutAnyOrigin],
+    flags: MutPointer[UInt32, MutAnyOrigin],
     n_col_blocks_in: Int32,
     k_in: Int32,
 ):
@@ -450,7 +502,16 @@ def partial_keys_select_kernel[CAP: Int](
     selector's), then k rounds of the block minimum (lane groups through
     `shuffle_min_u64`, one shared slot per group, double-buffered pages)
     pop the row's k smallest keys ascending. CAP >= k; the extra slots
-    only admit more than the rank phase pops."""
+    only admit more than the rank phase pops.
+
+    TERMINATED (DEVIATION 3062): the per-block lists end at their first
+    sentinel (the bounded rank loop's terminator; slots past it are not
+    written), so thread `t` walks lists `t, t + 256, ...` and leaves each at
+    its first sentinel instead of striding the flat buffer; and `flags` is a
+    per-row array: a block whose row's flag is 0 returns at once. This is
+    the flagged launch of `bound_compact_lists_launch`. Which thread sees
+    which key does not matter (the union argument above). Without it
+    `flags` is a placeholder the kernel never reads."""
     comptime assert CAP >= 1 and CAP <= SMT_MAX_K
     comptime assert PKS_BLOCK % PKS_LANES == 0
     var k = Int(k_in)
@@ -463,17 +524,36 @@ def partial_keys_select_kernel[CAP: Int](
         2 * PKS_WARPS, Scalar[DType.uint64], address_space=AddressSpace.SHARED,
     ]()
     var base = row * length
-    var i = tid
-    while i < length:
-        var pending = part.unsafe_load(base + i)
-        if pending < threshold:
-            comptime for slot in range(CAP):
-                if pending < local_keys[slot]:
-                    var previous = local_keys[slot]
-                    local_keys[slot] = pending
-                    pending = previous
-            threshold = local_keys[CAP - 1]
-        i += PKS_BLOCK
+    comptime if TERMINATED:
+        if flags.unsafe_load(row) == UInt32(0):
+            return
+        var n_lists = Int(n_col_blocks_in)
+        var lst = tid
+        while lst < n_lists:
+            for s in range(k):
+                var pending = part.unsafe_load(base + lst * k + s)
+                if pending == SMT_SENTINEL:
+                    break
+                if pending < threshold:
+                    comptime for slot in range(CAP):
+                        if pending < local_keys[slot]:
+                            var previous = local_keys[slot]
+                            local_keys[slot] = pending
+                            pending = previous
+                    threshold = local_keys[CAP - 1]
+            lst += PKS_BLOCK
+    else:
+        var i = tid
+        while i < length:
+            var pending = part.unsafe_load(base + i)
+            if pending < threshold:
+                comptime for slot in range(CAP):
+                    if pending < local_keys[slot]:
+                        var previous = local_keys[slot]
+                        local_keys[slot] = pending
+                        pending = previous
+                threshold = local_keys[CAP - 1]
+            i += PKS_BLOCK
     var warp = tid // PKS_LANES
     var lane = tid % PKS_LANES
     for rank in range(k):
@@ -504,10 +584,11 @@ def smem_tile_col_blocks(cols: Int) -> Int:
 
 
 @always_inline
-def _smt_enqueue[TOPK: Bool, EXACT: Bool](
+def _smt_enqueue[TOPK: Bool, EXACT: Bool, BOUNDED: Bool = False](
     ctx: DeviceContext,
     z: MutPointer[Float32, MutAnyOrigin],
     part: MutPointer[UInt64, MutAnyOrigin],
+    bound: MutPointer[Float32, MutAnyOrigin],
     q: MutPointer[Float32, MutAnyOrigin],
     yt: MutPointer[Float32, MutAnyOrigin],
     q_norm: MutPointer[Float32, MutAnyOrigin],
@@ -516,8 +597,8 @@ def _smt_enqueue[TOPK: Bool, EXACT: Bool](
     y_meta: MutPointer[Float32, MutAnyOrigin],
     rows: Int, cols: Int, y_stride: Int, d: Int, k: Int, is_sqrt: Bool,
 ) raises:
-    ctx.enqueue_function[smem_distance_tile_kernel[TOPK, EXACT]](
-        z, part, q, yt, q_norm, y_norm, q_meta, y_meta,
+    ctx.enqueue_function[smem_distance_tile_kernel[TOPK, EXACT, BOUNDED]](
+        z, part, bound, q, yt, q_norm, y_norm, q_meta, y_meta,
         Int32(rows), Int32(cols), Int32(y_stride), Int32(d),
         Int32(1 if is_sqrt else 0), Int32(k),
         grid_dim=(smem_tile_col_blocks(cols), (rows + SMT_BM - 1) // SMT_BM, 1),
@@ -547,9 +628,9 @@ def smem_distance_tile_launch(
     if d <= 0 or d > 2147483647 or y_stride <= 0 or y_stride > 2147483647:
         raise Error("smem distance tile requires positive Int32 feature and stride")
     if exact:
-        _smt_enqueue[False, True](ctx, z, z.bitcast[UInt64](), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
+        _smt_enqueue[False, True](ctx, z, z.bitcast[UInt64](), z, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
     else:
-        _smt_enqueue[False, False](ctx, z, z.bitcast[UInt64](), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
+        _smt_enqueue[False, False](ctx, z, z.bitcast[UInt64](), z, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, 0, is_sqrt)
 
 
 @always_inline
@@ -561,7 +642,7 @@ def _pks_enqueue[CAP: Int](
     rows: Int, n_cb: Int, k: Int,
 ) raises:
     ctx.enqueue_function[partial_keys_select_kernel[CAP]](
-        part, out_values, out_indices, Int32(n_cb), Int32(k),
+        part, out_values, out_indices, out_indices, Int32(n_cb), Int32(k),
         grid_dim=(rows, 1, 1), block_dim=(PKS_BLOCK, 1, 1),
     )
 
@@ -577,8 +658,14 @@ def smem_block_topk_launch(
     q_meta: MutPointer[Float32, MutAnyOrigin],
     y_meta: MutPointer[Float32, MutAnyOrigin],
     rows: Int, cols: Int, y_stride: Int, d: Int, k: Int, is_sqrt: Bool, exact: Bool,
+    bounded: Bool = False,
+    bound: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
 ) raises:
-    """One column tile's block top-k (DEVIATION 3001) into `part` (at least
+    """`bounded` (DEVIATION 3062): `bound` is the query tile's running top-k
+    distances, `k` per row, merged from every EARLIER column tile, and the
+    lists are sentinel-terminated (`bound_compact_lists_launch` reads them).
+
+    One column tile's block top-k (DEVIATION 3001) into `part` (at least
     `rows * smem_tile_col_blocks(cols) * k` keys); `partial_keys_select_launch`
     is the second launch. `cols >= k` is the caller's to guarantee, as it is
     for the small-k selector. `out_values` is the unread matrix placeholder."""
@@ -590,10 +677,17 @@ def smem_block_topk_launch(
         raise Error("block top-k requires positive Int32 feature and stride")
     if k < 1 or k > SMT_MAX_K or k > cols:
         raise Error("block top-k supports only 1 <= k <= min(64, cols)")
-    if exact:
-        _smt_enqueue[True, True](ctx, out_values, part, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+    if bounded:
+        if not bound:
+            raise Error("block top-k: a bounded launch needs the running top-k")
+        if exact:
+            _smt_enqueue[True, True, True](ctx, out_values, part, bound.value(), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+        else:
+            _smt_enqueue[True, False, True](ctx, out_values, part, bound.value(), q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+    elif exact:
+        _smt_enqueue[True, True](ctx, out_values, part, out_values, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
     else:
-        _smt_enqueue[True, False](ctx, out_values, part, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
+        _smt_enqueue[True, False](ctx, out_values, part, out_values, q, yt, q_norm, y_norm, q_meta, y_meta, rows, cols, y_stride, d, k, is_sqrt)
 
 
 def partial_keys_select_launch(
@@ -616,3 +710,36 @@ def partial_keys_select_launch(
         _pks_enqueue[32](ctx, part, out_values, out_indices, rows, n_cb, k)
     else:
         _pks_enqueue[64](ctx, part, out_values, out_indices, rows, n_cb, k)
+
+
+def partial_lists_flagged_launch(
+    ctx: DeviceContext,
+    part: MutPointer[UInt64, MutAnyOrigin],
+    out_values: MutPointer[Float32, MutAnyOrigin],
+    out_indices: MutPointer[UInt32, MutAnyOrigin],
+    flags: MutPointer[UInt32, MutAnyOrigin],
+    rows: Int, cols: Int, k: Int,
+) raises:
+    """The partial-key selector over sentinel-terminated lists for the rows
+    whose `flags[row]` is nonzero (DEVIATION 3062); rows whose flag is 0 are
+    not touched."""
+    if rows <= 0 or rows > 2147483647 or cols <= 0 or cols > 2147483647:
+        raise Error("partial-list select requires positive Int32 dimensions")
+    if k < 1 or k > SMT_MAX_K or k > cols:
+        raise Error("partial-list select supports only 1 <= k <= min(64, cols)")
+    var n_cb = smem_tile_col_blocks(cols)
+    if k <= 16:
+        ctx.enqueue_function[partial_keys_select_kernel[16, True]](
+            part, out_values, out_indices, flags, Int32(n_cb), Int32(k),
+            grid_dim=(rows, 1, 1), block_dim=(PKS_BLOCK, 1, 1),
+        )
+    elif k <= 32:
+        ctx.enqueue_function[partial_keys_select_kernel[32, True]](
+            part, out_values, out_indices, flags, Int32(n_cb), Int32(k),
+            grid_dim=(rows, 1, 1), block_dim=(PKS_BLOCK, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[partial_keys_select_kernel[64, True]](
+            part, out_values, out_indices, flags, Int32(n_cb), Int32(k),
+            grid_dim=(rows, 1, 1), block_dim=(PKS_BLOCK, 1, 1),
+        )
