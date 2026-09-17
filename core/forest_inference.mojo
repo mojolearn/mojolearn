@@ -55,6 +55,15 @@ def finite_key(value: Float32) -> UInt32:
 comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]()
 comptime FOREST_SHARED_ROW_CAPACITY = 256
 
+#: The resident node layout. Packed is the default since
+#: lane/forest-groves-cpu-and-speed (2026-09-17, the L40S A/B in
+#: docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md);
+#: `-D MOJOLEARN_FOREST_SEPARATE_NODES=1` selects the separate-arrays layout,
+#: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
+#: accepted and changes nothing. The layout is a device-side cache of the
+#: same nodes; the archive arrays, the comparison and the fold are the same.
+comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
+
 
 @always_inline
 def reached_leaf[xorigin: MutOrigin, xspace: AddressSpace, //, RF_INPUT: Bool, PACKED: Bool = False](

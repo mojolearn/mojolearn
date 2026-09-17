@@ -205,8 +205,10 @@ time_one() {
     _t=$1; _l=$2; _m=$3; _x=$4; _p=$5; _i=$6
     cd "$_t" || return 1
     _stem="$OUT/$SPEED_DIR/$(basename "$_m" .npz).$_p.$_l.$_i"
+    # the host walks (16 threads) are single-call context, not the A/B
+    _calls=8; case "$_p" in groves) ;; *) _calls=1 ;; esac
     PYTHONPATH=python pixi run python3 tools/forest_groves_speed.py time \
-        --model "$_m" --x "$_x" --path "$_p" --rounds "$AB_ROUNDS" --calls 8 --label "$_l" \
+        --model "$_m" --x "$_x" --path "$_p" --rounds "$AB_ROUNDS" --calls "$_calls" --label "$_l" \
         --json "$_stem.json" --save-prediction "$OUT/$SPEED_DIR" > "$_stem.log" 2>&1
     tail -1 "$_stem.log"
 }
@@ -231,7 +233,9 @@ phase_speed() {
                 say "$(time_one "$tree" "$label" "$AB/$model.npz" "$AB/$x" groves "$i")"
             done
         done
-        # the host groves door and the sequential GPU-class engine, AFTER only, one process each
+        # the host groves door and the sequential GPU-class engine, AFTER only,
+        # one process each, single calls; not for the 500-tree model
+        case "$model" in *-500x*) continue ;; esac
         say "$(time_one "$R" after "$AB/$model.npz" "$AB/$x" host-groves 1)"
         say "$(time_one "$R" after "$AB/$model.npz" "$AB/$x" sequential 1)"
     done

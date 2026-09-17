@@ -15,7 +15,7 @@ from std.time import perf_counter_ns
 from max.algorithm import sync_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
-from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference
+from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, FOREST_PACKED_NODES
 from core.forest_inference_pool import PooledForest, forest_device_count
 
 
@@ -133,7 +133,7 @@ struct ResidentForest(Movable):
         self.left = Optional[DeviceBuffer[DType.int32]]()
         self.leaves = Optional[DeviceBuffer[DType.float32]]()
         var device_count = forest_device_count()
-        comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+        comptime if FOREST_PACKED_NODES:
             if len(columns) > 2147483647 // 4:
                 raise Error("packed forest node word count exceeds Int32")
         if device_count > 1:
@@ -148,7 +148,7 @@ struct ResidentForest(Movable):
         # Archive arrays are unchanged. Packing runs once per resident snapshot.
         var packed_nodes = List[Int32]()
         var compact_leaves = List[Float32]()
-        comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+        comptime if FOREST_PACKED_NODES:
             if len(columns) > 2147483647 // 4:
                 raise Error("packed forest node word count exceeds Int32")
             for node in range(len(columns)):
@@ -165,7 +165,7 @@ struct ResidentForest(Movable):
         try:
             self.offsets = self.ctx.value().enqueue_create_buffer[DType.int32](len(offsets))
             self.ctx.value().enqueue_copy(dst_buf=self.offsets.value(), src_ptr=offsets.unsafe_ptr())
-            comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+            comptime if FOREST_PACKED_NODES:
                 self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(packed_nodes))
                 # Unused ABI operands; avoid retaining original SoA buffers.
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
@@ -246,7 +246,7 @@ struct ResidentForest(Movable):
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            launch_forest_inference[RF_INPUT, True, is_defined["MOJOLEARN_FOREST_PACKED_NODES"]()](
+            launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
                 self.thresholds.value(), self.left.value(), self.leaves.value(),
                 dx, dout, rows, features, outputs, self.trees,
@@ -368,7 +368,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
-        launch_forest_inference[RF_INPUT, True, is_defined["MOJOLEARN_FOREST_PACKED_NODES"]()](ctx, offsets, columns,
+        launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](ctx, offsets, columns,
             thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
         comptime if FOREST_PROFILE:
             ctx.synchronize()
