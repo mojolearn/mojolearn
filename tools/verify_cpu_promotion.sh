@@ -9,7 +9,12 @@ export MOJOLEARN_HOST_DIR="$PWD/python/mojolearn/host"
 # Both arms share production core helpers.
 CORE="$MOJOLEARN_HOST_DIR/_mojolearn_core_host.so"
 if [[ ! -f "$CORE" ]]; then
- echo "Missing core host dependency: run with --build core,metrics,arima" >&2
+ echo "Missing core host dependency: run with --build core,estimators,metrics,arima" >&2
+ exit 1
+fi
+# Public verification always runs its OLS comparator self-test.
+if [[ ! -f "$MOJOLEARN_HOST_DIR/_mojolearn_estimators_host.so" ]]; then
+ echo "Missing public comparator dependency: build estimators too" >&2
  exit 1
 fi
 cp "$CORE" "$PWD/python/mojolearn/host-sabotage/"
