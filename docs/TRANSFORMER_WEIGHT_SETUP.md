@@ -39,8 +39,9 @@ No persistent pointer cache or trusted-validation flag was added. New Python
 calls still observe in-place weight edits and still refuse bad weights before
 mutating output/cache state. This is shared Metal/CUDA/HIP implementation code;
 the CPU oracle and public Python API are unchanged. No fixtures or numerical
-checks were removed or reduced. Persistent model contexts and resident Python
-model state remain separate work requiring explicit lifetime and refresh rules.
+checks were removed or reduced. The follow-up [retained Transformer setup](TRANSFORMER_SESSION_REUSE.md)
+documents context/workspace ownership and refresh rules; it still reloads and
+validates mutable Python weights on every call.
 
 ## Small checks
 
