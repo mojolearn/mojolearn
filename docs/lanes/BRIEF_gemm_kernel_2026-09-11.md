@@ -1640,3 +1640,99 @@ change walks past.
   roughly six-instruction software `ftz` per product step where two would
   do, and the wave-mode flush question (whether AMD's output flush is
   post-round). That is untouched by the gather-staging flip.
+
+## 20. What is actually left, sized from the record and from the compiler (2026-09-17, lane `lane/gemm-next`)
+
+### 20.1 The AMD lever is the big one, and it is not the one the plan named
+
+Section 18.4 already flipped AMD's kernel-body row to 1 on 2026-09-13, so the
+gather staging IS on AMD and the "Apple and AMD rows stay 0" line of 18.1 is
+true only of Apple. Any plan still saying AMD never got the kernel-body work is
+reading section 18.1 and not 18.4.
+
+What AMD did NOT get, and still has not got, is its seam. Section 14.5 point 2
+called it "about six issued instructions" and unmeasured. It is now counted, off
+the emitted gfx942 GCN, on the M4, with no GPU and no rental
+(`bench/results/e1g/2026-09-17_163900-apple-m4-amd-seam-instruction-count`, and
+445148a4c):
+
+| column | issued instructions per product step | spelling |
+|---|---:|---|
+| NVIDIA | 2 | `fma.rn` then `mul.rn.ftz` |
+| **AMD, shipped** | **8** | `v_fmac_f32` then `v_and`, `v_and`, `v_cmp_ne`, `v_cmp_eq`, `s_and`, `v_and`, `v_cndmask` |
+| AMD, wave mode | **1** | `v_fmac_f32`, with one `s_setreg_imm32_b32 hwreg(HW_REG_MODE, 4, 2), 0` per KERNEL |
+
+The MI300X lean step was 1.198 s against the H100's 0.232 (14.5) and its GEMM
+sum 559 ms after the gather staging (18.4), so about half the AMD step is GEMM
+and every product step of it carries eight instructions where two would do on
+NVIDIA and one would do here. **That is the largest single structural
+difference between the two columns that anyone has counted**, and it is a
+property of `ftz()` in `checks/numerics.mojo`, not of the GEMM kernel.
+
+**It is an instruction count and not a time, and nothing here says otherwise.**
+Section 15.5 measured 11,960 cycles per block window against 4,120 issue cycles
+for the loop ON NVIDIA, i.e. that column's loop is not issue-bound, and section
+16.3's bare FMA chain read 0.31 of the body. Whether AMD's loop is issue-bound
+is UNMEASURED. But AMD's loop carries four times NVIDIA's instruction count per
+step, so the two columns' answers cannot be assumed to be the same one, and
+`lane/attention-speed` section 21.1 is the standing warning: the same arm read
+0.8207 on one column and 0.9716 on the other.
+
+### 20.2 The one question that decides it, and it is ten seconds
+
+`s_setreg` is worth nothing unless AMD's hardware output flush is
+ROUND-THEN-FLUSH. If AMD flushes before rounding, as Apple's FMA does (14.3,
+19.1), the arm computes the wrong value at the 315 boundary triples and is a
+DEFECT, not an optimization. Nothing about the instruction count changes that.
+
+The harness is the existing seam probe with one more lane (e0b6582b0): a
+separate `mode_seam_kernel` with its own buffer, launched after the four
+existing lanes are downloaded, because `s_setreg` changes the mode for the rest
+of the wave and setting it inside `seam_kernel` would silently change the lanes
+computed after it. The containment is read out of the GCN and can fail: the
+`s_setreg` appears in `gfx942_mode_seam_kernel.amdgcn` and is ABSENT from
+`gfx942_seam_kernel.amdgcn`. Off AMD the lane names itself
+`modeftz_NOT_SET_ON_THIS_COLUMN`. The M4 gate says the four existing lanes still
+hash `f269fc70e5625987`, so the edit moved nothing.
+
+`tools/gemm_seam_probe_column_leg.sh` (059d92c03) exists because
+`tools/gemm_remote_leg.sh` exports `MOJOLEARN_GPU_ARCHS` to the box but NOT
+`MOJOLEARN_TARGET_COLUMN`, while `tools/hotaisle_leg.sh` exports both. The lane
+is `comptime MODE_LANE = TARGET_COLUMN == COLUMN_AMD`, decided at BUILD time, so
+an unnamed column would have compiled the lane out and printed a line that looks
+like an answer.
+
+### 20.3 On NVIDIA the leftovers are small and the instrument for them is known
+
+Section 15.5's arithmetic is the sizing, and it does not need redoing: about
+11,960 cycles per block window against 4,120 issue cycles for the loop, so about
+7,800 cycles are not the loop. Section 16.3 decomposed them against the
+`kpack_padv` body (staging about a third, fold about a fifth) and section 17.4's
+`kpack_hg` took both, for 0.852 on the GEMM sum. What 18.3 left named is the
+BARRIER SKEW and the SCALAR GLOBAL LOADS in the staging head.
+
+Neither can be sized from static text: 15.5 says so in its own words, and Nsight
+Compute is refused in the RunPod container (`ERR_NVGPUCTRPERM`). Sizing them
+means DIAG variants against the CURRENT shipped body, and
+`bench/gemm_step_diag_main.mojo`'s base is `kpack_padv`, the body kpack_hg
+replaced. So the NVIDIA leftover work is: re-base the diagnostic on the shipped
+body, add a no-barrier and a vectorized-global-load variant, one H100 hour, and
+only then decide whether an arm is worth building. That is a SMALLER and LATER
+item than 20.1, and it is not a ninth scheduling arm: every variant computes
+wrong bits by design, is behind `-D MOJOLEARN_GEMM_DIAG=1`, and never ships.
+
+### 20.4 There is no dominant GEMM cell, and that ARGUES FOR the kernel
+
+`lane/attention-speed` section 22.6 reads the per-leaf detail: nine of the
+thirteen `gemm.<kind>` leaves sit between 13.0 and 14.4 ms and together are
+123.1 ms of the 144.9. A reader could take that as bad news. It is the opposite,
+because all thirteen kinds are ONE KERNEL at different shapes:
+`identical_gemm_backward_a_into` and `identical_gemm_backward_b_into`
+(`gemm/checks/gemm_backward.mojo:449` and `:503`) reorder operands and forward
+to a single `identical_gemm_into`, whose own docstring says "Everything
+numerical happens inside `identical_gemm_into`". So a one percent KERNEL win is
+worth about 1.45 ms of the step where a one percent win on the largest single
+cell is worth 0.14 ms, and the breadth is exactly what makes a kernel-body
+change pay. It is also the reason the plan's "do NOT open a ninth scheduling
+arm" is right: a scheduling arm can only move one shape's dispatch, and there is
+no shape worth moving.
