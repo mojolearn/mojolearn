@@ -91,6 +91,11 @@ def _llama_config(**over):
            "max_position_embeddings": 128, "tie_word_embeddings": False, "hidden_act": "silu",
            "attention_bias": False, "mlp_bias": False, "torch_dtype": "float32"}
     cfg.update(over)
+    # A real Qwen2 config carries no `attention_bias` key (its modeling code
+    # puts the bias on q, k and v unconditionally); the Llama default above
+    # would otherwise say False and hide the qwen2 row's own default.
+    if cfg.get("model_type") == "qwen2" and "attention_bias" not in over:
+        del cfg["attention_bias"]
     return cfg
 
 
