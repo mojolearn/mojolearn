@@ -1042,14 +1042,15 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 # DEVIATION 1890 moved the estimator's gathers to a fit-owned pool of one and
 # named the reference's reason (`TCudaManager` hands these out of a per-device
 # memory pool, `cuda_lib/memory_pool.h`); this is the same repair for the
-# oracle's own buffers.
+# oracle's own buffers (`OracleScratchPool`).
 #
 # WHY NO BIT MOVES. No kernel, grid, launch order, drain or host loop changes:
 # the oracle reads and writes the same cells through handle copies of buffers
 # the fit keeps, instead of through buffers it allocates. The key is EXACT (row
 # count, bin count, cursor and leaf dimensions, value blocks, the resolved
 # machine count), because several of these buffers are the `dst_buf` or
-# `src_buf` of a whole-buffer copy; a different key rebuilds. Every cell the
+# `src_buf` of a whole-buffer copy; another bin count gets its own small
+# buffers beside the shared `n_rows`-sized ones, another shape rebuilds. Every cell the
 # oracle reads it has written first in the same task (`d_identity` is refilled
 # by `launch_make_sequence`, `d_bins` by `fill_bins_from_partition_kernel`,
 # `d_leaves` by its copy, the rest by the evaluation that reads them), which the
@@ -1062,6 +1063,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 # `-D MOJOLEARN_3041_ORACLE_ALLOC_PER_TREE=1` is the kill switch and the BEFORE
 # arm. The caller decides (`oracle_scratch_pooled_for`); with no scratch passed
 # this function allocates exactly as before.
+# `-D MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE=1` is the negative control.
 # ================================================================================================
 
 
@@ -1075,6 +1077,10 @@ def oracle_scratch_pooled_for[column: Int]() -> Bool:
 
 
 comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()
+#: negative control for DEVIATION 3041 (default off): a task that REUSES the
+#: fit's buffers skips the fill of `d_bins`, so it reads the previous tree's
+#: bins, the stale read this DEVIATION must never cause
+comptime ORACLE_POOL_SABOTAGE = is_defined["MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE"]()
 
 
 struct OracleDeviceScratch(Movable):
@@ -1152,6 +1158,14 @@ struct OracleDeviceScratch(Movable):
             and self.multi_planes == multi_planes
             and self.fv_blocks == fv_blocks
             and self.sm == sm
+        )
+
+    def row_matches(self, n_rows: Int, multi_planes: Int, fv_blocks: Int) -> Bool:
+        """The key of the `n_rows`-sized half."""
+        return (
+            self.n_rows == n_rows
+            and self.multi_planes == multi_planes
+            and self.fv_blocks == fv_blocks
         )
 
     def handles(self) -> OracleDeviceScratch:
@@ -1242,39 +1256,109 @@ def make_oracle_device_scratch(
     )
 
 
-def ensure_oracle_device_scratch(
+def make_oracle_device_scratch_sharing_rows(
     ctx: DeviceContext,
-    mut pool: List[OracleDeviceScratch],
-    n_rows: Int,
+    rows: OracleDeviceScratch,
     bin_count: Int,
-    objective: Int,
-    num_classes: Int,
-    sm_count: Int,
-    pair_blocks: Int,
-) raises:
-    """The fit's pool of one (DEVIATION 3041): rebuilt whenever the exact key
-    moves. `pair_blocks` is the PairLogit value block count, 0 otherwise."""
-    var dims = _oracle_dims(objective, num_classes)
-    if dims[0] < 1:
-        # the factory refuses this `num_classes` in its own words
-        pool.clear()
-        return
-    var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    if pair_blocks > 0:
-        fv_blocks = pair_blocks
-    var sm = sm_count
-    if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
-    if len(pool) == 1 and pool[0].matches(
-        n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
-    ):
-        return
-    pool.clear()
-    pool.append(
-        make_oracle_device_scratch(
-            ctx, n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
-        )
+    cursor_dim: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """A scratch for another `bin_count`: fresh bin-sized buffers, and handle
+    copies of `rows`' `n_rows`-sized ones."""
+    var multi_planes = rows.multi_planes
+    var d_leaves = ctx.enqueue_create_buffer[DType.uint32](bin_count)
+    var d_shift = ctx.enqueue_create_buffer[DType.float32](
+        bin_count * cursor_dim
     )
+    var d_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = ctx.enqueue_create_buffer[DType.float32](
+        2 * bin_count
+    )
+    var d_multi_stats = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        rows.n_rows, bin_count, cursor_dim, multi_planes, rows.fv_blocks, sm,
+        rows.d_identity.copy(), rows.d_bins.copy(), d_leaves^, d_shift^,
+        rows.d_eval_stats.copy(), rows.d_fv.copy(), rows.d_mag_dummy.copy(),
+        d_partials^, d_multi_partials^, d_part_stats^,
+        rows.d_multi_der.copy(), d_multi_stats^,
+    )
+
+
+#: the bin-keyed half of the pool holds at most this many keys (a
+#: non-symmetric fit sees a handful of leaf counts; each entry is a few KiB)
+comptime ORACLE_POOL_MAX_BIN_KEYS = 128
+
+
+struct OracleScratchPool(Movable):
+    """The fit's pool (DEVIATION 3041), in two halves because the two halves
+    have different keys. The ROW half (`d_identity`, `d_bins`, `d_eval_stats`,
+    `d_fv`, `d_mag_dummy`, `d_multi_der`: everything of `n_rows` size) is a
+    pool of ONE. The BIN half (`d_leaves`, `d_shift`, the partials, the part
+    stats: a few KiB) is one entry per exact `bin_count`, because a
+    non-symmetric fit's trees do not all have the same leaf count and these
+    buffers are whole-buffer copy endpoints. An entry is a full
+    `OracleDeviceScratch` whose row half is a handle onto the shared one."""
+
+    var entries: List[OracleDeviceScratch]
+
+    def __init__(out self):
+        self.entries = List[OracleDeviceScratch]()
+
+    def take(
+        mut self,
+        ctx: DeviceContext,
+        n_rows: Int,
+        bin_count: Int,
+        objective: Int,
+        num_classes: Int,
+        sm_count: Int,
+        pair_blocks: Int,
+    ) raises -> Optional[OracleDeviceScratch]:
+        """Handle views for this task's exact key, allocating what the pool
+        does not hold. `pair_blocks` is the PairLogit value block count, 0
+        otherwise."""
+        var dims = _oracle_dims(objective, num_classes)
+        if dims[0] < 1:
+            # the factory refuses this `num_classes` in its own words
+            return Optional[OracleDeviceScratch]()
+        var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+        if pair_blocks > 0:
+            fv_blocks = pair_blocks
+        var sm = sm_count
+        if sm < 0:
+            sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        # a row-half key change (another dataset shape) empties the pool
+        if len(self.entries) > 0 and not self.entries[0].row_matches(
+            n_rows, dims[1], fv_blocks
+        ):
+            self.entries.clear()
+        for i in range(len(self.entries)):
+            if self.entries[i].matches(
+                n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
+            ):
+                return Optional(self.entries[i].handles())
+        if len(self.entries) >= ORACLE_POOL_MAX_BIN_KEYS:
+            self.entries.clear()
+        if len(self.entries) == 0:
+            self.entries.append(
+                make_oracle_device_scratch(
+                    ctx, n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
+                )
+            )
+        else:
+            self.entries.append(
+                make_oracle_device_scratch_sharing_rows(
+                    ctx, self.entries[0], bin_count, dims[0], sm
+                )
+            )
+        return Optional(self.entries[len(self.entries) - 1].handles())
 
 
 def make_bin_optimized_oracle(
@@ -1395,11 +1479,15 @@ def make_bin_optimized_oracle(
     var bins_gx = 2 * sm
     if bins_gx < 1:
         bins_gx = 1
-    ctx.enqueue_function[fill_bins_from_partition_kernel](
-        d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
-        grid_dim=(bins_gx, bin_count, 1),
-        block_dim=(256, 1, 1),
-    )
+    var fill_bins = True
+    comptime if ORACLE_POOL_SABOTAGE:
+        fill_bins = not have_scratch
+    if fill_bins:
+        ctx.enqueue_function[fill_bins_from_partition_kernel](
+            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
+            grid_dim=(bins_gx, bin_count, 1),
+            block_dim=(256, 1, 1),
+        )
 
     # `d_partials`, `d_multi_partials`, `d_part_stats`, `d_multi_der` and
     # `d_multi_stats` are sized by `make_oracle_device_scratch` (DEVIATION 3041)
