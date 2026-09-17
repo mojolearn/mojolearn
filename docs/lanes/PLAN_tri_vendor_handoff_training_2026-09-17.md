@@ -22,82 +22,83 @@ The claim we can make today (`docs/LM_TRAINING_CLAIM_PLAN.md`) is **sampled**:
 at the checkpoints we replayed, three vendors agreed. A divergence in a window
 nobody replayed is invisible.
 
-Two routes removes the sampling. Split the run into segments and assign
-vendors so that **every segment is run by a DIFFERENT vendor in each route**.
-If both routes end at bitwise equal final weights, no vendor diverged at any
-step, because a divergence at step k was produced on different hardware in each
-route and the finals could not match.
+Two routes removes the sampling. Split the run into segments and assign vendors
+so that **every segment is run by a DIFFERENT vendor in each route**. If both
+routes end at bitwise equal final weights, no vendor diverged at any step,
+because a divergence at step k was produced on different hardware in each route
+and the finals could not match.
 
-**THE CONSTRAINT IS PER SEGMENT, NOT PER ROUTE.** Andrew proposed
+**THE CONSTRAINT IS PER SEGMENT, NOT PER ROUTE.** Two routes that merely look
+different are not enough. Andrew's assignment satisfies it:
 
-    route A:  Apple -> NVIDIA -> AMD
-    route B:  AMD   -> NVIDIA -> AMD
+    route A:  Apple -> AMD     -> NVIDIA
+    route B:  AMD   -> NVIDIA  -> AMD
+              ----     ----       ----
+              differ   differ     differ
 
-That does not work. Segment 2 is NVIDIA in both routes and segment 3 is AMD in
-both, so two of the three segments get no cross-vendor coverage at all. Routes
-that merely *look* different are not enough; the two routes must differ in
-**every position**.
+Every segment is covered by two distinct vendors, and Apple appears exactly
+once in the whole experiment, which is also the cost goal. (The variant
+`apple -> nvidia -> amd` against `amd -> nvidia -> amd` does NOT work: segment
+2 is NVIDIA in both and segment 3 is AMD in both, so two thirds of the run gets
+no cross-vendor coverage. The distinction is worth keeping in writing because
+the two assignments look equally reasonable at a glance.)
 
-## 3. The assignment, with the Mac held to one segment
+## 3. More handoffs is better, and nearly free
 
-Andrew: "maybe we do mac cloud for only 1/3 of 1 run because it is more
-expensive." That is compatible with full coverage. Apple does not need to
-appear in both routes, it only needs to be the one that differs somewhere.
-With six segments:
+A handoff is not overhead, it is evidence. Each one is an instance of the
+cross-vendor resume claim: stop on vendor X, move the bytes, continue on vendor
+Y, and the trajectory does not move. That claim already passed bidirectionally
+at 34,944 parameters; every additional handoff at 162M is another instance of
+it at a serious size, and more segments localize a divergence more tightly.
+
+The cost is small. A checkpoint at this shape is parameters plus both Adam
+moments, 3 x 162,147,840 x 4 bytes, about **1.95 GB**, which moves through R2
+in well under a minute against segments measured in hours. Box spin-up is the
+real per-segment cost, and the cloud Mac's minimum billing window is the one
+that matters, which is another reason to keep Apple to a single segment.
+
+Six to twelve segments looks right. Generalizing Andrew's assignment:
 
 | segment | 1 | 2 | 3 | 4 | 5 | 6 |
 |---|---|---|---|---|---|---|
-| **route A** | **Apple** | NVIDIA | AMD | NVIDIA | AMD | NVIDIA |
-| **route B** | NVIDIA | AMD | NVIDIA | AMD | NVIDIA | AMD |
+| **route A** | **Apple** | AMD | NVIDIA | AMD | NVIDIA | AMD |
+| **route B** | AMD | NVIDIA | AMD | NVIDIA | AMD | NVIDIA |
 | distinct? | yes | yes | yes | yes | yes | yes |
 
-Every segment is covered by two different vendors. **Apple appears exactly
-once, in 1 of 12 segment-runs.** Segments need not be equal length either, so
-Apple's can be the short one; make it long enough to be a real training window
-and no longer.
+Segments need not be equal length. Make Apple's long enough to be a real
+training window and no longer.
 
-What is lost by holding Apple to one segment: we prove Apple agrees with
-NVIDIA over segment 1, not over the whole run. That is honest, it is still a
-three-vendor training run, and it sits alongside the per-release full Apple
-verification column which covers the inference and fixture claims separately.
+## 4. The two routes are independent, so they simply run at the same time
 
-## 4. How the two routes can be concurrent when learning is sequential
+CORRECTED 2026-09-17. An earlier draft of this file proposed starting each of
+route B's segments from route A's checkpoint so they could be parallelized, and
+argued by induction that this proves what a chained route B would have. The
+induction was valid and the whole construction was pointless, because **the two
+routes never needed each other's checkpoints in the first place.**
 
-Andrew: "i don't understand. how can they be concurrent.... doesn't learning
-need to depend on prio checkpoint?"
+Both routes start from the same initialization at t=0 and are independent
+trajectories. Route A runs its segments sequentially on its boxes; route B runs
+its segments sequentially on its boxes; neither waits for the other. Two boxes
+busy throughout, 2x GPU-hours, and both routes are real artifacts that actually
+existed rather than an argument that one would have.
 
-It does, and route A is strictly sequential. There is no way around that.
-A0 -> Apple -> A1 -> NVIDIA -> A2 -> ... Each segment needs the one before it.
+    t:       0 ................................................ T
+    route A   [Apple seg1][AMD seg2   ][NVIDIA seg3]
+    route B   [AMD   seg1][NVIDIA seg2][AMD    seg3]
+                        ^compare A1,B1  ^compare A2,B2  ^compare A3,B3
 
-The move is in route B. Run naively, B chains too:
-A0 -> NVIDIA -> B1 -> AMD -> B2 -> ..., and the claim is B1 == A1, B2 == A2,
-and so on to the final.
+**Compare at every segment boundary as it happens.** Both routes reach
+boundary k at the same STEP INDEX, so both have a checkpoint there and the two
+must be bit equal. That gives divergence detection at the first bad boundary
+rather than at the end, which was the only real benefit the discarded pipeline
+scheme had.
 
-**Instead, start each of B's segments from the corresponding A checkpoint:**
-
-    B segment 1:  A0 -> NVIDIA -> B1'     check B1' == A1
-    B segment 2:  A1 -> AMD     -> B2'     check B2' == A2
-    B segment 3:  A2 -> NVIDIA  -> B3'     check B3' == A3
-    ...
-
-**Why this proves the chained claim, by induction.** Suppose B1' == A1. Then
-feeding A1 into B's segment 2 is feeding *the identical bytes* that chained
-route B would have fed it. Same input, same code, same hardware, therefore the
-same output: B2' == B2. And we checked B2' == A2, so B2 == A2. The argument
-carries to the final segment. If any check fails, the chained claim is false
-anyway, and we have localized the failure to one segment on one vendor instead
-of bisecting two different final checkpoints over millions of steps.
-
-**Why it costs no extra wall clock.** B's segment k needs A's checkpoint k-1,
-which A produces at time (k-1)T/N. B's segment k then takes T/N and finishes at
-kT/N. So B's last segment finishes at exactly T, the same moment A does. It is
-a pipeline, not a race: two boxes busy at all times, 2x GPU-hours, **1x wall
-clock**.
-
-    t:      0 ......... T/3 ......... 2T/3 ......... T
-    route A  [Apple seg1][NVIDIA seg2][AMD    seg3]
-    route B  [NVIDIA s1'][AMD    s2' ][NVIDIA s3' ]
-              ^both from A0  ^from A1    ^from A2
+**Wall clock is bounded by the SLOWER route, not by 1x.** Per-segment cost
+differs by vendor, and Apple's per-step cost at this shape has never been
+measured. Route A carries the Apple segment, so route A is likely the
+bottleneck and the experiment finishes when it does. Do not quote a wall-clock
+number until `lane/lm-training-shakedown` and a cloud Mac trial have measured
+per-vendor step cost at this shape.
 
 ## 5. What blocks the Apple leg
 
@@ -139,7 +140,7 @@ for Apple. Treat as a floor.
 
 | token budget | one route | two routes | cost at $2.00 to $2.69/h | wall clock |
 |---|---:|---:|---:|---:|
-| 25B, one twelfth of GPT-3's 300B | 789 h | 1,577 h | $3,155 to $4,243 | about 33 days at 1 box per route |
+| 25B, one twelfth of GPT-3 Small's 300B | 789 h | 1,577 h | $3,155 to $4,243 | bounded by the slower route, see section 4 |
 
 Batch is 1. If `lane/lm-training-shakedown` finds a larger batch fits, both the
 hours and the wall clock fall. If `lane/attention-speed` lands its 2x to 8x,
