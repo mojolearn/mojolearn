@@ -157,3 +157,21 @@ is exploratory. This companion complements the HIGGS workload; it is not broad
 large-data qualification. The initial cache-hit failure from an unnecessary
 pandas import is retained; moving that import into the zip-decode branch
 preserved the cached arrays and split.
+
+## Before and after builds, alternating processes
+
+`bench/speed/infer_speed_trees_ab.py` (lane/infer-speed-trees, 2026-09-17)
+times ONE path of ONE saved model per process: `prepare` trains the models
+once on the box's GPU and writes the fixed prediction rows beside them;
+`time` loads a model in whichever checkout `PYTHONPATH` names, runs one
+warmup and at least five timed calls, and records the medians, the max/min
+spread, the SHA-256 of the output bytes and the digests of the `.so` files
+the process actually loaded. A BEFORE binary and an AFTER binary are two
+builds of the same module name, so they are timed in alternating processes
+over the same input bytes, never inside one process; `summarize` pairs the
+records and quotes a ratio only where every process passed the 1.10 spread
+gate and every hash agreed. `tools/infer_speed_trees_body.sh speed` is the
+loop that ran on the pod. The paths are the public `predict` and
+`predict_proba` of the GPU classes (whose forest default engine is the
+sequential host walk), `host_model`'s `predict` and `predict_proba`, and
+the GBDT binding's model-text parse alone as a diagnostic.

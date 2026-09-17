@@ -43,7 +43,9 @@ hash is checked for shape only (two unsigned 32-bit halves); the Mojo reader
 recomputes it from the sources and splits, which this parser does not.
 
 This module holds no arithmetic beyond the `1 - p` column
-`GradientBoosting.predict_proba` also computes in Python (DEVIATION 2333).
+`GradientBoosting.predict_proba` also computes in Python (DEVIATION 2333),
+and with a binding that carries `forest_host_gbdt_sigmoid_pair` (DEVIATION
+2902) not even that: both columns come from the binding in one pass.
 What it promises is what the gate measured: tools/forest_host_gate.py
 compares the host predictions of a recorded model and fixture against the
 SHA-256 a GPU run recorded, and the brief in
@@ -706,6 +708,17 @@ class HostGBDT:
                 f"model was fitted with {self.loss!r}")
         raw = self.predict(X).astype('<f8')
         n_rows = raw.shape[0]
+        pair = getattr(self._binding, 'forest_host_gbdt_sigmoid_pair', None)
+        if pair is not None:
+            # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both
+            # columns from the binding in one pass, the same `p` and the
+            # same one double subtraction per row as the comprehension
+            # below; the O(rows) Python loop is gone, the bits are not.
+            out = empty((n_rows, 2), '<f8')
+            wrote = pair(addr_ro(raw, name='raw'), addr(out, name='proba'), n_rows)
+            if int(wrote) != n_rows:
+                raise RuntimeError(f"forest_host_gbdt_sigmoid_pair wrote {wrote} of {n_rows} rows")
+            return out
         p1 = empty((n_rows,), '<f8')
         self._binding.forest_host_gbdt_sigmoid(addr_ro(raw, name='raw'), addr(p1, name='p1'), n_rows)
         pv = flat_view(p1, 'd')

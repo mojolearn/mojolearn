@@ -382,6 +382,37 @@ def forest_host_gbdt_sigmoid_binding(
     return PythonObject(count)
 
 
+def forest_host_gbdt_sigmoid_pair_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): the two
+    probability columns of a Logloss or CrossEntropy `predict_proba`,
+    `out[2 * i] = 1 - p` and `out[2 * i + 1] = p` with
+    `p = 1 / (1 + exp(-raw[i]))` through `identical_exp64`, `n` rows, both
+    buffers float64 and the caller's. `p` is `forest_host_gbdt_sigmoid`'s
+    value and `1.0 - p` is the one IEEE double subtraction the Python
+    layer computed per row (DEVIATION 2333, retired by this entry point
+    where the binary carries it); a subtraction has no fusion partner and
+    no association, so the column's bits are the Python column's. Under
+    the gate's sabotage build the two columns are written swapped, so a
+    column that could not tell would read IDENTICAL and be caught."""
+    var rp = f64_ptr(_index(raw_addr))
+    var op = f64_ptr(_index(out_addr))
+    var count = _index(n)
+    if count < 0:
+        raise Error("forest_host_gbdt_sigmoid_pair: n must be non-negative")
+    for i in range(count):
+        var r = rp.unsafe_load(i)
+        var p = 1.0 / (1.0 + identical_exp64(-r))
+        comptime if FOREST_HOST_SABOTAGE:
+            op.unsafe_store(2 * i, p)
+            op.unsafe_store(2 * i + 1, 1.0 - p)
+        else:
+            op.unsafe_store(2 * i, 1.0 - p)
+            op.unsafe_store(2 * i + 1, p)
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
     try:
@@ -395,6 +426,7 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         module.def_function[forest_host_et_predict_binding]("forest_host_et_predict")
         module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
         module.def_function[forest_host_gbdt_sigmoid_binding]("forest_host_gbdt_sigmoid")
+        module.def_function[forest_host_gbdt_sigmoid_pair_binding]("forest_host_gbdt_sigmoid_pair")
         module.def_function[forest_host_gbdt_expand_ctr_binding]("forest_host_gbdt_expand_ctr")
         module.def_function[forest_host_gbdt_ctr_sabotage_binding]("forest_host_gbdt_ctr_sabotage")
         module.def_function[all_finite_f32_binding]("all_finite_f32")
