@@ -27,58 +27,31 @@ comptime TPB_DEFAULT = 128
 
 
 comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
-"""Rows each thread of the range and score passes folds -- DEVIATION 2020,
-and DEVIATION 3020 for the NVIDIA default."""
+"""Rows each thread of the range and score passes folds -- DEVIATION 2020."""
 
 
 def _search_rows_per_thread() -> Int:
-    """DEVIATION 2020's arms, and DEVIATION 3020's NVIDIA default of 64.
+    """DEVIATION 2020's measurement arms; 1 (cuML's one row per thread,
+    `builder.cuh:393-408`) is the default on every column.
 
-    ==================================================================
-    DEVIATION 3020 (lane/forest-train-speed, 2026-09-17) -- on an NVIDIA
-    build each search thread folds 64 rows, where cuML's one row per thread
-    (`builder.cuh:393-408`) stays the default on every other column.
-
-    WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod 6x6vfh2zqas3n4,
-    `nsys`, taxi 4.0M x 16, 100 trees depth 16). Two kernels were 99.5
-    percent of device time and the host was idle: the score pass 53.3 s and
-    the range pass 38.3 s of a 94 s fit, at a CONSTANT 1.4 to 1.9 ns per
-    thread from the root level to the deepest. The cost is per BLOCK and
-    it is the publish: every block's thread 0 ends in four (range) or
-    `3 + 2 * n_classes` (score) atomic read-modify-writes on global memory,
-    and a measurement arm that replaced the range publish's four atomics
-    with plain stores (`MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH`, wrong on
-    purpose) took the whole range pass out of a 16-tree fit, 16.5 s to
-    10.0 s. Dropping the explicit barriers moved nothing (16.5 s to 15.1 s).
-    The partition pass tiles the same rows one per thread, publishes with a
-    plain store, and runs the same grid in under 1 ms.
-
-    So the lever is BLOCKS PER LAUNCH, which is what this constant divides.
-    16-tree fits, same pod, one process each: taxi 16.5 s at 1, 9.0 at 2,
-    4.4 at 4, 2.9 at 8, 2.0 at 16, 1.7 at 32, 1.45 at 64, 1.03 at 128,
-    1.02 at 256; Istella-S 2.0M x 220 28.4 s at 1, 4.7 at 16, 3.7 at 64,
-    4.2 at 128, 3.8 at 256. It saturates at 64, where one block per
-    (node, feature) at the deep levels is the floor that remains.
-
-    WHY NO BIT MOVES. The tiling decides only which thread visits a row.
-    The score pass sums Int32 class counts or fixed-point labels (DEVIATION
-    135/171), and integer addition is associative and commutative, so the
-    per-thread, per-block and per-cell sums are the same integers under any
-    tiling; the quantization bounds every partial sum inside
-    `2^REGRESSION_SUM_BITS`, so no grouping can overflow. The range pass
-    folds in key space at R > 1 (the `range_key` compares below), a total
-    order, so min and max are the same elements under any grouping, and
-    the NaN count is an integer sum. Every draw is keyed by (seed, tree,
-    node, feature) and never by a thread or block index. The partition
-    keeps its own TPB tile and restages its plan (`builder.mojo`, the
-    `SEARCH_ROWS_PER_THREAD > 1` arm of the level loop). Held by
-    `identity_break` on et-clf, et-reg and et-clf-entropy-bestfirst, five
-    fixtures, BEFORE against AFTER, and by the equal model hashes of every
-    arm above; `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` is the arm that must move.
-
-    NVIDIA ONLY. `MOJOLEARN_ET_SEARCH_RPT_1` restores one row per thread
-    for the A/B. Apple and AMD keep 1 until their columns are measured.
-    ==================================================================
+    DEVIATION 3020 (lane/forest-train-speed, 2026-09-17) -- THE ARMS WERE
+    FINALLY RUN ON NVIDIA, AND THEY STAY ARMS. RTX 4090, driver 580.159.04,
+    pod 6x6vfh2zqas3n4, 16-tree depth-16 fits, one process each, model
+    hashes equal in every arm. Under the seq_cst publish this file shipped
+    until DEVIATION 3022: taxi 4.0M x 16 took 16.5 s at 1, 9.0 at 2, 4.4 at
+    4, 2.9 at 8, 2.0 at 16, 1.7 at 32, 1.45 at 64, 1.03 at 128, 1.02 at 256;
+    Istella-S 2.0M x 220 took 28.4 s at 1, 4.7 at 16, 3.7 at 64, 3.8 at 256.
+    The tile was dividing a per-BLOCK cost, and DEVIATION 3022 removed that
+    cost at its root: with the RELAXED publish, 1 row per thread runs taxi in
+    0.89 s and Istella-S in 2.53 s, and 64 rows per thread 0.84 s and 2.45 s.
+    That is 3 to 5 percent from single samples, it costs the level loop a
+    restage and a drain per cycle (`builder.mojo`, the
+    `SEARCH_ROWS_PER_THREAD > 1` arm), so the default does not move.
+    `_32`, `_64`, `_128`, `_256` and the explicit `_1` were added for this
+    measurement. Bit-inert at every width for DEVIATION 2020's reasons:
+    integer sums, a key-space range fold, draws keyed by (seed, tree, node,
+    feature); `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` is the arm that must move and
+    was seen to (15 of 15 ExtraTrees cells) at 64, and seen NOT to at 1.
     """
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_256"]():
         return 256
@@ -96,9 +69,7 @@ def _search_rows_per_thread() -> Int:
         return 4
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
         return 2
-    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
-        return 1
-    return 64 if has_nvidia_gpu_accelerator() else 1
+    return 1
 
 
 comptime SEARCH_SAB_RPT_TAIL_DROP = is_defined[
@@ -284,45 +255,83 @@ def _search_barrier():
         barrier()
 
 
-comptime SINGLE_WRITER_PLAIN_PUBLISH = (
-    has_nvidia_gpu_accelerator()
-    or is_defined["MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH"]()
-) and not is_defined["MOJOLEARN_ET_ATOMIC_PUBLISH_ALWAYS"]()
-"""DEVIATION 3021 (lane/forest-train-speed, 2026-09-17): a node that fits in
-ONE search block publishes its range and score cells with plain stores.
+comptime SINGLE_WRITER_PLAIN_PUBLISH = is_defined[
+    "MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH"
+]()
+"""DEVIATION 3021 (lane/forest-train-speed, 2026-09-17), A MEASUREMENT ARM,
+OFF BY DEFAULT: a node that fits in ONE search block publishes its range and
+score cells with plain stores.
 
-THE COST. DEVIATION 3020 measured the range and score passes' price on NVIDIA
-as the per-block publish: four (range) or `3 + 2 * n_classes` (score) atomic
-read-modify-writes on global memory by each block's thread 0. With 64 rows per
-thread almost every node below the first few levels is ONE block, and those
-blocks are most of what is left of the two passes.
-
-WHY A PLAIN STORE IS EXACT THERE. A cell is `(node, feature slot)`. Its
-publishers are the thread 0 of each of the node's `num_blocks` blocks on that
-feature slot's grid row, and nothing else in the launch writes it. When
-`num_blocks == 1` the cell has exactly one writer in the whole launch, the
-seeder that initialized it ran earlier on the in-order queue, and no reader
-runs until the launch is behind it on the same queue. One writer needs no
-atomic: `cell = min(cell, x)` and `cell += x` store the very integers the
-atomic forms store. A node with more than one block keeps the atomics. No
-value, order or draw depends on which form ran, so no bit moves.
-
-NVIDIA ONLY by default; `-D MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH=1` opts another
-column in for a measurement and `-D MOJOLEARN_ET_ATOMIC_PUBLISH_ALWAYS=1`
-restores the atomics everywhere for the A/B.
-`-D MOJOLEARN_ET_SAB_PLAIN_PUBLISH=1` is the arm that must move: the plain
-path adds one to every count it publishes, so every cell that took the plain
-path is wrong and the trees move wherever the seam is reached."""
+A cell is `(node, feature slot)`. Its publishers are the thread 0 of each of
+the node's `num_blocks` blocks on that feature slot's grid row, and nothing
+else in the launch writes it. When `num_blocks == 1` the cell has exactly one
+writer in the whole launch, the seeder that initialized it ran earlier on the
+in-order queue, and no reader runs until the launch is behind it. One writer
+needs no atomic: `cell = min(cell, x)` and `cell += x` store the very integers
+the atomic forms store, so no bit moves. It was written when the publish
+atomics were the two hot passes' whole price; DEVIATION 3022 removed that
+price at its root, after which this arm measured inside the noise (16-tree
+fits, RTX 4090: taxi 0.84 s without it and 0.88 s with it, Istella-S 2.45 s
+and 2.41 s), so it stays an arm. `-D MOJOLEARN_ET_SAB_PLAIN_PUBLISH=1` is the
+arm that must move: the plain path adds one to every count it publishes."""
 
 comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
+
+comptime RELAXED_PUBLISH = (
+    has_nvidia_gpu_accelerator()
+    or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
+) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
+"""DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
+atomics are RELAXED on an NVIDIA build.
+
+WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod 6x6vfh2zqas3n4, `nsys`,
+taxi 4.0M x 16, 100 trees depth 16, IDENTICAL). Two kernels were 99.5 percent
+of device time and the host was idle: the score pass 53.3 s and the range
+pass 38.3 s of a 94 s fit, at a CONSTANT 1.4 to 1.9 ns per thread from the
+root level to the deepest, while the partition pass tiled the same rows one
+per thread, published with a plain store, and ran the same grid in under
+1 ms. The cost was per BLOCK and it was the publish: every block's thread 0
+ends in four (range) or `3 + 2 * n_classes` (score) atomic read-modify-writes
+on global memory. A measurement arm that replaced the range pass's four with
+plain stores (`MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH`, wrong on purpose) took
+the whole range pass out of a 16-tree fit, 16.5 s to 10.0 s; dropping the
+explicit barriers moved nothing (`MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER`, 16.5 s
+to 15.1 s).
+
+THE ROOT CAUSE. Mojo's non-Apple default ordering is seq_cst, and on CUDA a
+seq_cst read-modify-write carries fences: about 47 ns of WALL time per
+publish, serialized across the launch. The random forest lane met this first
+and pinned every histogram add to `Ordering.RELAXED`
+(`ensemble/decisiontree/batched_levelalgo/bins.mojo`, "Fences only -- the
+totals cannot move"); this file never did. With the ordering alone changed,
+the 16-tree fits went from 16.5 s to 0.89 s on taxi and from 28.4 s to 2.53 s
+on Istella-S 2.0M x 220, model hashes equal.
+
+WHY NO BIT MOVES. The ordering changes fences, never the read-modify-write:
+an `atomicrmw add`, `min` or `max` loses no update under any ordering, and an
+integer sum, min or max is the same value under any interleaving. No thread
+of a launch READS a published cell; the readers are later launches on the
+same in-order queue, which is a full barrier. cuML's own `atomicAdd` is
+relaxed. `-D MOJOLEARN_ET_SAB_RELAXED_PUBLISH=1` is the arm that must move:
+the relaxed `_publish_add` adds one to every count it publishes.
+
+NVIDIA ONLY by default. `-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts another
+column in for a measurement (AMD's default is seq_cst too, and DEVIATION
+1943's "dispatch rate" signature on the MI325X is worth re-reading against
+this); `-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for
+the A/B. Apple's default is already relaxed."""
+
+comptime SAB_RELAXED_PUBLISH = is_defined["MOJOLEARN_ET_SAB_RELAXED_PUBLISH"]()
 
 
 @always_inline
 def _publish_add(
     cell: MutPointer[Int32, MutAnyOrigin], idx: Int, value: Int32, single: Bool
 ):
-    """`cell[idx] += value`: plain for a single-writer cell (DEVIATION 3021),
-    `Atomic.fetch_add` otherwise."""
+    """`cell[idx] += value` for one publish of the search: a RELAXED
+    `Atomic.fetch_add` on NVIDIA (DEVIATION 3022), the default ordering
+    elsewhere, and a plain store for a single-writer cell only under
+    DEVIATION 3021's opt-in arm."""
     comptime if SINGLE_WRITER_PLAIN_PUBLISH:
         if single:
             comptime if SAB_PLAIN_PUBLISH:
@@ -330,7 +339,34 @@ def _publish_add(
             else:
                 cell[unsafe_offset=idx] += value
             return
-    _ = Atomic.fetch_add(cell.unsafe_offset(idx), value)
+    comptime if RELAXED_PUBLISH:
+        comptime if SAB_RELAXED_PUBLISH:
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                cell.unsafe_offset(idx), value + Int32(1)
+            )
+        else:
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                cell.unsafe_offset(idx), value
+            )
+    else:
+        _ = Atomic.fetch_add(cell.unsafe_offset(idx), value)
+
+
+@always_inline
+def _publish_min_max(
+    minkey: MutPointer[UInt32, MutAnyOrigin],
+    maxkey: MutPointer[UInt32, MutAnyOrigin],
+    idx: Int,
+    kmin: UInt32,
+    kmax: UInt32,
+):
+    """The range cell's atomic min and max, RELAXED under DEVIATION 3022."""
+    comptime if RELAXED_PUBLISH:
+        Atomic.min[ordering = Ordering.RELAXED](minkey.unsafe_offset(idx), kmin)
+        Atomic.max[ordering = Ordering.RELAXED](maxkey.unsafe_offset(idx), kmax)
+    else:
+        Atomic.min(minkey.unsafe_offset(idx), kmin)
+        Atomic.max(maxkey.unsafe_offset(idx), kmax)
 
 
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
@@ -532,11 +568,9 @@ def node_feature_range_kernel[
                 if kmax > out_maxkey[unsafe_offset=slot]:
                     out_maxkey[unsafe_offset=slot] = kmax
             else:
-                Atomic.min(out_minkey.unsafe_offset(slot), kmin)
-                Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
         else:
-            Atomic.min(out_minkey.unsafe_offset(slot), kmin)
-            Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+            _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
         _publish_add(out_n_missing, slot, blk_missing, single)
         _publish_add(out_n_merges, slot, Int32(1), single)
 
@@ -607,7 +641,9 @@ def node_nonconstant_flag_kernel(
         if not node_feature_is_constant(
             extent, work_items[unsafe_offset=nid].instances.count
         ):
-            _ = Atomic.fetch_add(out_flag.unsafe_offset(nid), Int32(1))
+            # DEVIATION 3022: RELAXED on NVIDIA, like every other publish of
+            # the search; never the single-writer form (k writers per node).
+            _publish_add(out_flag, nid, Int32(1), False)
         idx += stride
 
 
