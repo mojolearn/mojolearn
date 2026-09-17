@@ -40,6 +40,8 @@ from gemm.checks.gemm_identical import GemmWorkspace, identical_gemm
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from mamba.impl.modeling.modeling_mamba import pinned_mul
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
     identical_div,
     identical_mul_add,
@@ -163,7 +165,8 @@ def _download(
     return out^
 
 
-def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+def _zeros[wait: Bool = True](ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """Zero fill; wait=False requires the returned owner to survive a later fence."""
     var n_buf = n
     if n_buf < 1:
         n_buf = 1
@@ -171,16 +174,18 @@ def _zeros(ctx: DeviceContext, n: Int) raises -> DeviceBuffer[DType.float32]:
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_launch()
     dev.enqueue_fill(Float32(0.0))
-    step_count_sync()
-    ctx.synchronize()
+    comptime if wait:
+        step_count_sync()
+        ctx.synchronize()
     return dev^
 
 
-def _fill_ones(
+def _fill_ones[wait: Bool = True](
     ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     """`n` entries of exactly `Float32(1.0)`, for the two RMSNorm weight
-    gradients (DEVIATION 1410).
+    gradients (DEVIATION 1410). With wait=False the returned owner must
+    survive a later completion fence.
 
     **A wrong value here is a wrong gradient with no symptom**, because any
     vector produces a plausible weighted column sum. The gate for it is not
@@ -193,8 +198,9 @@ def _fill_ones(
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
     step_count_launch()
     dev.enqueue_fill(Float32(1.0))
-    step_count_sync()
-    ctx.synchronize()
+    comptime if wait:
+        step_count_sync()
+        ctx.synchronize()
     return dev^
 
 
@@ -1857,60 +1863,67 @@ struct LlamaBackwardStages(Movable):
         if it > wide:
             wide = it
 
-        self.in_d_residual2 = _zeros(ctx, m * dm)
-        self.d_down_proj_out = _zeros(ctx, m * dm)
-        self.d_mlp_gated = _zeros(ctx, m * it)
-        self.dw_down = _zeros(ctx, dm * it)
-        self.d_silu_out = _zeros(ctx, m * it)
-        self.d_up_proj_out = _zeros(ctx, m * it)
-        self.d_gate_proj_out = _zeros(ctx, m * it)
-        self.dw_gate = _zeros(ctx, it * dm)
-        self.dw_up = _zeros(ctx, it * dm)
-        self.d_norm2_out = _zeros(ctx, m * dm)
-        self.norm2_dot = _zeros(ctx, m)
-        self.dw_norm2 = _zeros(ctx, dm)
-        self.norm2_dx = _zeros(ctx, m * dm)
-        self.d_residual1 = _zeros(ctx, m * dm)
-        self.d_o_proj_out = _zeros(ctx, m * dm)
-        self.d_attn_ctx = _zeros(ctx, m * qw)
-        self.dw_o = _zeros(ctx, dm * qw)
+        self.in_d_residual2 = _zeros[False](ctx, m * dm)
+        self.d_down_proj_out = _zeros[False](ctx, m * dm)
+        self.d_mlp_gated = _zeros[False](ctx, m * it)
+        self.dw_down = _zeros[False](ctx, dm * it)
+        self.d_silu_out = _zeros[False](ctx, m * it)
+        self.d_up_proj_out = _zeros[False](ctx, m * it)
+        self.d_gate_proj_out = _zeros[False](ctx, m * it)
+        self.dw_gate = _zeros[False](ctx, it * dm)
+        self.dw_up = _zeros[False](ctx, it * dm)
+        self.d_norm2_out = _zeros[False](ctx, m * dm)
+        self.norm2_dot = _zeros[False](ctx, m)
+        self.dw_norm2 = _zeros[False](ctx, dm)
+        self.norm2_dx = _zeros[False](ctx, m * dm)
+        self.d_residual1 = _zeros[False](ctx, m * dm)
+        self.d_o_proj_out = _zeros[False](ctx, m * dm)
+        self.d_attn_ctx = _zeros[False](ctx, m * qw)
+        self.dw_o = _zeros[False](ctx, dm * qw)
         var cells = b * nh * l * s_max
         var head_c_n = l * s_max
         if lean:
             cells = 1
             head_c_n = 1
-        self.d_attn_weights = _zeros(ctx, cells)
-        self.attn_zdot = _zeros(ctx, b * nh * l)
-        self.d_attn_masked = _zeros(ctx, cells)
-        self.d_attn_scores = _zeros(ctx, cells)
-        self.d_qk_cell = _zeros(ctx, cells)
-        self.d_q_rope = _zeros(ctx, m * qw)
-        self.d_k_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.d_v_cache = _zeros(ctx, b * nkv * s_max * hd)
-        self.d_k_rope = _zeros(ctx, m * kw)
-        self.d_v_proj_out = _zeros(ctx, m * kw)
-        self.d_q_proj_out = _zeros(ctx, m * qw)
-        self.d_k_proj_out = _zeros(ctx, m * kw)
-        self.dw_q = _zeros(ctx, qw * dm)
-        self.dw_k = _zeros(ctx, kw * dm)
-        self.dw_v = _zeros(ctx, kw * dm)
-        self.d_norm1_out = _zeros(ctx, m * dm)
-        self.norm1_dot = _zeros(ctx, m)
-        self.dw_norm1 = _zeros(ctx, dm)
-        self.norm1_dx = _zeros(ctx, m * dm)
-        self.d_x = _zeros(ctx, m * dm)
+        self.d_attn_weights = _zeros[False](ctx, cells)
+        self.attn_zdot = _zeros[False](ctx, b * nh * l)
+        self.d_attn_masked = _zeros[False](ctx, cells)
+        self.d_attn_scores = _zeros[False](ctx, cells)
+        self.d_qk_cell = _zeros[False](ctx, cells)
+        self.d_q_rope = _zeros[False](ctx, m * qw)
+        self.d_k_cache = _zeros[False](ctx, b * nkv * s_max * hd)
+        self.d_v_cache = _zeros[False](ctx, b * nkv * s_max * hd)
+        self.d_k_rope = _zeros[False](ctx, m * kw)
+        self.d_v_proj_out = _zeros[False](ctx, m * kw)
+        self.d_q_proj_out = _zeros[False](ctx, m * qw)
+        self.d_k_proj_out = _zeros[False](ctx, m * kw)
+        self.dw_q = _zeros[False](ctx, qw * dm)
+        self.dw_k = _zeros[False](ctx, kw * dm)
+        self.dw_v = _zeros[False](ctx, kw * dm)
+        self.d_norm1_out = _zeros[False](ctx, m * dm)
+        self.norm1_dot = _zeros[False](ctx, m)
+        self.dw_norm1 = _zeros[False](ctx, dm)
+        self.norm1_dx = _zeros[False](ctx, m * dm)
+        self.d_x = _zeros[False](ctx, m * dm)
 
-        self.dh = _zeros(ctx, m * dm)
-        self.dprod = _zeros(ctx, m * dm)
-        self.rstd = _zeros(ctx, m)
-        self.dvcoef = _zeros(ctx, m)
-        self.ones = _fill_ones(ctx, m)
-        self.tmp0 = _zeros(ctx, m * wide)
-        self.tmp1 = _zeros(ctx, m * wide)
-        self.tmp2 = _zeros(ctx, m * wide)
-        self.head_a = _zeros(ctx, l * hd)
-        self.head_b = _zeros(ctx, s_max * hd)
-        self.head_c = _zeros(ctx, head_c_n)
+        self.dh = _zeros[False](ctx, m * dm)
+        self.dprod = _zeros[False](ctx, m * dm)
+        self.rstd = _zeros[False](ctx, m)
+        self.dvcoef = _zeros[False](ctx, m)
+        self.ones = _fill_ones[False](ctx, m)
+        self.tmp0 = _zeros[False](ctx, m * wide)
+        self.tmp1 = _zeros[False](ctx, m * wide)
+        self.tmp2 = _zeros[False](ctx, m * wide)
+        self.head_a = _zeros[False](ctx, l * hd)
+        self.head_b = _zeros[False](ctx, s_max * hd)
+        self.head_c = _zeros[False](ctx, head_c_n)
+
+        # All fill targets are fields of self and remain alive through this
+        # fence. Queue every fill on the same context, then wait once before
+        # publishing the initialized stages. Keep zeros AND the ones vector.
+        step_count_sync()
+        ctx.synchronize()
+
 
 
 def ensure_backward_attention_capacity(
@@ -2580,6 +2593,10 @@ def bwd_rms_norm[which: Int = 0](
     # compile time (1 the input norm, 2 the post-attention norm, 0 any
     # other caller) and nothing else; the ticks exist only under
     # -D MOJOLEARN_STEP_PHASE_TIMERS=1 (core/step_phase.mojo).
+    # IDENTICAL's three kernels and final GEMM share one in-order context;
+    # the caller owns every buffer, and there are no intervening host reads.
+    # identical_gemm retains the completion wait. Preserve the old fences
+    # in other modes, whose vendor GEMM may return asynchronously.
     var pc = StepPhaseClock(ctx)
     step_count_launch()
     ctx.enqueue_function[bwd_norm_dh_kernel](
@@ -2591,8 +2608,9 @@ def bwd_rms_norm[which: Int = 0](
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        step_count_sync()
+        ctx.synchronize()
     # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the ONE row kernel here (the `c` fold) at that many threads per block;
@@ -2622,8 +2640,9 @@ def bwd_rms_norm[which: Int = 0](
         grid_dim=(dot_blocks, 1, 1),
         block_dim=(dot_threads, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        step_count_sync()
+        ctx.synchronize()
     step_count_launch()
     ctx.enqueue_function[bwd_norm_dx_kernel](
         dx_out.unsafe_ptr(),
@@ -2638,8 +2657,9 @@ def bwd_rms_norm[which: Int = 0](
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_sync()
-    ctx.synchronize()
+    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+        step_count_sync()
+        ctx.synchronize()
     comptime if which == 1:
         pc.tick(ctx, "grad.norm1_kernels")
     comptime if which == 2:
