@@ -303,6 +303,7 @@ watched before the code that catches it existed:
 | `INCOMPLETE` | 4 | nothing differs, but the runs did not cover the same ground: a cell in only one document, a cell **neither** side computed (`value` null, where the probe raised), or two different `n/a` reasons |
 | `SAME DOCUMENT` | 4 | the two files are byte-identical. That is one document handed over twice, and it can only agree with itself |
 | `MALFORMED` | 2 | a file is not an evidence document, or names one cell part twice. A duplicated row would otherwise let a party paste the other's answer over their own and hide the loss |
+| `COMMITMENT BROKEN` | 1 | a document is not the one its party committed to before the exchange. Only `MALFORMED` outranks it: until you know a document is the one that was committed to, no headline about its cells is honest |
 | `SAME FILE` / `CANNOT READ` | 2 | both arguments are one path, or a file is missing or not JSON |
 
 A cell recorded with the **same** `n/a` reason by both sides is an absence they
@@ -325,6 +326,73 @@ invocation can never be read as a pass. It dispatches **before** the import and
 numeric-tier checks: under `MOJOLEARN_NUMERIC_MODE=fast` every other check
 refuses with exit 3 and `--compare` still runs, because a third party has none
 of our bindings.
+
+### Commit first, then exchange
+
+Every outcome in that table is about a document that is malformed or that
+contradicts itself. None of them is about a **well formed** document whose
+numbers were never computed by the machine it names, because the party wrote
+them down after reading the other party's file. Whichever side receives the
+other's document first can paste its cell values under their own provenance,
+and `--compare` reads a clean `AGREE` across two "independent" vendors.
+
+Commit-reveal closes that, and it is the cheap standard fix: before either
+party can see the other's file, each publishes a hash of their own document
+under a random nonce they hold back.
+
+    # each party, on their own machine, before anything is exchanged
+    python -m mojolearn verify --all --json-out mine.json
+    python -m mojolearn verify --commitment mine.json     # prints one line
+
+Publish that 64-character line however you like -- a message, a mailing list
+post, a gist, a git tag. There is no transport here and there must not be.
+Then exchange the documents, which carry the nonces, and either party runs:
+
+    python -m mojolearn verify --compare mine.json theirs.json \
+        --commitment-a <the line you published> \
+        --commitment-b <the line they published>
+
+Each argument takes the line itself or a path to the `.commitment` file
+written beside the document. A party who published a commitment cannot copy,
+because what they are bound to was fixed before there was anything to copy.
+
+**What the commitment covers** is the whole design, and the reason lives in
+`commitment_preimage` in `python/mojolearn/_verify_all.py`, next to the code,
+not here. In short: exactly the fields `compare_documents` reads -- the
+format, every cell row, the whole device block, the verification contract,
+the binding digests and the document's own verdict and detail line -- and
+nothing else. Cells alone would leave a forger free to swap the provenance,
+which is the half they never needed to change. The file's bytes would break
+on re-indenting, and a check that fires on honest handling is a check people
+learn to click past, so it hashes parsed values re-serialized canonically and
+excludes the wall-clock fields by name.
+
+**A comparison without commitments is not an error.** Two strangers with two
+files and no prior arrangement still get the full comparison and exit 0. What
+changes is that the output says what it does not show, in the same place and
+the same voice `same_device` is called weaker than `independent`:
+
+    COMMITMENTS: none were exchanged. Nothing here shows that either document's
+    numbers were COMPUTED by the machine it names. Whichever party received the
+    other's file first could have pasted its cell values into a document
+    carrying their own provenance, and this command cannot tell that apart from
+    two honest runs. This result is WEAKER for the same reason two documents
+    from one device are weaker than two vendors.
+
+and the `RESULT: AGREE` line itself carries `WEAKER THAN IT LOOKS`, so a
+reader who greps for `RESULT:` cannot get the strong sentence without the
+reason. A commitment carried **inside** a document is reported as
+self-declared and never as a check that passed: the nonce ships with it, so
+anyone holding the document can recompute it. One commitment presented for
+both documents, and two documents carrying the same nonce, are refused.
+
+**What it still does not close.** Commit-reveal stops a party copying after
+seeing. It does not stop a party synthesizing a document from the reference
+table shipped in this wheel, which pins the expected hash of every cell on
+every pinned fixture, and committing to that without running anything. Only a
+challenge that neither party controls -- fixtures derived from a nonce agreed
+after both parties are committed -- would close that, and such cells have no
+reference by construction, so it could only ever produce a pairwise verdict.
 
 The comparer takes its lanes from the two documents and never enumerates,
 greps or imports a lane list of its own, so it cannot grow a second idea of
@@ -573,3 +641,21 @@ nine fixtures twice from an installed development wheel and join the default
 CPU set. This does not replace final release-wheel qualification.
 
 See [the evidence audit and remaining work](lanes/LANE_STATUS_verification_evidence_audit.md).
+
+### Admitting one verified group without rewriting other references
+
+To generate a scoped candidate while preserving every other lane, combine
+`--lanes`, `--reference-table` (the base) and `--emit-reference` (the output):
+
+```sh
+python -m mojolearn verify --all --lanes lane-a,lane-b \
+  --reference-table python/mojolearn/verify_reference/table.json \
+  --emit-reference /tmp/candidate-table.json
+```
+
+This requires strict generated evidence for every fixture and core part, refuses
+conflicts, and refuses to drop an existing part. Unselected cells and record
+indices remain unchanged. Coverage reports the admission policy per updated
+lane; the whole table keeps its prior policy because adding a few strict lanes
+does not qualify legacy references. Replay the candidate from installed wheels
+and review native controls before promoting a lane's default availability.

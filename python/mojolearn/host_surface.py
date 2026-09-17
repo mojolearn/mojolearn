@@ -2472,24 +2472,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "ordered-gradient-sum": "no reference",
-    "metrics-homogeneity-completeness": "no reference",
-    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
-    # change. UMAP.transform became row separable, so every umap hash in the
-    # shipped table describes bytes this build no longer produces. The
-    # regeneration lane/expose-stepfull landed drops those cells rather than
-    # keeping them, because no committed record was taken at the new
-    # revision, so what umap owes is a RECORD and its reason is
-    # `no reference` rather than `stale reference`. Without an entry here a
-    # user's CPU-only `verify --all` would read OWED for umap on a machine
-    # that is fine.
-    "umap": "no reference",
-    "gbdt-nan-modes": "no reference",
-    "gbdt-parametric-losses": "no reference",
-    "gbdt-lossguide-newtoncosine": "no reference",
-    "gbdt-pair-logit": "no reference",
-    "hdbscan": "no reference",
-    "hdbscan-leaf": "no reference",
     # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
     # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
     # harness no longer produces. `unwatched` would be the wrong reason and
@@ -2517,9 +2499,6 @@ PUBLIC_PENDING_LANES = {
     "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "no reference",
     "byte-lm-resident": "no reference",
-    "gbdt-adapter-score-weighted": "no reference",
-    "rf-score-weighted": "no reference",
-    "gbdt-yeti-rank": "unwatched",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
@@ -2527,11 +2506,9 @@ PUBLIC_PENDING_LANES = {
     # from an installed CPU development wheel with bundled, digest-checked models.
     # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
     # inference replay, not CPU CTR training or final release qualification.
-    "kmeans-sqrt": "own record",
-    "embedding": "own record",
-    "embedding-sort": "own record",
-    "ivf": "own record",
-    "ivf-euclidean": "own record",
+    # The other fix-record lanes passed installed reference-table replay;
+    # legacy `identity` still restricts itself to its original column scope.
+    "ivf": "own record",  # ties still owes a qualifying native training control
     # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
     "gemm-bf16": "no reference", "gemm-int8": "no reference",
     "transformer-bf16w": "no reference", "transformer-int8w": "no reference",

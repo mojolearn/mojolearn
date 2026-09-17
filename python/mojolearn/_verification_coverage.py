@@ -51,7 +51,9 @@ def inventory(harness, table, vendor_class):
                                  and entry.get("ref") is not None and not entry.get("conflict"))
                              for fixture in harness.FIXTURES)
         lanes[name] = dict(status=status, reason=reason, properties=properties,
-                           reference_fixtures=refs, fixtures=len(harness.FIXTURES))
+                           reference_fixtures=refs, fixtures=len(harness.FIXTURES),
+                           reference_admission=table.get('lane_admission', {}).get(name,
+                               dict(policy=table.get('admission_policy', dict(status='legacy')))))
     for name, lane in lanes.items():
         evidence = HISTORICAL_EVIDENCE['lanes'].get(name, {})
         lane['historical_evidence'] = evidence

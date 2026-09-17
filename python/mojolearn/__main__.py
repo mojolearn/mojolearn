@@ -68,6 +68,13 @@ def _wants_suite(args):
                 or getattr(args, "self_test", False)
                 or getattr(args, "cross_check", None)
                 or getattr(args, "compare", None)
+                # sealing a document is a pure function over one JSON file, the
+                # same as comparing two, and must not fall through to the
+                # pinned k-means card, which needs a reference this party has
+                # no reason to own
+                or getattr(args, "commitment", None)
+                or getattr(args, "commitment_a", None)
+                or getattr(args, "commitment_b", None)
                 or getattr(args, "coverage", False)
                 or getattr(args, "batch_checks", False))
 
@@ -171,6 +178,27 @@ def build_parser():
                         "genuinely different. A cell present in only one "
                         "document is INCOMPARABLE, never a match. Needs no GPU, "
                         "no bindings and no network")
+    v.add_argument("--commitment", metavar="DOC", default=None,
+                   help="COMMIT TO YOUR OWN EVIDENCE DOCUMENT BEFORE YOU SEE "
+                        "THEIRS. Writes a random nonce into DOC and prints a "
+                        "64-character commitment over the document's cells, "
+                        "its provenance block, its verification contract, its "
+                        "binding digests and its own verdict. Publish that "
+                        "line anywhere, by any means, BEFORE the two parties "
+                        "exchange documents; then exchange them, nonces "
+                        "included, and pass both lines back to --compare. "
+                        "Without this step nothing stops whoever receives the "
+                        "other file first from pasting its numbers into a "
+                        "document carrying their own hardware. Adds no network "
+                        "code and needs no GPU, no bindings and no repo")
+    v.add_argument("--commitment-a", dest="commitment_a", metavar="C", default=None,
+                   help="with --compare: the commitment published for the FIRST "
+                        "document before the exchange, as the 64-character line "
+                        "itself or a path to the .commitment file. A comparison "
+                        "without commitments is not an error; it is labelled a "
+                        "weaker result")
+    v.add_argument("--commitment-b", dest="commitment_b", metavar="C", default=None,
+                   help="with --compare: the same, for the SECOND document")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
                    help="with --all: also write the full evidence document "
                         "(per-cell hashes computed here and expected, per-lane "
@@ -179,7 +207,8 @@ def build_parser():
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
                    help="with --all: compare against this table instead of "
-                        "the one shipped in the wheel")
+                        "the one shipped in the wheel; with --emit-reference "
+                        "and --lanes, update only those lanes in this base table")
     v.add_argument("--records", action="append", metavar="DIR", default=None,
                    help="MAINTAINER PATH, with --all --emit-reference: the "
                         "identity_break record directories or JSONs to build "
