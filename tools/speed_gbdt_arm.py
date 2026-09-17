@@ -520,16 +520,42 @@ def load_covtype(size, binary=False, rows_cap=None):
     to every arm, it is named differently in the `shape=` tag so it can never
     be read as the 7-class result, and it is not a dataset chosen for
     flattering anyone: it is the only covtype an arm that refuses multiclass
-    can run."""
-    from sklearn.datasets import fetch_covtype
+    can run.
 
-    ds = fetch_covtype()
-    x = np.ascontiguousarray(ds.data, dtype=np.float32)
+    THE DECODED CACHE IS `<GBM_BENCH_DATA>/covtype/covtype_speed.npz` (x as
+    float32, target as sklearn's raw int32 labels 1..7), the same shape of
+    cache `load_higgs` and `load_year` keep, so `tools/dataset_store.sh stage`
+    can put it on a box (`gbm-bench/covtype/covtype_speed.npz`) and no rented
+    pod asks figshare for the archive. Both tasks derive from the raw target
+    exactly as they did from `fetch_covtype().target`, bit for bit. Without
+    the cache, scikit-learn's own fetch is the fallback and the cache is
+    written beside it, once."""
+    folder = os.path.join(data_root(), "covtype")
+    npz_path = os.path.join(folder, "covtype_speed.npz")
+    cached = None
+    if os.path.exists(npz_path) and os.path.getsize(npz_path) > 0:
+        try:
+            cached = np.load(npz_path)
+        except Exception as exc:                   # noqa: BLE001
+            sys.stderr.write(
+                "speed_gbdt_arm: %s is unreadable (%s); re-fetching with "
+                "scikit-learn\n" % (npz_path, exc))
+            cached = None
+    if cached is not None:
+        x, target = cached["x"], cached["target"]
+    else:
+        from sklearn.datasets import fetch_covtype
+
+        ds = fetch_covtype()
+        x = np.ascontiguousarray(ds.data, dtype=np.float32)
+        target = np.ascontiguousarray(ds.target, dtype=np.int32)
+        os.makedirs(folder, exist_ok=True)
+        np.savez(npz_path, x=x, target=target)
     if binary:
-        y = (ds.target == 2).astype(np.float32)
+        y = (target == 2).astype(np.float32)
         name, task, n_classes = "covtype2", "binary", 2
     else:
-        y = (ds.target.astype(np.int64) - 1).astype(np.float32)
+        y = (target.astype(np.int64) - 1).astype(np.float32)
         name, task, n_classes = "covtype", "multiclass", 7
     if size == "smoke" or rows_cap:
         x, y = _smoke_rows(x, y, rows_cap or 50000)
@@ -1234,6 +1260,11 @@ DATASET_STORE_KEYS = {
     "taxireg": "gbm-bench/taxi/taxi_speed.npz",
     "istella": "gbm-bench/istella/istella_speed.npz",
     "istellareg": "gbm-bench/istella/istella_speed.npz",
+    "higgs": "gbm-bench/higgs/higgs_speed.npz",
+    "higgsreg": "gbm-bench/higgs/higgs_speed.npz",
+    "year": "gbm-bench/year/year_speed.npz",
+    "covtype": "gbm-bench/covtype/covtype_speed.npz",
+    "covtype2": "gbm-bench/covtype/covtype_speed.npz",
 }
 
 #: Generated in process, so they cannot be missing and are never a substitute
@@ -1447,10 +1478,10 @@ def download(name):
         print("year decoded to %s" % os.path.join(folder, "year_speed.npz"))
         return
     if name in ("covtype", "covtype2"):
-        from sklearn.datasets import fetch_covtype
-        fetch_covtype()
-        print("covtype fetched into ~/scikit_learn_data (about 11 MB "
-              "compressed, 581012 x 54)")
+        d = load_covtype("shipped")
+        print("covtype decoded to %s (%d x %d + %d test rows)"
+              % (os.path.join(data_root(), "covtype", "covtype_speed.npz"),
+                 d.X_train.shape[0], d.X_train.shape[1], d.X_test.shape[0]))
         return
     if name in ("synth", "synthclf", "anomaly"):
         print("%s is generated in-process; nothing to download" % name)

@@ -42,6 +42,10 @@
 #   gbm-bench/taxi/taxi_speed.npz               419,757,252
 #   gbm-bench/istella/istella_speed.npz       2,248,281,826   (decoded; skips the 18 min parse)
 #   gbm-bench/istella/istella-s-letor.tar.gz    472,129,615   (source, so a decode is reproducible)
+#   gbm-bench/istella/istella_rank.npz          624,022,440   (query ids and the ranking test half)
+#   gbm-bench/higgs/higgs_speed.npz           1,276,000,490   (decoded 11,000,000 x 28 float32; skips the 2.6 GB gzip and its parse)
+#   gbm-bench/covtype/covtype_speed.npz          127,823,140   (decoded 581,012 x 54 float32 + int32 target; skips figshare)
+#   gbm-bench/year/year_speed.npz               187,586,070   (decoded 515,345 x 90 float32; skips the 211 MB zip)
 #   corpus/enwik8/input.txt                     100,000,000   (neural, English kind)
 #   corpus/pile_github/input.txt                 97,124,565   (neural, source-code kind)
 #
@@ -74,6 +78,9 @@ gbm-bench/taxi/taxi_speed.npz	HOME/datasets/gbm-bench/taxi/taxi_speed.npz
 gbm-bench/istella/istella_speed.npz	HOME/datasets/gbm-bench/istella/istella_speed.npz
 gbm-bench/istella/istella-s-letor.tar.gz	HOME/datasets/gbm-bench/istella/istella-s-letor.tar.gz
 gbm-bench/istella/istella_rank.npz	HOME/datasets/gbm-bench/istella/istella_rank.npz
+gbm-bench/higgs/higgs_speed.npz	HOME/datasets/gbm-bench/higgs/higgs_speed.npz
+gbm-bench/covtype/covtype_speed.npz	HOME/datasets/gbm-bench/covtype/covtype_speed.npz
+gbm-bench/year/year_speed.npz	HOME/datasets/gbm-bench/year/year_speed.npz
 corpus/enwik8/input.txt	ROOT/training/corpus/enwik8/input.txt
 corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
 EOF
@@ -154,6 +161,7 @@ cmd_manifest() {
     : > "$_tmp"
     _missing=0
     _hashed=0
+    _kept=0
     # keys come through `cut -f1`, NOT through IFS: a literal tab in an
     # `IFS=<tab> read` did not survive editing here and silently swallowed
     # every line into $key, so local_path_for matched nothing, `|| continue`
@@ -162,7 +170,21 @@ cmd_manifest() {
     # reports "no pin" instead of a mismatch.
     for key in $(catalog | cut -f1); do
         _lp=$(local_path_for "$key") || { echo "unknown key in catalog: $key" >&2; _missing=1; continue; }
-        if [ ! -f "$_lp" ]; then echo "MISSING locally, skipped: $key ($_lp)" >&2; _missing=1; continue; fi
+        if [ ! -f "$_lp" ]; then
+            # A catalog key this checkout cannot hash keeps its existing pin.
+            # Before 2026-09-17 it was dropped, so a worktree without the corpus
+            # files under training/ rebuilt the manifest and silently un-pinned
+            # enwik8 and pile_github while reporting success.
+            _old=$(pinned "$key")
+            if [ -n "$_old" ]; then
+                printf '%s\t%s\n' "$key" "$_old" >> "$_tmp"
+                _kept=$((_kept + 1))
+                echo "not here, pin kept: $key ($_lp)" >&2
+            else
+                echo "MISSING locally, skipped: $key ($_lp)" >&2; _missing=1
+            fi
+            continue
+        fi
         _sz=$(size_of "$_lp"); _sh=$(sha256_of "$_lp")
         printf '%s\t%s\t%s\n' "$key" "$_sz" "$_sh" >> "$_tmp"
         printf '%-44s %14s  %s\n' "$key" "$_sz" "$_sh"
@@ -194,7 +216,7 @@ cmd_manifest() {
     fi
     LC_ALL=C sort -o "$_tmp" "$_tmp"
     mv "$_tmp" "$MANIFEST"
-    echo "wrote $MANIFEST ($_rows pinned: $_hashed hashed here, $_carried carried forward)"
+    echo "wrote $MANIFEST ($_rows pinned: $_hashed hashed here, $_kept kept unhashed, $_carried carried forward)"
     [ "$_missing" = 0 ] || echo "NOTE: some catalog entries were skipped (see above); push only what is pinned" >&2
 }
 
