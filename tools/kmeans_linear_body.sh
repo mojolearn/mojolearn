@@ -81,6 +81,7 @@ host)
     ;;
 identity)
     cd "/root/t-$NAME" || exit 9
+    MOJOLEARN_COMMIT=$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt"); export MOJOLEARN_COMMIT
     step identity 5400 env PYTHONPATH="/root/t-$NAME/python:/root/t-$NAME/tools" "$P" tools/identity_break.py \
         --lanes "$LANES" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
     : > "$OUT/identity.done"
