@@ -97,6 +97,11 @@ def _refuse_ids(tokens, vocab, batch, width, target_column):
     target and may also hold `_IGNORE_INDEX`, exactly what the native loss
     admits; every other position is a model input."""
     flat = flat_view(tokens, 'i')
+    # The common case, every id a byte value, is settled by two C-speed
+    # scans of the view (lane/infer-speed-neural, 2026-09-17); the loop
+    # below runs only to name the first offender, with the same message.
+    if batch * width > 0 and min(flat) >= 0 and max(flat) < vocab:
+        return
     for r in range(batch):
         base = r * width
         for c in range(width):

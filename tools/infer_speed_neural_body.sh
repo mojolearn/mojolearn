@@ -39,6 +39,10 @@ if [ -s "$ROOT/COMMIT" ]; then MOJOLEARN_COMMIT=$(cat "$ROOT/COMMIT"); else MOJO
 export MOJOLEARN_COMMIT MOJOLEARN_GATE_COMMIT="$MOJOLEARN_COMMIT"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 NEURAL_LANES="mlp,transformer,transformer-window,mamba1,mamba2,mamba2-dtlimit,mamba3,samba,samba-untied-dropout-accum,byte-lm,byte-lm-resident,byte-lm-host-infer"
+# The CPU column carries the lanes the host bindings cover: the decode lanes,
+# mlp and the byte LM host inference lane (the resident session is a GPU
+# object and the rlpair part needs the training binding on either column).
+CPU_LANES="mlp,transformer,transformer-window,mamba1,mamba2,mamba2-dtlimit,mamba3,samba,samba-untied-dropout-accum,byte-lm-host-infer"
 note() { echo "$* $(date -u +%H:%M:%S)" | tee -a "$OUT/progress.txt"; }
 
 step() {
@@ -66,6 +70,16 @@ build_all() {
     step "build_byte_lm_$_tag" 1500 sh bindings/build_byte_lm.sh
     step "build_neural_host_$_tag" 1500 env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_TARGET_COLUMN sh bindings/build_neural_host.sh
     step "build_byte_lm_host_$_tag" 1500 env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_TARGET_COLUMN sh bindings/build_byte_lm_host.sh
+    # The lanes' other bindings, unchanged by this lane, so every neural lane
+    # has a column: training (samba, the resident rlpair) and linalg (mlp)
+    # on the GPU; the reference host families the CPU column trains through.
+    if [ "${INFER_BUILD_EXTRA:-1}" = 1 ]; then
+        step "build_training_$_tag" 1500 sh bindings/build_training.sh
+        step "build_linalg_$_tag" 1500 sh bindings/build_linalg.sh
+        for fam in transformer mamba training linalg; do
+            step "build_${fam}_host_$_tag" 1500 env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_TARGET_COLUMN sh bindings/build_host_family.sh "$fam"
+        done
+    fi
     sha256sum python/mojolearn/identical/*.so python/mojolearn/host/*.so > "$OUT/so_sha256_$_tag.txt" 2>&1
 }
 
@@ -99,18 +113,20 @@ build)
     ;;
 identity)
     gpu_arch
+    rm -f "$OUT/identity_cuda_$LABEL.json" "$OUT/identity_cpu_$LABEL.json"
     step "identity_cuda_$LABEL" 3000 pixi run python -u tools/identity_break.py \
-        --lanes "$NEURAL_LANES" --fixtures base,ties,odd --step-full --repeats 2 \
+        --lanes "$NEURAL_LANES" --fixtures base,ties,odd --step-full --no-rlpair --repeats 2 \
         --require-backend cuda --fail-on-refused --json "$OUT/identity_cuda_$LABEL.json"
     _stage=$(cpu_stage)
     step "identity_cpu_$LABEL" 3000 env PYTHONPATH="$_stage:$ROOT/tools" MOJOLEARN_HOST_DIR="$ROOT/python/mojolearn/host" \
         MOJOLEARN_CPU_THREADS=4 pixi run python -u tools/identity_break.py \
-        --lanes "$NEURAL_LANES" --fixtures base,ties,odd --step-full --repeats 2 \
+        --lanes "$CPU_LANES" --fixtures base,ties,odd --step-full --no-rlpair --repeats 2 \
         --require-cpu --require-backend cpu --fail-on-refused --json "$OUT/identity_cpu_$LABEL.json"
     : > "$OUT/identity_$LABEL.done"
     ;;
 bytelm)
     gpu_arch
+    rm -f "$OUT/bytelm_sweep_$LABEL.json" "$OUT/bytelm_host_gate_$LABEL.json"
     step "bytelm_sweep_$LABEL" 2400 pixi run python -u tools/byte_lm_gpu_logits_sweep.py \
         --stateless-every 8 --report "$OUT/bytelm_sweep_$LABEL.json"
     step "bytelm_host_gate_$LABEL" 2400 pixi run python -u tools/byte_lm_host_gate.py \
