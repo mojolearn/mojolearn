@@ -6,11 +6,27 @@ plan agreement, batch invariance, and the sabotage that shows each can fail.
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . gemm/checks/gemm_lowbit_check.mojo
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_LOWBIT_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo
     pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_HOST_SABOTAGE=1 -I . gemm/checks/gemm_lowbit_check.mojo
+    pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo
 
 The first must pass every gate; the second and third must FAIL the device
-gates (the sabotage report at the end says which did). Contract
-`gemm/IDENTICAL_LOWBIT_CONTRACT.md`; kernels `gemm/checks/gemm_lowbit.mojo`;
-answers `gemm/host/gemm_lowbit_oracle.mojo`.
+gates (the sabotage report at the end says which did); the fourth pins the
+int8 dispatcher to the flat plan and must pass every gate too. Contract
+`gemm/IDENTICAL_LOWBIT_CONTRACT.md`; kernels `gemm/checks/gemm_lowbit.mojo`
+and `gemm/checks/gemm_int8_mma.mojo`; answers
+`gemm/host/gemm_lowbit_oracle.mojo`.
+
+THE int8 MATRIX-UNIT GATE (DEVIATION 2910, contract L-9).
+`check_int8_mma_matches_flat` runs the flat plan and the MMA plan on every
+OP_NT shape of `_shape` and on the ragged shapes of `_mma_shape` (k = 17,
+31, 33, 100, 1000, 4097 with m, n off the 16 and 32 tile edges) and
+requires the same bits, and on the ragged shapes also the oracle's bits. It
+runs only on a column whose `lib_int8_matrix_unit_for` row is True; on any
+other column main prints that it did not run, which is not a pass.
+    RUN OWED: pixi run check-gemm-lowbit                (H100 sm_90a; MI300X/MI325X gfx942)
+    RUN OWED: pixi run check-gemm-lowbit-sabotage       (must FAIL on both boxes, naming check_int8_mma_matches_flat)
+    RUN OWED: pixi run check-gemm-lowbit-host-sabotage  (must FAIL on both boxes)
+    RUN OWED: pixi run mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_INT8_FORCE_FLAT=1 -I . gemm/checks/gemm_lowbit_check.mojo
+`tools/lowbit_mma_leg.sh` is the body that runs the four on a rented box.
 
 MAIN RUNS EVERY GATE AND REPORTS EVERY VERDICT before it raises, as
 `gemm_device_check.mojo` does and for the same reason: under a sabotage
@@ -31,6 +47,8 @@ from checks.numerics import (
     numeric_mode_name,
     quantize_int8_value,
 )
+from checks.kernel_matrix import TARGET_COLUMN, column_name, lib_int8_matrix_unit_for
+from gemm.checks.gemm_int8_mma import identical_gemm_int8_mma_into
 from gemm.checks.gemm_lowbit import (
     BF16W_FUSED_MAX_CELLS,
     LowbitWorkspace,
@@ -40,7 +58,9 @@ from gemm.checks.gemm_lowbit import (
     identical_gemm_bf16w_fused_into,
     identical_gemm_bf16w_into,
     identical_gemm_bf16w_widen_into,
+    identical_gemm_int8_flat_into,
     identical_gemm_int8_into,
+    int8_plan_dispatch_name,
     lowbit_sabotage_name,
     quantize_rows_int8_device,
 )
@@ -559,6 +579,95 @@ def check_int8_device_matches_oracle(ctx: DeviceContext) raises:
         print("   ok " + tag + "  c[0]=" + _show(got[0]))
 
 
+#: The ragged shapes of the matrix-unit gate: every k off the unit's k-tile
+#: of 32 (17, 31, 33, 100, 1000, 4097) and m, n off the 16-wide warp tile
+#: and the 32-wide block tile, so the zero-code padding and the store mask
+#: are exercised on both edges; one decode row; one k that is a multiple of
+#: 32 with a single warp tile (2 x 16 x 32) so the aligned vector load path
+#: runs.
+comptime MMA_SHAPE_COUNT = 8
+
+
+def _mma_shape(i: Int) -> Tuple[Int, Int, Int]:
+    if i == 0:
+        return (3, 5, 17)
+    if i == 1:
+        return (17, 33, 31)
+    if i == 2:
+        return (33, 17, 33)
+    if i == 3:
+        return (1, 47, 100)
+    if i == 4:
+        return (50, 70, 1000)
+    if i == 5:
+        return (13, 21, 4097)
+    if i == 6:
+        return (2, 16, 32)
+    return (100, 3, 64)
+
+
+def _run_int8_plans(
+    ctx: DeviceContext, qa: Int8Rows, qb: Int8Rows, m: Int, n: Int, k: Int, tag: String
+) raises -> Tuple[List[Float32], List[Float32]]:
+    """Both int8 plans on the same codes: (flat, mma)."""
+    var dqa = _upload_i8(ctx, qa.q)
+    var dea = _upload_i32(ctx, qa.e)
+    var dqb = _upload_i8(ctx, qb.q)
+    var deb = _upload_i32(ctx, qb.e)
+    var dflat = _poisoned(ctx, m * n)
+    var dmma = _poisoned(ctx, m * n)
+    identical_gemm_int8_flat_into(ctx, dflat, dqa, dea, dqb, deb, m, n, k)
+    identical_gemm_int8_mma_into(ctx, dmma, dqa, dea, dqb, deb, m, n, k)
+    ctx.synchronize()
+    var flat = _download_f32(ctx, dflat, m * n, tag + " flat")
+    var mma = _download_f32(ctx, dmma, m * n, tag + " mma")
+    _ = dqa
+    _ = dea
+    _ = dqb
+    _ = deb
+    _ = dflat
+    _ = dmma
+    return (flat^, mma^)
+
+
+def check_int8_mma_matches_flat(ctx: DeviceContext) raises:
+    """GATE (L-9, DEVIATION 2910): the matrix-unit plan and the flat plan
+    return the same bits on every OP_NT shape of the file and on the
+    ragged shapes, and on the ragged shapes both equal the oracle. The
+    oracle comparison is what a sabotage build fails here: the value arm
+    reaches both plans alike, so plan-versus-plan alone would pass it."""
+    var shapes = 0
+    for s in range(SHAPE_COUNT):
+        var sh = _shape(s)
+        if sh[3] != OP_NT:
+            continue
+        var m = sh[0]
+        var n = sh[1]
+        var k = sh[2]
+        var qa = quantize_rows_int8(_fill(m * k, 131 + s), m, k)
+        var qb = quantize_rows_int8(_fill(n * k, 149 + s), n, k)
+        var tag = "int8 mma " + String(m) + "x" + String(n) + "x" + String(k)
+        var both = _run_int8_plans(ctx, qa, qb, m, n, k, tag)
+        _first_diff(both[1], both[0], tag + " (mma vs flat)")
+        shapes += 1
+    for s in range(MMA_SHAPE_COUNT):
+        var sh = _mma_shape(s)
+        var m = sh[0]
+        var n = sh[1]
+        var k = sh[2]
+        var qa = quantize_rows_int8(_fill(m * k, 167 + s), m, k)
+        var qb = quantize_rows_int8(_fill(n * k, 181 + s), n, k)
+        var want = gemm_int8_oracle(qa.q, qa.e, qb.q, qb.e, m, n, k)
+        var tag = "int8 mma ragged " + String(m) + "x" + String(n) + "x" + String(k)
+        var both = _run_int8_plans(ctx, qa, qb, m, n, k, tag)
+        _first_diff(both[1], both[0], tag + " (mma vs flat)")
+        _first_diff(both[1], want, tag + " (mma vs oracle)")
+        _first_diff(both[0], want, tag + " (flat vs oracle)")
+        shapes += 1
+        print("   ok " + tag + "  c[0]=" + _show(both[1][0]))
+    print("   ok mma == flat on " + String(shapes) + " shapes, oracle on " + String(MMA_SHAPE_COUNT))
+
+
 def check_int8_is_batch_invariant(ctx: DeviceContext) raises:
     """GATE: a row's codes, exponent and products do not depend on the other
     rows in the call."""
@@ -624,6 +733,7 @@ def main() raises:
     )
     print("   profiles: mojolearn.identical.gemm.bf16f32.v1, mojolearn.identical.gemm.int8i32.v1")
     print("   contract: gemm/IDENTICAL_LOWBIT_CONTRACT.md")
+    print("   column: " + column_name(TARGET_COLUMN) + "  int8 dispatch: " + int8_plan_dispatch_name())
     var ran = 0
     var failed = 0
     try:
@@ -675,6 +785,20 @@ def main() raises:
             _gate(String("check_int8_is_batch_invariant"), ran, failed, String(""))
         except e:
             _gate(String("check_int8_is_batch_invariant"), ran, failed, String(e))
+        comptime if lib_int8_matrix_unit_for[TARGET_COLUMN]():
+            try:
+                check_int8_mma_matches_flat(ctx)
+                _gate(String("check_int8_mma_matches_flat"), ran, failed, String(""))
+            except e:
+                _gate(String("check_int8_mma_matches_flat"), ran, failed, String(e))
+        else:
+            # Not a pass: the gate did not run. The column has no integer
+            # matrix unit, so the MMA plan cannot be launched here.
+            print(
+                "   check_int8_mma_matches_flat DID NOT RUN: column "
+                + column_name(TARGET_COLUMN)
+                + " has no int8 matrix unit (RUN OWED on an H100 and an MI300X/MI325X, tools/lowbit_mma_leg.sh)"
+            )
     print("== " + String(ran) + " gates, " + String(failed) + " failed ==")
     if failed > 0:
         raise Error(String(failed) + " gate(s) failed")

@@ -796,6 +796,21 @@ clause (d) when they are written, they will look inert and be deleted.
   this document came from reading source on 2026-08-24. No file in
   `transformer/` other than this one and the README has any content.
 
+### 11.1 Addendum, 2026-09-17 (lane/block-options): the option record
+
+Everything section 11 declines remains declined for THIS profile's default
+record, which is the frozen v1 spelling bit for bit. `transformer/block_options.mojo`
+(DEVIATIONS 2930 to 2939, 2943 to 2948) adds a record of options (`rope_theta`,
+`rope_scaling` linear and llama3, `rope_dim`, `max_positions`, `qkv_bias`,
+`o_bias`, `norm` rmsnorm, layernorm and rmsnorm_offset, `norm_eps`,
+`norm_bias`, `mlp` swiglu, gelu, gelu_tanh, geglu and geglu_tanh,
+`mlp_bias`, `qk_norm`, `attn_softcap`). Each non-default option is a SEPARATE
+spelling with its own oracle stage, device kernel and separating fixture
+(`transformer/checks/transformer_options_check.mojo`), and a block built with
+a non-default record is certified only where that record's own columns exist.
+A default record sends the old binding lists and reaches the old code path,
+which is what keeps every existing certificate of this contract intact.
+
 ## 12. Where this departs from the plan's sketch, and where the code goes
 
 ### 12.1 The sketch

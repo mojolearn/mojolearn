@@ -36,6 +36,23 @@ seam is the dequantization, and it is one exact multiply plus the flush.
 `quantize_rows_int8_kernel` is one thread per row: the absmax, the exponent,
 the codes, in the oracle's order.
 
+TWO EXECUTION PLANS FOR int8, ONE ANSWER (DEVIATION 2910, contract L-9)
+-----------------------------------------------------------------------
+  FLAT    `identical_gemm_int8_flat_kernel`, above. Every column.
+  MMA     `gemm/checks/gemm_int8_mma.mojo::identical_gemm_int8_mma_kernel`,
+          the vendor's integer matrix unit (NVIDIA IMMA m16n8k32 s8/s32,
+          AMD CDNA MFMA i32_16x16x32_i8), Int32 accumulation, the same
+          `dequant_int8_pinned` epilogue. Columns whose kernel-matrix row
+          `lib_int8_matrix_unit_for` says True: NVIDIA and AMD.
+Both are the profile because an int8 product is exact and an Int32 sum of
+exact integers is order-free: no tile shape and no internal summation order
+can move a bit, so the choice is SCHEDULING and `check_int8_mma_matches_flat`
+requires the two plans' bits to match on every shape.
+`identical_gemm_int8_into` takes the MMA plan when the row says True, the
+shape is admitted (`int8_mma_admits`, every legal shape) and the build does
+not carry `-D MOJOLEARN_INT8_FORCE_FLAT=1`; the flat plan otherwise. Apple
+stays on the flat plan (Metal has no integer matrix unit).
+
 THE SABOTAGE ARM (DEVIATION 2908)
 ---------------------------------
 `-D MOJOLEARN_LOWBIT_SABOTAGE=1` flips the value of every cell both kernels
@@ -72,6 +89,11 @@ from gemm.checks.gemm_identical import (
     step_count_device_alloc,
     step_count_sync,
 )
+from checks.kernel_matrix import TARGET_COLUMN, lib_int8_matrix_unit_for
+from gemm.checks.gemm_int8_mma import (
+    identical_gemm_int8_mma_into,
+    int8_mma_admits,
+)
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K
 from gemm.host.gemm_oracle import (
     OP_NN,
@@ -82,6 +104,27 @@ from gemm.host.gemm_oracle import (
 
 #: DEVIATION 2908, the value arm. Off in every build that does not name it.
 comptime LOWBIT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_SABOTAGE"]()
+
+#: DEVIATION 2910: `-D MOJOLEARN_INT8_FORCE_FLAT=1` keeps the flat int8 plan
+#: on every column, the unit's column included, so a box that has the unit
+#: can run the whole gate file through the flat plan and compare. SCHEDULING;
+#: cannot move a bit (contract L-9).
+comptime INT8_FORCE_FLAT = is_defined["MOJOLEARN_INT8_FORCE_FLAT"]()
+
+#: DEVIATION 2910: whether this build's dispatcher may pick the MMA plan at
+#: all. The row and the define; the shape is asked per call.
+comptime INT8_MMA_ENABLED = lib_int8_matrix_unit_for[TARGET_COLUMN]() and not INT8_FORCE_FLAT
+
+
+def int8_plan_dispatch_name() -> String:
+    """What `identical_gemm_int8_into` runs on this build: for the gate
+    banner, so a log says which plan produced the oracle comparison."""
+    comptime if INT8_FORCE_FLAT:
+        return String("flat (MOJOLEARN_INT8_FORCE_FLAT)")
+    elif lib_int8_matrix_unit_for[TARGET_COLUMN]():
+        return String("mma (lib_int8_matrix_unit_for)")
+    else:
+        return String("flat (no int8 matrix unit on this column)")
 
 #: Threads per block for every kernel in this file. SCHEDULING; no float
 #: crosses a thread boundary in any of them.
@@ -498,7 +541,31 @@ def identical_gemm_int8_into(
     k: Int,
 ) raises:
     """**THE ENTRY POINT of `mojolearn.identical.gemm.int8i32.v1`**, OP_NT:
-    `C[m x n] = Q_a[m x k] . Q_b[n x k]^T` dequantized. Asynchronous."""
+    `C[m x n] = Q_a[m x k] . Q_b[n x k]^T` dequantized. Asynchronous.
+    DEVIATION 2910: the MMA plan when the column's row says True, the shape
+    is admitted and the build does not force the flat plan; the flat plan
+    otherwise. Both are the profile (contract L-9)."""
+    comptime if INT8_MMA_ENABLED:
+        if int8_mma_admits(m, n, k):
+            identical_gemm_int8_mma_into(ctx, c, qa, ea, qb, eb, m, n, k)
+            return
+    identical_gemm_int8_flat_into(ctx, c, qa, ea, qb, eb, m, n, k)
+
+
+def identical_gemm_int8_flat_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut qa: DeviceBuffer[DType.int8],
+    mut ea: DeviceBuffer[DType.int32],
+    mut qb: DeviceBuffer[DType.int8],
+    mut eb: DeviceBuffer[DType.int32],
+    m: Int,
+    n: Int,
+    k: Int,
+) raises:
+    """The FLAT plan, always: one thread per cell. The checks call this
+    directly to compare it with the MMA plan; production goes through
+    `identical_gemm_int8_into`. Asynchronous."""
     if m <= 0 or n <= 0 or k <= 0:
         raise Error(
             "identical_gemm_int8: m, n and k must all be positive, got m="
