@@ -55,6 +55,7 @@ from ._arrays import _addr, _addr_ro
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_i32_c, empty, frombytes, full, zeros
 from ._bufcheck import flat_view, is_int32, is_native_f32, le_bytes, memcopy, probe
 from ._byte_lm_config import ByteLanguageModelConfig, require_shape, state_shape
+from . import _byte_lm_checkpoint
 from ._byte_lm_host import _greedy_next_bytes, _logits_ids
 from . import _ragged
 
@@ -579,6 +580,56 @@ class SmallByteLanguageModelTrainer:
                                    'since open, restore, import or rollback')
             return self._export_gradients_impl(completed, named)
 
+    def attention_stage_report(self):
+        """DEVIATION 3010: what the OPEN resident session's quadratic
+        attention stages are holding RIGHT NOW. `None` when no session is
+        open, or when the loaded binding predates this report.
+
+        Keys: `forward_eager_cells`, `forward_aexp_cells`,
+        `backward_eager_cells` and the matching `*_bytes` at four bytes a
+        cell; `layers_grown_forward`, `layers_grown_backward`,
+        `layers_full_aexp`, `layers`; `eager_bytes` (forward eager +
+        backward eager, the two that only the eager fallback grows) and
+        `total_bytes` (those plus `aexp`).
+
+        WHAT IT IS FOR. The ten `[B, n_heads, L, S]` attention arrays are
+        allocated at ONE element for the fused path and GROW ON DEMAND the
+        first time a layer takes the eager path -- a refused regime, or a
+        `FUSED_CORNER` hit, both of which depend on the DATA and so on the
+        step. Once grown they are never released while the session lives.
+        A run therefore has no single device footprint: it can step up
+        once, at a step nobody chose, and every capacity figure taken
+        before that step is wrong afterwards. A three-step probe cannot
+        see it. Read this between steps and the step where it moved is
+        named rather than inferred.
+
+        `forward_aexp_cells` is reported APART from the other forward
+        arrays because two unrelated mechanisms grow `aexp`: the eager
+        fallback grows all four together, while a build carrying the
+        fused exp stash grows `aexp` alone on a call that refused
+        nothing. `eager_bytes` excludes it for exactly that reason.
+
+        Host metadata only: every number is the length of a buffer the
+        trainer already owns. Nothing is launched, downloaded or
+        synchronized, and no step path calls this."""
+        with self._lock:
+            if not self._session_open or self._native_session is None:
+                return None
+            info = self._session_binding.byte_lm_session_info(self._native_session)
+            if len(info) < 10:
+                return None
+            fwd, aexp, bwd = int(info[4]), int(info[5]), int(info[6])
+            return dict(forward_eager_cells=fwd, forward_aexp_cells=aexp,
+                        backward_eager_cells=bwd,
+                        forward_eager_bytes=fwd * 4, forward_aexp_bytes=aexp * 4,
+                        backward_eager_bytes=bwd * 4,
+                        eager_bytes=(fwd + bwd) * 4,
+                        total_bytes=(fwd + aexp + bwd) * 4,
+                        layers_grown_forward=int(info[7]),
+                        layers_grown_backward=int(info[8]),
+                        layers_full_aexp=int(info[9]),
+                        layers=state_shape(self._state).n_layers)
+
     def _export_state_impl(self):
         """Lock held, session open. Returns a validated state dict whose
         arrays are fresh owned copies (the `_validate_state` copies of the
@@ -1066,6 +1117,57 @@ class SmallByteLanguageModelTrainer:
         finally:
             if temporary is not None:
                 os.unlink(temporary)
+
+    def export_checkpoint_binary(self, path):
+        """Atomically write the complete state as a streamed BINARY archive
+        (`_byte_lm_checkpoint`, schema `mojolearn.byte-lm-stream.v1`), from
+        `export_state()`. Returns the file's SHA-256.
+
+        THIS IS THE PATH AT SCALE, AND IT IS A SECOND FORMAT, NOT A WIDER
+        FIRST ONE. `export_checkpoint` keeps its JSON/hex envelope, its
+        bytes and its 2 MiB bound untouched; hex doubles the payload, so
+        that bound stops at about 87,381 parameters and the
+        162,147,840-parameter shape has always been refused by it. Here the
+        four arrays are streamed as their little-endian `<f4`/`<i4` bytes
+        after a bounded canonical JSON header, so the file is about 1.95 GB
+        at that shape instead of impossible, and a round trip is bit-exact
+        by construction: nothing passes through decimal text, so `-0.0`,
+        NaN payloads and subnormals all survive.
+
+        THE OPTIMIZER MOMENTS ARE IN THE FILE AND THAT IS THE POINT. A
+        restore that dropped `m` and `v` would produce the same loss and
+        the same gradient on its first step and a different update, so the
+        divergence would surface a step later looking like
+        nondeterminism.
+
+        No device work beyond the one `export_state()` download a resident
+        session already owes, and no arithmetic."""
+        with self._lock:
+            payload = self.export_state()
+        return _byte_lm_checkpoint.save(path, payload)
+
+    @classmethod
+    def from_checkpoint_binary(cls, path, *, resident=False):
+        """Restore a `mojolearn.byte-lm-stream.v1` archive written by
+        `export_checkpoint_binary`, never the JSON/hex envelope and never
+        `training/checkpoint.mojo`'s unreachable native binary v1.
+
+        The archive is verified whole -- magic, header digest, every array
+        digest and the exact file size -- and every array length is taken
+        from the admitted registry rather than from the file, before this
+        allocates anything. The restored state then passes the SAME
+        `_validate_state` that admits `load_state_dict`, so a file cannot
+        enter through a weaker door than an in-memory dict.
+
+        Provenance is not established here: this says the bytes are the
+        bytes that were written, not who wrote them or on what device."""
+        state = _byte_lm_checkpoint.load(path)
+        shape = state_shape(state)
+        cfg = state['config']
+        result = cls(state['parameters'], data_schedule=state['data_schedule'], lr=cfg['lr'],
+                     betas=(cfg['beta1'], cfg['beta2']), eps=cfg['eps'], weight_decay=cfg['weight_decay'],
+                     shape=shape, resident=resident)
+        return result.load_state_dict(state)
 
     @classmethod
     def from_checkpoint(cls, path, *, resident=False):
