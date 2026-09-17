@@ -166,6 +166,9 @@ def test_identity_command_runs_public_reference_probes_on_a_cpu():
     assert unreachable == set(), (
         f"public reference lanes no shipped binding can serve: {sorted(unreachable)}")
     for lane, family in host_only.items():
+        if family is None:
+            assert lane in ("bpe-trainer", "cross-val-folds"), "unclassified pure-Python lane"
+            continue
         f = host_surface.family(family)
         assert f["ships_in_wheel"] and f["routes"] is None, f"{lane}: not a shipped host-only family"
 

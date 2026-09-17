@@ -55,6 +55,7 @@ from training.byte_lm_model_pool import ByteModelPool
 from training.byte_lm_offload import ByteOffloadedReplay
 from training.byte_lm_parallel import ByteParallelTrainer
 from training.byte_lm_logits import (
+    ByteLogitsScratch,
     BYTE_LOGITS_MAX_BATCH,
     BYTE_LOGITS_MAX_CELLS,
     byte_logits_from_params,
@@ -122,12 +123,17 @@ struct ByteLMSession(Movable, Writable):
     """
     var ctx: Optional[DeviceContext]
     var trainer: Optional[ByteTrainer]
+    #: DEVIATION 2942: the logits forward's call-shaped buffers, kept across
+    #: `byte_lm_session_logits` calls of the same shape. Inference-only
+    #: state; the trainer never reads it. Released before the trainer.
+    var logits_scratch: Optional[ByteLogitsScratch]
     var busy: Bool
     var usable: Bool
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
         self.trainer = Optional[ByteTrainer]()
+        self.logits_scratch = Optional[ByteLogitsScratch]()
         self.busy = False
         self.usable = True
 
@@ -140,6 +146,7 @@ struct ByteLMSession(Movable, Writable):
     def __deinit__(deinit self):
         # Buffers must die before their context, and the frees they enqueue
         # must drain before the context goes (DEVIATION 2520, below).
+        _ = self.logits_scratch^
         _ = self.trainer^
         if self.ctx:
             try:
@@ -154,6 +161,7 @@ struct ByteLMSession(Movable, Writable):
         self.usable = False
         if self.ctx:
             self.ctx.value().synchronize()
+        self.logits_scratch = None
         self.trainer = None
         # DEVIATION 2520: releasing the trainer enqueues its buffer frees on
         # the context's stream; destroying the context with those frees in
@@ -495,6 +503,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
                 # runtime allocator's lock the dying context never returned.
                 if sync_before_teardown:
                     print("byte LM teardown variant: sync_before_teardown")
+                session.logits_scratch = None
                 session.trainer = None
                 session.ctx.value().synchronize()
                 session.ctx = None
@@ -509,6 +518,7 @@ def _byte_lm_run(addresses: PythonObject, params: PythonObject, shape: ByteConfi
         # shape: synchronized above, released with the GIL held). Off, the
         # teardown above ran and both Optionals are already empty.
         print("byte LM teardown variant: teardown_with_gil")
+        session.logits_scratch = None
         session.trainer = None
         # DEVIATION 2520: drain the enqueued frees before the context goes.
         if session.ctx:
@@ -768,6 +778,7 @@ def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
             _bbytes(ton, "open.bind_context_and_upload_bytes", 3 * n * 4)
     except error:
         owner[].busy = False
+        owner[].logits_scratch = None
         owner[].trainer = None
         owner[].ctx = None
         raise error
@@ -1194,7 +1205,8 @@ def byte_lm_session_logits_binding(session: PythonObject, addresses: PythonObjec
     try:
         with GILReleased(Python()):
             ref ctx = owner[].ctx.value()
-            logits = byte_logits_resident(ctx, owner[].trainer.value(), ids, bl[0], bl[1])
+            logits = byte_logits_resident(ctx, owner[].trainer.value(), ids, bl[0], bl[1],
+                                          owner[].logits_scratch)
             if owner[].trainer.value().completed_steps != step_before:
                 raise Error("byte LM logits changed the completed step")
             ctx.synchronize()

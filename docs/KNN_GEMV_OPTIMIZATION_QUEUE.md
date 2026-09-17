@@ -52,13 +52,25 @@ provenance when using it; do not treat a log footer alone as a new certificate.
 
 ## Missing integration and next source changes
 
-- [ ] kNN: inspect existing opt-in dispatch in
-  [knn_brute_force.mojo](../neighbors/impl/detail/knn_brute_force.mojo).
-  Integration already exists behind `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL`
-  and `MOJOLEARN_EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL`; do not add a duplicate
-  dispatch. Missing work is bounded shape/data qualification, installed-binary
-  activation witnesses and a justified default policy. Keep selector-only,
-  transpose-only and combined routes separately observable.
+- [x] kNN: the small-k selector, the transposed index with the register tile
+  and the index-axis tiling are THE DEFAULT under IDENTICAL on NVIDIA, AMD,
+  AMD RDNA, Apple and the CPU column since 2026-09-09
+  (`checks/kernel_matrix.mojo::_knn_identical_round_column`, whose docstring
+  carries the M4 four-arm price the Apple flip rested on: 20.5 to 15.1 ms at
+  32 queries, 182.2 to 66.6 ms at 1,000). THE SENTENCE THAT STOOD HERE,
+  "missing work is ... a justified default policy", was FALSE from that day
+  (corrected 2026-09-17, lane/infer-speed-classical): the two
+  `MOJOLEARN_EXPERIMENTAL_*` defines now force a row ON on any column and
+  `MOJOLEARN_KNN_IDENTICAL_LEGACY_SELECT` / `_LEGACY_LAYOUT` force it OFF, so
+  selector-only, transpose-only and combined routes stay separately
+  observable. The fused distance-and-select launch (DEVIATION 2667) is the one
+  row still off by default on every column.
+- [x] kNN: the per-call index upload. Measured 2026-09-17 on an RTX 4090
+  (bench/results/infer_speed_classical_2026-09-17/): with the index uploaded
+  every call, one Istella-S query (400,000 x 220 index) cost 48 ms and 4,000
+  queries 140 ms, so the upload and its staging were the floor of the call.
+  DEVIATION 2921 keeps the index on the device across `kneighbors` calls
+  (`neighbors/resident_index.mojo`); the search body is unchanged.
 - [ ] Keep original norms, per-distance FP32 operation order, tie/composite-key
   selection and output offsets unchanged. First extend host dispatch metadata
   with selected flags, query tile, metric and transpose/preparation scope.

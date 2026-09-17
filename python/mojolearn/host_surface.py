@@ -304,6 +304,7 @@ FOREST_RECORDED_ROOT = "bench/results/forest_host"
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.
 TRAINING_LANE_NAMES = {
+    "select-d": "ordinary differencing order selection",
     "gemm-pinned": "pinned GEMM",
     "kde": "kernel density",
     "holtwinters": "Holt-Winters",
@@ -401,6 +402,8 @@ TRAINING_LANE_NAMES = {
     # lane/cpu-training-small-gaps (2026-09-15): normalize_y=True, the folds
     # through the preprocessing host binding's standard_fit and standard_transform.
     "gp-normalize-y": "the Gaussian process with normalized targets",
+    "gp-optimize": "Gaussian process hyperparameter optimization",
+    "gp-optimize-restarts": "Gaussian process hyperparameter optimization with restarts",
     # Gaussian process classification (lane/gaussian-process-classifier,
     # 2026-09-15): gaussian_process/host/gpc_oracle.mojo over the gp oracle's
     # kernel matrix, the Cholesky oracle and gemm_oracle, the Newton steps in
@@ -491,6 +494,7 @@ TRAINING_LANE_NAMES = {
     # contingency matrix, host_fowlkes_mallows in
     # metrics/host/metrics_oracle.mojo, exported under the GPU binding's name.
     "metrics-fowlkes-mallows": "the Fowlkes-Mallows index",
+    "metrics-homogeneity-completeness": "the combined homogeneity, completeness and V-measure scores",
     # The weighted score lanes (lane/cpu-training-small-gaps, 2026-09-15):
     # score(X, y, sample_weight) of the gradient boosting adapters and the
     # random forests through host_weighted_accuracy and host_weighted_r2 in
@@ -676,6 +680,7 @@ TRAINING_LANE_NAMES = {
     "optim-adam-clip": "Adam and AdamW with the gradient clip and accumulation",
     "cross-entropy-arms": "the cross-entropy loss arms",
     "training-primitives": "the embedding, RMSNorm and linear training primitives",
+    "ordered-gradient-sum": "the ordered shard gradient reduction",
     # CPU training for the workstream D estimators
     # (lane/cpu-training-d-estimators, 2026-09-15). The Cholesky door through
     # the gp host binding's cholesky_factor and cholesky_solve (the factor is
@@ -854,6 +859,23 @@ TRAINING_LANE_NAMES = {
     # computes is the prediction from a GPU-fitted model, not a fit.
     "gbdt-categorical-ctr-tables": "predictions of Metal-saved gradient boosting models with CTR tables (inference)",
     "gbdt-tensor-ctr-tables": "predictions of Metal-saved gradient boosting models with tensor CTRs (inference)",
+    # lane/identical-lowbit-inference (2026-09-17): the two low-bit GEMM
+    # profiles, and every neural block with bf16- or int8-stored projection
+    # weights materialized exactly and run through the fp32 path.
+    "gemm-bf16": "the bf16-storage GEMM profile",
+    "gemm-int8": "the int8 GEMM profile with power-of-two scales",
+    "transformer-bf16w": "the Transformer block with bf16-stored weights",
+    "transformer-int8w": "the Transformer block with int8-stored weights",
+    "mamba1-bf16w": "the Mamba-1 block with bf16-stored weights",
+    "mamba1-int8w": "the Mamba-1 block with int8-stored weights",
+    "mamba2-bf16w": "the Mamba-2 block with bf16-stored weights",
+    "mamba2-int8w": "the Mamba-2 block with int8-stored weights",
+    "mamba3-bf16w": "the Mamba-3 block with bf16-stored weights",
+    "mamba3-int8w": "the Mamba-3 block with int8-stored weights",
+    "mlp-bf16w": "the small MLP with bf16-stored weights",
+    "mlp-int8w": "the small MLP with int8-stored weights",
+    "samba-bf16w": "the Samba stack with bf16-stored weights",
+    "samba-int8w": "the Samba stack with int8-stored weights",
 }
 
 #: The saved models the CTR table lanes load on a CPU column, one
@@ -1197,17 +1219,22 @@ FAMILIES = (
         # matrix, then solve) ships: this family is in the wheel and gp is
         # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
         # so the cholesky lane reads through this binding.
-        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky"),
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
         display="pinned GEMM and the Cholesky factorization and solve",
-        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
+        host_modules=("gemm/host/gemm_oracle.mojo", "gemm/host/gemm_lowbit_oracle.mojo",
+                      "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
             "linalg_profile_version", "gemm", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+            # lane/identical-lowbit-inference (2026-09-17): the bf16f32.v1 and
+            # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
+            "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
+            "dequantize_int8", "to_bf16", "from_bf16",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1311,7 +1338,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                        "metrics-fowlkes-mallows"),
+                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -1416,10 +1443,10 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "par-holtwinters"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d", "par-holtwinters"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("ExponentialSmoothing", "kpss_test"),
+        classes=("ExponentialSmoothing", "kpss_test", "select_d"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
@@ -1431,7 +1458,8 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: holtwinters_fit and the KPSS test, so the holtwinters and kpss lanes can be "
+            "Ships: holtwinters_fit and the KPSS test (also used by the Python select_d controller), "
+            "so the holtwinters, kpss and select-d lanes can be "
             "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
             "shipped forecast binding, which registers kpss_test from the same shared module "
             "(bindings/kpss_host_test.mojo), so the two binaries cannot drift."
@@ -1600,7 +1628,8 @@ FAMILIES = (
         # lane/gaussian-process-classifier (2026-09-15): gpc_fit and
         # gpc_predict under the GPU binding's contract.
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
-                        "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize"),
+                        "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize",
+                        "gp-optimize", "gp-optimize-restarts"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -1949,8 +1978,9 @@ FAMILIES = (
         routes="_mojolearn_training",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "par-mlp",
-                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip"),
+        training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
+                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
+                        "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -2045,7 +2075,8 @@ FAMILIES = (
         routes="_mojolearn_mamba",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3"),
+        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3",
+                        "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Mamba1Block", "Mamba2Block", "Mamba3Block"),
@@ -2311,7 +2342,7 @@ FAMILIES = (
         routes="_mojolearn_transformer",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("transformer", "transformer-window"),
+        training_lanes=("transformer", "transformer-window", "transformer-bf16w", "transformer-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -2435,6 +2466,9 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    "select-d": "no reference",
+    "ordered-gradient-sum": "no reference",
+    "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
     # shipped table describes bytes this build no longer produces. The
@@ -2493,6 +2527,14 @@ PUBLIC_PENDING_LANES = {
     "embedding-sort": "own record",
     "ivf": "own record",
     "ivf-euclidean": "own record",
+    # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
+    "gemm-bf16": "no reference", "gemm-int8": "no reference",
+    "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
+    "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
+    "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
+    "mamba3-bf16w": "no reference", "mamba3-int8w": "no reference",
+    "mlp-bf16w": "no reference", "mlp-int8w": "no reference",
+    "samba-bf16w": "no reference", "samba-int8w": "no reference",
 }
 
 
@@ -2539,7 +2581,11 @@ def public_reference_lanes():
 #: lane/ship-cpu-host-families widened the set and narrowing it would be a
 #: regression, which is why the derivation adds it back rather than deriving
 #: it: it is the one public lane a run selects without comparing.
-PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
+# BPE vocabulary training and fold construction are pure host operations.
+# Their fixtures run locally, but missing reference hashes must read OWED.
+# None means pure Python: no native host binding is required.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
+                          "cross-val-folds": None}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:
@@ -2578,6 +2624,11 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
+    # CPU diagnostics now match all nine fixtures, but the bundled table
+    # has only Apple GPU witnesses for these optimizers. CUDA/HIP release
+    # records and installed-wheel verification are still owed.
+    "gp-optimize",
+    "gp-optimize-restarts",
     # `svc-poly` is here rather than promoted for a reason that is not about
     # its arithmetic: its cells rest on TWO columns (apple and cpu, from
     # 2026-09-15_inference-svm), so it cannot meet `--require-columns 4`.
