@@ -178,6 +178,8 @@ def judge(value, ent, error=None):
     probe raised (then `error` is the sentence it raised with)."""
     if value is None:
         return REFUSED, error or "raised"
+    if not isinstance(value, str):
+        return REFUSED, "invalid computed value: expected a digest or explicit verdict"
     if value == "MOVED":
         return DIVERGENT, "this box gave two different hashes for the same fit (MOVED)"
     if value.startswith("BATCH_MOVED"):
@@ -186,6 +188,10 @@ def judge(value, ent, error=None):
         return DIVERGENT, "sampler/replay or continuous batching failed on this box: " + value[:300]
     if value.startswith("RELOAD-MOVED"):
         return DIVERGENT, "the saved model predicts differently from the model in memory"
+    if error:
+        return REFUSED, error
+    if not re.fullmatch(r"[0-9a-f]{16}", value) and not (value.startswith("n/a:") and len(value) > 4):
+        return REFUSED, "invalid computed value: expected a 16-hex digest or n/a reason"
     if ent is None:
         if value.startswith("n/a"):
             return NA, value
@@ -274,7 +280,11 @@ def admit(j, path):
 
 def _part_value(cell, part, min_repeats=1):
     """The one value a column carries for a part, or None when it carries no
-    usable one (moved, refused, reload-moved, batch-moved, skipped)."""
+    usable one (moved, refused, reload-moved, batch-moved, skipped).
+
+    Historical provenance readers may accept one sample. New table admission
+    explicitly requires two; reading an old table does not silently rewrite it.
+    """
     if not isinstance(cell, dict):
         return None
     verdict = cell.get("verdict" if part == "train" else f"{part}_verdict")

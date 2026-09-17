@@ -6,6 +6,13 @@ export MOJOLEARN_NUMERIC_MODE=identical
 PY=.pixi/envs/test/bin/python
 LANES=kpss,select-d,holtwinters,holtwinters-multiplicative
 export MOJOLEARN_HOST_DIR="$PWD/python/mojolearn/host"
+# KPSS/select-d use the production core transpose in both control arms.
+CORE="$MOJOLEARN_HOST_DIR/_mojolearn_core_host.so"
+if [[ ! -f "$CORE" ]]; then
+ echo "Missing core host dependency: run with --build core,tsa,forecast" >&2
+ exit 1
+fi
+cp "$CORE" "$PWD/python/mojolearn/host-sabotage/"
 "$PY" tools/identity_break.py --lanes "$LANES" --repeats 2 --json "$LEG_OUT/cpu-clean.json" > "$LEG_OUT/clean.log" 2>&1
 MOJOLEARN_HOST_DIR="$PWD/python/mojolearn/host-sabotage" MOJOLEARN_HOST_ALLOW_SABOTAGE=1 \
  "$PY" tools/identity_break.py --lanes "$LANES" --repeats 2 --json "$LEG_OUT/cpu-sabotage.json" > "$LEG_OUT/sabotage.log" 2>&1

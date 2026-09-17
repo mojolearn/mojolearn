@@ -143,7 +143,7 @@ ENT = dict(ref="0123456789abcdef", cols={"apple": 0})
     ("n/a:function", ENT, vref.OWED),
 ])
 def test_judge_states(value, ent, state):
-    got, _ = vref.judge(value, ent, error="NotImplementedError: no CPU implementation of x.y yet")
+    got, _ = vref.judge(value, ent, error="NotImplementedError: no CPU implementation of x.y yet" if value is None else None)
     assert got == state
 
 
