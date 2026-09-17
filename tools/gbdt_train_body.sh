@@ -11,6 +11,8 @@
 #   bash tools/gbdt_train_body.sh build-fast   the FAST tier of the BEFORE commit in /root/mojolearn-before-fast
 #   bash tools/gbdt_train_body.sh ab <tag> <probe fit args>   interleaved A/B, one process per arm per
 #                                              round (AB_ARMS, AB_ROUNDS, AB_DIR), then the summary
+#   bash tools/gbdt_train_body.sh pinning <tag> <trees> <probe fit args>   the stage ledger and the
+#                                              per-kernel GPU time of the IDENTICAL and FAST builds of main
 #   bash tools/gbdt_train_body.sh identity     identity_break columns (before/after/sabotage cuda,
 #                                              before/after cpu) over LANES, five fixtures, two repeats
 #   bash tools/gbdt_train_body.sh identity-diff
@@ -154,6 +156,31 @@ phase_ab() {
     : > "$_dir/$_tag.done"
 }
 
+# The cost of pinning, per cell: the stage ledger and the per-kernel GPU time
+# of the IDENTICAL and the FAST build of ONE commit (BEFORE, main).
+#   bash tools/gbdt_train_body.sh pinning <tag> <trees> <probe fit args...>
+phase_pinning() {
+    _tag=$1; _trees=$2; shift 2
+    _dir="$OUT/pinning"
+    mkdir -p "$_dir"
+    for arm in "identical=$B=identical" "fast=$B-fast=fast"; do
+        _name=${arm%%=*}; _rest=${arm#*=}; _tree=${_rest%%=*}; _mode=${_rest#*=}
+        cp "$R/tools/gbdt_train_probe.py" "$_tree/tools/gbdt_train_probe.py"
+        ( cd "$_tree" && MOJOLEARN_STAGE_TIMES=1 MOJOLEARN_NUMERIC_MODE=$_mode PYTHONPATH=python pixi run python3 tools/gbdt_train_probe.py fit \
+            "$@" --trees "$_trees" --reps 1 --no-predict --label "$_name" --expect-root "$_tree" ) > "$_dir/ledger.$_name.$_tag.log" 2>&1
+        ( cd "$_tree" && MOJOLEARN_NUMERIC_MODE=$_mode PYTHONPATH=python nsys profile -t cuda -s none --cpuctxsw=none -f true \
+            -o "$_dir/nsys.$_name.$_tag" pixi run python3 tools/gbdt_train_probe.py fit \
+            "$@" --trees "$_trees" --reps 1 --no-predict --label "$_name" --expect-root "$_tree" ) > "$_dir/nsys.$_name.$_tag.log" 2>&1
+        nsys export --type sqlite --force-overwrite true -o "$_dir/nsys.$_name.$_tag.sqlite" "$_dir/nsys.$_name.$_tag.nsys-rep" > /dev/null 2>&1
+        (cd "$R" && PYTHONPATH=python pixi run python3 tools/gbdt_train_probe.py kernels "$_dir/nsys.$_name.$_tag.sqlite" --label "$_name.$_tag") \
+            > "$_dir/kernels.$_name.$_tag.txt" 2>&1
+        rm -f "$_dir/nsys.$_name.$_tag.nsys-rep" "$_dir/nsys.$_name.$_tag.sqlite"
+    done
+    (cd "$R" && PYTHONPATH=python pixi run python3 tools/gbdt_train_probe.py ledger "$_trees" \
+        "identical=$_dir/ledger.identical.$_tag.log" "fast=$_dir/ledger.fast.$_tag.log") > "$_dir/ledger.$_tag.txt" 2>&1
+    say "pinning $_tag done: $(grep -c 'GTP LEDGER' "$_dir/ledger.$_tag.txt") ledger lines"
+}
+
 identity_column() {
     # $1 tree, $2 label, $3 commit, then env words
     _t=$1; _l=$2; _c=$3; shift 3
@@ -202,7 +229,8 @@ case "${1:-}" in
     build-after) phase_build_after ;;
     build-fast) phase_build_fast ;;
     ab) shift; phase_ab "$@" ;;
+    pinning) shift; phase_pinning "$@" ;;
     identity) phase_identity ;;
     identity-diff) identity_diffs ;;
-    *) sed -n '2,19p' "$0"; exit 2 ;;
+    *) sed -n '2,21p' "$0"; exit 2 ;;
 esac

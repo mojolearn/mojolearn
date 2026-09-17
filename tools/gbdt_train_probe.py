@@ -188,6 +188,87 @@ def cmd_summarize(args):
     return 0
 
 
+def _last_tables(path):
+    """The stage tables of the LAST fit in a `MOJOLEARN_STAGE_TIMES=1` log:
+    the boosting loop's (`ensemble/instruments.mojo`, seconds) and the
+    searcher's (`depthwise_stage_times.mojo`, milliseconds). Returns
+    {stage: ms}."""
+    loop, stages, cur = {}, {}, None
+    for line in open(path, errors="replace"):
+        if line.startswith("== MOJOLEARN_STAGE_TIMES"):
+            loop, cur = {}, "loop"
+            continue
+        if line.startswith("[stage-times] "):
+            if "NOT a" in line:
+                stages = {}
+            parts = line[len("[stage-times] "):].strip().split("\t")
+            if len(parts) == 2 and parts[1].endswith(" ms"):
+                stages[parts[0].strip()] = float(parts[1][:-3])
+            continue
+        if cur == "loop" and line.startswith("  ") and "\t" in line:
+            name, val = line.strip().split("\t")
+            if val.endswith(" s"):
+                loop[name] = float(val[:-2]) * 1000.0
+            continue
+        if cur == "loop" and not line.startswith(" "):
+            cur = None
+    out = {"loop." + k: v for k, v in loop.items()}
+    out.update(stages)
+    return out
+
+
+def cmd_ledger(args):
+    """`ledger <trees> <arm>=<log> ...`: the last fit's stage tables side by
+    side, in ms per tree, with each arm's difference from the first arm."""
+    arms = [a.split("=", 1) for a in args.logs]
+    tables = [(name, _last_tables(path)) for name, path in arms]
+    keys = []
+    for _n, t in tables:
+        for k in t:
+            if k not in keys:
+                keys.append(k)
+    print("GTP LEDGER trees=%d (ms per tree; a stage-timed run drains per stage: a SPLIT, not a timing)" % args.trees)
+    print("GTP LEDGER stage | " + " | ".join(n for n, _t in tables) + " | first minus each other")
+    for k in keys:
+        vals = [t.get(k) for _n, t in tables]
+        cells = ["%.3f" % (v / args.trees) if v is not None else "-" for v in vals]
+        deltas = ["%.3f" % ((vals[0] - v) / args.trees) if (v is not None and vals[0] is not None) else "-"
+                  for v in vals[1:]]
+        print("GTP LEDGER %s | %s | %s" % (k, " | ".join(cells), " ".join(deltas)))
+    return 0
+
+
+def cmd_kernels(args):
+    """Per-kernel GPU time of one nsys capture (`.sqlite`), grouped by the
+    kernel's name and block size, with launch counts and the mean grid: the
+    compiler's kernel names are a module prefix and a hash, so the block size
+    and the launch count are what tie a row to a source kernel."""
+    import sqlite3
+    db = sqlite3.connect(args.sqlite)
+    rows = db.execute(
+        "SELECT s.value, k.blockX, COUNT(*), SUM(k.end - k.start), AVG(k.gridX), AVG(k.gridY) "
+        "FROM CUPTI_ACTIVITY_KIND_KERNEL k JOIN StringIds s ON s.id = k.shortName "
+        "GROUP BY s.value, k.blockX ORDER BY 4 DESC").fetchall()
+    total = sum(r[3] for r in rows)
+    sync = db.execute(
+        "SELECT s.value, COUNT(*), SUM(r.end - r.start) FROM CUPTI_ACTIVITY_KIND_RUNTIME r "
+        "JOIN StringIds s ON s.id = r.nameId GROUP BY s.value ORDER BY 3 DESC LIMIT 8").fetchall()
+    mem = db.execute(
+        "SELECT copyKind, COUNT(*), SUM(end - start), SUM(bytes) FROM CUPTI_ACTIVITY_KIND_MEMCPY "
+        "GROUP BY copyKind").fetchall()
+    print("GTP KERNELS label=%s total_gpu_kernel_ms=%.1f launches=%d" % (
+        args.label, total / 1e6, sum(r[2] for r in rows)))
+    for name, bx, n, ns, gx, gy in rows[:args.top]:
+        print("GTP KERNEL label=%s ms=%.2f pct=%.1f launches=%d avg_us=%.1f block=%d grid=%.0fx%.0f %s" % (
+            args.label, ns / 1e6, 100.0 * ns / total, n, ns / n / 1e3, bx, gx, gy, name))
+    for name, n, ns in sync:
+        print("GTP API label=%s ms=%.1f calls=%d %s" % (args.label, ns / 1e6, n, name))
+    for kind, n, ns, b in mem:
+        print("GTP MEMCPY label=%s kind=%d ms=%.1f copies=%d MiB=%.1f" % (
+            args.label, kind, ns / 1e6, n, (b or 0) / 1048576.0))
+    return 0
+
+
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = p.add_subparsers(dest="cmd", required=True)
@@ -203,6 +284,15 @@ def main(argv=None):
     q.add_argument("--expect-root", default=None,
                    help="refuse unless the loaded gbdt binding lives under this tree")
     q.set_defaults(fn=cmd_fit)
+    q = sub.add_parser("ledger")
+    q.add_argument("trees", type=int)
+    q.add_argument("logs", nargs="+")
+    q.set_defaults(fn=cmd_ledger)
+    q = sub.add_parser("kernels")
+    q.add_argument("sqlite")
+    q.add_argument("--label", default="ours")
+    q.add_argument("--top", type=int, default=25)
+    q.set_defaults(fn=cmd_kernels)
     q = sub.add_parser("summarize")
     q.add_argument("files", nargs="+")
     q.set_defaults(fn=cmd_summarize)
