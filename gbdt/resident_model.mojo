@@ -55,7 +55,14 @@ resident call is the device work of `gbdt/train.mojo::predict_floats` and
 
 What moves out of the call: the parse, the `DeviceContext`, the pack and
 its six uploads, the border uploads, and the per-feature staging ring
-with its drain per revolution. What is retained across calls of the same
+with its drain per revolution. The input may arrive ROW-MAJOR (the C-order
+float32 array a caller usually holds, DEVIATION 2637's shape for the
+forests): the staging pass writes the column-major pinned buffer straight
+from it, so the per-call native transpose the column-major contract cost
+(`_buffer.as_f32_colmajor`, DEVIATION 2472) is gone. The staging pass and
+the Logloss pair fan out to host threads (`MOJOLEARN_CPU_THREADS`, the
+forests' `host_worker_count`); staging moves bytes and substitutes NaNs
+and the pair is per row, so no bit depends on the thread count. What is retained across calls of the same
 row count, exact size as FOREST-IO-REUSE-1 retains it: one pinned host
 staging buffer for the input, the device input, the compressed index,
 the cursor and the pinned readback; a call with a different row count
@@ -77,10 +84,12 @@ from std.ffi import _Global
 from std.memory import memcpy
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
 from core.device_zero import enqueue_fill
+from core.forest_host_predict import host_worker_count
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
 from gbdt.gpu_data.compressed_index_builder import (
     CompressedIndexLayout,
@@ -120,6 +129,10 @@ comptime RESIDENT_SIGMOID_PAIR = 3
 comptime BORDER_SLAB = 256
 
 comptime RESIDENT_SABOTAGE = is_defined["MOJOLEARN_GBDT_RESIDENT_SABOTAGE"]()
+
+#: a staging or pair task takes at least this many rows, so a small
+#: fixture does not fan out
+comptime STAGE_MIN_ROWS_PER_TASK = 4096
 
 #: The identity gate's control for `gbdt_sigmoid_pair`, honored on the
 #: resident pair path too so that column keeps its reach over the GPU
@@ -404,29 +417,103 @@ struct ResidentGbdtModel(Movable):
         self.workspace_rows = n_rows
 
     def _stage(
-        mut self, src: MutPointer[Float32, MutUntrackedOrigin], n_rows: Int
+        mut self,
+        src: MutPointer[Float32, MutUntrackedOrigin],
+        n_rows: Int,
+        row_major: Bool,
     ) raises:
         """The host half of `_build_cindex_from_floats`: every bordered
-        column into the pinned staging buffer after its NaN treatment,
-        same values, same refusal. Nothing is enqueued before the
-        refusal, so nothing has to be drained ahead of it."""
-        var hx = self.h_x.value().unsafe_ptr()
-        for f in range(self.n_columns):
-            if len(self.tm.borders[f]) == 0:
-                continue
+        column into the column-major pinned staging buffer after its NaN
+        treatment, same values, same refusal. A NaN on an `AsIs` column
+        is recorded per task and raised after the join for the LOWEST such
+        feature, which is the feature the serial column-order scan raised
+        for. Nothing is enqueued before the refusal, so nothing has to be
+        drained ahead of it. Columns without borders are never read, as
+        the serial loop never read them."""
+        var n_cols = self.n_columns
+        var treats = List[Int](capacity=n_cols)
+        var bordered = List[Int](capacity=n_cols)
+        var active = List[Int]()
+        for f in range(n_cols):
             var treat = NAN_TREATMENT_AS_IS
-            if len(self.tm.nan_treatment) == self.n_columns:
+            if len(self.tm.nan_treatment) == n_cols:
                 treat = self.tm.nan_treatment[f]
+            treats.append(treat)
+            if len(self.tm.borders[f]) == 0:
+                bordered.append(0)
+            else:
+                bordered.append(1)
+                active.append(f)
+        var hxp = self.h_x.value().unsafe_ptr()
+        var tp = treats.unsafe_ptr()
+        var bdp = bordered.unsafe_ptr()
+        var ap = active.unsafe_ptr()
+        var n_active = len(active)
+        var workers = host_worker_count()
+        if row_major:
+            # row blocks: a task reads its rows once, contiguously, and
+            # writes one sequential run per bordered column
+            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
+            if tasks > workers:
+                tasks = workers
+            if tasks < 1:
+                tasks = 1
+            var chunk = (n_rows + tasks - 1) // tasks
+            var bad = List[Int](length=tasks, fill=-1)
+            var bp = bad.unsafe_ptr()
+
+            def _rows_task(c: Int) {imm src, imm hxp, imm tp, imm bdp, imm bp,
+                                    imm chunk, imm n_rows, imm n_cols}:
+                var lo = c * chunk
+                var hi = lo + chunk
+                if hi > n_rows:
+                    hi = n_rows
+                for r in range(lo, hi):
+                    var row = src + r * n_cols
+                    for f in range(n_cols):
+                        if bdp[f] == 0:
+                            continue
+                        var v = row.unsafe_load(f)
+                        if v != v:
+                            var treat = tp[f]
+                            if treat == NAN_TREATMENT_AS_IS:
+                                if bp[c] < 0 or f < bp[c]:
+                                    bp[c] = f
+                                continue
+                            v = nan_substitution(treat)
+                        hxp.unsafe_store(f * n_rows + r, v)
+
+            if tasks == 1:
+                _rows_task(0)
+            else:
+                sync_parallelize(_rows_task, tasks)
+            var first = -1
+            for c in range(tasks):
+                if bad[c] >= 0 and (first < 0 or bad[c] < first):
+                    first = bad[c]
+            _ = len(treats)
+            _ = len(bordered)
+            if first >= 0:
+                raise Error(
+                    "There are NaNs in feature number " + String(first)
+                    + " but there were no NaNs in the learn dataset"
+                )
+            return
+        # column-major input: one task per bordered column
+        var bad = List[Int](length=max(n_active, 1), fill=-1)
+        var bp = bad.unsafe_ptr()
+
+        def _col_task(j: Int) {imm src, imm hxp, imm tp, imm ap, imm bp, imm n_rows}:
+            var f = ap[j]
             var col = src + f * n_rows
-            var dst = hx + f * n_rows
+            var dst = hxp + f * n_rows
+            var treat = tp[f]
             if treat == NAN_TREATMENT_AS_IS:
                 for r in range(n_rows):
                     var v = col.unsafe_load(r)
                     if v != v:
-                        raise Error(
-                            "There are NaNs in feature number " + String(f)
-                            + " but there were no NaNs in the learn dataset"
-                        )
+                        bp[j] = f
+                        return
                 memcpy(dest=dst, src=col, count=n_rows)
             else:
                 var sub = nan_substitution(treat)
@@ -435,6 +522,26 @@ struct ResidentGbdtModel(Movable):
                     if v != v:
                         v = sub
                     dst.unsafe_store(r, v)
+
+        if n_active == 0:
+            return
+        if workers == 1 or n_active == 1:
+            for j in range(n_active):
+                _col_task(j)
+        else:
+            sync_parallelize(_col_task, n_active)
+        var first = -1
+        for j in range(n_active):
+            if bad[j] >= 0 and (first < 0 or bad[j] < first):
+                first = bad[j]
+        _ = len(treats)
+        _ = len(active)
+        _ = len(bordered)
+        if first >= 0:
+            raise Error(
+                "There are NaNs in feature number " + String(first)
+                + " but there were no NaNs in the learn dataset"
+            )
 
     def _apply(mut self, n_rows: Int) raises:
         """`predict`'s device work over the resident pack: the cursor
@@ -493,23 +600,34 @@ struct ResidentGbdtModel(Movable):
         out_f32: MutPointer[Float32, MutUntrackedOrigin],
         out_f64: MutPointer[Float64, MutUntrackedOrigin],
         mode: Int,
+        row_major: Bool = False,
     ) raises -> Int:
         """One call: stage, upload once, quantize, apply, read back once,
-        transform on the host. `x` is COLUMN-MAJOR over `n_rows` rows and
-        `n_input_features` raw columns. Returns the width written per
-        row; the float32 output is written for every mode but
-        `RESIDENT_SIGMOID_PAIR`, which writes the float64 output."""
+        transform on the host. `x` holds `n_rows` rows of
+        `n_input_features` raw columns, COLUMN-MAJOR unless `row_major`.
+        Returns the width written per row; the float32 output is written
+        for every mode but `RESIDENT_SIGMOID_PAIR`, which writes the
+        float64 output."""
         if n_rows <= 0:
             raise Error("gbdt_resident_predict: n_rows must be positive")
         var expanded = List[Float32]()
         var src = x
+        var staged_row_major = row_major
         if self.needs_expansion:
             # their CalcCtrs ahead of the quantizer, the same host
-            # functions `predict_floats` calls over the same copy
+            # functions `predict_floats` calls over the same column-major
+            # copy; a row-major input is transposed into that copy
             var n_x = n_rows * self.n_input_features
             var xs = List[Float32]()
             xs.resize(n_x, Float32(0.0))
-            memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+            if row_major:
+                var nf = self.n_input_features
+                for r in range(n_rows):
+                    for f in range(nf):
+                        xs[f * n_rows + r] = x.unsafe_load(r * nf + f)
+            else:
+                memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+            staged_row_major = False
             if len(self.tm.tensor_ctr_registry.features) != 0:
                 expanded = self.tm.tensor_ctr_registry.expand_for_model_apply(
                     xs, n_rows, self.tm.borders, self.tm.one_hot
@@ -524,7 +642,7 @@ struct ResidentGbdtModel(Movable):
                 expanded.unsafe_ptr()
             )
         self._prepare_workspace(n_rows)
-        self._stage(src, n_rows)
+        self._stage(src, n_rows, staged_row_major)
         ref ctx = self.ctx
         try:
             enqueue_fill(ctx, self.d_cindex.value(), UInt32(0))
@@ -574,15 +692,35 @@ struct ResidentGbdtModel(Movable):
                     " one-dimensional Logloss / CrossEntropy transform; this"
                     " model has dim " + String(dim)
                 )
-            for r in range(n_rows):
-                var raw = Float64(hc.unsafe_load(r))
-                var p = 1.0 / (1.0 + identical_exp64(-raw))
-                comptime if PAIR_SABOTAGE:
-                    out_f64.unsafe_store(2 * r, p)
-                    out_f64.unsafe_store(2 * r + 1, 1.0 - p)
-                else:
-                    out_f64.unsafe_store(2 * r, 1.0 - p)
-                    out_f64.unsafe_store(2 * r + 1, p)
+            # per row, so the rows fan out to host threads; each row's two
+            # statements are `gbdt_sigmoid_pair`'s
+            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
+            var workers = host_worker_count()
+            if tasks > workers:
+                tasks = workers
+            if tasks < 1:
+                tasks = 1
+            var chunk = (n_rows + tasks - 1) // tasks
+
+            def _pair_task(c: Int) {imm hc, imm out_f64, imm chunk, imm n_rows}:
+                var lo = c * chunk
+                var hi = lo + chunk
+                if hi > n_rows:
+                    hi = n_rows
+                for r in range(lo, hi):
+                    var raw = Float64(hc.unsafe_load(r))
+                    var p = 1.0 / (1.0 + identical_exp64(-raw))
+                    comptime if PAIR_SABOTAGE:
+                        out_f64.unsafe_store(2 * r, p)
+                        out_f64.unsafe_store(2 * r + 1, 1.0 - p)
+                    else:
+                        out_f64.unsafe_store(2 * r, 1.0 - p)
+                        out_f64.unsafe_store(2 * r + 1, p)
+
+            if tasks == 1:
+                _pair_task(0)
+            else:
+                sync_parallelize(_pair_task, tasks)
             return 2
         if dim < 2:
             raise Error(
@@ -674,6 +812,7 @@ def gbdt_resident_predict(
     out_f32: MutPointer[Float32, MutUntrackedOrigin],
     out_f64: MutPointer[Float64, MutUntrackedOrigin],
     mode: Int,
+    row_major: Bool = False,
 ) raises -> Int:
     """`ResidentGbdtModel.predict_into` over the handle's model. Returns
     the width written per row."""
@@ -681,5 +820,5 @@ def gbdt_resident_predict(
     if handle not in state[].entries:
         raise Error("unknown or released resident GBDT model handle")
     return state[].entries[handle].predict_into(
-        x, n_rows, out_f32, out_f64, mode
+        x, n_rows, out_f32, out_f64, mode, row_major
     )

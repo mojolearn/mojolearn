@@ -110,6 +110,7 @@ from . import _backend, _mojolearn_gbdt, _serialize
 from ._mode import NumericModeMixin
 from ._array import Array
 from ._buffer import (
+    as_f32_forest_layout,
     addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
     empty, frombytes, zeros,
 )
@@ -1623,6 +1624,23 @@ class GradientBoosting(NumericModeMixin):
         state.pop("_resident", None)
         return state
 
+    def _check_fitted_layout(self, X):
+        """`_check_fitted` for the resident door (DEVIATION 2980):
+        `(array, n_rows, row_major)`. A 2-D float32 C-order input is a
+        zero-copy borrow with `row_major` True and the native staging pass
+        transposes it (DEVIATION 2637's shape for the forests); every other
+        input takes the column-major materialization exactly as before."""
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict() before fit()")
+        Xa, row_major = as_f32_forest_layout(X, name="X")
+        n_rows, n_features = Xa.shape
+        if n_features != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn: model was fitted on {self.n_features_in_} "
+                f"features, got {n_features}"
+            )
+        return Xa, n_rows, row_major
+
     def _check_fitted(self, X):
         if self.model_ is None:
             raise RuntimeError("mojolearn: predict() before fit()")
@@ -1651,7 +1669,8 @@ class GradientBoosting(NumericModeMixin):
         would give a different answer. `MultiClassOneVsAll` returns
         `(n_samples, n_classes)` with one raw score per independent head.
         """
-        Xa, n_rows = self._check_fitted(X)
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict() before fit()")
         binding = self._bind("_mojolearn_gbdt")
 
         # DEVIATION 2980: the parsed, packed and uploaded model stays on
@@ -1659,10 +1678,12 @@ class GradientBoosting(NumericModeMixin):
         # for a binary without the entry point
         handle = self._resident_handle(binding)
         if handle is not None:
+            Xa, n_rows, row_major = self._check_fitted_layout(X)
             out = empty((n_rows * self.approx_dim_,), "<f4")
             width = binding.gbdt_resident_predict(
                 handle, addr_ro(Xa, name="X"),
-                addr(out, name="predict output"), [n_rows, _PREDICT_RAW],
+                addr(out, name="predict output"),
+                [n_rows, _PREDICT_RAW, 1 if row_major else 0],
             )
             if width != self.approx_dim_:
                 raise RuntimeError(
@@ -1673,6 +1694,7 @@ class GradientBoosting(NumericModeMixin):
                 return out
             return out.reshape((n_rows, width))
 
+        Xa, n_rows = self._check_fitted(X)
         if self.approx_dim_ > 1:
             out = empty((n_rows * self.approx_dim_,), "<f4")
             width = binding.gbdt_predict_multi(
@@ -1727,20 +1749,25 @@ class GradientBoosting(NumericModeMixin):
         The returned columns are in class-code order, `0 .. n_classes - 1`.
         """
         if self.loss in MULTI_OUTPUT_LOSSES:
-            Xa, n_rows = self._check_fitted(X)
+            if self.model_ is None:
+                raise RuntimeError("mojolearn: predict_proba() before fit()")
             # 54a8143a libs/model/eval_processing.h:214-226:
             # MultiProbability applies CalcSigmoid elementwise.
             mode = (_PREDICT_SIGMOID if self.loss == "MultiClassOneVsAll"
                     else _PREDICT_SOFTMAX)
-            out = empty((n_rows * self.n_classes_,), "<f4")
             binding = self._bind("_mojolearn_gbdt")
             handle = self._resident_handle(binding)  # DEVIATION 2980
             if handle is not None:
+                Xa, n_rows, row_major = self._check_fitted_layout(X)
+                out = empty((n_rows * self.n_classes_,), "<f4")
                 width = binding.gbdt_resident_predict(
                     handle, addr_ro(Xa, name="X"),
-                    addr(out, name="predict_proba output"), [n_rows, mode],
+                    addr(out, name="predict_proba output"),
+                    [n_rows, mode, 1 if row_major else 0],
                 )
             else:
+                Xa, n_rows = self._check_fitted(X)
+                out = empty((n_rows * self.n_classes_,), "<f4")
                 width = binding.gbdt_predict_multi(
                     self.model_, addr_ro(Xa, name="X"),
                     addr(out, name="predict_proba output"), [n_rows, mode]
@@ -1764,7 +1791,7 @@ class GradientBoosting(NumericModeMixin):
         binding = self._bind("_mojolearn_gbdt")
         handle = self._resident_handle(binding)
         if handle is not None:
-            Xa, n_rows = self._check_fitted(X)
+            Xa, n_rows, row_major = self._check_fitted_layout(X)
             # DEVIATION 2980: both columns from the resident call, written
             # by the binding as float64 `[1 - p, p]` with `p` exactly
             # `gbdt_sigmoid`'s value over the exact widening of the raw
@@ -1773,7 +1800,7 @@ class GradientBoosting(NumericModeMixin):
             out = empty((n_rows, 2), "<f8")
             width = binding.gbdt_resident_predict(
                 handle, addr_ro(Xa, name="X"), addr(out, name="proba"),
-                [n_rows, _PREDICT_SIGMOID_PAIR],
+                [n_rows, _PREDICT_SIGMOID_PAIR, 1 if row_major else 0],
             )
             if int(width) != 2:
                 raise RuntimeError(

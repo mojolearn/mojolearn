@@ -611,30 +611,35 @@ def gbdt_resident_predict_binding(
 ) raises -> PythonObject:
     """Apply a prepared model. Returns the width written per row.
 
-    `params` is `[n_rows, mode]` with mode 0 RAW, 1 SOFTMAX, 2 SIGMOID as
-    `gbdt_predict_multi` takes them, plus 3 SIGMOID_PAIR: the Logloss and
-    CrossEntropy `predict_proba` columns `[1 - p, p]` written as FLOAT64
-    to `out_addr` (`gbdt_sigmoid_pair`'s two statements over the exact
-    widening of the raw float32 value). Every other mode writes float32
-    to `out_addr`, `n_rows * width` values row-major, exactly as
-    `gbdt_predict` and `gbdt_predict_multi` write them. The feature count
-    comes from the prepared model. The caller holds `x` and `out` for the
-    length of the call."""
-    if len(params) != 2:
+    `params` is `[n_rows, mode, row_major]` with mode 0 RAW, 1 SOFTMAX, 2
+    SIGMOID as `gbdt_predict_multi` takes them, plus 3 SIGMOID_PAIR: the
+    Logloss and CrossEntropy `predict_proba` columns `[1 - p, p]` written
+    as FLOAT64 to `out_addr` (`gbdt_sigmoid_pair`'s two statements over
+    the exact widening of the raw float32 value). Every other mode writes
+    float32 to `out_addr`, `n_rows * width` values row-major, exactly as
+    `gbdt_predict` and `gbdt_predict_multi` write them. `row_major` (an
+    optional third entry, 0 when absent) says `x` is the C-order
+    `[row * n_features + f]` block rather than the column-major one; the
+    staging pass transposes it. The feature count comes from the prepared
+    model. The caller holds `x` and `out` for the length of the call."""
+    if len(params) != 2 and len(params) != 3:
         raise Error(
-            "gbdt_resident_predict: params must hold [n_rows, mode], got "
-            + String(len(params))
+            "gbdt_resident_predict: params must hold [n_rows, mode] or"
+            " [n_rows, mode, row_major], got " + String(len(params))
         )
     var h = Int(py=handle)
     var addr = Int(py=out_addr)
     var xp = _f32_ptr(Int(py=x_addr))
     var n_rows = Int(py=params[0])
     var mode = Int(py=params[1])
+    var row_major = False
+    if len(params) == 3:
+        row_major = Int(py=params[2]) != 0
     var op32 = _f32_ptr(addr)
     var op64 = _f64_ptr(addr)
     var width: Int
     with GILReleased(Python()):
-        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, mode)
+        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, mode, row_major)
     return PythonObject(width)
 
 
