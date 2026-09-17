@@ -2989,8 +2989,6 @@ def attention_eager_core(
                 grid_dim=(_grid(s * hd), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
-            step_count_sync()
-            ctx.synchronize()
             stages.gemm_workspace.run[False](
                 ctx,
                 stages.sbh,
@@ -3013,8 +3011,12 @@ def attention_eager_core(
                 grid_dim=(_grid(l * s), 1, 1),
                 block_dim=(LLAMA_TPB, 1, 1),
             )
-            step_count_sync()
-            ctx.synchronize()
+
+    # Gather -> GEMM -> scatter -> next head uses one in-order context.
+    # Stage-owned scratch survives the entire loop, and each scatter finishes
+    # before the next head overwrites that scratch. Preserve one phase fence.
+    step_count_sync()
+    ctx.synchronize()
 
     # ---- S12 (:204's `* scaling`), applied to the FINISHED dot.
     step_count_launch()
