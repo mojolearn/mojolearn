@@ -54,16 +54,15 @@ def _digest(model):
     return h.hexdigest()
 
 
-def _binding_record(module_name):
-    import mojolearn
-    base = os.path.dirname(os.path.abspath(mojolearn.__file__))
-    out = []
-    for path in sorted(glob.glob(os.path.join(base, "*", module_name + "*.so"))):
-        st = os.stat(path)
-        with open(path, "rb") as fh:
-            sha = hashlib.sha256(fh.read()).hexdigest()
-        out.append(dict(path=path, bytes=st.st_size, mtime=st.st_mtime, sha256=sha))
-    return out
+def _binding_record(model, module_name):
+    """The binding THIS process fitted through: path, size, mtime, sha256."""
+    path = getattr(model._bind(module_name), "__file__", None)
+    if not path:
+        return None
+    st = os.stat(path)
+    with open(path, "rb") as fh:
+        sha = hashlib.sha256(fh.read()).hexdigest()
+    return dict(path=path, bytes=st.st_size, mtime=st.st_mtime, sha256=sha)
 
 
 def _make(lane, cfg, task, max_features):
@@ -133,7 +132,8 @@ def cmd_fit(args):
         task=data.task, label=args.label, config=cfg, max_features=max_features,
         numeric_mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset"),
         vendor=mojolearn.vendor(), warmup_ms=warm_ms, ms=times, hashes=hashes,
-        quality=quality, binding=_binding_record(module),
+        quality=quality, binding=_binding_record(model, module),
+        fit_numeric_mode=getattr(model, "_fit_numeric_mode", None),
         checkout=ROOT, stage_times=os.environ.get("MOJOLEARN_STAGE_TIMES", ""),
     )
     with open(args.json, "w") as fh:
@@ -152,7 +152,7 @@ def cmd_summarize(args):
                 r["label"], dict(ms=[], hashes=set(), quality=[], modes=set()))
             arm["ms"] += r["ms"]
             arm["hashes"].update(r["hashes"])
-            arm["modes"].add(r["numeric_mode"])
+            arm["modes"].add(str(r.get("fit_numeric_mode") or r["numeric_mode"]))
             if r.get("quality"):
                 arm["quality"].append(r["quality"]["value"])
     out = []

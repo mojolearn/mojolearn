@@ -9,6 +9,7 @@
 #   bash tools/forest_train_body.sh profile    the attribution: MOJOLEARN_STAGE_TIMES=1 fits
 #                                             and (when nsys is present) an nsys kernel
 #                                             summary, rf and et on taxi and istella
+#   bash tools/forest_train_body.sh fast       the FAST tier's rf and trees bindings beside them
 #   bash tools/forest_train_body.sh variants   /root/mojolearn-v-<name>: a source copy with
 #                                             rf+trees rebuilt under one define set each
 #                                             (VARIANTS="name:defines|name:defines")
@@ -94,6 +95,7 @@ find_nsys() {
 phase_profile() {
     # PROFILE_TREE: the checkout to profile (default main's)
     _t="${PROFILE_TREE:-$R}"; _l="${PROFILE_LABEL:-main}"
+    export MOJOLEARN_NUMERIC_MODE="${PROFILE_MODE:-identical}"
     mkdir -p "$OUT/profile"
     cd "$_t" || return 1
     for cell in $CELLS; do
@@ -118,6 +120,18 @@ phase_profile() {
         fi
     done
     : > "$OUT/profile.$_l.done"
+}
+
+phase_fast() {
+    # The FAST tier's rf and trees bindings beside the IDENTICAL ones (the
+    # FAST build lands in python/mojolearn/, MOJOLEARN_NUMERIC_MODE=fast
+    # selects it at import). FAST_TREE names the checkout (default main's).
+    _t="${FAST_TREE:-$R}"
+    cd "$_t" || return 1
+    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 step "fast_build_rf_$(basename "$_t")" bash bindings/build_rf.sh
+    MOJOLEARN_NUMERIC_MODE=fast MOJOLEARN_SKIP_BUILD_GATE=1 step "fast_build_trees_$(basename "$_t")" bash bindings/build_trees.sh
+    ls -l --time-style=full-iso python/mojolearn/_mojolearn_rf*.so python/mojolearn/_mojolearn_trees*.so > "$OUT/fast_so_$(basename "$_t").txt" 2>&1
+    : > "$OUT/fast.done"
 }
 
 phase_variants() {
@@ -172,9 +186,10 @@ phase_ab() {
         IFS=: read -r lane ds rows <<< "$cell"
         for i in $(seq 1 "${AB_ROUNDS:-5}"); do
             for arm in ${ARMS:-}; do
-                label=${arm%%:*}; tree=${arm#*:}
+                # label:tree or label:tree:mode (mode defaults to identical)
+                IFS=: read -r label tree mode <<< "$arm"
                 stem="$_dir/$lane.$ds.$rows.$label.$i"
-                ( cd "$tree" && PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
+                ( cd "$tree" && MOJOLEARN_NUMERIC_MODE="${mode:-identical}" PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
                     --dataset "$ds" --rows "$rows" --rounds "${AB_FITS:-2}" --label "$label" ${AB_SCORE:+--score} \
                     --json "$stem.json" > "$stem.log" 2>&1 )
                 say "$cell $label $i: $(grep '^FTRAIN ' "$stem.log" | sed 's/.*round=/r/' | tr '\n' ' ')"
@@ -191,6 +206,7 @@ phase_ab() {
 case "${1:-}" in
     setup) phase_setup ;;
     profile) phase_profile ;;
+    fast) phase_fast ;;
     variants) phase_variants ;;
     identity) phase_identity ;;
     ab) phase_ab ;;
