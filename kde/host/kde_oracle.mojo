@@ -45,6 +45,13 @@ from std.math import cos, exp, lgamma, log, pi, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
+from core.host_predict_threads import (
+    HostF32Ptr,
+    host_list_ptr,
+    host_predict_chunk,
+)
 from core.row_norms import NORM_TPB
 from kde.impl.distance.distance_ops import (
     DIST_COSINE_EXPANDED,
@@ -108,6 +115,11 @@ struct KdeOracleStages(Movable):
 
 
 def _host_row_norm_halving(a: List[Float32], row: Int, d: Int) -> Float32:
+    """`_host_row_norm_halving_ptr` over a List, the checks' door."""
+    return _host_row_norm_halving_ptr(host_list_ptr(a), row, d)
+
+
+def _host_row_norm_halving_ptr(a: HostF32Ptr, row: Int, d: Int) -> Float32:
     """`row_norm_kernel` at `take_sqrt = 0`, replayed: NORM_TPB strided lane
     partials (`acc = ftz(fma(v, v, acc))`), then the halving tree of
     `pinned_block_sum`, then `ftz` of the total."""
@@ -116,7 +128,7 @@ def _host_row_norm_halving(a: List[Float32], row: Int, d: Int) -> Float32:
         var acc = Float32(0.0)
         var col = t
         while col < d:
-            var v = ftz(a[row * d + col])
+            var v = ftz(a.unsafe_load(row * d + col))
             acc = ftz(identical_mul_add(v, v, acc))
             col += NORM_TPB
         red.append(acc)
@@ -134,7 +146,12 @@ def _host_row_norm_halving_sqrt(a: List[Float32], row: Int, d: Int) -> Float32:
     what `rowNorm<L2Norm, true>(..., raft::sqrt_op{})` gives cosine
     (`distance.cuh:215-216`) and NOT the squared norm the expanded L2 arm
     takes."""
-    var total = _host_row_norm_halving(a, row, d)
+    return _host_row_norm_halving_sqrt_ptr(host_list_ptr(a), row, d)
+
+
+def _host_row_norm_halving_sqrt_ptr(a: HostF32Ptr, row: Int, d: Int) -> Float32:
+    """`_host_row_norm_halving_sqrt` over the caller's memory."""
+    var total = _host_row_norm_halving_ptr(a, row, d)
     if total <= Float32(0.0):
         total = Float32(0.0)
     return ftz(identical_sqrt(total))
@@ -143,6 +160,25 @@ def _host_row_norm_halving_sqrt(a: List[Float32], row: Int, d: Int) -> Float32:
 def oracle_distance(
     query: List[Float32],
     train: List[Float32],
+    q: Int,
+    j: Int,
+    d: Int,
+    metric: Int,
+    q_norm: Float32,
+    t_norm: Float32,
+    metric_arg: Float32 = Float32(2.0),
+) -> Float32:
+    """`oracle_distance_ptr` over two Lists, the checks' door."""
+    return oracle_distance_ptr(
+        host_list_ptr(query), host_list_ptr(train), q, j, d, metric, q_norm,
+        t_norm, metric_arg,
+    )
+
+
+@always_inline
+def oracle_distance_ptr(
+    query: HostF32Ptr,
+    train: HostF32Ptr,
     q: Int,
     j: Int,
     d: Int,
@@ -166,7 +202,7 @@ def oracle_distance(
         for f in range(d):
             acc = ftz(
                 identical_mul_add(
-                    ftz(query[q * d + f]), ftz(train[j * d + f]), acc
+                    ftz(query.unsafe_load(q * d + f)), ftz(train.unsafe_load(j * d + f)), acc
                 )
             )
         var denom = ftz(identical_mul(q_norm, t_norm))
@@ -174,22 +210,22 @@ def oracle_distance(
     if metric == DIST_LP_UNEXPANDED:
         # `lp_unexp.cuh:56-57` core, then `:67` and `:72` epilog.
         for f in range(d):
-            var diff = abs(ftz(ftz(query[q * d + f]) - ftz(train[j * d + f])))
+            var diff = abs(ftz(ftz(query.unsafe_load(q * d + f)) - ftz(train.unsafe_load(j * d + f))))
             acc = ftz(acc + ftz(identical_pow(diff, metric_arg)))
         var one_over_p = ftz(identical_div(Float32(1.0), metric_arg))
         return ftz(identical_pow(acc, one_over_p))
     if metric == DIST_L2_SQRT_UNEXPANDED:
         for f in range(d):
-            var diff = ftz(ftz(query[q * d + f]) - ftz(train[j * d + f]))
+            var diff = ftz(ftz(query.unsafe_load(q * d + f)) - ftz(train.unsafe_load(j * d + f)))
             acc = ftz(identical_mul_add(diff, diff, acc))
         return ftz(identical_sqrt(acc))
     if metric == DIST_L1:
         for f in range(d):
-            acc = ftz(acc + abs(ftz(ftz(query[q * d + f]) - ftz(train[j * d + f]))))
+            acc = ftz(acc + abs(ftz(ftz(query.unsafe_load(q * d + f)) - ftz(train.unsafe_load(j * d + f)))))
         return acc
     if metric == DIST_LINF:
         for f in range(d):
-            var diff = abs(ftz(ftz(query[q * d + f]) - ftz(train[j * d + f])))
+            var diff = abs(ftz(ftz(query.unsafe_load(q * d + f)) - ftz(train.unsafe_load(j * d + f))))
             # row 39: the device's strict `>` over abs() candidates, seeded
             # +0.0; a tie is the same bits either way (distance_ops.mojo).
             if diff > acc:
@@ -198,7 +234,7 @@ def oracle_distance(
     # DIST_L2_EXPANDED: the pinned tile's arithmetic, `is_sqrt = 0`.
     for f in range(d):
         acc = ftz(
-            identical_mul_add(ftz(query[q * d + f]), ftz(train[j * d + f]), acc)
+            identical_mul_add(ftz(query.unsafe_load(q * d + f)), ftz(train.unsafe_load(j * d + f)), acc)
         )
     var dist = ftz(identical_mul_add(Float32(-2.0), acc, ftz(q_norm + t_norm)))
     if dist <= Float32(0.0):
@@ -351,6 +387,112 @@ def oracle_score_samples(
         scores.append(ftz(a - norm))
 
     return KdeOracleStages(dists^, logk^, rowmax^, lse^, scores^, log_sw, norm)
+
+
+def oracle_score_samples_into(
+    train: HostF32Ptr,
+    query: HostF32Ptr,
+    weights: List[Float32],
+    has_weights: Bool,
+    n_train: Int,
+    n_query: Int,
+    d: Int,
+    h: Float32,
+    kernel: Int,
+    metric: Int,
+    scores: HostF32Ptr,
+    tasks: Int,
+    metric_arg: Float32 = Float32(2.0),
+) raises:
+    """`oracle_score_samples` over the caller's memory, the scores only
+    (lane/infer-speed-classical, 2026-09-17, DEVIATION 2920): the two norm
+    vectors, the log weights, `log_sw` and the kernel norm first, in that
+    function's order; then the query rows split into at most `tasks`
+    contiguous ranges (`core/host_predict_threads.mojo`). A task keeps one
+    `n_train` row of log kernels and, per query row, spells that
+    function's row statements in its order: every training row's
+    `oracle_distance_ptr`, `oracle_log_kernel(ftz(dist), h, kernel)`, the
+    weight's log added, then `oracle_logsumexp_row` over the row and the
+    two subtractions. A row reads the inputs and its own row only, so the
+    split moves no bit; the stages the checks read are not materialized
+    (a 2,000 x 100,000 score held two 800 MB stage matrices)."""
+    var q_norms = List[Float32](length=n_query, fill=Float32(0.0))
+    var t_norms = List[Float32](length=n_train, fill=Float32(0.0))
+    var use_norms = metric == DIST_L2_EXPANDED or metric == DIST_COSINE_EXPANDED
+    if metric == DIST_L2_EXPANDED:
+        for q in range(n_query):
+            q_norms[q] = _host_row_norm_halving_ptr(query, q, d)
+        for j in range(n_train):
+            t_norms[j] = _host_row_norm_halving_ptr(train, j, d)
+    elif metric == DIST_COSINE_EXPANDED:
+        for q in range(n_query):
+            q_norms[q] = _host_row_norm_halving_sqrt_ptr(query, q, d)
+        for j in range(n_train):
+            t_norms[j] = _host_row_norm_halving_sqrt_ptr(train, j, d)
+
+    var logw = List[Float32](length=n_train, fill=Float32(0.0))
+    if has_weights:
+        for j in range(n_train):
+            logw[j] = ftz(identical_log(ftz(weights[j])))
+
+    var sum_w = Float32(0.0)
+    if has_weights:
+        for j in range(n_train):
+            sum_w = ftz(sum_w + weights[j])
+    else:
+        sum_w = Float32(n_train)
+    var log_sw = ftz(identical_log(sum_w))
+    var norm = log_kernel_norm(kernel, h, d)
+
+    var t = tasks
+    if t < 1:
+        t = 1
+    if t > n_query:
+        t = n_query
+    var chunk = host_predict_chunk(n_query, t)
+    var qnp = host_list_ptr(q_norms)
+    var tnp = host_list_ptr(t_norms)
+    var lwp = host_list_ptr(logw)
+    var failed = List[Int](length=t, fill=0)
+    var fp = failed.unsafe_ptr()
+
+    def _rows(c: Int) {imm train, imm query, imm qnp, imm tnp, imm lwp, imm scores, imm fp, imm chunk, imm n_query, imm n_train, imm d, imm h, imm kernel, imm metric, imm metric_arg, imm has_weights, imm use_norms, imm log_sw, imm norm}:
+        try:
+            var logk = List[Float32](length=n_train, fill=Float32(0.0))
+            var lo = c * chunk
+            var hi = min(lo + chunk, n_query)
+            for q in range(lo, hi):
+                for j in range(n_train):
+                    var qn = Float32(0.0)
+                    var tn = Float32(0.0)
+                    if use_norms:
+                        qn = qnp.unsafe_load(q)
+                        tn = tnp.unsafe_load(j)
+                    var dist = oracle_distance_ptr(
+                        query, train, q, j, d, metric, qn, tn, metric_arg
+                    )
+                    var v = oracle_log_kernel(ftz(dist), h, kernel)
+                    if has_weights:
+                        v = ftz(v + lwp.unsafe_load(j))
+                    logk[j] = v
+                var mm = oracle_logsumexp_row(logk, 0, n_train)
+                var a = ftz(mm[1] - log_sw)
+                scores.unsafe_store(q, ftz(a - norm))
+            _ = logk^
+        except:
+            fp.unsafe_store(c, 1)
+
+    if t == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, t)
+    _ = q_norms^
+    _ = t_norms^
+    _ = logw^
+    for c in range(t):
+        if failed[c] != 0:
+            raise Error("kde host: score row chunk " + String(c) + " raised")
+    _ = failed^
 
 
 # ---------------------------------------------------------------------------

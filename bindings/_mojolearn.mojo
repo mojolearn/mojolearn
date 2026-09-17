@@ -96,6 +96,11 @@ from max.gpu.host import DeviceContext
 
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
+from neighbors.resident_index import (
+    knn_index_prepare,
+    knn_index_release,
+    knn_index_search,
+)
 from neighbors.estimator import (
     knn_classifier_predict,
     knn_classifier_from_neighbors,
@@ -232,6 +237,73 @@ def knn_search_binding(
         var ctx = DeviceContext()
         used = knn_search(
             ctx, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
+            dt[0], dt[1],
+        )
+    return PythonObject(used)
+
+
+def knn_index_prepare_binding(
+    index_addr: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """DEVIATION 2921: upload a fitted index ONCE and return the handle
+    `knn_search_resident` searches through. `params` is `[n_index,
+    n_features]`; the bytes at `index_addr` are copied to the device
+    inside this call and never read again by a search except for the
+    host-side refusals. Release with `knn_index_release`."""
+    if len(params) != 2:
+        raise Error("knn_index_prepare: params must hold n_index, n_features")
+    var ip = _f32_ptr(Int(py=index_addr))
+    var ni = Int(py=params[0])
+    var nf = Int(py=params[1])
+    if ni <= 0 or nf <= 0:
+        raise Error("knn_index_prepare: n_index and n_features must be positive")
+    var handle: Int
+    with GILReleased(Python()):
+        handle = knn_index_prepare(ip, ni, nf)
+    return PythonObject(handle)
+
+
+def knn_index_release_binding(handle: PythonObject) raises -> PythonObject:
+    """Drop a resident index (DEVIATION 2921)."""
+    knn_index_release(Int(py=handle))
+    return PythonObject(None)
+
+
+def knn_search_resident_binding(
+    handle: PythonObject,
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    out_dist_addr: PythonObject,
+    out_idx_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """`knn_search` over a resident index (DEVIATION 2921): the same
+    `params` and `dist_params` as `knn_search_binding`, plus the handle
+    `knn_index_prepare` returned first, and `index_addr` still the host
+    bytes (the cosine zero-row refusal reads them). Returns the query tile
+    that ran, as `knn_search` does."""
+    if len(params) != 6:
+        raise Error(
+            "knn_search_resident: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var dp = _f32_ptr(Int(py=out_dist_addr))
+    var xp = _u32_ptr(Int(py=out_idx_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var sq = Int(py=params[4]) != 0
+    var qt = Int(py=params[5])
+    var dt = _dist_triple(dist_params)
+    var h = Int(py=handle)
+    var used: Int
+    with GILReleased(Python()):
+        used = knn_index_search(
+            h, ip, ni, qp, nq, nf, kk, dp, xp, sq, qt, KNN_METHOD_AUTO,
             dt[0], dt[1],
         )
     return PythonObject(used)
@@ -1628,6 +1700,9 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[mojolearn_vendor_binding]("mojolearn_vendor")
         m.def_function[mojolearn_numeric_mode_binding]("mojolearn_numeric_mode")
         m.def_function[knn_search_binding]("knn_search")
+        m.def_function[knn_index_prepare_binding]("knn_index_prepare")
+        m.def_function[knn_index_release_binding]("knn_index_release")
+        m.def_function[knn_search_resident_binding]("knn_search_resident")
         m.def_function[knn_classify_neighbors_binding]("knn_classify_neighbors")
         m.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         m.def_function[knn_classify_binding]("knn_classify")

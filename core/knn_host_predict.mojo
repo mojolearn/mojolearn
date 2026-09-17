@@ -152,6 +152,15 @@ what it has shown.
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
+from core.host_predict_threads import (
+    HostF32Ptr,
+    host_list_ptr,
+    host_list_ptr_u32,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 from checks.kernel_matrix import (
     COLUMN_AMD,
     COLUMN_APPLE,
@@ -312,6 +321,17 @@ def host_metric_cell(
     q: List[Float32], row: Int, y: List[Float32], col: Int, d: Int,
     qn: Float32, yn: Float32, metric: Int, metric_arg: Float32,
 ) -> Float32:
+    """`host_metric_cell_ptr` over two Lists, the checks' door."""
+    return host_metric_cell_ptr(
+        host_list_ptr(q), row, host_list_ptr(y), col, d, qn, yn, metric, metric_arg
+    )
+
+
+@always_inline
+def host_metric_cell_ptr(
+    q: HostF32Ptr, row: Int, y: HostF32Ptr, col: Int, d: Int,
+    qn: Float32, yn: Float32, metric: Int, metric_arg: Float32,
+) -> Float32:
     """One cell of `metric_distance_kernel` for the four metrics above,
     `x = q` (the query tile) and `y` (the index tile), the feature axis
     ascending, each operand `ftz`'d as it is loaded. `qn` and `yn` are the
@@ -323,7 +343,9 @@ def host_metric_cell(
     var acc = Float32(0.0)
     if metric == DIST_LINF:
         for f in range(d):
-            acc = linf_core(acc, ftz(q[row * d + f]), ftz(y[col * d + f]))
+            acc = linf_core(
+                acc, ftz(q.unsafe_load(row * d + f)), ftz(y.unsafe_load(col * d + f))
+            )
         comptime if KNN_HOST_SABOTAGE:
             acc = bitcast[DType.float32](bitcast[DType.uint32](acc) + UInt32(1))
         return acc
@@ -331,8 +353,8 @@ def host_metric_cell(
         var f = g
         comptime if KNN_HOST_SABOTAGE:
             f = d - 1 - g
-        var qv = ftz(q[row * d + f])
-        var yv = ftz(y[col * d + f])
+        var qv = ftz(q.unsafe_load(row * d + f))
+        var yv = ftz(y.unsafe_load(col * d + f))
         if metric == DIST_L1:
             acc = l1_core(acc, qv, yv)
         elif metric == DIST_LP_UNEXPANDED:
@@ -367,6 +389,17 @@ def host_l2_expanded_cell(
     q: List[Float32], row: Int, y: List[Float32], col: Int, d: Int,
     qn: Float32, yn: Float32, is_sqrt: Bool,
 ) -> Float32:
+    """`host_l2_expanded_cell_ptr` over two Lists, the checks' door."""
+    return host_l2_expanded_cell_ptr(
+        host_list_ptr(q), row, host_list_ptr(y), col, d, qn, yn, is_sqrt
+    )
+
+
+@always_inline
+def host_l2_expanded_cell_ptr(
+    q: HostF32Ptr, row: Int, y: HostF32Ptr, col: Int, d: Int,
+    qn: Float32, yn: Float32, is_sqrt: Bool,
+) -> Float32:
     """One cell of `pinned_distance_tile_kernel` (`pinned_distance_tile.mojo:
     91-107`):
 
@@ -383,13 +416,13 @@ def host_l2_expanded_cell(
         # purpose; see KNN_HOST_SABOTAGE.
         for g in range(d):
             var f = d - 1 - g
-            var qv = ftz(q[row * d + f])
-            var yv = ftz(y[col * d + f])
+            var qv = ftz(q.unsafe_load(row * d + f))
+            var yv = ftz(y.unsafe_load(col * d + f))
             acc = ftz(identical_mul_add(qv, yv, acc))
     else:
         for f in range(d):
-            var qv = ftz(q[row * d + f])
-            var yv = ftz(y[col * d + f])
+            var qv = ftz(q.unsafe_load(row * d + f))
+            var yv = ftz(y.unsafe_load(col * d + f))
             acc = ftz(identical_mul_add(qv, yv, acc))
     var dist = ftz(
         identical_mul_add(Float32(-2.0), acc, ftz(ftz(qn) + ftz(yn)))
@@ -528,32 +561,64 @@ def host_knn_search(
                 + " is all zeros; cosine distance divides by ||x|| and is"
                 " undefined at the origin (DEVIATION 553)"
             )
-    var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
-    if mtr != KNN_HOST_DIST_L2_EXPANDED and mtr != KNN_HOST_DIST_L2_SQRT_EXPANDED:
-        # `compute_norms_for_metric`: cosine's TRUE norm, none for the rest.
-        var index_cn = List[Float32](length=n_index, fill=Float32(0.0))
-        var query_cn = List[Float32](length=n_queries, fill=Float32(0.0))
-        if mtr == DIST_COSINE_EXPANDED:
-            index_cn = host_cosine_row_norms(index, n_index, d)
-            query_cn = host_cosine_row_norms(queries, n_queries, d)
-        for row in range(n_queries):
-            for col in range(n_index):
-                dist_row[col] = host_metric_cell(
-                    queries, row, index, col, d, query_cn[row], index_cn[col],
-                    mtr, metric_arg,
-                )
-            host_select_k(dist_row, n_index, k, out_dist, out_idx, row * k)
-        return
+    # DEVIATION 2920 (lane/infer-speed-classical, 2026-09-17): the query
+    # rows are split into contiguous tasks (`core/host_predict_threads.
+    # mojo`). A query row's distances, its selection and its sort read the
+    # index, the norms and its own row only and write its own `k` slots,
+    # so the split moves no bit; each task keeps one `dist_row` scratch
+    # and the row's cells are still written ascending by one thread.
+    var l2_pair = mtr == KNN_HOST_DIST_L2_EXPANDED or mtr == KNN_HOST_DIST_L2_SQRT_EXPANDED
     var is_sqrt = mtr == KNN_HOST_DIST_L2_SQRT_EXPANDED
-    var index_norm = host_row_norms(index, n_index, d)
-    var query_norm = host_row_norms(queries, n_queries, d)
-    for row in range(n_queries):
-        var qn = query_norm[row]
-        for col in range(n_index):
-            dist_row[col] = host_l2_expanded_cell(
-                queries, row, index, col, d, qn, index_norm[col], is_sqrt
-            )
-        host_select_k(dist_row, n_index, k, out_dist, out_idx, row * k)
+    var index_norm = List[Float32](length=n_index, fill=Float32(0.0))
+    var query_norm = List[Float32](length=n_queries, fill=Float32(0.0))
+    if l2_pair:
+        index_norm = host_row_norms(index, n_index, d)
+        query_norm = host_row_norms(queries, n_queries, d)
+    elif mtr == DIST_COSINE_EXPANDED:
+        # `compute_norms_for_metric`: cosine's TRUE norm, none for the rest.
+        index_norm = host_cosine_row_norms(index, n_index, d)
+        query_norm = host_cosine_row_norms(queries, n_queries, d)
+    var tasks = host_predict_task_count(n_queries)
+    var chunk = host_predict_chunk(n_queries, tasks)
+    var ip = host_list_ptr(index)
+    var qp = host_list_ptr(queries)
+    var inp = host_list_ptr(index_norm)
+    var qnp = host_list_ptr(query_norm)
+    var odp = host_list_ptr(out_dist)
+    var oip = host_list_ptr_u32(out_idx)
+
+    def _rows(c: Int) {imm ip, imm qp, imm inp, imm qnp, imm odp, imm oip, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm mtr, imm metric_arg, imm l2_pair, imm is_sqrt}:
+        var dist_row = List[Float32](length=n_index, fill=Float32(0.0))
+        var sel_dist = List[Float32](length=k, fill=Float32(0.0))
+        var sel_idx = List[UInt32](length=k, fill=UInt32(0))
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_queries)
+        for row in range(lo, hi):
+            var qn = qnp.unsafe_load(row)
+            if l2_pair:
+                for col in range(n_index):
+                    dist_row[col] = host_l2_expanded_cell_ptr(
+                        qp, row, ip, col, d, qn, inp.unsafe_load(col), is_sqrt
+                    )
+            else:
+                for col in range(n_index):
+                    dist_row[col] = host_metric_cell_ptr(
+                        qp, row, ip, col, d, qn, inp.unsafe_load(col), mtr, metric_arg
+                    )
+            host_select_k(dist_row, n_index, k, sel_dist, sel_idx, 0)
+            for rank in range(k):
+                odp.unsafe_store(row * k + rank, sel_dist[rank])
+                oip.unsafe_store(row * k + rank, sel_idx[rank])
+        _ = dist_row^
+        _ = sel_dist^
+        _ = sel_idx^
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+    _ = index_norm^
+    _ = query_norm^
 
 
 def host_unique_labels(y: List[Int32], n: Int) -> List[Int32]:
