@@ -158,11 +158,13 @@ from mamba.checks.mamba_fixture import (
 )
 from mamba.impl.modeling.modeling_mamba import (
     BLOCK_ANY_SABOTAGE,
+    MAMBA_GUARD,
     mamba_block_forward,
     mamba_copy_in,
     mamba_device_alloc,
     mamba_download,
     mamba_upload,
+    mamba_zeros,
     MambaDeviceStages,
     MambaDeviceState,
     MambaDeviceWeights,
@@ -534,6 +536,284 @@ def mamba1_decode_step_binding(
     var dm = Int(py=params[1])
     with GILReleased(Python()):
         _mamba1_run(a, b, 1, dm, True)
+    return PythonObject(0)
+
+
+# ===========================================================================
+# The Mamba-1 resident decode session (DEVIATION 2941, lane/infer-speed-
+# neural, 2026-09-17): device-owned weights, state and L = 1 stages that
+# live across decode steps. The transformer binding's DEVIATION 2940, the
+# same shape and the same reason it cannot move a bit: every step is
+# `mamba_step`, THE certified decode entry (the block at L = 1), on
+# `MambaDeviceWeights`, `MambaDeviceState` and `MambaDeviceStages` holding
+# the bytes the per-call entry uploads per token, built once instead. Stage
+# reuse across calls is the Mamba-1 stage struct's own contract (every stage
+# the block reads it writes first in the same call). Ownership: the session
+# COPIES the weights and the state at open; the caller's state arrays are
+# STALE until export_state or close; weights refresh is close and open.
+# ===========================================================================
+
+
+struct Mamba1DecodeSession(Movable, Writable):
+    var ctx: Optional[DeviceContext]
+    var w: Optional[MambaDeviceWeights]
+    var state: Optional[MambaDeviceState]
+    var stages: Optional[MambaDeviceStages]
+    var dx: Optional[DeviceBuffer[DType.float32]]
+    var b: Int
+    var dm: Int
+    var di: Int
+    var busy: Bool
+    var usable: Bool
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+        self.w = Optional[MambaDeviceWeights]()
+        self.state = Optional[MambaDeviceState]()
+        self.stages = Optional[MambaDeviceStages]()
+        self.dx = Optional[DeviceBuffer[DType.float32]]()
+        self.b = 0
+        self.dm = 0
+        self.di = 0
+        self.busy = False
+        self.usable = True
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("Mamba1DecodeSession")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("Mamba1DecodeSession")
+
+    def is_open(self) -> Bool:
+        return Bool(self.ctx) and Bool(self.state)
+
+    def release(mut self):
+        self.stages = None
+        self.dx = None
+        self.state = None
+        self.w = None
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
+        self.ctx = None
+
+    def __deinit__(deinit self):
+        self.release()
+
+    def close(mut self) raises:
+        if self.busy:
+            raise Error("mamba1 session: busy")
+        self.usable = False
+        self.release()
+
+
+def _m1_require_session_open(s: Mamba1DecodeSession) raises:
+    if s.busy:
+        raise Error("mamba1 session: busy")
+    if not s.is_open():
+        raise Error("mamba1 session: not open (mamba1_session_open first)")
+    if not s.usable:
+        raise Error("mamba1 session: lost after a failed call; close it and open a new one")
+
+
+def _m1_session_open_run(mut s: Mamba1DecodeSession, a: List[Int], b: Int, dm: Int) raises:
+    """The GIL-free half of `mamba1_session_open`: the host weight lists
+    through the lane's own struct, one context, the device weights, the
+    state over fresh zeros, the L = 1 stages and the resident x buffer."""
+    var dims = MambaDims.of(dm)
+    var di = dims.d_inner
+    var r = dims.dt_rank
+    var xr = dims.x_proj_rows()
+    var w = MambaWeights(dims)
+    w.norm_w = _read_f32(a[1], dm)
+    w.w_in = _read_f32(a[2], 2 * di * dm)
+    w.conv_w = _read_f32(a[3], di * D_CONV)
+    w.conv_b = _read_f32(a[4], di)
+    w.w_x = _read_f32(a[5], xr * di)
+    w.w_dt = _read_f32(a[6], di * r)
+    w.b_dt = _read_f32(a[7], di)
+    w.a_log = _read_f32(a[8], di * D_STATE)
+    w.d_skip = _read_f32(a[9], di)
+    w.w_out = _read_f32(a[10], dm * di)
+    s.ctx = DeviceContext()
+    s.w = MambaDeviceWeights(s.ctx.value(), w)
+    var dstate = MambaDeviceState(s.ctx.value(), b, dims)
+    dstate.conv_win = mamba_upload(s.ctx.value(), _read_f32(a[11], b * di * D_CONV))
+    dstate.h = mamba_upload(s.ctx.value(), _read_f32(a[12], b * di * D_STATE))
+    s.state = dstate^
+    s.stages = MambaDeviceStages(s.ctx.value(), b, 1, dims)
+    s.dx = mamba_zeros(s.ctx.value(), b * dm)
+    s.b = b
+    s.dm = dm
+    s.di = di
+
+
+def _m1_session_step_run(mut s: Mamba1DecodeSession, px: Int, py: Int) raises:
+    """One decode token on the resident structs, one completion wait."""
+    ref ctx = s.ctx.value()
+    var n = s.b * s.dm
+    mamba_copy_in(ctx, s.dx.value(), f32_ptr(px), n)
+    var trace = IdentityTrace.disabled()
+    mamba_step(ctx, s.stages.value(), s.state.value(), s.w.value(), s.dx.value(), s.b, trace,
+               String("py.session"))
+    comptime if MAMBA_GUARD > 0:
+        var body = s.stages.value().residual_out.create_sub_buffer[DType.float32](0, n)
+        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=body)
+        ctx.synchronize()
+        _ = body^
+    else:
+        if n != len(s.stages.value().residual_out):
+            raise Error("mamba1 session: the L = 1 stages hold a different output length")
+        ctx.enqueue_copy(dst_ptr=f32_ptr(py), src_buf=s.stages.value().residual_out)
+        ctx.synchronize()
+
+
+def _m1_session_export_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
+    ref ctx = s.ctx.value()
+    _write_f32(pw, mamba_download(ctx, s.state.value().conv_win, s.b * s.di * D_CONV))
+    _write_f32(ph, mamba_download(ctx, s.state.value().h, s.b * s.di * D_STATE))
+
+
+def _m1_session_load_run(mut s: Mamba1DecodeSession, pw: Int, ph: Int) raises:
+    ref ctx = s.ctx.value()
+    s.state.value().conv_win = mamba_upload(ctx, _read_f32(pw, s.b * s.di * D_CONV))
+    s.state.value().h = mamba_upload(ctx, _read_f32(ph, s.b * s.di * D_STATE))
+
+
+def mamba1_session_create_binding() raises -> PythonObject:
+    """A closed session. Creation performs no GPU operation."""
+    return PythonObject(alloc=Mamba1DecodeSession())
+
+
+def mamba1_session_open_binding(
+    session: PythonObject, addrs: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Open a closed session: `addrs` is TWELVE addresses, the ten weights
+    in `mamba1_forward`'s order (slots 1 to 10 there), then conv_window and
+    h; `params` is [B, d_model]. Everything is COPIED to the device."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 12 or len(params) != 2:
+        raise Error("mamba1_session_open: expected 12 addresses and 2 scalars")
+    if owner[].busy:
+        raise Error("mamba1 session: busy")
+    if owner[].is_open():
+        raise Error("mamba1 session: already open; close it first")
+    var a = List[Int]()
+    a.append(0)
+    for i in range(12):
+        var address = Int(py=addrs[i])
+        if address == 0:
+            raise Error("mamba1_session_open: null buffer address at slot " + String(i))
+        a.append(address)
+    var b = Int(py=params[0])
+    var dm = Int(py=params[1])
+    if b <= 0:
+        raise Error("mamba1_session_open: B must be positive")
+    owner[].busy = True
+    owner[].usable = False
+    try:
+        with GILReleased(Python()):
+            _m1_session_open_run(owner[], a, b, dm)
+    except error:
+        owner[].busy = False
+        owner[].release()
+        raise error
+    owner[].busy = False
+    owner[].usable = True
+    return PythonObject(0)
+
+
+def mamba1_session_step_binding(
+    session: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """One decode token on an open session: `addrs` = [x, y_out], both
+    B * d_model float32. A failed call marks the session lost."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 2:
+        raise Error("mamba1_session_step: expected 2 addresses")
+    var px = Int(py=addrs[0])
+    var py = Int(py=addrs[1])
+    if px == 0 or py == 0:
+        raise Error("mamba1_session_step: null buffer address")
+    _m1_require_session_open(owner[])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m1_session_step_run(owner[], px, py)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
+def mamba1_session_export_state_binding(
+    session: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """Copy the resident state into the caller's buffers: `addrs` =
+    [conv_window, h]. The session stays open."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 2:
+        raise Error("mamba1_session_export_state: expected 2 addresses")
+    var pw = Int(py=addrs[0])
+    var ph = Int(py=addrs[1])
+    if pw == 0 or ph == 0:
+        raise Error("mamba1_session_export_state: null buffer address")
+    _m1_require_session_open(owner[])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m1_session_export_run(owner[], pw, ph)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
+def mamba1_session_load_state_binding(
+    session: PythonObject, addrs: PythonObject,
+) raises -> PythonObject:
+    """Replace the resident state with the caller's bytes: `addrs` =
+    [conv_window, h]. The explicit refresh for the state half."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    if len(addrs) != 2:
+        raise Error("mamba1_session_load_state: expected 2 addresses")
+    var pw = Int(py=addrs[0])
+    var ph = Int(py=addrs[1])
+    if pw == 0 or ph == 0:
+        raise Error("mamba1_session_load_state: null buffer address")
+    _m1_require_session_open(owner[])
+    owner[].busy = True
+    try:
+        with GILReleased(Python()):
+            _m1_session_load_run(owner[], pw, ph)
+    except error:
+        owner[].busy = False
+        owner[].usable = False
+        raise error
+    owner[].busy = False
+    return PythonObject(0)
+
+
+def mamba1_session_info_binding(session: PythonObject) raises -> PythonObject:
+    """[open, usable, B, d_model] as ints."""
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    var out = Python.list()
+    out.append(PythonObject(1 if owner[].is_open() else 0))
+    out.append(PythonObject(1 if owner[].usable else 0))
+    out.append(PythonObject(owner[].b))
+    out.append(PythonObject(owner[].dm))
+    return out
+
+
+def mamba1_session_close_binding(session: PythonObject) raises -> PythonObject:
+    var owner = session.downcast_value_ptr[Mamba1DecodeSession]()
+    owner[].close()
     return PythonObject(0)
 
 
@@ -1225,6 +1505,15 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba1_forward_binding]("mamba1_forward")
         m.def_function[mamba1_backward_binding]("mamba1_backward")
         m.def_function[mamba1_decode_step_binding]("mamba1_decode_step")
+        # DEVIATION 2941: the Mamba-1 resident decode session.
+        _ = m.add_type[Mamba1DecodeSession]("_Mamba1DecodeSession")
+        m.def_function[mamba1_session_create_binding]("mamba1_session_create")
+        m.def_function[mamba1_session_open_binding]("mamba1_session_open")
+        m.def_function[mamba1_session_step_binding]("mamba1_session_step")
+        m.def_function[mamba1_session_export_state_binding]("mamba1_session_export_state")
+        m.def_function[mamba1_session_load_state_binding]("mamba1_session_load_state")
+        m.def_function[mamba1_session_info_binding]("mamba1_session_info")
+        m.def_function[mamba1_session_close_binding]("mamba1_session_close")
         m.def_function[mamba2_backward_binding]("mamba2_backward")
         m.def_function[mamba2_forward_binding]("mamba2_forward")
         m.def_function[mamba2_decode_step_binding]("mamba2_decode_step")

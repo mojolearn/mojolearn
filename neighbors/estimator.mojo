@@ -387,52 +387,24 @@ def knn_search_traced(
     )
 
 
-def _knn_search_traced_retaining(
-    ctx: DeviceContext,
-    mut trace: IdentityTrace,
-    mut retained_indices: List[DeviceBuffer[DType.uint32]],
-    keep_device_indices: Bool,
+def _knn_search_plan(
     index_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_index: Int,
     queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
     n_queries: Int,
     n_features: Int,
     k: Int,
-    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
-    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
-    return_sqrt: Bool = True,
-    requested_query_tile: Int = DEFAULT_QUERY_TILE,
-    knn_method: Int = KNN_METHOD_AUTO,
-    metric: Int = METRIC_FROM_IS_SQRT,
-    metric_arg: Float32 = Float32(2.0),
-) raises -> Int:
-    """Exact k nearest neighbours, index and queries row-major on the host.
-
-    THE METRIC, 2026-09-01. `metric` is a cuVS `DistanceType` value and
-    `metric_arg` is Minkowski's `p`, which is how cuML spells the pair all
-    the way down (`nearest_neighbors.pyx:852-854` passes
-    `<DistanceType>_metric` and `<float>self.p` to `brute_force_knn`
-    regardless of the metric, because every non-Lp op discards it). Use
-    `knn_metric_from_name` above for the string table. The DEFAULT is the
-    sentinel `METRIC_FROM_IS_SQRT`, which reproduces this function's
-    pre-metric behaviour exactly -- `return_sqrt` choosing between
-    `L2SqrtExpanded` and `L2Expanded` -- so the nine existing call sites
-    across `metrics/`, `spectral/`, `hdbscan/`, `ivf/`, `bench/` and the
-    check files keep their arm and their bits with no edit.
-
-    Both inputs are read as `n x n_features` row-major Float32. Both outputs
-    are written as `n_queries x k` row-major, distances and indices in the
-    same order, which is scikit-learn's `(distances, indices)` layout.
-
-    Returns THE QUERY TILE THAT RAN, so a caller can record which
-    configuration produced a number instead of assuming it was the default.
-    That is the same discipline `ENGINEERING_RULES.md` rule 8 asks of the
-    benchmark, applied at the boundary where a user can actually see it.
-
-    Raises rather than clamping on every shape the kernel cannot serve. A
-    clamp here would return a wrong answer quietly, which is the failure mode
-    this repository has paid for repeatedly.
-    """
+    return_sqrt: Bool,
+    requested_query_tile: Int,
+    knn_method: Int,
+    metric: Int,
+    metric_arg: Float32,
+) raises -> Tuple[Int, Int, Int, Int]:
+    """The refusals and the plan of `_knn_search_traced_retaining`, in its
+    order, before any allocation: `(resolved metric, devices, query tile,
+    buf_len)`. Split out 2026-09-17 (DEVIATION 2921) so `knn_search_resident`
+    refuses and plans exactly as `knn_search` does; the statements are the
+    ones that stood at the top of that function."""
     if n_index <= 0:
         raise Error("knn_search: n_index must be positive, got " + String(n_index))
     if n_queries <= 0:
@@ -494,8 +466,144 @@ def _knn_search_traced_retaining(
     # selector has nowhere to put a full result row.
     # DEVIATION 2631: `k` pairs where the small-k selector serves every tile.
     var buf_len = tiled_radix_scratch_len(n_index, k)
+    return (mtr, devices, query_tile, buf_len)
+
+
+def _knn_search_traced_retaining(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut retained_indices: List[DeviceBuffer[DType.uint32]],
+    keep_device_indices: Bool,
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
+    """Exact k nearest neighbours, index and queries row-major on the host.
+
+    THE METRIC, 2026-09-01. `metric` is a cuVS `DistanceType` value and
+    `metric_arg` is Minkowski's `p`, which is how cuML spells the pair all
+    the way down (`nearest_neighbors.pyx:852-854` passes
+    `<DistanceType>_metric` and `<float>self.p` to `brute_force_knn`
+    regardless of the metric, because every non-Lp op discards it). Use
+    `knn_metric_from_name` above for the string table. The DEFAULT is the
+    sentinel `METRIC_FROM_IS_SQRT`, which reproduces this function's
+    pre-metric behaviour exactly -- `return_sqrt` choosing between
+    `L2SqrtExpanded` and `L2Expanded` -- so the nine existing call sites
+    across `metrics/`, `spectral/`, `hdbscan/`, `ivf/`, `bench/` and the
+    check files keep their arm and their bits with no edit.
+
+    Both inputs are read as `n x n_features` row-major Float32. Both outputs
+    are written as `n_queries x k` row-major, distances and indices in the
+    same order, which is scikit-learn's `(distances, indices)` layout.
+
+    Returns THE QUERY TILE THAT RAN, so a caller can record which
+    configuration produced a number instead of assuming it was the default.
+    That is the same discipline `ENGINEERING_RULES.md` rule 8 asks of the
+    benchmark, applied at the boundary where a user can actually see it.
+
+    Raises rather than clamping on every shape the kernel cannot serve. A
+    clamp here would return a wrong answer quietly, which is the failure mode
+    this repository has paid for repeatedly.
+    """
+    var plan = _knn_search_plan(
+        index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
+        requested_query_tile, knn_method, metric, metric_arg,
+    )
+    var mtr = plan[0]
+    var devices = plan[1]
+    var query_tile = plan[2]
+    var buf_len = plan[3]
 
     var index = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+    ctx.enqueue_copy(dst_buf=index, src_ptr=index_ptr)
+    ctx.synchronize()
+    return _knn_search_on_device_index(
+        ctx, trace, retained_indices, keep_device_indices, index, n_index,
+        queries_ptr, n_queries, n_features, k, out_dist_ptr, out_idx_ptr,
+        return_sqrt, query_tile, knn_method, mtr, metric_arg, devices, buf_len,
+    )
+
+
+def knn_search_resident(
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool = True,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    knn_method: Int = KNN_METHOD_AUTO,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+) raises -> Int:
+    """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
+    lane/infer-speed-classical, 2026-09-17): `index` holds the same
+    `n_index x n_features` row-major float32 bytes `index_ptr` holds, uploaded
+    once by `neighbors/resident_index.mojo::knn_index_prepare` and kept
+    across calls, and `ctx` is the context that owns it. Everything after
+    the upload is `_knn_search_on_device_index`, the one body `knn_search`
+    runs, so the norms, the transposed layout, the distance chain, the
+    selection, the sort and the outputs are the same statements on the
+    same bytes; only the per-call host to device copy of the index (352 MB
+    for the 400,000 x 220 Istella-S block, 48 ms of a 140 ms call on an
+    RTX 4090) is gone. `index_ptr` is still read for the refusals that
+    inspect the index on the host (the cosine zero row, DEVIATION 553).
+    """
+    var trace = IdentityTrace()
+    var plan = _knn_search_plan(
+        index_ptr, n_index, queries_ptr, n_queries, n_features, k, return_sqrt,
+        requested_query_tile, knn_method, metric, metric_arg,
+    )
+    var retained = List[DeviceBuffer[DType.uint32]]()
+    return _knn_search_on_device_index(
+        ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
+        n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
+        knn_method, plan[0], metric_arg, plan[1], plan[3],
+    )
+
+
+def _knn_search_on_device_index(
+    ctx: DeviceContext,
+    mut trace: IdentityTrace,
+    mut retained_indices: List[DeviceBuffer[DType.uint32]],
+    keep_device_indices: Bool,
+    mut index: DeviceBuffer[DType.float32],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    out_dist_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_idx_ptr: MutPointer[UInt32, MutUntrackedOrigin],
+    return_sqrt: Bool,
+    var query_tile: Int,
+    knn_method: Int,
+    mtr: Int,
+    metric_arg: Float32,
+    devices: Int,
+    buf_len: Int,
+) raises -> Int:
+    """The body of `_knn_search_traced_retaining` after the index is on the
+    device: the query upload, the norms, the search, the readback, the
+    sort and the outputs. `mtr` is the RESOLVED metric and `query_tile`,
+    `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
+    2026-09-17 (DEVIATION 2921) so a resident index enters here; every
+    statement below is where it was."""
     var queries = ctx.enqueue_create_buffer[DType.float32](
         n_queries * n_features
     )
@@ -519,7 +627,6 @@ def _knn_search_traced_retaining(
     var out_i32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=index, src_ptr=index_ptr)
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
 

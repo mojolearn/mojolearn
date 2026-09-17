@@ -373,8 +373,14 @@ is Apache-2.0.
 
 ### Check the claims on your machine
 
+The commands below describe the 0.8.7 release candidate; older published wheels
+do not contain this full verifier. Inspect `verify --coverage` for the installed
+package's 246 appendix entries, additional lanes, missing references and batch
+contracts. Mappings are not certification. `verify --batch-checks` additionally
+runs gradient, batch-size, ragged-batch and sampler/replay probes; see [the verification guide](docs/VERIFY.md).
+
 ```sh
-pip install mojolearn
+python -m mojolearn verify --coverage
 python -m mojolearn verify --all        # or --quick, one lane per family
 ```
 

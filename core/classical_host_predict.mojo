@@ -85,10 +85,30 @@ kernel it mirrors and keeps its statements in its order:
 
 The restatement is a prediction until measured. tools/classical_host_gate.py
 is the measurement, and the brief records what it has shown.
+
+THE POINTER ENTRIES AND THE ROW SPLIT (lane/infer-speed-classical,
+2026-09-17, DEVIATION 2920). Every entry above has an `_into` twin that
+reads X through the caller's pointer and writes the caller's output
+directly, so the host bindings copy nothing (a 500,000 x 220 X was one
+440 MB `read_f32` copy per predict), and `host_gemm_nt_into` splits its
+output ROWS into contiguous tasks (`core/host_predict_threads.mojo`, the
+count from MOJOLEARN_CPU_THREADS or one per physical core). One cell is
+still `host_pinned_cell_ptr`, the same statements in the same order, and
+one row's cells are still written in ascending column order by one task;
+the intercept and bias epilogues, which are one statement per output, run
+on the calling thread after the join exactly as before. The List entries
+below are kept for the checks and route through the same twins, so there
+is one spelling of every arithmetic and the sabotage arm reaches it from
+either door. `host_pca_transform_into` centers each row into a task-local
+row buffer with `host_center_cell` (the statement `shift_columns_kernel`
+spells) instead of a whole centered copy of X; the cell reads the same
+flushed values.
 """
 from std.sys.compile import is_defined
 
 from std.math import sqrt
+
+from max.algorithm import sync_parallelize
 
 from checks.numerics import (
     ftz,
@@ -96,6 +116,12 @@ from checks.numerics import (
     identical_exp64,
     identical_mul,
     identical_mul_add,
+)
+from core.host_predict_threads import (
+    HostF32Ptr,
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
 )
 
 
@@ -109,8 +135,9 @@ from checks.numerics import (
 comptime CLASSICAL_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
-def host_pinned_cell(
-    x: List[Float32], x_off: Int, y: List[Float32], y_off: Int, k: Int,
+@always_inline
+def host_pinned_cell_ptr(
+    x: HostF32Ptr, x_off: Int, y: HostF32Ptr, y_off: Int, k: Int,
 ) -> Float32:
     """One cell of `pinned_gemm_nt_kernel` (`core/gemm.mojo:52-62`):
 
@@ -120,32 +147,75 @@ def host_pinned_cell(
         z[cell] = ftz(Float32(0.0) + ftz(acc))
 
     `x_off` is `i * k`, `y_off` is `j * k`. The final `0.0 + acc` turns a
-    `-0.0` accumulator into `+0.0`, and is kept for that reason."""
+    `-0.0` accumulator into `+0.0`, and is kept for that reason. THE ONE
+    SPELLING: `host_pinned_cell` and every `_into` entry call this."""
     var acc = Float32(0.0)
     comptime if CLASSICAL_HOST_SABOTAGE:
         # THE SABOTAGE ARM: the same fold, walked DESCENDING. Wrong on
         # purpose; see CLASSICAL_HOST_SABOTAGE.
         for q in range(k):
             var p = k - 1 - q
-            acc = ftz(identical_mul_add(ftz(x[x_off + p]), ftz(y[y_off + p]), acc))
+            acc = ftz(identical_mul_add(
+                ftz(x.unsafe_load(x_off + p)), ftz(y.unsafe_load(y_off + p)), acc
+            ))
         return ftz(Float32(0.0) + ftz(acc))
     for p in range(k):
-        acc = ftz(identical_mul_add(ftz(x[x_off + p]), ftz(y[y_off + p]), acc))
+        acc = ftz(identical_mul_add(
+            ftz(x.unsafe_load(x_off + p)), ftz(y.unsafe_load(y_off + p)), acc
+        ))
     return ftz(Float32(0.0) + ftz(acc))
+
+
+def host_pinned_cell(
+    x: List[Float32], x_off: Int, y: List[Float32], y_off: Int, k: Int,
+) -> Float32:
+    """`host_pinned_cell_ptr` over two Lists, the checks' door."""
+    return host_pinned_cell_ptr(host_list_ptr(x), x_off, host_list_ptr(y), y_off, k)
+
+
+def host_gemm_nt_into(
+    x: HostF32Ptr, y: HostF32Ptr, z: HostF32Ptr, m: Int, n: Int, k: Int,
+    tasks: Int,
+):
+    """`z[m x n] = x[m x k] . y[n x k]^T`, `gemm_nt` under IDENTICAL
+    (`core/gemm.mojo:137-160`): `pinned_gemm_nt_kernel` over `m * n` cells,
+    `i = cell // n`, `j = cell % n`; `n == 1` is `pinned_gemv_n_kernel`, the
+    same fold over the one column. DEVIATION 2920: the rows are split into
+    at most `tasks` contiguous ranges (`core/host_predict_threads.mojo`);
+    a task writes its own rows' cells in ascending cell order, reads `x`
+    and `y` only, and every cell is `host_pinned_cell_ptr`, so the bits are
+    the serial walk's. One task runs on the calling thread."""
+    if m <= 0 or n <= 0:
+        return
+    var t = tasks
+    if t < 1:
+        t = 1
+    if t > m:
+        t = m
+    var chunk = host_predict_chunk(m, t)
+
+    def _rows(c: Int) {imm x, imm y, imm z, imm chunk, imm m, imm n, imm k}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, m)
+        for i in range(lo, hi):
+            for j in range(n):
+                z.unsafe_store(i * n + j, host_pinned_cell_ptr(x, i * k, y, j * k, k))
+
+    if t == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, t)
 
 
 def host_gemm_nt(
     x: List[Float32], y: List[Float32], m: Int, n: Int, k: Int,
 ) -> List[Float32]:
-    """`z[m x n] = x[m x k] . y[n x k]^T`, `gemm_nt` under IDENTICAL
-    (`core/gemm.mojo:137-160`): `pinned_gemm_nt_kernel` over `m * n` cells,
-    `i = cell // n`, `j = cell % n`; `n == 1` is `pinned_gemv_n_kernel`, the
-    same fold over the one column."""
+    """`host_gemm_nt_into` into a fresh List, at the policy's task count."""
     var z = List[Float32](length=m * n, fill=Float32(0.0))
-    for cell in range(m * n):
-        var i = cell // n
-        var j = cell % n
-        z[cell] = host_pinned_cell(x, i * k, y, j * k, k)
+    host_gemm_nt_into(
+        host_list_ptr(x), host_list_ptr(y), host_list_ptr(z), m, n, k,
+        host_predict_task_count(m),
+    )
     return z^
 
 
@@ -157,12 +227,27 @@ def host_ols_predict(
     `_add_scalar_kernel` (`:53-74`, `dst[i] = ftz(ftz(dst[i]) + ftz(value))`)
     only `if intercept != Float32(0.0)`, the host compare that file audits
     under DEVIATION 527."""
-    var out = host_gemm_nt(x, coef, n_rows, 1, n_features)
+    var out = List[Float32](length=n_rows, fill=Float32(0.0))
+    host_ols_predict_into(
+        host_list_ptr(x), host_list_ptr(coef), host_list_ptr(out), n_rows,
+        n_features, intercept, host_predict_task_count(n_rows),
+    )
+    return out^
+
+
+def host_ols_predict_into(
+    x: HostF32Ptr, coef: HostF32Ptr, dst: HostF32Ptr, n_rows: Int,
+    n_features: Int, intercept: Float32, tasks: Int,
+):
+    """`host_ols_predict` over the caller's memory (DEVIATION 2920): the
+    gemv rows split across `tasks`, then the intercept epilogue, one
+    statement per row on the calling thread, only `if intercept !=
+    Float32(0.0)`."""
+    host_gemm_nt_into(x, coef, dst, n_rows, 1, n_features, tasks)
     if intercept != Float32(0.0):
         for i in range(n_rows):
-            var v = ftz(out[i])
-            out[i] = ftz(v + ftz(intercept))
-    return out^
+            var v = ftz(dst.unsafe_load(i))
+            dst.unsafe_store(i, ftz(v + ftz(intercept)))
 
 
 def host_qn_decision(
@@ -175,15 +260,30 @@ def host_qn_decision(
     `w_head` copy), then `add_bias_kernel` (`:121-134`) when
     `fit_intercept`: `z[i] = ftz(z[i] + b)` with `b = w[D]` read as it is,
     NOT flushed (that kernel flushes the sum only)."""
+    var z = List[Float32](length=n_rows, fill=Float32(0.0))
+    host_qn_decision_into(
+        host_list_ptr(x), host_list_ptr(w), host_list_ptr(z), n_rows,
+        n_features, fit_intercept, host_predict_task_count(n_rows),
+    )
+    return z^
+
+
+def host_qn_decision_into(
+    x: HostF32Ptr, w: HostF32Ptr, z: HostF32Ptr, n_rows: Int,
+    n_features: Int, fit_intercept: Bool, tasks: Int,
+):
+    """`host_qn_decision` over the caller's memory (DEVIATION 2920): the
+    `w_head` copy, the gemv rows split across `tasks`, then the bias
+    epilogue on the calling thread, `b = w[D]` read as it is."""
     var w_head = List[Float32](length=n_features, fill=Float32(0.0))
     for j in range(n_features):
-        w_head[j] = w[j]
-    var z = host_gemm_nt(x, w_head, n_rows, 1, n_features)
+        w_head[j] = w.unsafe_load(j)
+    host_gemm_nt_into(x, host_list_ptr(w_head), z, n_rows, 1, n_features, tasks)
     if fit_intercept:
-        var b = w[n_features]
+        var b = w.unsafe_load(n_features)
         for i in range(n_rows):
-            z[i] = ftz(z[i] + b)
-    return z^
+            z.unsafe_store(i, ftz(z.unsafe_load(i) + b))
+    _ = w_head^
 
 
 def host_qn_sigmoid(
@@ -213,19 +313,34 @@ def host_qn_decision_multi(
     cell over `n_rows * C` cells, `z[i*C + c]`; `add_bias_multi_kernel`,
     when `fit_intercept`, stores `ftz(z[cell] + b)` with `b = w[C*D + c]`
     read as it is, `c = cell % C`."""
+    var z = List[Float32](length=n_rows * n_classes, fill=Float32(0.0))
+    host_qn_decision_multi_into(
+        host_list_ptr(x), host_list_ptr(w), host_list_ptr(z), n_rows,
+        n_features, n_classes, fit_intercept, host_predict_task_count(n_rows),
+    )
+    return z^
+
+
+def host_qn_decision_multi_into(
+    x: HostF32Ptr, w: HostF32Ptr, z: HostF32Ptr, n_rows: Int,
+    n_features: Int, n_classes: Int, fit_intercept: Bool, tasks: Int,
+):
+    """`host_qn_decision_multi` over the caller's memory (DEVIATION 2920):
+    the row-major weight copy, the gemm rows split across `tasks`, then
+    the bias epilogue on the calling thread in cell order."""
     var d = n_features
     var w_rm = List[Float32](length=n_classes * d, fill=Float32(0.0))
     for cell in range(n_classes * d):
         var c = cell // d
         var j = cell % d
-        w_rm[cell] = w[c + n_classes * j]
-    var z = host_gemm_nt(x, w_rm, n_rows, n_classes, d)
+        w_rm[cell] = w.unsafe_load(c + n_classes * j)
+    host_gemm_nt_into(x, host_list_ptr(w_rm), z, n_rows, n_classes, d, tasks)
     if fit_intercept:
         for cell in range(n_classes * n_rows):
             var c = cell % n_classes
-            var b = w[n_classes * d + c]
-            z[cell] = ftz(z[cell] + b)
-    return z^
+            var b = w.unsafe_load(n_classes * d + c)
+            z.unsafe_store(cell, ftz(z.unsafe_load(cell) + b))
+    _ = w_rm^
 
 
 def host_qn_softmax(
@@ -269,10 +384,17 @@ def host_center(
     var out = List[Float32](length=n_rows * n_cols, fill=Float32(0.0))
     for idx in range(n_rows * n_cols):
         var col = idx % n_cols
-        var xv = ftz(x[idx])
-        var mv = ftz(mu[col])
-        out[idx] = ftz(xv + sign * mv)
+        out[idx] = host_center_cell(x[idx], mu[col], sign)
     return out^
+
+
+@always_inline
+def host_center_cell(x: Float32, m: Float32, sign: Float32) -> Float32:
+    """One cell of `shift_columns_kernel`, the two locals as it spells
+    them: `xv = ftz(x)`, `mv = ftz(mu)`, `ftz(xv + sign * mv)`."""
+    var xv = ftz(x)
+    var mv = ftz(m)
+    return ftz(xv + sign * mv)
 
 
 def host_pca_transform(
@@ -281,9 +403,57 @@ def host_pca_transform(
 ) -> List[Float32]:
     """`pca_transform` (`decomposition/impl/linalg/detail/pca.mojo:319-355`):
     center with sign `-1.0`, then `gemm_nt(out, x, components, n_rows,
-    n_components, n_cols)`."""
-    var centered = host_center(x, mu, n_rows, n_cols, Float32(-1.0))
-    return host_gemm_nt(centered, components, n_rows, n_components, n_cols)
+    n_components, n_cols)`; `host_pca_transform_into` into a fresh List."""
+    var out = List[Float32](length=n_rows * n_components, fill=Float32(0.0))
+    host_pca_transform_into(
+        host_list_ptr(x), host_list_ptr(mu), host_list_ptr(components),
+        host_list_ptr(out), n_rows, n_cols, n_components,
+        host_predict_task_count(n_rows),
+    )
+    return out^
+
+
+def host_pca_transform_into(
+    x: HostF32Ptr, mu: HostF32Ptr, components: HostF32Ptr, dst: HostF32Ptr,
+    n_rows: Int, n_cols: Int, n_components: Int, tasks: Int,
+):
+    """`host_pca_transform` over the caller's memory (DEVIATION 2920). A
+    task centers each of its rows into its own `n_cols` row buffer with
+    `host_center_cell` (the value `shift_columns_kernel` leaves in the
+    device copy of that cell), then writes the row's `n_components` cells
+    through `host_pinned_cell_ptr` over that buffer, ascending. The same
+    flushed values reach the same fold in the same order as the whole
+    centered copy did; no float crosses a row."""
+    if n_rows <= 0 or n_components <= 0:
+        return
+    var t = tasks
+    if t < 1:
+        t = 1
+    if t > n_rows:
+        t = n_rows
+    var chunk = host_predict_chunk(n_rows, t)
+
+    def _rows(c: Int) {imm x, imm mu, imm components, imm dst, imm chunk, imm n_rows, imm n_cols, imm n_components}:
+        var centered = List[Float32](length=n_cols, fill=Float32(0.0))
+        var cp = host_list_ptr(centered)
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_rows)
+        for i in range(lo, hi):
+            for col in range(n_cols):
+                centered[col] = host_center_cell(
+                    x.unsafe_load(i * n_cols + col), mu.unsafe_load(col), Float32(-1.0)
+                )
+            for j in range(n_components):
+                dst.unsafe_store(
+                    i * n_components + j,
+                    host_pinned_cell_ptr(cp, 0, components, j * n_cols, n_cols),
+                )
+        _ = centered^
+
+    if t == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, t)
 
 
 def host_tsvd_transform(
@@ -293,6 +463,14 @@ def host_tsvd_transform(
     """`tsvd_transform_host` (`decomposition/estimator.mojo:265-281`): one
     `gemm_nt(out, x, components, n_rows, n_components, n_features)`."""
     return host_gemm_nt(x, components, n_rows, n_components, n_cols)
+
+
+def host_tsvd_transform_into(
+    x: HostF32Ptr, components: HostF32Ptr, dst: HostF32Ptr,
+    n_rows: Int, n_cols: Int, n_components: Int, tasks: Int,
+):
+    """`host_tsvd_transform` over the caller's memory (DEVIATION 2920)."""
+    host_gemm_nt_into(x, components, dst, n_rows, n_components, n_cols, tasks)
 
 
 #: `decomposition/impl/linalg/detail/pca.mojo::WHITEN_SKIP_ZERO`, cuML's

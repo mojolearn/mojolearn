@@ -117,7 +117,7 @@ SAB_NAME = re.compile(r"sabotage|(^|[-_.])g?sab([-_.]|$)")
 #: can be argued with rather than hidden in a heuristic.
 NOT_ALGORITHMS = frozenset({
     "__version__", "numeric_mode", "set_numeric_mode", "vendor", "gpu_arch",
-    "gpu_arch_how", "Array", "select_d",
+    "gpu_arch_how", "Array",
     "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
     "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
     "training.numeric_mode_used", "training.vendor_used",

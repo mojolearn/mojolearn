@@ -73,6 +73,31 @@ the three bindings on the box, fetches the three parameter states from GitHub
 at the leg's own commit and verifies their SHA-256, then runs this sweep and
 the CPU path sweep, recording each phase's exit code.
 
+## One wait per call, and a scratch the session keeps (2026-09-17)
+
+`training/byte_lm_logits.mojo::_logits_forward` once waited five times between
+the ids upload, the embedding, each block and the head GEMM. All of that is
+enqueued on one in-order context, so the waits ordered nothing; only the
+download's wait remains (lane/infer-speed-neural, DEVIATION 2942). The
+call-shaped buffers (the ids, the embedding output, the KV cache reset per
+block, one stage struct per block, the logits and the head GEMM workspace) are
+a `ByteLogitsScratch`. The resident session keeps one across `logits` calls of
+the same `[batch, length]` and rebuilds it when the shape changes; the
+stateless entry still builds one per call and destroys it with its context.
+Every buffer is written whole before it is read, the same reuse the trainer's
+own per-layer stages and workspaces already rely on, so the kernels, their
+order and their operands are exactly the previous ones.
+
+Measured on one RunPod RTX 4090 in four alternating processes (before, after,
+after, before), 15 calls each after a warmup, the shipped profile: resident
+logits at batch 8 length 32 from 3.05 ms to 1.63 ms, at batch 256 from 44.9 ms
+to 35.4 ms; the stateless call unchanged at 6.6 ms (its time is the per-call
+context and the weight uploads). The sweep below passed on the changed build
+with the three per-state digests of the CPU sweep, and a build under
+`-D MOJOLEARN_BYTE_LM_LOGITS_SABOTAGE=1` (one output bit moved after the
+arithmetic, never in a shipped binary) was seen to fail it. Details:
+`docs/lanes/LANE_STATUS_lane-infer-speed-neural.md`.
+
 ## Certified GPUs
 
 | GPU | build | sweep against the CPU reference | per-state logits equal the CPU sweep | negative control | evidence |

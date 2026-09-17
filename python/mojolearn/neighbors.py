@@ -612,6 +612,57 @@ class NearestNeighbors(NumericModeMixin):
                 "(neighbors/impl/ball_cover/knn.mojo)."
             )
 
+    def _resident_index_handle(self, binding, idx):
+        """The handle of the device-resident copy of `idx` (DEVIATION 2921),
+        prepared on the first call and reused while the index array keeps
+        its address and shape; None where the loaded binding has no
+        `knn_index_prepare` (the CPU host binding, a CPU-only install, a
+        host subclass), in which case `kneighbors` takes the per-call
+        upload. Never raises for a missing door: `_HostBinding` refuses an
+        absent name with ImportError and a plain module with
+        AttributeError, and both mean "no residency here"."""
+        try:
+            prepare = binding.knn_index_prepare
+        except (ImportError, AttributeError):
+            return None
+        key = (addr_ro(idx, name="idx"), tuple(idx.shape))
+        cached = getattr(self, "_resident", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        if cached is not None:
+            self._release_resident_index()
+        handle = int(prepare(key[0], [int(idx.shape[0]), int(idx.shape[1])]))
+        self._resident = (key, handle)
+        return handle
+
+    def _release_resident_index(self):
+        """Drop the device copy, if one is held. Quiet on a binding that
+        cannot be reached any more (interpreter shutdown) and on a handle
+        already released (a copied instance)."""
+        cached = getattr(self, "_resident", None)
+        if cached is None:
+            return
+        self._resident = None
+        try:
+            self._bind("_mojolearn").knn_index_release(cached[1])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __del__(self):
+        try:
+            self._release_resident_index()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no device handle: the integer is
+        meaningful only in the process and registry that minted it, and an
+        unpickled instance holding it could release ANOTHER model's live
+        index. The copy uploads its own index at its first call."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
+
     def fit(self, X, y=None):
         """Store the index. There is no index structure to build.
 
@@ -619,6 +670,11 @@ class NearestNeighbors(NumericModeMixin):
         compatibility.
         """
         self._check_refusals()
+        # A refit drops the device copy of the previous index HERE, not at
+        # the next call: the copy is keyed on the array's address and shape,
+        # and a new array of the same shape can land at a freed address, so
+        # a key match after a refit would serve the old bytes.
+        self._release_resident_index()
         idx, _ = as_f32_c(X, ndim=2, name="X")
         # Held on the instance so the memory outlives this call: the Mojo side
         # borrows the address at `kneighbors` time and owns nothing.
@@ -637,6 +693,20 @@ class NearestNeighbors(NumericModeMixin):
         distances and the square root is taken on the way out, over
         `n_queries * k` values rather than `n_queries * n_index`, so it is not
         on the hot path.
+
+        THE INDEX STAYS ON THE DEVICE (DEVIATION 2921, lane/infer-speed-
+        classical, 2026-09-17). On a GPU binding the brute-force arm uploads
+        the fitted index ONCE, at the first call after `fit`, and every
+        later call searches the device copy (`neighbors/resident_index.
+        mojo`); the search itself is `knn_search`'s body after its upload,
+        so the bits are `knn_search`'s. The copy is keyed on the index
+        array's address and shape: a refit replaces the array and the next
+        call uploads again, and the old copy is released then and when the
+        instance is collected. An in-place write into the array `fit` was
+        given, after the first call, is NOT seen by later calls, as it is
+        not by cuML, whose `fit` copies the index to the device. The CPU
+        host binding has no such entry and reads the caller's memory on
+        every call.
         """
         if self._index is None:
             raise ValueError("mojolearn: call fit before kneighbors")
@@ -698,17 +768,32 @@ class NearestNeighbors(NumericModeMixin):
         # Every array named here stays in a local for the whole call. That is
         # the contract `_buffer` documents and the reason it is spelled out.
         idx = self._index
-        self.used_query_tile_ = self._bind("_mojolearn").knn_search(
-            addr_ro(idx, name="idx"),
-            addr_ro(q, name="q"),
-            addr(dist, name="dist"),
-            addr(ind, name="ind"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::knn_search_binding.
-            # n_index, n_queries, n_features, k, return_sqrt, query_tile
-            [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile],
-            # metric, metric_arg, weights -- see _dist_triple there.
-            self._dist_params(),
-        )
+        binding = self._bind("_mojolearn")
+        handle = self._resident_index_handle(binding, idx)
+        # ORDER MATCHES bindings/_mojolearn.mojo::knn_search_binding and
+        # ::knn_search_resident_binding.
+        # n_index, n_queries, n_features, k, return_sqrt, query_tile
+        params = [idx.shape[0], nq, idx.shape[1], k, 1, self.query_tile]
+        if handle is not None:
+            self.used_query_tile_ = binding.knn_search_resident(
+                handle,
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr(dist, name="dist"),
+                addr(ind, name="ind"),
+                params,
+                # metric, metric_arg, weights -- see _dist_triple there.
+                self._dist_params(),
+            )
+        else:
+            self.used_query_tile_ = binding.knn_search(
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr(dist, name="dist"),
+                addr(ind, name="ind"),
+                params,
+                self._dist_params(),
+            )
 
         if return_distance:
             return dist, ind.astype("<i8")
