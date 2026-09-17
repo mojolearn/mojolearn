@@ -397,7 +397,7 @@ def _label_lists():
         "big ints": [2**70, 1, 2] * 200, "int64 edge": [2**63 - 1, -(2**63), 0] * 200,
         "many classes": list(range(5000)), "nested": [[v] for v in ints],
         "short": [3, 1, 2], "numpy ints": [np.int64(v) for v in ints[:600]],
-        "none": [None] * 300, "one class": [7] * 400,
+        "none": [None] * 300, "one class": [7] * 400, "huge ints": [2**2000, 1, -5] * 200,
     }
 
 
@@ -609,6 +609,99 @@ def test_indices_and_overlap_match():
         b = MS._indices(other, n, "test")
         ref = _same(lambda: MS._overlap(a, b, n), ("indices_overlap_i64",), group="indices")
         assert ref[0] == ("ok", ("bool", hit))
+
+
+# ------------------------------------------- the C-builtin seams, pinned
+
+
+class _Count:
+    """Counts calls of `module.name`, for the seams that are C builtins and
+    not core helpers: the new arm must reach the function and return its
+    answer, the reference arm must not reach it at all."""
+
+    def __init__(self, module, name):
+        self.module, self.name, self.answered = module, name, 0
+
+    def __enter__(self):
+        self.real = getattr(self.module, self.name)
+
+        def wrapped(*args, **kwargs):
+            try:
+                out = self.real(*args, **kwargs)
+            except Exception:
+                self.answered += 1  # a refusal raised there is its answer
+                raise
+            if out is not None:
+                self.answered += 1
+            return out
+
+        setattr(self.module, self.name, wrapped)
+        return self
+
+    def __exit__(self, *exc):
+        setattr(self.module, self.name, self.real)
+        return False
+
+
+def _pinned(module, name, fn, answers=True):
+    os.environ["MOJOLEARN_HOTPATH"] = "python"
+    try:
+        with _Count(module, name) as ref_count:
+            ref = _outcome(fn)
+    finally:
+        os.environ.pop("MOJOLEARN_HOTPATH", None)
+    assert ref_count.answered == 0, f"the reference arm was answered by {name}"
+    with _Count(module, name) as new_count:
+        new = _outcome(fn)
+    if answers is not None:
+        assert bool(new_count.answered) == answers, (name, new_count.answered, answers)
+    assert new == ref, f"{name}: new arm {new!r:.300} != reference {ref!r:.300}"
+    return ref
+
+
+@pytest.mark.parametrize("name", list(_label_lists()))
+def test_plain_label_lists_match_the_label_loop(name):
+    y = _label_lists()[name]
+    plain = name in ("ints", "floats", "zeros a", "zeros b", "nan", "bools mixed",
+                     "int and float", "strs", "int64 edge", "many classes", "short",
+                     "one class", "big ints")
+    big = name == "huge ints"  # plain types, but `math.isnan` cannot hold 2**2000
+    if isinstance(y, list):
+        _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
+                answers=plain)
+    _pinned(_labels, "_plain_labels", lambda: _labels.flatten_labels(y),
+            answers=plain or big or name == "tuple")
+    if plain and name != "nan":
+        classes, codes = _labels.sorted_classes(list(y))
+        assert all(classes[c] == v for c, v in zip(codes, y))
+
+
+def test_first_seen_object_is_kept_by_the_plain_path():
+    for y in ([True, 1, 1.0, 0, False, 0.0] * 50, [1.0, 1, True, -0.0, 0, False] * 50,
+              [0.0, -0.0] * 99, [-0.0, 0.0] * 99):
+        ref = _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y))
+        assert ref[0][0] == "ok"
+
+
+@pytest.mark.parametrize("index", range(len(_LISTS)))
+def test_flatten_fast_is_pinned(index):
+    value = _LISTS[index]
+    fast = _array._flatten_fast(value) is not None
+    assert fast or index not in (0, 1, 2, 3, 4, 5, 6, 7, 20, 25, 26, 27)
+    # a block the fast path declines is walked recursively, and the walk may
+    # still be answered for a plain SUB-list; only the top-level yes is pinned
+    _pinned(_array, "_flatten_fast", lambda: _array._flatten(value),
+            answers=True if fast else None)
+
+
+def test_block_copy_is_pinned():
+    a = _arr(_RNG.integers(0, 99, (700, 6)).astype(np.int64))
+    _pinned(_array, "_block_store", lambda: a[5:650], answers=True)
+    _pinned(_array, "_block_store", lambda: a[5:650:2], answers=False)
+    _pinned(_array, "_block_store", lambda: a[5:20], answers=False)  # a short run
+    block = _RNG.integers(0, 99, (4000, 3)).astype(np.int64)
+    _pinned(_buffer, "_same_dtype_store", lambda: _buffer.as_i64_c(block[::2], ndim=2, name="X"),
+            answers=True)
 
 
 def test_sabotage_build_diverges():

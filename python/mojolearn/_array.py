@@ -850,6 +850,9 @@ def _flatten_fast(nested):
     which `_flatten` then walks and, where it must, refuses in its words."""
     if type(nested) not in _ROW_TYPES or not nested:
         return None
+    from . import _buffer
+    if not _buffer.hotpath_enabled():
+        return None
     kinds = set(map(type, nested))
     if kinds <= _SCALAR_TYPES:
         return (len(nested),), list(nested)

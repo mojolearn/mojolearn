@@ -97,6 +97,10 @@ def flatten_labels(y):
         y = y.tolist()
     if isinstance(y, (str, bytes)):
         raise ValueError("mojolearn: y must be a sequence of labels")
+    if type(y) in (list, tuple) and _plain_labels(y) is not None:
+        # DEVIATION 3103: nothing to flatten; the walk below would visit every
+        # label to find that out (50 ns a label against 12 for the type set)
+        return list(y)
     out = []
     stack = [y]
     while stack:
@@ -108,12 +112,58 @@ def flatten_labels(y):
     return out
 
 
+_PLAIN_NUMBERS = frozenset((int, float, bool))
+_PLAIN_STR = frozenset((str,))
+
+
+def _plain_labels(labels):
+    """'number' or 'str' when EVERY label is exactly a Python int, float or
+    bool, or exactly a str (the type set, read in C); None for anything
+    else, an empty sequence included, and when MOJOLEARN_HOTPATH=python."""
+    from ._buffer import hotpath_enabled
+
+    if not labels or not hotpath_enabled():
+        return None
+    kinds = set(map(type, labels))
+    if kinds <= _PLAIN_NUMBERS:
+        return "number"
+    if kinds == _PLAIN_STR:
+        return "str"
+    return None
+
+
+def _sorted_plain_classes(labels, kind):
+    """DEVIATION 3103: `sorted_classes` for labels `_plain_labels` vouched
+    for. The loop below it does three things per label: a type test (the
+    type set already answered it, and one kind means no mixing), the NaN
+    test (only a float can fail it), and `first[v] = v` for an unseen `v`,
+    which is `dict.fromkeys`: the FIRST of equal keys is the one kept. The
+    code list is the same dict lookup per label, driven by `map`."""
+    if kind == "number":
+        try:
+            nan = any(map(math.isnan, labels))
+        except OverflowError:
+            return None  # an int beyond float range: the loop below compares it
+        if nan:
+            raise ValueError(
+                "mojolearn: y contains a NaN label; NaN is not a class"
+            )
+    classes = sorted(dict.fromkeys(labels))
+    code = {c: i for i, c in enumerate(classes)}
+    return classes, list(map(code.__getitem__, labels))
+
+
 def sorted_classes(labels):
     """`(classes, codes)`: the class list under the ORDER RULE above, and
     one dense code per label, `classes[codes[i]] == labels[i]` under
     Python equality."""
     if not labels:
         raise ValueError("mojolearn: y is empty")
+    if type(labels) is list:
+        kind = _plain_labels(labels)
+        fast = _sorted_plain_classes(labels, kind) if kind is not None else None
+        if fast is not None:
+            return fast
     first = {}
     numeric = strings = 0
     for v in labels:
