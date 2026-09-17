@@ -6,6 +6,14 @@
 #                                                  (/root/mojolearn-before), the sabotage
 #                                                  arms and the CPU-only copies
 #   bash tools/infer_speed_trees_body.sh identity   six identity_break columns + diffs
+#   bash tools/infer_speed_trees_body.sh identity-cuda   the three CUDA columns only
+#                                                  (the CPU columns already on disk)
+#   bash tools/infer_speed_trees_body.sh identity-diff   the six diffs over the JSONs on disk
+#   bash tools/infer_speed_trees_body.sh identity-sw     the two score-weighted lanes as a
+#                                                  separate CUDA part (setup built no
+#                                                  metrics GPU binding, so the columns
+#                                                  above REFUSE them); builds it, runs
+#                                                  the part per CUDA tree, diffs
 #   bash tools/infer_speed_trees_body.sh speed      prepare the models, then the
 #                                                  alternating BEFORE/AFTER timings
 #
@@ -36,6 +44,13 @@ export GBM_BENCH_DATA=/root/datasets/gbm-bench
 export PYTHONUNBUFFERED=1
 LANES="rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,gbdt-ordered-rmse,gbdt-feature-freq,rf-clf-entropy-log2-noboot,rf-clf-balanced-parallel,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,et-reg-bootstrap-parallel,gbdt-multiclass,gbdt-onevsall,gbdt-parametric-losses,gbdt-lossguide-newtoncosine,gbdt-pointwise-l2-bayesian-eval,gbdt-exact-mae,gbdt-categorical-ctr,gbdt-categorical-ctr-tables,gbdt-tensor-ctr-tables,gbdt-nan-modes,gbdt-adapter-clf,gbdt-adapter-reg,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank,gbdt-adapter-score-weighted,rf-score-weighted"
 FIXTURES="base,ties,odd,dupes,wide"
+# Left out of the CUDA columns only (the CPU columns carry them): on the
+# one-GPU box the parallel lanes' batch part hung the BEFORE column at
+# `rf-clf-balanced-parallel/base repeat=1/batch` (13:57 UTC, 90 minutes in
+# futex_wait, 0% CPU, 0% GPU) on the UNMODIFIED main tree, so it is the
+# parallel pool's batch protocol on this box, not this lane's code.
+# identity_break reports each as SKIPPED.
+SKIP_CUDA="${SKIP_CUDA:-rf-clf-balanced-parallel,et-reg-bootstrap-parallel}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }
 step() {
@@ -61,6 +76,7 @@ build_tree() {
     MOJOLEARN_EXTRA_DEFINES="$_d" step "${_l}_build_rf" bash bindings/build_rf.sh
     MOJOLEARN_EXTRA_DEFINES="$_d" step "${_l}_build_trees" bash bindings/build_trees.sh
     if [ -z "$_d" ]; then
+        step "${_l}_build_metrics" bash bindings/build_metrics.sh
         for fam in core forest rf trees gbdt metrics; do
             step "${_l}_host_$fam" sh bindings/build_host_family.sh "$fam"
         done
@@ -109,13 +125,36 @@ phase_setup() {
 
 identity_column() {
     # $1 tree, $2 label, $3 commit, $4 extra env (string of VAR=val words)
+    # A label ending in -cuda passes --skip "$SKIP_CUDA".
     _t=$1; _l=$2; _c=$3; shift 3
     cd "$_t" || return 1
-    say "identity $_l in $_t"
+    _skip=""
+    case "$_l" in *-cuda) _skip="$SKIP_CUDA" ;; esac
+    say "identity $_l in $_t skip=[$_skip]"
     env MOJOLEARN_COMMIT="$_c" PYTHONPATH=python "$@" pixi run python3 tools/identity_break.py \
-        --lanes "$LANES" --fixtures "$FIXTURES" --repeats 2 --vendor "$_l" \
+        --lanes "$LANES" --fixtures "$FIXTURES" --repeats 2 --vendor "$_l" --skip "$_skip" \
         --json "$OUT/identity/$_l.json" > "$OUT/identity/$_l.log" 2>&1
-    say "identity $_l rc=$? $(grep -c IDENTICAL "$OUT/identity/$_l.log") IDENTICAL lines"
+    _rc=$?
+    say "identity $_l rc=$_rc $(grep -c '^# DONE' "$OUT/identity/$_l.log") DONE cells"
+    return $_rc
+}
+
+identity_cuda_columns() {
+    AC=$(cat "$R/SHIPPED_COMMIT.txt")
+    BC=$(cat "$B/COMMIT")
+    identity_column "$B" before-cuda "$BC" MOJOLEARN_IDENTITY_HOST_INFER=0
+    identity_column "$R" after-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+    identity_column "$R-sab" sabotage-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+}
+
+identity_diffs() {
+    cd "$R"
+    for pair in "before-cuda after-cuda" "after-cuda sabotage-cuda" "before-cpu after-cpu" "after-cpu sabotage-cpu" "after-cuda after-cpu" "before-cuda before-cpu"; do
+        set -- $pair
+        PYTHONPATH=python pixi run python3 tools/identity_break.py --diff "$OUT/identity/$1.json" "$OUT/identity/$2.json" \
+            > "$OUT/identity/diff.$1.vs.$2.txt" 2>&1
+        say "diff $1 vs $2: $(tail -1 "$OUT/identity/diff.$1.vs.$2.txt")"
+    done
 }
 
 phase_identity() {
@@ -124,11 +163,7 @@ phase_identity() {
     BC=$(cat "$B/COMMIT")
     # the CUDA group and the CPU group run side by side: identity is not a
     # timing, and the box has 16 cores beside the one GPU
-    (
-        identity_column "$B" before-cuda "$BC" MOJOLEARN_IDENTITY_HOST_INFER=0
-        identity_column "$R" after-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
-        identity_column "$R-sab" sabotage-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
-    ) &
+    ( identity_cuda_columns ) &
     (
         identity_column "$B-cpu" before-cpu "$BC" MOJOLEARN_IDENTITY_HOST_INFER=1
         identity_column "$R-cpu" after-cpu "$AC" MOJOLEARN_IDENTITY_HOST_INFER=1
@@ -137,14 +172,52 @@ phase_identity() {
             MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
     ) &
     wait
+    identity_diffs
+    : > "$OUT/identity.done"
+}
+
+phase_identity_cuda() {
+    mkdir -p "$OUT/identity"
+    identity_cuda_columns
+    : > "$OUT/identity-cuda.done"
+}
+
+phase_identity_diff() {
+    identity_diffs
+    : > "$OUT/identity.done"
+}
+
+SW_LANES="gbdt-adapter-score-weighted,rf-score-weighted"
+
+identity_sw_part() {
+    # $1 tree, $2 label, $3 commit
+    _t=$1; _l=$2; _c=$3
+    cd "$_t" || return 1
+    [ -f python/mojolearn/identical/_mojolearn_metrics.so ] || step "${_l}_build_metrics" sh bindings/build_metrics.sh
+    say "identity $_l-sw in $_t"
+    env MOJOLEARN_COMMIT="$_c" PYTHONPATH=python MOJOLEARN_IDENTITY_HOST_INFER=0 pixi run python3 tools/identity_break.py \
+        --lanes "$SW_LANES" --fixtures "$FIXTURES" --repeats 2 --vendor "$_l" \
+        --json "$OUT/identity/$_l-sw.json" > "$OUT/identity/$_l-sw.log" 2>&1
+    say "identity $_l-sw rc=$? $(grep -c '^# DONE' "$OUT/identity/$_l-sw.log") DONE cells $(grep -c '^REFUSED' "$OUT/identity/$_l-sw.log") REFUSED"
+}
+
+phase_identity_sw() {
+    mkdir -p "$OUT/identity"
+    AC=$(cat "$R/SHIPPED_COMMIT.txt")
+    BC=$(cat "$B/COMMIT")
+    identity_sw_part "$B" before-cuda "$BC"
+    identity_sw_part "$R" after-cuda "$AC"
+    identity_sw_part "$R-sab" sabotage-cuda "$AC"
+    sha256sum "$R"/python/mojolearn/identical/_mojolearn_metrics.so "$B"/python/mojolearn/identical/_mojolearn_metrics.so \
+        "$R-sab"/python/mojolearn/identical/_mojolearn_metrics.so > "$OUT/metrics_so_sha256.txt" 2>&1
     cd "$R"
-    for pair in "before-cuda after-cuda" "after-cuda sabotage-cuda" "before-cpu after-cpu" "after-cpu sabotage-cpu" "after-cuda after-cpu" "before-cuda before-cpu"; do
+    for pair in "before-cuda-sw after-cuda-sw" "after-cuda-sw sabotage-cuda-sw" "after-cuda-sw after-cpu" "before-cuda-sw before-cpu"; do
         set -- $pair
         PYTHONPATH=python pixi run python3 tools/identity_break.py --diff "$OUT/identity/$1.json" "$OUT/identity/$2.json" \
             > "$OUT/identity/diff.$1.vs.$2.txt" 2>&1
         say "diff $1 vs $2: $(tail -1 "$OUT/identity/diff.$1.vs.$2.txt")"
     done
-    : > "$OUT/identity.done"
+    : > "$OUT/identity-sw.done"
 }
 
 time_one() {
@@ -197,6 +270,9 @@ EOF
 case "${1:-}" in
     setup) phase_setup ;;
     identity) phase_identity ;;
+    identity-cuda) phase_identity_cuda ;;
+    identity-diff) phase_identity_diff ;;
+    identity-sw) phase_identity_sw ;;
     speed) phase_speed ;;
     *) sed -n '2,12p' "$0"; exit 2 ;;
 esac

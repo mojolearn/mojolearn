@@ -84,7 +84,7 @@ def prepare(args):
     # temporal order (the shipped held-out block is 500k; a larger floor
     # takes the rows just before it). Timing does not need held-out rows.
     for name, data in (("taxi", cls), ("taxireg", reg)):
-        full = np.concatenate([data.x_train, data.x_test]) if rows > data.x_test.shape[0] else data.x_test
+        full = np.concatenate([data.X_train, data.X_test]) if rows > data.X_test.shape[0] else data.X_test
         x = np.ascontiguousarray(full[-rows:], dtype=np.float32)
         path = os.path.join(args.out, f"x_{name}.npy")
         np.save(path, x)
@@ -93,7 +93,7 @@ def prepare(args):
     t0 = time.perf_counter()
     m = ml.RandomForestRegressor(n_estimators=args.trees, max_depth=args.depth,
                                  numeric_mode="identical", random_state=7)
-    m.fit(reg.x_train, reg.y_train)
+    m.fit(reg.X_train, reg.y_train)
     p = os.path.join(args.out, f"rf-reg-{args.trees}x{args.depth}.npz")
     m.save(p)
     manifest["models"]["rf-reg"] = dict(path=p, kind="rf-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
@@ -101,7 +101,7 @@ def prepare(args):
     t0 = time.perf_counter()
     m = ml.ExtraTreesRegressor(n_estimators=args.trees, max_depth=args.depth,
                                numeric_mode="identical", random_state=7)
-    m.fit(reg.x_train, reg.y_train)
+    m.fit(reg.X_train, reg.y_train)
     p = os.path.join(args.out, f"et-reg-{args.trees}x{args.depth}.npz")
     m.save(p)
     manifest["models"]["et-reg"] = dict(path=p, kind="et-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
@@ -109,7 +109,7 @@ def prepare(args):
     for iters in [int(v) for v in args.gbdt_iterations.split(",") if v]:
         t0 = time.perf_counter()
         m = ml.GradientBoosting(loss="Logloss", n_estimators=iters, max_depth=6, numeric_mode="identical")
-        m.fit(cls.x_train, cls.y_train)
+        m.fit(cls.X_train, cls.y_train)
         p = os.path.join(args.out, f"gbdt-logloss-{iters}.npz")
         m.save(p)
         manifest["models"][f"gbdt-logloss-{iters}"] = dict(path=p, kind="gbdt", fit_s=time.perf_counter() - t0, x="x_taxi.npy")

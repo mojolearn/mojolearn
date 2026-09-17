@@ -1645,7 +1645,12 @@ class GradientBoosting(NumericModeMixin):
         # FAST is never asked a bitwise question. `1 - p` is the same one
         # float64 subtraction as before, so column 0 keeps its bits.
         binding = self._bind("_mojolearn_gbdt")
-        pair = getattr(binding, "gbdt_sigmoid_pair", None)
+        # a CPU-only install's binding proxy raises ImportError, by name, for
+        # an entry point its host family does not export
+        try:
+            pair = getattr(binding, "gbdt_sigmoid_pair", None)
+        except ImportError:
+            pair = None
         if pair is not None:
             # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both
             # columns from the binding in one pass. `p` is `gbdt_sigmoid`'s
