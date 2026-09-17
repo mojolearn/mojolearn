@@ -162,6 +162,118 @@ def _smt_slices[qo: MutOrigin, yo: MutOrigin, //, EXACT: Bool](
     """The staged feature slices and the chains, f ascending over each
     slice's real length only. EXACT takes DEVIATION 2629's unflushed step,
     admitted by the caller for the whole block."""
+    var acc = SIMD[DType.float32, SMT_TM * SMT_TN](0.0)
+    var f0 = 0
+    while f0 < d:
+        var kk = d - f0
+        if kk > SMT_BK:
+            kk = SMT_BK
+        comptime for i in range(SMT_Q_PER_THREAD):
+            var v = Float32(0.0)
+            if fq < kk:
+                v = ftz(q.unsafe_load(Int(q_off[i]) + f0))
+            qs.unsafe_store(fq * SMT_QS_STRIDE + rq + i * (SMT_TPB // SMT_BK), v)
+        comptime for i in range(SMT_Y_PER_THREAD):
+            var f = fy + i * (SMT_TPB // SMT_BN)
+            var v = Float32(0.0)
+            if f < kk:
+                v = ftz(yt.unsafe_load((f0 + f) * y_stride + ycol))
+            ys.unsafe_store(f * SMT_BN + cy, v)
+        barrier()
+        # THE CHAIN: f ascending over the slice's real length only.
+        for f in range(kk):
+            var qv = qs.unsafe_load[width=SMT_TM, alignment=16](
+                f * SMT_QS_STRIDE + ty * SMT_TM
+            )
+            var yv = ys.unsafe_load[width=SMT_TN, alignment=16](
+                f * SMT_BN + tx * SMT_TN
+            )
+            comptime for r in range(SMT_TM):
+                comptime for c in range(SMT_TN):
+                    comptime if EXACT:
+                        acc[r * SMT_TN + c] = _rt_step_exact(qv[r], yv[c], acc[r * SMT_TN + c])
+                    else:
+                        acc[r * SMT_TN + c] = _rt_step(qv[r], yv[c], acc[r * SMT_TN + c])
+        barrier()
+        f0 += SMT_BK
+    return acc
+
+
+def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool](
+    z: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[UInt64, MutAnyOrigin],
+    q: MutPointer[Float32, MutAnyOrigin],
+    yt: MutPointer[Float32, MutAnyOrigin],
+    q_norm: MutPointer[Float32, MutAnyOrigin],
+    y_norm: MutPointer[Float32, MutAnyOrigin],
+    q_meta: MutPointer[Float32, MutAnyOrigin],
+    y_meta: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_cols_in: Int32,
+    y_stride_in: Int32,
+    n_features_in: Int32,
+    is_sqrt_in: Int32,
+    k_in: Int32,
+):
+    """`z[row, col] = ||q_row||^2 + ||y_col||^2 - 2 q_row . y_col` for the
+    block's SMT_BM x SMT_BN cells, clamped, rooted when asked, one ascending
+    chain per cell; or, with TOPK, the block's per-row k smallest composite
+    keys into `part` and nothing into `z`. `q` is the query tile's first
+    row, `yt` the transposed index at the column tile's first column with
+    stride `y_stride`; `n_cols` is the column tile's width, so a key's index
+    half is the TILE-LOCAL column, as the small-k selector writes it.
+    With EXACT, `q_meta` and `y_meta` are DEVIATION 2629's per-row
+    admission metadata (`vector_exponent_admission_kernel`) and the block
+    takes the unflushed step when its 64 rows and 128 columns are admitted
+    together (the same three clauses, over the block's rows and columns);
+    a block that fails keeps the flushed chain, bit for bit.
+    """
+    comptime assert SMT_BK * SMT_BM % SMT_TPB == 0 and SMT_BK * SMT_BN % SMT_TPB == 0
+    comptime assert SMT_TPB % SMT_BK == 0 and SMT_TPB % SMT_BN == 0
+    var n_rows = Int(n_rows_in)
+    var n_cols = Int(n_cols_in)
+    var y_stride = Int(y_stride_in)
+    var d = Int(n_features_in)
+    var tid = Int(thread_idx.x)
+    var ty = tid // SMT_TX
+    var tx = tid % SMT_TX
+    var row0 = Int(block_idx.y) * SMT_BM
+    var col0 = Int(block_idx.x) * SMT_BN
+    if row0 >= n_rows or col0 >= n_cols:
+        return
+
+    var qs = stack_allocation[
+        SMT_BK * SMT_QS_STRIDE, Scalar[DType.float32],
+        alignment=16, address_space=AddressSpace.SHARED,
+    ]()
+    var ys = stack_allocation[
+        SMT_BK * SMT_BN, Scalar[DType.float32],
+        alignment=16, address_space=AddressSpace.SHARED,
+    ]()
+
+    # The staging assignment: query element `tid + i * SMT_TPB` of the
+    # SMT_BM x SMT_BK slice is row `tid // SMT_BK + i * (SMT_TPB // SMT_BK)`,
+    # feature `tid % SMT_BK`, so SMT_BK consecutive threads read SMT_BK
+    # consecutive features of one row; index element `tid + i * SMT_TPB`
+    # of the SMT_BK x SMT_BN slice is feature `tid // SMT_BN + i *
+    # (SMT_TPB // SMT_BN)`, column `tid % SMT_BN`, so a warp reads
+    # consecutive columns of one feature row of the transposed index.
+    # Rows and columns past the edge are clamped to the last valid one
+    # (their chains are computed and discarded, never stored).
+    var rq = tid // SMT_BK
+    var fq = tid % SMT_BK
+    var q_off = SIMD[DType.int32, SMT_Q_PER_THREAD](0)
+    comptime for i in range(SMT_Q_PER_THREAD):
+        var rr = row0 + rq + i * (SMT_TPB // SMT_BK)
+        if rr > n_rows - 1:
+            rr = n_rows - 1
+        q_off[i] = Int32(rr * d + fq)
+    var fy = tid // SMT_BN
+    var cy = tid % SMT_BN
+    var ycol = col0 + cy
+    if ycol > n_cols - 1:
+        ycol = n_cols - 1
+
     var acc: SIMD[DType.float32, SMT_TM * SMT_TN]
     comptime if EXACT:
         # DEVIATION 2629's admission for the whole block: the minimum nonzero
