@@ -26,6 +26,11 @@
 #      it resets the clock and the memory.
 #   2. THE STRAIGHT ARM, which is the REPLICATION of leg 1's observation. One
 #      box seeing drift once is not a result.
+#   2b. BATCH 4 PAST THE TRANSITION, which decides whether leg 1's batch sweep
+#      means anything at all. Every sweep cell was three steps, so every cell
+#      was measured inside phase 1. If the memory step-up is proportional at
+#      every batch, batch 4's 45.94 GB becomes about 93 GB and OOMs mid-run on
+#      an 80 GiB card.
 #   3. The LOGICAL SHARDS probe: single-device gradient accumulation at the
 #      target shape, the only path past the 999,999-step ceiling, and never
 #      run above a toy shape.
@@ -50,7 +55,10 @@ export PYTHONPATH="$ROOT/python:$ROOT"
 STEPS="${MOJOLEARN_LM_LONG_STEPS:-2500}"
 RECYCLE_EVERY="${MOJOLEARN_LM_RECYCLE_EVERY:-250}"
 RECYCLE_BUDGET="${MOJOLEARN_LM_RECYCLE_BUDGET:-1000}"
-STRAIGHT_BUDGET="${MOJOLEARN_LM_STRAIGHT_BUDGET:-1300}"
+STRAIGHT_STEPS="${MOJOLEARN_LM_STRAIGHT_STEPS:-1500}"
+STRAIGHT_BUDGET="${MOJOLEARN_LM_STRAIGHT_BUDGET:-800}"
+B4_STEPS="${MOJOLEARN_LM_B4_STEPS:-700}"
+B4_BUDGET="${MOJOLEARN_LM_B4_BUDGET:-700}"
 SHARDS="${MOJOLEARN_LM_SHARDS:-1 4 16 64}"
 SHARD_STEPS="${MOJOLEARN_LM_SHARD_STEPS:-3}"
 CORPUS=training/corpus/enwik8/input.txt
@@ -129,15 +137,33 @@ echo "recycle exit=$_rc secs=$(( $(date +%s) - _t0 )) (2 = budget limitation rec
 diag "after-recycle"
 
 # 2. THE STRAIGHT ARM: the replication of leg 1.
-echo "--- straight arm: $STEPS steps, one session (replicates leg 1) ---" >> "$ST"
+echo "--- straight arm: $STRAIGHT_STEPS steps, one session (replicates leg 1) ---" >> "$ST"
 _t0=$(date +%s)
 # shellcheck disable=SC2046
 pixi run python tools/lm_recycle_probe.py --out "$OUT/straight" --target \
-    --steps "$STEPS" --recycle-every 0 \
+    --steps "$STRAIGHT_STEPS" --recycle-every 0 \
     --budget-seconds "$STRAIGHT_BUDGET" $(corpus_args) > "$OUT/straight.log" 2>&1
 _rc=$?
 echo "straight exit=$_rc secs=$(( $(date +%s) - _t0 )) (2 = budget limitation recorded)" >> "$ST"
 diag "after-straight"
+
+# 2b. BATCH 4, PAST THE TRANSITION. This is the arm that decides whether the
+# batch sweep means anything. Leg 1's sweep is three steps a cell, so every
+# cell was measured inside the first 210 steps, where memory is small. If the
+# phase-2 step-up is proportional at every batch, batch 4's 45.94 GB becomes
+# about 93 GB and OOMs on an 80 GiB card MID-RUN, which would make batch 4
+# unusable however good its throughput looks in a three-step cell. 700 steps
+# is enough to cross the transition (leg 1 saw it settle by about step 480).
+echo "--- batch 4 endurance: $B4_STEPS steps, one session, past the transition ---" >> "$ST"
+_t0=$(date +%s)
+# shellcheck disable=SC2046
+pixi run python tools/lm_recycle_probe.py --out "$OUT/batch4-long" \
+    --shape 4 2048 768 12 12 64 2048 12 50257 --recycle-every 0 \
+    --steps "$B4_STEPS" --budget-seconds "$B4_BUDGET" $(corpus_args) \
+    > "$OUT/batch4-long.log" 2>&1
+_rc=$?
+echo "batch4-long exit=$_rc secs=$(( $(date +%s) - _t0 )) (2 = budget limitation, other = OOM/refusal)" >> "$ST"
+diag "after-batch4-long"
 
 # 3. LOGICAL SHARDS: the path past the 999,999 step ceiling.
 echo "--- logical shards at the target shape: K = $SHARDS ---" >> "$ST"
