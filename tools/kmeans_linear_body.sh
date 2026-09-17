@@ -36,6 +36,10 @@ step() {
 }
 LANES="kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-classic-pp,kmeans-cosine,pca,pca-whiten,pca-full-whiten,tsvd,ols,ridge,ols-no-intercept,ols-weighted,ridge-no-intercept"
 FIX5="base,ties,odd,dupes,wide"
+# The other families whose fits run `kmeans_fit_main_traced` or `kmeans_fit`
+# (spectral in the core binding; GaussianMixture's k-means init; the IVF
+# coarse quantizer; the parallel k-means and GMM drivers).
+LANES2="spectral,spectral-precomputed,gmm,gmm-sample,ivf,ivf-euclidean,ivf-extend,par-kmeans,par-gmm"
 
 case "$STAGE" in
 _build_core)
@@ -73,6 +77,24 @@ arm)
     ( cd "/root/t-$NAME" && PYTHONPATH="/root/t-$NAME/python" "$P" -c "import mojolearn as ml; print('import OK', ml.vendor(), ml.numeric_mode())" ) > "$OUT/import.txt" 2>&1
     note arm_done
     : > "$OUT/arm.done"
+    ;;
+arm_extra)
+    # The ivf and mixture bindings of arm NAME, into its gpubins and its tree.
+    DEFS=${3:-}
+    cd "$R" || exit 9
+    for fam in ivf mixture; do
+        step build_$fam 2400 env MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$DEFS" bash bindings/build_$fam.sh
+        cp "$R/python/mojolearn/identical/_mojolearn_$fam.so" "/root/gpubins/$NAME/" && cp "/root/gpubins/$NAME/_mojolearn_$fam.so" "/root/t-$NAME/python/mojolearn/identical/"
+    done
+    sha256sum /root/gpubins/"$NAME"/*.so > "$OUT/so_sha256.txt"
+    : > "$OUT/arm_extra.done"
+    ;;
+identity2)
+    cd "/root/t-$NAME" || exit 9
+    MOJOLEARN_COMMIT=$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt"); export MOJOLEARN_COMMIT
+    step identity2 5400 env PYTHONPATH="/root/t-$NAME/python:/root/t-$NAME/tools" "$P" tools/identity_break.py \
+        --require-backend cuda --lanes "$LANES2" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
+    : > "$OUT/identity2.done"
     ;;
 host)
     # NAME's host (CPU column) binding set, built from the source of tree
