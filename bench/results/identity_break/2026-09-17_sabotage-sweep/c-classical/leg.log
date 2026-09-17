@@ -1,0 +1,86 @@
+== runpod_cpu_leg: lane sabsweep-c, RENT ==
+  worktree /Users/andrewhendel/mojolearn-wt/sabotage-sweep  commit 372609f8e819  dirty tracked files: 0
+  pod mojolearn-cpu-sabsweep-c-20260917-200015  image runpod/base:1.3.1-ubuntu2204  flavors cpu3c,cpu5c  vCPU 16  disk 40GB  lease 90m
+  envs default  build [core,estimators,linalg,gp,gp_infer,metrics,arima,tsa,forecast,resample,mixture,mixture_infer,hdbscan,kernel_methods]  sabotage-build [core,estimators,linalg,gp,gp_infer,metrics,arima,tsa,forecast,resample,mixture,mixture_infer,hdbscan,kernel_methods]  jobs 16  bincache=1 envcache=0
+  source: 2925 files, 19220878 bytes gz, sha256 c89ad00b57999d26
+  box script OK (bash -n, no placeholder, commit baked in); create request: {"name":"mojolearn-cpu-sabsweep-c-20260917-200015","imageName":"runpod/base:1.3.1-ubuntu2204","computeType":"CPU","cpuFlavorIds":["cpu3c","cpu5c"],"vcpuCount":16,"containerDiskInGb":40,"volumeInGb":0,"ports":["22/tcp"],"supportPublicIp":true,"cloudType":"SECURE"}
+  cache key: pixi	pixi	0.77.0	runpod-cpu/v1/pixi-bin/0.77.0/linux-64/pixi
+  cache key: env	default	74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90	runpod-cpu/v1/pixi-env/linux-64/default/74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90
+  dead-man composes (sh -n)
+[16:00:17 cpu-leg] pre-flight: pods on this account
+    3itong89aqphnh	mojolearn-cpu-sabsweep-b-20260917-200010	RUNNING	0.48
+    w7qaio78lxrsl8	mojolearn-cpu-sabsweep-a-20260917-195956	RUNNING	0.48
+    4ckx8iprhc6k54	mojolearn-cpu-refregen-20260917-195604	RUNNING	0.24
+    4018mzhxmp3prb	mojolearn-cpu-verification-neural-20260917-193423	RUNNING	0.06
+[16:00:19 cpu-leg] dead-man ARMED before the create: pid 65181, fires in 6600s, keyed by mojolearn-cpu-sabsweep-c-20260917-200015
+[16:00:19 cpu-leg] creating mojolearn-cpu-sabsweep-c-20260917-200015. THE BILL STARTS HERE.
+[16:00:20 cpu-leg] pod o7apt5kr1wtpri created. COST $0.48/hr
+[16:01:25 cpu-leg] ssh up (-p 12928 root@216.81.245.17) after 66s; cost $0.48/hr
+[16:01:25 cpu-leg] arming the ON-POD watchdog (90 minutes)
+    WATCHDOG_ALIVE pid=93
+    sleep 5400
+    1
+    TOKEN_GET_200
+[16:01:29 cpu-leg] staging the source (19220878 bytes)
+[16:02:21 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit
+[16:02:24 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260917T200222Z-740d07ac entries=188
+[16:02:26 cpu-leg] starting the box pipeline (env, build, command, cache upload)
+[16:02:47 cpu-leg]   box: env_start
+[16:02:47 cpu-leg]   box: env_end
+[16:02:47 cpu-leg]   box: build_start
+[16:10:40 cpu-leg]   box: build_end
+[16:10:40 cpu-leg]   box: run_start
+[16:12:23 cpu-leg]   box: run_end
+[16:12:23 cpu-leg]   box: upload_start
+[16:12:23 cpu-leg]   box: upload_end
+[16:12:23 cpu-leg] fetching $LEG_OUT
+[16:12:40 cpu-leg] BINCACHE PROMOTED 28 refused_or_failed=0
+    cache: pixi	restored	version=0.77.0
+    cache: env:default	miss	install_rc=0	restore_s=0	pixi_install_s=4
+    cache: toolchain	ok	Mojo 1.0.0 (ed45d567)
+    bincache: bindings/build_core_host.sh	miss+built-uploaded	21.0
+    bincache: bindings/build_estimators_host.sh	miss+built-uploaded	23.7
+    bincache: bindings/build_linalg_host.sh	miss+built-uploaded	12.8
+    bincache: bindings/build_gp_host.sh	miss+built-uploaded	17.4
+    bincache: bindings/build_gp_infer_host.sh	miss+built-uploaded	12.7
+    bincache: bindings/build_metrics_host.sh	miss+built-uploaded	27.7
+    bincache: bindings/build_arima_host.sh	miss+built-uploaded	15.8
+    bincache: bindings/build_tsa_host.sh	miss+built-uploaded	13.2
+    bincache: bindings/build_forecast_host.sh	miss+built-uploaded	14.4
+    bincache: bindings/build_resample_host.sh	miss+built-uploaded	13.3
+    bincache: bindings/build_mixture_host.sh	miss+built-uploaded	17.6
+    bincache: bindings/build_mixture_infer_host.sh	miss+built-uploaded	11.9
+    bincache: bindings/build_hdbscan_host.sh	miss+built-uploaded	19.3
+    bincache: bindings/build_kernel_methods_host.sh	miss+built-uploaded	15.3
+    bincache: bindings/build_core_host.sh	negative-miss+built-uploaded	22.5
+    bincache: bindings/build_estimators_host.sh	negative-miss+built-uploaded	23.4
+    bincache: bindings/build_linalg_host.sh	negative-miss+built-uploaded	12.9
+    bincache: bindings/build_gp_host.sh	negative-miss+built-uploaded	17.8
+    bincache: bindings/build_gp_infer_host.sh	negative-miss+built-uploaded	13.2
+    bincache: bindings/build_metrics_host.sh	negative-miss+built-uploaded	28.1
+    bincache: bindings/build_arima_host.sh	negative-miss+built-uploaded	16.5
+    bincache: bindings/build_tsa_host.sh	negative-miss+built-uploaded	13.2
+    bincache: bindings/build_forecast_host.sh	negative-miss+built-uploaded	14.5
+    bincache: bindings/build_resample_host.sh	negative-miss+built-uploaded	13.8
+    bincache: bindings/build_mixture_host.sh	negative-miss+built-uploaded	17.6
+    bincache: bindings/build_mixture_infer_host.sh	negative-miss+built-uploaded	11.6
+    bincache: bindings/build_hdbscan_host.sh	negative-miss+built-uploaded	18.5
+    bincache: bindings/build_kernel_methods_host.sh	negative-miss+built-uploaded	15.0
+[16:12:40 cpu-leg] command exit: 0   results: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6395396a-b2ac-4b53-ad72-e273c7024073/scratchpad/out-c
+
+== teardown (exit 0) ==
+  DELETE https://rest.runpod.io/v1/pods/o7apt5kr1wtpri -> HTTP 204
+  VERIFIED: o7apt5kr1wtpri is gone (GET pod HTTP 404; not in the pod listing)
+  create (POST to ssh up)                          66 s
+  arm (on-pod watchdog)                            4 s
+  stage (source + R2 URL maps)                     57 s
+  env (pixi binary + envs)                         6 s
+  build (host bindings)                            479 s
+  run (command)                                    107 s
+  create to first result (POST to command end)     719 s
+  cache upload (misses only)                       0 s
+  fetch                                            1 s
+  teardown (DELETE to verified gone)               1 s
+  billed (POST to verified gone)                   743 s
+  spend $0.0991 at $0.48/hr
+  dead-man cancelled (pid 65181)

@@ -1,0 +1,73 @@
+== runpod_cpu_leg: lane sabsweep-b, RENT ==
+  worktree /Users/andrewhendel/mojolearn-wt/sabotage-sweep  commit 372609f8e819  dirty tracked files: 0
+  pod mojolearn-cpu-sabsweep-b-20260917-200010  image runpod/base:1.3.1-ubuntu2204  flavors cpu3c,cpu5c  vCPU 16  disk 40GB  lease 90m
+  envs default  build [core,estimators,linalg,gbdt,forest,rf,trees,svm]  sabotage-build [core,estimators,linalg,gbdt,forest,rf,trees,svm]  jobs 16  bincache=1 envcache=0
+  source: 2925 files, 19220878 bytes gz, sha256 c89ad00b57999d26
+  box script OK (bash -n, no placeholder, commit baked in); create request: {"name":"mojolearn-cpu-sabsweep-b-20260917-200010","imageName":"runpod/base:1.3.1-ubuntu2204","computeType":"CPU","cpuFlavorIds":["cpu3c","cpu5c"],"vcpuCount":16,"containerDiskInGb":40,"volumeInGb":0,"ports":["22/tcp"],"supportPublicIp":true,"cloudType":"SECURE"}
+  cache key: pixi	pixi	0.77.0	runpod-cpu/v1/pixi-bin/0.77.0/linux-64/pixi
+  cache key: env	default	74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90	runpod-cpu/v1/pixi-env/linux-64/default/74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90
+  dead-man composes (sh -n)
+[16:00:12 cpu-leg] pre-flight: pods on this account
+    w7qaio78lxrsl8	mojolearn-cpu-sabsweep-a-20260917-195956	RUNNING	0.48
+    4ckx8iprhc6k54	mojolearn-cpu-refregen-20260917-195604	RUNNING	0.24
+    4018mzhxmp3prb	mojolearn-cpu-verification-neural-20260917-193423	RUNNING	0.06
+[16:00:13 cpu-leg] dead-man ARMED before the create: pid 64826, fires in 6600s, keyed by mojolearn-cpu-sabsweep-b-20260917-200010
+[16:00:13 cpu-leg] creating mojolearn-cpu-sabsweep-b-20260917-200010. THE BILL STARTS HERE.
+[16:00:15 cpu-leg] pod 3itong89aqphnh created. COST $0.48/hr
+[16:01:54 cpu-leg] ssh up (-p 34289 root@91.199.227.82) after 101s; cost $0.48/hr
+[16:01:54 cpu-leg] arming the ON-POD watchdog (90 minutes)
+    WATCHDOG_ALIVE pid=93
+    sleep 5400
+    1
+    TOKEN_GET_200
+[16:02:01 cpu-leg] staging the source (19220878 bytes)
+[16:04:10 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit
+[16:04:16 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260917T200413Z-703e86e8 entries=188
+[16:04:19 cpu-leg] starting the box pipeline (env, build, command, cache upload)
+[16:04:41 cpu-leg]   box: env_start
+[16:04:41 cpu-leg]   box: env_end
+[16:04:41 cpu-leg]   box: build_start
+[16:08:29 cpu-leg]   box: build_end
+[16:08:29 cpu-leg]   box: run_start
+[16:15:14 cpu-leg]   box: run_end
+[16:15:14 cpu-leg]   box: upload_start
+[16:15:14 cpu-leg]   box: upload_end
+[16:15:14 cpu-leg] fetching $LEG_OUT
+[16:15:27 cpu-leg] BINCACHE PROMOTED 16 refused_or_failed=0
+    cache: pixi	restored	version=0.77.0
+    cache: env:default	miss	install_rc=0	restore_s=0	pixi_install_s=3
+    cache: toolchain	ok	Mojo 1.0.0 (ed45d567)
+    bincache: bindings/build_core_host.sh	miss+built-uploaded	14.1
+    bincache: bindings/build_estimators_host.sh	miss+built-uploaded	14.5
+    bincache: bindings/build_linalg_host.sh	miss+built-uploaded	8.2
+    bincache: bindings/build_gbdt_host.sh	miss+built-uploaded	34.9
+    bincache: bindings/build_forest_host.sh	miss+built-uploaded	11.3
+    bincache: bindings/build_rf_host.sh	miss+built-uploaded	11.6
+    bincache: bindings/build_trees_host.sh	miss+built-uploaded	12.5
+    bincache: bindings/build_svm_host.sh	miss+built-uploaded	10.3
+    bincache: bindings/build_core_host.sh	negative-miss+built-uploaded	13.3
+    bincache: bindings/build_estimators_host.sh	negative-miss+built-uploaded	14.4
+    bincache: bindings/build_linalg_host.sh	negative-miss+built-uploaded	8.3
+    bincache: bindings/build_gbdt_host.sh	negative-miss+built-uploaded	35.2
+    bincache: bindings/build_forest_host.sh	negative-miss+built-uploaded	11.2
+    bincache: bindings/build_rf_host.sh	negative-miss+built-uploaded	12.1
+    bincache: bindings/build_trees_host.sh	negative-miss+built-uploaded	12.5
+    bincache: bindings/build_svm_host.sh	negative-miss+built-uploaded	10.7
+[16:15:27 cpu-leg] command exit: 0   results: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6395396a-b2ac-4b53-ad72-e273c7024073/scratchpad/out-b
+
+== teardown (exit 0) ==
+  DELETE https://rest.runpod.io/v1/pods/3itong89aqphnh -> HTTP 204
+  VERIFIED: 3itong89aqphnh is gone (GET pod HTTP 404; not in the pod listing)
+  create (POST to ssh up)                          101 s
+  arm (on-pod watchdog)                            7 s
+  stage (source + R2 URL maps)                     138 s
+  env (pixi binary + envs)                         9 s
+  build (host bindings)                            237 s
+  run (command)                                    395 s
+  create to first result (POST to command end)     888 s
+  cache upload (misses only)                       0 s
+  fetch                                            1 s
+  teardown (DELETE to verified gone)               2 s
+  billed (POST to verified gone)                   917 s
+  spend $0.1223 at $0.48/hr
+  dead-man cancelled (pid 64826)
