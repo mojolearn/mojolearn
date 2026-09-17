@@ -179,7 +179,8 @@ def build_parser():
     v.add_argument("--reference-table", dest="reference_table", metavar="PATH",
                    default=None,
                    help="with --all: compare against this table instead of "
-                        "the one shipped in the wheel")
+                        "the one shipped in the wheel; with --emit-reference "
+                        "and --lanes, update only those lanes in this base table")
     v.add_argument("--records", action="append", metavar="DIR", default=None,
                    help="MAINTAINER PATH, with --all --emit-reference: the "
                         "identity_break record directories or JSONs to build "

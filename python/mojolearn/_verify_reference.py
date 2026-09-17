@@ -46,6 +46,7 @@ This module imports nothing from the package at module level, so the table
 can be built and read on a machine with no binding built.
 """
 import hashlib
+import copy
 import json
 import os
 import re
@@ -449,6 +450,57 @@ def stale_reference_lanes(table, harness):
     with_cells = {k.partition("/")[0] for k in table.get("cells", {})}
     return sorted(lane for lane, rev in want.items()
                   if lane in with_cells and have.get(lane) != rev)
+
+
+def merge_reference_lanes(base, candidate, lanes):
+    """Admit selected complete lanes without rewriting unrelated evidence.
+
+    The candidate must come from build_table's strict admission. Keep the
+    base's global policy and harness witness: updating a few lanes does not
+    qualify its legacy cells. Record the new policy per selected lane instead.
+    """
+    lanes = set(lanes)
+    if not lanes:
+        raise TableError("scoped admission requires at least one lane")
+    policy = candidate.get("admission_policy", {})
+    if (policy.get("min_repeats", 0) < 2 or not policy.get("input_witness_required")
+            or not policy.get("property_protocol_required")):
+        raise TableError("scoped admission requires a strict generated candidate")
+    for field in ("format", "fixtures", "heldout"):
+        if base.get(field) != candidate.get(field):
+            raise TableError(f"scoped admission cannot change {field}")
+    selected = {}
+    for lane in sorted(lanes):
+        for fixture in base["fixtures"]:
+            key = f"{lane}/{fixture}"
+            cell = candidate["cells"].get(key, {})
+            required = {"train", "infer", "model", "batch"} | set(base["cells"].get(key, {}))
+            if required - set(cell):
+                raise TableError(f"{key}: missing parts {sorted(required - set(cell))}")
+            if any(e.get("ref") is None or e.get("conflict") for e in cell.values()):
+                raise TableError(f"{key}: missing or conflicted reference")
+            selected[key] = cell
+    result = copy.deepcopy(base)
+    indices = {}
+    for key, cell in selected.items():
+        cell = copy.deepcopy(cell)
+        for entry in cell.values():
+            for cls, value in entry["cols"].items():
+                idx = value if isinstance(value, int) else value[0]
+                if idx not in indices:
+                    indices[idx] = len(result["records"])
+                    result["records"].append(copy.deepcopy(candidate["records"][idx]))
+                entry["cols"][cls] = indices[idx] if isinstance(value, int) else [indices[idx], value[1]]
+        result["cells"][key] = cell
+    for lane in lanes:
+        revisions = result.setdefault("lane_revisions", {})
+        if lane in candidate.get("lane_revisions", {}):
+            revisions[lane] = candidate["lane_revisions"][lane]
+        else:
+            revisions.pop(lane, None)
+        result.setdefault("lane_admission", {})[lane] = dict(
+            policy=copy.deepcopy(policy), harness_sha256=candidate["harness_sha256"])
+    return result
 
 
 def write_table(table, path):

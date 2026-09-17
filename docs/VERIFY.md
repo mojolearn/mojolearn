@@ -573,3 +573,21 @@ nine fixtures twice from an installed development wheel and join the default
 CPU set. This does not replace final release-wheel qualification.
 
 See [the evidence audit and remaining work](lanes/LANE_STATUS_verification_evidence_audit.md).
+
+### Admitting one verified group without rewriting other references
+
+To generate a scoped candidate while preserving every other lane, combine
+`--lanes`, `--reference-table` (the base) and `--emit-reference` (the output):
+
+```sh
+python -m mojolearn verify --all --lanes lane-a,lane-b \
+  --reference-table python/mojolearn/verify_reference/table.json \
+  --emit-reference /tmp/candidate-table.json
+```
+
+This requires strict generated evidence for every fixture and core part, refuses
+conflicts, and refuses to drop an existing part. Unselected cells and record
+indices remain unchanged. Coverage reports the admission policy per updated
+lane; the whole table keeps its prior policy because adding a few strict lanes
+does not qualify legacy references. Replay the candidate from installed wheels
+and review native controls before promoting a lane's default availability.

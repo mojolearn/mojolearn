@@ -2527,11 +2527,9 @@ PUBLIC_PENDING_LANES = {
     # from an installed CPU development wheel with bundled, digest-checked models.
     # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
     # inference replay, not CPU CTR training or final release qualification.
+    # The other fix-record lanes passed installed reference-table replay;
+    # legacy `identity` still restricts itself to its original column scope.
     "kmeans-sqrt": "own record",
-    "embedding": "own record",
-    "embedding-sort": "own record",
-    "ivf": "own record",
-    "ivf-euclidean": "own record",
     # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
     "gemm-bf16": "no reference", "gemm-int8": "no reference",
     "transformer-bf16w": "no reference", "transformer-int8w": "no reference",

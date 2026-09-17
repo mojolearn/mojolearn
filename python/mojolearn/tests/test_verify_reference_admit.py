@@ -158,3 +158,50 @@ def test_builder_requires_witnesses_repeats_and_standard_property_protocols(tmp_
         'decode_protocol':{'train','infer','batch'}}
     assert parts==expected[broken]
     assert table['admission_policy']['min_repeats']==2
+
+
+def scoped_tables():
+    import copy
+    base = dict(format=vref.FORMAT, fixtures={'base': {'X': 'x'}}, heldout={'base': {'X': 'h'}},
+                records=[{'class': 'cpu', 'commit': 'a' * 40}], harness_sha256='old',
+                lane_revisions={'old': 'v1'},
+                cells={'old/base': {'train': {'ref': 'a' * 16, 'cols': {'cpu': 0}}}})
+    candidate = copy.deepcopy(base)
+    candidate.update(admission_policy=dict(min_repeats=2, input_witness_required=True,
+                                          property_protocol_required=True),
+                     harness_sha256='new', lane_revisions={'new': 'v2'})
+    candidate['cells'] = {'new/base': {part: {'ref': 'b' * 16, 'cols': {'cpu': 0}}
+                                     for part in ('train', 'infer', 'model', 'batch')}}
+    return base, candidate
+
+
+def test_scoped_admission_preserves_unselected_cells_and_legacy_policy():
+    import copy
+    base, candidate = scoped_tables()
+    saved = copy.deepcopy(base)
+    merged = vref.merge_reference_lanes(base, candidate, ['new'])
+    assert base == saved
+    assert merged['cells']['old/base'] == base['cells']['old/base']
+    assert merged['records'][0] == base['records'][0]
+    assert merged['cells']['new/base']['train']['cols'] == {'cpu': 1}
+    assert 'admission_policy' not in merged
+    assert merged['harness_sha256'] == 'old'
+    assert merged['lane_revisions'] == {'old': 'v1', 'new': 'v2'}
+    assert merged['lane_admission']['new']['policy']['min_repeats'] == 2
+
+
+@pytest.mark.parametrize('failure', ['legacy', 'fixture', 'heldout', 'missing', 'conflict', 'lost-part'])
+def test_scoped_admission_refuses_incomplete_or_incomparable_evidence(failure):
+    base, candidate = scoped_tables()
+    if failure == 'legacy':
+        candidate.pop('admission_policy')
+    elif failure in ('fixture', 'heldout'):
+        candidate['fixtures' if failure == 'fixture' else 'heldout'] = {}
+    elif failure == 'missing':
+        candidate['cells']['new/base'].pop('model')
+    elif failure == 'conflict':
+        candidate['cells']['new/base']['train']['conflict'] = True
+    elif failure == 'lost-part':
+        base['cells']['new/base'] = {'stepfull': {'ref': 'c' * 16, 'cols': {'cpu': 0}}}
+    with pytest.raises(vref.TableError):
+        vref.merge_reference_lanes(base, candidate, ['new'])
