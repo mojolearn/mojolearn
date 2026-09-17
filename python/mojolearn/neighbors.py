@@ -635,6 +635,16 @@ class NearestNeighbors(NumericModeMixin):
         self._resident = (key, handle)
         return handle
 
+    @staticmethod
+    def _resident_door(binding, name):
+        """The binding's entry `name`, or None where the loaded binding
+        has no such door (`_resident_index_handle`'s rule: an absent name
+        is ImportError on a host binding, AttributeError on a module)."""
+        try:
+            return getattr(binding, name)
+        except (ImportError, AttributeError):
+            return None
+
     def _release_resident_index(self):
         """Drop the device copy, if one is held. Quiet on a binding that
         cannot be reached any more (interpreter shutdown) and on a handle
@@ -1016,21 +1026,46 @@ class KNeighborsClassifier(NearestNeighbors):
         uniq = empty((sum(n_classes),), "<i4")
         idx = self._index
         y_cols = self._y_cols
-        self.used_query_tile_ = self._bind("_mojolearn").knn_classify(
-            addr_ro(idx, name="idx"),
-            addr_ro(q, name="q"),
-            addr_ro(y_cols, name="y_cols"),
-            addr(labels, name="labels"),
-            addr(proba, name="proba"),
-            addr(uniq, name="uniq"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::knn_classify_binding.
-            # n_index, n_queries, n_features, k, query_tile, n_outputs,
-            # want_proba, then n_classes per output
-            [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out,
-             1 if want_proba else 0] + n_classes,
-            # metric, metric_arg, weights -- see _dist_triple there.
-            self._dist_params(),
-        )
+        binding = self._bind("_mojolearn")
+        # THE INDEX STAYS ON THE DEVICE (DEVIATION 3002, the classifier's
+        # door of DEVIATION 2921): the first call uploads it, every later
+        # call classifies against the device copy through
+        # `knn_classify_resident`; the search and the vote are the same
+        # statements over the same bytes. A binding without that entry
+        # takes the per-call path.
+        resident = self._resident_door(binding, "knn_classify_resident")
+        handle = self._resident_index_handle(binding, idx) if resident is not None else None
+        # ORDER MATCHES bindings/_mojolearn.mojo::knn_classify_binding and
+        # ::knn_classify_resident_binding.
+        # n_index, n_queries, n_features, k, query_tile, n_outputs,
+        # want_proba, then n_classes per output
+        params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out,
+                  1 if want_proba else 0] + n_classes
+        if handle is not None:
+            # The handle rides at the front of `params`: a binding takes at
+            # most eight arguments and the classifier uses all eight.
+            self.used_query_tile_ = resident(
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr_ro(y_cols, name="y_cols"),
+                addr(labels, name="labels"),
+                addr(proba, name="proba"),
+                addr(uniq, name="uniq"),
+                [handle] + params,
+                # metric, metric_arg, weights -- see _dist_triple there.
+                self._dist_params(),
+            )
+        else:
+            self.used_query_tile_ = binding.knn_classify(
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr_ro(y_cols, name="y_cols"),
+                addr(labels, name="labels"),
+                addr(proba, name="proba"),
+                addr(uniq, name="uniq"),
+                params,
+                self._dist_params(),
+            )
         # POLICY 7: the implementation's class set against ours, made visible. `uniq`
         # is split at the running class counts (the old np.cumsum /
         # np.split), in Python over O(classes) ints.
@@ -1200,17 +1235,34 @@ class KNeighborsRegressor(NearestNeighbors):
         out = empty((nq, n_out), "<f4")
         idx = self._index
         y_cols = self._y_cols
-        self.used_query_tile_ = self._bind("_mojolearn").knn_regress(
-            addr_ro(idx, name="idx"),
-            addr_ro(q, name="q"),
-            addr_ro(y_cols, name="y_cols"),
-            addr(out, name="out"),
-            # ORDER MATCHES bindings/_mojolearn.mojo::knn_regress_binding.
-            # n_index, n_queries, n_features, k, query_tile, n_outputs
-            [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out],
-            # metric, metric_arg, weights -- see _dist_triple there.
-            self._dist_params(),
-        )
+        binding = self._bind("_mojolearn")
+        # DEVIATION 3002: the regressor's resident door; see the classifier.
+        resident = self._resident_door(binding, "knn_regress_resident")
+        handle = self._resident_index_handle(binding, idx) if resident is not None else None
+        # ORDER MATCHES bindings/_mojolearn.mojo::knn_regress_binding and
+        # ::knn_regress_resident_binding.
+        # n_index, n_queries, n_features, k, query_tile, n_outputs
+        params = [idx.shape[0], nq, idx.shape[1], k, self.query_tile, n_out]
+        if handle is not None:
+            self.used_query_tile_ = resident(
+                handle,
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr_ro(y_cols, name="y_cols"),
+                addr(out, name="out"),
+                params,
+                # metric, metric_arg, weights -- see _dist_triple there.
+                self._dist_params(),
+            )
+        else:
+            self.used_query_tile_ = binding.knn_regress(
+                addr_ro(idx, name="idx"),
+                addr_ro(q, name="q"),
+                addr_ro(y_cols, name="y_cols"),
+                addr(out, name="out"),
+                params,
+                self._dist_params(),
+            )
         if self.outputs_2d_:
             return out
         return out.reshape((nq,))

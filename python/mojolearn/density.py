@@ -648,7 +648,69 @@ class KernelDensity(NumericModeMixin):
         self.metric = metric
         self.algorithm = "auto"
 
+    def _resident_fit_handle(self, binding):
+        """The handle of the device-resident copy of the fit set (DEVIATION
+        3003, the KDE door of DEVIATION 2921), prepared on the first call
+        and reused while the training array, the weights, the kernel, the
+        metric and the bandwidth keep their identity; None where the loaded
+        binding has no `kde_fit_prepare` (the CPU host binding, a CPU-only
+        install), in which case `score_samples` takes the per-call
+        upload. An absent name is ImportError on a host binding and
+        AttributeError on a module, and both mean "no residency here"."""
+        try:
+            prepare = binding.kde_fit_prepare
+        except (ImportError, AttributeError):
+            return None
+        w = self._w
+        key = (addr_ro(self._x, name="_x"), tuple(self._x.shape),
+               addr_ro(w, name="w") if w is not None else 0,
+               str(self.kernel), str(self.metric), float(self.bandwidth))
+        cached = getattr(self, "_resident", None)
+        if cached is not None and cached[0] == key:
+            return cached[1]
+        if cached is not None:
+            self._release_resident_fit()
+        handle = int(prepare(
+            key[0], key[2],
+            # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_fit_prepare_binding.
+            [int(self._x.shape[0]), int(self._x.shape[1]), float(self.bandwidth),
+             1 if w is not None else 0],
+            self.kernel, self.metric,
+        ))
+        self._resident = (key, handle)
+        return handle
+
+    def _release_resident_fit(self):
+        """Drop the device copy, if one is held. Quiet on a binding that
+        cannot be reached any more (interpreter shutdown) and on a handle
+        already released (a copied instance)."""
+        cached = getattr(self, "_resident", None)
+        if cached is None:
+            return
+        self._resident = None
+        try:
+            self._bind("_mojolearn_estimators").kde_fit_release(cached[1])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __del__(self):
+        try:
+            self._release_resident_fit()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no device handle (the integer is
+        meaningful only in the process and registry that minted it); the
+        copy uploads its own fit set at its first call."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
+
     def fit(self, X, y=None, sample_weight=None):
+        # A refit drops the device copy of the previous fit set HERE, as
+        # NearestNeighbors.fit does (DEVIATION 2921's key rule).
+        self._release_resident_fit()
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         self._x = x  # kept alive; score_samples reads it
         self.n_features_in_ = x.shape[1]
@@ -687,7 +749,25 @@ class KernelDensity(NumericModeMixin):
             )
         out = empty((q.shape[0],), "<f4")
         w = self._w
-        self._bind("_mojolearn_estimators").kde_score_samples(
+        binding = self._bind("_mojolearn_estimators")
+        # THE FIT SET STAYS ON THE DEVICE (DEVIATION 3003): the first call
+        # validates and uploads it, every later call scores the device copy
+        # through `kde_score_samples_resident`, validating and uploading the
+        # queries only; the score is the same statements over the same
+        # bytes. A binding without that entry takes the per-call path.
+        handle = self._resident_fit_handle(binding)
+        if handle is not None:
+            binding.kde_score_samples_resident(
+                handle,
+                addr_ro(q, name="q"),
+                addr(out, name="out"),
+                # ORDER MATCHES bindings/_mojolearn_estimators.mojo::kde_score_samples_resident_binding.
+                [int(q.shape[0]), int(self.n_features_in_), float(self.bandwidth)],
+                self.kernel,
+                self.metric,
+            )
+            return out
+        binding.kde_score_samples(
             addr_ro(self._x, name="_x"),
             addr_ro(q, name="q"),
             addr_ro(w, name="w") if w is not None else 0,

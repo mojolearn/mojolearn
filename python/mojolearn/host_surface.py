@@ -1024,13 +1024,19 @@ FAMILIES = (
         # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
         # step of a saved GBDT model, reusing expand_raw_columns and the
         # tensor apply module the GPU predict calls
-        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo",
+        host_modules=("core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
+                      "core/gbdt_host_predict.mojo",
                       "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
-            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid",
+            # lane/forest-groves-cpu-and-speed (2026-09-17): the parallel_groves
+            # engine over core/forest_host_groves.mojo, and DEVIATION 2961's
+            # association sabotage read-back
+            "forest_host_groves_sabotage", "forest_host_groves_prepare",
+            "forest_host_groves_predict", "forest_host_groves_release",
+            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid", "forest_host_gbdt_sigmoid_pair",
             "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
@@ -1946,7 +1952,7 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
-            "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_sigmoid", "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -2466,7 +2472,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "select-d": "no reference",
     "ordered-gradient-sum": "no reference",
     "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
@@ -2479,8 +2484,6 @@ PUBLIC_PENDING_LANES = {
     # user's CPU-only `verify --all` would read OWED for umap on a machine
     # that is fine.
     "umap": "no reference",
-    "holtwinters": "no reference",
-    "spectral": "unwatched",
     "gbdt-nan-modes": "no reference",
     "gbdt-parametric-losses": "no reference",
     "gbdt-lossguide-newtoncosine": "no reference",
@@ -2514,14 +2517,16 @@ PUBLIC_PENDING_LANES = {
     "samba-untied-dropout-accum": "stale reference",
     "byte-lm": "no reference",
     "byte-lm-resident": "no reference",
-    "metrics-fowlkes-mallows": "unwatched",
     "gbdt-adapter-score-weighted": "no reference",
     "rf-score-weighted": "no reference",
     "gbdt-yeti-rank": "unwatched",
-    "arima-exog": "unwatched",
-    "arima-exog-seasonal": "unwatched",
-    "gbdt-categorical-ctr-tables": "unwatched",
-    "gbdt-tensor-ctr-tables": "unwatched",
+    # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
+    # fixtures twice through the public CPU verifier, with native negative
+    # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
+    # CTR saved-model lanes were promoted after all nine fixtures passed twice
+    # from an installed CPU development wheel with bundled, digest-checked models.
+    # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
+    # inference replay, not CPU CTR training or final release qualification.
     "kmeans-sqrt": "own record",
     "embedding": "own record",
     "embedding-sort": "own record",

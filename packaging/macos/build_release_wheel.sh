@@ -437,6 +437,7 @@ rm -f "$PKG/_identity_trace_diff.py" "$PKG/_identity_break.py"
 rm -rf "$PKG/identity_columns"
 cp "$here/tools/identity_trace_diff.py" "$PKG/_identity_trace_diff.py"
 cp "$here/tools/identity_break.py" "$PKG/_identity_break.py"
+python3 "$here/tools/verification_ctr_payload.py" --output "$PKG/verify_reference/ctr_models" || exit 1
 RECORD=$(python3 python/mojolearn/host_surface.py --training-gpu-column-record) || exit 1
 mkdir -p "$PKG/identity_columns/$RECORD"
 for col in $(python3 python/mojolearn/host_surface.py --training-gpu-columns); do

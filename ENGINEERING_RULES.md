@@ -129,7 +129,7 @@ wrong with it and each one is a way to write a bad number.
   100 trees. The published range took the bottom of one row and the top of the
   other, so the interval it stated was never measured.
 * It MIXED CONVENTIONS with the rest of the repository. That window reports
-  speedup, theirs over ours, where above 1.0 we are faster.
+  a ratio, theirs over ours, where above 1.0 ours takes less of their time.
   `bench/OPPONENT_REFERENCE.md` reports ours over theirs, where above 1.0 we
   are SLOWER, and its own ET rows read 1.53x and 1.63x. The same digits mean
   opposite things in two files here, which is why a reader who knows the
@@ -138,7 +138,7 @@ wrong with it and each one is a way to write a bad number.
   sentence was written here on 2026-09-10 (`92928a2cd`), and it was already
   superseded when it was written. The same file's own later addendum restates
   covtype as 1.6-1.8x, and three later Apple covtype windows read 1.04x
-  slower, 1.13x slower and 1.12x faster.
+  of their time, 1.13x of their time and 0.89x of their time.
 * It was NOT QUOTABLE in the first place. `bench/OPPONENT_REFERENCE.md` has a
   section headed "Rows never to quote" and two of its three entries are
   everything under `bench/results/fast_speed/mac-*` and **our own FAST or

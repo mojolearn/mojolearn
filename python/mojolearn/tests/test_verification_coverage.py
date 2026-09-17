@@ -18,7 +18,8 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
     mapped = {l for e in ENTRIES for l in e['lanes']}
     assert set(report['additional_lanes']) == set(h.LANES) - mapped
     assert report['execution'] == 'not run'
-    assert report['lanes']['select-d']['status'] == 'withheld'
+    assert report['lanes']['select-d']['status'] == 'available'
+    assert report['lanes']['holtwinters']['status'] == 'available'
     assert report['lanes']['select-d']['properties']['batch']['kind'] == 'check'
     assert report['lanes']['bpe-trainer']['properties']['batch']['kind'] == 'not_applicable'
     assert report['lanes']['transformer']['properties']['batchgrad']['command'] == 'verify --batch-checks'
@@ -31,9 +32,9 @@ def test_inspection_and_batch_flags_route_to_suite():
 
 def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted():
     h = va.load_harness()
-    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['select-d'])
-    assert lanes == ['select-d']
-    assert 'select-d' not in va.host_surface().public_reference_lanes()
+    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['samba'])
+    assert lanes == ['samba']
+    assert 'samba' not in va.host_surface().public_reference_lanes()
     for name in ('bpe-trainer', 'cross-val-folds'):
         assert name in va.host_surface().public_reference_lanes()
 
@@ -146,3 +147,83 @@ def test_reference_builder_can_include_extended_checks(tmp_path, monkeypatch):
     changed = vr.build_table([str(path)], h, str(tmp_path), parts=vr.PARTS+vr.OPTIONAL_PARTS)
     assert 'batchgrad' not in changed['cells']['x/base']
     assert 'rlpair' in changed['cells']['x/base']
+
+
+def test_historical_evidence_is_exposed_without_release_certification():
+    h = va.load_harness()
+    report = coverage.inventory(h, vr.load_table(), 'cpu')
+    assert report['evidence_provenance']['release_qualified'] is False
+    assert report['evidence_provenance']['sources']
+    for row in report['entries']:
+        assert row['evidence_summary']['release_qualified'] is False
+    for lane in report['lanes'].values():
+        assert 'historical_evidence' in lane
+        assert lane['release_qualified'] is False
+    assert 'not qualification of this wheel' in coverage.format_human(report)
+
+
+@pytest.mark.parametrize('change', ['missing', 'inputs', 'heldout', 'protocol', 'harness'])
+def test_equal_hashes_do_not_hide_incomparable_experiments(change):
+    import copy
+    def document(vendor):
+        return dict(format='mojolearn.verify-all-report.v1', device=dict(vendor=vendor),
+            cells=[dict(lane='x', fixture='base', part='batch', value='a'*16, state='IDENTICAL')],
+            verification_contract=dict(harness_sha256='b'*64,
+                fixtures={'base': {'X': 'input'}}, heldout={'base': {'X': 'held'}},
+                protocols={'batch': {'alone': 16}}))
+    a, b = document('cuda'), document('hip')
+    assert va.compare_documents(a, b)['verdict'] == 'AGREE'
+    if change == 'missing':
+        b.pop('verification_contract')
+    else:
+        key = dict(inputs='fixtures', heldout='heldout', protocol='protocols', harness='harness_sha256')[change]
+        b['verification_contract'][key] = {} if key != 'harness_sha256' else 'c'*64
+    result = va.compare_documents(a, b)
+    assert result['exit'] == va.EXIT_CANNOT_RUN and result['agree'] == 0
+    assert result['verdict'] == 'INCOMPARABLE' and result['context_problems']
+
+
+def test_bundled_ctr_models_are_complete_and_digest_checked(tmp_path):
+    from pathlib import Path
+    from mojolearn import _verification_ctr_models as ctr
+    h = va.load_harness()
+    assert len(ctr.MODEL_SHA256) == len(h.FIXTURES) * 2
+    assert set(("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")) <= set(va.host_surface().public_reference_lanes())
+    for lane in ('gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables'):
+        for fixture in h.FIXTURES:
+            assert Path(ctr.resolve_model(lane, fixture)).is_file()
+    target = tmp_path / 'verify_reference/ctr_models'
+    target.mkdir(parents=True)
+    (target/'gbdt-categorical-ctr-tables.base.npz').write_bytes(b'corrupt')
+    with pytest.raises(RuntimeError, match='digest mismatch'):
+        ctr.resolve_model('gbdt-categorical-ctr-tables', 'base', tmp_path)
+    with pytest.raises(RuntimeError, match='missing verification'):
+        ctr.resolve_model('gbdt-tensor-ctr-tables', 'base', tmp_path)
+
+
+def test_probe_error_cannot_be_hidden_by_matching_hashes():
+    value='0123456789abcdef'
+    assert va._collapse([value,value],['model reload failed']) == (None,'model reload failed')
+    state, detail=vr.judge(value,dict(ref=value),error='model reload failed')
+    assert state == vr.REFUSED and detail == 'model reload failed'
+    assert vr.judge('BATCH_MOVED: broken row',dict(ref=value),error='other failure')[0] == vr.DIVERGENT
+
+
+@pytest.mark.parametrize('value', [123, [], {}, True, '', 'error: failed', 'n/a:'])
+def test_invalid_probe_value_cannot_become_a_matching_reference(value):
+    assert vr.judge(value,dict(ref=value))[0] == vr.REFUSED
+
+
+def test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match():
+    digest='0123456789abcdef'
+    h=types.SimpleNamespace(LANES={'x':lambda *a:object()},BATCH_ALONE=1,
+        EXTRA_PARTS={'stepfull':()},_train_hash=lambda f:digest,
+        _probe_fit=lambda *a:(digest,digest,None,'model: reload failed'),
+        _probe_batch=lambda *a:('n/a:function',None),
+        _probe_part=lambda *a:('n/a:no-decode-state',None,[]))
+    parts=va.run_cell(h,None,'x','base',(None,None,None),np.zeros((1,1)),2)
+    assert parts['train']==(digest,None)
+    assert parts['model']==(None,'model: reload failed')
+    rows=va.judge_rows([dict(lane='x',fixture='base',part='model',value=parts['model'][0],error=parts['model'][1])],
+                      dict(cells={'x/base':{'model':dict(ref=digest)}}))
+    assert rows[0]['state']==vr.REFUSED

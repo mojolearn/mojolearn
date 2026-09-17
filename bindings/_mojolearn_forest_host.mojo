@@ -46,7 +46,22 @@ left_child i32 (n_nodes), leaves f32 (n_nodes * num_outputs), x f32
 is `[n_rows, n_cols, n_trees, num_outputs, n_nodes]`. `n_nodes` is what the
 GPU bindings do not take; it lets a file read off disk be refused instead of
 read past. Each entry returns the rows written.
+
+THE `parallel_groves` ENGINE (lane/forest-groves-cpu-and-speed, 2026-09-17).
+`forest_host_groves_prepare(addresses, params, family)` takes the five model
+addresses above (no x, no out), `params = [n_trees, n_cols, num_outputs,
+n_nodes]` and `family` 0 for RandomForest (the input flushed, `RF_INPUT`) or
+1 for ExtraTrees, validates the graph as the GPU resident snapshot does
+(`core/forest_host_groves.mojo::HostGroveForest`) and returns a handle;
+`forest_host_groves_predict(handle, x_addr, out_addr, params, family)` with
+`params = [n_rows, n_cols, num_outputs]` runs the host grove engine (32
+fixed lanes, the 16/8/4/2/1 fold, DEVIATION 2960 threads) and returns the
+rows written; `forest_host_groves_release(handle, family)` drops the
+snapshot. The three hold the GIL, as the GPU binding's resident entries do,
+so a handle is never released under a running prediction.
+`forest_host_groves_sabotage` reads back DEVIATION 2961's define.
 """
+from std.ffi import _Global
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -68,6 +83,11 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
+from core.forest_host_groves import (
+    FOREST_GROVES_SABOTAGE,
+    HostGroveForest,
+    HostGroveRegistry,
+)
 from core.forest_host_predict import (
     FOREST_HOST_SABOTAGE,
     et_host_predict,
@@ -81,6 +101,21 @@ from core.gbdt_host_predict import gbdt_host_predict
 
 comptime FAMILY_RF = 0
 comptime FAMILY_ET = 1
+
+# The host grove registries of THIS binding, named apart from the rf and
+# trees host families' ("MojoRFResidentForestHost",
+# "MojoETResidentForestHost" in bindings/forest_host_groves_binding.mojo),
+# so two host bindings loaded into one process never share a handle space.
+comptime RF_GROVES = _Global[
+    StorageType=HostGroveRegistry,
+    name="MojoForestHostRFGroves",
+    init_fn=HostGroveRegistry.__init__,
+]
+comptime ET_GROVES = _Global[
+    StorageType=HostGroveRegistry,
+    name="MojoForestHostETGroves",
+    init_fn=HostGroveRegistry.__init__,
+]
 #: Rows per call, so `n_rows * n_cols` stays far from any Int edge.
 comptime FOREST_HOST_MAX_ROWS = 1073741824
 
@@ -150,7 +185,110 @@ def forest_host_sabotage_binding() raises -> PythonObject:
     read from it. `python/mojolearn/_forest_host.py` already ORs the two when
     it decides whether to refuse the load; this makes the column say the same.
     """
-    return PythonObject(FOREST_HOST_SABOTAGE or GBDT_CTR_HOST_SABOTAGE)
+    return PythonObject(FOREST_HOST_SABOTAGE or GBDT_CTR_HOST_SABOTAGE or FOREST_GROVES_SABOTAGE)
+
+
+def forest_host_groves_sabotage_binding() raises -> PythonObject:
+    """Whether this binary folds the 32 grove lanes in lane order on purpose
+    (DEVIATION 2961, `-D MOJOLEARN_FOREST_GROVES_SABOTAGE=1`)."""
+    return PythonObject(FOREST_GROVES_SABOTAGE)
+
+
+def _family(value: PythonObject, entry: String) raises -> Int:
+    var family = _index(value)
+    if family != FAMILY_RF and family != FAMILY_ET:
+        raise Error(entry + ": family must be 0 (RandomForest) or 1 (ExtraTrees)")
+    return family
+
+
+def forest_host_groves_prepare_binding(
+    addresses: PythonObject, params: PythonObject, family_arg: PythonObject
+) raises -> PythonObject:
+    """The host grove snapshot of a saved forest: the five model arrays
+    copied and validated once, a handle back."""
+    var entry = String("forest_host_groves_prepare")
+    var family = _family(family_arg, entry)
+    if len(addresses) != 5 or len(params) != 4:
+        raise Error(entry + ": expected 5 addresses and 4 params")
+    var n_trees = _index(params[0])
+    var n_cols = _index(params[1])
+    var num_outputs = _index(params[2])
+    var n_nodes = _index(params[3])
+    if n_cols <= 0 or n_cols > FOREST_HOST_MAX_ROWS:
+        raise Error(entry + ": n_cols must be in [1, 2^30]")
+    if n_trees <= 0 or n_trees > 2147483646:
+        raise Error(entry + ": n_trees must be in [1, 2^31 - 2]")
+    if num_outputs <= 0 or n_nodes <= 0 or n_nodes > 2147483647 // num_outputs:
+        raise Error(entry + ": num_outputs and n_nodes must be positive and n_nodes * num_outputs must fit int32")
+    if n_nodes < n_trees:
+        raise Error(entry + ": fewer nodes than trees")
+    var offsets_p = i32_ptr(_index(addresses[0]))
+    var colid_p = i32_ptr(_index(addresses[1]))
+    var quesval_p = f32_ptr(_index(addresses[2]))
+    var left_p = i32_ptr(_index(addresses[3]))
+    var leaves_p = f32_ptr(_index(addresses[4]))
+    if Int(offsets_p[0]) != 0 or Int(offsets_p[n_trees]) != n_nodes:
+        raise Error(entry + ": tree_offsets must start at 0 and end at n_nodes")
+    var offsets = read_i32(_index(addresses[0]), n_trees + 1)
+    var columns = read_i32(_index(addresses[1]), n_nodes)
+    var thresholds = read_f32(_index(addresses[2]), n_nodes)
+    var left = read_i32(_index(addresses[3]), n_nodes)
+    var leaves = read_f32(_index(addresses[4]), n_nodes * num_outputs)
+    _ = colid_p
+    _ = quesval_p
+    _ = left_p
+    _ = leaves_p
+    var model = HostGroveForest(
+        offsets^, columns^, thresholds^, left^, leaves^, n_cols, num_outputs
+    )
+    if family == FAMILY_RF:
+        return PythonObject(RF_GROVES.get_or_create_ptr()[].prepare(model^))
+    return PythonObject(ET_GROVES.get_or_create_ptr()[].prepare(model^))
+
+
+def forest_host_groves_predict_binding(
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject, family_arg: PythonObject,
+) raises -> PythonObject:
+    """The grove engine's answer for `n_rows` ROW-major rows: the divided
+    fold, `n_rows * num_outputs` float32 into `out`. Returns the rows."""
+    var entry = String("forest_host_groves_predict")
+    var family = _family(family_arg, entry)
+    if len(params) != 3:
+        raise Error(entry + ": expected 3 params [n_rows, n_cols, num_outputs]")
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var num_outputs = _index(params[2])
+    if n_rows <= 0 or n_rows > FOREST_HOST_MAX_ROWS:
+        raise Error(entry + ": n_rows must be in [1, 2^30]")
+    if n_cols <= 0 or n_cols > FOREST_HOST_MAX_ROWS or num_outputs <= 0:
+        raise Error(entry + ": n_cols and num_outputs must be positive")
+    if n_rows > 2147483647 // n_cols or n_rows > 2147483647 // num_outputs:
+        raise Error(entry + ": n_rows * n_cols and n_rows * num_outputs must fit int32")
+    var xp = f32_ptr(_index(x_addr))
+    var op = f32_ptr(_index(out_addr))
+    var id = _index(handle)
+    var state = RF_GROVES.get_or_create_ptr()
+    if family == FAMILY_ET:
+        state = ET_GROVES.get_or_create_ptr()
+    if id not in state[].entries:
+        raise Error(entry + ": unknown or released host grove forest handle")
+    if family == FAMILY_RF:
+        state[].entries[id].predict_into[True](xp, op, n_rows, n_cols, num_outputs)
+    else:
+        state[].entries[id].predict_into[False](xp, op, n_rows, n_cols, num_outputs)
+    return PythonObject(n_rows)
+
+
+def forest_host_groves_release_binding(
+    handle: PythonObject, family_arg: PythonObject
+) raises -> PythonObject:
+    var family = _family(family_arg, String("forest_host_groves_release"))
+    if family == FAMILY_RF:
+        RF_GROVES.get_or_create_ptr()[].release(_index(handle))
+    else:
+        ET_GROVES.get_or_create_ptr()[].release(_index(handle))
+    return PythonObject(None)
 
 
 def _predict(
@@ -424,6 +562,10 @@ def PyInit__mojolearn_forest_host() abi("C") -> PythonObject:
         module.def_function[forest_host_rf_predict_proba_binding]("forest_host_rf_predict_proba")
         module.def_function[forest_host_rf_predict_reg_binding]("forest_host_rf_predict_reg")
         module.def_function[forest_host_et_predict_binding]("forest_host_et_predict")
+        module.def_function[forest_host_groves_sabotage_binding]("forest_host_groves_sabotage")
+        module.def_function[forest_host_groves_prepare_binding]("forest_host_groves_prepare")
+        module.def_function[forest_host_groves_predict_binding]("forest_host_groves_predict")
+        module.def_function[forest_host_groves_release_binding]("forest_host_groves_release")
         module.def_function[forest_host_gbdt_predict_binding]("forest_host_gbdt_predict")
         module.def_function[forest_host_gbdt_sigmoid_binding]("forest_host_gbdt_sigmoid")
         module.def_function[forest_host_gbdt_sigmoid_pair_binding]("forest_host_gbdt_sigmoid_pair")

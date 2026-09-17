@@ -2467,6 +2467,9 @@ def _ctr_saved_or_fit(ml, fit):
     d = os.environ.get(GBDT_CTR_MODELS_ENV, "").strip()
     path = os.path.join(d, f"{lane_name}.{fx}.npz") if d and lane_name else None
     if ml.vendor() == "cpu":
+        if not d:
+            from mojolearn._verification_ctr_models import resolve_model
+            path = resolve_model(lane_name, fx)
         if not path or not os.path.isfile(path):
             raise RuntimeError(f"CPU training refuses CTR tables by name; set {GBDT_CTR_MODELS_ENV} to the "
                                f"directory of this lane's GPU-saved models (no {path})")

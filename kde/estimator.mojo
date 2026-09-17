@@ -32,10 +32,12 @@ bound, a normal bandwidth and normal finite weights), uploads, runs `ML::KDE::sc
 (`kde/impl/kde.mojo`) with the environment's identity trace
 (`MOJOLEARN_IDENTITY_TRACE`), and returns `n_query` float32 log-densities.
 
-cuML's `fit` keeps `X` on the device and `score_samples` reuses it; a
-bindings layer that wants that should keep the `DeviceBuffer` in the Python
-object and call `kde/impl.mojo::score_samples` directly. This
-entry is the one-shot form, which is what the gates and the card use.
+cuML's `fit` keeps `X` on the device and `score_samples` reuses it, and
+SINCE 2026-09-17 SO DOES THIS TREE: `kde/resident_fit.mojo` (DEVIATION
+3003) validates and uploads the fit set once and `KernelDensity.
+score_samples` scores through its handle where the GPU binding exports
+it. This entry is the one-shot form, which the gates, the card and the
+CPU host binding use.
 """
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
