@@ -3562,14 +3562,26 @@ def _(ml, X, yc, yr, Xh=None):
 
     SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 reverses ONLY the tie-break
     (largest (left_id, right_id) among the pairs at the top count instead of
-    smallest). MEASURED on this fixture, it moves `ranks`, `tokenizer_json`
-    and `n_ties_broken`, and leaves `n_tokens` and `n_merges` alone -- the
-    vocabulary still fills to vocab_size, it is filled with DIFFERENT tokens.
-    That is why the two artifact hashes are the load-bearing parts of this
-    cell and the counters are not: a cell that watched only the sizes would
-    call this sabotage inert. The Mojo trainer carries the same arm as a
-    build define, and `pixi run check-bpe-trainer-sabotage` is where it is
-    watched failing."""
+    smallest). It moves ALL FIVE parts. MEASURED on x86-64 EPYC, 2026-09-17,
+    both fixtures (`bench/results/identity_break/2026-09-17_sabotage-sweep/
+    e-python-lanes/`): `base` 302 tokens, 46 merges, 42 ties broken clean
+    against 301, 45 and 41 sabotaged; `ties` 309/53/33 against 308/52/31.
+
+    THIS PARAGRAPH USED TO SAY the arm "leaves `n_tokens` and `n_merges`
+    alone -- the vocabulary still fills to vocab_size". It does not, and it
+    never did on this fixture: `min_frequency=2` exhausts the pairs worth
+    merging long before `vocab_size=320`, so the vocabulary's SIZE is an
+    output of the merge sequence and not a constant, and one different
+    tie-break costs one merge. Read as written, the old sentence invited a
+    reader to drop the counters from the cell; the counters move too.
+
+    The two artifact hashes are still the load-bearing parts, for the reason
+    the old sentence was reaching for: they are what a user ships beside a
+    model, and a counter that happened to agree would not make the
+    vocabularies the same. The Mojo trainer carries the same arm as a build
+    define, and `pixi run check-bpe-trainer-sabotage` is where THAT one is
+    watched failing; this Python door's arm is watched failing in the
+    directory above."""
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
     ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
