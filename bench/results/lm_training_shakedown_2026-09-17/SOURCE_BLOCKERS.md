@@ -60,13 +60,23 @@ the checkpoint"), but no harness in the repository does that today, and the
     if any(x < 0 for x in flat_view(v, 'f')) or any(x not in (0, 1) for x in flat_view(flags, 'i')):
 
 `flat_view` returns a memoryview (`_bufcheck.py:163`), so the first `any` is a
-Python-level loop over all 162,147,840 second moments. Measured on one core of
-the M4 by extrapolating a synthetic `array.array` scan (linear by construction):
-0.1971 s at 2,000,000 elements and 0.8061 s at 8,000,000, which is 15.98 s and
-16.34 s at 162,147,840. `_validate_state` runs on every `export_state()`, every
-`load_state_dict()` and every stateless `train_step`. Against a 0.2326 s step
-that is a 70x per-step tax on the stateless path and a fixed ~16 s per
-checkpoint on the resident path. `all_finite` is native and is not part of this.
+Python-level loop over all 162,147,840 second moments. On one core of the M4,
+extrapolating a synthetic `array.array` scan (linear by construction), that is
+about 16 s: 0.1971 s at 2,000,000 elements and 0.8061 s at 8,000,000.
+
+THE H100 POD IS FASTER THAN THAT EXTRAPOLATION and the measured figure is the
+one to use. Leg 1 measured a complete save (an `export_state()` including the
+scan, four sha256 digests and 1.95 GB written to disk) at **11.19 s**, and a
+complete restore (1.95 GB read, four digests verified and a `load_state_dict`
+including a second scan) at **7.63 s**. The M4 number is a bound on the shape
+of the cost, not the cost.
+
+`_validate_state` runs on every `export_state()`, every `load_state_dict()` and
+every stateless `train_step`. On the resident path that is a fixed ten-second
+tax per checkpoint, which is nothing against a run measured in hundreds of
+hours. On the STATELESS path it is per step, which is one of the reasons the
+2026-09-10 stateless probe measured 38.9 s a step against the resident lean
+path's 0.21 s. `all_finite` is native and is not part of this.
 
 ## D. Gradient accumulation exists, but only through a second trainer class
 
