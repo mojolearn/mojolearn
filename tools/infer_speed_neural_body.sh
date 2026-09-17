@@ -33,6 +33,10 @@ export PATH="$HOME/.pixi/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
 export MOJOLEARN_CORPUS_SOURCE_DIR=${MOJOLEARN_CORPUS_SOURCE_DIR:-/root/datasets/corpus}
 export PYTHONPATH="$ROOT/python:$ROOT/tools"
+# The commit witness identity_break and the byte LM sweep refuse to run
+# without: a COMMIT file names a candidate tree, SHIPPED_COMMIT.txt the base.
+if [ -s "$ROOT/COMMIT" ]; then MOJOLEARN_COMMIT=$(cat "$ROOT/COMMIT"); else MOJOLEARN_COMMIT=$(cat "$ROOT/SHIPPED_COMMIT.txt" 2>/dev/null || echo unknown); fi
+export MOJOLEARN_COMMIT MOJOLEARN_GATE_COMMIT="$MOJOLEARN_COMMIT"
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 NEURAL_LANES="mlp,transformer,transformer-window,mamba1,mamba2,mamba2-dtlimit,mamba3,samba,samba-untied-dropout-accum,byte-lm,byte-lm-resident,byte-lm-host-infer"
 note() { echo "$* $(date -u +%H:%M:%S)" | tee -a "$OUT/progress.txt"; }
