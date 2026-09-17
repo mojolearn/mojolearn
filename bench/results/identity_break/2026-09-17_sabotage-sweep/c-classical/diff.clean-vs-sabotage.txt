@@ -1,0 +1,203 @@
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_resample_host', '_mojolearn_tsa_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_resample_host', '_mojolearn_tsa_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| arima-011/base               | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 0b6e27da8bbe4b81 |
+| arima-011/ties               | DIVERGENT  | parts differ: ma,sigma2,forecast; agree: - | 5ad64b2afdd0c5ec |
+| arima-seasonal-c/base        | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 42be56eb08618d06 |
+| arima-seasonal-c/ties        | DIVERGENT  | parts differ: ar,sar,mu,sigma2,forecast; agree: - | 3f4310ed2ca1916c |
+| arima/base                   | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 0e77d6dec9ac0689 |
+| arima/ties                   | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | 3cdff2f04901ea07 |
+| bootstrap/base               | DIVERGENT  | parts differ: mean,std,trimmed,pearson,diff,r_first; agree: quantile | 3f6ba9c72af87818 |
+| bootstrap/ties               | DIVERGENT  | parts differ: mean,std,trimmed,pearson,diff,r_first; agree: quantile | df10c73580fc117c |
+| gemm-bf16/base               | DIVERGENT  | parts differ: nt,both,nn; agree: bits | c4f1a45f3a380e82 |
+| gemm-bf16/ties               | DIVERGENT  | parts differ: nt,both,nn; agree: bits | f594964676e508fd |
+| gemm-int8/base               | DIVERGENT  | parts differ: product; agree: codes,exps,dequant | 7d0d9a9677d2f456 |
+| gemm-int8/ties               | DIVERGENT  | parts differ: product; agree: codes,exps,dequant | 1760cd38c6fb6ab3 |
+| gemm-pinned/base             | DIVERGENT  | parts differ: small,wide; agree: - | 92303a93b7706725 |
+| gemm-pinned/ties             | DIVERGENT  | parts differ: small,wide; agree: - | e2461398ea9430d4 |
+| gemm-transposed/base         | DIVERGENT  | parts differ: nt,tn; agree: - | e90bde3202c68f28 |
+| gemm-transposed/ties         | DIVERGENT  | parts differ: nt,tn; agree: - | adbe818712f9dfe1 |
+| gmm-random-init-sample/base  | DIVERGENT  | parts differ: sample_X; agree: sample_y | da0d6cc2f4c710a9 |
+| gmm-random-init-sample/ties  | DIVERGENT  | parts differ: sample_X; agree: sample_y | 5e85dc15e329ef95 |
+| gmm-sample/base              | DIVERGENT  | parts differ: sample_X; agree: sample_y | 1c2e1844d83f2c67 |
+| gmm-sample/ties              | DIVERGENT  | parts differ: sample_X; agree: sample_y | 61d19a5b1494e1e9 |
+| gp-normalize-y/base          | REFUSED    | REFUSED          | REFUSED          |
+| gp-normalize-y/ties          | REFUSED    | REFUSED          | REFUSED          |
+| gp-optimize-restarts/base    | DIVERGENT  | parts differ: theta,params,runs,lml,alpha,L,mean,std; agree: - | f38d29a90471b8f5 |
+| gp-optimize-restarts/ties    | DIVERGENT  | parts differ: theta,params,runs,alpha,L,mean,std; agree: lml | 136e39a72adb9477 |
+| gp-optimize/base             | DIVERGENT  | parts differ: theta,params,runs,alpha,L,mean,std; agree: lml | b5ef9655fff64ef3 |
+| gp-optimize/ties             | DIVERGENT  | parts differ: theta,params,runs,lml,alpha,L,mean,std; agree: - | 1d928f099ab29011 |
+| gp-sample-y-normalize/base   | REFUSED    | REFUSED          | REFUSED          |
+| gp-sample-y-normalize/ties   | REFUSED    | REFUSED          | REFUSED          |
+| gp-sample-y/base             | DIVERGENT  | parts differ: sample; agree: - | 6e70ecc84491ab59 |
+| gp-sample-y/ties             | DIVERGENT  | parts differ: sample; agree: - | 79429249f713c121 |
+| gpc-multiclass/base          | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 6da3c1db4d295193 |
+| gpc-multiclass/ties          | DIVERGENT  | parts differ: L,pi,W_sr,lml,n_iter,proba; agree: predict | 4fff7795c337e1b9 |
+| gpc/base                     | DIVERGENT  | parts differ: L,pi,W_sr,lml,proba; agree: n_iter,predict | 4b0bcba6ef95bbf8 |
+| gpc/ties                     | DIVERGENT  | parts differ: L,pi,W_sr,proba; agree: lml,n_iter,predict | 95a3e76407b9f12d |
+| metrics-classification/base  | DIVERGENT  | parts differ: log_loss:sum,entropy:nats,entropy:base2,v_measure:beta2,mutual_info,homogeneity,completeness,silhouette_samples; agree: precision_score:None,recall_score:None,f1_score:None,precision_score:binary,recall_score:binary,f1_score:binary,precision_score:micro,recall_score:micro,f1_score:micro,precision_score:macro,recall_score:macro,f1_score:macro,precision_score:weighted,recall_score:weighted,f1_score:weighted,precision_zero_division:0,precision_zero_division:1,log_loss:mean,roc_auc,confusion,pr_curve,mse,mae,rmse,rand,kl,trustworthiness | be210a27d832b27d |
+| metrics-classification/ties  | DIVERGENT  | parts differ: entropy:nats,entropy:base2,v_measure:beta2,mutual_info,homogeneity,completeness,trustworthiness,silhouette_samples; agree: precision_score:None,recall_score:None,f1_score:None,precision_score:binary,recall_score:binary,f1_score:binary,precision_score:micro,recall_score:micro,f1_score:micro,precision_score:macro,recall_score:macro,f1_score:macro,precision_score:weighted,recall_score:weighted,f1_score:weighted,precision_zero_division:0,precision_zero_division:1,log_loss:mean,log_loss:sum,roc_auc,confusion,pr_curve,mse,mae,rmse,rand,kl | 58a4369afb94438d |
+| metrics/base                 | DIVERGENT  | parts differ: accuracy,ari,vmeasure,r2,silhouette; agree: - | 83336f906e9a5ddc |
+| metrics/ties                 | DIVERGENT  | parts differ: accuracy,ari,vmeasure,r2,silhouette; agree: - | 24061004a7e18289 |
+| monte-carlo/base             | DIVERGENT  | parts differ: sum,product; agree: const | 8e9c8f645bff5388 |
+| monte-carlo/ties             | DIVERGENT  | parts differ: product; agree: const,sum | 423ad4b3f043c930 |
+| par-arima/base               | DIVERGENT  | parts differ: mu,sigma2,forecast; agree: ar | 0e77d6dec9ac0689 |
+| par-arima/ties               | DIVERGENT  | parts differ: ar,mu,sigma2,forecast; agree: - | 3cdff2f04901ea07 |
+| par-holtwinters/base         | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,criterion,forecast; agree: - | a4b27ebeb851b152 |
+| par-holtwinters/ties         | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,forecast; agree: criterion | de1d353be7981daa |
+| permutation-test/base        | DIVERGENT  | parts differ: two-sided,less,greater; agree: - | db035db5aa6dbe2f |
+| permutation-test/ties        | DIVERGENT  | parts differ: two-sided,less,greater; agree: - | 7a43c159f27d8152 |
+| spectral-precomputed/base    | DIVERGENT  | parts differ: labels; agree: affinity | a47b3cee729dfc83 |
+| spectral-precomputed/ties    | DIVERGENT  | parts differ: labels; agree: affinity | 39e5e8c26efdbdd4 |
+| umap/base                    | DIVERGENT  | parts differ: embedding; agree: - | 53c7ef0567198e8d |
+| umap/ties                    | DIVERGENT  | parts differ: embedding; agree: - | 13702c5f06a1eae8 |
+
+summary: DIVERGENT=46, REFUSED=4
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| arima-011/base               | infer  | DIVERGENT    | 436e34843e2d7277 | 145816653fec7fd3 |
+| arima-011/base               | model  | DIVERGENT    | d10f42f4fa3ab9cb | b1b6f1a2ed8f9122 |
+| arima-011/base               | batch  | DIVERGENT    | 91fcd2a61774b596 | 8ce71130c0f6fbba |
+| arima-011/ties               | infer  | DIVERGENT    | b18657cbfbe91ac6 | d3829b8c838ea27d |
+| arima-011/ties               | model  | DIVERGENT    | 171b7c3c93902b38 | 54ec6afbb7f2398d |
+| arima-011/ties               | batch  | DIVERGENT    | 26e5f53b13398024 | 95d5835f01e1d074 |
+| arima-seasonal-c/base        | infer  | DIVERGENT    | 51863aef53c592d2 | 1371409bb3b2a902 |
+| arima-seasonal-c/base        | model  | DIVERGENT    | 4b68b52e2c4312b5 | eb42b659f6dd72a3 |
+| arima-seasonal-c/base        | batch  | DIVERGENT    | c9f23e9e56d51e65 | 63bdb26d3454553c |
+| arima-seasonal-c/ties        | infer  | DIVERGENT    | d75b867e7900df54 | 8416822759ed1958 |
+| arima-seasonal-c/ties        | model  | DIVERGENT    | 95387cc89a6d3b76 | 1a755972346e0056 |
+| arima-seasonal-c/ties        | batch  | DIVERGENT    | aa51c6b43366533d | 920c2f772d238774 |
+| arima/base                   | infer  | DIVERGENT    | 9f76be0396a666ca | 8ff14f7006a4ae70 |
+| arima/base                   | model  | DIVERGENT    | 6ae822845884aedf | 4ca0c4f897e15925 |
+| arima/base                   | batch  | DIVERGENT    | cef3c859431cbbaf | f95958dba3b0d046 |
+| arima/ties                   | infer  | DIVERGENT    | e699bca0934688f0 | a4a38096b6fafec7 |
+| arima/ties                   | model  | DIVERGENT    | a70bbb860b0f3fcf | d72cc103aa88c720 |
+| arima/ties                   | batch  | DIVERGENT    | 7abdf42416059c68 | 41c9a97af5a23c8f |
+| bootstrap/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| bootstrap/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bootstrap/base               | batch  | DIVERGENT    | cbde033336be3e1e | 813bac2a2a11fc02 |
+| bootstrap/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| bootstrap/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bootstrap/ties               | batch  | DIVERGENT    | e1decff8099fa142 | b6f7742f58e81ddd |
+| gemm-bf16/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-bf16/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-bf16/base               | batch  | N/A          | n/a:profile lane; the products are hashed whole | n/a:profile lane; the products are hashed whole |
+| gemm-bf16/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-bf16/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-bf16/ties               | batch  | N/A          | n/a:profile lane; the products are hashed whole | n/a:profile lane; the products are hashed whole |
+| gemm-int8/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-int8/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-int8/base               | batch  | N/A          | n/a:profile lane; the products are hashed whole | n/a:profile lane; the products are hashed whole |
+| gemm-int8/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-int8/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-int8/ties               | batch  | N/A          | n/a:profile lane; the products are hashed whole | n/a:profile lane; the products are hashed whole |
+| gemm-pinned/base             | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-pinned/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-pinned/base             | batch  | DIVERGENT    | 85316c17ab632377 | 9154af6fe67cde36 |
+| gemm-pinned/ties             | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-pinned/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-pinned/ties             | batch  | DIVERGENT    | f78018508fcdfa72 | 99b36b99bc15ad3a |
+| gemm-transposed/base         | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-transposed/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-transposed/base         | batch  | DIVERGENT    | a06324eb1ab8f7cd | 8ae8ffc44ae6f8ec |
+| gemm-transposed/ties         | infer  | N/A          | n/a:function     | n/a:function     |
+| gemm-transposed/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gemm-transposed/ties         | batch  | DIVERGENT    | d8743261f9c7c6aa | d06357b510ad3c0a |
+| gmm-random-init-sample/base  | infer  | DIVERGENT    | a460febf045cb5ed | b06b866d7462fa28 |
+| gmm-random-init-sample/base  | model  | DIVERGENT    | de637910417c0f6a | 64d21f6a89b90e3d |
+| gmm-random-init-sample/base  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-random-init-sample/ties  | infer  | DIVERGENT    | c9f89c3987186292 | f5b3834c9042dc4c |
+| gmm-random-init-sample/ties  | model  | DIVERGENT    | 4bf7497302af00ff | 232bd2522a1ac182 |
+| gmm-random-init-sample/ties  | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/base              | infer  | DIVERGENT    | e3cad76ce9a060d0 | 7c327224646fa7d1 |
+| gmm-sample/base              | model  | DIVERGENT    | c4a997dc3ae320a2 | 718ca849904cb838 |
+| gmm-sample/base              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gmm-sample/ties              | infer  | DIVERGENT    | aa785d8205811e0f | 43605601885fc70e |
+| gmm-sample/ties              | model  | DIVERGENT    | fa63a34d1b2e5088 | b2fba7238414717e |
+| gmm-sample/ties              | batch  | N/A          | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) | n/a:no-batch-axis (GaussianMixture.sample takes no input rows) |
+| gp-optimize-restarts/base    | infer  | DIVERGENT    | ef23636025bb9281 | e331cf95f1dd94b4 |
+| gp-optimize-restarts/base    | model  | DIVERGENT    | 2d77ffc98991757b | 4e88759fbd32cac5 |
+| gp-optimize-restarts/base    | batch  | DIVERGENT    | 976899114f971572 | 6c94375bed8b10b0 |
+| gp-optimize-restarts/ties    | infer  | DIVERGENT    | 0c96bbfb72d43730 | 21f6b6be34587ff4 |
+| gp-optimize-restarts/ties    | model  | DIVERGENT    | 52cb879b6fdaae2c | 1c31b247ccda5b76 |
+| gp-optimize-restarts/ties    | batch  | DIVERGENT    | b48564acfc5cfe1f | 0cdccbec9b171bfa |
+| gp-optimize/base             | infer  | DIVERGENT    | d9df0d407450a397 | 109fa0952eacb8f5 |
+| gp-optimize/base             | model  | DIVERGENT    | e00579045e0d743e | 236a05fb21d64811 |
+| gp-optimize/base             | batch  | DIVERGENT    | f88dad7a538dcc0d | 52fdbcc0b58016a6 |
+| gp-optimize/ties             | infer  | DIVERGENT    | 3de76f60b0228178 | eb41e1d5497108e6 |
+| gp-optimize/ties             | model  | DIVERGENT    | 274654e2971ebc3d | 8653d5fab62b8664 |
+| gp-optimize/ties             | batch  | DIVERGENT    | 55f13d990596d453 | 9e51b983e02d74b7 |
+| gp-sample-y/base             | infer  | DIVERGENT    | b7cef1a89e642972 | f97919e91c0d791d |
+| gp-sample-y/base             | model  | DIVERGENT    | 8f4a54a0bd816175 | c0e9045b92ccc1f5 |
+| gp-sample-y/base             | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y/ties             | infer  | DIVERGENT    | 0811d434a92222cc | 68d011ad93291593 |
+| gp-sample-y/ties             | model  | DIVERGENT    | 5a2f8a826a1aab15 | 4d51554238eb1324 |
+| gp-sample-y/ties             | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gpc-multiclass/base          | infer  | DIVERGENT    | 84db38aa85e9efe3 | 0797f125eac7735d |
+| gpc-multiclass/base          | model  | DIVERGENT    | a7da75ab43e33d59 | 8b9960e0ea5c9197 |
+| gpc-multiclass/base          | batch  | DIVERGENT    | 772762bf3af9d5ab | de21783994067d68 |
+| gpc-multiclass/ties          | infer  | DIVERGENT    | 5f34edf8c694f013 | ee6abd6743b55d60 |
+| gpc-multiclass/ties          | model  | DIVERGENT    | 3b3ac4079026dcdb | 7e6063753c86e0b8 |
+| gpc-multiclass/ties          | batch  | DIVERGENT    | f212e023f26bc35c | 55d990ff088098ba |
+| gpc/base                     | infer  | DIVERGENT    | fc0b4c2f28c2e079 | dc2bf8ac35dedd6b |
+| gpc/base                     | model  | DIVERGENT    | 81b8bb9e635d8e83 | eee601635b759e33 |
+| gpc/base                     | batch  | DIVERGENT    | b46f1f9043e091a8 | db45fc5e4d28c2eb |
+| gpc/ties                     | infer  | DIVERGENT    | ede5baa0c8969b06 | 6037010a59f6ef2b |
+| gpc/ties                     | model  | DIVERGENT    | 7b9bf869ad365c26 | a3ba57782816225c |
+| gpc/ties                     | batch  | DIVERGENT    | c5069c7b59de4ee1 | 10a3bb9dbf689ab4 |
+| metrics-classification/base  | infer  | N/A          | n/a:function     | n/a:function     |
+| metrics-classification/base  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| metrics-classification/base  | batch  | DIVERGENT    | 7ad4c2154ecfc2b1 | 25b2df6f41f210ba |
+| metrics-classification/ties  | infer  | N/A          | n/a:function     | n/a:function     |
+| metrics-classification/ties  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| metrics-classification/ties  | batch  | DIVERGENT    | 59ae3e19c610247a | d52edefd07c6073a |
+| metrics/base                 | infer  | N/A          | n/a:function     | n/a:function     |
+| metrics/base                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| metrics/base                 | batch  | N/A          | n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) | n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) |
+| metrics/ties                 | infer  | N/A          | n/a:function     | n/a:function     |
+| metrics/ties                 | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| metrics/ties                 | batch  | N/A          | n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) | n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) |
+| monte-carlo/base             | infer  | N/A          | n/a:function     | n/a:function     |
+| monte-carlo/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| monte-carlo/base             | batch  | N/A          | n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against) | n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against) |
+| monte-carlo/ties             | infer  | N/A          | n/a:function     | n/a:function     |
+| monte-carlo/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| monte-carlo/ties             | batch  | N/A          | n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against) | n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against) |
+| par-arima/base               | infer  | DIVERGENT    | 9f76be0396a666ca | 8ff14f7006a4ae70 |
+| par-arima/base               | model  | DIVERGENT    | 30ba4efd0914b6c6 | a7521d92b1c7f89f |
+| par-arima/base               | batch  | DIVERGENT    | cef3c859431cbbaf | f95958dba3b0d046 |
+| par-arima/ties               | infer  | DIVERGENT    | e699bca0934688f0 | a4a38096b6fafec7 |
+| par-arima/ties               | model  | DIVERGENT    | 672e12505bacbd28 | 0433dd64b8a38dbc |
+| par-arima/ties               | batch  | DIVERGENT    | 7abdf42416059c68 | 41c9a97af5a23c8f |
+| par-holtwinters/base         | infer  | DIVERGENT    | 649ba9e2deb0116b | fdc6682860bfe97d |
+| par-holtwinters/base         | model  | DIVERGENT    | 2b788f20f8d8c145 | 56d1635396e8df19 |
+| par-holtwinters/base         | batch  | DIVERGENT    | 232d55481f01f239 | 1bc02c26fbd01f84 |
+| par-holtwinters/ties         | infer  | DIVERGENT    | 6174df6113828371 | e66a92dca55861e7 |
+| par-holtwinters/ties         | model  | DIVERGENT    | dc2d6a661f911c91 | c3c57e1494e608bd |
+| par-holtwinters/ties         | batch  | DIVERGENT    | f061dca8388dc5d3 | 69c24c9925635381 |
+| permutation-test/base        | infer  | N/A          | n/a:function     | n/a:function     |
+| permutation-test/base        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| permutation-test/base        | batch  | DIVERGENT    | b7e7c03b9f400ef8 | d7da3df7958b9cc7 |
+| permutation-test/ties        | infer  | N/A          | n/a:function     | n/a:function     |
+| permutation-test/ties        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| permutation-test/ties        | batch  | DIVERGENT    | bec37fa614e5f274 | 0719a98a86f4ace1 |
+| spectral-precomputed/base    | infer  | DIVERGENT    | bb2835f47f32e74d | fc3cb907ec089c58 |
+| spectral-precomputed/base    | model  | DIVERGENT    | 6b04b89cfa623e45 | 94f04cc83f552fb9 |
+| spectral-precomputed/base    | batch  | DIVERGENT    | 403839d9afb03ede | e07a76c7391df363 |
+| spectral-precomputed/ties    | infer  | DIVERGENT    | 77b660ca4b2a42e2 | c702f133cec54863 |
+| spectral-precomputed/ties    | model  | DIVERGENT    | ea7aeb5dfe06471c | f64203268198c9f1 |
+| spectral-precomputed/ties    | batch  | DIVERGENT    | eba1461e59f20122 | 496b7f559c57b2d4 |
+| umap/base                    | infer  | DIVERGENT    | 01d01e040df02560 | 2db0760722c8dec7 |
+| umap/base                    | model  | DIVERGENT    | fe1804a5876e88e3 | c6a6f70c17fcf855 |
+| umap/base                    | batch  | DIVERGENT    | 39ed4f97e478fd2c | 64b794cce51a7640 |
+| umap/ties                    | infer  | DIVERGENT    | 69412caad3ac2091 | 9d86dae703a07d75 |
+| umap/ties                    | model  | DIVERGENT    | fc7ef4ccd4d719f3 | 2111d2a079e445cf |
+| umap/ties                    | batch  | DIVERGENT    | b2f2bb20bffc2c8a | c9bb30b74ee89026 |
+
+infer/model: 8 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): DIVERGENT=56, N/A=36, NOT-COMPARED=8
+batch: 4 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): DIVERGENT=32, N/A=14, NOT-COMPARED=4
+summary (rlpair): 
