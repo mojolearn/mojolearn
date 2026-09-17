@@ -18,6 +18,16 @@ def test_stable_changed_native_result_passes():
     assert evaluate_pair(*records(), 'x', ['base'])['passed']
 
 
+@pytest.mark.parametrize('part', ['infer', 'model', 'batch', 'stepfull', 'batchgrad', 'rlpair'])
+def test_clean_property_refusal_blocks_training_control_success(part):
+    clean, bad = records()
+    clean['cells']['x/base'][part + '_verdict'] = 'REFUSED'
+    result = evaluate_pair(clean, bad, 'x', ['base'])
+    assert result['cells'][0]['detected']
+    assert not result['passed']
+    assert result['clean_failures'] == [dict(cell='x/base', part=part + '_verdict', verdict='REFUSED')]
+
+
 @pytest.mark.parametrize('failure', ['same', 'unstable', 'refused', 'missing-fixture', 'input', 'incomplete', 'not-native'])
 def test_invalid_native_control_never_passes(failure):
     clean, bad = records()

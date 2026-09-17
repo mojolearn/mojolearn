@@ -20,8 +20,13 @@ import verification_matrix as matrix
 def evaluate_pair(clean, sabotage, lane, fixtures):
     expected = {f'{lane}/{fixture}' for fixture in fixtures}
     rows = []
+    clean_failures = []
     for key in sorted(expected):
         a, b = clean.get('cells', {}).get(key), sabotage.get('cells', {}).get(key)
+        if a:
+            for field, verdict in a.items():
+                if (field == 'verdict' or field.endswith('_verdict')) and verdict not in ('STABLE', 'N/A'):
+                    clean_failures.append(dict(cell=key, part=field, verdict=verdict))
         context = (evidence.same_cell_context(clean, sabotage, key, 'train')
                    and clean.get('vendor') == sabotage.get('vendor')
                    and evidence.devices(clean) == evidence.devices(sabotage))
@@ -34,7 +39,9 @@ def evaluate_pair(clean, sabotage, lane, fixtures):
     complete = (set(clean.get('cells', {})) == expected == set(sabotage.get('cells', {}))
                 and clean.get('complete', True) and sabotage.get('complete', True))
     return dict(cells=rows, native_sabotage=native, clean_native=clean_native,
-                complete=complete, passed=bool(complete and native and clean_native and all(r['detected'] for r in rows)))
+                clean_failures=clean_failures, complete=complete,
+                passed=bool(complete and native and clean_native and not clean_failures
+                            and all(r['detected'] for r in rows)))
 
 
 def main():

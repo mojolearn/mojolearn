@@ -58,11 +58,10 @@ entry in front of it:
 THE NEGATIVE CONTROL. `gemm_oracle` walks every leaf DESCENDING under
 `-D MOJOLEARN_HOST_SABOTAGE=1` (`GEMM_ORACLE_HOST_SABOTAGE`), which moves the
 linear forward and backward and the RMSNorm weight gradient. The embedding
-and the accumulate carry no arm of their own: a gather and a pairwise add
-have no fold order to move (an addition commutes), so a sabotage arm there
-would be inert, and the lanes that reach them also reach a GEMM (the
-training-primitives lane's linear and RMSNorm) or the optimizer's
-GEMM-backed clip (optim-adam-clip), which move.
+gather has no arm of its own. Accumulation corrupts its first output to zero:
+pairwise addition has no fold-order fault (addition commutes), and the public
+ordered-shard reduction reaches no GEMM. Its independent oracle must catch
+the changed native result, including the cancellation fixture ending at three.
 """
 from std.math import isfinite
 
@@ -77,7 +76,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.host.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.host.gemm_oracle import OP_NN, OP_NT, gemm_oracle, GEMM_ORACLE_HOST_SABOTAGE
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 
@@ -297,4 +296,9 @@ def host_samba_accumulate(
                 nxt.append(ftz(identical_mul_add(Float32(1.0), left, right)))
         cur = nxt^
         pieces = pairs
+    comptime if GEMM_ORACLE_HOST_SABOTAGE:
+        # Pairwise addition has no fold-order fault. Corrupt the actual native
+        # result so the ordered-shard reduction's independent oracle can prove
+        # sensitivity even when no GEMM is involved.
+        cur[0] = Float32(0.0)
     return cur^

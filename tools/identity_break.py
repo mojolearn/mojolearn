@@ -1133,6 +1133,17 @@ class Fit(dict):
     model_na = None
 
 
+class NumericalMismatch(AssertionError):
+    """A completed numerical result disagrees with an independent oracle.
+
+    Keep the measured parts for negative-control evidence while still failing
+    ordinary callers and reference admission. This is not an exception waiver.
+    """
+    def __init__(self, message, parts):
+        super().__init__(message)
+        self.parts = dict(parts)
+
+
 def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
@@ -3955,13 +3966,18 @@ def _(ml, X, yc, yr, Xh=None):
     got = ordered_sum_gradients(iter(shards))
     if len(got) != len(expected):
         raise AssertionError("ordered gradient sum lost a tensor")
+    mismatch = False
     for actual, wanted in zip(got, expected):
         actual = np.asarray(actual)
-        if actual.shape != wanted.shape or actual.dtype != wanted.dtype or actual.tobytes() != wanted.tobytes():
-            raise AssertionError("ordered gradient sum differs from Float32 left fold")
+        if actual.shape != wanted.shape or actual.dtype != wanted.dtype:
+            raise AssertionError("ordered gradient sum changed tensor shape or dtype")
+        mismatch |= actual.tobytes() != wanted.tobytes()
     if before != [[a.tobytes() for a in shard] for shard in shards]:
         raise AssertionError("ordered gradient sum mutated its inputs")
-    return _fit(dict(gradients=_h(*(np.asarray(a) for a in got))))
+    parts = dict(gradients=_h(*(np.asarray(a) for a in got)))
+    if mismatch:
+        raise NumericalMismatch("ordered gradient sum differs from Float32 left fold", parts)
+    return _fit(parts)
 
 
 @lane("training-primitives")
@@ -7848,6 +7864,7 @@ def _run_reference(args):
             X, yc, yr = data[f]
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
+            oracle_errors = []
             batches, errs3 = [], []
             extras = {part: dict(values=[], errors=[], notes=None) for part in extra}
             rls, errs4, rl_sides = [], [], None
@@ -7861,6 +7878,14 @@ def _run_reference(args):
                         p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
                     hs.append(_train_hash(p))
+                except NumericalMismatch as exc:
+                    # Repeat the actual computation and retain its bytes. An
+                    # oracle mismatch is a failed numerical check, never a
+                    # STABLE reference and never an arbitrary REFUSED control.
+                    parts.append(exc.parts)
+                    hs.append(_train_hash(exc.parts))
+                    oracle_errors.append(str(exc))
+                    continue
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:
@@ -7913,6 +7938,9 @@ def _run_reference(args):
             if err:
                 cell = dict(verdict="REFUSED", error=err[:300], hashes=hs, parts=parts)
                 shown = "REFUSED"
+            elif oracle_errors:
+                cell = dict(verdict="DIVERGENT", hashes=hs, parts=parts, oracle_errors=oracle_errors)
+                shown = "DIVERGENT"
             elif len(set(hs)) == 1:
                 cell = dict(verdict="STABLE", hashes=hs, parts=parts)
                 shown = hs[0]
@@ -7920,7 +7948,7 @@ def _run_reference(args):
                 cell = dict(verdict="MOVED", hashes=hs, parts=parts)
                 shown = "MOVED " + hs[0][:8]
             # the two new columns; a REFUSED train column has no fit to probe
-            if not err:
+            if not err and not oracle_errors:
                 iv = _column_verdict(infers)
                 has_reload = all(r is not None for r in reloads)
                 mv = _column_verdict(models, reloads if has_reload else None, infers)
@@ -7979,7 +8007,7 @@ def _run_reference(args):
                 print(f"| {name + ' ' + label:<{W}} | " + " | ".join(f"{s:<16}" for s in r) + " |", flush=True)
 
     refused = {k: v["error"] for k, v in cells.items() if v["verdict"] == "REFUSED"}
-    moved = [k for k, v in cells.items() if v["verdict"] == "MOVED"]
+    moved = [k for k, v in cells.items() if v["verdict"] in ("MOVED", "DIVERGENT")]
     moved2 = [k for k, v in cells.items()
               if v.get("infer_verdict") == "MOVED" or v.get("model_verdict") in ("MOVED", "RELOAD-MOVED")]
     refused2 = {k: v["probe_error"] for k, v in cells.items() if v.get("probe_error")}
