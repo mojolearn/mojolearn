@@ -1821,7 +1821,7 @@ comptime KNN_BLOCK_TOPK_MAX_K = 64 if is_defined["MOJOLEARN_KNN_BLOCK_TOPK_ALL_K
 
 @always_inline
 def knn_selector_bound_compact_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 3060, 2026-09-17, lane/knn-selector-speed): whether a column tile's top-k for KNN_SELECTOR_BOUND_MIN_K <= k <= 64 is taken by the bound-and-compact selector (`neighbors/checks/knn_selector_bound_compact.mojo`) instead of the small-k selector's per-thread k-deep lists and k rank rounds. Every thread keeps its C smallest composite keys (C = 4), the rank k - 1 of the 256 thread minima is a bound with at least k keys at or below it, every key at or below the bound is compacted into shared memory and ranked by counting; a row with a thread whose list is full below the bound, or with more than 256 candidates, is flagged and served by the UNCHANGED small-k kernel in a second launch that returns at once on every other row. Same composite key, unique keys, integer counts and compares only, the distance copied from the same tile cell, so neighbors and distances are the same bits; the gate is `neighbors/checks/knn_selector_bound_compact_check.mojo` (host oracle and the small-k selector, both paths reached), the 400,000 x 4,000 digests at k 32 and 64 against the small-k selector, `tools/identity_break.py` on the knn lanes, and `-D MOJOLEARN_KNN_SELECTOR_BOUND_SABOTAGE=1`. Needs the small-k selector row. `-D MOJOLEARN_EXPERIMENTAL_KNN_SELECTOR_BOUND=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_LIST_SELECT=1` keeps the small-k selector."""
+    """SCHEDULING row (DEVIATION 3060, 2026-09-17, lane/knn-selector-speed): whether a column tile's top-k for KNN_SELECTOR_BOUND_MIN_K <= k <= 64 is taken by the bound-and-compact selector (`neighbors/checks/knn_selector_bound_compact.mojo`) instead of the small-k selector's per-thread k-deep lists and k rank rounds. Every thread keeps its C smallest composite keys (C = 8), the rank k - 1 of the 256 thread minima is a bound with at least k keys at or below it, every key at or below the bound is compacted into shared memory and ranked by counting; a row with a thread whose list is full below the bound, or with more than 256 candidates, is flagged and served by the UNCHANGED small-k kernel in a second launch that returns at once on every other row. Same composite key, unique keys, integer counts and compares only, the distance copied from the same tile cell, so neighbors and distances are the same bits; the gate is `neighbors/checks/knn_selector_bound_compact_check.mojo` (host oracle and the small-k selector, both paths reached), the 400,000 x 4,000 digests at k 32 and 64 against the small-k selector, `tools/identity_break.py` on the knn lanes, and `-D MOJOLEARN_KNN_SELECTOR_BOUND_SABOTAGE=1`. Needs the small-k selector row. `-D MOJOLEARN_EXPERIMENTAL_KNN_SELECTOR_BOUND=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_LIST_SELECT=1` keeps the small-k selector."""
     comptime if not identical:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_LIST_SELECT"]():
@@ -1836,6 +1836,19 @@ def knn_selector_bound_compact_for[column: Int, identical: Bool]() -> Bool:
 #: below it the small-k selector stays. `-D MOJOLEARN_KNN_SELECTOR_BOUND_ALL_K=1`
 #: lowers it to 1 for an A/B.
 comptime KNN_SELECTOR_BOUND_MIN_K = 1 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_ALL_K"]() else 17
+
+
+@always_inline
+def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3061, 2026-09-17, lane/knn-selector-speed): whether a RESIDENT k-NN index (`neighbors/resident_index.mojo`, DEVIATIONs 2921 and 3002) keeps, beside the uploaded index bytes, what every search derives from those bytes alone: the transposed layout, the index row norms of the metric, and DEVIATION 2629's per-row admission metadata. They are built on the first search that needs them by the SAME kernels over the SAME device bytes (`transpose_kernel`, `compute_norms_for_metric`, `vector_exponent_admission_kernel`) and read by every later search instead of being rebuilt; the device copy of a resident index is never written after its upload and a refit releases the handle, so a later search reads the values it would have computed and no output bit can move. Costs device memory for the life of the handle (the transposed layout is a second copy of the index) in place of a per-call allocation of the same size. The gate is `tools/identity_break.py` on the knn lanes (their infer and batch parts search a fitted index again) plus `-D MOJOLEARN_KNN_RESIDENT_CACHE_SABOTAGE=1`. `-D MOJOLEARN_EXPERIMENTAL_KNN_RESIDENT_CACHE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_NO_RESIDENT_CACHE=1` forces the per-call rebuild."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_NO_RESIDENT_CACHE"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_RESIDENT_CACHE"]():
+        return True
+    # OFF on every column until measured.
+    return False
 
 
 @always_inline

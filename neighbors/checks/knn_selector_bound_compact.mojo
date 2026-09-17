@@ -24,7 +24,7 @@ Same block shape (one block of SBC_BLOCK threads per row, thread `t` owns
 columns `t, t + 256, ...`), same key (`composite_key(distance, tile-local
 column, select_min)`), four phases and four barriers, none of them per rank:
 
-  1. SCAN. Every thread keeps only its C smallest keys (C = 4 by default), a
+  1. SCAN. Every thread keeps only its C smallest keys (C = 8 by default), a
      branch-free min/max carry chain in registers.
   2. BOUND. The 256 thread minima go to shared memory; every thread ranks
      its own minimum among them by counting, and the thread of rank k - 1
@@ -100,9 +100,14 @@ comptime SBC_SENTINEL = UInt64(18446744073709551615)
 comptime SBC_HIDING = 100000
 comptime SBC_SABOTAGE = is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_SABOTAGE"]()
 comptime SBC_FALLBACK_SABOTAGE = is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_FALLBACK_SABOTAGE"]()
-#: The per-thread list depth. 4 by default; the two defines are A/B arms.
-comptime SBC_DEPTH = 8 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C8"]() else (
-    2 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C2"]() else 4
+#: The per-thread list depth; the two defines are A/B arms. MEASURED on the
+#: RTX 4090, 400,000 x 4,000, selection class of a timer build, k 64: depth
+#: 8 reads 8.0 ms with 0 of 28,000 row tiles flagged on either dataset; depth
+#: 4 reads 13.2 (Istella-S) and 13.6 ms (taxi) with 1,147 and 1,276 flagged,
+#: 7.8 ms of it the scan and 5.4 the flagged launch; depth 2 flags nearly
+#: every row and reads 88 to 93 ms (bench/results/knn_selector_2026-09-17/).
+comptime SBC_DEPTH = 4 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C4"]() else (
+    2 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C2"]() else 8
 )
 comptime SBC_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
 #: TIMING ONLY, OUTPUT INVALID on flagged rows: no flagged launch, so a timer

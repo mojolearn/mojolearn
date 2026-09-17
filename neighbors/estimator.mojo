@@ -130,7 +130,10 @@ from neighbors.impl.knn.knn import (
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
     METRIC_FROM_IS_SQRT,
+    KNN_RESIDENT_CACHE,
+    KnnIndexCachePointer,
     brute_force_knn_impl,
+    cached_index_norm_ready,
     compute_norms_for_metric,
     identical_index_tile,
     resolve_metric,
@@ -552,6 +555,7 @@ def knn_search_resident(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    cache: KnnIndexCachePointer = None,
 ) raises -> Int:
     """`knn_search` over an index ALREADY ON THE DEVICE (DEVIATION 2921,
     lane/infer-speed-classical, 2026-09-17): `index` holds the same
@@ -575,7 +579,7 @@ def knn_search_resident(
     return _knn_search_on_device_index(
         ctx, trace, retained, False, index, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt, plan[2],
-        knn_method, plan[0], metric_arg, plan[1], plan[3],
+        knn_method, plan[0], metric_arg, plan[1], plan[3], cache,
     )
 
 
@@ -599,8 +603,14 @@ def _knn_search_on_device_index(
     metric_arg: Float32,
     devices: Int,
     buf_len: Int,
+    cache: KnnIndexCachePointer = None,
 ) raises -> Int:
-    """The body of `_knn_search_traced_retaining` after the index is on the
+    """`cache` (DEVIATION 3061) is a resident index's derived buffers, None
+    for a per-call index: with it the index norms are copied from the cache
+    (built on first use by the call below) and the tiled arm reads the
+    cached transposed layout and admission metadata.
+
+    The body of `_knn_search_traced_retaining` after the index is on the
     device: the query upload, the norms, the search, the readback, the
     sort and the outputs. `mtr` is the RESOLVED metric and `query_tile`,
     `devices` and `buf_len` are the plan's (`_knn_search_plan`). Split out
@@ -658,7 +668,16 @@ def _knn_search_on_device_index(
     # hold whatever the allocator left. `metric_distance_kernel` does not
     # read them on those arms; the identity trace below records them only
     # when they mean something, for the same reason.
-    compute_norms_for_metric(ctx, index, index_norm, n_index, n_features, mtr)
+    var use_cache = False
+    comptime if KNN_RESIDENT_CACHE:
+        use_cache = Bool(cache) and devices <= 1
+    if use_cache and metric_uses_norms(mtr):
+        # DEVIATION 3061: the same kernel's output over the same device
+        # bytes, computed once per handle and copied device to device.
+        cached_index_norm_ready(ctx, cache.value(), index, n_index, n_features, mtr)
+        ctx.enqueue_copy(dst_buf=index_norm, src_buf=cache.value()[].index_norm.value())
+    else:
+        compute_norms_for_metric(ctx, index, index_norm, n_index, n_features, mtr)
     compute_norms_for_metric(
         ctx, queries, query_norm, n_queries, n_features, mtr
     )
@@ -728,6 +747,7 @@ def _knn_search_on_device_index(
             knn_method,
             mtr,
             metric_arg,
+            cache if use_cache else KnnIndexCachePointer(None),
         )
     ctx.synchronize()
     comptime if KNN_PHASE_TIMERS:
@@ -1020,6 +1040,7 @@ def knn_classifier_predict_resident(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
+    cache: KnnIndexCachePointer = None,
 ) raises -> Int:
     """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
@@ -1062,7 +1083,7 @@ def knn_classifier_predict_resident(
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, True, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
-        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3],
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], cache,
     )
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
@@ -1088,6 +1109,7 @@ def knn_regressor_predict_resident(
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
     weights: Int = WEIGHTS_UNIFORM,
+    cache: KnnIndexCachePointer = None,
 ) raises -> Int:
     """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
     (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
@@ -1117,7 +1139,7 @@ def knn_regressor_predict_resident(
     var used_tile = _knn_search_on_device_index(
         ctx, trace, retained_indices, False, index, n_index, queries_ptr,
         n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
-        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3],
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3], cache,
     )
     _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
                         n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)

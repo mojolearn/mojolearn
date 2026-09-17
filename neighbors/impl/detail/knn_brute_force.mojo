@@ -109,6 +109,7 @@ from neighbors.checks.pinned_distance_tile import (
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
 from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
 from checks.kernel_matrix import knn_selector_bound_compact_for, KNN_SELECTOR_BOUND_MIN_K
+from checks.kernel_matrix import knn_resident_derived_cache_for
 from neighbors.checks.knn_selector_bound_compact import bound_compact_select_launch
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
 from neighbors.checks.smem_distance_tile import (
@@ -267,6 +268,59 @@ comptime KNN_BLOCK_TOPK = (
     and EXPERIMENTAL_SMALLK_IDENTICAL
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
+
+
+# DEVIATION 3061 (kernel-matrix row `knn_resident_derived_cache_for`).
+comptime KNN_RESIDENT_CACHE = knn_resident_derived_cache_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+comptime KNN_RESIDENT_CACHE_SABOTAGE = is_defined["MOJOLEARN_KNN_RESIDENT_CACHE_SABOTAGE"]()
+
+
+struct KnnIndexCache(Movable):
+    """What a search derives from a resident index's device bytes ALONE
+    (DEVIATION 3061): the transposed layout, the index row norms and
+    DEVIATION 2629's per-row admission metadata. Owned by the resident
+    entry, on the entry's context, built lazily by the search that first
+    needs each one with the kernels a per-call search launches, and dropped
+    with the entry (before its context). `norm_takes_sqrt` names which norm
+    `index_norm` holds (cosine's true norm or L2's squared norm); a search
+    with the other metric rebuilds it."""
+
+    var transposed: Optional[DeviceBuffer[DType.float32]]
+    var y_meta: Optional[DeviceBuffer[DType.float32]]
+    var index_norm: Optional[DeviceBuffer[DType.float32]]
+    var norm_takes_sqrt: Bool
+
+    def __init__(out self):
+        self.transposed = Optional[DeviceBuffer[DType.float32]]()
+        self.y_meta = Optional[DeviceBuffer[DType.float32]]()
+        self.index_norm = Optional[DeviceBuffer[DType.float32]]()
+        self.norm_takes_sqrt = False
+
+
+comptime KnnIndexCachePointer = Optional[MutPointer[KnnIndexCache, MutAnyOrigin]]
+
+
+def cached_index_norm_ready(
+    ctx: DeviceContext,
+    cache: MutPointer[KnnIndexCache, MutAnyOrigin],
+    mut index: DeviceBuffer[DType.float32],
+    n_index: Int, n_features: Int, metric: Int,
+) raises:
+    """Make `cache[].index_norm` the metric's index row norms, computing them
+    with `compute_norms_for_metric` when absent or when they are the other
+    metric's. `metric` is resolved and uses norms."""
+    var takes_sqrt = metric_norm_takes_sqrt(metric)
+    if cache[].index_norm and cache[].norm_takes_sqrt == takes_sqrt:
+        return
+    if not cache[].index_norm:
+        cache[].index_norm = ctx.enqueue_create_buffer[DType.float32](n_index)
+    compute_norms_for_metric(ctx, index, cache[].index_norm.value(), n_index, n_features, metric)
+    cache[].norm_takes_sqrt = takes_sqrt
+
+
+def _cache_sabotage_kernel(transposed: MutPointer[Float32, MutAnyOrigin]):
+    """Reach control, never shipped: feature 0 of index row 0 becomes 1e30."""
+    transposed.unsafe_store(0, Float32(1.0e30))
 
 
 # DEVIATION 3060 (kernel-matrix row `knn_selector_bound_compact_for`): a
@@ -557,8 +611,14 @@ def tiled_brute_force_knn(
     use_vendor_topk: Bool = False,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    cache: KnnIndexCachePointer = None,
 ) raises:
     """Own optional transposed index through the complete synchronized request.
+
+    `cache` (DEVIATION 3061): a resident index's derived buffers. When given,
+    the transposed layout and the admission metadata are the cache's, built
+    here on first use by the same launches, and nothing is allocated or
+    transposed per request.
 
     Only expanded Euclidean metrics can use this layout. Original row-major
     norm computation, ascending per-distance FMA/FTZ, clamp, sqrt BEFORE
@@ -570,6 +630,48 @@ def tiled_brute_force_knn(
     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
         var resolved = resolve_metric(metric, is_sqrt)
         if (resolved == DIST_L2_EXPANDED or resolved == DIST_L2_SQRT_EXPANDED) and n_queries > 0 and n_index > 0 and n_features > 0 and n_index <= 2147483647 and n_features <= 2147483647:
+            comptime if KNN_RESIDENT_CACHE:
+                if cache:
+                    var cp = cache.value()
+                    var t_cached = perf_counter_ns()
+                    if not cp[].transposed:
+                        cp[].transposed = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
+                        ctx.enqueue_function[transpose_kernel](
+                            cp[].transposed.value().unsafe_ptr(), index.unsafe_ptr(), Int32(n_index), Int32(n_features),
+                            grid_dim=((n_features + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE,
+                                      min((n_index + TRANSPOSE_TILE - 1) // TRANSPOSE_TILE, CUDA_MAX_GRID_YZ), 1),
+                            block_dim=(TRANSPOSE_TILE, TRANSPOSE_TILE, 1),
+                        )
+                    else:
+                        comptime if KNN_RESIDENT_CACHE_SABOTAGE:
+                            ctx.enqueue_function[_cache_sabotage_kernel](
+                                cp[].transposed.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+                            )
+                    var cached_y_meta = Optional[MutPointer[Float32, MutAnyOrigin]]()
+                    comptime if KNN_EXACT_CHAIN:
+                        if not cp[].y_meta:
+                            cp[].y_meta = ctx.enqueue_create_buffer[DType.float32](n_index)
+                            ctx.enqueue_function[vector_exponent_admission_kernel](
+                                index.unsafe_ptr(),
+                                cp[].y_meta.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                Int32(n_index), Int32(n_features),
+                                grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+                            )
+                        cached_y_meta = cp[].y_meta.value().unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+                    comptime if KNN_PHASE_TIMERS:
+                        ctx.synchronize()
+                        print(
+                            "KNN_PHASE_TIMERS", "transpose_ms",
+                            Float64(perf_counter_ns() - t_cached) / 1000000.0, "cached", 1,
+                        )
+                    _tiled_brute_force_knn_impl(
+                        ctx, queries, query_norm, index, index_norm, dist_tile, buf_val, buf_idx,
+                        out_dist, out_idx, out_idx32, n_queries, n_index, n_features, k,
+                        query_tile, buf_len, is_sqrt, use_vendor_topk, metric, metric_arg,
+                        Optional(cp[].transposed.value().unsafe_ptr()), True, cached_y_meta,
+                    )
+                    return
             var transposed = ctx.enqueue_create_buffer[DType.float32](n_index * n_features)
             try:
                 var t_transpose = perf_counter_ns()
@@ -636,6 +738,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     metric_arg: Float32,
     transposed_index: Optional[MutPointer[Float32, transposed_origin]],
     use_transposed_index: Bool,
+    cached_y_meta: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
 ) raises:
     """Tile the QUERIES, keep the whole index resident, top-k per query row.
 
@@ -766,10 +869,15 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 queries.unsafe_ptr(), q_minima, Int32(n_queries), Int32(n_features),
                 grid_dim=((n_queries + 127) // 128, 1, 1), block_dim=(128, 1, 1),
             )
-            ctx.enqueue_function[vector_exponent_admission_kernel](
-                index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
-                grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
-            )
+            if cached_y_meta:
+                # DEVIATION 3061: the resident index's admission metadata,
+                # this very kernel's output over the same device bytes.
+                y_minima = cached_y_meta.value()
+            else:
+                ctx.enqueue_function[vector_exponent_admission_kernel](
+                    index.unsafe_ptr(), y_minima, Int32(n_index), Int32(n_features),
+                    grid_dim=((n_index + 127) // 128, 1, 1), block_dim=(128, 1, 1),
+                )
     comptime if KNN_PREFLIGHT_METADATA or KNN_PREFLIGHT_METADATA_DEFAULT:
         if use_metadata:
             ctx.enqueue_function[vector_exponent_minimum_kernel](
@@ -1481,8 +1589,11 @@ def brute_force_knn_impl(
     knn_method: Int = KNN_METHOD_AUTO,
     metric: Int = METRIC_FROM_IS_SQRT,
     metric_arg: Float32 = Float32(2.0),
+    cache: KnnIndexCachePointer = None,
 ) raises:
     """`brute_force_knn_impl`'s dispatch, `knn_brute_force.cuh:443-447`.
+
+    `cache` (DEVIATION 3061) is handed to the tiled arm and read nowhere else.
 
     Their four conditions, in their order:
 
@@ -1755,4 +1866,5 @@ def brute_force_knn_impl(
             use_vendor_topk,
             mtr,
             metric_arg,
+            cache,
         )
