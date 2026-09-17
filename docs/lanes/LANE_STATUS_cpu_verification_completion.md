@@ -144,3 +144,23 @@ candidates, all nine fixtures, with the missing neural dependency included.
 The external command is `neural-complete-body.sh`; two single-thread workers,
 compilers at most two, 120-minute watchdog. The dry run created no pod. Rent
 only after our existing pod `4018mzhxmp3prb` is verified deleted.
+
+The installed Mamba2 wheel at `1d7fc53fe` passes all nine fixtures twice:
+36 IDENTICAL, 9 N/A, zero failures or missing references. The wheel and receipt
+are archived by SHA-256 under the external evidence directory.
+
+Second pod `4018mzhxmp3prb` is now VERIFIED DELETED. All records and original
+failures are retained under `identity_break/2026-09-17_cpu-neural-completion`.
+The corrected evaluator qualifies six complete lane pairs (five new lanes plus
+the already-restored metric). It rejects eighteen missing-neural property
+failures and the inert ordered-sum fault. Cost $0.0433. Five further references
+were admitted at `5904a7914`: IVF, gemm-bf16, gemm-int8, byte-lm and
+byte-lm-resident. Candidate availability is 150; 29 CPU lanes remain withheld.
+307 focused tests passed. Their installed replay is next.
+
+Third pod `17o53wuev9wtbr` is IN FLIGHT, source `1d7fc53fe`, two vCPUs,
+120-minute watchdog and external dead-man, $0.06/hr. Root session 95156.
+SSH `-p 39174 root@38.80.152.147`; external `cloud-complete-dependencies/`,
+log `cloud-complete-dependencies-run.log`. Seventeen production and fifteen
+sabotage families, including neural, run 24 lanes through two single-thread
+workers. Do not kill it to start another rental. Verify deletion at completion.

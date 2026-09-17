@@ -23,7 +23,7 @@ and final artifact qualification remain owed.
 
 ## Follow-up: CPU completion, 2026-09-17
 
-CPU availability is now 145, with 34 withheld and 50 parallel exclusions.
+CPU availability is now 150, with 29 withheld and 50 parallel exclusions.
 The installed development wheel passed 16 changed/reference-filled lanes over
 all nine fixtures twice (423 IDENTICAL, 297 N/A, no failures or owed parts).
 Every available lane has core references on all nine fixtures. Scoped strict
