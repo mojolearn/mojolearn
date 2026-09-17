@@ -140,6 +140,46 @@ candidate bytewise. Each integration command had a 60-second execution limit.
 The timings in the table above remain measurements of the earlier candidate,
 not of the final merged implementation.
 
+## CUDA and CPU, 2026-09-17: the resident decode session
+
+The resident decode API named above now exists for two blocks
+(lane/infer-speed-neural, DEVIATIONS 2940 and 2941):
+`TransformerBlock.decode_session(state)` and `Mamba1Block.decode_session(state)`
+return a session that holds the device context, the weights, the carried state,
+the rotary table and the L = 1 stages across decode steps, so a token costs one
+input upload, the certified block call and one output download. Ownership is
+explicit: the session copies the weights and the state at open, the per-call
+`forward` and `step` refuse a state while it is resident, `sync_state` and
+`close` write the state back, `load_state` re-uploads it, and a weight refresh
+is a new session. The per-call entries are unchanged, and a session's outputs
+are bytewise the per-call entries' on the same block and state.
+
+The binding exports it as `transformer_decode_session_{create,open,step,
+forward,export_state,load_state,info,close}`, beside and distinct from the
+[retained per-model setup](TRANSFORMER_SESSION_REUSE.md)'s
+`transformer_session_*`, which the per-call `forward` and `step` use and
+which rereads the weights and the caller's cache on every call. A block that
+holds that retained context still opens a decode session; the decode session
+holds its own context.
+
+Measured on one RunPod RTX 4090 (IDENTICAL, `sm_89`) with
+`tools/bench_neural_decode.py --resident-ab`, a fresh state prefilled to 1024
+positions and 64 decode tokens at d_model 1024, five interleaved rounds after a
+warmup, every output and state piece bytewise equal to the fresh full forward:
+
+| Case | Per-call ms per token | Session ms per token | Paired ratio |
+| --- | --- | --- | --- |
+| Transformer B1 (16 heads, 4 kv, head_dim 64, ff 2816) | 9.440 | 0.817 | 11.54 |
+| Transformer B8 | 12.528 | 0.987 | 12.68 |
+| Mamba-1 B1 (d_inner 2048) | 31.801 | 0.946 | 33.61 |
+| Mamba-1 B8 | 26.930 | 1.234 | 21.82 |
+
+These are CUDA numbers. The Apple and AMD columns of the session paths are
+owed at the next release record. The CPU host route exports no session
+(`TransformerBlockInference.decode_session` refuses by name); its per-call
+`step` is the path there. Records, commands and the identity evidence:
+`docs/lanes/LANE_STATUS_lane-infer-speed-neural.md`.
+
 ## Batched weight validation
 
 The next setup reduction batches all nine Transformer weight scans into shared
