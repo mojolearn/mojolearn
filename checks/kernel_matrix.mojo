@@ -1828,8 +1828,19 @@ def knn_selector_bound_compact_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SELECTOR_BOUND"]():
         return knn_smallk_select_for[column, identical]()
-    # OFF on every column until measured.
-    return False
+    if column == COLUMN_CPU:
+        return False  # scheduling; the measured schedule is NVIDIA's
+    # FLIPPED ON NVIDIA 2026-09-17 for k >= KNN_SELECTOR_BOUND_MIN_K (RTX
+    # 4090, pod 0btpza2l3g1plm, bench/results/knn_selector_2026-09-17/): the
+    # selection class of 4,000 queries against 400,000 rows went 68.0 to 8.1
+    # ms (Istella-S) and 69.5 to 8.2 ms (taxi) at k 64 and 18.8 to 8.0 and
+    # 28.6 to 8.1 ms at k 32, with 0 of 28,000 row tiles flagged; the
+    # interleaved race (5 rounds x 3 calls, digests equal across arms) read
+    # 130.3 to 69.6 ms and 98.8 to 42.2 ms per call at k 64. Below 17 the
+    # block top-k (DEVIATION 3001) serves the L2 metrics and this selector
+    # is level with the small-k selector (7.7 to 8.1 against 7.1 to 13.6 ms),
+    # so the bound stays at 17. Apple and AMD are owed at the next release.
+    return column == COLUMN_NVIDIA and knn_smallk_select_for[column, identical]()
 
 
 #: The smallest k the bound-and-compact selector (DEVIATION 3060) serves;
@@ -1862,6 +1873,19 @@ comptime KNN_BOUNDED_FIRST_TILE = 1024 if is_defined["MOJOLEARN_KNN_BOUNDED_FIRS
 
 
 @always_inline
+def knn_block_topk_key32_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3063, 2026-09-17, lane/knn-selector-speed): whether the block top-k's rank loop (`smem_distance_tile_kernel[TOPK=True]`, DEVIATION 3001) keeps each thread's 32 cells as 32-bit DISTANCE HALVES and one 32-bit mask of empty slots instead of 32 UInt64 composite keys. A key's low half is its tile-local column, which the slot names, so the written key is rebuilt from the half and the slot; a lane offers the smallest half among its live slots, the row's minimum is the same 32-bit warp minimum, the lowest lane holding it wins (column order) and pops its first live slot with that half (column order), which is the composite order; a lane with no live slot never enters the ballot, so a real half of 0xFFFFFFFF is still popped before the row is called empty. Same keys in the same ascending order into the same slots, so the bits are DEVIATION 3001's; the gate is the identity run of that deviation plus `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`. The point is register state: the 64-bit form holds about a hundred registers through the rank loop and any added state (DEVIATION 3062's bound or its early leave, each alone) cost the whole kernel 40 percent on the RTX 4090. `-D MOJOLEARN_EXPERIMENTAL_KNN_TOPK_KEY32=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_TOPK_KEY64=1` keeps the UInt64 keys."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_TOPK_KEY64"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_TOPK_KEY32"]():
+        return True
+    # OFF on every column until measured.
+    return False
+
+
+@always_inline
 def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 3061, 2026-09-17, lane/knn-selector-speed): whether a RESIDENT k-NN index (`neighbors/resident_index.mojo`, DEVIATIONs 2921 and 3002) keeps, beside the uploaded index bytes, what every search derives from those bytes alone: the transposed layout, the index row norms of the metric, and DEVIATION 2629's per-row admission metadata. They are built on the first search that needs them by the SAME kernels over the SAME device bytes (`transpose_kernel`, `compute_norms_for_metric`, `vector_exponent_admission_kernel`) and read by every later search instead of being rebuilt; the device copy of a resident index is never written after its upload and a refit releases the handle, so a later search reads the values it would have computed and no output bit can move. Costs device memory for the life of the handle (the transposed layout is a second copy of the index) in place of a per-call allocation of the same size. The gate is `tools/identity_break.py` on the knn lanes (their infer and batch parts search a fitted index again) plus `-D MOJOLEARN_KNN_RESIDENT_CACHE_SABOTAGE=1`. `-D MOJOLEARN_EXPERIMENTAL_KNN_RESIDENT_CACHE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_NO_RESIDENT_CACHE=1` forces the per-call rebuild."""
     comptime if not identical:
@@ -1870,8 +1894,17 @@ def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_RESIDENT_CACHE"]():
         return True
-    # OFF on every column until measured.
-    return False
+    if column == COLUMN_CPU:
+        return False  # the host route has no device copy to derive from
+    # FLIPPED ON NVIDIA 2026-09-17 (RTX 4090, pod 0btpza2l3g1plm,
+    # bench/results/knn_selector_2026-09-17/): the per-call allocation of the
+    # transposed layout (352 MB at 400,000 x 220), its transposition, the
+    # index norms and the index admission scan were 6.5 of an 8.2 ms
+    # one-query Istella-S call; the interleaved race read 8.20 to 1.64 ms at
+    # one query and 53.7 to 47.7 ms at 4,000 queries (k 10), taxi 1.77 to
+    # 1.13 and 26.9 to 24.3 ms, every digest equal. Apple and AMD are owed
+    # at the next release.
+    return column == COLUMN_NVIDIA
 
 
 @always_inline

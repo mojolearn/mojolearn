@@ -81,7 +81,7 @@ from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
+from checks.kernel_matrix import TARGET_COLUMN, knn_block_topk_key32_for, lib_lane_width_for
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -127,6 +127,9 @@ comptime SMT_BOUNDED_SABOTAGE = is_defined["MOJOLEARN_KNN_BOUNDED_TOPK_SABOTAGE"
 #: leave of the rank loop, and no bound load or compare at all.
 comptime SMT_DIAG_NOBREAK = is_defined["MOJOLEARN_KNN_BOUNDED_DIAG_NOBREAK"]()
 comptime SMT_DIAG_NOBOUND = is_defined["MOJOLEARN_KNN_BOUNDED_DIAG_NOBOUND"]()
+#: DEVIATION 3063 (kernel-matrix row `knn_block_topk_key32_for`): the block
+#: top-k's rank loop on 32-bit distance halves and a slot mask.
+comptime SMT_KEY32 = knn_block_topk_key32_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()
 #: The ballot's width on this column: a 64-lane wave holds two thread rows,
 #: and a thread row takes its own half of the mask.
 comptime SMT_MASK_DT = DType.uint64 if lib_lane_width_for[TARGET_COLUMN]() == 64 else DType.uint32
@@ -411,82 +414,170 @@ def smem_distance_tile_kernel[TOPK: Bool, EXACT: Bool, BOUNDED: Bool = False](
         var k = Int(k_in)
         var n_cb = (n_cols + SMT_BN - 1) // SMT_BN
         var cb = Int(block_idx.x)
-        var keys = SIMD[DType.uint64, SMT_TM * SMT_TN](SMT_SENTINEL)
-        comptime for r in range(SMT_TM):
-            var row = row0 + ty * SMT_TM + r
-            if row < n_rows:
-                var qn = ftz(q_norm.unsafe_load(row))
-                comptime for c in range(SMT_TN):
-                    var col = col0 + tx * SMT_TN + c
-                    if col < n_cols:
-                        var dist = _smt_epilogue(
-                            acc[r * SMT_TN + c], qn, y_norm.unsafe_load(col), is_sqrt
-                        )
-                        var built = composite_key(dist, UInt32(col), True)
-                        comptime if BOUNDED and not SMT_DIAG_NOBOUND:
-                            # A key at or above the row's bound is never
-                            # offered (the docstring's argument), so the rank
-                            # loop sees only keys that can enter the top-k.
-                            if UInt32(built >> UInt64(32)) >= bs.unsafe_load(ty * SMT_TM + r):
-                                built = SMT_SENTINEL
-                        keys[r * SMT_TN + c] = built
-        # THE RANK LOOP, the SMT_TM rows of the thread row interleaved so
-        # their shuffle chains overlap. Per rank and row: every lane offers
-        # its smallest remaining key; the row's minimum key is the one with
-        # the smallest distance half, and among equal halves the smallest
-        # column, which is the LOWEST LANE that holds that half (lane order
-        # is column order: lane tx owns columns tx * SMT_TN .. + SMT_TN - 1),
-        # so a 32-bit warp minimum and one ballot name it. That lane writes
-        # the key (a sentinel where the row has no key left, so every slot
-        # of the partial list is written) and retires it. Rows past the edge
-        # take part with sentinels only, so the shuffles stay convergent.
-        var lane_row = row0 + ty * SMT_TM
-        for rank in range(k):
-            var mine = SIMD[DType.uint64, SMT_TM](SMT_SENTINEL)
-            var hi = SIMD[DType.uint32, SMT_TM](0)
+        comptime if SMT_KEY32:
+            # DEVIATION 3063: the rank loop on DISTANCE HALVES alone. A key's
+            # low half is its tile-local column, which the slot names (lane
+            # tx, slot c is column col0 + tx * SMT_TN + c), so the thread
+            # keeps 32 UInt32 halves and one 32-bit mask of the slots that
+            # hold no key (past the edge, at or above the bound, or popped)
+            # instead of 32 UInt64 keys, and rebuilds the key it writes.
+            # THE ORDER IS THE COMPOSITE KEY'S: a lane offers the smallest
+            # half among its live slots; the row's minimum half is a 32-bit
+            # warp minimum; among the lanes that hold it the LOWEST lane
+            # wins (lane order is column order) and pops its FIRST live slot
+            # with that half (slot order is column order), which is the
+            # smallest column among equal halves. A lane with no live slot
+            # offers 0xFFFFFFFF but never enters the ballot, so a real half
+            # of 0xFFFFFFFF still pops before the row is called empty; an
+            # empty row gets the sentinel at that rank.
+            var hk = SIMD[DType.uint32, SMT_TM * SMT_TN](UInt32(4294967295))
+            var gone = UInt32(4294967295)
             comptime for r in range(SMT_TM):
-                var m = keys[r * SMT_TN]
-                comptime for c in range(1, SMT_TN):
-                    if keys[r * SMT_TN + c] < m:
-                        m = keys[r * SMT_TN + c]
-                mine[r] = m
-                hi[r] = UInt32(m >> UInt64(32))
-            var wmin = SIMD[DType.uint32, SMT_TM](0)
-            comptime for r in range(SMT_TM):
-                wmin[r] = _smt_warp_min_u32(hi[r])
-            comptime if BOUNDED and not SMT_DIAG_NOBREAK:
-                # Keys at or above the bound were never built, so a row is
-                # live while its warp minimum is a real key half. `wmin` is
-                # the same on every lane of the thread row, so the thread
-                # row leaves the loop together; a 64-lane wave holds two
-                # thread rows and takes one ballot so that both leave
-                # together. (A real key half of 0xFFFFFFFF is at or above
-                # every bound and was never built either.)
-                var live = False
-                comptime for r in range(SMT_TM):
-                    if wmin[r] != UInt32(4294967295):
-                        live = True
-                comptime if SMT_MASK_DT == DType.uint64:
-                    live = vote[SMT_MASK_DT](live) != Scalar[SMT_MASK_DT](0)
-                if not live:
-                    # One terminator per row, each from its own lane so the
-                    # eight stores leave the thread row together.
-                    comptime for r in range(SMT_TM):
-                        if tx == r:
-                            var trow = lane_row + r
-                            if trow < n_rows:
-                                part.unsafe_store((trow * n_cb + cb) * k + rank, SMT_SENTINEL)
-                    break
-            comptime for r in range(SMT_TM):
-                var mask = _smt_ballot(hi[r] == wmin[r], ty)
-                var wl = Int(count_trailing_zeros(mask))
-                if tx == wl:
-                    var row = lane_row + r
-                    if row < n_rows:
-                        part.unsafe_store((row * n_cb + cb) * k + rank, mine[r])
+                var row = row0 + ty * SMT_TM + r
+                if row < n_rows:
+                    var qn = ftz(q_norm.unsafe_load(row))
                     comptime for c in range(SMT_TN):
-                        if keys[r * SMT_TN + c] == mine[r]:
-                            keys[r * SMT_TN + c] = SMT_SENTINEL
+                        var col = col0 + tx * SMT_TN + c
+                        if col < n_cols:
+                            var dist = _smt_epilogue(
+                                acc[r * SMT_TN + c], qn, y_norm.unsafe_load(col), is_sqrt
+                            )
+                            var half = twiddle_in(dist, True)
+                            var offered = True
+                            comptime if BOUNDED and not SMT_DIAG_NOBOUND:
+                                # A key at or above the row's bound is never
+                                # offered (the kernel docstring's argument).
+                                offered = half < bs.unsafe_load(ty * SMT_TM + r)
+                            if offered:
+                                hk[r * SMT_TN + c] = half
+                                gone = gone & ~(UInt32(1) << UInt32(r * SMT_TN + c))
+            var lane_row = row0 + ty * SMT_TM
+            for rank in range(k):
+                var mine = SIMD[DType.uint32, SMT_TM](UInt32(4294967295))
+                comptime for r in range(SMT_TM):
+                    var m = UInt32(4294967295)
+                    comptime for c in range(SMT_TN):
+                        if ((gone >> UInt32(r * SMT_TN + c)) & UInt32(1)) == UInt32(0):
+                            if hk[r * SMT_TN + c] < m:
+                                m = hk[r * SMT_TN + c]
+                    mine[r] = m
+                var wmin = SIMD[DType.uint32, SMT_TM](0)
+                comptime for r in range(SMT_TM):
+                    wmin[r] = _smt_warp_min_u32(mine[r])
+                var any_popped = False
+                comptime for r in range(SMT_TM):
+                    var holds = ((gone >> UInt32(r * SMT_TN)) & UInt32(15)) != UInt32(15)
+                    var mask = _smt_ballot(holds and mine[r] == wmin[r], ty)
+                    var row = lane_row + r
+                    if mask != UInt32(0):
+                        any_popped = True
+                        if tx == Int(count_trailing_zeros(mask)):
+                            # pop the FIRST live slot holding the minimum half
+                            var popped = False
+                            comptime for c in range(SMT_TN):
+                                if not popped:
+                                    if ((gone >> UInt32(r * SMT_TN + c)) & UInt32(1)) == UInt32(0):
+                                        if hk[r * SMT_TN + c] == mine[r]:
+                                            popped = True
+                                            gone = gone | (UInt32(1) << UInt32(r * SMT_TN + c))
+                                            if row < n_rows:
+                                                part.unsafe_store(
+                                                    (row * n_cb + cb) * k + rank,
+                                                    (UInt64(mine[r]) << UInt64(32))
+                                                    | UInt64(UInt32(col0 + tx * SMT_TN + c)),
+                                                )
+                    else:
+                        # the row holds no key: the sentinel at this rank
+                        # (the terminator of a bounded list), from the row's
+                        # own lane so the eight stores leave together
+                        if tx == r and row < n_rows:
+                            part.unsafe_store((row * n_cb + cb) * k + rank, SMT_SENTINEL)
+                comptime if BOUNDED and not SMT_DIAG_NOBREAK:
+                    # Every ballot is the same value on every lane of the
+                    # thread row, so the thread row leaves together; a
+                    # 64-lane wave holds two thread rows and takes one more
+                    # ballot so that both leave together.
+                    comptime if SMT_MASK_DT == DType.uint64:
+                        any_popped = vote[SMT_MASK_DT](any_popped) != Scalar[SMT_MASK_DT](0)
+                    if not any_popped:
+                        break
+        else:
+            var keys = SIMD[DType.uint64, SMT_TM * SMT_TN](SMT_SENTINEL)
+            comptime for r in range(SMT_TM):
+                var row = row0 + ty * SMT_TM + r
+                if row < n_rows:
+                    var qn = ftz(q_norm.unsafe_load(row))
+                    comptime for c in range(SMT_TN):
+                        var col = col0 + tx * SMT_TN + c
+                        if col < n_cols:
+                            var dist = _smt_epilogue(
+                                acc[r * SMT_TN + c], qn, y_norm.unsafe_load(col), is_sqrt
+                            )
+                            var built = composite_key(dist, UInt32(col), True)
+                            comptime if BOUNDED and not SMT_DIAG_NOBOUND:
+                                # A key at or above the row's bound is never
+                                # offered (the docstring's argument), so the rank
+                                # loop sees only keys that can enter the top-k.
+                                if UInt32(built >> UInt64(32)) >= bs.unsafe_load(ty * SMT_TM + r):
+                                    built = SMT_SENTINEL
+                            keys[r * SMT_TN + c] = built
+            # THE RANK LOOP, the SMT_TM rows of the thread row interleaved so
+            # their shuffle chains overlap. Per rank and row: every lane offers
+            # its smallest remaining key; the row's minimum key is the one with
+            # the smallest distance half, and among equal halves the smallest
+            # column, which is the LOWEST LANE that holds that half (lane order
+            # is column order: lane tx owns columns tx * SMT_TN .. + SMT_TN - 1),
+            # so a 32-bit warp minimum and one ballot name it. That lane writes
+            # the key (a sentinel where the row has no key left, so every slot
+            # of the partial list is written) and retires it. Rows past the edge
+            # take part with sentinels only, so the shuffles stay convergent.
+            var lane_row = row0 + ty * SMT_TM
+            for rank in range(k):
+                var mine = SIMD[DType.uint64, SMT_TM](SMT_SENTINEL)
+                var hi = SIMD[DType.uint32, SMT_TM](0)
+                comptime for r in range(SMT_TM):
+                    var m = keys[r * SMT_TN]
+                    comptime for c in range(1, SMT_TN):
+                        if keys[r * SMT_TN + c] < m:
+                            m = keys[r * SMT_TN + c]
+                    mine[r] = m
+                    hi[r] = UInt32(m >> UInt64(32))
+                var wmin = SIMD[DType.uint32, SMT_TM](0)
+                comptime for r in range(SMT_TM):
+                    wmin[r] = _smt_warp_min_u32(hi[r])
+                comptime if BOUNDED and not SMT_DIAG_NOBREAK:
+                    # Keys at or above the bound were never built, so a row is
+                    # live while its warp minimum is a real key half. `wmin` is
+                    # the same on every lane of the thread row, so the thread
+                    # row leaves the loop together; a 64-lane wave holds two
+                    # thread rows and takes one ballot so that both leave
+                    # together. (A real key half of 0xFFFFFFFF is at or above
+                    # every bound and was never built either.)
+                    var live = False
+                    comptime for r in range(SMT_TM):
+                        if wmin[r] != UInt32(4294967295):
+                            live = True
+                    comptime if SMT_MASK_DT == DType.uint64:
+                        live = vote[SMT_MASK_DT](live) != Scalar[SMT_MASK_DT](0)
+                    if not live:
+                        # One terminator per row, each from its own lane so the
+                        # eight stores leave the thread row together.
+                        comptime for r in range(SMT_TM):
+                            if tx == r:
+                                var trow = lane_row + r
+                                if trow < n_rows:
+                                    part.unsafe_store((trow * n_cb + cb) * k + rank, SMT_SENTINEL)
+                        break
+                comptime for r in range(SMT_TM):
+                    var mask = _smt_ballot(hi[r] == wmin[r], ty)
+                    var wl = Int(count_trailing_zeros(mask))
+                    if tx == wl:
+                        var row = lane_row + r
+                        if row < n_rows:
+                            part.unsafe_store((row * n_cb + cb) * k + rank, mine[r])
+                        comptime for c in range(SMT_TN):
+                            if keys[r * SMT_TN + c] == mine[r]:
+                                keys[r * SMT_TN + c] = SMT_SENTINEL
     else:
         comptime for r in range(SMT_TM):
             var row = row0 + ty * SMT_TM + r
