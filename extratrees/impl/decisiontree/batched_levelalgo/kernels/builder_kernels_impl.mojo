@@ -32,6 +32,10 @@ comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
 
 def _search_rows_per_thread() -> Int:
     """DEVIATION 2020's measurement arms."""
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_64"]():
+        return 64
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_32"]():
+        return 32
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_16"]():
         return 16
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_8"]():

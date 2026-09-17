@@ -47,17 +47,21 @@ step() {
 }
 
 build_gpu() {
-    # $1 tree, $2 label, $3 extra defines (may be empty); rf and trees only
+    # $1 tree, $2 label, $3 extra defines (may be empty); the families named
+    # in VARIANT_FAMILIES (default "rf trees"), each binding removed first so a
+    # failed build cannot leave the copied one in place
     _t=$1; _l=$2; _d=${3:-}
     cd "$_t" || return 1
-    rm -f python/mojolearn/identical/_mojolearn_rf.so python/mojolearn/identical/_mojolearn_trees.so
-    MOJOLEARN_EXTRA_DEFINES="$_d" step "${_l}_build_rf" bash bindings/build_rf.sh
-    MOJOLEARN_EXTRA_DEFINES="$_d" step "${_l}_build_trees" bash bindings/build_trees.sh
+    for fam in ${VARIANT_FAMILIES:-rf trees}; do
+        rm -f "python/mojolearn/identical/_mojolearn_$fam.so"
+        MOJOLEARN_EXTRA_DEFINES="$_d" step "${_l}_build_$fam" bash "bindings/build_$fam.sh"
+    done
     sha256sum python/mojolearn/identical/*.so > "$OUT/${_l}_so_sha256.txt" 2>&1
     # the mtime check the brief asks for: binding against newest forest source
     { ls -l --time-style=full-iso python/mojolearn/identical/_mojolearn_rf.so python/mojolearn/identical/_mojolearn_trees.so
       find ensemble extratrees bindings -name '*.mojo' -printf '%TY-%Tm-%Td %TH:%TM:%TS %p\n' | sort | tail -3
     } > "$OUT/${_l}_mtimes.txt" 2>&1
+    echo "$_d" > "$_t/VARIANT_DEFINES.txt"
 }
 
 clone_tree() {
@@ -103,17 +107,17 @@ phase_profile() {
         stem="$OUT/profile/$_l.$lane.$ds.$rows"
         # 1. untimed: the honest wall time beside the serialized table
         PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" --dataset "$ds" \
-            --rows "$rows" --rounds 3 --label "$_l" --json "$stem.plain.json" > "$stem.plain.log" 2>&1
+            --rows "$rows" --rounds "${PROFILE_ROUNDS:-3}" ${PROFILE_TREES:+--trees $PROFILE_TREES} --label "$_l" --json "$stem.plain.json" > "$stem.plain.log" 2>&1
         say "plain $cell: $(grep '^FTRAIN ' "$stem.plain.log" | tr '\n' ' ' | cut -c1-300)"
         # 2. the stage table (drains per stage; attribution, never a timing)
         MOJOLEARN_STAGE_TIMES=1 PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
-            --dataset "$ds" --rows "$rows" --rounds 1 --label "$_l-staged" --json "$stem.staged.json" > "$stem.staged.log" 2>&1
+            --dataset "$ds" --rows "$rows" --rounds 1 ${PROFILE_TREES:+--trees $PROFILE_TREES} --label "$_l-staged" --json "$stem.staged.json" > "$stem.staged.log" 2>&1
         say "staged $cell done"
         # 3. nsys, when the box has it: per-kernel GPU time, CUDA API time, memcpy
         if NSYS=$(find_nsys); then
             "$NSYS" profile -t cuda,osrt -s none --force-overwrite true -o "$stem.nsys" \
                 env PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" --dataset "$ds" \
-                --rows "$rows" --rounds 1 --label "$_l-nsys" --json "$stem.nsys.json" > "$stem.nsys.log" 2>&1
+                --rows "$rows" --rounds 1 ${PROFILE_TREES:+--trees $PROFILE_TREES} --label "$_l-nsys" --json "$stem.nsys.json" > "$stem.nsys.log" 2>&1
             "$NSYS" stats --force-export true -r cuda_gpu_kern_sum,cuda_api_sum,cuda_gpu_mem_time_sum,cuda_gpu_mem_size_sum \
                 --format csv -o "$stem.nsysstats" "$stem.nsys.nsys-rep" > "$stem.nsysstats.log" 2>&1
             say "nsys $cell done"
@@ -135,14 +139,20 @@ phase_fast() {
 }
 
 phase_variants() {
-    echo "${VARIANTS:-}" | tr '|' '\n' | while IFS=: read -r name defs; do
+    # every variant builds in its own copy, in parallel (VARIANT_JOBS each)
+    IFS='|' read -r -a _vs <<< "${VARIANTS:-}"
+    for v in "${_vs[@]}"; do
+        name=${v%%:*}; defs=${v#*:}
         [ -n "$name" ] || continue
-        dst="$R-v-$name"
-        clone_tree "${VARIANT_SRC:-$R}" "$dst"
-        mkdir -p "$dst/python/mojolearn/identical"
-        cp "$R"/python/mojolearn/identical/*.so "$dst/python/mojolearn/identical/"
-        build_gpu "$dst" "v-$name" "$defs"
+        (
+            dst="$R-v-$name"
+            clone_tree "${VARIANT_SRC:-$R}" "$dst"
+            mkdir -p "$dst/python/mojolearn/identical"
+            cp -n "$R"/python/mojolearn/identical/*.so "$dst/python/mojolearn/identical/"
+            MOJOLEARN_COMPILE_JOBS="${VARIANT_JOBS:-16}" build_gpu "$dst" "v-$name" "$defs"
+        ) &
     done
+    wait
     : > "$OUT/variants.done"
 }
 
@@ -190,7 +200,7 @@ phase_ab() {
                 IFS=: read -r label tree mode <<< "$arm"
                 stem="$_dir/$lane.$ds.$rows.$label.$i"
                 ( cd "$tree" && MOJOLEARN_NUMERIC_MODE="${mode:-identical}" PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
-                    --dataset "$ds" --rows "$rows" --rounds "${AB_FITS:-2}" --label "$label" ${AB_SCORE:+--score} \
+                    --dataset "$ds" --rows "$rows" --rounds "${AB_FITS:-2}" ${AB_TREES:+--trees $AB_TREES} --label "$label" ${AB_SCORE:+--score} \
                     --json "$stem.json" > "$stem.log" 2>&1 )
                 say "$cell $label $i: $(grep '^FTRAIN ' "$stem.log" | sed 's/.*round=/r/' | tr '\n' ' ')"
             done
