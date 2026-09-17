@@ -138,6 +138,7 @@ from .randomforest import RandomForestClassifier, RandomForestRegressor
 # raise BY NAME when touched, which is `_backend.py`'s whole design.
 from . import linalg
 from . import lowbit
+from . import models
 from .linalg import matmul
 from . import _metrics_impl as metrics
 from ._hierarchy_impl import AgglomerativeClustering
@@ -394,6 +395,7 @@ __all__ = [
     "kpss_test",
     "linalg",
     "lowbit",
+    "models",
     "matmul",
     "mamba",
     "metrics",
