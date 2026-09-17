@@ -87,7 +87,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz, identical_exp64, identical_sigmoid
-from core.gbdt_host_predict import gbdt_host_predict
+from core.gbdt_host_predict import GBDT_HOST_SABOTAGE, gbdt_host_predict
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
     NAN_TREATMENT_AS_IS,
@@ -1678,6 +1678,33 @@ def gbdt_sigmoid_binding(
     return PythonObject(count)
 
 
+def gbdt_sigmoid_pair_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """`gbdt_sigmoid_pair_binding` (`bindings/_mojolearn_gbdt.mojo`, DEVIATION
+    2902), its body: `out[2 * i] = 1 - p`, `out[2 * i + 1] = p` with `p`
+    exactly `gbdt_sigmoid`'s value, `n` rows, both buffers float64. The
+    `1.0 - p` is the one IEEE double subtraction the Python layer computed
+    per row. Under the forest walk's sabotage define
+    (`MOJOLEARN_FOREST_HOST_SABOTAGE`, the lane's negative control) the two
+    columns are written swapped."""
+    var rp = f64_ptr(Int(py=raw_addr))
+    var op = f64_ptr(Int(py=out_addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("gbdt_sigmoid_pair: n must be non-negative")
+    for i in range(count):
+        var r = rp.unsafe_load(i)
+        var p = 1.0 / (1.0 + identical_exp64(-r))
+        comptime if GBDT_HOST_SABOTAGE:
+            op.unsafe_store(2 * i, p)
+            op.unsafe_store(2 * i + 1, 1.0 - p)
+        else:
+            op.unsafe_store(2 * i, 1.0 - p)
+            op.unsafe_store(2 * i + 1, p)
+    return PythonObject(count)
+
+
 def gbdt_binary_prediction_binding[probabilities: Bool, dtype: DType](
     raw_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -1747,6 +1774,7 @@ def PyInit__mojolearn_gbdt_host() abi("C") -> PythonObject:
         module.def_function[gbdt_predict_multi_binding]("gbdt_predict_multi")
         module.def_function[gbdt_model_dim_binding]("gbdt_model_dim")
         module.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        module.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         module.def_function[gbdt_binary_probabilities_binding]("gbdt_binary_probabilities")
         module.def_function[gbdt_binary_classes_binding]("gbdt_binary_classes")
         module.def_function[gbdt_fit_two_level_feature_freq_binding]("gbdt_fit_two_level_feature_freq")

@@ -193,3 +193,26 @@ against the fixtures under `bench/results/forest_host/`, and the brief
 [BRIEF_forest_host_inference_2026-09-13.md](lanes/BRIEF_forest_host_inference_2026-09-13.md)
 records which recordings exist and which are still owed. A CPU or a vendor
 not in that record is not certified.
+
+### Host threads (lane/infer-speed-trees, 2026-09-17)
+
+The sequential walk fans its rows out to host threads (DEVIATION 2900 in
+`core/forest_host_predict.mojo`, DEVIATION 2901 in `core/gbdt_host_predict.mojo`).
+`MOJOLEARN_CPU_THREADS` sets the count; absent or `0` is one thread per
+physical core, `1` is the calling thread and no pool. Each thread owns a
+contiguous row range and every row's arithmetic is the reference loop
+unchanged (zero, add every tree's leaf in increasing tree order, divide by
+the tree count; for GBDT one float32 add per tree in tree order into a
+cursor seeded with `Float32(bias)`), so no output bit depends on the count.
+The same functions now serve the GPU classes' `sequential` engine
+(`bindings/_mojolearn_rf.mojo`, `bindings/_mojolearn_trees.mojo`), the CPU
+training column and `HostForest`, so the columns share the walk by
+construction. GBDT host quantization bisects a non-decreasing border list
+for the count the linear scan produced; a border list that is not
+non-decreasing keeps the linear count. Logloss and CrossEntropy
+`predict_proba` columns come from the binding in one pass
+(`gbdt_sigmoid_pair`, `forest_host_gbdt_sigmoid_pair`, DEVIATION 2902), the
+same `p` and the same one double subtraction per row the Python
+comprehension of DEVIATION 2333 computed. The numbers, the identity
+evidence and what is owed are in
+[LANE_STATUS_lane-infer-speed-trees.md](lanes/LANE_STATUS_lane-infer-speed-trees.md).

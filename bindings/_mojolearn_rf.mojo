@@ -28,7 +28,8 @@ sampler's first Python caller.
 """
 
 from std.memory import memcpy
-from hostptr import copy_f32
+from hostptr import copy_f32, read_f32
+from core.forest_host_predict import rf_host_predict, rf_host_trees
 from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
 
 from std.os import abort
@@ -731,29 +732,32 @@ def rf_predict_proba_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
+    # DEVIATION 2900 (lane/infer-speed-trees, 2026-09-17): the walk is
+    # `core/forest_host_predict.mojo`'s, which is `RandomForest.predict_proba`
+    # row for row (zero, `predict_one` per tree in tree order, divide by
+    # `n_trees`) with the rows spread over host threads
+    # (`MOJOLEARN_CPU_THREADS`), the tree rebuild bounds-checked, and the
+    # input copied as one memcpy instead of an element loop. The CPU
+    # training column runs this same function, so the two columns share
+    # every bit of this path by construction.
+    if n_rows == 0:
+        return PythonObject(0)
+    var n_nodes = Int(offsets_p[n_trees])
+    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
+        raise Error("rf_predict_proba: tree_offsets must start at 0 and hold at least one node per tree")
     var wrote = 0
     with GILReleased(Python()):
-        var rf_params = _default_rf_params(n_trees)
-        var trees = _rebuild_trees(
+        var rows = read_f32(Int(py=x_addr), n_rows * n_cols)
+        var probs = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
+        var trees = rf_host_trees(
             offsets_p, colid_p, quesval_p, left_p, leaves_p,
-            n_trees, num_outputs,
+            n_trees, n_nodes, n_cols, num_outputs,
         )
-        var forest = RandomForestMetaData[DT, CLT](
-            trees^, rf_params, Int32(n_cols)
-        )
-        var rf = RandomForest[DT, CLT](
-            rf_params=rf_params, rf_type=CLASSIFICATION
-        )
-        var rows = List[Float32](capacity=n_rows * n_cols)
-        for i in range(n_rows * n_cols):
-            rows.append(xp[i])
-        var probs = List[Float32](capacity=n_rows * num_outputs)
-        for _ in range(n_rows * num_outputs):
-            probs.append(0.0)
-        rf.predict_proba(rows, n_rows, n_cols, probs, forest)
+        rf_host_predict(trees, rows, n_rows, n_cols, n_trees, num_outputs, probs)
         for i in range(n_rows * num_outputs):
             op[i] = probs[i]
         wrote = n_rows
+    _ = xp
     return PythonObject(wrote)
 
 
@@ -792,28 +796,26 @@ def rf_predict_reg_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
+    # DEVIATION 2900: the same shared walk as `rf_predict_proba` above, read
+    # at output 0 of a one-output vote, which is what `RandomForest.predict`'s
+    # REGRESSION branch does (`ensemble/randomforest.mojo:1033-1074`).
+    if n_rows == 0:
+        return PythonObject(0)
+    var n_nodes = Int(offsets_p[n_trees])
+    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
+        raise Error("rf_predict_reg: tree_offsets must start at 0 and hold at least one node per tree")
     var wrote = 0
     with GILReleased(Python()):
-        var rf_params = _default_rf_params(n_trees)
-        var trees = _rebuild_trees(
-            offsets_p, colid_p, quesval_p, left_p, leaves_p, n_trees, 1
+        var rows = read_f32(Int(py=x_addr), n_rows * n_cols)
+        var preds = List[Float32](length=n_rows, fill=Float32(0.0))
+        var trees = rf_host_trees(
+            offsets_p, colid_p, quesval_p, left_p, leaves_p, n_trees, n_nodes, n_cols, 1
         )
-        var forest = RandomForestMetaData[DT, RLT](
-            trees^, rf_params, Int32(n_cols)
-        )
-        var rf = RandomForest[DT, RLT](
-            rf_params=rf_params, rf_type=REGRESSION
-        )
-        var rows = List[Float32](capacity=n_rows * n_cols)
-        for i in range(n_rows * n_cols):
-            rows.append(xp[i])
-        var preds = List[Float32](capacity=n_rows)
-        for _ in range(n_rows):
-            preds.append(0.0)
-        rf.predict(rows, n_rows, n_cols, preds, forest)
+        rf_host_predict(trees, rows, n_rows, n_cols, n_trees, 1, preds)
         for i in range(n_rows):
             op[i] = preds[i]
         wrote = n_rows
+    _ = xp
     return PythonObject(wrote)
 
 
