@@ -625,7 +625,7 @@ class TransformerBlock(NumericModeMixin):
         what = "TransformerBlock.step" if step else "TransformerBlock.forward"
         x = _batch_tokens(x, what, self.d_model, step)
         ext = self._extension()
-        reuse = (hasattr(ext, "transformer_session_forward")
+        reuse = (_exports(ext, "transformer_session_forward")
                  and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1")
         if not reuse and self._native_session is None:
             # CPU and older extensions keep the existing path, without a lock.
@@ -860,6 +860,20 @@ class TransformerBlock(NumericModeMixin):
     __call__ = forward
 
 
+def _exports(ext, name):
+    """Whether the loaded binding exports `name`. On a CPU-only install the
+    stand-in for a GPU binding RAISES ImportError by name from `__getattr__`
+    (`_backend.py::_HostBinding`), and `hasattr` swallows only
+    AttributeError, so a bare `hasattr` probe took the whole CPU host route
+    down (seen 2026-09-17 on the merged tree: every transformer and samba
+    CPU cell REFUSED at `transformer_session_forward`). A probe is not a
+    use; the repo's own guard in `_backend.py` does the same."""
+    try:
+        return hasattr(ext, name)
+    except ImportError:
+        return False
+
+
 def _refuse_resident(state, what):
     owner = getattr(state, "_resident_session", None)
     if owner is not None:
@@ -896,7 +910,8 @@ class TransformerDecodeSession:
     def __init__(self, block, state):
         what = "TransformerDecodeSession"
         ext = block._extension()
-        create = getattr(ext, "transformer_decode_session_create", None)
+        create = (getattr(ext, "transformer_decode_session_create", None)
+                  if _exports(ext, "transformer_decode_session_create") else None)
         if create is None:
             raise NotImplementedError(
                 f"mojolearn {what}: the loaded {type(block).__name__} binding "

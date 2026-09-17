@@ -682,7 +682,12 @@ class Mamba1DecodeSession:
     def __init__(self, block, state):
         what = "Mamba1DecodeSession"
         ext = block._extension()
-        create = getattr(ext, "mamba1_session_create", None)
+        try:
+            # The CPU-only stand-in raises ImportError BY NAME from
+            # __getattr__ (_backend.py::_HostBinding); a probe is not a use.
+            create = getattr(ext, "mamba1_session_create", None)
+        except ImportError:
+            create = None
         if create is None:
             raise NotImplementedError(
                 f"mojolearn {what}: the loaded {type(block).__name__} binding "
