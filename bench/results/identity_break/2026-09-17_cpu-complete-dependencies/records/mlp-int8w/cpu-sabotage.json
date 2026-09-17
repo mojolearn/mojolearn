@@ -1,0 +1,1116 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-7713-64-core-processor",
+ "commit": "1d7fc53fe9ee5406bd42b4641324fb864ccba6de",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "mlp-int8w/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3687a8774b7cfa2a",
+    "3687a8774b7cfa2a"
+   ],
+   "parts": [
+    {
+     "logits": "8b99fe35feaf6ef4",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "8b99fe35feaf6ef4",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "7f842e10fdd5259b",
+    "7f842e10fdd5259b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7f842e10fdd5259b",
+    "7f842e10fdd5259b"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.028189395554363728,
+    "stages": {
+     "repeat=1/train": 0.00428853090852499,
+     "repeat=1/infer-save-reload": 0.009385012090206146,
+     "repeat=1/batch": 0.0013576233759522438,
+     "repeat=1/stepfull": 8.583255112171173e-05,
+     "repeat=2/train": 0.0030925804749131203,
+     "repeat=2/infer-save-reload": 0.008933870121836662,
+     "repeat=2/batch": 0.00036316923797130585,
+     "repeat=2/stepfull": 0.00034677889198064804
+    }
+   }
+  },
+  "mlp-int8w/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "80f2afd9eeaeb738",
+    "80f2afd9eeaeb738"
+   ],
+   "parts": [
+    {
+     "logits": "dd01ea9875f3f032",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "dd01ea9875f3f032",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "79f9e1a1ad0b4f8d",
+    "79f9e1a1ad0b4f8d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "79f9e1a1ad0b4f8d",
+    "79f9e1a1ad0b4f8d"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.020826165564358234,
+    "stages": {
+     "repeat=1/train": 0.003208632580935955,
+     "repeat=1/infer-save-reload": 0.007146274670958519,
+     "repeat=1/batch": 0.0003382982686161995,
+     "repeat=1/stepfull": 0.00037513021379709244,
+     "repeat=2/train": 0.0025353850796818733,
+     "repeat=2/infer-save-reload": 0.006867756135761738,
+     "repeat=2/batch": 6.458256393671036e-05,
+     "repeat=2/stepfull": 5.976017564535141e-05
+    }
+   }
+  },
+  "mlp-int8w/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "849e9caf8a50b881",
+    "849e9caf8a50b881"
+   ],
+   "parts": [
+    {
+     "logits": "f9913d7cae9ea84f",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "f9913d7cae9ea84f",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "d98630bd6b98117e",
+    "d98630bd6b98117e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d98630bd6b98117e",
+    "d98630bd6b98117e"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01860788930207491,
+    "stages": {
+     "repeat=1/train": 0.002412271685898304,
+     "repeat=1/infer-save-reload": 0.006038006395101547,
+     "repeat=1/batch": 8.404254913330078e-05,
+     "repeat=1/stepfull": 6.095133721828461e-05,
+     "repeat=2/train": 0.002215307205915451,
+     "repeat=2/infer-save-reload": 0.006834755651652813,
+     "repeat=2/batch": 0.00036653876304626465,
+     "repeat=2/stepfull": 0.00036608893424272537
+    }
+   }
+  },
+  "mlp-int8w/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0b93061029e61e71",
+    "0b93061029e61e71"
+   ],
+   "parts": [
+    {
+     "logits": "9ab0220e297d9430",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "9ab0220e297d9430",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "be5f13ca17f2a292",
+    "be5f13ca17f2a292"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "be5f13ca17f2a292",
+    "be5f13ca17f2a292"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.025779633782804012,
+    "stages": {
+     "repeat=1/train": 0.0035067200660705566,
+     "repeat=1/infer-save-reload": 0.008822266943752766,
+     "repeat=1/batch": 0.00010281242430210114,
+     "repeat=1/stepfull": 7.183197885751724e-05,
+     "repeat=2/train": 0.003031148575246334,
+     "repeat=2/infer-save-reload": 0.00926181860268116,
+     "repeat=2/batch": 0.0003503384068608284,
+     "repeat=2/stepfull": 0.0003458485007286072
+    }
+   }
+  },
+  "mlp-int8w/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8f672b17d23d41b0",
+    "8f672b17d23d41b0"
+   ],
+   "parts": [
+    {
+     "logits": "51a000ff42a0d253",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "51a000ff42a0d253",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "778c3605e1ca569b",
+    "778c3605e1ca569b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "778c3605e1ca569b",
+    "778c3605e1ca569b"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.027613130398094654,
+    "stages": {
+     "repeat=1/train": 0.0036397138610482216,
+     "repeat=1/infer-save-reload": 0.009591386653482914,
+     "repeat=1/batch": 0.00035787932574748993,
+     "repeat=1/stepfull": 0.0003766687586903572,
+     "repeat=2/train": 0.0037817973643541336,
+     "repeat=2/infer-save-reload": 0.009322360157966614,
+     "repeat=2/batch": 7.33518972992897e-05,
+     "repeat=2/stepfull": 6.907153874635696e-05
+    }
+   }
+  },
+  "mlp-int8w/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8f672b17d23d41b0",
+    "8f672b17d23d41b0"
+   ],
+   "parts": [
+    {
+     "logits": "51a000ff42a0d253",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "51a000ff42a0d253",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "778c3605e1ca569b",
+    "778c3605e1ca569b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "778c3605e1ca569b",
+    "778c3605e1ca569b"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.027560080401599407,
+    "stages": {
+     "repeat=1/train": 0.0038953199982643127,
+     "repeat=1/infer-save-reload": 0.008920400403439999,
+     "repeat=1/batch": 9.26116481423378e-05,
+     "repeat=1/stepfull": 8.510146290063858e-05,
+     "repeat=2/train": 0.003660234622657299,
+     "repeat=2/infer-save-reload": 0.00988785456866026,
+     "repeat=2/batch": 0.0003744484856724739,
+     "repeat=2/stepfull": 0.00035346951335668564
+    }
+   }
+  },
+  "mlp-int8w/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3687a8774b7cfa2a",
+    "3687a8774b7cfa2a"
+   ],
+   "parts": [
+    {
+     "logits": "8b99fe35feaf6ef4",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "8b99fe35feaf6ef4",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "7f842e10fdd5259b",
+    "7f842e10fdd5259b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7f842e10fdd5259b",
+    "7f842e10fdd5259b"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.027272552251815796,
+    "stages": {
+     "repeat=1/train": 0.003814028576016426,
+     "repeat=1/infer-save-reload": 0.009250007569789886,
+     "repeat=1/batch": 0.00029726792126893997,
+     "repeat=1/stepfull": 0.0003072274848818779,
+     "repeat=2/train": 0.003808378241956234,
+     "repeat=2/infer-save-reload": 0.009362130425870419,
+     "repeat=2/batch": 7.789209485054016e-05,
+     "repeat=2/stepfull": 6.883218884468079e-05
+    }
+   }
+  },
+  "mlp-int8w/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4ead3bf09b4ee270",
+    "4ead3bf09b4ee270"
+   ],
+   "parts": [
+    {
+     "logits": "f53dad9d714cf050",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "f53dad9d714cf050",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "74fa57ee9d9aec39",
+    "74fa57ee9d9aec39"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "74fa57ee9d9aec39",
+    "74fa57ee9d9aec39"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0256602605804801,
+    "stages": {
+     "repeat=1/train": 0.003351987339556217,
+     "repeat=1/infer-save-reload": 0.008747895248234272,
+     "repeat=1/batch": 0.00015036389231681824,
+     "repeat=1/stepfull": 0.00013287365436553955,
+     "repeat=2/train": 0.003719915635883808,
+     "repeat=2/infer-save-reload": 0.009183676913380623,
+     "repeat=2/batch": 5.832035094499588e-05,
+     "repeat=2/stepfull": 5.0601549446582794e-05
+    }
+   }
+  },
+  "mlp-int8w/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c8f056f65443d448",
+    "c8f056f65443d448"
+   ],
+   "parts": [
+    {
+     "logits": "98189256933fa196",
+     "weights": "0e735f79bb84d597"
+    },
+    {
+     "logits": "98189256933fa196",
+     "weights": "0e735f79bb84d597"
+    }
+   ],
+   "infer": [
+    "239a9c2fb54d5ccc",
+    "239a9c2fb54d5ccc"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "10959ca81118cc10",
+    "10959ca81118cc10"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "239a9c2fb54d5ccc",
+    "239a9c2fb54d5ccc"
+   ],
+   "batch": [
+    "n/a:weight-format lane; the batch part is measured on its base lane",
+    "n/a:weight-format lane; the batch part is measured on its base lane"
+   ],
+   "batch_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.02746126800775528,
+    "stages": {
+     "repeat=1/train": 0.0037416256964206696,
+     "repeat=1/infer-save-reload": 0.009093424305319786,
+     "repeat=1/batch": 0.000352528877556324,
+     "repeat=1/stepfull": 0.00036786962300539017,
+     "repeat=2/train": 0.003969642333686352,
+     "repeat=2/infer-save-reload": 0.00935469102114439,
+     "repeat=2/batch": 8.153170347213745e-05,
+     "repeat=2/stepfull": 7.21607357263565e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 7713 64-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w"
+  ],
+  "families": {
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "85778cd8cdeebe53f2a35089653d8785300189d4faa5f1b760d141c0ae9d45a8",
+    "size": 569688,
+    "sabotage": true
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "be7428da7d16cdb056d63b2f0567d9d1208cd3b6145f7929b42c0d9a386977aa",
+    "size": 618960,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "cc86acdaabcfb6151c7955d2de2af57c4dd7f21a25a2273c6634734a8f933f8c",
+    "size": 687000,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "7049f55956e758afd849196c161ad405b7e118cd68e66adbca19970768ff8b22",
+    "size": 1527864,
+    "sabotage": true
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "e5648e6d978b2b15632eb377dcc824ded07dae27840cf26834877dc85835e35a",
+    "size": 457736,
+    "sabotage": true
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "8c779557bfbdde470566a39d0f1690e817bb0d1d7d104099e2b98873ae23842f",
+    "size": 282816,
+    "sabotage": true
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "dcf7de96cf8975cde03454c472649a9846d43c4e9ca91b971b66238833728b87",
+    "size": 456760,
+    "sabotage": true
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "c3830514ff2046983ae9295d4a41a8dc6104f8ab6441dce11940c0044d766295",
+    "size": 276912,
+    "sabotage": true
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "37a4eed7234f1ae4ce0eabed89782fae3e581e2e239565d84fb3ecff2e15d74c",
+    "size": 285224,
+    "sabotage": true
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "b74663c2b53ba71e2b0b83fba9033ef77ca38819705c75ed9e2db05564a4f20f",
+    "size": 1256872,
+    "sabotage": true
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "b81b6cba2e91caac902440fb47ef2554fad110a43993bd692cc36441f7434ab1",
+    "size": 831368,
+    "sabotage": true
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "666dfdd24e2cc34c7789f576ad8dd0ae8e1fc9d2e069a095035534beebfeb7bf",
+    "size": 447760,
+    "sabotage": true
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "d027126a9569a7ee16951a379de5fa0e499815841d0b5fadaaa3b32e38ec19c6",
+    "size": 242064,
+    "sabotage": true
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "9f7753b6c25fbf15cb818fdd0b8a20f2ebc048d1a5f50bbb85170cca8dcf2d09",
+    "size": 663056,
+    "sabotage": true
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "94d0216581ee202e076cfb7c9857a70ace36c361b672afed1ac475303c8c0d68",
+    "size": 399480,
+    "sabotage": true
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "328c7cb627141985108feeead39b1025163c922491ef5153cd9d2ba11b2d4a31",
+    "size": 420416,
+    "sabotage": true
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "a59df3dc2a721ce9c2dafae0aa31f2d1f204acf85c2606487df658c7a8b462b1",
+    "size": 443456,
+    "sabotage": true
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "638615b8562d70f1be61915d2b209299d2948fef249cda3fa31f7a85872c0a3a",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "lanes": "mlp-int8w",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "09c89141abf0636b95cf91e2c4d74bf9f089e26f0abbfc5b72b0641e64d3348d",
+  "provenance": {
+   "commit": "1d7fc53fe9ee5406bd42b4641324fb864ccba6de",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-7713-64-core-processor",
+   "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
