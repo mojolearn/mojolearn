@@ -38,10 +38,14 @@ import struct
 _CODE = {
     "<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q",
     "<u4": "I", "<u1": "B", "<f2": "H",
+    # lane/identical-lowbit-inference (2026-09-17): bf16 bits travel as
+    # uint16 and int8 codes as int8 (gemm/IDENTICAL_LOWBIT_CONTRACT.md).
+    "<u2": "H", "<i1": "b",
 }
-_ITEMSIZE = {"<f4": 4, "<f8": 8, "<i4": 4, "<i8": 8, "<u4": 4, "<u1": 1, "<f2": 2}
+_ITEMSIZE = {"<f4": 4, "<f8": 8, "<i4": 4, "<i8": 8, "<u4": 4, "<u1": 1, "<f2": 2,
+             "<u2": 2, "<i1": 1}
 _FLOAT = {"<f4", "<f8", "<f2"}
-_INT = {"<i4", "<i8", "<u4", "<u1"}
+_INT = {"<i4", "<i8", "<u4", "<u1", "<u2", "<i1"}
 SUPPORTED_DTYPES = tuple(_CODE)
 
 # The store typecodes must have the sizes the typestrs promise. `'i'` is 4
@@ -88,6 +92,7 @@ def normalize_dtype(dtype):
 _ALIAS = {
     "float32": "<f4", "float64": "<f8", "int32": "<i4", "int64": "<i8",
     "uint32": "<u4", "uint8": "<u1", "float16": "<f2",
+    "uint16": "<u2", "int8": "<i1", "|i1": "<i1", "=u2": "<u2", "u2": "<u2", "i1": "<i1",
     "|u1": "<u1", "=f4": "<f4", "=f8": "<f8", "=i4": "<i4", "=i8": "<i8",
     "=u4": "<u4", "=f2": "<f2", "f4": "<f4", "f8": "<f8", "i4": "<i4",
     "i8": "<i8", "u4": "<u4", "u1": "<u1", "f2": "<f2",

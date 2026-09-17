@@ -1202,12 +1202,17 @@ FAMILIES = (
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
         display="pinned GEMM and the Cholesky factorization and solve",
-        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
+        host_modules=("gemm/host/gemm_oracle.mojo", "gemm/host/gemm_lowbit_oracle.mojo",
+                      "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
             "linalg_profile_version", "gemm", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+            # lane/identical-lowbit-inference (2026-09-17): the bf16f32.v1 and
+            # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
+            "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
+            "dequantize_int8", "to_bf16", "from_bf16",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
