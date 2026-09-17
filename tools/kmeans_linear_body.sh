@@ -5,7 +5,8 @@
 #
 #   sh tools/kmeans_linear_body.sh setup            pixi, the big blocks from the staged R2 npz
 #   sh tools/kmeans_linear_body.sh arm NAME "DEFS"  one binding arm (core + estimators) and its tree /root/t-NAME
-#   sh tools/kmeans_linear_body.sh host NAME        the host (CPU column) binding set /root/hostbins/NAME
+#   sh tools/kmeans_linear_body.sh host NAME        the host (CPU column) binding set /root/hostbins/NAME from tree /root/t-NAME
+#   sh tools/kmeans_linear_body.sh diff LABEL A.json B.json ...   identity_break --diff into /root/kls_out/diff.LABEL.txt
 #   sh tools/kmeans_linear_body.sh identity NAME    cuda column of every reached lane on arm NAME
 #   sh tools/kmeans_linear_body.sh identity_cpu NAME   cpu column with /root/hostbins/NAME
 #
@@ -74,17 +75,40 @@ arm)
     : > "$OUT/arm.done"
     ;;
 host)
-    cd "$R" || exit 9
+    # NAME's host (CPU column) binding set, built from the source of tree
+    # /root/t-NAME (the pixi environment is shared through a symlink).
+    T="/root/t-$NAME"
+    [ -e "$T/.pixi" ] || ln -s "$R/.pixi" "$T/.pixi"
+    cd "$T" || exit 9
     MOJOLEARN_HOST_OUTDIR=/root/hostbins/$NAME step host_core 2400 sh bindings/build_core_host.sh
     MOJOLEARN_HOST_OUTDIR=/root/hostbins/$NAME step host_est 2400 sh bindings/build_estimators_host.sh
+    sha256sum /root/hostbins/"$NAME"/*.so > "$OUT/so_sha256.txt" 2>&1
     : > "$OUT/host.done"
     ;;
 identity)
     cd "/root/t-$NAME" || exit 9
     MOJOLEARN_COMMIT=$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt"); export MOJOLEARN_COMMIT
     step identity 5400 env PYTHONPATH="/root/t-$NAME/python:/root/t-$NAME/tools" "$P" tools/identity_break.py \
-        --lanes "$LANES" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
+        --require-backend cuda --lanes "$LANES" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
     : > "$OUT/identity.done"
+    ;;
+identity_cpu)
+    # The cpu column: tree /root/t-NAME's Python with NO GPU binding beside it,
+    # host bindings from /root/hostbins/NAME.
+    rm -rf "/root/cpu-$NAME" && mkdir -p "/root/cpu-$NAME"
+    ( cd "/root/t-$NAME" && tar cf - --exclude=.pixi --exclude='*.so' . ) | ( cd "/root/cpu-$NAME" && tar xf - )
+    cd "/root/cpu-$NAME" || exit 9
+    MOJOLEARN_COMMIT=$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt"); export MOJOLEARN_COMMIT
+    step identity_cpu 5400 env PYTHONPATH="/root/cpu-$NAME/python:/root/cpu-$NAME/tools" MOJOLEARN_HOST_DIR="/root/hostbins/$NAME" "$P" tools/identity_break.py \
+        --require-backend cpu --lanes "$LANES" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
+    : > "$OUT/identity_cpu.done"
+    ;;
+diff)
+    # sh tools/kmeans_linear_body.sh diff LABEL A.json B.json [...]
+    shift 2
+    cd "$R" || exit 9
+    PYTHONPATH="$R/python:$R/tools" "$P" tools/identity_break.py --diff "$@" > "/root/kls_out/diff.$NAME.txt" 2>&1
+    echo "diff $NAME rc=$?" | tee -a /root/kls_out/diff.progress.txt
     ;;
 *) echo "unknown stage $STAGE" >&2; exit 2 ;;
 esac
