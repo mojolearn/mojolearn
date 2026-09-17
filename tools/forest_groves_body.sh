@@ -204,9 +204,11 @@ time_one() {
     # $1 tree, $2 label, $3 model, $4 x, $5 path, $6 index
     _t=$1; _l=$2; _m=$3; _x=$4; _p=$5; _i=$6
     cd "$_t" || return 1
+    _stem="$OUT/$SPEED_DIR/$(basename "$_m" .npz).$_p.$_l.$_i"
     PYTHONPATH=python pixi run python3 tools/forest_groves_speed.py time \
         --model "$_m" --x "$_x" --path "$_p" --rounds "$AB_ROUNDS" --calls 8 --label "$_l" \
-        --json "$OUT/$SPEED_DIR/$(basename "$_m" .npz).$_p.$_l.$_i.json" 2>&1 | tail -1
+        --json "$_stem.json" --save-prediction "$OUT/$SPEED_DIR" > "$_stem.log" 2>&1
+    tail -1 "$_stem.log"
 }
 
 phase_speed() {
