@@ -631,6 +631,26 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert capsys.readouterr().out.strip() == ""
 
 
+def _reference_classes(table, lane):
+    """The device classes the shipped table's cells for `lane` rest on.
+
+    A cell part's `cols` maps a device class to the record its value came
+    from, so the union over the lane's cells is every class that has ever
+    been recorded reproducing it. One class means the reference has ONE
+    witness: nothing has reproduced it, and a user who disagreed with it
+    could not tell their machine apart from our single column.
+    """
+    classes = set()
+    for key, cell in table["cells"].items():
+        if key.partition("/")[0] != lane:
+            continue
+        for entry in cell.values():
+            if entry.get("ref") is None or entry.get("conflict"):
+                continue
+            classes.update(entry.get("cols", {}))
+    return classes
+
+
 def _lane_revisions():
     """`LANE_REVISIONS` read from the harness's source, like the lane readers
     above, so this needs no numpy and no import of the harness."""
@@ -734,6 +754,41 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
                 wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
                                     f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
                                     "'stale reference' and a run would prove nothing")
+        elif why == "one column":
+            # THE REFERENCE HAS ONE WITNESS (lane/reference-regen, 2026-09-17).
+            # The lanes whose fixture or arithmetic moved lost every cell they
+            # had from the three GPU columns, and the CPU column that lane
+            # recorded gave them cells again. Cells are not the whole
+            # condition: a reference ONE device class has ever produced is a
+            # number nothing has reproduced, and a user who disagreed with it
+            # could not tell their machine apart from our single column. That
+            # is the bar `PUBLIC_REFERENCE_CANDIDATES` already holds svc-poly
+            # to; this states it as a condition the shipped table answers
+            # instead of as prose in a comment.
+            #
+            # It is checked BOTH ways on purpose. A lane that loses its cells
+            # cannot hide here (its reason is `no reference`), a lane whose
+            # fixture moves again cannot either (`stale reference`), and a
+            # lane that GAINS a second class must stop hiding here and move to
+            # `unwatched`, so the next release record's columns force the list
+            # to shrink rather than letting it sit.
+            if lane not in with_cells:
+                wrong_reason.append(f"{lane}: held back as 'one column', but the shipped table "
+                                    "carries NO cell for it, so its reason is 'no reference' and "
+                                    "what is owed is a record, not a second column")
+            elif lane in stale:
+                wrong_reason.append(f"{lane}: held back as 'one column', but its fixture has moved "
+                                    f"past the shipped reference ({revisions.get(lane)!r}), so its "
+                                    "reason is 'stale reference' and a second column of the old "
+                                    "bytes would prove nothing")
+            else:
+                classes = _reference_classes(table, lane)
+                if len(classes) > 1:
+                    wrong_reason.append(
+                        f"{lane}: held back as 'one column', but the shipped table's cells for it "
+                        f"rest on {len(classes)} device classes ({', '.join(sorted(classes))}), so "
+                        "the hold no longer applies: its reason is 'unwatched' until a CPU-only "
+                        "`verify --all` has been watched to read IDENTICAL for it")
         elif why == "own record":
             assert lane in host_surface.TRAINING_FIX_LANES, f"{lane}: not a TRAINING_FIX_LANES lane"
         elif why.startswith("measured"):

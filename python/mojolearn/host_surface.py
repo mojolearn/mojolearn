@@ -2452,6 +2452,21 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     lanes at once without being able to run that column.
 #:                     The same regeneration gave SIX `no reference`
 #:                     lanes their first cells, so they moved here too.
+#:   one column        the shipped table DOES carry cells for the lane at the
+#:                     current fixture revision, but every one of them rests
+#:                     on a SINGLE device class, so the reference has one
+#:                     witness and nothing has ever reproduced it. A user who
+#:                     disagreed with such a number could not tell their own
+#:                     machine apart from our one column. This is the bar
+#:                     `PUBLIC_REFERENCE_CANDIDATES` already holds `svc-poly`
+#:                     to, written as a condition the table answers rather
+#:                     than as prose: `test_host_surface` counts the classes
+#:                     in each cell's `cols` and fails BOTH when a lane here
+#:                     has gained a second class and when one held as
+#:                     `unwatched` has only one. It leaves the day a second
+#:                     column carries the lane, which for the lanes a fixture
+#:                     change emptied is the next release record
+#:                     (lane/reference-regen, 2026-09-17).
 #:   measured          a CPU-only `verify --all` at this commit WATCHED the
 #:                     lane and it did not read clean. This reason is the only
 #:                     one that comes from a run rather than from a static
@@ -2485,7 +2500,13 @@ PUBLIC_PENDING_LANES = {
     "mamba3": "stale reference",
     "transformer": "stale reference",
     "transformer-window": "stale reference",
-    "samba": "unwatched",
+    # lane/reference-regen (2026-09-17): `unwatched` said the only thing
+    # missing was a run. It was not. Every cell the shipped table carries for
+    # samba comes from the CPU column alone, so a run would have compared this
+    # lane against a number no second machine has ever produced. The reason is
+    # `one column`, and the check that reads the classes out of the table says
+    # so by name.
+    "samba": "one column",
     # lane/shrink-floors (2026-09-16) put this lane in identity_break's
     # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
     # the shipped table carries and a run would prove nothing. The reason is
