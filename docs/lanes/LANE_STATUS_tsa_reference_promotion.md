@@ -47,3 +47,9 @@ Remaining: strict regeneration/replay of the whole table and optional properties
 51 withheld CPU lanes (including unwatched samba and gbdt-yeti-rank), native
 controls for the remaining appendix entries, the eleven parallel lanes without
 historical pairs, and final Linux/macOS artifact qualification. No PyPI release.
+
+Before integration, origin/main advanced to `ac49b36c5` with concurrent kNN
+and forest-groves work. It was merged and all 266 focused tests plus two
+subtests and matrix consistency passed again. The installed-wheel receipt
+qualifies the scoped development artifact at `032325dc5`, not those concurrent
+native changes. Their hardware qualification remains with their own records.
