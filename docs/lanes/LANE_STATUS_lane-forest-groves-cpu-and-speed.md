@@ -47,13 +47,13 @@ Files: `core/forest_host_groves.mojo`, `core/forest_inference.mojo`,
 `tools/forest_groves_fil.py`, `tools/forest_groves_body.sh`,
 `tools/check_forest_resident_layouts.sh`, `docs/FOREST_INFERENCE_ENGINES.md`.
 
-OWED IN A SHARED FILE (not edited by this lane, exact diff in
-`~/mojolearn-evidence/forest-groves/report/host_surface.diff`):
+PAID AT THE MERGE (2026-09-17, the shared file the lane did not edit):
 `python/mojolearn/host_surface.py`, the `forest` family's `exports` tuple
-gains the four names above and its `host_modules` gains
-`core/forest_host_groves.mojo`; until then
+gained the four names above and its `host_modules` gained
+`core/forest_host_groves.mojo`.
 `python/mojolearn/tests/test_host_surface.py::test_binding_exports_exactly_the_manifest[forest]`
-fails on this branch.
+was seen to fail without the edit (1 failed, 156 passed) and the file reads
+157 passed with it, on the branch merged with `main` at `bde7a7b24`.
 
 ## Box
 

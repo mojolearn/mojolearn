@@ -1024,12 +1024,18 @@ FAMILIES = (
         # lane/inference-gbdt-ctr-tables (2026-09-15): the CTR and tensor CTR
         # step of a saved GBDT model, reusing expand_raw_columns and the
         # tensor apply module the GPU predict calls
-        host_modules=("core/forest_host_predict.mojo", "core/gbdt_host_predict.mojo",
+        host_modules=("core/forest_host_predict.mojo", "core/forest_host_groves.mojo",
+                      "core/gbdt_host_predict.mojo",
                       "core/gbdt_host_ctr.mojo", "gbdt/models/tensor_ctr_apply.mojo"),
         exports=(
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
+            # lane/forest-groves-cpu-and-speed (2026-09-17): the parallel_groves
+            # engine over core/forest_host_groves.mojo, and DEVIATION 2961's
+            # association sabotage read-back
+            "forest_host_groves_sabotage", "forest_host_groves_prepare",
+            "forest_host_groves_predict", "forest_host_groves_release",
             "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid", "forest_host_gbdt_sigmoid_pair",
             "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
