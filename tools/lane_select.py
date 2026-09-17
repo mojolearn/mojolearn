@@ -114,6 +114,10 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "test_algorithm_scope.py"),
     os.path.join("tools", "test_mac_slot.py"),
     os.path.join("tools", "test_identity_runtime.py"),
+    os.path.join("tools", "check_python_gates.py"),
+    os.path.join("tools", "check_python_gates.sh"),
+    os.path.join("tools", "test_backend_control.py"),
+    os.path.join("tools", "test_gate_scope.py"),
 )
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")

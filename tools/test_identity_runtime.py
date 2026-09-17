@@ -216,3 +216,12 @@ def test_metal_iteration_requires_release_or_diagnostic(monkeypatch, tmp_path):
     with pytest.raises(SystemExit):
         runner.main(["--lane", "ridge", "--mode", "metal", "--out", str(tmp_path / "out")])
     assert not (tmp_path / "out").exists()
+
+
+@pytest.mark.parametrize('backend', ['cpu', 'metal', 'cuda', 'hip'])
+def test_wrong_backend_refuses_before_fit(run_fixture, backend):
+    args, state, _ = run_fixture
+    args.require_backend = backend
+    with pytest.raises(SystemExit, match='requested .* backend, loaded'):
+        ib._run_reference(args)
+    assert state['calls'] == 0

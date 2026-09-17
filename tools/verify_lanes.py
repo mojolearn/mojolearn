@@ -38,16 +38,20 @@ THREE PROPERTIES, IN THE ORDER THEY BITE.
      lightest shard, so the same lane set always gives the same shards and a
      rerun is comparable to the run before it.
 
-WHERE IT RUNS. `--runner local` (the default) runs the shards as processes
-here; `--jobs 1`, the default, is the Mac's one-core rule. `--runner pods`
-PRINTS one `tools/runpod_cpu_leg.sh` command per shard and rents nothing,
-because the full sweep belongs on rented CPU (parallel, cheap, bitwise equal
-to Metal) and because renting is never something a tool should do on its own.
-The tiers, and which of these to reach for, are
-docs/lanes/VERIFICATION_TIERS.md.
+WHERE IT RUNS. Local runs default to the CPU-only route, base fixture and
+core probes. Explicit --jobs enables CPU shard parallelism within shared
+capacity. All children use one scheduler, per-shard limits and a shared total
+deadline. --backend cuda/hip/metal requires that actual loaded backend and
+serializes GPU jobs per host. Separate GPU hosts may work independently.
+--runner pods only PRINTS bounded CPU commands, even without --plan; it never
+rents or falls through to local execution. See docs/TEST_RUNTIME.md.
+
 """
 import argparse
 import json
+import math
+from pathlib import Path
+import signal
 import os
 import subprocess
 import sys
@@ -106,21 +110,35 @@ def _identity_break_cmd(lanes, out, args):
         cmd += ["--fixtures", args.fixtures]
     if args.vendor:
         cmd += ["--vendor", args.vendor]
+    cmd += ["--fail-on-refused", "--require-backend", args.backend]
+    if args.probe_group in ("core", "rlpair"):
+        cmd.append("--no-batch")
+    if args.probe_group in ("core", "batch"):
+        cmd.append("--no-rlpair")
+    if args.resume and os.path.exists(out):
+        cmd.append("--resume")
     return cmd + args.extra
 
 
 def _plan(groups, load, args, out_dir):
+    print(f"# backend={args.backend} jobs={args.jobs} budget={args.budget}s shard-timeout={args.timeout}s queue-timeout={args.wait_timeout}s")
     total = 0
     for k, group in enumerate(groups):
         part = os.path.join(out_dir, f"part{k}.json")
         if args.runner == "pods":
-            inner = " ".join(_identity_break_cmd(group, f'"$LEG_OUT"/part{k}.json', args)[1:])
+            import shlex
+            inner = ["python3", "tools/verify_lanes.py", "--lanes", ",".join(group),
+                     "--backend", "cpu", "--fixtures", args.fixtures, "--probe-group", args.probe_group,
+                     "--repeats", str(args.repeats),
+                     "--budget", str(args.budget), "--timeout", str(args.timeout),
+                     "--wait-timeout", str(args.wait_timeout), "--out"]
+            command = shlex.join(inner) + f' "$LEG_OUT/shard{k}"'
             print(f"\n# shard {k}: {len(group)} lanes, weight {load[k]} s")
-            print(f"bash tools/runpod_cpu_leg.sh --lane {args.tag}-s{k} --rent \\\n"
-                  f"  --build {args.build} --envs default \\\n"
-                  f"  --cmd 'python3 {inner}'")
+            print("bash tools/runpod_cpu_leg.sh --lane " + shlex.quote(f"{args.tag}-s{k}") +
+                  " --rent --build " + shlex.quote(args.build) + " --envs default --cmd " + shlex.quote(command))
         else:
             print(f"# shard {k}: {len(group)} lanes, weight {load[k]} s -> {part}")
+            print("  # inner workload; executed through the scheduler with the shared deadline")
             print("  " + " ".join(_identity_break_cmd(group, part, args)))
         total += load[k]
     if args.runner == "pods":
@@ -133,39 +151,78 @@ def _plan(groups, load, args, out_dir):
 
 
 def _run_local(groups, load, args, out_dir):
+    import identity_iterate
     parts = [os.path.join(out_dir, f"part{k}.json") for k in range(len(groups))]
-    logs = [os.path.join(out_dir, f"part{k}.log") for k in range(len(groups))]
-    for path in parts:
-        if os.path.exists(path):
-            os.remove(path)                # a part from an earlier run must never be merged
-    jobs = max(1, min(args.jobs, len(groups)))
-    t0 = time.time()
+    env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    env["PYTHONPATH"] = os.path.join(ROOT, "python") + os.pathsep + env.get("PYTHONPATH", "")
+    if args.backend == "cpu":
+        package, host = identity_iterate.cpu_package(Path(out_dir),
+            args.host_dir or env.get("MOJOLEARN_HOST_DIR") or Path(ROOT) / "python/mojolearn/host")
+        env["PYTHONPATH"] = str(package) + os.pathsep + env["PYTHONPATH"]
+        env["MOJOLEARN_HOST_DIR"] = str(host)
     pending, running, codes = list(range(len(groups))), {}, {}
-    while pending or running:
-        while pending and len(running) < jobs:
-            k = pending.pop(0)
-            fh = open(logs[k], "w")
-            env = dict(os.environ)
-            env.setdefault("PYTHONPATH", os.path.join(ROOT, "python"))
-            proc = subprocess.Popen(_identity_break_cmd(groups[k], parts[k], args),
-                                    stdout=fh, stderr=subprocess.STDOUT, cwd=ROOT, env=env)
-            running[k] = (proc, fh, time.time())
-            print(f"# shard {k} started: {len(groups[k])} lanes, weight {load[k]} s", flush=True)
-        for k in list(running):
-            proc, fh, started = running[k]
-            rc = proc.poll()
-            if rc is None:
-                continue
+    def report():
+        dest = Path(out_dir) / "run-summary.json"
+        tmp = dest.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(dict(pending=pending, running=list(running), exit_codes=codes,
+            complete=False, execution_complete=len(codes) == len(groups) and all(c == 0 for c in codes.values()),
+            budget=args.budget, elapsed_seconds=time.monotonic() - args.started), indent=2) + "\n")
+        tmp.replace(dest)
+    def interrupted(signum, frame):
+        raise KeyboardInterrupt(signum)
+    old = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
+    try:
+        report()
+        while pending or running:
+            if time.monotonic() >= args.deadline:
+                break
+            while pending and len(running) < args.jobs and time.monotonic() < args.deadline:
+                k = pending.pop(0)
+                fh = open(os.path.join(out_dir, f"part{k}.log"), "w")
+                mode = "run" if args.backend == "cpu" else args.backend
+                cmd = [sys.executable, os.path.join(ROOT, "tools/mac_slot.py"),
+                       "--timeout", str(args.timeout), "--wait-timeout", str(args.wait_timeout),
+                       "--deadline", str(args.deadline), mode, *_identity_break_cmd(groups[k], parts[k], args)]
+                try:
+                    proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT, cwd=ROOT, env=env)
+                except BaseException:
+                    fh.close()
+                    pending.insert(0, k)
+                    raise
+                running[k] = (proc, fh)
+                print(f"# shard {k} started: {len(groups[k])} lanes ({args.backend})", flush=True)
+            for k, (proc, fh) in list(running.items()):
+                rc = proc.poll()
+                if rc is not None:
+                    fh.close()
+                    codes[k] = rc
+                    del running[k]
+            report()
+            if any(c != 0 for c in codes.values()):
+                break
+            if pending or running:
+                time.sleep(min(.05, max(0, args.deadline - time.monotonic())))
+    except KeyboardInterrupt:
+        print("# interrupted; unfinished shards are not coverage", flush=True)
+    finally:
+        for signum in old:
+            signal.signal(signum, signal.SIG_IGN)
+        # Signal the scheduler, which drains its child's process group before
+        # releasing the lease. Do not kill only the scheduler and orphan work.
+        for proc, _ in running.values():
+            if proc.poll() is None:
+                proc.terminate()
+        for k, (proc, fh) in list(running.items()):
+            codes[k] = proc.wait()
             fh.close()
-            codes[k] = rc
             del running[k]
-            print(f"# shard {k} exited {rc} after {time.time() - started:.0f} s", flush=True)
-        time.sleep(0.5)
-    print(f"# all shards done after {time.time() - t0:.0f} s")
-    return parts, codes, time.time() - t0
+        report()
+        for signum, handler in old.items():
+            signal.signal(signum, handler)
+    return parts, codes, time.monotonic() - args.started
 
 
-def _verdict(lanes, parts, codes, out_dir, elapsed):
+def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None):
     """COMPLETE only when every shard reported and the cells cover exactly the
     lanes selected. Anything else is INCOMPLETE and exits 1."""
     failures = []
@@ -176,19 +233,27 @@ def _verdict(lanes, parts, codes, out_dir, elapsed):
             failures.append(f"shard {k} wrote no part file ({os.path.basename(part)})")
     present = [p for p in parts if os.path.exists(p)]
     merged = os.path.join(out_dir, "column.json" if not failures else "column.incomplete.json")
-    if present:
-        res = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "identity_break.py"),
-                              "--merge"] + present + ["--json", merged], cwd=ROOT)
-        if res.returncode != 0:
-            failures.append(f"identity_break --merge exited {res.returncode}")
+    if present and (deadline is None or time.monotonic() < deadline):
+        try:
+            res = subprocess.run([sys.executable, os.path.join(ROOT, "tools", "identity_break.py"),
+                                  "--merge"] + present + ["--json", merged], cwd=ROOT,
+                                 timeout=min(60, max(.001, deadline - time.monotonic())) if deadline else 60)
+            if res.returncode != 0:
+                failures.append(f"identity_break --merge exited {res.returncode}")
+        except subprocess.TimeoutExpired:
+            failures.append("result merge exceeded the remaining run budget")
     else:
-        failures.append("no part file was written at all")
+        failures.append("no merge: no part records or total run budget exhausted")
     covered, verdicts = set(), {}
     if os.path.exists(merged):
         with open(merged) as fh:
             cells = json.load(fh).get("cells") or {}
         covered = {k.split("/")[0] for k in cells}
         for key, cell in cells.items():
+            for field, value in cell.items():
+                if ((field == "verdict" and value != "STABLE")
+                        or (field.endswith("_verdict") and value not in ("STABLE", "N/A"))):
+                    failures.append(f"{key}: {field}={value}")
             verdicts.setdefault(key.split("/")[0], set()).add(cell.get("verdict"))
     # A CELL THAT SAYS REFUSED IS NOT A CHECK. Measured 2026-09-16: one lane on
     # a stale host binding set exited 0, wrote its part, merged, and printed
@@ -223,10 +288,18 @@ def _verdict(lanes, parts, codes, out_dir, elapsed):
         print("# An incomplete run is NOT a pass. Rerun the shards that failed and merge again. "
               "A REFUSED lane needs its host family built, or its own GPU column; it is not "
               "evidence either way.")
+    summary = Path(out_dir) / "run-summary.json"
+    if summary.exists():
+        result = json.loads(summary.read_text())
+        result.update(complete=not failures, validation_failures=failures)
+        tmp = summary.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(result, indent=2) + "\n")
+        tmp.replace(summary)
     return 1 if failures else 0
 
 
 def main(argv=None):
+    started = time.monotonic()
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--all", action="store_true", help="every registered lane")
     ap.add_argument("--lanes", default="", help="lanes by name, comma separated")
@@ -234,7 +307,16 @@ def main(argv=None):
     ap.add_argument("--changed-since", metavar="REF", help="the lanes the diff against REF can affect")
     ap.add_argument("--lanes-for-paths", nargs="+", metavar="PATH", help="the lanes these paths can affect")
     ap.add_argument("--shards", type=int, default=1, help="split into N deterministic shards (default 1)")
-    ap.add_argument("--jobs", type=int, default=1, help="shards to run at once locally (default 1, the Mac rule)")
+    ap.add_argument("--jobs", type=int, default=1, help="CPU shards to run concurrently (default 1); GPU hosts require 1")
+    ap.add_argument("--backend", choices=("cpu", "metal", "cuda", "hip"), default="cpu")
+    ap.add_argument("--host-dir", help="prebuilt CPU bindings; never build or fall back to GPU")
+    ap.add_argument("--budget", type=float, default=None)
+    ap.add_argument("--timeout", type=float, default=60)
+    ap.add_argument("--wait-timeout", type=float, default=60)
+    ap.add_argument("--probe-group", choices=("core", "batch", "rlpair", "all"), default="core")
+    ap.add_argument("--resume", action="store_true")
+    ap.add_argument("--full-selection", action="store_true", help="explicitly accept selector fallback")
+    ap.add_argument("--metal-diagnostic", action="store_true")
     ap.add_argument("--runner", choices=("local", "pods"), default="local",
                     help="local processes, or print one runpod_cpu_leg.sh command per shard")
     ap.add_argument("--plan", action="store_true", help="print what would run and stop")
@@ -245,8 +327,22 @@ def main(argv=None):
     ap.add_argument("--vendor", default="")
     ap.add_argument("--tag", default="sweep", help="lane tag for the pod plan")
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
-    ap.add_argument("extra", nargs="*", help="passed through to identity_break (after --)")
+    ap.add_argument("extra", nargs="*", help="legacy extra arguments are rejected; use explicit scope controls")
     args = ap.parse_args(argv)
+    args.budget = args.budget if args.budget is not None else (60 if args.backend == "metal" else 300)
+    args.started, args.deadline = started, started + args.budget
+    if any(not math.isfinite(v) or v <= 0 for v in (args.budget, args.timeout, args.wait_timeout)):
+        ap.error("budgets and timeouts must be finite and positive")
+    if args.jobs < 1 or args.shards < 1:
+        ap.error("jobs and shards must be positive")
+    if args.jobs > int(os.environ.get("MAC_SLOTS", "5")):
+        ap.error("--jobs exceeds shared CPU capacity (MAC_SLOTS, default 5)")
+    if args.backend != "cpu" and args.jobs != 1:
+        ap.error("one GPU job per host; parallelize separate GPU hosts, or use --backend cpu --jobs N")
+    if args.runner == "pods" and args.backend != "cpu":
+        ap.error("the pod planner is CPU-only; run GPU jobs on explicitly provisioned GPU hosts")
+    if args.extra:
+        ap.error("unrestricted extra arguments can override scope; use the explicit scope options")
     import identity_break
     if args.exhaustive and args.fixtures is not None:
         ap.error("choose --exhaustive OR --fixtures")
@@ -269,22 +365,49 @@ def main(argv=None):
         print("# REFUSING: the selection is empty. An empty run is not a pass; if the change "
               "really touches no lane, say so in the lane status file rather than running this.")
         return 2
+    if args.probe_group in ("batch", "rlpair"):
+        unsupported = [n for n in lanes if
+                       (not callable(identity_break.BATCH.get(n)) if args.probe_group == "batch"
+                        else n not in identity_break.RLPAIR)]
+        if unsupported:
+            ap.error(f"no applicable {args.probe_group} probe for: {unsupported}")
     groups, load = lane_select.shard(lanes, args.shards)
     out_dir = args.out or os.path.join(ROOT, "bench", "results", "lane_select",
                                        time.strftime("%Y-%m-%d_%H%M%S"))
-    if not args.plan:
+    if not args.plan and args.runner != "pods":
+        if sel.get("fallback") and not args.full_selection:
+            ap.error("selector fell back to every lane; inspect --plan or pass --full-selection")
+        import lane_applicability
+        column = dict(cpu="cpu-host", metal="apple-metal", cuda="nvidia-1gpu", hip="amd-1gpu")[args.backend]
+        try:
+            lane_applicability.check(lanes, column)
+        except lane_applicability.LaneNotApplicable as exc:
+            ap.error(str(exc))
+        if args.backend == "metal":
+            if not (args.metal_diagnostic or os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV)):
+                ap.error("Metal is release-only; use --metal-diagnostic for investigation")
+            if len(lanes) * len(fixtures) != 1 or args.probe_group == "all":
+                ap.error("one Metal lane/fixture/probe per round; use test-algo for expanded diagnostics")
+        if not args.resume and any(Path(out_dir).glob("part*.json")):
+            ap.error("records already exist; use --resume or a new output directory")
         os.makedirs(out_dir, exist_ok=True)
+        for filename in ("column.json", "column.incomplete.json"):
+            Path(out_dir, filename).unlink(missing_ok=True)
     manifest = dict(commit=_commit(), lanes=lanes, shards=[list(g) for g in groups], weights=load,
-                    fixtures=args.fixtures, repeats=args.repeats, runner=args.runner,
+                    fixtures=args.fixtures, repeats=args.repeats, runner=args.runner, backend=args.backend,
+                    probe_group=args.probe_group, budget=args.budget, timeout=args.timeout, jobs=args.jobs,
                     registry_total=len(lane_select.all_lanes()), selection=sel.get("mode", "derived"),
                     fallback=bool(sel.get("fallback")))
-    if args.plan:
+    if args.plan or args.runner == "pods":
         _plan(groups, load, args, out_dir)
         return 0
     with open(os.path.join(out_dir, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=1)
-    parts, codes, elapsed = _run_local(groups, load, args, out_dir)
-    return _verdict(lanes, parts, codes, out_dir, elapsed)
+    try:
+        parts, codes, elapsed = _run_local(groups, load, args, out_dir)
+    except ValueError as exc:
+        ap.error(str(exc))
+    return _verdict(lanes, parts, codes, out_dir, elapsed, args.deadline)
 
 
 if __name__ == "__main__":

@@ -47,7 +47,7 @@ python3 packaging/check_ext_lists.py --host   # the host list is read from the m
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # 978 pytest tests, about 7 s
-pixi run check-python-gates                                      # the 13 gate-style tests, about 34 s
+pixi run check-python-gates-release                              # explicit bounded release gates
 pixi run check-mamba-poison                                      # DEVIATIONS 2712/2713: the four Mamba lanes cold on a NaN-poisoned, guard-banded binding, about 3 min
 ```
 

@@ -1404,6 +1404,7 @@ check-arima-surface = "cd python && python3 -m mojolearn.tests.test_arima_surfac
 # DEFERS, discovers the gate files rather than listing them, and exits
 # non-zero naming any that go RED.
 check-python-gates = "bash tools/check_python_gates.sh"
+check-python-gates-release = "bash tools/check_python_gates.sh --all --backend metal --release --budget 600"
 # spectral: SOURCE ONLY, no gate and no sabotage has ever run. The five sabotage arms written
 # 2026-08-23 have NEVER BEEN COMPILED, so a syntax error in them would break this build.
 check-spectral = "mojo run -I . spectral/checks/spectral_check.mojo"
@@ -1649,7 +1650,7 @@ numpy = "*"
 pytest = ">=8"
 
 [feature.test.tasks]
-test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects"
+test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects"
 test-identity-changed = "python3 tools/identity_iterate.py"
 test-algo = "python3 tools/identity_iterate.py"
 # `pixi run -e test test-python`.

@@ -15,8 +15,8 @@ changed-code selection. These use `tools/identity_iterate.py` and enforce the
 budgets and summaries in [TEST_RUNTIME.md](../TEST_RUNTIME.md).
 
 `tools/verify_lanes.py` remains the explicit broader qualification/sharding
-runner. It shares `tools/lane_select.py` but is not the bounded routine entry
-point. Inspect its plan before starting a broader run.
+runner. It shares `tools/lane_select.py` and now enforces backend readback, per-shard deadlines and a total budget.
+Use it for explicit CPU parallelism; inspect its plan before broader work.
 
 The count is not written down here either, for the same reason. Ask the
 registry:

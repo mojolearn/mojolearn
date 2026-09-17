@@ -7366,6 +7366,9 @@ def _run_reference(args):
     import mojolearn as ml
     if getattr(args, "require_cpu", False) and ml.vendor() != "cpu":
         raise SystemExit("REFUSING: --require-cpu loaded a GPU backend")
+    required = getattr(args, "require_backend", None)
+    if required and ml.vendor() != required:
+        raise SystemExit(f"REFUSING: requested {required} backend, loaded {ml.vendor()}")
     mode = ml.numeric_mode()
     want = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower() or "fast"
     if mode != want:
@@ -8189,6 +8192,8 @@ def merge(paths, out, allow_separate_builds=False):
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--json", default="")
+    ap.add_argument("--require-backend", choices=("cpu", "metal", "cuda", "hip"),
+                    help="refuse a different loaded backend before fitting")
     ap.add_argument("--require-cpu", action="store_true",
                     help="refuse any GPU backend before fitting (internal CPU oracle jobs)")
     ap.add_argument("--fail-on-refused", action="store_true",

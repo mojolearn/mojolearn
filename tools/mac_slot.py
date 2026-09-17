@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
-"""Cooperative CPU/Metal admission, compatible with the legacy slot directories.
+"""Cooperative CPU/GPU admission, compatible with the legacy slot directories.
 
 All new participants serialize metadata updates with flock. Lease directories
 are published with their PID already inside; live legacy owners are respected.
@@ -188,7 +188,7 @@ def main(argv=None):
     ap.add_argument("--deadline", type=float, default=0, help="shared monotonic deadline; 0 disables it")
     ap.add_argument("--poll", type=float, default=0.25)
     ap.add_argument("--timing-json")
-    ap.add_argument("mode", choices=("run", "metal", "status"))
+    ap.add_argument("mode", choices=("run", "metal", "cuda", "hip", "status"))
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
     if (any(not math.isfinite(v) for v in (args.timeout, args.wait_timeout, args.poll, args.deadline))
@@ -210,7 +210,7 @@ def main(argv=None):
         raise KeyboardInterrupt(signum)
     previous = {s: signal.signal(s, interrupted) for s in (signal.SIGINT, signal.SIGTERM)}
     try:
-        if args.mode == "metal":
+        if args.mode in ("metal", "cuda", "hip"):
             scheduler.enqueue(args.command)
         last_log = -60.0
         while True:
@@ -219,7 +219,7 @@ def main(argv=None):
                 print("mac_slot: total run budget exhausted", file=sys.stderr, flush=True)
                 code = 124
                 return code
-            if scheduler.attempt(args.mode == "metal", args.command):
+            if scheduler.attempt(args.mode in ("metal", "cuda", "hip"), args.command):
                 break
             waited = now - started
             if args.wait_timeout and waited >= args.wait_timeout:

@@ -69,7 +69,7 @@ permissions:
 jobs:
   python-tests:
     if: inputs.confirm == 'RUN-HEAVY'
-    name: pytest suite and the 13 gates
+    name: pytest suite and explicit release gates
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
     timeout-minutes: 45
     defaults:
@@ -128,4 +128,4 @@ jobs:
       # The 13 module-style gates, about 34 s including the oracle card the
       # linalg gate needs. Exits non-zero naming any that go RED.
       - name: Gate-style tests
-        run: pixi run check-python-gates
+        run: pixi run check-python-gates-release

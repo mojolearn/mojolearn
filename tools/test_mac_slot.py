@@ -112,10 +112,11 @@ def test_cancelled_waiter_removes_ticket(env):
         owner.release()
 
 
-def test_concurrent_jobs_never_overlap(env, tmp_path):
+@pytest.mark.parametrize("mode", ["metal", "cuda", "hip"])
+def test_concurrent_jobs_never_overlap(env, tmp_path, mode):
     marker = str(tmp_path / "exclusive")
     body = "import os,time,sys;p=sys.argv[1];f=os.open(p,os.O_CREAT|os.O_EXCL|os.O_WRONLY);time.sleep(.05);os.close(f);os.unlink(p)"
-    jobs = [launch(env, "metal", sys.executable, "-c", body, marker) for _ in range(5)]
+    jobs = [launch(env, mode, sys.executable, "-c", body, marker) for _ in range(5)]
     for p in jobs:
         out, err = p.communicate(timeout=10)
         assert p.returncode == 0, (out, err)

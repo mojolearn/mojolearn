@@ -90,6 +90,8 @@ def command(python, lane, fixture, record, timeout, mode, resume, group="all", w
         cmd[2:2] = ["--deadline", str(deadline)]
     if mode == "cpu":
         cmd.append("--require-cpu")
+    if mode != "run":
+        cmd += ["--require-backend", mode]
     if group in ("core", "rlpair"):
         cmd.append("--no-batch")
     if group in ("core", "batch"):
@@ -99,8 +101,8 @@ def command(python, lane, fixture, record, timeout, mode, resume, group="all", w
     return cmd
 
 
-def run_job(cmd, env):
-    child = subprocess.Popen(cmd, env=env)
+def run_job(cmd, env, **popen_options):
+    child = subprocess.Popen(cmd, env=env, **popen_options)
     def forward(signum, frame):
         if child.poll() is None:
             child.send_signal(signum)
@@ -127,7 +129,7 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--budget", type=float, default=None, help="total seconds including planning, queueing and execution (CPU/run 300; Metal 60)")
     ap.add_argument("--timeout", type=float, default=60, help="maximum seconds per job, excluding wait (default 60)")
-    ap.add_argument("--mode", choices=("cpu", "metal", "run"), default="cpu")
+    ap.add_argument("--mode", choices=("cpu", "metal", "cuda", "hip", "run"), default="cpu")
     ap.add_argument("--metal-diagnostic", action="store_true",
                     help="explicitly run one bounded Apple diagnostic between releases")
     ap.add_argument("--metal-expanded", action="store_true",
@@ -159,7 +161,7 @@ def main(argv=None):
     selected["cell_count"] = len(selected["lanes"]) * len(fixtures)
     # The audit is a preflight, before staging sources or taking a lease.
     import lane_applicability
-    column = {"cpu": "cpu-host", "metal": "apple-metal"}.get(args.mode)
+    column = {"cpu": "cpu-host", "metal": "apple-metal", "cuda": "nvidia-1gpu", "hip": "amd-1gpu"}.get(args.mode)
     scopes = lane_applicability.scopes() if column and selected["lanes"] else {}
     selected["inapplicable"] = {
         lane: scopes[lane].applicable(column)[1]

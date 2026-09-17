@@ -64,7 +64,9 @@ selector fallback refuses execution unless `--full-selection` is explicit.
 `--mode metal` requires a release marker or `--metal-diagnostic`, and remains
 subject to the broad-matrix guard;
 `--mode run` reserves CPU capacity but uses the installation's chosen backend,
-for explicit non-Metal GPU work. Neither is the routine default.
+for legacy callers. Prefer explicit `--mode cuda` (NVIDIA) or `--mode hip`
+(AMD), which reserve the GPU lease and check the loaded backend. None is the
+routine default.
 
 See [TEST_ORACLE_SCOPE.md](TEST_ORACLE_SCOPE.md) for what each comparison proves.
 
@@ -133,7 +135,7 @@ showed why a single training step can hide state/copy and scheduler defects.
 
 ## Applicability preflight
 
-CPU and Metal iteration plans include an `inapplicable` map derived by
+CPU, Metal, CUDA and HIP iteration plans include an `inapplicable` map derived by
 `lane_applicability.py`. Execution refuses those selections before staging a
 package or acquiring a lease: for example, multi-device driver claims cannot
 be tested on the CPU-only route, and a CPU-only lane does not test Metal.
@@ -170,3 +172,63 @@ The runner refuses multiple jobs unless `--metal-expanded` is explicit, even
 with a release marker. Expanded jobs still share the one-minute budget unless
 `--budget` is also changed. This does not change installed-wheel release gates.
 No Apple runtime speedup is implied: this limits the amount tested per round.
+
+## The same controls on CPU, AMD and NVIDIA
+
+The routine default is CPU, base fixture, two fits and core probes on every
+host. GPU work requires an explicit backend. The harness reads the loaded
+backend before fitting, so a CUDA request cannot silently measure CPU or HIP.
+All backends have per-job execution/queue limits and one shared run deadline.
+GPU hosts keep their existing release qualification contracts; broad work is
+explicit, not part of every edit.
+
+```sh
+# One selected NVIDIA or AMD lane on an already provisioned GPU host.
+pixi run -e test test-algo --lane ridge --mode cuda --out /tmp/cuda-ridge
+pixi run -e test test-algo --lane ridge --mode hip --out /tmp/hip-ridge
+
+# Two CPU shards concurrently, sharing a five-minute total budget.
+python tools/verify_lanes.py --lanes ridge,kmeans --backend cpu \
+  --host-dir /path/to/prebuilt/host --shards 2 --jobs 2 --budget 300 \
+  --out /tmp/cpu-round
+
+# Inspect the CPU pod commands; this never rents or runs locally.
+python tools/verify_lanes.py --lanes ridge,kmeans --runner pods --shards 2
+```
+
+`verify_lanes.py` now defaults to core probes and CPU-only source staging.
+Use `--probe-group batch`, `rlpair`, or `all` deliberately. Fixture expansion,
+backend selection and selector fallback remain explicit. `--resume` keeps
+matching checkpoints; it never deletes earlier parts before running. A failed
+shard stops further scheduling and cancels active peers through their
+schedulers. The summary is complete only after merged records pass validation,
+including sub-verdicts. A merge timeout also leaves the run incomplete.
+
+CPU `--jobs` is explicit and cannot exceed shared capacity (`MAC_SLOTS`,
+default 5); every child uses one compute thread. GPU `--jobs` stays one per
+host. CUDA/HIP use the same exclusive GPU lease mechanism as Metal. Separate
+CPU, NVIDIA, AMD and Apple hosts can run independently. Multiple GPUs in one
+host are conservatively serialized: this change does not assign physical
+devices or permit same-GPU concurrency. Old processes launched outside the
+scheduler do not acquire its lease.
+
+## Selected Python gates
+
+`check-python-gates` no longer silently runs every module. It requires named
+gates or an explicit `--all`. Only selecting `test_linalg_identity` can launch
+the CPU oracle-card build, and that build shares the total budget.
+
+```sh
+pixi run check-python-gates --list
+pixi run check-python-gates --gate test_linalg_identity --backend cpu \
+  --host-dir /path/to/prebuilt/host --out /tmp/linalg-gate --plan
+# Real-Apple broad gates are an explicit release task.
+pixi run check-python-gates-release
+```
+
+Some public API gates require GPU training. CPU selection does not grant
+public CPU training or silently reroute such a gate; choose its actual GPU
+backend when needed. Gate logs and atomic summaries preserve failures and
+unrun gates. The release task uses a ten-minute total budget, with each gate
+still bounded to one minute. Other broad qualifications can explicitly set
+`--all`, their backend and their budget.
