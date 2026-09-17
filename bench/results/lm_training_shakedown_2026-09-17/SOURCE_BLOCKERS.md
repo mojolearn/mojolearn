@@ -22,6 +22,14 @@ the Mojo trainer alike. It is not one guard that could be relaxed in one place:
 | `bindings/_mojolearn_byte_lm.mojo` | 807 | session step: `if completed >= 999999:` |
 | `bindings/_mojolearn_byte_lm.mojo` | 1188 | `claimed < 0 or claimed >= 1000000` |
 | `training/byte_lm.mojo` | 230, 261, 653 | `raise Error("byte LM: completed step must be in [0,1000000)")` |
+| `python/mojolearn/_byte_lm_trainer_host.py` | 126, 224, 365, 458 | the CPU host trainer carries the same bound, `_MAX_COMPLETED` and all |
+
+That census is repo-wide by the guards' own error text
+(`git grep -n "completed step\|step counter is exhausted\|completed step outside admitted bound" -- '*.mojo' '*.py'`),
+not a sample: **fourteen guards across five files**, plus three more inside a
+retained copy of an older binding under `bench/results/lm_session_2026-09-10/`.
+`SmallMLPTrainer` has its own, unrelated, at `_mlp_impl.py:414,431`. There is no
+path through this stack that does not check it.
 
 What that ceiling buys at L2048:
 
