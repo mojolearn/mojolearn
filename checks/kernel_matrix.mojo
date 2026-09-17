@@ -1771,3 +1771,15 @@ def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW"]():
         return True
     return False
+
+
+@always_inline
+def lib_int8_matrix_unit_for[column: Int]() -> Bool:
+    """Capability row (DEVIATION 2910, 2026-09-17, lane/int8-mma; contract clause L-9 of gemm/IDENTICAL_LOWBIT_CONTRACT.md): whether the column has an INTEGER matrix unit that takes int8 operands and accumulates in Int32, so `mojolearn.identical.gemm.int8i32.v1` may run its product on it (`gemm/checks/gemm_int8_mma.mojo`) instead of the one-thread-per-cell flat kernel. NVIDIA True: IMMA, `mma.sync.aligned.m16n8k32.row.col.s32.s8.s8.s32`, sm_80 and later. AMD True: CDNA MFMA, `v_mfma_i32_16x16x32_i8` on gfx942 and gfx950 (the k16 form of CDNA2 is not wired; a gfx90a build is OWED its own intrinsic). Apple False: Metal's simdgroup matrix takes half and float operands only, so the flat kernel serves it. CPU False: no kernel is launched on it and the host oracle is the answer. A True here CANNOT move a bit: an int8 product is exact and an Int32 sum of exact integers is order-free, so the unit's tile shape and internal summation are scheduling; the dequantization seam stays `dequant_int8_pinned` on either path, and `check_int8_mma_matches_flat` requires the two paths' bits to match on every shape. `-D MOJOLEARN_INT8_FORCE_FLAT=1` keeps the flat kernel everywhere without changing this row (the equality gate on a box that has the unit). RDNA, Qualcomm, Intel and the two graph columns answer False: none has been wired or measured."""
+    if column == COLUMN_NVIDIA:
+        return True
+    if column == COLUMN_AMD:
+        return True
+    if column == COLUMN_CPU:
+        return False  # the host runs no kernel; the oracle is the answer
+    return False
