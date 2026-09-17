@@ -1345,9 +1345,61 @@ def load_with_fallback(name, size, rows_cap=None):
                where))
 
 
+#: The decoded cache each `--download <name>` exists to produce. When the R2
+#: store has already put this file on the box, there is nothing left to fetch
+#: and nothing left to decode.
+DOWNLOAD_PRODUCES = {
+    "higgs": ("higgs", "higgs_speed.npz"),
+    "taxi": ("taxi", "taxi_speed.npz"),
+    "istella": ("istella", "istella_speed.npz"),
+    "year": ("year", "year_speed.npz"),
+    "covtype": ("covtype", "covtype_speed.npz"),
+    "covtype2": ("covtype", "covtype_speed.npz"),
+}
+
+
+def staged_cache(name):
+    """The staged decoded npz for `name`, or None.
+
+    A file of zero or near-zero length is NOT a cache: `load_higgs` already
+    carries a scar about a 0-byte `higgs_speed.npz` left by a killed decode,
+    and accepting one here would turn a truncated file into "already staged"
+    and then into a refusal three steps later with the wrong cause attached.
+    """
+    ent = DOWNLOAD_PRODUCES.get(name)
+    if ent is None:
+        return None
+    path = os.path.join(data_root(), ent[0], ent[1])
+    try:
+        if os.path.isfile(path) and os.path.getsize(path) > (1 << 20):
+            return path
+    except OSError:
+        return None
+    return None
+
+
 def download(name):
     """The explicitly named, untimed fetch step. Prints the size it pulled so
-    the orchestrator can budget the lease around it."""
+    the orchestrator can budget the lease around it.
+
+    THE STAGED CACHE SHORT-CIRCUITS EVERYTHING BELOW (DEVIATION 2704).
+    Every branch used to test for the RAW artifact -- `HIGGS.csv.gz`,
+    `yellow_tripdata_*.parquet`, `istella-s-letor.tar.gz`,
+    `YearPredictionMSD.txt.zip` -- so a box that already held the pinned,
+    sha256-verified `*_speed.npz` from R2 still pulled 2.6 GB from
+    archive.ics.uci.edu, or 472 MB from library.istella.it, and then decoded
+    it again. The npz IS what this function exists to produce; when it is
+    there, the fetch and the decode are both finished.
+
+    The taxi branch is the one this matters most for and the one that was
+    least visible: it never printed an `R2_STAGING_MISSED` line at all, so its
+    re-download left no trace in the leg's evidence.
+    """
+    staged = staged_cache(name)
+    if staged is not None:
+        print("%s: staged decoded cache already present, nothing to download: "
+              "%s (%.1f MB)" % (name, staged, os.path.getsize(staged) / 1e6))
+        return
     if name == "higgs":
         import urllib.request
         folder = os.path.join(data_root(), "higgs")
