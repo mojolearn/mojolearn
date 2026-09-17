@@ -153,22 +153,25 @@ def _thread_count(value):
 def _flatten_parameters(params, shape):
     """The registry dict (names from `shape.parameter_names`, values float32
     or packed) to the flat float32 vector the binding takes, and the one
-    format the packed tensors share."""
-    import numpy as np
+    format the packed tensors share. NumPy-free: the materialized tensors
+    are `mojolearn.Array`s and the copy goes through the flat buffer views."""
     from . import lowbit as _lowbit
+    from ._buffer import empty as _empty
+    from ._bufcheck import flat_view as _flat
     names = shape.parameter_names
     missing = [n for n in names if n not in params]
     extra = [n for n in params if n not in names]
     if missing or extra:
         raise ValueError(f"mojolearn.LanguageModelInference: parameter dict mismatch; missing {missing!r}, unknown {extra!r}")
     fmt = _lowbit.format_of(params)
-    flat = np.empty((shape.n_total,), np.float32)
+    flat = _empty((shape.n_total,), '<f4')
+    dst = _flat(flat, 'f')
     offsets = shape.offsets
     for j, (name, shp) in enumerate(zip(names, shape.parameter_shapes)):
-        a = np.ascontiguousarray(_lowbit.materialize_one(params[name], name), dtype=np.float32)
-        if a.shape != tuple(shp):
-            raise ValueError(f"mojolearn.LanguageModelInference: {name} has shape {a.shape}, want {tuple(shp)}")
-        flat[offsets[j]:offsets[j + 1]] = a.reshape(-1)
+        a, _ = as_f32_c(_lowbit.materialize_one(params[name], name), ndim=None, name=name)
+        if tuple(a.shape) != tuple(shp):
+            raise ValueError(f"mojolearn.LanguageModelInference: {name} has shape {tuple(a.shape)}, want {tuple(shp)}")
+        dst[offsets[j]:offsets[j + 1]] = _flat(a, 'f')
     return flat, fmt
 
 

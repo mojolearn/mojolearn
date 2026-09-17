@@ -96,6 +96,7 @@ EOF
 groups() {
     cat <<'EOF'
 corpus/fineweb-edu-10BT	ROOT/training/corpus/fineweb-edu-10BT	000_00000.parquet 001_00000.parquet 002_00000.parquet 003_00000.parquet 004_00000.parquet 005_00000.parquet 006_00000.parquet 007_00000.parquet 008_00000.parquet 009_00000.parquet 010_00000.parquet 011_00000.parquet 012_00000.parquet 013_00000.parquet
+models/SmolLM2-360M	HOME/models/SmolLM2-360M	config.json generation_config.json model.safetensors tokenizer.json tokenizer_config.json special_tokens_map.json
 EOF
 }
 
