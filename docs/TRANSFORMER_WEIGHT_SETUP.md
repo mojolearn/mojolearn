@@ -99,3 +99,43 @@ but timed out building the full binding at 60 seconds. Neither initial leg
 completed its Transformer integration checks. Both machines were deleted,
 with HTTP 404 confirmation. A final confirmation uses two compiler workers
 and a 120-second cold-binding build cap, retaining 60-second runtime caps.
+
+
+## Completed cloud confirmation
+
+The final candidate passed on AMD Instinct MI300X (HIP/gfx942) and NVIDIA
+H100 80GB HBM3 (CUDA/sm_90). Each passed the 45-case scan gate, the host-list
+constructor/counter gate, both setup groups, and the selected backward case.
+All 54 forward/cache arrays and all 20 gradient arrays matched Metal byte for
+byte. All 63 refusal messages also matched Metal exactly. No cross-vendor
+performance ratio is inferred: these cloud legs ran the candidate only.
+They are focused checks, not complete installed-wheel release qualification.
+
+The final AMD VM `46ec4ae5-06b7-4d83-914b-d83aa2ff6d9d` and NVIDIA droplet
+`601401995` were deleted and verified absent with HTTP 404. The initial timed-out
+legs were likewise deleted. Every nested final check returned zero; the initial
+legs' `extra_exit=124` remains a failure even though their orchestration wrapper
+returned zero after successfully collecting logs and cleaning up.
+
+[Committed measurements and comparison results](evidence/transformer_weight_setup_2026-09-17.json)
+include source commits, binary hashes, raw timing samples, check counts, and
+teardown receipts. Full local build logs, NPZ arrays, and cloud logs remain in
+`~/mojolearn-evidence/transformer-setup-profile/`. The CPU reference is the
+existing host binding identified by its hash, not a fresh rebuild this round.
+
+To reproduce the narrow remote leg, follow the provider-selection rules and
+set `MOJOLEARN_STAGE_KEYS=""` **on the local runner invocation**, before renting:
+
+```sh
+MOJOLEARN_STAGE_KEYS="" \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/transformer_setup_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=/absolute/path/to/evidence \
+MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES=0 \
+bash tools/hotaisle_leg.sh amd --rent --minutes 20 --skip-gates
+```
+
+The body needs no corpora. Setting the variable inside the remote body is too
+late: the generic runner stages datasets before launching it. This removed
+41–120 seconds of unrelated downloads in the confirmation attempts. The
+`--skip-gates` option skips the generic card/device gates; the explicit narrow
+checks above still run, and this leg does not replace release qualification.
