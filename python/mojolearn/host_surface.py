@@ -2473,16 +2473,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
     "ordered-gradient-sum": "no reference",
-    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
-    # change. UMAP.transform became row separable, so every umap hash in the
-    # shipped table describes bytes this build no longer produces. The
-    # regeneration lane/expose-stepfull landed drops those cells rather than
-    # keeping them, because no committed record was taken at the new
-    # revision, so what umap owes is a RECORD and its reason is
-    # `no reference` rather than `stale reference`. Without an entry here a
-    # user's CPU-only `verify --all` would read OWED for umap on a machine
-    # that is fine.
-    "umap": "no reference",
     # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
     # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
     # harness no longer produces. `unwatched` would be the wrong reason and
