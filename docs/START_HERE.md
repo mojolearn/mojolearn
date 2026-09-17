@@ -1,5 +1,8 @@
 # Start here
 
+> Resuming the low-bit inference work of 2026-09-17? Read
+> [docs/lanes/HANDOFF_2026-09-17_lowbit_inference.md](lanes/HANDOFF_2026-09-17_lowbit_inference.md) first.
+
 This is the whole path from a clone to a merged change. It is deliberately
 short. **You do not need to read the rest of this repository's documentation
 before your first contribution.** The long documents exist so that a claim can
