@@ -1,11 +1,12 @@
 # Small neural decode calls on Metal
 
-A healthy command queue does not make our current host-array API efficient.
-`TransformerBlock.step` and `Mamba1Block.step` cross the native boundary once
-per token. The binding constructs a DeviceContext, uploads weights and carried
-state, allocates stages, executes the block, then downloads output and state.
-The next token repeats this setup. Python model reuse does not imply resident
-GPU weights or GPU state.
+A healthy command queue does not make a host-array API efficient. At the
+start of this investigation, `TransformerBlock.step` and `Mamba1Block.step`
+constructed a DeviceContext, uploaded weights and carried state, allocated
+stages, executed the block, then downloaded output and state on every token.
+The [Transformer follow-up](TRANSFORMER_SESSION_REUSE.md) reuses compatible
+context/workspace ownership. Python model reuse still does not imply resident
+GPU weights or authoritative GPU cache state.
 
 The reported 225.71 ms Transformer and 211.67 ms Mamba-1 measurements used
 B=1, L=16, d_model=32, and timed 16 separate step calls. They are tiny-call
@@ -145,3 +146,8 @@ The next setup reduction batches all nine Transformer weight scans into shared
 scratch, one result copy, and one completion wait. Mutable weights are still
 validated on every construction. See [Transformer weight setup](TRANSFORMER_WEIGHT_SETUP.md)
 for bounded checks, measurements, and cross-vendor qualification limits.
+
+The subsequent [retained Transformer setup](TRANSFORMER_SESSION_REUSE.md)
+reuses compatible per-model context/workspace ownership. Mutable weights and
+caller cache state are still refreshed on every call; this does not change the
+Mamba setup path or remove any release identity fixtures.

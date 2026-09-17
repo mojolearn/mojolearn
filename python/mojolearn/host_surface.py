@@ -859,6 +859,23 @@ TRAINING_LANE_NAMES = {
     # computes is the prediction from a GPU-fitted model, not a fit.
     "gbdt-categorical-ctr-tables": "predictions of Metal-saved gradient boosting models with CTR tables (inference)",
     "gbdt-tensor-ctr-tables": "predictions of Metal-saved gradient boosting models with tensor CTRs (inference)",
+    # lane/identical-lowbit-inference (2026-09-17): the two low-bit GEMM
+    # profiles, and every neural block with bf16- or int8-stored projection
+    # weights materialized exactly and run through the fp32 path.
+    "gemm-bf16": "the bf16-storage GEMM profile",
+    "gemm-int8": "the int8 GEMM profile with power-of-two scales",
+    "transformer-bf16w": "the Transformer block with bf16-stored weights",
+    "transformer-int8w": "the Transformer block with int8-stored weights",
+    "mamba1-bf16w": "the Mamba-1 block with bf16-stored weights",
+    "mamba1-int8w": "the Mamba-1 block with int8-stored weights",
+    "mamba2-bf16w": "the Mamba-2 block with bf16-stored weights",
+    "mamba2-int8w": "the Mamba-2 block with int8-stored weights",
+    "mamba3-bf16w": "the Mamba-3 block with bf16-stored weights",
+    "mamba3-int8w": "the Mamba-3 block with int8-stored weights",
+    "mlp-bf16w": "the small MLP with bf16-stored weights",
+    "mlp-int8w": "the small MLP with int8-stored weights",
+    "samba-bf16w": "the Samba stack with bf16-stored weights",
+    "samba-int8w": "the Samba stack with int8-stored weights",
 }
 
 #: The saved models the CTR table lanes load on a CPU column, one
@@ -1202,17 +1219,22 @@ FAMILIES = (
         # matrix, then solve) ships: this family is in the wheel and gp is
         # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
         # so the cholesky lane reads through this binding.
-        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky"),
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
         display="pinned GEMM and the Cholesky factorization and solve",
-        host_modules=("gemm/host/gemm_oracle.mojo", "cholesky/host/chol_oracle.mojo"),
+        host_modules=("gemm/host/gemm_oracle.mojo", "gemm/host/gemm_lowbit_oracle.mojo",
+                      "cholesky/host/chol_oracle.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
             "linalg_profile_version", "gemm", "cholesky_profile_jitter",
             "cholesky_factor", "cholesky_solve",
+            # lane/identical-lowbit-inference (2026-09-17): the bf16f32.v1 and
+            # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
+            "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
+            "dequantize_int8", "to_bf16", "from_bf16",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1957,7 +1979,8 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
-                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip"),
+                        "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
+                        "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -2052,7 +2075,8 @@ FAMILIES = (
         routes="_mojolearn_mamba",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3"),
+        training_lanes=("mamba2", "mamba2-dtlimit", "mamba1", "mamba3",
+                        "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("Mamba1Block", "Mamba2Block", "Mamba3Block"),
@@ -2318,7 +2342,7 @@ FAMILIES = (
         routes="_mojolearn_transformer",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("transformer", "transformer-window"),
+        training_lanes=("transformer", "transformer-window", "transformer-bf16w", "transformer-int8w"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("TransformerBlock",),
@@ -2503,6 +2527,14 @@ PUBLIC_PENDING_LANES = {
     "embedding-sort": "own record",
     "ivf": "own record",
     "ivf-euclidean": "own record",
+    # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
+    "gemm-bf16": "no reference", "gemm-int8": "no reference",
+    "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
+    "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
+    "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
+    "mamba3-bf16w": "no reference", "mamba3-int8w": "no reference",
+    "mlp-bf16w": "no reference", "mlp-int8w": "no reference",
+    "samba-bf16w": "no reference", "samba-int8w": "no reference",
 }
 
 

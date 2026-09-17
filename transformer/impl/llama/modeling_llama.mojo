@@ -1359,6 +1359,77 @@ struct LlamaDeviceStages(Movable):
         ctx.synchronize()
 
 
+    def reset(mut self, ctx: DeviceContext) raises:
+        """Restore constructor scratch bits before a retained binding call.
+
+        Keep all zero fills: partially written scratch must never carry NaNs
+        or stale values from a previous input. The owner retains every buffer
+        through this fence. GEMM workspace ownership is unchanged.
+        """
+        step_count_launch()
+        self.norm1_sumsq.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.norm1_out.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.q_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.k_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.v_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.q_rope.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.k_rope.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.k_cache.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.v_cache.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.scores.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.masked.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.amax.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.aexp.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.denom.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.weights.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.ctxv.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.o_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.residual1.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.norm2_sumsq.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.norm2_out.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.gate_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.up_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.silu_out.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.gated.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.down_proj.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.residual2.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.qbh.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.kbh.enqueue_fill(Float32(0))
+        step_count_launch()
+        self.sbh.enqueue_fill(Float32(0))
+        self.attn_materialized = False
+        self.attn_estash_cells = 0
+        step_count_sync()
+        ctx.synchronize()
+
+
 def ensure_attention_stage_capacity(
     ctx: DeviceContext, mut stages: LlamaDeviceStages, l: Int, s: Int
 ) raises:

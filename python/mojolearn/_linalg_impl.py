@@ -87,7 +87,7 @@ import os
 import sys
 
 from . import _backend
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, as_f32_c, as_i8_c, as_i32_c, as_u16_c, empty
 from ._bufcheck import dtype_name, is_native_f32, nelems, probe
 
 #: The profile family and the version, kept apart because the VERSION is the
@@ -98,6 +98,12 @@ from ._bufcheck import dtype_name, is_native_f32, nelems, probe
 PROFILE_FAMILY = "mojolearn.identical.gemm.fp32"
 PROFILE_VERSION = 1
 PROFILE = f"{PROFILE_FAMILY}.v{PROFILE_VERSION}"
+
+#: The two low-bit profiles (gemm/IDENTICAL_LOWBIT_CONTRACT.md,
+#: lane/identical-lowbit-inference, 2026-09-17). Same version discipline.
+LOWBIT_PROFILE_VERSION = 1
+PROFILE_BF16 = f"mojolearn.identical.gemm.bf16f32.v{LOWBIT_PROFILE_VERSION}"
+PROFILE_INT8 = f"mojolearn.identical.gemm.int8i32.v{LOWBIT_PROFILE_VERSION}"
 
 #: The three operations of contract section 0.1, and their `op` codes as
 #: `gemm/host/gemm_oracle.mojo` defines them. `gemv` is `OP_NT` at
@@ -508,3 +514,222 @@ def matmul(a, b, *, transpose_a=False, transpose_b=False, out=None,
     binding.gemm(addr(out_arr, name="out"), addr_ro(a_arr, name="a"),
                  addr_ro(b_arr, name="b"), params)
     return out_arr
+
+
+
+# ===========================================================================
+# THE LOW-BIT PROFILES (lane/identical-lowbit-inference, 2026-09-17)
+# gemm/IDENTICAL_LOWBIT_CONTRACT.md. Every function below refuses a lower
+# tier the way `matmul` does, reads back the profile version from the
+# binary, and passes addresses plus one `params` list whose order is written
+# out in the same words in `bindings/_mojolearn_linalg.mojo`.
+# ===========================================================================
+
+
+def _lowbit_binding():
+    b = _load()
+    require_identical()
+    got = getattr(b, "lowbit_profile_version", None)
+    if got is None:
+        raise RuntimeError(
+            "mojolearn.linalg: the loaded linalg extension predates the "
+            "low-bit profiles; rebuild it with bindings/build_linalg.sh"
+        )
+    v = int(got())
+    if v != LOWBIT_PROFILE_VERSION:
+        raise RuntimeError(
+            f"mojolearn.linalg: the loaded extension implements low-bit "
+            f"profile version {v}, this wrapper expects {LOWBIT_PROFILE_VERSION}"
+        )
+    return b
+
+
+def _operand_bits(x, name):
+    """A 2-D uint16 buffer of bf16 bits, C-contiguous, kept alive."""
+    try:
+        pb = probe(x)
+    except TypeError:
+        raise TypeError(
+            f"mojolearn.linalg: {name} must be a uint16 buffer of bf16 bits "
+            f"(profile {PROFILE_BF16}); got {type(x).__name__}"
+        ) from None
+    if dtype_name(x, pb) != "uint16":
+        raise TypeError(
+            f"mojolearn.linalg: {name} has dtype {dtype_name(x, pb)}; the "
+            f"bf16 profile takes bf16 BITS in a uint16 buffer, which "
+            "to_bf16() produces. Refused rather than reinterpreted."
+        )
+    if pb.ndim != 2:
+        raise ValueError(f"mojolearn.linalg: {name} must be 2-D, got {pb.ndim}-D")
+    if nelems(pb.shape) == 0:
+        raise ValueError(f"mojolearn.linalg: {name} has no elements")
+    a, _ = as_u16_c(x, ndim=2, name=name)
+    return a
+
+
+def to_bf16(x):
+    """float32 to bf16 bits (contract L-2: flush, then round to nearest
+    even), on the GPU, as a uint16 `mojolearn.Array` of the same shape."""
+    a, _ = as_f32_c(x, ndim=None, name="x")
+    pb = probe(a)
+    if not is_native_f32(pb.format):
+        raise TypeError("mojolearn.linalg.to_bf16: x must be float32")
+    n = nelems(pb.shape)
+    if n == 0:
+        raise ValueError("mojolearn.linalg.to_bf16: x has no elements")
+    out = empty(pb.shape, "<u2")
+    _lowbit_binding().to_bf16(addr(out, name="out"), addr_ro(a, name="x"), [int(n)])
+    return out
+
+
+def from_bf16(bits):
+    """bf16 bits to float32 (contract L-1, exact), on the GPU, as a float32
+    `mojolearn.Array` of the same shape."""
+    a, _ = as_u16_c(bits, ndim=None, name="bits")
+    pb = probe(a)
+    n = nelems(pb.shape)
+    if n == 0:
+        raise ValueError("mojolearn.linalg.from_bf16: bits has no elements")
+    out = empty(pb.shape, "<f4")
+    _lowbit_binding().from_bf16(addr(out, name="out"), addr_ro(a, name="bits"), [int(n)])
+    return out
+
+
+def quantize_int8(x):
+    """Row-wise int8 codes and per-row power-of-two exponents of a 2-D
+    float32 matrix (contract L-3, L-4), on the GPU. Returns `(codes,
+    exponents)`: an int8 Array of x's shape and an int32 Array of `rows`."""
+    a = _operand(x, "x")
+    rows, cols = probe(a).shape
+    codes = empty((rows, cols), "<i1")
+    exps = empty((rows,), "<i4")
+    _lowbit_binding().quantize_int8(addr(codes, name="codes"), addr(exps, name="exponents"),
+                                    addr_ro(a, name="x"), [int(rows), int(cols)])
+    return codes, exps
+
+
+def dequantize_int8(codes, exponents):
+    """`codes * 2**exponents[row]`, exact, on the GPU, as float32."""
+    q, _ = as_i8_c(codes, ndim=2, name="codes")
+    e, _ = as_i32_c(exponents, ndim=1, name="exponents")
+    rows, cols = probe(q).shape
+    if probe(e).shape != (rows,):
+        raise ValueError(
+            f"mojolearn.linalg.dequantize_int8: exponents has shape "
+            f"{probe(e).shape}, want ({rows},)"
+        )
+    out = empty((rows, cols), "<f4")
+    _lowbit_binding().dequantize_int8(addr(out, name="out"), addr_ro(q, name="codes"),
+                                      addr_ro(e, name="exponents"), [int(rows), int(cols)])
+    return out
+
+
+def _op_and_shape(a_shape, b_shape, transpose_a, transpose_b, who):
+    if transpose_a and transpose_b:
+        raise ValueError(
+            f"mojolearn.linalg.{who}: transpose_a and transpose_b together "
+            "is not one of the contract's three operations (section 0.1); "
+            "write (b @ a).T with the flags swapped, in your own source."
+        )
+    if transpose_a:
+        op = OP_TN
+        k, m = a_shape
+        kb, n = b_shape
+    elif transpose_b:
+        op = OP_NT
+        m, k = a_shape
+        n, kb = b_shape
+    else:
+        op = OP_NN
+        m, k = a_shape
+        kb, n = b_shape
+    if k != kb:
+        raise ValueError(
+            f"mojolearn.linalg.{who}: contracted extents differ, a gives "
+            f"k={k} and b gives k={kb} (a.shape={a_shape}, b.shape={b_shape}, "
+            f"transpose_a={transpose_a}, transpose_b={transpose_b})"
+        )
+    return op, m, n, k
+
+
+def matmul_bf16(a, b, *, transpose_a=False, transpose_b=False, out=None):
+    """`C = op(a) @ op(b)` under `mojolearn.identical.gemm.bf16f32.v1`.
+
+    `b` is bf16 bits (a uint16 buffer, from `to_bf16`); `a` is float32, or
+    bf16 bits too. The output is float32: the exactly widened operands
+    through the fp32 profile's arithmetic, so a caller who widens the bits
+    with `from_bf16` and calls `matmul` gets the same bits. The transpose
+    flags and `out` follow `matmul`.
+    """
+    a_bits = False
+    try:
+        pa = probe(a)
+        a_bits = dtype_name(a, pa) == "uint16"
+    except TypeError:
+        pass
+    a_arr = _operand_bits(a, "a") if a_bits else _operand(a, "a")
+    b_arr = _operand_bits(b, "b")
+    op, m, n, k = _op_and_shape(probe(a_arr).shape, probe(b_arr).shape,
+                                transpose_a, transpose_b, "matmul_bf16")
+    out_arr = _out_or_new(out, m, n, "matmul_bf16")
+    # `params` is, in this exact order (mirrored word for word in
+    # `bindings/_mojolearn_linalg.mojo::gemm_bf16_binding`):
+    #     0 m, 1 n, 2 k, 3 op, 4 a_bf16
+    params = [int(m), int(n), int(k), int(op), 1 if a_bits else 0]
+    _lowbit_binding().gemm_bf16(addr(out_arr, name="out"), addr_ro(a_arr, name="a"),
+                                addr_ro(b_arr, name="b"), params)
+    return out_arr
+
+
+def matmul_int8(a, b, *, out=None):
+    """`C = a @ b.T` under `mojolearn.identical.gemm.int8i32.v1` (OP_NT).
+
+    Each of `a` (m x k) and `b` (n x k) is either a float32 matrix, which is
+    quantized on the GPU by the profile's own rule, or a `(codes,
+    exponents)` pair from `quantize_int8`. The output is float32: the exact
+    Int32 sum of the codes, dequantized by one multiply by a power of two.
+    It is NOT the float32 product; it is the product of the rounded
+    operands, and the profile pins that, not its distance from the
+    unrounded one.
+    """
+    qa, ea = _int8_operand(a, "a")
+    qb, eb = _int8_operand(b, "b")
+    m, k = probe(qa).shape
+    n, kb = probe(qb).shape
+    if k != kb:
+        raise ValueError(
+            f"mojolearn.linalg.matmul_int8: contracted extents differ, a "
+            f"gives k={k} and b gives k={kb}"
+        )
+    out_arr = _out_or_new(out, m, n, "matmul_int8")
+    # `params` is `[m, n, k]`, mirrored in `gemm_int8_binding`.
+    _lowbit_binding().gemm_int8(addr(out_arr, name="out"), addr_ro(qa, name="a codes"),
+                                addr_ro(ea, name="a exponents"), addr_ro(qb, name="b codes"),
+                                addr_ro(eb, name="b exponents"), [int(m), int(n), int(k)])
+    return out_arr
+
+
+def _int8_operand(x, name):
+    if isinstance(x, tuple) and len(x) == 2:
+        q, _ = as_i8_c(x[0], ndim=2, name=name + " codes")
+        e, _ = as_i32_c(x[1], ndim=1, name=name + " exponents")
+        if probe(e).shape != (probe(q).shape[0],):
+            raise ValueError(
+                f"mojolearn.linalg.matmul_int8: {name} exponents has shape "
+                f"{probe(e).shape}, want ({probe(q).shape[0]},)"
+            )
+        return q, e
+    return quantize_int8(_operand(x, name))
+
+
+def _out_or_new(out, m, n, who):
+    if out is None:
+        return empty((m, n), "<f4")
+    pb = probe(out)
+    if not is_native_f32(pb.format):
+        raise TypeError(f"mojolearn.linalg.{who}: out must be float32")
+    if pb.shape != (m, n):
+        raise ValueError(f"mojolearn.linalg.{who}: out has shape {pb.shape}, want ({m}, {n})")
+    if not pb.c_contiguous or pb.readonly:
+        raise ValueError(f"mojolearn.linalg.{who}: out must be C-contiguous and writable")
+    return out
