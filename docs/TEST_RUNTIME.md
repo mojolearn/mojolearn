@@ -69,6 +69,9 @@ for legacy callers. Prefer explicit `--mode cuda` (NVIDIA) or `--mode hip`
 routine default.
 
 See [TEST_ORACLE_SCOPE.md](TEST_ORACLE_SCOPE.md) for what each comparison proves.
+For a narrow native gradient-transfer check on CPU or GPU, see
+[Transformer gradient readback](TRANSFORMER_GRADIENT_READBACK.md). It selects
+one small case at a time and preserves complete bytewise output comparisons.
 
 ## Scheduler
 
