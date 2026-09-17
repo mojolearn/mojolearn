@@ -247,3 +247,22 @@ probe group with the original manifest. A changed scope refuses and leaves the
 existing evidence untouched. A fresh budget or a different CPU concurrency
 limit is allowed; changing shard membership requires a new output directory.
 The harness still checks source, binary and protocol provenance per checkpoint.
+
+## Gate applicability before launching work
+
+Gate modules may declare a literal `GATE_BACKENDS = ("cpu",)` (or a tuple of
+supported backend names). The runner reads this declaration without importing
+the gate or initializing a GPU. Undeclared scope remains conservative: the
+module stays selectable on every backend. Invalid declarations refuse.
+
+For `--all`, the plan and summary list inapplicable modules under `excluded`,
+with reasons; those modules are not counted as completed checks. Explicitly
+requesting an inapplicable `--gate` refuses before staging or scheduling.
+CPU training gates now declare their CPU-only scope: their runtime checks
+already skipped when a GPU set was loaded. Their source and host-runtime
+checks remain available on CPU.
+
+On 2026-09-17 this removes 19 CPU-training modules from each broad GPU gate
+plan: 55 discovered modules become 36 selected modules. That is fewer modules
+to launch, not a measured 35% reduction in elapsed time, and it does not change
+the selected modules' assertions or public estimator behavior.

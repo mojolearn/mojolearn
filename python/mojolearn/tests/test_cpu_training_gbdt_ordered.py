@@ -29,6 +29,9 @@ claim against the GPU columns is the CPU identity gate's, not this file's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_ordered
 """
+
+# Gate-runner scope: host runtime checks require the CPU-only route.
+GATE_BACKENDS = ("cpu",)
 import os
 import re
 import sys

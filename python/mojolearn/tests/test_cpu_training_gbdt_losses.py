@@ -25,6 +25,9 @@ bit claim against the GPU columns is the CPU identity gate's.
 
     cd python && python3 -m mojolearn.tests.test_cpu_training_gbdt_losses
 """
+
+# Gate-runner scope: host runtime checks require the CPU-only route.
+GATE_BACKENDS = ("cpu",)
 import re
 import sys
 from pathlib import Path

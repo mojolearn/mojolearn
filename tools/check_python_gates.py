@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Run explicitly selected installed-package gates with a shared time budget."""
 import argparse
+import ast
 import json
 import math
 import os
@@ -19,6 +20,30 @@ def discover():
     return sorted(p.stem for p in (ROOT / 'python/mojolearn/tests').glob('test_*.py')
                   if 'import pytest' not in p.read_text() and 'unittest.TestCase' not in p.read_text())
 
+
+
+BACKENDS = frozenset(('cpu', 'metal', 'cuda', 'hip'))
+
+
+def gate_backends(name):
+    """Read literal scope without importing a test or initializing a device."""
+    path = ROOT / 'python/mojolearn/tests' / (name + '.py')
+    tree = ast.parse(path.read_text())
+    declarations = [node.value for node in tree.body if isinstance(node, ast.Assign)
+                    and any(isinstance(t, ast.Name) and t.id == 'GATE_BACKENDS' for t in node.targets)]
+    if not declarations:
+        return BACKENDS  # Unknown scope stays conservative; never infer it from a filename.
+    if len(declarations) != 1:
+        raise ValueError(f'{name}: duplicate GATE_BACKENDS declarations')
+    try:
+        declared = ast.literal_eval(declarations[0])
+        if not isinstance(declared, (tuple, list)) or not declared:
+            raise ValueError('expected a nonempty literal list/tuple')
+        if any(not isinstance(v, str) or v not in BACKENDS for v in declared):
+            raise ValueError('unknown backend')
+    except (ValueError, TypeError) as exc:
+        raise ValueError(f'{name}: invalid GATE_BACKENDS: {exc}') from exc
+    return frozenset(declared)
 
 def main(argv=None):
     started = time.monotonic()
@@ -46,7 +71,17 @@ def main(argv=None):
     gates = available if args.all else list(dict.fromkeys(args.gate))
     if not gates or set(gates) - set(available):
         ap.error('select known --gate NAME entries or explicitly --all; use --list')
-    print(json.dumps(dict(gates=gates, backend=args.backend, budget=args.budget,
+    try:
+        excluded = {name: f"declares backends {', '.join(sorted(gate_backends(name)))}"
+                    for name in gates if args.backend not in gate_backends(name)}
+    except (ValueError, SyntaxError) as exc:
+        ap.error(str(exc))
+    if excluded and not args.all:
+        ap.error(f"selected gates do not apply to {args.backend}: {excluded}")
+    gates = [name for name in gates if name not in excluded]
+    if not gates:
+        ap.error('no applicable gates; an empty selection is not a pass')
+    print(json.dumps(dict(gates=gates, excluded=excluded, backend=args.backend, budget=args.budget,
                           timeout=args.timeout, wait_timeout=args.wait_timeout)), flush=True)
     if args.plan:
         return 0
@@ -71,7 +106,7 @@ def main(argv=None):
     def report(pending, failed=None):
         tmp = out / 'summary.tmp'
         tmp.write_text(json.dumps(dict(complete=not pending and failed is None,
-            completed=completed, pending=pending, failed=failed, backend=args.backend,
+            completed=completed, pending=pending, excluded=excluded, failed=failed, backend=args.backend,
             elapsed_seconds=time.monotonic()-started), indent=2) + '\n')
         tmp.replace(out / 'summary.json')
     def run(command, mode, label):
