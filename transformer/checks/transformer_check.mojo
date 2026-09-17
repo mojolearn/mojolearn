@@ -234,12 +234,13 @@ OWED, and this file covers none of it
   through 302 stages while NVIDIA diverged at `tree001.winners.scores`.
 """
 
-from std.memory import bitcast
+from std.memory import bitcast, memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
+from core.step_phase import step_count_host_alloc, step_count_d2h, step_count_sync
 from mamba.checks.mamba_fixture import corpus_splitmix64
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -814,37 +815,65 @@ def device_dump(
     var half = dims.half_head()
     var m = b * l
     var cells = b * nh * l * s
+    # Retain logical views for input, rotary tables and all stages. Allocation
+    # capacity is deliberately excluded from the packed attention regions.
+    var views = List[DeviceBuffer[DType.float32]]()
+    views.append(dx.create_sub_buffer[DType.float32](0, m * dm))  # 0  input.x
+    views.append(stages.norm1_sumsq.create_sub_buffer[DType.float32](0, m))  # 1
+    views.append(stages.norm1_out.create_sub_buffer[DType.float32](0, m * dm))  # 2
+    views.append(stages.q_proj.create_sub_buffer[DType.float32](0, m * qw))  # 3
+    views.append(stages.k_proj.create_sub_buffer[DType.float32](0, m * kw))  # 4
+    views.append(stages.v_proj.create_sub_buffer[DType.float32](0, m * kw))  # 5
+    views.append(rope.inv_freq.create_sub_buffer[DType.float32](0, half))  # 6
+    views.append(rope.cos.create_sub_buffer[DType.float32](0, rope.p_max * half))  # 7
+    views.append(rope.sin.create_sub_buffer[DType.float32](0, rope.p_max * half))  # 8
+    views.append(stages.q_rope.create_sub_buffer[DType.float32](0, m * qw))  # 9
+    views.append(stages.k_rope.create_sub_buffer[DType.float32](0, m * kw))  # 10
+    views.append(stages.k_cache.create_sub_buffer[DType.float32](0, b * nkv * s * hd))  # 11
+    views.append(stages.v_cache.create_sub_buffer[DType.float32](0, b * nkv * s * hd))  # 12
+    views.append(stages.scores.create_sub_buffer[DType.float32](0, cells))  # 13
+    views.append(stages.masked.create_sub_buffer[DType.float32](0, cells))  # 14
+    views.append(stages.amax.create_sub_buffer[DType.float32](0, b * nh * l))  # 15
+    views.append(stages.aexp.create_sub_buffer[DType.float32](0, cells))  # 16
+    views.append(stages.denom.create_sub_buffer[DType.float32](0, b * nh * l))  # 17
+    views.append(stages.weights.create_sub_buffer[DType.float32](0, cells))  # 18
+    views.append(stages.ctxv.create_sub_buffer[DType.float32](0, m * qw))  # 19
+    views.append(stages.o_proj.create_sub_buffer[DType.float32](0, m * dm))  # 20
+    views.append(stages.residual1.create_sub_buffer[DType.float32](0, m * dm))  # 21
+    views.append(stages.norm2_sumsq.create_sub_buffer[DType.float32](0, m))  # 22
+    views.append(stages.norm2_out.create_sub_buffer[DType.float32](0, m * dm))  # 23
+    views.append(stages.gate_proj.create_sub_buffer[DType.float32](0, m * it))  # 24
+    views.append(stages.up_proj.create_sub_buffer[DType.float32](0, m * it))  # 25
+    views.append(stages.silu_out.create_sub_buffer[DType.float32](0, m * it))  # 26
+    views.append(stages.gated.create_sub_buffer[DType.float32](0, m * it))  # 27
+    views.append(stages.down_proj.create_sub_buffer[DType.float32](0, m * dm))  # 28
+    views.append(stages.residual2.create_sub_buffer[DType.float32](0, m * dm))  # 29
+    var total = 0
+    for i in range(len(views)):
+        total += len(views[i])
+    step_count_host_alloc()
+    var host = ctx.enqueue_create_host_buffer[DType.float32](total)
+    step_count_sync()
+    ctx.synchronize()
+    var offset = 0
+    for i in range(len(views)):
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+        offset += len(views[i])
+    # Keep every source and destination alive until all 30 copies complete.
+    step_count_sync()
+    ctx.synchronize()
     var out = List[List[Float32]]()
-    out.append(_download(ctx, dx, m * dm))  # 0  input.x
-    out.append(_download(ctx, stages.norm1_sumsq, m))  # 1
-    out.append(_download(ctx, stages.norm1_out, m * dm))  # 2
-    out.append(_download(ctx, stages.q_proj, m * qw))  # 3
-    out.append(_download(ctx, stages.k_proj, m * kw))  # 4
-    out.append(_download(ctx, stages.v_proj, m * kw))  # 5
-    out.append(_download(ctx, rope.inv_freq, half))  # 6
-    out.append(_download(ctx, rope.cos, rope.p_max * half))  # 7
-    out.append(_download(ctx, rope.sin, rope.p_max * half))  # 8
-    out.append(_download(ctx, stages.q_rope, m * qw))  # 9
-    out.append(_download(ctx, stages.k_rope, m * kw))  # 10
-    out.append(_download(ctx, stages.k_cache, b * nkv * s * hd))  # 11
-    out.append(_download(ctx, stages.v_cache, b * nkv * s * hd))  # 12
-    out.append(_download(ctx, stages.scores, cells))  # 13
-    out.append(_download(ctx, stages.masked, cells))  # 14
-    out.append(_download(ctx, stages.amax, b * nh * l))  # 15
-    out.append(_download(ctx, stages.aexp, cells))  # 16
-    out.append(_download(ctx, stages.denom, b * nh * l))  # 17
-    out.append(_download(ctx, stages.weights, cells))  # 18
-    out.append(_download(ctx, stages.ctxv, m * qw))  # 19
-    out.append(_download(ctx, stages.o_proj, m * dm))  # 20
-    out.append(_download(ctx, stages.residual1, m * dm))  # 21
-    out.append(_download(ctx, stages.norm2_sumsq, m))  # 22
-    out.append(_download(ctx, stages.norm2_out, m * dm))  # 23
-    out.append(_download(ctx, stages.gate_proj, m * it))  # 24
-    out.append(_download(ctx, stages.up_proj, m * it))  # 25
-    out.append(_download(ctx, stages.silu_out, m * it))  # 26
-    out.append(_download(ctx, stages.gated, m * it))  # 27
-    out.append(_download(ctx, stages.down_proj, m * dm))  # 28
-    out.append(_download(ctx, stages.residual2, m * dm))  # 29
+    offset = 0
+    for i in range(len(views)):
+        var n = len(views[i])
+        var values = List[Float32](length=n, fill=Float32(0.0))
+        if n > 0:
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+        out.append(values^)
+        offset += n
+    _ = host^
+    _ = views^
     return out^
 
 
