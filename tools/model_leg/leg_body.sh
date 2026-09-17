@@ -84,7 +84,10 @@ VENV=${MOJOLEARN_MODEL_LEG_VENV:-/root/.venv-model-leg}
 TRANSFORMERS_PIN=${MOJOLEARN_MODEL_LEG_TRANSFORMERS_PIN:-}
 SKIP_TORCH=${MOJOLEARN_MODEL_LEG_SKIP_TORCH:-0}
 ALLOW_HF=${MOJOLEARN_MODEL_LEG_ALLOW_HF_DOWNLOAD:-0}
-NAME=$(basename "$MODEL" | tr -c 'A-Za-z0-9_.-' '_')
+# printf, not a bare pipe: `tr -c` would turn basename's trailing newline
+# into an underscore, and the leg of 2026-09-17 17:59 looked for
+# /root/models/SmolLM2-360M_ beside the files the store had staged.
+NAME=$(printf '%s' "$(basename "$MODEL")" | tr -c 'A-Za-z0-9_.-' '_')
 MODEL_DIR=${MOJOLEARN_MODEL_LEG_MODEL_DIR:-/root/models/$NAME}
 COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-8}
 # macOS ships no timeout(1); the network steps then run unbounded there

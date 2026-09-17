@@ -814,7 +814,7 @@ def main() raises:
         refused = True
     expect_refusal(String("qk_norm with layernorm"), refused, String("qk_norm"))
     var bad3 = BlockOptions()
-    bad3.rope_dim = 6
+    bad3.rope_dim = 7  # odd; 6 is even and legal (half 3), the rule pairs halves
     refused = False
     try:
         bad3.validate(16)

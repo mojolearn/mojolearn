@@ -244,7 +244,7 @@ def _ref_block(w, x, cfg, n_heads=NH, n_kv=NKV, head_dim=HD):
     (dict(rope_scaling={"type": "llama3", "factor": 8.0, "low_freq_factor": 4.0,
                         "high_freq_factor": 1.0, "original_max_position_embeddings": 8192}),
      "high_freq_factor > low_freq_factor"),
-    (dict(rope_dim=6), "rope_dim"),
+    (dict(rope_dim=7), "rope_dim"),   # odd; 6 is even and legal (half 3)
     (dict(rope_dim=18), "rope_dim"),
     (dict(norm_bias=True), "norm_bias=True needs norm='layernorm'"),
     (dict(norm="rmsnorm", qk_norm=True, norm_bias=True), "norm_bias=True"),
@@ -345,7 +345,10 @@ def test_the_params_tail_order_is_the_documented_one():
     assert t == [f32(500000.0), 2, f32(8.0), f32(1.0), f32(4.0), 8192, 8, 16384,
                  1, 1, 2, f32(1e-5), 0, 4, 1, 1, f32(50.0)]
     tail = blk._tail_addrs()
-    assert len(tail) == 11 and all(tail[i] != 0 for i in range(11))
+    # rmsnorm_offset carries no norm bias (entries 4 and 5 are absent by
+    # the record's own rule); every other tail slot is present here.
+    assert len(tail) == 11 and all(tail[i] != 0 for i in range(11) if i not in (4, 5))
+    assert tail[4] == 0 and tail[5] == 0
     assert [n for n in impl._OPT_NAMES] == [
         "q_proj.bias", "k_proj.bias", "v_proj.bias", "o_proj.bias",
         "input_layernorm.bias", "post_attention_layernorm.bias",

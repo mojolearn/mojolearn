@@ -3355,7 +3355,7 @@ def llama_refuse_bad_call(
     # ON THE DEVICE (2026-09-09): the download-and-walk of the block input
     # was 65 ms per call at the Samba shape, a fifth of the forward.
     _refuse_nonfinite_device(ctx, "hidden_states", x, b * l * dm)
-    _refuse_nonfinite_device(ctx, "rotary_emb.inv_freq", rope.inv_freq, dims.half())
+    _refuse_nonfinite_device(ctx, "rotary_emb.inv_freq", rope.inv_freq, rope.half)
     if kv.s > 0:
         # The linear cache is packed at stride `s`; the ring is always at
         # stride `cap`, so the whole ring is read (unused slots are zeros).
