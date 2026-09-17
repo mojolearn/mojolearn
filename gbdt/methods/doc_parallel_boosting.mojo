@@ -29,6 +29,9 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
     newton_like_walker_estimate,
 )
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    ORACLE_SCRATCH_POOLED,
+    OracleDeviceScratch,
+    ensure_oracle_device_scratch,
     make_bin_optimized_oracle,
     merge_stage_times,
 )
@@ -612,6 +615,9 @@ struct TEstimationWorkspace(Movable):
     var h_ps: HostBuffer[DType.uint32]
     var d_est: DeviceBuffer[DType.float32]
     var h_est: HostBuffer[DType.float32]
+    #: DEVIATION 3041: the oracle's own device buffers, a pool of one under
+    #: its own exact key (`pointwise_oracle.OracleDeviceScratch`)
+    var oracle_scratch: List[OracleDeviceScratch]
 
     def __init__(
         out self,
@@ -638,6 +644,7 @@ struct TEstimationWorkspace(Movable):
         self.h_est = ctx.enqueue_create_host_buffer[DType.float32](
             n_leaves * approx_dim
         )
+        self.oracle_scratch = List[OracleDeviceScratch]()
 
 
 def _estimate_and_apply(
@@ -717,6 +724,20 @@ def _estimate_and_apply(
         est_ws.append(
             TEstimationWorkspace(ctx, n_rows, approx_dim, n_leaves)
         )
+    # DEVIATION 3041: the oracle's device buffers from the fit's pool of one
+    # (keyed exactly; see `OracleDeviceScratch`), taken as handle views
+    # BEFORE the workspace refs below are borrowed
+    var oracle_ws = Optional[OracleDeviceScratch]()
+    comptime if ORACLE_SCRATCH_POOLED:
+        var pair_blocks = 0
+        if pairs.__bool__():
+            pair_blocks = pairs.value().blocks()
+        ensure_oracle_device_scratch(
+            ctx, est_ws[0].oracle_scratch, n_rows, n_leaves, objective,
+            num_classes, est_sm, pair_blocks,
+        )
+        if len(est_ws[0].oracle_scratch) == 1:
+            oracle_ws = Optional(est_ws[0].oracle_scratch[0].handles())
     ref g_target = est_ws[0].g_target
     ref g_weights = est_ws[0].g_weights
     ref g_cursor = est_ws[0].g_cursor
@@ -814,6 +835,7 @@ def _estimate_and_apply(
         pairs^,
         yeti^,
         yeti_seed,
+        oracle_ws^,
     )
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
