@@ -376,12 +376,43 @@ The 22-lane and 15-lane counts differ because round 2 ran the kde lanes
 only on the arms whose estimators binding changed (after0; the kde lanes
 are in the 22-lane rows above and in the final section).
 
+## The shipped default (final section)
+
+`cuda-final` is the branch built with NO defines at the merge candidate
+(`bench/results/knn_tiled_2026-09-17/final/`), so it is the NVIDIA IDENTICAL
+column a user gets: the smem tile, the per-block exact-chain admission and
+the block top-k for k <= 16, plus the resident doors.
+
+Identity, 22 lanes, five fixtures, two repeats: cuda-final vs cpu-after vs
+cpu-base IDENTICAL 110 train, 220 infer/model, 110 batch, exit 0;
+cuda-base vs cuda-final the same; cuda-final vs cuda-sabox DIVERGENT 22 on
+every part (the 15 knn and radius lanes; the 7 kde lanes read ONE-COLUMN
+because the sabotage arm did not run them), exit 1.
+
+Race (base vs final, 5 x 3, digests equal):
+
+| lane | dataset | rows | base median ms | final median ms | final min ms | final spread | paired ratio |
+|---|---|---|---|---|---|---|---|
+| knn | istella | 4000 | 82.27 | 53.11 | 50.42 | 1.082 | 0.647 |
+| knn | taxi | 4000 | 32.78 | 24.40 | 24.33 | 1.105 | 0.754 |
+| kde | istella | 2000 | 72.25 | 53.73 | 50.85 | 1.059 | 0.744 |
+| kde | taxi | 2000 | 47.47 | 40.95 | 40.88 | 1.004 | 0.863 |
+
+Floor probe on the final binding (medians of 5 calls, ms): knn istella
+4,000 queries k 1 42.47, k 10 53.36, k 64 126.98; taxi 10.67, 23.45, 96.61;
+knn-clf istella 4,000 queries 56.26 (base 123.98), taxi 27.38 (41.87);
+knn-reg istella 53.24 (124.18), taxi 23.69 (41.22); one query knn-clf
+istella 10.91 (41.10), knn-reg 9.37 (41.16). Against cuML on the same box
+through `tools/classical_two_datasets.py race` (k 10, 5 rounds): Istella-S
+54.4 ms ours, 68.4 cuML; taxi 26.3 ours, 8.8 cuML.
+
 ## Pod
 
 RunPod fc3i4usbkd8ahz, NVIDIA GeForce RTX 4090, $0.74 per hour, created
-17:37 UTC, reaped at the time in the final section; leases 150 + 120
-minutes. `~/mojolearn-evidence/knn-tiled/pod/` holds the create response,
-the arm log and the reaped pod id.
+17:37 UTC, reaped 18:32 UTC and verified gone (HTTP 404), 55 minutes,
+about $0.68; leases 150 + 120 minutes, never reached.
+`~/mojolearn-evidence/knn-tiled/pod/` holds the create response, the arm
+log and the reaped pod id; `pull3/ktd_out/` is the complete pod output.
 
 ## Commands
 
