@@ -16,6 +16,8 @@
 #                                                  the part per CUDA tree, diffs
 #   bash tools/infer_speed_trees_body.sh speed      prepare the models, then the
 #                                                  alternating BEFORE/AFTER timings
+#   SPECS="kind:model:x:path ..." AB_ROUNDS=15 SPEED_DIR=speed-rerun \
+#     bash tools/infer_speed_trees_body.sh speed-rerun   the same, more rounds, own dir
 #
 # Layout on the box:
 #   /root/mojolearn          AFTER source (the shipped lane HEAD), GPU bindings in
@@ -220,13 +222,37 @@ phase_identity_sw() {
     : > "$OUT/identity-sw.done"
 }
 
+SPEED_DIR="${SPEED_DIR:-speed}"
+AB_ROUNDS="${AB_ROUNDS:-5}"
+
 time_one() {
     # $1 tree, $2 label, $3 kind, $4 model, $5 x, $6 path, $7 index
     _t=$1; _l=$2; _k=$3; _m=$4; _x=$5; _p=$6; _i=$7
     cd "$_t" || return 1
     PYTHONPATH=python pixi run python3 bench/speed/infer_speed_trees_ab.py time \
-        --model "$_m" --x "$_x" --kind "$_k" --path "$_p" --rounds 5 --label "$_l" \
-        --json "$OUT/speed/$_k.$_p.$_l.$_i.json" 2>&1 | tail -1
+        --model "$_m" --x "$_x" --kind "$_k" --path "$_p" --rounds "$AB_ROUNDS" --label "$_l" \
+        --json "$OUT/$SPEED_DIR/$(basename "$_m" .npz).$_p.$_l.$_i.json" 2>&1 | tail -1
+}
+
+phase_speed_rerun() {
+    # The cells whose five-round process failed the 1.10 spread gate, run
+    # again with AB_ROUNDS rounds into their own directory (SPEED_DIR), so
+    # the summary of that directory stands on its own processes.
+    mkdir -p "$OUT/$SPEED_DIR"
+    for spec in $SPECS; do
+        IFS=: read -r kind model x path <<EOF
+$spec
+EOF
+        [ -f "$AB/$model" ] || { say "no $AB/$model"; continue; }
+        for i in 1 2; do
+            say "$(time_one "$B" before "$kind" "$AB/$model" "$AB/$x" "$path" "$i")"
+            say "$(time_one "$R" after "$kind" "$AB/$model" "$AB/$x" "$path" "$i")"
+        done
+    done
+    cd "$R"
+    PYTHONPATH=python pixi run python3 bench/speed/infer_speed_trees_ab.py summarize "$OUT/$SPEED_DIR/*.*.*.*.json" \
+        --out "$OUT/$SPEED_DIR/summary.json" > "$OUT/$SPEED_DIR/summary.txt" 2>&1
+    : > "$OUT/$SPEED_DIR.done"
 }
 
 phase_speed() {
@@ -274,5 +300,6 @@ case "${1:-}" in
     identity-diff) phase_identity_diff ;;
     identity-sw) phase_identity_sw ;;
     speed) phase_speed ;;
+    speed-rerun) phase_speed_rerun ;;
     *) sed -n '2,12p' "$0"; exit 2 ;;
 esac

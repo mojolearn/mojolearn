@@ -41,7 +41,72 @@ only under the evidence tree.
 
 ## Evidence
 
-FILLED BELOW FROM THE POD RUN.
+Box: RunPod `hhb4bs9mhcv6lt`, NVIDIA GeForce RTX 4090 (driver 580.159.04),
+AMD Ryzen 9 7950X (16 cores), Mojo 1.0.0, $0.74 per hour, 13:42Z to 16:54Z,
+about $2.37 (plus about $0.04 for a first pod whose 570 driver Mojo
+refuses); reaped and verified gone (HTTP 404). BEFORE is `main` at
+`e3213a59a`, AFTER is `411a69a96`; the later commits on the branch change
+the harness, the CPU training GBDT family's exports and the docs, not the
+timed paths. Summaries are committed under
+`bench/results/infer_speed_trees_2026-09-17/`; every per-process JSON, log
+and `.so` digest is under `~/mojolearn-evidence/infer-speed-trees/leg_out/`.
+
+### Speed, taxi, 1,000,000 prediction rows, 16 threads
+
+Qualified means every quoted process passed the 1.10 spread gate and every
+process of both arms hashed the same output bytes.
+
+| model | path | before ms | after ms | ratio |
+|---|---|---|---|---|
+| RF regressor, 100 trees, depth 16 | GPU class `predict` (sequential engine) | 38864 | 7570 | 5.13, qualified |
+| RF regressor, 100 trees, depth 16 | `host_model().predict` | 35116 | 7393 | 4.75, qualified |
+| ET regressor, 100 trees, depth 16 | GPU class `predict` (sequential engine) | 15257 | 4572 | 3.34, qualified on the stable processes; the other AFTER processes read 4518 to 5322 ms at spreads 1.12 to 1.27 |
+| ET regressor, 100 trees, depth 16 | `host_model().predict` | 14827 | 4477 | 3.31, qualified |
+| GBDT Logloss, 1000 iterations, depth 6 | `host_model().predict_proba` | 22883 | 1383 | 16.5, qualified |
+| GBDT Logloss, 1000 iterations, depth 6 | `host_model().predict` | 24134, 24110 | 1339, 1372 | 17.8 from four stable processes in the log; the JSONs were overwritten (harness naming defect, fixed in `e08ce80cb`) |
+| GBDT Logloss, 100 iterations, depth 6 | `host_model().predict` | 2733 | 199 | not qualified (AFTER spreads 1.11 to 1.40 at 200 ms); every AFTER round is below every BEFORE round |
+| GBDT Logloss, 1000 iterations, depth 6 | GPU class `predict_proba` | 828 to 877 | 129 to 137 | not qualified (AFTER spreads 1.35 to 1.40); every AFTER round is below every BEFORE round |
+| GBDT Logloss, 100 iterations, depth 6 | GPU class `predict_proba` | 784 | 86 | not qualified (AFTER spreads 1.48 to 1.54); every AFTER round is below every BEFORE round |
+| GBDT Logloss, 1000 iterations, depth 6 | GPU class `predict` | 99 | 109 | not qualified, both arms spread 1.4 to 1.7 at 100 ms; unchanged path |
+| GBDT Logloss, 1000 iterations | model text parse alone | 34 | 34 | unchanged; about a third of the 100 ms GPU `predict` call |
+
+The 16-thread pod result is not the one-core Mac result; on one core the
+forest gain is the removed per-row allocation and per-tree checks only, and
+the GBDT gain is the loop interchange and the bisection. Neither was timed
+on one core.
+
+### Identity, six columns, 33 lanes, five fixtures, two repeats
+
+| diff | result |
+|---|---|
+| before-cuda vs after-cuda | 280 infer and model cells IDENTICAL, 145 batch cells IDENTICAL, nothing moved |
+| before-cuda-sw vs after-cuda-sw (the two score-weighted lanes, run after the metrics binding was built) | 10 IDENTICAL, nothing moved |
+| before-cpu vs after-cpu | 210 infer and model cells IDENTICAL, 135 batch cells IDENTICAL, nothing moved; 10 cells ONE-COLUMN (below) |
+| after-cuda vs after-cpu | 210 infer and model cells IDENTICAL, 125 batch cells IDENTICAL, nothing moved |
+| after-cuda vs sabotage-cuda | 55 DIVERGENT: every rf and et lane (predict, proba, batch) and the two Logloss-proba gbdt lanes; the GPU-path gbdt lanes IDENTICAL, as the sabotage does not reach the device path |
+| after-cuda-sw vs sabotage-cuda-sw | `rf-score-weighted` DIVERGENT on its four regression parts |
+| after-cpu vs sabotage-cpu | 105 infer and model cells DIVERGENT and 125 batch cells DIVERGENT: every rf, et and gbdt lane the CPU column runs |
+
+The CUDA columns skip `rf-clf-balanced-parallel` and
+`et-reg-bootstrap-parallel`: their batch part hung the UNMODIFIED main tree
+(90 minutes in `futex_wait`, 0 percent CPU and GPU) on the one-GPU box, so
+it is the two-device batch protocol on this box and not this lane. The CPU
+columns carry them (REFUSED by name on both, as on main).
+
+The ten ONE-COLUMN cells: the AFTER CPU column REFUSED `gbdt-symmetric` and
+`gbdt-pointwise-l2-bayesian-eval` because the CPU training GBDT family of
+that build (`_mojolearn_gbdt_host`) did not export `gbdt_sigmoid_pair`, and
+a CPU-only install's binding proxy raises ImportError by name. `e08ce80cb`
+adds the entry point to that family and makes the Python layer treat the
+ImportError as absence. Those ten cells are OWED a rerun of the CPU
+column; on the CUDA column and through `host_model` (the AFTER CPU column's
+`infer` cells of every other Logloss lane, and the Mac gate) the pair reads
+IDENTICAL.
+
+Mac, one core: `tools/forest_host_gate.py check` on the 24 recorded
+fixtures under `bench/results/forest_host/2026-09-13-*` reads IDENTICAL
+with the new `_mojolearn_forest_host.so` (`predict` and `predict_proba` of
+every RF, ET and GBDT fixture, Apple and NVIDIA recordings alike).
 
 ## Commands
 
@@ -78,6 +143,14 @@ nice -n 19 env OMP_NUM_THREADS=1 MOJOLEARN_CPU_THREADS=1 PYTHONPATH=python MOJOL
 - The `rf-clf-balanced-parallel` and `et-reg-bootstrap-parallel` lanes need
   two devices and read REFUSED on the one-GPU pod, on both columns.
 - The GBDT GPU `predict` still parses the model text and creates a
-  `DeviceContext` per call (`gbdt/estimator.mojo` header, policy 1). See the
-  parse measurement below for its share; a parsed-model cache keyed on the
-  text is the fix the header names and was not built here.
+  `DeviceContext` per call (`gbdt/estimator.mojo` header, policy 1). The
+  parse alone is 34 ms of a 100 ms call for a 1000-tree model on the 4090;
+  a parsed-model cache keyed on the text is the fix the header names and was
+  not built here.
+- A rerun of the CPU identity column at `e08ce80cb` or later for the ten
+  `gbdt-symmetric` and `gbdt-pointwise-l2-bayesian-eval` cells above.
+- One-core timings of the host paths (the Mac rule allowed no more than one
+  core and the pod ran 16 threads).
+- The GPU `predict_proba` and the 100-iteration host `predict` AFTER cells
+  are faster on every round but too jittery at 85 to 200 ms for the 1.10
+  gate; a larger batch or more rounds would qualify them.
