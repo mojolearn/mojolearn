@@ -675,3 +675,40 @@ indices remain unchanged. Coverage reports the admission policy per updated
 lane; the whole table keeps its prior policy because adding a few strict lanes
 does not qualify legacy references. Replay the candidate from installed wheels
 and review native controls before promoting a lane's default availability.
+
+
+## Broader execution before qualification
+
+`python -m mojolearn verify --include-pending --batch-checks --json` also
+executes declared CPU routes whose references are not yet qualified, including
+CPU-supported parallel drivers. Pending lanes remain INCOMPLETE; stale
+reference bytes are never compared to changed fixtures. Actual hashes and
+local invariance outcomes are retained as OWED when no usable reference
+exists. A local mismatch still reads DIVERGENT and a missing operation still
+reads REFUSED. Use `--lanes`, `--fixtures base` and `--repeats 2` to bound a
+particular run. This option does not promote references or certify a release.
+
+CPU parallel execution exercises logical shard splitting, original native
+operations and ordered result assembly. It does not simulate or qualify GPU
+communication. Coverage names CPU-supported drivers and drivers that still
+require GPUs; a broad full request retains the missing drivers as scope gaps.
+
+`python -m mojolearn verify --models-only --json` executes the four bundled
+GPU-trained saved models without training: HostForest, HostGBDT, OLS and PCA.
+It checks serialized model bytes and batch invariance of loaded-model outputs
+against independent reference-table entries. The ordinary `--all` run also
+includes these probes unless `--no-models` is specified. The two HostForest /
+HostGBDT appendix entries now name this installed command and asset availability
+in `--coverage`. These representative models do not replace all configurations
+in the separate host gates. `--models-only` does not run the training-based
+self-test; run `verify --self-test` separately.
+
+Normal lane verification checks repeated training outputs, held-out inference,
+save/reload, row-batch invariance and step-versus-full decoding where declared.
+`--batch-checks` adds gradient accumulation, batch-size, ragged sequence and
+sampler/replay properties. Non-applicable properties retain their named reason;
+a missing reference is OWED, never a successful check. `--cross-check` compares
+GPU inference with CPU saved-model inference on the same machine. `--compare`
+compares independently produced evidence documents. Native fault controls and
+physical multi-GPU pairs remain historical evidence until rerun on the actual
+release artifacts; the ordinary verifier self-test is not a substitute.

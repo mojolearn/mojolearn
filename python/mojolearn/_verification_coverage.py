@@ -1,5 +1,6 @@
 """Installed-package verification scope; inspection never executes a lane."""
 import hashlib
+import json
 from pathlib import Path
 
 from . import host_surface
@@ -23,12 +24,15 @@ def inventory(harness, table, vendor_class):
     pending = host_surface.PUBLIC_PENDING_LANES
     candidates = set(host_surface.PUBLIC_REFERENCE_CANDIDATES)
     stale = set(vref.stale_reference_lanes(table, harness))
+    parallel_cpu = {name for name in covered if name.startswith("par-")}
     lanes = {}
     for name in harness.LANES:
         status, reason = "available", None
         if vendor_class == "cpu" and name not in public:
             if name.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES):
-                status, reason = "excluded", "parallel driver excluded from the public CPU verifier"
+                status = "excluded"
+                reason = ("CPU logical-shard replay available with --include-pending; physical multi-GPU qualification pending"
+                          if name in parallel_cpu else "no declared CPU implementation of this parallel driver; GPU execution required")
             elif name in covered:
                 status = "withheld"
                 reason = pending.get(name, "reference qualification pending" if name in candidates
@@ -51,6 +55,13 @@ def inventory(harness, table, vendor_class):
                                  and entry.get("ref") is not None and not entry.get("conflict"))
                              for fixture in harness.FIXTURES)
         lanes[name] = dict(status=status, reason=reason, properties=properties,
+                           execution=dict(
+                               cpu_route_declared=name in covered,
+                               cpu_logical_shards=name in parallel_cpu,
+                               command=(f"verify --include-pending --lanes {name}" if name in covered and
+                                        (name not in public or name in stale) else f"verify --lanes {name}"),
+                               requires_gpu_for_execution=name not in covered,
+                               physical_multi_gpu_measured_by_cpu=False),
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES),
                            reference_admission=table.get('lane_admission', {}).get(name,
                                dict(policy=table.get('admission_policy', dict(status='legacy')))))
@@ -63,6 +74,15 @@ def inventory(harness, table, vendor_class):
     harness_path = getattr(harness, '__file__', None)
     snapshot_matches = bool(harness_path and hashlib.sha256(Path(harness_path).read_bytes()).hexdigest()
                             == HISTORICAL_EVIDENCE['harness_sha256'])
+    manifest_path = Path(__file__).parent / vref.TABLE_DIR / "models" / "models.json"
+    model_keys = set()
+    try:
+        manifest = json.loads(manifest_path.read_text())
+        model_keys = {m["lane"] + "/" + m["fixture"] for m in manifest["models"]
+                      if (manifest_path.parent / m["file"]).is_file()}
+        model_error = None
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        model_error = f"portable model assets unavailable: {exc}"
     entries = []
     mapped = set()
     for entry in ENTRIES:
@@ -70,6 +90,12 @@ def inventory(harness, table, vendor_class):
         row["lane_status"] = {name: lanes.get(name, dict(status="missing_lane", reason="not registered"))
                               for name in entry["lanes"]}
         row["verification"] = "mapped" if entry["lanes"] else "portable_models_and_dedicated_gate"
+        if entry.get("portable_models"):
+            missing = sorted(set(entry["portable_models"]) - model_keys)
+            row["installed_check"] = dict(command="verify --models-only", run_by_default=True,
+                status="available" if not missing and not model_error else "unavailable",
+                models=entry["portable_models"], missing_models=missing, error=model_error,
+                scope="representative bundled GPU-trained models through the CPU saved-model loader; model bytes and batch invariance")
         mapped.update(entry["lanes"])
         relevant = [lanes[n]['historical_evidence'] for n in entry['lanes'] if n in lanes]
         row['evidence_summary'] = dict(
@@ -94,6 +120,9 @@ def inventory(harness, table, vendor_class):
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())
                                for status in ("available", "withheld", "excluded", "unavailable")}),
+                cpu_execution_counts=dict(declared=len(set(lanes) & covered),
+                    logical_shard_drivers=len(set(lanes) & parallel_cpu),
+                    parallel_drivers_requiring_gpu=sum(name.startswith("par-") and name not in covered for name in lanes)),
                 limitations=["References describe recorded fixtures, not all possible inputs or hardware.",
                              "A single-device parallel driver run does not certify multiple GPUs.",
                              "Gradient, batch-size, ragged and sampler/replay checks require --batch-checks; they are not implicit in --all.",
@@ -122,7 +151,13 @@ def format_human(report):
     if policy.get('status') == 'legacy':
         lines.append("Bundled reference admission: legacy; regeneration under the stricter policy is still owed.")
     lines += ["", "Saved-model entries (portable CPU probes plus dedicated gates):"]
-    lines += [f"- {e['title']}: {e.get('alternative_gate', 'unmapped')}"
+    lines += [f"- {e['title']}: {e.get('installed_check', {}).get('command', 'unmapped')} "
+              f"({e.get('installed_check', {}).get('status', 'unavailable')}); additional gate: {e.get('alternative_gate', 'unmapped')}"
               for e in report["entries"] if not e["lanes"]]
+    execution = report['cpu_execution_counts']
+    lines += ["", f"CPU execution routes: {execution['declared']}, including "
+              f"{execution['logical_shard_drivers']} logical-shard drivers; "
+              f"{execution['parallel_drivers_requiring_gpu']} parallel drivers still require GPUs.",
+              "Use verify --include-pending --batch-checks to exercise pending CPU routes and extended properties; unqualified results remain incomplete."]
     lines += ["", *report["limitations"], "Use --json for all 246 entry mappings and per-property reference counts."]
     return "\n".join(lines)

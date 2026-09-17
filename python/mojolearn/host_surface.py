@@ -773,6 +773,7 @@ TRAINING_LANE_NAMES = {
     # against the 166-lane record before the gate ran, and the sabotage set
     # DIVERGENT on every train cell.
     "par-scaler": "the column-sharded standard scaler",
+    "par-scaler-minmax": "the column-sharded min-max scaler",
     "par-arima": "series-sharded ARIMA",
     "par-holtwinters": "series-sharded Holt-Winters",
     # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
@@ -782,6 +783,7 @@ TRAINING_LANE_NAMES = {
     # and sends one vote request, served on CPU by the core host binding's
     # knn_classify_neighbors and knn_regress_neighbors.
     "par-queries-knn": "query-sharded k-NN classification",
+    "par-queries-nn": "query-sharded nearest-neighbor distances and indices",
     "par-queries-radius": "query-sharded radius neighbors",
     "par-queries-kde": "query-sharded kernel density",
     "par-reference-knn": "reference-sharded k-NN classification",
@@ -793,6 +795,8 @@ TRAINING_LANE_NAMES = {
     # trees concatenate in ID order.
     "par-forest": "the tree-range-sharded random forest classifier",
     "par-forest-et": "the tree-range-sharded Extra Trees regressor",
+    "par-forest-et-clf": "the tree-range-sharded Extra Trees classifier",
+    "par-forest-reg": "the tree-range-sharded random forest regressor",
     # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
     # per logical shard (three of 64 rows) and one mlp_update that folds
     # them in shard order in Python and steps the optimizer, on the
@@ -1167,7 +1171,7 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
-            "par-queries-knn", "par-queries-radius", "par-reference-knn",
+            "par-queries-knn", "par-queries-nn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
@@ -1422,7 +1426,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler",
+            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1537,7 +1541,7 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et", "par-forest-et-clf"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
@@ -1580,7 +1584,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "rf-score-weighted",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "par-forest-reg", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
