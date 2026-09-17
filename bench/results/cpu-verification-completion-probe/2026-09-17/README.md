@@ -26,3 +26,14 @@ The follow-up wheel at `b74de8f54` also passes UMAP and ordered sum: 45 IDENTICA
 35 withheld. Its training binding is freshly compiled as well as metrics;
 other bindings remain reused. `completion-*` files record this separate artifact.
 307 focused tests passed. No final release or PyPI upload is claimed.
+
+The five-lane wheel replay at `91fdf2387` passes IVF, both low-bit GEMMs,
+byte-lm and byte-lm-resident: 126 IDENTICAL, 99 N/A, zero failures or owed
+references; coverage is 150 available, 29 withheld, 50 parallel exclusions.
+The first artifact refused both low-bit GEMMs because its reused Mac linalg
+binding lacked the low-bit API. That failure and artifact identity are retained
+in `neural-five-old-linalg-*`. A fresh linalg binding fixes the installed replay.
+Metrics, training and linalg are fresh; other native bindings remain reused.
+`neural-five-wheel-receipt.json` identifies the successful artifact and runtime
+closure; wheel binaries are archived externally by SHA-256. The post-merge
+focused suite passes 336 tests. This remains scoped development-wheel evidence.

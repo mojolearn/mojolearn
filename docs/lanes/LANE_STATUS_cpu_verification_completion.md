@@ -164,3 +164,11 @@ SSH `-p 39174 root@38.80.152.147`; external `cloud-complete-dependencies/`,
 log `cloud-complete-dependencies-run.log`. Seventeen production and fifteen
 sabotage families, including neural, run 24 lanes through two single-thread
 workers. Do not kill it to start another rental. Verify deletion at completion.
+
+Installed five-lane replay at `91fdf2387` PASSED: 126 IDENTICAL, 99 N/A,
+zero DIVERGENT/REFUSED/OWED. Availability 150, withholding 29. The initial
+artifact failed both low-bit GEMMs because reused linalg lacked their API;
+retain that failure. Fresh Mac linalg fixed the replay. Fresh native families
+are metrics, training and linalg; remaining bindings reused, not a qualified
+PyPI release. Receipts, failed and passing reports, and build logs are in the
+installed probe directory. Post-merge tests: 336 passed. Third pod remains live.
