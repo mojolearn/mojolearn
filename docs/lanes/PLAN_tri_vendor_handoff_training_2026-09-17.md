@@ -130,6 +130,12 @@ one segment (section 3) is partly a response to exactly this.
 
 ## 6. Cost, from measured cells
 
+REVISED AGAIN the same evening: `lane/attention-speed` then landed DEVIATION
+2900 (`_bswz`, a causal block-index swizzle, no arithmetic touched), geomean
+0.9592, and the lean step is now **0.1979 s** measured on one H100 in one heat
+window. THE STEP HAS MOVED THREE TIMES IN ONE DAY; treat any figure here as
+perishable and re-read the lane records before quoting one.
+
 REVISED 2026-09-17 evening, after `lane/attention-speed` measured the current
 default. The earlier figures in this file used 0.2326 s from
 `bench/OPPONENT_REFERENCE.md` (2026-09-12 13:45Z, commit bb679f19). **Four
@@ -143,7 +149,7 @@ for Apple. Treat as a floor, and see section 4 on wall clock.
 
 | token budget | one route | two routes | cost at $2.00 to $2.69/h |
 |---|---:|---:|---:|
-| 25B, one twelfth of GPT-3 Small's 300B | 714 h | 1,428 h | $2,856 to $3,842 |
+| 25B, one twelfth of GPT-3 Small's 300B | 672 h | 1,343 h | $2,686 to $3,613 |
 
 **THE ATTENTION UPSIDE IS MUCH SMALLER THAN THIS FILE FIRST CLAIMED.** An
 earlier draft said attention was 61 percent of the step and that a 4x to 8x
