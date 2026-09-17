@@ -108,3 +108,10 @@ sum native control was unchanged and remains a failed control.
 
 307 focused tests pass. The next installed development artifact adds the freshly
 built training binding alongside metrics; all other Mac bindings remain reused.
+
+Installed follow-up `b74de8f54` passes UMAP and ordered sum: 45 IDENTICAL,
+45 N/A, no DIVERGENT/REFUSED/OWED, current coverage snapshot, all-nine historical
+controls, default selection and comparator self-test. Receipts are committed in
+the completion probe directory. A bounded single-thread local Mamba2 clean
+record is now running with all native dependencies to fill the missing stepfull
+property; external `mamba2-complete-clean.json`, root session 28100.
