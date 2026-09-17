@@ -25,6 +25,14 @@ are not distinct Python classes and mappings are not execution certificates.
 For every lane the inventory shows CPU availability, withheld-reference reasons,
 batch applicability and reference-fixture counts. It executes no algorithms.
 
+The candidate's default CPU selection now includes spectral clustering,
+Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
+lanes, including applicable batch and saved-model checks:
+
+```sh
+python -m mojolearn verify --lanes spectral,metrics-fowlkes-mallows,arima-exog,arima-exog-seasonal --repeats 2
+```
+
 `--all` runs standard whole/individual/split/prefix batch checks where declared,
 and the applicable step-versus-full sequence checks. For the additional gradient,
 batch-size, ragged-batch and sampler/replay properties, opt in explicitly (these cost more work):
