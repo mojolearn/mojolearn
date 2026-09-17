@@ -72,7 +72,9 @@ observations never enter the numerical reference table through this tool.
 input/protocol comparisons, host coverage and reference admission. The wheel
 was built through setuptools with prebuilt CPU candidate bindings, without GPU
 bindings or native compilation. It is a development wheel, not a fresh native
-release build. Tests ran outside the checkout with no host/model/harness path
+release build. The wheel receipt predates concurrent tree-inference integration;
+the 266 source tests were rerun after integration and its manifest fixes.
+Installed-wheel tests ran outside the checkout with no host/model/harness path
 overrides:
 
 - Coverage: all 246 appendix entries and historical evidence loaded.
