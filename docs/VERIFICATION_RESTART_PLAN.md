@@ -11,6 +11,16 @@ qualification of those newer native changes. Do not terminate its jobs.
 All implementation and evidence from this verification workstream
 are merged into main; this document does not certify a release.
 
+## Follow-up: CPU TSA admission, 2026-09-17
+
+The next two queued lanes, `select-d` and additive `holtwinters`, are now
+promoted with strict historical references and installed development-wheel
+replay. CPU availability is 128, with 51 withheld and 50 parallel exclusions.
+The rest of this document's counts describe the original baseline. See
+[the batch status](lanes/LANE_STATUS_tsa_reference_promotion.md) for evidence,
+packaging fixes, limitations and the remaining queue. Full reference regeneration
+and final artifact qualification remain owed.
+
 ## Objective and current position
 
 Finish honest, user-runnable verification for every exposed algorithm and
