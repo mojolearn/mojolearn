@@ -31,6 +31,11 @@ open; no release was published and no cloud resources were rented here.
   nine fixtures twice from an installed CPU development wheel and were removed
   from the `unwatched` set. They now join default public CPU verification.
 
+Concurrent tree-inference integration added two native sigmoid-pair exports
+without manifest entries. The post-merge checks caught both omissions; the
+host manifest now lists the actual exports. This does not qualify those new
+native binaries using the older development-wheel bindings.
+
 ## What the current inventory actually establishes
 
 229 registered lanes, 246 appendix entries, 222 enumerated API entries.

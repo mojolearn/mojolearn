@@ -5,6 +5,7 @@ from pathlib import Path
 from . import host_surface
 from . import _verify_reference as vref
 from ._verification_catalog import ENTRIES, PROVENANCE
+from ._verification_ctr_models import MODEL_SHA256 as CTR_MODELS
 from ._verification_evidence_data import DATA as HISTORICAL_EVIDENCE
 
 
@@ -84,6 +85,7 @@ def inventory(harness, table, vendor_class):
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
                 evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
                 evidence_snapshot_matches_harness=snapshot_matches,
+                declared_ctr_model_sha256=CTR_MODELS,
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())
