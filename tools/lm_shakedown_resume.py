@@ -210,8 +210,9 @@ def compare_control(baseline, other):
     too -- a control whose loss never moves means the witnesses cannot see
     the optimizer and the resume arm would prove nothing.
 
-    `flags` is a 38-int32 vector that stays zero in a healthy run and cannot
-    separate the arms, so nothing is required of it.
+    `flags` is one int32 per parameter tensor (110 at the target shape, 2 + 9
+    per layer) and stays zero in a healthy run, so it cannot
+    separate the arms and nothing is required of it.
     """
     ok = True
     print('\n--- control (m and v zeroed) vs baseline ---')
