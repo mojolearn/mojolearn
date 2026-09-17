@@ -107,7 +107,14 @@ from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
+from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for
 from neighbors.checks.fused_distance_select_identical import fused_distance_select_launch
+from neighbors.checks.smem_distance_tile import (
+    SMT_MAX_K,
+    smem_block_topk_launch,
+    smem_distance_tile_launch,
+    smem_tile_col_blocks,
+)
 
 # DEVIATION 2629 (kernel-matrix row `knn_distance_exact_chain_for`): the
 # transposed register-tile distance admits tiles whose request-local exponent
@@ -235,6 +242,28 @@ comptime KNN_RADIX_SCRATCH_SHRINK = (
     knn_radix_scratch_shrink_for[TARGET_COLUMN, IDENTICAL_BUILD]()
     and EXPERIMENTAL_SMALLK_IDENTICAL
 )
+# DEVIATION 3000 (kernel-matrix row `knn_smem_distance_tile_for`): the
+# transposed IDENTICAL arm's distance tile through shared memory. It carries
+# the register tile's chain only, so the Apple metadata and the exact-chain
+# variants keep the register tile; the fused select (2667) keeps its own.
+comptime KNN_SMEM_TILE = (
+    knn_smem_distance_tile_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+    and EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL
+    and KNN_REGISTER_TILE_IDENTICAL
+    and not KNN_PREFLIGHT_METADATA
+    and not KNN_PREFLIGHT_METADATA_DEFAULT
+    and not KNN_EXACT_CHAIN
+    and not KNN_FUSED_SELECT
+)
+# DEVIATION 3001 (kernel-matrix row `knn_block_topk_select_for`): the
+# shared-memory tile pops its rows' top-k in the block and a key selector
+# replaces the matrix and the small-k selector's read of it.
+comptime KNN_BLOCK_TOPK = (
+    knn_block_topk_select_for[TARGET_COLUMN, IDENTICAL_BUILD]()
+    and KNN_SMEM_TILE
+    and EXPERIMENTAL_SMALLK_IDENTICAL
+    and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
+)
 
 
 def fused_select_applies(
@@ -249,6 +278,23 @@ def fused_select_applies(
             not use_vendor_topk
             and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
             and k >= 1 and k <= SMALLK_MAX_K and k <= n_index
+            and n_features > 0 and n_features <= 2147483647
+            and n_index <= 2147483647
+        )
+    return False
+
+
+def block_topk_applies(
+    n_index: Int, n_features: Int, k: Int, metric: Int, use_vendor_topk: Bool
+) -> Bool:
+    """Whether a transposed IDENTICAL request takes the block top-k
+    (DEVIATION 3001) on every column tile and so writes no distance
+    matrix. `metric` is the RESOLVED metric."""
+    comptime if KNN_BLOCK_TOPK:
+        return (
+            not use_vendor_topk
+            and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
+            and k >= 1 and k <= SMT_MAX_K and k <= n_index
             and n_features > 0 and n_features <= 2147483647
             and n_index <= 2147483647
         )
@@ -278,6 +324,8 @@ def tiled_distance_tile_cells(
     (DEVIATION 2667) serves every column tile, which writes no matrix, else
     `query_tile x identical_index_tile(n_index)`. `metric` is resolved."""
     if fused_select_applies(n_index, n_features, k, metric, False):
+        return 1
+    if block_topk_applies(n_index, n_features, k, metric, False):
         return 1
     return query_tile * identical_index_tile(n_index)
 
@@ -631,7 +679,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var use_fused = use_transposed_index and fused_select_applies(
         n_index, n_features, k, mtr, use_vendor_topk
     )
-    if not use_fused and len(dist_tile) < query_tile * index_tile:
+    # DEVIATION 3001: the block top-k writes no matrix either; its key
+    # buffer is sized below from the widest column tile.
+    var use_block_topk = use_transposed_index and block_topk_applies(
+        n_index, n_features, k, mtr, use_vendor_topk
+    )
+    if not use_fused and not use_block_topk and len(dist_tile) < query_tile * index_tile:
         raise Error(
             "tiled_brute_force_knn: the distance tile holds "
             + String(len(dist_tile))
@@ -666,6 +719,22 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     var metadata_cells = n_queries + n_index if meta_on else 0
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
     var part_idx = ctx.enqueue_create_buffer[DType.uint32](part_cells)
+    # DEVIATION 3001: `query_tile x col_blocks(index_tile) x k` keys, one
+    # cell when the block top-k does not serve this request.
+    var part_key_cells = 1
+    if use_block_topk:
+        part_key_cells = query_tile * smem_tile_col_blocks(index_tile) * k
+    var part_keys = ctx.enqueue_create_buffer[DType.uint64](part_key_cells)
+    # DEVIATION 3000: the shared-memory distance tile serves the requests
+    # the register tile served with no metadata and no exact-chain
+    # admission; those two keep the register tile.
+    var use_smem = False
+    comptime if KNN_SMEM_TILE:
+        use_smem = (
+            use_transposed_index and not use_vendor_topk and not use_metadata
+            and not use_exact
+            and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+        )
 
     # Metadata is rebuilt for every request, including in-place input mutations.
     # The existing scratch allocation owns metadata until final synchronize.
@@ -735,7 +804,24 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
 
             comptime if KNN_PHASE_TIMERS:
                 t_class = perf_counter_ns()
-            if use_fused:
+            if use_block_topk:
+                # DEVIATION 3001: the shared-memory tile's block top-k and
+                # the partial-key selector, written straight to the same
+                # selection destination; the selection block below records
+                # the tile as selected and the partial merge follows as
+                # before. Both launches are timed under the distance class.
+                comptime if KNN_BLOCK_TOPK:
+                    smem_block_topk_launch(
+                        ctx, part_keys.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                        sel_dist, sel_idx,
+                        queries.unsafe_ptr().unsafe_offset(q * n_features).unsafe_origin_cast[MutAnyOrigin](),
+                        transposed_index.value().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                        query_norm.unsafe_ptr().unsafe_offset(q).unsafe_origin_cast[MutAnyOrigin](),
+                        index_norm.unsafe_ptr().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                        rows, cols, n_index, n_features, k,
+                        mtr == DIST_L2_SQRT_EXPANDED,
+                    )
+            elif use_fused:
                 # DEVIATION 2667 (kernel-matrix row
                 # `knn_fused_distance_select_for`): distances and the
                 # tile's top-k in one launch, written straight to the same
@@ -835,8 +921,22 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                     # RT_ROWS x 4 register tile per thread. Same bits from all three.
                     var is_sqrt_arg = Int32(1 if mtr == DIST_L2_SQRT_EXPANDED else 0)
                     var layout_distance_launched = False
+                    comptime if KNN_SMEM_TILE:
+                        # DEVIATION 3000: the shared-memory tile writes the
+                        # same `rows x cols` matrix the register tile writes.
+                        if use_smem:
+                            smem_distance_tile_launch(
+                                ctx, dist_tile.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                queries.unsafe_ptr().unsafe_offset(q * n_features).unsafe_origin_cast[MutAnyOrigin](),
+                                transposed_index.value().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                                query_norm.unsafe_ptr().unsafe_offset(q).unsafe_origin_cast[MutAnyOrigin](),
+                                index_norm.unsafe_ptr().unsafe_offset(c).unsafe_origin_cast[MutAnyOrigin](),
+                                rows, cols, n_index, n_features,
+                                mtr == DIST_L2_SQRT_EXPANDED,
+                            )
+                            layout_distance_launched = True
                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
-                        if use_transposed_index:
+                        if use_transposed_index and not layout_distance_launched:
                             comptime if KNN_REGISTER_TILE_IDENTICAL:
                                 comptime if KNN_PREFLIGHT_METADATA or KNN_PREFLIGHT_METADATA_DEFAULT:
                                     if use_metadata:
@@ -1082,8 +1182,8 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                         # which returns the same ascending (distance, index)
                         # rows the radix rank pass does. It needs k real
                         # keys in the row; every column tile has them.
-                        if use_fused:
-                            # DEVIATION 2667: the fused launch above already
+                        if use_fused or use_block_topk:
+                            # DEVIATION 2667 / 3001: the launch above already
                             # wrote this tile's top-k.
                             selected_smallk = True
                         elif cols >= k and k <= SMALLK_MAX_K and cols <= 2147483647:
@@ -1209,10 +1309,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
             "distance_launches", n_distance, "select_launches", n_select,
             "merge_launches", n_merge, "query_tile", query_tile,
             "index_tile", index_tile, "n_queries", n_queries, "n_index", n_index,
-            "k", k, "fused", Int(use_fused),
+            "k", k, "fused", Int(use_fused), "smem", Int(use_smem),
+            "block_topk", Int(use_block_topk),
         )
     _ = part_dist^
     _ = part_idx^
+    _ = part_keys^
 
 
 #: WHICH SIDE OF `knn_brute_force.cuh:443` THIS IMPLEMENTATION TAKES BY DEFAULT.

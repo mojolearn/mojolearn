@@ -1761,6 +1761,32 @@ def knn_fused_distance_select_for[column: Int, identical: Bool]() -> Bool:
     return False
 
 
+def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3000, 2026-09-17, lane/knn-tiled-distance): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances through the SHARED-MEMORY tile (`neighbors/checks/smem_distance_tile.mojo::smem_distance_tile_kernel`): a block of 256 threads owns 64 query rows x 128 index columns, stages each 16-feature slice of the query rows and of the transposed index columns into shared memory once (flushed at the store), and every thread advances its 8 x 4 accumulators from three 16-byte shared loads per feature step, instead of the register tile's twelve global loads and twelve flushes per step. Every cell is still one ascending `_rt_step` chain over the feature axis from +0.0 with the register tile's epilogue, clamp and root, and `ftz` is idempotent, so the bits are the register tile's; the gate is `tools/identity_break.py` on the knn lanes, cuda against the cpu host route, plus `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`. Needs the transposed layout and the register-tile row, and does not carry the Apple metadata or DEVIATION 2629 chains (a request on those keeps the register tile). OFF on every column until measured; `-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY=1` forces the register tile."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE"]():
+        return True
+    if column == COLUMN_CPU:
+        return False  # scheduling; the measured schedule is NVIDIA's
+    return False
+
+
+def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
+    """SCHEDULING row (DEVIATION 3001, 2026-09-17, lane/knn-tiled-distance): whether the shared-memory tile (DEVIATION 3000, required) writes NO distance matrix and instead pops each of its rows' k smallest composite keys inside the block (`smem_distance_tile_kernel[TOPK=True]`, warp minima over the block's 128 columns), with `partial_keys_select_kernel` selecting the row's k smallest from the union of the per-block lists. The key is the small-k selector's `composite_key(distance, tile-local column)`, keys are unique, the row's k smallest keys are a subset of the union whatever the partition, and the rank phase pops the same UInt64 minima ascending, so neighbors and distances are the same bits (the distance is `twiddle_out` of the key's high half, the exact inverse of the key's `twiddle_in`); the gate is the same identity run as DEVIATION 3000. Replaces the `query_tile x index_tile` matrix write and the selector's read of it by a `query_tile x (index_tile / 128) x k` key buffer. Needs the small-k selector row and 1 <= k <= 64; the fused select (DEVIATION 2667) and selector trial builds keep the two-launch form. OFF on every column until measured; `-D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_MATRIX_SELECT=1` keeps the matrix and the selector."""
+    comptime if not identical:
+        return False
+    comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_MATRIX_SELECT"]():
+        return False
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK"]():
+        return knn_smem_distance_tile_for[column, identical]()
+    if column == COLUMN_CPU:
+        return False  # scheduling; the measured schedule is NVIDIA's
+    return False
+
+
 @always_inline
 def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
     """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor, and the 2668 fold's 20,000-row fingerprint is one value (4040033352384472344) across launch widths 64, 128 and 256 with both UMAP identity checks passing. OFF BY DEFAULT: measured on the H200 2026-09-11 it SPLITS on the two datasets, which ENGINEERING_RULES section 9 gates per dataset. Sampled trustworthiness and 10-neighbor retention at 100,000 rows, 200 epochs: taxi 0.9062 / 0.3736 to 0.9323 / 0.3627 (trust up, retention down) and Istella-S 0.9737 / 0.4832 to 0.9636 / 0.4264 (both down), with the time flat on both (1.003 and 1.000). Quality worse on a dataset is a regression a user on that data sees, so the row stays opt-in through `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`; `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even then. What the measurement DID establish is the cause of the cuML gap on taxi (the update order: our own serial host loop scores 0.9796 on the same graph and init against cuML's 0.9657), and that on Istella-S the shipped fold already beats cuML by a wide margin."""

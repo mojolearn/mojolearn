@@ -97,7 +97,9 @@ from max.gpu.host import DeviceContext
 from cluster.estimator import kmeans_fit, kmeans_predict, kmeans_transform
 from neighbors.impl.detail.knn_brute_force import KNN_METHOD_AUTO
 from neighbors.resident_index import (
+    knn_index_classify,
     knn_index_prepare,
+    knn_index_regress,
     knn_index_release,
     knn_index_search,
 )
@@ -430,6 +432,96 @@ def knn_regress_binding(
         var ctx = DeviceContext()
         used = knn_regressor_predict(
             ctx, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
+        )
+    return PythonObject(used)
+
+
+def knn_classify_resident_binding(
+    handle: PythonObject,
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    y_addr: PythonObject,
+    out_labels_addr: PythonObject,
+    out_proba_addr: PythonObject,
+    out_uniq_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """`knn_classify` over a resident index (DEVIATION 3002): the same
+    `params` and `dist_params` as `knn_classify_binding`, plus the handle
+    `knn_index_prepare` returned first; `index_addr` is still the host
+    bytes, read for the host-side refusals only."""
+    if len(params) < 7:
+        raise Error(
+            "knn_classify: params must hold at least 7 values, got "
+            + String(len(params))
+        )
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var qt = Int(py=params[4])
+    var no = Int(py=params[5])
+    var want_proba = Int(py=params[6]) != 0
+    if len(params) != 7 + no:
+        raise Error(
+            "knn_classify: params must hold 7 + n_outputs ("
+            + String(7 + no)
+            + ") values, got "
+            + String(len(params))
+        )
+    var n_classes = List[Int]()
+    for i in range(no):
+        n_classes.append(Int(py=params[7 + i]))
+    var h = Int(py=handle)
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var yp = _i32_ptr(Int(py=y_addr))
+    var lp = _i32_ptr(Int(py=out_labels_addr))
+    var pp = _f32_ptr(Int(py=out_proba_addr))
+    var up = _i32_ptr(Int(py=out_uniq_addr))
+    var dt = _dist_triple(dist_params)
+    var used: Int
+    with GILReleased(Python()):
+        used = knn_index_classify(
+            h, ip, ni, qp, nq, nf, kk, yp, no, n_classes, lp, pp, up,
+            want_proba, qt, dt[0], dt[1], dt[2],
+        )
+    return PythonObject(used)
+
+
+def knn_regress_resident_binding(
+    handle: PythonObject,
+    index_addr: PythonObject,
+    queries_addr: PythonObject,
+    y_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+    dist_params: PythonObject,
+) raises -> PythonObject:
+    """`knn_regress` over a resident index (DEVIATION 3002): the same
+    `params` and `dist_params` as `knn_regress_binding`, plus the handle."""
+    if len(params) != 6:
+        raise Error(
+            "knn_regress: params must hold 6 values, got "
+            + String(len(params))
+        )
+    var h = Int(py=handle)
+    var ip = _f32_ptr(Int(py=index_addr))
+    var qp = _f32_ptr(Int(py=queries_addr))
+    var yp = _f32_ptr(Int(py=y_addr))
+    var op = _f32_ptr(Int(py=out_addr))
+    var ni = Int(py=params[0])
+    var nq = Int(py=params[1])
+    var nf = Int(py=params[2])
+    var kk = Int(py=params[3])
+    var qt = Int(py=params[4])
+    var no = Int(py=params[5])
+    var dt = _dist_triple(dist_params)
+    var used: Int
+    with GILReleased(Python()):
+        used = knn_index_regress(
+            h, ip, ni, qp, nq, nf, kk, yp, no, op, qt, dt[0], dt[1], dt[2]
         )
     return PythonObject(used)
 
@@ -1707,6 +1799,8 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[knn_regress_neighbors_binding]("knn_regress_neighbors")
         m.def_function[knn_classify_binding]("knn_classify")
         m.def_function[knn_regress_binding]("knn_regress")
+        m.def_function[knn_classify_resident_binding]("knn_classify_resident")
+        m.def_function[knn_regress_resident_binding]("knn_regress_resident")
         m.def_function[kmeans_fit_binding]("kmeans_fit")
         m.def_function[kmeans_predict_binding]("kmeans_predict")
         m.def_function[kmeans_transform_binding]("kmeans_transform")
