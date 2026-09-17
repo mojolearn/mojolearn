@@ -250,3 +250,47 @@ session every couple of hundred steps, holds phase 1, and the section 4 table
 stands. If it does not reset, phase 3 is the price and every estimate doubles.
 
 **Do not quote section 4 without section 7.**
+
+## 8. The completed 2,000-step run, end to end
+
+The run finished all 2,000 steps in 840 s (`long exit=0 secs=840`,
+`finished=2026-09-17T20:30:45Z`). Full curve from
+`.../remote/lm-shakedown/long/events.jsonl.gz`:
+
+| what | value |
+|---|---|
+| steps completed | 2,000 of 2,000, `limited` false |
+| step 1 (setup included) | 12.994 s |
+| fastest timed step | 0.20650 s |
+| median timed step | 0.44063 s |
+| slowest timed step | 0.51849 s |
+| slowest / median | **1.177x** |
+| steps slower than 1.5x the median | **0** |
+| median of the first 199 timed steps | 0.20686 s |
+| median of the last 199 | 0.41503 s |
+| drift across the run | **+100.63%** |
+| host `ru_maxrss` first / last | 8.193 GB / 8.193 GB, **delta 0 bytes** |
+| host `VmRSS` first / last | 2.361 GB / 2.396 GB, delta +34.7 MB over 2,000 steps |
+| device peak first / last / max | 15.607 / 34.397 / 34.397 GB |
+| loss first / min / last | 10.903326 / 0.605758 / 1.717035 |
+| NaN or inf steps | **0** |
+| loss mean, first 200 vs last 200 | 6.18672 vs 1.70408 |
+| distinct rounded losses in the last 200 steps | **200** (1 would mean flat) |
+
+Two things in that table matter as much as the drift.
+
+**There are no stalls.** The slowest step of 2,000 is 1.177x the median and
+exactly zero steps exceed 1.5x it. Whatever the transition is, it is a smooth
+change of regime and not an intermittent hitch, a swap, a page fault storm or
+a garbage collection. A 610,352-step run would not be punctuated by surprises;
+it would simply run at the phase-3 rate.
+
+**Host memory is not growing.** `ru_maxrss` is identical to the byte at step 1
+and step 2,000. `VmRSS` moved 34.7 MB across 2,000 steps, which is 17 KB a
+step and is the harness's own accumulating list of step records, not the
+trainer. The 21.9 GB host RSS that prompted this question was the stateless
+path and does not occur here.
+
+The loss is doing what training looks like: 10.903 at step 1 (ln(50257) =
+10.825, an untrained uniform model), a minimum of 0.606, 200 distinct values in
+the last 200 steps, and not one NaN or inf in 2,000 optimizer steps.
