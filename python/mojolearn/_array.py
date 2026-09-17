@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import array
 import struct
+from itertools import chain
 
 # typestr -> array.array typecode of the backing store
 _CODE = {
@@ -58,6 +59,30 @@ for _ts, _c in _CODE.items():
             f"{array.array(_c).itemsize} bytes on this platform, expected "
             f"{_ITEMSIZE[_ts]} for {_ts!r}"
         )
+
+
+# lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3102). dtype codes of the
+# core helpers in `bindings/hotpath_helpers.mojo`; float16 has no code and
+# keeps the Python routines. Below `_NATIVE_MIN` elements the Python routine
+# is as fast as the call and stays the only path, so scalars and metadata
+# never touch the binding.
+_NATIVE_CODE = {"<f4": 0, "<f8": 1, "<i4": 2, "<i8": 3, "<u4": 4, "<u1": 5}
+_NATIVE_MIN = 256
+_REDUCE_MIN, _REDUCE_MAX, _REDUCE_SUM, _REDUCE_ARGMAX, _REDUCE_INTEGRAL = range(5)
+_SCALAR_TYPES = frozenset((float, int, bool))
+_ROW_TYPES = frozenset((list, tuple))
+_NOT = bytes((1, 0)) + bytes(range(2, 256))
+
+
+def _helper(key, size):
+    """The core helper `key` for a block of `size` elements, or None when
+    the block is small, the binary lacks the helper, or
+    `MOJOLEARN_HOTPATH=python` is set; the caller then runs its Python
+    routine, which is the helper's definition."""
+    if size < _NATIVE_MIN:
+        return None
+    from . import _buffer
+    return _buffer._native_optional(key)
 
 
 def normalize_dtype(dtype):
@@ -489,6 +514,9 @@ class Array:
             return self.copy()
         src = self.dtype
         code = _CODE[dtype]
+        fast = self._native_astype(dtype)
+        if fast is not None:
+            return fast
         if src == "<f2" or dtype == "<f2":
             values = self._values()
             if dtype in _INT:
@@ -514,6 +542,28 @@ class Array:
         out.order = self.order
         out._set_meta(self.shape, dtype, self.order)
         return out
+
+    def _native_astype(self, dtype):
+        """DEVIATION 3100: `astype` through the core helper `cast_elements`,
+        or None. The routine below it is `array.array(code, <memoryview>)`,
+        a C loop that builds one Python object per element (22 to 31 ns);
+        the helper performs the same single conversion per element with no
+        object. When the helper meets an element the routine below REFUSES
+        (an integer outside the target, a NaN or infinity headed for an
+        integer dtype) it reports so and the routine below runs and raises
+        its own words."""
+        sc = _NATIVE_CODE.get(self.dtype)
+        dc = _NATIVE_CODE.get(dtype)
+        if sc is None or dc is None:
+            return None
+        fn = _helper("cast_elements", self.size)
+        if fn is None:
+            return None
+        from . import _buffer
+        store = _buffer._output_store(_CODE[dtype], self.size)
+        if int(fn(self._addr, sc, store.buffer_info()[0], dc, self.size)):
+            return None
+        return Array._owned(store, self.shape, dtype, self.order)
 
     def reshape(self, shape):
         """A C-order view over the same buffer (one `-1` allowed). An
@@ -615,7 +665,13 @@ class Array:
                 base_off += d * cs[axis]
         src = a._mv
         code = _CODE[a.dtype]
-        if not outer_ranges:
+        block = _contiguous_block(dims, a.shape, cs) if out_shape else None
+        store = None
+        if block is not None:
+            store = _block_store(a, block[0], block[1])
+        if store is not None:
+            pass
+        elif not outer_ranges:
             # the constructor copies a (possibly strided) typed memoryview
             # in C; `frombytes` would insist on a byte-format buffer
             store = array.array(
@@ -636,6 +692,10 @@ class Array:
     def __eq__(self, other):
         """Elementwise equality against an Array of the same shape or a
         scalar, as a `'<u1'` Array of 0/1."""
+        if isinstance(other, Array) and other.shape == self.shape:
+            fast = self._native_eq(other)
+            if fast is not None:
+                return fast
         mine = self._as_c()._values()
         if isinstance(other, Array):
             if other.shape != self.shape:
@@ -650,12 +710,30 @@ class Array:
             return NotImplemented
         return Array._owned(array.array("B", bits), self.shape, "<u1", "C")
 
+    def _native_eq(self, other):
+        """DEVIATION 3102: elementwise equality of two same-shape Arrays of
+        ONE dtype through the core helper `equal_elements`, or None. IEEE
+        equality is Python's float equality; two dtypes (an int against a
+        float compares exactly in Python) keep the Python routine."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None or other.dtype != self.dtype:
+            return None
+        fn = _helper("equal_elements", self.size)
+        if fn is None:
+            return None
+        a = self._as_c()
+        b = other._as_c()
+        store = array.array("B", bytes(self.size))
+        fn(a._addr, b._addr, code, self.size, store.buffer_info()[0])
+        return Array._owned(store, self.shape, "<u1", "C")
+
     def __ne__(self, other):
         eq = self.__eq__(other)
         if eq is NotImplemented:
             return eq
+        # `bytes.translate` flips 0 and 1 in C (was a comprehension per element)
         return Array._owned(
-            array.array("B", [1 - b for b in eq._mv]), self.shape, "<u1", "C"
+            array.array("B", eq._mv.tobytes().translate(_NOT)), self.shape, "<u1", "C"
         )
 
     __hash__ = None
@@ -668,15 +746,37 @@ class Array:
             raise ValueError(f"mojolearn: {what} of an empty Array")
         return self._values()
 
+    def _native_reduce(self, what):
+        """DEVIATION 3101: `what` through the core helper `reduce_stat`, or
+        None. Sequential in storage order with Python's own comparison, so a
+        NaN or a signed zero answers as `min(list)` / `max(list)` does."""
+        code = _NATIVE_CODE.get(self.dtype)
+        if code is None:
+            return None
+        fn = _helper("reduce_stat", self.size)
+        if fn is None:
+            return None
+        return fn(self._addr, code, self.size, what)
+
     def min(self):
+        fast = self._native_reduce(_REDUCE_MIN)
+        if fast is not None:
+            return fast
         return min(self._reduce_values("min"))
 
     def max(self):
+        fast = self._native_reduce(_REDUCE_MAX)
+        if fast is not None:
+            return fast
         return max(self._reduce_values("max"))
 
     def sum(self):
         """Sequential accumulation: exact `int` for int dtypes, a Python
         float summed left to right in storage order for float dtypes."""
+        if self.dtype in ("<f4", "<f8"):
+            fast = self._native_reduce(_REDUCE_SUM)
+            if fast is not None:
+                return fast
         values = self._values()
         if self.dtype in _INT:
             return sum(values)
@@ -688,6 +788,9 @@ class Array:
     def argmax(self):
         """Flat index of the first maximum (first-max-wins), in storage
         order, over the C-order view."""
+        fast = self._as_c()._native_reduce(_REDUCE_ARGMAX)
+        if fast is not None:
+            return fast
         values = self._as_c()._reduce_values("argmax")
         best = 0
         best_v = values[0]
@@ -697,6 +800,68 @@ class Array:
                 best = i
                 best_v = v
         return best
+
+
+def _contiguous_block(dims, shape, cs):
+    """`(offset, length)` in elements when the selection `dims` of a C-order
+    block is ONE contiguous run whose C-order walk is the run itself:
+    leading integer indices, then at most one step-1 slice, then only whole
+    axes. None otherwise (a stride, a slice after a partial slice)."""
+    offset = 0
+    axis = 0
+    n = len(dims)
+    while axis < n and not isinstance(dims[axis], tuple):
+        offset += dims[axis] * cs[axis]
+        axis += 1
+    if axis == n:
+        return None
+    start, step, count = dims[axis]
+    if step != 1:
+        return None
+    for later in range(axis + 1, n):
+        d = dims[later]
+        if not isinstance(d, tuple) or d != (0, 1, shape[later]):
+            return None
+    return offset + start * cs[axis], count * cs[axis]
+
+
+def _block_store(a, offset, length):
+    """DEVIATION 3105: an owned store holding `length` elements of `a` from
+    `offset`, equal byte for byte to the per-run `array.array(code,
+    <memoryview slice>)` copies it replaces, or None when that needs the
+    helper and the helper is absent. One memcpy instead of one Python object
+    per element (0.2 ns against 22); see `_buffer._same_dtype_store` for the
+    one float32 subtlety."""
+    from . import _buffer
+    if not _buffer.hotpath_enabled():
+        return None
+    if length == 0:
+        return array.array(_CODE[a.dtype])
+    raw = a._mv[offset:offset + length].cast("B")
+    return _buffer._same_dtype_store(raw, a.dtype)
+
+
+def _flatten_fast(nested):
+    """DEVIATION 3106: `_flatten` for the two shapes every estimator input
+    takes, a flat list of Python scalars and a list of equal-length rows of
+    them, with the leaf test and the row walk done by C builtins instead of
+    one recursive call per leaf (1.5 s per 10,000,000 leaves). None for
+    anything else (a ragged block, a NumPy scalar, a nested Array, rank 3),
+    which `_flatten` then walks and, where it must, refuses in its words."""
+    if type(nested) not in _ROW_TYPES or not nested:
+        return None
+    kinds = set(map(type, nested))
+    if kinds <= _SCALAR_TYPES:
+        return (len(nested),), list(nested)
+    if not kinds <= _ROW_TYPES:
+        return None
+    widths = set(map(len, nested))
+    if len(widths) != 1:
+        return None
+    flat = list(chain.from_iterable(nested))
+    if not set(map(type, flat)) <= _SCALAR_TYPES:
+        return None
+    return (len(nested), widths.pop()), flat
 
 
 def _run(mv, start, count, step):
@@ -725,6 +890,9 @@ def _flatten(nested):
     gives shape ()."""
     if isinstance(nested, Array):
         return nested.shape, nested._as_c()._values()
+    fast = _flatten_fast(nested)
+    if fast is not None:
+        return fast
     if isinstance(nested, (str, bytes)) or not hasattr(nested, "__len__"):
         return (), [nested]
     seq = list(nested)

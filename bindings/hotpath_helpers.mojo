@@ -39,7 +39,7 @@ split contiguous ranges across the host pool under `MOJOLEARN_CPU_THREADS`
 element depends on another, so the thread count moves no byte.
 """
 from std.math import isfinite
-from std.memory import memset_zero
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -125,7 +125,18 @@ def _refused[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> Bool:
 def _convert[src: DType, dst: DType, W: Int](v: SIMD[src, W]) -> SIMD[dst, W]:
     comptime if dst == DType.float32 and not src.is_floating_point():
         # The C item setter's route: integer -> double -> float.
-        return v.cast[DType.float64]().cast[DType.float32]()
+        return v.cast[DType.float64]().cast[dst]()
+    elif dst == DType.float32 and src == DType.float32:
+        # `array.array('f', <float32 memoryview>)` widens each element to a
+        # Python float and narrows it back. That round trip is the identity
+        # on every float32 EXCEPT a signaling NaN, which the widening quiets
+        # (quiet bit set, sign and payload kept; measured on the M4:
+        # 0x7fa00001 -> 0x7fe00001). An fpext/fptrunc pair would be folded
+        # away by the optimizer, so the quieting is spelled on the bits.
+        var bits = bitcast[DType.uint32, W](rebind[SIMD[DType.float32, W]](v))
+        var nan = (bits & SIMD[DType.uint32, W](0x7fffffff)).gt(SIMD[DType.uint32, W](0x7f800000))
+        var quiet = nan.select(bits | SIMD[DType.uint32, W](0x00400000), bits)
+        return rebind[SIMD[dst, W]](bitcast[DType.float32, W](quiet))
     else:
         return v.cast[dst]()
 

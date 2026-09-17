@@ -168,10 +168,52 @@ def encode_labels(y):
     with one dense code per label. The native arm for a numeric buffer,
     `sorted_classes(flatten_labels(y))` for everything else."""
     fast = _encode_labels_native(y)
+    if fast is None:
+        fast = _encode_label_list_native(y)
     if fast is not None:
         return fast
     classes, codes = sorted_classes(flatten_labels(y))
     return classes, Array.from_list(codes, "<i4")
+
+
+def _encode_label_list_native(y):
+    """DEVIATION 3103: a FLAT Python list or tuple whose every label is
+    EXACTLY an `int`, or exactly a `float`, through the native encoder.
+
+    `sorted_classes` keeps the first-seen OBJECT of each class, which only
+    matters when equal labels can be different objects (`1`, `1.0`, `True`).
+    With one exact type they cannot: equal ints are indistinguishable, and
+    for floats the one distinguishable pair, `0.0` and `-0.0`, is kept
+    first-seen by the native encoder too (DEVIATION 2500). So the type set,
+    read in C, decides; a bool, a subclass, a str, a mix or a nested list
+    takes the Python routine, as does an int outside int64 and anything
+    over `_NATIVE_ENCODE_MAX_CLASSES`. NaN raises the same ValueError."""
+    import array
+    from ._buffer import hotpath_enabled
+
+    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN or not hotpath_enabled():
+        return None
+    kinds = set(map(type, y))
+    if kinds == {int}:
+        code, dtype = "q", "<i8"
+    elif kinds == {float}:
+        code, dtype = "d", "<f8"
+    else:
+        return None
+    try:
+        store = array.array(code, y)
+    except OverflowError:
+        return None  # an int outside int64: a class only Python can hold
+    try:
+        return _encode_labels_native(Array._owned(store, (len(store),), dtype, "C"))
+    except ImportError:
+        # a GPU install whose base binding predates DEVIATION 2500 raises
+        # here by design for a BUFFER; a list has its Python routine
+        return None
+
+
+#: Below this many labels the Python routine is as fast as the detour.
+_NATIVE_LIST_MIN = 256
 
 
 def _encode_labels_native(y):
@@ -275,6 +317,21 @@ def _decode_labels_native(classes, codes, kind):
 
     if kind not in ("int", "float") or not isinstance(codes, Array):
         return None
+    if codes.dtype == "<i4" and codes.ndim == 1 and classes:
+        # DEVIATION 3103: int32 codes (`GradientBoostingClassifier.predict`
+        # hands these over) used to take the Python arm, four passes over
+        # the rows. Widened by `Array.astype` they take the gather. A code
+        # the gather refuses (negative: Python indexes from the END, so the
+        # Python arm ANSWERS it) sends the call back to the Python arm.
+        from ._buffer import hotpath_enabled
+        if not hotpath_enabled():
+            return None
+        try:
+            return _decode_labels_native(classes, codes.astype("<i8"), kind)
+        except ImportError:
+            raise
+        except Exception:
+            return None
     if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
         return None
     try:
