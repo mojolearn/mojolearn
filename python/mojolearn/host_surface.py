@@ -2494,8 +2494,6 @@ PUBLIC_PENDING_LANES = {
     # by lane/classical-host-recordings merging main; it is not this lane's
     # change and it leaves this dict at the next release record.
     "samba-untied-dropout-accum": "stale reference",
-    "byte-lm": "no reference",
-    "byte-lm-resident": "no reference",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
@@ -2505,9 +2503,7 @@ PUBLIC_PENDING_LANES = {
     # inference replay, not CPU CTR training or final release qualification.
     # The other fix-record lanes passed installed reference-table replay;
     # legacy `identity` still restricts itself to its original column scope.
-    "ivf": "own record",  # ties still owes a qualifying native training control
     # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
-    "gemm-bf16": "no reference", "gemm-int8": "no reference",
     "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
     "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
     "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
