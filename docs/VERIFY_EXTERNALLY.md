@@ -166,6 +166,11 @@ same bits is broken out and given a non-agreeing outcome.
 | `INCOMPLETE` | 4 | a cell only one document carries, a cell neither side computed (the probe raised on both), or two DIFFERENT `n/a` reasons, which is a disagreement about what the part even is |
 | `AGREE` | 0 | every shared cell part matches and none of the above applies |
 | `NOTHING COMPARED` | 4 | the documents share no cell part at all |
+| `SAME FILE` / `CANNOT READ` | 2 | both arguments are one path, or a file is missing or is not JSON |
+
+Every path out of the command, a crash included, prints exactly one `RESULT:`
+line and returns a code from that table, so an empty output or a failed
+invocation can never be read as a pass.
 
 The report also carries, next to the agreement count, each document's OWN
 verdict about its own run, and `provenance.independent`, which is true only
