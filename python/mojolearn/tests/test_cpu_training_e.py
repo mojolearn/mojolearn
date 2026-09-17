@@ -107,7 +107,7 @@ def test_sabotage_define_moves_the_gram_reduce():
     assert "PCA_ORACLE_HOST_SABOTAGE" in binding, "the binding does not read the PCA oracle's define back"
     dbscan = _read("dbscan/host/dbscan_oracle.mojo")
     assert "comptime if DBSCAN_ORACLE_HOST_SABOTAGE:" in dbscan
-    assert "min_pts = min_samples + 1" in dbscan, "the DBSCAN sabotage arm does not shift the core test"
+    assert "labels[0] += 1" in dbscan, "the DBSCAN sabotage arm must move even an all-noise result"
     assert "DBSCAN_ORACLE_HOST_SABOTAGE" in binding
 
 

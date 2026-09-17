@@ -900,18 +900,11 @@ def test_shipped_verifier_hashes_like_the_harness():
     lanes = os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_LANES", "").strip()
     if not lanes:
         selected = list(va.host_surface().public_reference_lanes())
-        # CAP IT ON AN APPLE GPU. This asked for every public reference lane in
-        # one process. That was 9; the 2026-09-16 promotion made it 39 and
-        # lane/ship-cpu-host-families took it to 122, read from the registry
-        # rather than written down here, and
-        # `identity_break.refuse_routine_apple_column` refuses more than 24 in
-        # one Metal process because a full Apple column is a per-release
-        # artifact. The parity this test checks is per lane, so a subset proves
-        # exactly the same thing; asking for a column here only made the test
-        # unrunnable on any Mac with a GPU build (it still passes on a CPU-only
-        # install, which is why this went unseen until a Metal tree ran it).
+        # A routine Metal diagnostic is one lane. The installed-wheel
+        # release gates cover broader device surfaces separately; the CPU
+        # parity check still exercises every public reference lane.
         if sys.platform == "darwin" and vendor != "cpu":
-            selected = selected[:va.APPLE_LANE_CAP]
+            selected = selected[:1]  # current routine Metal diagnostic policy
         lanes = ",".join(selected)
     with tempfile.TemporaryDirectory() as tmp:
         column = os.path.join(tmp, "column.json")
