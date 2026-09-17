@@ -3449,8 +3449,9 @@ M4 gate C confirmed by still resolving `stash_tiled` with no knob.
 
 ## 22. The causal block-index map (2026-09-17, lane `lane/attention-speed`): DEVIATION 2900, `_bswz`
 
-STATUS at the time of writing: source built, the M4 gates run, the H100 leg
-owed. Section 22.6 records the leg. A build without
+STATUS: MEASURED AND FLIPPED. Section 22.7 records the H100 leg, 22.8 the one
+regression it found and what the follow-on is worth. Section 22.6 is per-leaf
+GEMM detail filed for `lane/gemm-next`. A build without
 `-D MOJOLEARN_ATTN_ARM_TRIAL=1` compiles one instantiation of each of the
 four kernels, the one its column default resolves to, and no column default
 carries the bit yet, so a shipped build is byte for byte what it was.
@@ -3734,3 +3735,130 @@ nothing measurable (-1.04 ms, inside the run-to-run spread of the two shipped
 builds) and switching them on costs 4.65 ms, 1.55 percent. A share of that
 tree is a share of the price to within about 1.5 percent, which is a stronger
 statement than a breakdown usually earns.
+
+### 22.7 The H100 leg and the NVIDIA flip (2026-09-17, measured): DEVIATION 2900
+
+Pod d7piefs556qlqe, one RunPod NVIDIA H100 80GB HBM3, commit de7d2063e, one
+heat window, baseline `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`
+(the shipped NVIDIA and AMD default of sections 20.11 and 21). Every leg
+phase exited 0. Evidence
+`bench/results/e1g/2026-09-17_201140-nvidia-h100-attention-bswz` (the four
+operand `.bin` dumps per corpus are 6 MB each and live outside the repo in
+`~/mojolearn-evidence/attention-bswz-2026-09-17_201140/`; their `meta.txt`
+and `sha256.txt` are kept here).
+
+Lean step, `steady_median_seconds`, enwik8 / Pile GitHub:
+
+| arm | enwik8 s | pilegithub s | ratios | geomean |
+|---|---:|---:|---|---:|
+| baseline `..._estash_dres_kvgrid_r32` | 0.20648 | 0.20651 | 1, 1 | 1 |
+| `..._estash_dres_kvgrid_r32_bswz` | 0.19786 | 0.19827 | 0.9583, 0.9601 | **0.9592** |
+
+`witnesses_equal_baseline=True` for every step on both corpora. ENGINEERING
+RULES 9 flips the winner, so the NVIDIA row of `attn_default_arm_for` becomes
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz` (word 14732391).
+
+Gates (22.5), all six answered: arms check PASS, names inverse, 15 cases x 25
+arms; the smoke PASS; on BOTH corpora's real activations every
+`_bswz_vs_baseline` line MATCH on all seven buffers with zero non-sabotage
+cells moved, and REACH, REACH_E, REACH_ES and REACH_KV proven with
+`clean_restored=True`; both lean runs `limited: false` with equal witnesses;
+the `attn.*` lines present and lower. Gate 6 (occupancy not below the mirror)
+FAILED on one kernel of four and 22.8 is that finding.
+
+In-step, from the `lmtiming` probes of the same leg (one serialized step, a
+breakdown and never a price; enwik8, Pile GitHub within 0.1 ms of every line),
+beside the register readback of the same leg's `resources.txt`:
+
+| kernel | base ms | bswz ms | ratio | regs | blocks per SM |
+|---|---:|---:|---:|---|---|
+| `attn.fwd_r2_keep_kernel` | 20.85 | 17.19 | 0.825 | 100 -> 96 | 2 -> 2 |
+| `attn.bwd_dq_tiled_pf` | 12.49 | 9.68 | 0.775 | 118 -> 128 | 2 -> 2 |
+| `attn.bwd_kvgrid_dkdv_pf` | 10.07 | 7.10 | 0.706 | 63 -> 63 | 4 -> 4 |
+| `attn.bwd_zdot_estash_dres_pf` | 14.79 | 15.61 | **1.056** | 64 -> **70** | 4 -> **3** |
+| every `attn.*` leaf | 97.22 | 84.91 | 0.873 | | |
+| `envelope.native_call` | 207.21 | 198.56 | 0.958 | | |
+
+Nothing outside the four kernels moved: `bwd.after_attention` 0.9993,
+`block.mlp_and_residuals` 1.0017, `step.head_forward` 1.0024,
+`step.head_backward_da` 1.0014, `step.head_backward_db` 0.9991. That is the
+shape the mechanism predicts, since the map touches four kernels and nothing
+else, and it is why the win can be attributed to the map rather than to the
+pod.
+
+The counted expectation of 22.4 was that dq would move most (1.45 waves,
+ratio 32), the forward and zdot less (2.9 and 5.8 waves), and dk/dv least
+(already descending within a head). The measured ranking is dk/dv 0.706, dq
+0.775, forward 0.825, zdot 1.056. The counts got dq and the forward roughly
+right and got BOTH ends wrong: dk/dv gained most, not least, so ordering the
+heads globally mattered more than ordering the tiles within one; and zdot did
+not gain a little, it lost, for the reason in 22.8. 22.4 said a different
+ranking would mean a different mechanism, and it does.
+
+THE SHIPPED BRANCH. `_bswz` is a comptime parameter on four kernels a shipped
+build already compiles, not a new branch, so it needed no
+`ATTN_SHIPPED_BWD_ESTASH` equivalent: `ATTN_DEFAULT_BSWZ` resolves the bit
+from the column default and the launch sites pass it, so a shipped build
+compiles exactly one instantiation of each. Gated on the M4, one at a time
+under `nice 19` through `tools/mac_slot.py`:
+
+- Shipped build, NO knob: `DEFAULT column=apple arm=stash_tiled word=7
+  trial_hook=False`, PASS, 15 cases, every buffer bit-identical. Apple's own
+  default carries no `_bswz` bit and a shipped Apple build compiles none of
+  this branch, exactly as with estash.
+- Shipped build with `-D MOJOLEARN_ATTN_DEFAULT_BSWZ_EVERY_COLUMN=1` (the new
+  check knob, the fourth of its family, never a shipped build): `DEFAULT
+  column=apple arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz
+  word=14732391 trial_hook=False`, `ARM this_run=... is_default=True
+  backward_hd64=bwd_stash_tiled_pf_estash_dres_kvgrid_r32_bswz`, PASS, 15
+  cases, every compared buffer bit-identical, 17 direct launches RAN the
+  swizzled forward and backward at head_dim 64. `trial_hook=False` with the
+  swizzled kernels in the RAN list is the claim: a SHIPPED build reached them
+  and no bit moved, on Apple as well as NVIDIA.
+
+AMD IS NOT FLIPPED AND ITS ROW IS UNCHANGED. No AMD leg ran. The mechanism is
+occupancy- and dispatch-order-dependent and section 21.1 already showed the
+two vendors' occupancy arithmetic differing enough to turn 0.8207 into 0.9716
+on the same arm, so an AMD price here would be a guess. AMD keeps
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`.
+
+COST AT THE 25B-TOKEN SHAPE. 25e9 / 2048 = 12,207,031 steps. At the
+same-pod baseline 0.20649 s that is 700.2 H100-hours; at 0.19807 s it is
+671.6, a saving of 28.6 hours. At the $2.663/h that back-solves from the
+$2,100 figure the planning documents carry, $1,865 to $1,788. The saving is
+$77, and it is worth saying plainly that this is 4 percent of a bill whose
+other 58 percent is GEMM (22.6).
+
+### 22.8 The one regression, its measured cause, and what fixing it is worth
+
+The zdot kernel got SLOWER, 14.79 to 15.61 ms per step, 1.056. This is not a
+puzzle and it was caught by gate 6 rather than explained after the fact: the
+same leg's `resources.txt` reads `zdot_estash_dres_pf regs=64
+blocks_per_sm_256=4` against `zdot_estash_dres_pf_bswz regs=70
+blocks_per_sm_256=3`. The map's index arithmetic (one division by the runtime
+`b * nh`) costs that kernel six registers, and six registers is exactly what
+it had in hand: at 64 registers a 256-thread block fits four times into the
+H100's 65,536 per SM, at 70 it fits three. A 25 percent occupancy loss buying
+a schedule gain the kernel barely needed (5.8 waves, the least imbalanced of
+the four) nets out negative.
+
+The other three kernels kept their occupancy (100 -> 96, 118 -> 128 and 63 ->
+63 registers all leave `blocks_per_sm_256` where it was) and won on schedule
+alone, which is why the step still moves 0.9592.
+
+FOLLOW-ON, NAMED AND PRICED, NOT BUILT. Withhold the map from the zdot kernel
+(a second bit, or a per-kernel `SWZ` the launcher resolves) and the step
+should take back the 0.83 ms the zdot kernel lost. AT THE CEILING THIS LANE
+MUST QUOTE: 0.83 ms is 0.42 percent of the 198.6 ms step, against the 15
+percent that HALVING ALL OF ATTENTION would buy, so it is about a
+thirty-fifth of the remaining attention ceiling and about one fiftieth of
+what halving GEMM would buy. It costs one more H100 leg. It is recorded here
+rather than opened, and anyone who opens it should say that number first.
+
+A second, cheaper form of the same fix, also not built: spell the map so it
+costs no registers. `ntb`, `nh` and `b` are kernel arguments, so the division
+is a runtime integer division; passing the precomputed `b * nh` (or the tile
+count) as one more `Int32` argument would replace it with a multiply and a
+subtract. Whether that recovers all six registers is not derivable from the
+source and the `resources.txt` readback answers it in seconds on any column,
+without a lease.

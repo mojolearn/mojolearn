@@ -118,6 +118,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
+    ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
     TARGET_COLUMN,
     attn_default_arm_for,
@@ -460,7 +461,14 @@ comptime ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT = (
 """`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`: DEVIATIONS 2650
 and 2651 (the backward reads the forward's kept exp stash, dctx rows in the
 shared page) on top of `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, flipped
-on NVIDIA by DEVIATION 2657 (brief section 20)."""
+on NVIDIA by DEVIATION 2657 (brief section 20) and still AMD's default."""
+comptime ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT = (
+    ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT | ATTN_ARM_BSWZ
+)
+"""`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz`: DEVIATION
+2900's causal block-index map on top of the word above, flipped on NVIDIA by
+the H100 leg bench/results/e1g/2026-09-17_201140-nvidia-h100-attention-bswz
+(FLIP geomean 0.9592, brief section 22)."""
 comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
     | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
@@ -834,6 +842,13 @@ def fused_attention_arm_from_env() raises -> Int:
         " no longer spells this file's"
         " stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 bits (DEVIATION"
         " 2657); fix the literal there"
+    )
+    comptime assert ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ == ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT, (
+        "checks/kernel_matrix.mojo"
+        " ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ"
+        " no longer spells this file's"
+        " stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz bits"
+        " (DEVIATION 2900); fix the literal there"
     )
     comptime assert (ATTN_ARM_DEFAULT & ATTN_ARM_DEFAULT_REFUSED_BITS) == 0, (
         "attn_default_arm_for names a sabotage, a DEVIATION 2528 arm or"
