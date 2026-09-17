@@ -272,21 +272,24 @@ def admit(j, path):
     return None
 
 
-def _part_value(cell, part):
+def _part_value(cell, part, min_repeats=1):
     """The one value a column carries for a part, or None when it carries no
     usable one (moved, refused, reload-moved, batch-moved, skipped)."""
-    if part == "train":
-        if cell.get("verdict") != "STABLE" or not cell.get("hashes"):
-            return None
-        return cell["hashes"][0]
-    verdict = cell.get(f"{part}_verdict")
-    values = cell.get(part)
-    if verdict not in ("STABLE", "N/A") or not values or values[0] is None:
+    if not isinstance(cell, dict):
         return None
-    v = values[0]
-    if not isinstance(v, str) or v.startswith(_SKIPPED_NA):
+    verdict = cell.get("verdict" if part == "train" else f"{part}_verdict")
+    values = cell.get("hashes" if part == "train" else part)
+    if not isinstance(values, list) or len(values) < min_repeats:
         return None
-    return v
+    value = values[0]
+    if not isinstance(value, str) or any(v != value for v in values):
+        return None
+    if verdict == "STABLE" and re.fullmatch(r"[0-9a-f]{16}", value):
+        return value
+    if (part != "train" and verdict == "N/A" and value.startswith("n/a:")
+            and len(value) > 4 and not value.startswith(_SKIPPED_NA)):
+        return value
+    return None
 
 
 def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=None):
@@ -341,18 +344,29 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
             lane, _, fixture = cell_key.partition("/")
             if lane not in lanes or fixture not in want_fix or not isinstance(cell, dict):
                 continue
+            # Absence is not agreement: a cell must carry its own input witness.
+            if fx.get(fixture) != want_fix[fixture]:
+                continue
             if lane in revs and have_revs.get(lane) != revs[lane]:
                 continue
             for part in parts:
+                if part != "train" and held.get(fixture) != want_held[fixture]:
+                    continue
                 if part in OPTIONAL_PARTS:
                     expected = (harness._rlpair_protocol() if part == "rlpair" else
                                 harness._part_protocol(part, harness.BATCH_ALONE))
                     # A different split/length protocol is a different claim.
                     if j.get(f"{part}_protocol") != expected:
                         continue
-                value = _part_value(cell, part)
+                value = _part_value(cell, part, min_repeats=2)
                 if value is None:
                     continue
+                if not value.startswith("n/a:") and part in ("batch", "stepfull"):
+                    expected = (dict(alone=harness.BATCH_ALONE, split=list(harness.BATCH_SPLIT) + ["n"],
+                                     prefix="1,7,full-1", enabled=True) if part == "batch" else
+                                harness._part_protocol(part, harness.BATCH_ALONE))
+                    if j.get(f"{part}_protocol") != expected:
+                        continue
                 slot = (cell_key, part, cls)
                 if slot not in best or key > best[slot][0]:
                     best[slot] = (key, idx, value)
@@ -393,6 +407,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: reference predates the input it is supposed to describe. A table
         #: generated before this key existed carries none, which reads as
         #: "unknown" and therefore stale for any lane that has a revision.
+        admission_policy=dict(min_repeats=2, input_witness_required=True, property_protocol_required=True),
         lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],
