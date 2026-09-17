@@ -43,10 +43,12 @@ from ._mamba_impl import (
     Mamba2State,
     Mamba3Block,
     Mamba3State,
+    Mamba1DecodeSession,
 )
 
 __all__ = [
     "Mamba1Block",
+    "Mamba1DecodeSession",
     "Mamba1State",
     "Mamba2Block",
     "Mamba2State",

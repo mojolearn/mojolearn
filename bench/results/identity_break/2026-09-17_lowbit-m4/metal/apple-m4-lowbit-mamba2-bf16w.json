@@ -1,0 +1,363 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4-lowbit",
+ "commit": "125051b08f49d71b5c95834bfab3f3a52bda6d78",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  }
+ },
+ "cells": {
+  "mamba2-bf16w/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "73367d2def3fb75a",
+    "73367d2def3fb75a"
+   ],
+   "parts": [
+    {
+     "forward": "b162c01c36b55889",
+     "prefill": "b162c01c36b55889",
+     "step": "a45f546ac80fb915",
+     "backward": "61158af82c47b9db"
+    },
+    {
+     "forward": "b162c01c36b55889",
+     "prefill": "b162c01c36b55889",
+     "step": "a45f546ac80fb915",
+     "backward": "61158af82c47b9db"
+    }
+   ],
+   "infer": [
+    "5cae7295a36713bf",
+    "5cae7295a36713bf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a7e2a0b6c7ed964d",
+    "a7e2a0b6c7ed964d"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "bc4da5388be1c862",
+    "bc4da5388be1c862"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "timing": {
+    "total_seconds": 31.888629542081617,
+    "stages": {
+     "repeat=1/train": 0.5630287079839036,
+     "repeat=1/infer-save-reload": 0.07287154195364565,
+     "repeat=1/batch": 1.2580530419945717,
+     "repeat=1/rlpair": 14.124029790982604,
+     "repeat=2/train": 0.4805754580302164,
+     "repeat=2/infer-save-reload": 0.08056345907971263,
+     "repeat=2/batch": 1.4349112920463085,
+     "repeat=2/rlpair": 13.873380875098519
+    }
+   }
+  },
+  "mamba2-bf16w/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c5dd74ebf5ff776c",
+    "c5dd74ebf5ff776c"
+   ],
+   "parts": [
+    {
+     "forward": "4139fc2e1bfd513b",
+     "prefill": "4139fc2e1bfd513b",
+     "step": "cc2383f404c26bc6",
+     "backward": "43beea3edaf4726c"
+    },
+    {
+     "forward": "4139fc2e1bfd513b",
+     "prefill": "4139fc2e1bfd513b",
+     "step": "cc2383f404c26bc6",
+     "backward": "43beea3edaf4726c"
+    }
+   ],
+   "infer": [
+    "7db99b24cea235e6",
+    "7db99b24cea235e6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "63f827f0a586bce3",
+    "63f827f0a586bce3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "9734d6a22cb250d0",
+    "9734d6a22cb250d0"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "timing": {
+    "total_seconds": 28.14708304195665,
+    "stages": {
+     "repeat=1/train": 0.4102901660371572,
+     "repeat=1/infer-save-reload": 0.07228191604372114,
+     "repeat=1/batch": 1.2663088749395683,
+     "repeat=1/rlpair": 12.794696500059217,
+     "repeat=2/train": 0.39550587499979883,
+     "repeat=2/infer-save-reload": 0.09363829100038856,
+     "repeat=2/batch": 1.152400916093029,
+     "repeat=2/rlpair": 11.96120208397042
+    }
+   }
+  },
+  "mamba2-bf16w/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cd9a7bd9fa0ba0bb",
+    "cd9a7bd9fa0ba0bb"
+   ],
+   "parts": [
+    {
+     "forward": "8f580ed135b9e32a",
+     "prefill": "8f580ed135b9e32a",
+     "step": "08133e88fbdd21ad",
+     "backward": "8ab24e23a704ff57"
+    },
+    {
+     "forward": "8f580ed135b9e32a",
+     "prefill": "8f580ed135b9e32a",
+     "step": "08133e88fbdd21ad",
+     "backward": "8ab24e23a704ff57"
+    }
+   ],
+   "infer": [
+    "58a165930fe3aafe",
+    "58a165930fe3aafe"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bd29815b3b301837",
+    "bd29815b3b301837"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "b5df17b53f2b75f7",
+    "b5df17b53f2b75f7"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "timing": {
+    "total_seconds": 29.102188624907285,
+    "stages": {
+     "repeat=1/train": 0.4439082909375429,
+     "repeat=1/infer-save-reload": 0.06862512498628348,
+     "repeat=1/batch": 1.4257497909711674,
+     "repeat=1/rlpair": 13.49226379103493,
+     "repeat=2/train": 0.4896283340640366,
+     "repeat=2/infer-save-reload": 0.07119837496429682,
+     "repeat=2/batch": 1.2336494160117581,
+     "repeat=2/rlpair": 11.876590333064087
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/lowbit-inference/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "603275dbbceb0cc01eb2ed48f8e6cf00551fe9c11939ff6b3655803623d1c350",
+    "size": 2761120
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "46112eaeeb4d1a1d2d2916b99d83efcec475b4241dbc98e1e93529e40a32f739",
+    "size": 1066520
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "a2780d3d8c73154a6f458765f7c7507665f4b6c1496a5492d805123c3c5617ae",
+    "size": 2706656
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "b8edb653368158c7ec6fce88763b6481c86c2b5e3d82bfe07bceefd0233c9ea9",
+    "size": 1608184
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "6f06b29a5e38d5fd1b3353e2c7f678a73afd545c5bd7e4e38e228e10cba7b8cc",
+    "size": 2706984
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "d07d7fe45d4f0addcf86f08c802a3112aabea1ad259c40485e545bd255acc8b3",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "lanes": "mamba2-bf16w",
+   "skip": "",
+   "fixtures": "base,ties,denormal",
+   "repeats": 2,
+   "vendor": "apple-m4-lowbit",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "2864720c42945741b061efa535d28065c5ddc3198e3d59847ce9605420d8f56d",
+  "provenance": {
+   "commit": "125051b08f49d71b5c95834bfab3f3a52bda6d78",
+   "mode": "identical",
+   "vendor": "apple-m4-lowbit",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    }
+   }
+  }
+ }
+}

@@ -47,9 +47,11 @@ APPLE M4 and no other vendor -- its NVIDIA and AMD columns are OWED.
         y_t = blk.step(x_t, st)                 # st updated in place
 """
 
-from ._transformer_impl import TransformerBlock, TransformerState
+from ._transformer_impl import (TransformerBlock, TransformerDecodeSession,
+                                TransformerState)
 
 __all__ = [
     "TransformerBlock",
+    "TransformerDecodeSession",
     "TransformerState",
 ]

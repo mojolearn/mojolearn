@@ -575,7 +575,7 @@ def _raw_store_type(code, n):
     scalar = {"f": ctypes.c_float, "d": ctypes.c_double,
               "i": ctypes.c_int32, "q": ctypes.c_int64,
               "I": ctypes.c_uint32, "H": ctypes.c_uint16,
-              "B": ctypes.c_uint8}[code]
+              "B": ctypes.c_uint8, "b": ctypes.c_int8}[code]
 
     class Store(ctypes.Array):
         _type_ = scalar
@@ -661,6 +661,16 @@ def as_i32_c(obj, *, ndim=1, name):
 
 def as_i64_c(obj, *, ndim=1, name):
     return _as_typed(obj, "<i8", "C", ndim, name)
+
+
+def as_u16_c(obj, *, ndim=2, name):
+    """bf16 bits as a C-contiguous uint16 Array (lane/identical-lowbit-inference)."""
+    return _as_typed(obj, "<u2", "C", ndim, name)
+
+
+def as_i8_c(obj, *, ndim=2, name):
+    """int8 codes as a C-contiguous int8 Array (lane/identical-lowbit-inference)."""
+    return _as_typed(obj, "<i1", "C", ndim, name)
 
 
 def as_f64_c(obj, *, ndim=1, name):

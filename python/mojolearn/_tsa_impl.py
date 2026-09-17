@@ -263,6 +263,27 @@ def select_d(y, D=0, s=0, d_max=None, pval_threshold=0.05):
     if d_max is None:
         d_max = 2 - int(D)
     flat, n_obs, batch_size = _series_major(y, "select_d")
+    # The device selector itself is a host-controlled first-stationary
+    # loop (tsa/impl/auto_arima.mojo). Reuse the same public KPSS route on
+    # CPU: only the flags determine the choice, with no new arithmetic.
+    from . import _backend
+    if _backend.vendor() == "cpu":
+        limit, seasonal = int(d_max), int(D)
+        if limit < 0 or limit + seasonal > 2:
+            raise ValueError(
+                f"select_d: d_max must satisfy 0 <= d_max <= 2 - D (d_max={limit}, "
+                f"D={seasonal}), refused by name")
+        chosen = [limit] * batch_size
+        decided = [False] * batch_size
+        for order in range(limit):
+            if all(decided):
+                break
+            flags = kpss_test(y, d=order, D=seasonal, s=int(s),
+                              pval_threshold=float(pval_threshold)).tolist()
+            for index, stationary in enumerate(flags):
+                if not decided[index] and stationary:
+                    chosen[index], decided[index] = order, True
+        return Array.from_list(chosen, "<i4")
     out = empty((batch_size,), "<i4")
     _mojolearn_tsa.select_d(
         addr_ro(flat, name="y"),

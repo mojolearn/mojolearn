@@ -119,10 +119,14 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
+import os
+import threading
+
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
 from . import _backend
+from . import lowbit as _lowbit
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._bufcheck import dtype_name, is_native_f32, probe
@@ -474,7 +478,14 @@ class TransformerBlock(NumericModeMixin):
 
     def __init__(self, weights, *, n_heads, n_kv_heads=None, head_dim=None,
                  window=0):
+        self._runtime_lock = threading.RLock()
+        self._native_session = None
+        self._session_binding = None
         what = "TransformerBlock"
+        # lane/identical-lowbit-inference (2026-09-17): packed bf16 or int8
+        # projection weights (mojolearn.lowbit) are materialized exactly here
+        # and the block runs its certified fp32 path on the result.
+        weights, self.weight_format = _lowbit.unpack(weights, what)
         arrs = _take(weights, what, self._W_NAMES)
         win = int(window)
         if win < 0:
@@ -553,6 +564,20 @@ class TransformerBlock(NumericModeMixin):
                         what, "down_proj.weight", (dm, it)),
         ]
 
+    def __getstate__(self):
+        # Device contexts and thread locks cannot cross serialization/copy.
+        # Only ordinary model state is saved; GPU ownership is recreated lazily.
+        state = self.__dict__.copy()
+        for name in ("_runtime_lock", "_native_session", "_session_binding"):
+            state.pop(name, None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._runtime_lock = threading.RLock()
+        self._native_session = None
+        self._session_binding = None
+
     def allocate_state(self, batch_size, max_tokens):
         """The zero KV cache for `batch_size` sequences of up to
         `max_tokens` total positions each (prefill plus every later
@@ -597,21 +622,38 @@ class TransformerBlock(NumericModeMixin):
         return y
 
     def _call(self, x, state, step):
+        what = "TransformerBlock.step" if step else "TransformerBlock.forward"
+        x = _batch_tokens(x, what, self.d_model, step)
+        ext = self._extension()
+        reuse = (_exports(ext, "transformer_session_forward")
+                 and os.environ.get("MOJOLEARN_TRANSFORMER_LEGACY_SETUP") != "1")
+        if not reuse and self._native_session is None:
+            # CPU and older extensions keep the existing path, without a lock.
+            return self._call_impl(x, state, step, ext, False)
+        with self._runtime_lock:
+            if self._native_session is not None and (
+                    not reuse or self._session_binding is not ext):
+                self._session_binding.transformer_session_close(self._native_session)
+                self._native_session = None
+                self._session_binding = None
+            return self._call_impl(x, state, step, ext, reuse)
+
+    def _call_impl(self, x, state, step, ext, reuse):
         what = ("TransformerBlock.step" if step
                 else "TransformerBlock.forward")
-        x = _batch_tokens(x, what, self.d_model, step)
         b, l = int(x.shape[0]), int(x.shape[1])
         fresh_ext = None
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if (state is None and not step and b > 0 and l > 0
                 and self.window >= 0 and mode == "identical"):
-            fresh_ext = self._extension()
+            fresh_ext = ext
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)
         if state is None:
             # A self-contained prefill: the cache exists for exactly this
             # call and is discarded, so its capacity is the call's length.
             state = self.allocate_state(b, l)
+        _refuse_resident(state, what)
         if state.batch_size != b:
             raise ValueError(
                 f"mojolearn {what}: the state was allocated for "
@@ -641,7 +683,7 @@ class TransformerBlock(NumericModeMixin):
         # the addresses alive (_buffer.py). `addr` (writable) for the
         # cache and the output, `addr_ro` for x and the weights.
         w = self._w
-        ext = fresh_ext if fresh_ext is not None else self._extension()
+        ext = fresh_ext if fresh_ext is not None else ext
         addrs = (
             # ORDER MATCHES bindings/_mojolearn_transformer.mojo::
             # transformer_forward_binding: x, input_layernorm.weight,
@@ -654,7 +696,16 @@ class TransformerBlock(NumericModeMixin):
             + [addr(kc, name="k_cache"), addr(vc, name="v_cache"),
                addr(y, name="y")]
         )
-        if step:
+        if reuse:
+            if self._native_session is None:
+                self._native_session = ext.transformer_session_create()
+                self._session_binding = ext
+            new_len = ext.transformer_session_forward(
+                self._native_session, addrs,
+                [b, l, self.d_model, self.n_heads, self.n_kv_heads,
+                 self.head_dim, self.intermediate, smax, s0, self.window],
+            )
+        elif step:
             # B, d_model, n_heads, n_kv_heads, head_dim, intermediate,
             # max_tokens, cached_tokens, window.
             new_len = ext.transformer_decode_step(
@@ -779,4 +830,221 @@ class TransformerBlock(NumericModeMixin):
                        self.head_dim, self.intermediate, self.window])
         return dict(zip(("x",) + self._W_NAMES, grads))
 
+    def decode_session(self, state):
+        """A `TransformerDecodeSession` on this block and `state`: the
+        weights, the KV cache, the rotary table and the L = 1 stages
+        RESIDENT on the device across decode steps (DEVIATION 2940,
+        lane/infer-speed-neural, 2026-09-17), so a token costs one input
+        upload, the block and one output download instead of the per-call
+        entry's context, weight and cache round trip. `step` there is
+        `TransformerBlock.step`'s bytes: the same certified entry point at
+        L = 1 on the same structs, built once instead of per call.
+
+        OWNERSHIP. The session COPIES this block's weights and the state's
+        cache at open. Until `close()` (or `sync_state()`) the state's
+        `k_cache`/`v_cache` are STALE and `forward`/`step` on this block
+        refuse the state by name; `cached_tokens` on the state is kept
+        current. Edits to the weights after open are NOT observed: close
+        and open a new session. Edits to the cache arrays after open are
+        not observed either: `load_state()` re-uploads them. A block whose
+        binding exports no session (the CPU host route) refuses by name.
+
+        This is NOT the block's retained per-model context (`_native_session`,
+        the binding's `transformer_session_*` entry points, docs/
+        TRANSFORMER_SESSION_REUSE.md), which the per-call `forward`/`step`
+        use and which rereads the weights and the caller's cache on every
+        call. The decode session owns its own context and its entry points
+        are `transformer_decode_session_*`; the two coexist on one block."""
+        return TransformerDecodeSession(self, state)
+
     __call__ = forward
+
+
+def _exports(ext, name):
+    """Whether the loaded binding exports `name`. On a CPU-only install the
+    stand-in for a GPU binding RAISES ImportError by name from `__getattr__`
+    (`_backend.py::_HostBinding`), and `hasattr` swallows only
+    AttributeError, so a bare `hasattr` probe took the whole CPU host route
+    down (seen 2026-09-17 on the merged tree: every transformer and samba
+    CPU cell REFUSED at `transformer_session_forward`). A probe is not a
+    use; the repo's own guard in `_backend.py` does the same."""
+    try:
+        return hasattr(ext, name)
+    except ImportError:
+        return False
+
+
+def _refuse_resident(state, what):
+    owner = getattr(state, "_resident_session", None)
+    if owner is not None:
+        raise ValueError(
+            f"mojolearn {what}: the state is owned by an open "
+            "TransformerDecodeSession (its cache lives on the device and the "
+            "caller's buffers are stale); call sync_state() or close() on the "
+            "session first"
+        )
+
+
+class TransformerDecodeSession:
+    """Resident decode on one `TransformerBlock` and one `TransformerState`
+    (DEVIATION 2940). Made by `TransformerBlock.decode_session(state)`.
+
+    `step(x)`      one decode token per row, `(B, 1, d_model)` or
+                   `(B, d_model)` float32 in, `(B, 1, d_model)` out;
+                   `state.cached_tokens` advances
+    `forward(x)`   `L` tokens per row on the resident cache (a prefill
+                   or a chunked continuation), `(B, L, d_model)` in and out
+    `sync_state()` copy the resident cache into the state's buffers; the
+                   state stays owned by the session
+    `load_state()` re-upload the state's buffers and `cached_tokens`
+                   (the explicit refresh of the state half)
+    `close()`      sync, release every device buffer and hand the state
+                   back; also the context manager exit
+
+    Every output is BYTE FOR BYTE the per-call `step`/`forward` on the
+    same block and state: the binding runs the one certified entry point
+    on device structs that hold the same bytes, built once instead of per
+    token. The session holds its own device context; it is not
+    thread-safe and refuses re-entrant use."""
+
+    def __init__(self, block, state):
+        what = "TransformerDecodeSession"
+        ext = block._extension()
+        create = (getattr(ext, "transformer_decode_session_create", None)
+                  if _exports(ext, "transformer_decode_session_create") else None)
+        if create is None:
+            raise NotImplementedError(
+                f"mojolearn {what}: the loaded {type(block).__name__} binding "
+                "exports no resident decode session (the CPU host route and "
+                "older GPU builds); the per-call step() is the path here"
+            )
+        if state is None:
+            raise ValueError(f"mojolearn {what}: state is required (allocate_state)")
+        _refuse_resident(state, what)
+        if state.batch_size < 1:
+            raise ValueError(f"mojolearn {what}: the state holds no rows")
+        if int(getattr(state, "window", 0)) != block.window:
+            raise ValueError(
+                f"mojolearn {what}: the state was allocated for window "
+                f"{getattr(state, 'window', 0)} but this block has window "
+                f"{block.window}"
+            )
+        b = int(state.batch_size)
+        n = b * block.n_kv_heads * state.capacity * block.head_dim
+        kc = _state_buf(state.k_cache, what, "k_cache", (n,))
+        vc = _state_buf(state.v_cache, what, "v_cache", (n,))
+        self._block = block
+        self._state = state
+        self._ext = ext
+        self._native = create()
+        self._open = False
+        w = block._w
+        addrs = ([addr_ro(a, name="weight") for a in w]
+                 + [addr(kc, name="k_cache"), addr(vc, name="v_cache")])
+        s0 = int(ext.transformer_decode_session_open(
+            self._native, addrs,
+            [b, block.d_model, block.n_heads, block.n_kv_heads, block.head_dim,
+             block.intermediate, int(state.max_tokens), int(state.cached_tokens),
+             block.window]))
+        self._open = True
+        state.cached_tokens = s0
+        state._resident_session = self
+
+    @property
+    def state(self):
+        return self._state
+
+    @property
+    def is_open(self):
+        return self._open
+
+    def _require_open(self, what):
+        if not self._open:
+            raise ValueError(f"mojolearn {what}: the session is closed")
+
+    def step(self, x):
+        what = "TransformerDecodeSession.step"
+        self._require_open(what)
+        blk = self._block
+        x = _batch_tokens(x, what, blk.d_model, True)
+        b = int(x.shape[0])
+        st = self._state
+        if b != st.batch_size:
+            raise ValueError(
+                f"mojolearn {what}: the session holds {st.batch_size} rows, x has B = {b}")
+        y = empty((b, 1, blk.d_model), "<f4")
+        new_len = self._ext.transformer_decode_session_step(
+            self._native, [addr_ro(x, name="x"), addr(y, name="y")], [int(st.cached_tokens)])
+        st.cached_tokens = int(new_len)
+        return y
+
+    def forward(self, x):
+        what = "TransformerDecodeSession.forward"
+        self._require_open(what)
+        blk = self._block
+        x = _batch_tokens(x, what, blk.d_model, False)
+        b, l = int(x.shape[0]), int(x.shape[1])
+        st = self._state
+        if b != st.batch_size:
+            raise ValueError(
+                f"mojolearn {what}: the session holds {st.batch_size} rows, x has B = {b}")
+        y = empty((b, l, blk.d_model), "<f4")
+        new_len = self._ext.transformer_decode_session_forward(
+            self._native, [addr_ro(x, name="x"), addr(y, name="y")], [l, int(st.cached_tokens)])
+        st.cached_tokens = int(new_len)
+        return y
+
+    def sync_state(self):
+        what = "TransformerDecodeSession.sync_state"
+        self._require_open(what)
+        st = self._state
+        blk = self._block
+        n = st.batch_size * blk.n_kv_heads * st.capacity * blk.head_dim
+        kc = _state_buf(st.k_cache, what, "k_cache", (n,))
+        vc = _state_buf(st.v_cache, what, "v_cache", (n,))
+        st.cached_tokens = int(self._ext.transformer_decode_session_export_state(
+            self._native, [addr(kc, name="k_cache"), addr(vc, name="v_cache")]))
+        return st
+
+    def load_state(self):
+        what = "TransformerDecodeSession.load_state"
+        self._require_open(what)
+        st = self._state
+        blk = self._block
+        n = st.batch_size * blk.n_kv_heads * st.capacity * blk.head_dim
+        kc = _state_buf(st.k_cache, what, "k_cache", (n,))
+        vc = _state_buf(st.v_cache, what, "v_cache", (n,))
+        st.cached_tokens = int(self._ext.transformer_decode_session_load_state(
+            self._native, [addr(kc, name="k_cache"), addr(vc, name="v_cache")],
+            [int(st.cached_tokens)]))
+        return st
+
+    def close(self):
+        if not self._open:
+            return
+        try:
+            self.sync_state()
+        finally:
+            self._open = False
+            self._state._resident_session = None
+            self._ext.transformer_decode_session_close(self._native)
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        self.close()
+        return False
+
+    def __del__(self):
+        try:
+            if getattr(self, "_open", False):
+                self._open = False
+                self._state._resident_session = None
+                self._ext.transformer_decode_session_close(self._native)
+        except Exception:
+            pass
+
+    def __repr__(self):
+        return "TransformerDecodeSession(open=%r, cached_tokens=%d)" % (
+            self._open, int(self._state.cached_tokens))

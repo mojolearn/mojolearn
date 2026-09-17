@@ -367,3 +367,73 @@ struct DeviceScanScratch(Movable):
             block_dim=(SCAN_TPB, 1, 1),
         )
         return self._finish(ctx, blocks)
+
+
+struct DeviceNonfiniteBatch(Movable):
+    """Independent scans sharing packed scratch and one completion wait.
+
+    Enqueue every slot, then finish before reading results or releasing any
+    source buffer. The batch and all sources must use the same live context.
+    A completed batch can be reused with the same lengths; enqueue rereads
+    every source. Kernel geometry and first-index reduction are unchanged.
+    """
+    var lengths: List[Int]
+    var offsets: List[Int]
+    var queued: List[Bool]
+    var part: DeviceBuffer[DType.int32]
+    var host: HostBuffer[DType.int32]
+
+    def __init__(out self, ctx: DeviceContext, lengths: List[Int]) raises:
+        var offsets = List[Int]()
+        var total = 0
+        for n in lengths:
+            if n < 0 or n > Int(NONFINITE_NONE):
+                raise Error("nonfinite batch: length outside Int32 index range")
+            offsets.append(total)
+            total += _scan_blocks(n)
+        self.lengths = lengths.copy()
+        self.offsets = offsets^
+        self.queued = List[Bool](length=len(lengths), fill=False)
+        step_count_device_alloc()
+        self.part = ctx.enqueue_create_buffer[DType.int32](max(total, 1))
+        step_count_host_alloc()
+        self.host = ctx.enqueue_create_host_buffer[DType.int32](max(total, 1))
+
+    def enqueue(
+        mut self, ctx: DeviceContext, slot: Int,
+        mut buf: DeviceBuffer[DType.float32],
+    ) raises:
+        if slot < 0 or slot >= len(self.lengths):
+            ctx.synchronize()
+            raise Error("nonfinite batch: slot out of range")
+        var n = self.lengths[slot]
+        if self.queued[slot] or n > len(buf):
+            ctx.synchronize()
+            raise Error("nonfinite batch: duplicate slot or short source")
+        if n > 0:
+            step_count_launch()
+            ctx.enqueue_function[nonfinite_partial_kernel](
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                Int32(n), grid_dim=(_scan_blocks(n), 1, 1),
+                block_dim=(SCAN_TPB, 1, 1),
+            )
+        self.queued[slot] = True
+
+    def finish(mut self, ctx: DeviceContext) raises -> List[Int]:
+        # Even an incomplete batch drains before raising; its sources must
+        # remain live through this method. Never read unfinished host data.
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=self.host.unsafe_ptr(), src_buf=self.part)
+        step_count_sync()
+        ctx.synchronize()
+        for done in self.queued:
+            if not done:
+                raise Error("nonfinite batch: missing slot")
+        var results = List[Int]()
+        for slot in range(len(self.lengths)):
+            var best = NONFINITE_NONE
+            for i in range(_scan_blocks(self.lengths[slot])):
+                best = min(best, self.host.unsafe_ptr().unsafe_load(self.offsets[slot] + i))
+            results.append(-1 if best == NONFINITE_NONE else Int(best))
+            self.queued[slot] = False
+        return results^

@@ -1907,6 +1907,192 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
 
 
+# ---------------------------------------------------------------- low-bit weight lanes (2026-09-17)
+# lane/identical-lowbit-inference. Each lane is its base lane with the 2-D
+# projection weights PACKED (mojolearn.lowbit: bf16 bits, or int8 codes with
+# a power-of-two exponent per row), materialized exactly on this column and
+# run through the block's fp32 path; gemm/IDENTICAL_LOWBIT_CONTRACT.md. The
+# cells therefore hash the packed model's answer, and the equality of that
+# answer with the fp32 block on the materialized weights is asserted by
+# python/mojolearn/tests/test_lowbit_weights.py on one box; across columns
+# it is this harness's diff. The gemm lanes hash the two profiles directly.
+
+
+def _lowbit_block_lane(ml, X, Xh, base, fmt):
+    if base == "transformer":
+        dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+        w = _block_weights(base, {
+            "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+            "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+            "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+            "down_proj.weight": (dm, it)},
+            near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
+        blk = ml.TransformerBlock(ml.lowbit.pack(w, fmt), n_heads=nh, n_kv_heads=nkv)
+        state_kw = dict(max_tokens=32)
+    elif base == "mamba1":
+        dm, di, r = 32, 64, 2
+        w = _block_weights(base, {
+            "norm.weight": (dm,), "in_proj.weight": (2 * di, dm), "conv1d.weight": (di, 1, 4),
+            "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
+            "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
+            ones=("norm.weight",))
+        blk = ml.Mamba1Block(ml.lowbit.pack(w, fmt))
+        state_kw = {}
+    elif base == "mamba2":
+        dm, di, nh = 32, 64, 1                      # the mamba2 lane's dims
+        cd, dip = di + 256, 2 * di + 256 + nh
+        w = _block_weights(base, {
+            "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "conv1d.weight": (cd, 1, 4),
+            "conv1d.bias": (cd,), "dt_bias": (nh,), "A_log": (nh,), "D": (nh,), "norm.weight": (di,),
+            "out_proj.weight": (dm, di)},
+            ones=("block_norm.weight", "norm.weight"))
+        blk = ml.Mamba2Block(ml.lowbit.pack(w, fmt))
+        state_kw = {}
+    else:
+        dm = 32
+        di = 2 * dm
+        w = _block_weights(base, _mamba3_shapes(dm, di), ones=("block_norm.weight",),
+                           near_one=("B_norm.weight", "C_norm.weight"))
+        blk = ml.Mamba3Block(ml.lowbit.pack(w, fmt))
+        state_kw = {}
+    assert blk.weight_format == fmt, (base, fmt, blk.weight_format)
+    parts = _block_fit(blk, _seq(X, 2, 16, dm), _seq(X, 2, 16, dm, skip=1024), state_kw)
+    return _fit(parts, blk, lambda e: (np.asarray(_neural_inference(ml, base, e).forward(_seq(Xh, 2, 16, dm))),))
+
+
+def _mamba3_shapes(dm, di):
+    """The Mamba-3 block's weight shapes, the mamba3 lane's dict at nh = 1."""
+    nh = 1
+    dip = 2 * di + 256 + 3 * nh + 32
+    return {
+        "block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
+        "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128), "C_bias": (nh, 128),
+        "D": (nh,), "out_proj.weight": (dm, di)}
+
+
+@lane("transformer-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    """The transformer lane with bf16-stored projection weights."""
+    return _lowbit_block_lane(ml, X, Xh, "transformer", "bfloat16")
+
+
+@lane("transformer-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    """The transformer lane with int8-stored projection weights."""
+    return _lowbit_block_lane(ml, X, Xh, "transformer", "int8")
+
+
+@lane("mamba1-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba1", "bfloat16")
+
+
+@lane("mamba1-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba1", "int8")
+
+
+@lane("mamba2-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba2", "bfloat16")
+
+
+@lane("mamba2-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba2", "int8")
+
+
+@lane("mamba3-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba3", "bfloat16")
+
+
+@lane("mamba3-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_block_lane(ml, X, Xh, "mamba3", "int8")
+
+
+def _lowbit_mlp_lane(ml, X, Xh, fmt):
+    """The mlp lane's network with its two matrices stored packed: the
+    trainer is built on the materialized weights and asked for logits only
+    (no step), so the cell is the packed model's answer."""
+    w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
+         for s in ((16, 8), (16,), (3, 16), (3,))]
+    packed = ml.lowbit.pack({"weight1": w[0], "weight2": w[2]}, fmt)
+    f32, got = ml.lowbit.unpack(packed)
+    assert got == fmt
+    m = ml.SmallMLPTrainer(f32["weight1"], w[1], f32["weight2"], w[3],
+                           data_schedule={"dataset": "identity_break", "order": "sequential"})
+    Xm = np.ascontiguousarray(X[:256, :8])
+    return _fit(dict(logits=_h(np.asarray(m.predict_logits(Xm))),
+                     weights=_h(*[np.asarray(f32[k]) for k in ("weight1", "weight2")])),
+                m, lambda e: (np.asarray(_neural_inference(ml, "mlp", e).predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
+
+
+@lane("mlp-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_mlp_lane(ml, X, Xh, "bfloat16")
+
+
+@lane("mlp-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_mlp_lane(ml, X, Xh, "int8")
+
+
+def _lowbit_samba_lane(ml, X, Xh, fmt):
+    """The samba lane's stack with every 2-D registry tensor stored packed,
+    forward logits only (no step)."""
+    cfg = ml.SambaConfig(vocab=256, d_model=32, layers=("mamba3", "attention"), n_heads=2, intermediate=64)
+    seed = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    w = {n: np.asarray(v).copy() for n, v in seed.parameters().items()} if hasattr(seed, "parameters") \
+        else {n: np.asarray(seed.arrays[n]).copy() for n in seed.names}
+    packed = ml.lowbit.pack(w, fmt)
+    f32, got = ml.lowbit.unpack(packed)
+    assert got == fmt
+    m = ml.SambaStack(cfg, weights=f32, lr=1e-3)
+    ids = _ids(X, 2, 17)
+    logits = np.asarray(m.forward(ids[:, :-1]))
+    return _fit(dict(logits=_h(logits)), m,
+                lambda e: (np.asarray(_neural_inference(ml, "samba", e).forward(_ids(Xh, 2, 17)[:, :-1])),))
+
+
+@lane("samba-bf16w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_samba_lane(ml, X, Xh, "bfloat16")
+
+
+@lane("samba-int8w")
+def _(ml, X, yc, yr, Xh=None):
+    return _lowbit_samba_lane(ml, X, Xh, "int8")
+
+
+@lane("gemm-bf16")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.identical.gemm.bf16f32.v1` on the gemm-pinned lane's
+    slices: a float32 left operand times a bf16 right operand, and both
+    operands bf16, NN and NT."""
+    a = np.ascontiguousarray(X[:256]).astype(np.float32)          # 256 x d
+    b = np.ascontiguousarray(X[256:256 + 128]).astype(np.float32)  # 128 x d
+    bb = np.asarray(ml.linalg.to_bf16(b))
+    c1 = ml.linalg.matmul_bf16(a, bb, transpose_b=True)            # 256 x 128
+    c2 = ml.linalg.matmul_bf16(np.asarray(ml.linalg.to_bf16(a)), bb, transpose_b=True)
+    c3 = ml.linalg.matmul_bf16(np.ascontiguousarray(a[:64].T), np.asarray(ml.linalg.to_bf16(a[64:128])))  # d x d, NN
+    return _fit(dict(nt=_h(c1), both=_h(c2), nn=_h(c3), bits=_h(bb)))
+
+
+@lane("gemm-int8")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.identical.gemm.int8i32.v1` on the same slices: the codes
+    and exponents the quantizer produces and the dequantized product."""
+    a = np.ascontiguousarray(X[:256]).astype(np.float32)
+    b = np.ascontiguousarray(X[256:256 + 128]).astype(np.float32)
+    qa, ea = ml.linalg.quantize_int8(a)
+    qb, eb = ml.linalg.quantize_int8(b)
+    c = ml.linalg.matmul_int8((qa, ea), (qb, eb))
+    return _fit(dict(codes=_h(np.asarray(qa), np.asarray(qb)), exps=_h(np.asarray(ea), np.asarray(eb)),
+                     product=_h(c), dequant=_h(ml.linalg.dequantize_int8(qb, eb))))
+
+
 @lane("samba")
 @floor(steps=(1, "one step is measured to be ENOUGH for this lane's arms, which is the only reason a "
                  "floor of one is honest here: its 20 parameter tensors contain no bitwise-equal "
@@ -3021,6 +3207,27 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(flags=_h(np.asarray(flat)), diffed=_h(np.asarray(diffed)), stat=_h(np.asarray(stat))))
 
 
+def _select_d_series(values):
+    series = np.array(values, dtype=np.float32, order="C", copy=True)
+    # Mixed stationary, integrated and twice-integrated series exercise
+    # first-round success, a later success and the d_max fallback.
+    series[:, 1] = np.cumsum(series[:, 1], dtype=np.float32)
+    series[:, 2] = np.cumsum(np.cumsum(series[:, 2], dtype=np.float32), dtype=np.float32)
+    return series
+
+
+@lane("select-d")
+def _(ml, X, yc, yr, Xh=None):
+    """Public differencing-order selection, including caller-supplied seasonal D.
+
+    This chooses ordinary d, not automatic seasonal D (which is not exposed).
+    Hash the per-series results with both seasonal and nonseasonal inputs.
+    """
+    series = _select_d_series(X[:512, :4])
+    return _fit({f"D{D}": _h(np.asarray(ml.select_d(series, D=D, s=12 if D else 0,
+                                                   d_max=2-D))) for D in (0, 1)})
+
+
 @lane("arima-011")
 def _(ml, X, yc, yr, Xh=None):
     """Differencing and a moving-average term, and no intercept (trend
@@ -3253,6 +3460,30 @@ def _(ml, X, yc, yr, Xh=None):
     parts["kl"] = _h(np.float64(mt.kl_divergence(_exact_prob(64, "kl:P"), _exact_prob(64, "kl:Q"))))
     parts["trustworthiness"] = _h(np.float64(mt.trustworthiness(X[:512, :4], X[:512, :2], n_neighbors=5)))
     parts["silhouette_samples"] = _h(np.asarray(mt.silhouette_samples(X[:n, :4], labels)))
+    return _fit(parts)
+
+
+@lane("metrics-homogeneity-completeness")
+def _(ml, X, yc, yr, Xh=None):
+    """The public three-score convenience API, including nondefault beta.
+
+    Its result order and beta forwarding were absent from the harness even
+    though the individual metrics had lanes. Use all fixture labels and a
+    distinct eight-way clustering; global contingency reductions have no
+    row-wise batch-invariance promise.
+    """
+    mt = ml.metrics
+    yt = np.ascontiguousarray(yc).astype(np.int32)
+    split = ((X[:, 3] > 0).astype(np.int32) + 2 * (X[:, 4] > 0).astype(np.int32)
+             + 4 * (X[:, 5] > 0).astype(np.int32)).astype(np.int32)
+    parts = {}
+    for beta in (0.5, 1.0, 2.0):
+        got = np.asarray(mt.homogeneity_completeness_v_measure(yt, split, beta=beta), dtype=np.float64)
+        expected = np.asarray((mt.homogeneity_score(yt, split), mt.completeness_score(yt, split),
+                               mt.v_measure_score(yt, split, beta=beta)), dtype=np.float64)
+        if got.shape != (3,) or got.tobytes() != expected.tobytes():
+            raise AssertionError("homogeneity_completeness_v_measure order/beta differs from scalar APIs")
+        parts[f"hcv:beta{beta}"] = _h(got)
     return _fit(parts)
 
 
@@ -3698,6 +3929,36 @@ def _(ml, X, yc, yr, Xh=None):
         r = rs.monte_carlo_integrate(f, lo, hi, 65536, random_state=1)
         parts[f] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
     return _fit(parts)
+
+
+@lane("ordered-gradient-sum")
+def _(ml, X, yc, yr, Xh=None):
+    """Public ordered shard reduction: preserve shard order and input bytes.
+
+    Normal finite Float32 values keep the independent NumPy left-fold oracle
+    outside FTZ subtleties. The first element cancels 2**100, so a balanced
+    reduction returns zero where the required left fold returns three.
+    """
+    from mojolearn.parallel_training import ordered_sum_gradients
+    seed = np.where(X[:4, :8] >= 0, np.float32(1), np.float32(-1))
+    shards = [[np.ascontiguousarray(seed * np.float32(i + 1)),
+               np.array([i, -i, i + 1], dtype=np.float32)] for i in range(4)]
+    for shard, value in zip(shards, (2.0**100, 1.0, -(2.0**100), 3.0)):
+        shard[0][0, 0] = np.float32(value)
+    before = [[a.tobytes() for a in shard] for shard in shards]
+    expected = [a.copy() for a in shards[0]]
+    for shard in shards[1:]:
+        expected = [np.add(a, b, dtype=np.float32) for a, b in zip(expected, shard)]
+    got = ordered_sum_gradients(iter(shards))
+    if len(got) != len(expected):
+        raise AssertionError("ordered gradient sum lost a tensor")
+    for actual, wanted in zip(got, expected):
+        actual = np.asarray(actual)
+        if actual.shape != wanted.shape or actual.dtype != wanted.dtype or actual.tobytes() != wanted.tobytes():
+            raise AssertionError("ordered gradient sum differs from Float32 left fold")
+    if before != [[a.tobytes() for a in shard] for shard in shards]:
+        raise AssertionError("ordered gradient sum mutated its inputs")
+    return _fit(dict(gradients=_h(*(np.asarray(a) for a in got))))
 
 
 @lane("training-primitives")
@@ -4880,6 +5141,7 @@ def _neural_inference(ml, lane_name, est):
     train rows never go through here."""
     if ml.vendor() != "cpu":
         return est
+    lane_name = _lowbit_base(lane_name)
     if lane_name == "mlp":
         with tempfile.TemporaryDirectory() as d:
             path = os.path.join(d, "mlp.json")
@@ -4912,7 +5174,24 @@ def _neural_inference(ml, lane_name, est):
 #: mlp, transformer and transformer-window wrap theirs in the lane bodies and
 #: batch declarations above, so they are named only for the opt-in parts.
 NEURAL_PUBLIC_LANES = ("mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "samba",
-                       "samba-untied-dropout-accum", "byte-lm", "byte-lm-resident")
+                       "samba-untied-dropout-accum", "byte-lm", "byte-lm-resident",
+                       # lane/identical-lowbit-inference (2026-09-17)
+                       "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w",
+                       "mamba3-bf16w", "mamba3-int8w")
+
+
+#: lane/identical-lowbit-inference (2026-09-17): the `-bf16w` and `-int8w`
+#: lanes are their base lane with the projection weights stored packed
+#: (mojolearn.lowbit) and materialized exactly on the column; every helper
+#: keyed by lane name reads the base name.
+LOWBIT_SUFFIXES = ("-bf16w", "-int8w")
+
+
+def _lowbit_base(name):
+    for suf in LOWBIT_SUFFIXES:
+        if name.endswith(suf):
+            return name[: -len(suf)]
+    return name
 NEURAL_PUBLIC_PART_LANES = NEURAL_PUBLIC_LANES + ("transformer", "transformer-window")
 
 
@@ -5463,6 +5742,8 @@ def _batch_gemm_transposed(ml, e, Xh):
 
 
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
+_batch_decl("n/a:profile lane; the products are hashed whole", "gemm-bf16", "gemm-int8")
+_batch_decl("n/a:weight-format lane; the batch part is measured on its base lane", "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w")
 _batch_decl(_batch_gemm_transposed, "gemm-transposed")
 # The function, tokenizer, optimizer and byte LM trainer lanes
 # (lane/cpu-training-batch-fill-func, 2026-09-15). Each lane was read against
@@ -5661,6 +5942,10 @@ _batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measur
             "silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the "
             "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
 _batch_decl(_batch_silhouette_chunks, "metrics-classification")
+_batch_decl("n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+            "metrics-homogeneity-completeness")
+_batch_decl("n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+            "bpe-trainer")
 _batch_decl(_batch_cross_val, "cross-val")
 # The fold PARTITION is metadata, not an inference call: the lane fits nothing
 # and asks nothing for a row's answer, so there is no batch axis to vary
@@ -5776,7 +6061,19 @@ def _batch_ivf_extend(ml, e, Xh):
 _batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
+def _batch_select_d(ml, e, Xh):
+    # A sample here is a time series: split series columns, never time steps.
+    series_rows = np.ascontiguousarray(_select_d_series(Xh[:256, :8]).T)
+    return [_BatchRows(f"select_d D={D}", series_rows,
+                      lambda rows, D=D: (np.asarray(ml.select_d(np.ascontiguousarray(rows.T),
+                          D=D, s=12 if D else 0, d_max=2-D)),)) for D in (0, 1)]
+
+
+_batch_decl(_batch_select_d, "select-d")
+
 _batch_decl(_batch_training_primitives, "training-primitives")
+_batch_decl("n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+            "ordered-gradient-sum")
 _batch_decl(lambda ml, e, Xh: _rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8)))(
     ml, _neural_inference(ml, "mlp", e), Xh), "mlp")
 _batch_decl(_rows_calls("predict_logits", sl=(slice(0, 256), slice(0, 8))), "par-mlp")
@@ -5809,9 +6106,10 @@ def _batch_block(ml, e, Xh):
                          axis=1)]
 
 
-_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
+_batch_decl(_batch_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit",
+            "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w")
 _batch_decl(lambda ml, e, Xh: _batch_block(ml, _neural_inference(ml, "transformer", e), Xh),
-            "transformer", "transformer-window")
+            "transformer", "transformer-window", "transformer-bf16w", "transformer-int8w")
 
 
 def _batch_samba(ml, e, Xh):
@@ -6125,8 +6423,8 @@ def _batchgrad_block(kind):
     return spec
 
 
-_batchgrad_decl(_batchgrad_block("transformer"), "transformer", "transformer-window")
-_batchgrad_decl(_batchgrad_block("mamba1"), "mamba1")
+_batchgrad_decl(_batchgrad_block("transformer"), "transformer", "transformer-window", "transformer-bf16w", "transformer-int8w")
+_batchgrad_decl(_batchgrad_block("mamba1"), "mamba1", "mamba1-bf16w", "mamba1-int8w")
 _batchgrad_decl(_batchgrad_block("mamba2"), "mamba2", "mamba2-dtlimit")
 _batchgrad_decl(_batchgrad_block("mamba3"), "mamba3")
 
@@ -6328,7 +6626,8 @@ def _batchscale_block(ml, blk, Xh):
 
 
 _batchscale_decl(_batchscale_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer",
-                 "transformer-window")
+                 "transformer-window", "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w",
+                 "mamba3-bf16w", "mamba3-int8w", "transformer-bf16w", "transformer-int8w")
 
 
 def _long_byte_lm(ml, e):
@@ -6483,7 +6782,9 @@ def _ragged_block(ml, blk, Xh):
             _RaggedCall(f"forward(lengths) L={L2}", xl, RAGGED_LONG_LENGTHS, fwd, one)]
 
 
-_ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window")
+_ragged_decl(_ragged_block, "mamba1", "mamba2", "mamba3", "mamba2-dtlimit", "transformer", "transformer-window",
+             "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w",
+             "transformer-bf16w", "transformer-int8w")
 
 
 def _ragged_byte_lm(ml, e, Xh):
@@ -6619,8 +6920,9 @@ def _stepfull_samba(ml, e, Xh):
         lambda a, st: e.step(a, st))]
 
 
-_stepfull_decl(_stepfull_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
-_stepfull_decl(_stepfull_block_spec("kv"), "transformer", "transformer-window")
+_stepfull_decl(_stepfull_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtlimit",
+               "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w")
+_stepfull_decl(_stepfull_block_spec("kv"), "transformer", "transformer-window", "transformer-bf16w", "transformer-int8w")
 _stepfull_decl(_stepfull_samba, "samba", "samba-untied-dropout-accum")
 _stepfull_decl("n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
                "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
@@ -6726,6 +7028,14 @@ RLPAIR_LEAVER, RLPAIR_LEAVE_AFTER = 1, 8
 RLPAIR_BLOCK_VOCAB = 48
 
 RLPAIR = {}
+
+
+def _rlpair_protocol(enabled=True):
+    return dict(seqs=RLPAIR_SEQS, prompt=RLPAIR_PROMPT, decode=RLPAIR_DECODE,
+                trainer_split=list(RLPAIR_SPLIT) + ["n"], joiner=RLPAIR_JOINER,
+                join_at=RLPAIR_JOIN_AT, join_row=RLPAIR_JOIN_ROW, leaver=RLPAIR_LEAVER,
+                leave_after=RLPAIR_LEAVE_AFTER, block_vocab=RLPAIR_BLOCK_VOCAB,
+                logprob="training.cross_entropy(reduction='none')", enabled=enabled)
 
 
 def _rlpair_decl(spec, *names):
@@ -7172,8 +7482,9 @@ def _rlpair_samba(ml, e, Xh):
 
 _rlpair_decl(_rlpair_byte_lm, "byte-lm", "byte-lm-resident")
 _rlpair_decl(_rlpair_byte_lm_host, "byte-lm-host-infer", "byte-lm-host-infer-threaded")
-_rlpair_decl(_rlpair_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtlimit")
-_rlpair_decl(_rlpair_block_spec("kv"), "transformer", "transformer-window")
+_rlpair_decl(_rlpair_block_spec(), "mamba1", "mamba2", "mamba3", "mamba2-dtlimit",
+             "mamba1-bf16w", "mamba1-int8w", "mamba2-bf16w", "mamba2-int8w", "mamba3-bf16w", "mamba3-int8w")
+_rlpair_decl(_rlpair_block_spec("kv"), "transformer", "transformer-window", "transformer-bf16w", "transformer-int8w")
 _rlpair_decl(_rlpair_samba, "samba", "samba-untied-dropout-accum")
 
 
@@ -7441,11 +7752,7 @@ def _run_reference(args):
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
     rlpair_sabotage = os.environ.get(RLPAIR_SABOTAGE_ENV, "").strip() not in ("", "0")
-    rlpair_protocol = dict(seqs=RLPAIR_SEQS, prompt=RLPAIR_PROMPT, decode=RLPAIR_DECODE,
-                           trainer_split=list(RLPAIR_SPLIT) + ["n"], joiner=RLPAIR_JOINER,
-                           join_at=RLPAIR_JOIN_AT, join_row=RLPAIR_JOIN_ROW, leaver=RLPAIR_LEAVER,
-                           leave_after=RLPAIR_LEAVE_AFTER, block_vocab=RLPAIR_BLOCK_VOCAB,
-                           logprob="training.cross_entropy(reduction='none')", enabled=not args.no_rlpair)
+    rlpair_protocol = _rlpair_protocol(enabled=not args.no_rlpair)
     if rlpair_sabotage:
         print(f"# {RLPAIR_SABOTAGE_ENV} is ON: the first sampler log-probability of every rlpair cell is "
               "perturbed by one low-bit flip; every rlpair cell with a hash MUST read RLPAIR_MOVED. "
