@@ -27,10 +27,17 @@ THE POLICY CHOICES
    red. Reusing it means the boundary inherits that gate instead of needing a
    new one.
 
-   IT COSTS A SERIALISE AND A PARSE PER `predict` CALL. That is real and it is
-   not hidden: a caller predicting in a loop pays it every time. The fix, when
-   someone measures it and wants it gone, is a cached parse keyed on the text,
-   not a handle table slipped in quietly.
+   IT USED TO COST A PARSE PER `predict` CALL, and it was measured
+   (lane/infer-speed-trees, 2026-09-17: 34 ms of a 100 ms call for a
+   1000-tree model on an RTX 4090). The cached parse this paragraph asked
+   for is `gbdt/resident_model.mojo` (DEVIATION 2980): the Python wrapper
+   hands the text to `gbdt_resident_prepare` once, keyed on the text's
+   sha256, and every later `predict` goes through the handle; the text is
+   still what crosses at `fit`, what `save` writes and what a binary
+   without the entry point applies through `gbdt_predict` below. The handle
+   table is not slipped in quietly: it is one process-wide registry with
+   named lifetime rules (released on refit, released with the instance,
+   never pickled), the same shape as the forests' and the k-NN index's.
 
    Floats in that text are written as `<decimal>/<hex bits>` and read back
    from the HEX, because `String(Float32)` on this toolchain returns a

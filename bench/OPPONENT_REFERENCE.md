@@ -819,6 +819,79 @@ opponent here is torch `cdist` + `topk`, NOT cuML.
 | gram | 65536 x 32 | torch | 1.097 |
 | umap | 15 neighbors, 2 components, 50 epochs | cuML UMAP | REFUSED (no cupy in the venv) |
 
+### RTX 4090 inference rows measured 2026-09-17 (three lanes; added here so they are looked up, not re-measured)
+
+These are NEW TUPLES (RTX 4090, inference), measured once by the lanes that
+landed on 2026-09-17 and first recorded only in their status documents. A
+lane working on these blocks on an RTX 4090 reads them from here.
+
+**Brute-force kNN, cuML 26.8.0 (`cuml-cu12`) and cuVS 26.8.1 (`cuvs-cu12`), cupy 14.2.0.**
+Pod fc3i4usbkd8ahz, driver 580.126.09. 400,000 index rows, index and queries
+on the device and the index built BEFORE the clock, `kneighbors` / `search`
+timed with a device synchronize, medians of 5 calls after a warmup. Source:
+`bench/results/knn_tiled_2026-09-17/round2/opponents_probe.txt` and
+`docs/lanes/LANE_STATUS_lane-knn-tiled-distance.md` ("Opponents on the same box").
+
+| dataset | cols | k | queries | cuML brute ms | cuVS brute_force ms |
+|---|---|---|---|---|---|
+| istella | 220 | 1 | 4000 | 63.71 | 63.53 |
+| istella | 220 | 10 | 4000 | 63.57 | 63.07 |
+| istella | 220 | 64 | 4000 | 65.45 | 64.92 |
+| istella | 220 | 1 | 1 | 1.98 | 1.32 |
+| istella | 220 | 10 | 1 | 1.95 | 1.33 |
+| taxi | 11 | 1 | 4000 | 6.62 | 6.35 |
+| taxi | 11 | 10 | 4000 | 7.18 | 6.92 |
+| taxi | 11 | 64 | 4000 | 27.73 | 27.50 |
+| taxi | 11 | 1 | 1 | 1.05 | 0.83 |
+| taxi | 11 | 10 | 1 | 1.04 | 0.80 |
+
+**KDE, cuML 26.8.0 `KernelDensity`** (gaussian, euclidean, Scott bandwidth),
+same pod, 100,000 fit rows, inputs on the device: Istella-S 2,000 queries
+4.8 ms, one query 0.83 ms; taxi 2,000 queries 0.93 ms, one query 0.29 ms.
+
+**GBDT predict, CatBoost 1.2.10.** Pod u3g00x1o4wy6fo, driver 580.159.04, AMD
+EPYC 7K62. Models fit by CatBoost on the same training rows (1,000,000 taxi
+or HIGGS rows, all 581,012 Covtype rows), depth 6, host array in and host
+array out, seven rounds, ms per call in eight-call blocks; `u` marks a
+spread above 1.10. Its GPU evaluator REFUSES a multi-dimensional model
+("Model is not one-dimensional, GPU evaluation is not supported yet"), so
+MultiClass has its CPU only. HIGGS is retired as a RESULT dataset (above);
+its rows are here because the lane timed them. Source:
+`bench/results/gbdt_resident_2026-09-17/speed_tip_table.md` and
+`~/mojolearn-evidence/gbdt-resident/leg_out_tip/speed/catboost-*.json`.
+
+| model | rows | predict GPU | predict CPU (all cores) | proba GPU | proba CPU |
+|---|---|---|---|---|---|
+| taxi Logloss 100 trees | 1,000,000 | 164.1 | 64.9u | 173.4u | 73.9u |
+| taxi Logloss 1000 trees | 1,000,000 | 225.9 | 160.2u | 212.6 | 166.6u |
+| taxi RMSE 100 trees | 1,000,000 | 121.8 | 62.5u | n/a | n/a |
+| taxi RMSE 1000 trees | 1,000,000 | 206.7 | 159.5u | n/a | n/a |
+| HIGGS Logloss 100 trees | 1,000,000 | 186.4 | 81.1u | 192.9 | 88.2 |
+| HIGGS Logloss 1000 trees | 1,000,000 | 267.9 | 191.8u | 273.9 | 201.7u |
+| Covtype MultiClass 100 trees | 581,012 | refused | 174.8u | refused | 159.5u |
+| Covtype MultiClass 1000 trees | 581,012 | refused | 352.1u | refused | 352.1u |
+
+### L40S forest inference, cuML 26.08.00 FIL, measured 2026-09-17
+
+Pod oeb71n6q3y70sy, NVIDIA L40S, driver 580.159.03, treelite 4.7.2. `fil-ours`
+is OUR saved forest rebuilt as a treelite model and loaded into
+`cuml.fil.ForestInference` (outputs differ from our groves engine by at most
+1.8e-7 on probabilities, the association difference); `cuml-rf` is cuML's
+own RandomForest fit on the same rows and settings, through its cached
+nvForest model. 100 or 500 trees, depth 16, ms per call, single call /
+eight-call block, 15 rounds; `u` marks a spread above 1.10, which is most
+cells (FIL's own call-to-call jitter on that box; its 7-round and 15-round
+medians agree). Source: `bench/results/forest_groves_2026-09-17/fil15/` and
+`docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md`.
+
+| model | prediction rows | fil-ours | cuml-rf |
+|---|---|---|---|
+| RF HIGGS 100x16 | 500,000 | 14.7 / 14.4u | 16.0u / 15.4u |
+| ET HIGGS 100x16 | 500,000 | 14.2u / 13.1u | (no cuML ET) |
+| RF Covtype 100x16, 7 outputs | 581,012 | 19.7u / 18.8u | 20.2u / 20.6u |
+| ET Year 100x16 | 515,345 | 27.4u / 26.3u | (no cuML ET) |
+| RF HIGGS 500x16 | 500,000 | 41.5u / 42.1 | 42.0u / 43.0 |
+
 ## AMD Instinct MI300X (Hot Aisle), ROCm 6.4.1 image on a ROCm 7.2.4 host, torch 2.6.0+rocm6.4.1
 
 ### torch byte-LM training step, PROVISIONAL (shared 2x VM)
