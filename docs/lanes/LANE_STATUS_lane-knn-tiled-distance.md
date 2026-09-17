@@ -323,10 +323,16 @@ KDE, cuML `KernelDensity` (gaussian, euclidean, Scott bandwidth), 2,000
 queries against 100,000 fit rows: Istella-S 4.8 ms cuML against our 51.1
 (after DEVIATION 3003; 68.6 before), taxi 0.93 against 41.0. One query:
 0.83 against 3.35 and 0.29 against 2.81. The remaining gap is the device
-pass, not the residency; cuML's fused pass never writes the
-`n_query x n_train` matrix and ours writes and re-reads it under the
-identical summation order (the design question the 2026-09-11 handoff
-named). The two-datasets race read the same (`round1/cuml_race.txt`).
+pass, not the residency. CORRECTED 2026-09-17: this paragraph first named
+the `n_query x n_train` matrix as the cause; that was measured on
+2026-09-12 and is not it (`bench/OPPONENT_REFERENCE.md`, the September 12
+KDE section, and `kde/impl/neighbors/kernel_density.mojo`, DEVIATION 2690):
+the matrix WRITE is about 1.5 ms of a 36.9 ms device entry, the per-cell
+distance arithmetic is 25.0 ms, and the fused pass that never writes the
+matrix was built, gated bit for bit and read 109.8 ms. What binds is the
+contract's serial ascending sum over all `n_train` terms of a query, which
+one thread must own. The two-datasets race read the same
+(`round1/cuml_race.txt`).
 
 ## Identity (deliverable 5)
 
