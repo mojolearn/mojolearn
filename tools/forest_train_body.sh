@@ -151,6 +151,9 @@ phase_candidate() {
     MOJOLEARN_COMPILE_JOBS=32 build_gpu "$C" cand ""
     cd "$C" || return 1
     for fam in ${CAND_HOST_FAMILIES:-trees rf}; do
+        # build_host_family.sh never overwrites: remove main's copy first, so
+        # a failed build leaves NO binding and never main's under AFTER's name
+        rm -f "python/mojolearn/host/_mojolearn_${fam}_host.so"
         step "cand_host_$fam" sh bindings/build_host_family.sh "$fam"
     done
     for pair in "$R:$R-cpu" "$C:$C-cpu"; do

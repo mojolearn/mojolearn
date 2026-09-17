@@ -284,6 +284,55 @@ def _search_barrier():
         barrier()
 
 
+comptime SINGLE_WRITER_PLAIN_PUBLISH = (
+    has_nvidia_gpu_accelerator()
+    or is_defined["MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH"]()
+) and not is_defined["MOJOLEARN_ET_ATOMIC_PUBLISH_ALWAYS"]()
+"""DEVIATION 3021 (lane/forest-train-speed, 2026-09-17): a node that fits in
+ONE search block publishes its range and score cells with plain stores.
+
+THE COST. DEVIATION 3020 measured the range and score passes' price on NVIDIA
+as the per-block publish: four (range) or `3 + 2 * n_classes` (score) atomic
+read-modify-writes on global memory by each block's thread 0. With 64 rows per
+thread almost every node below the first few levels is ONE block, and those
+blocks are most of what is left of the two passes.
+
+WHY A PLAIN STORE IS EXACT THERE. A cell is `(node, feature slot)`. Its
+publishers are the thread 0 of each of the node's `num_blocks` blocks on that
+feature slot's grid row, and nothing else in the launch writes it. When
+`num_blocks == 1` the cell has exactly one writer in the whole launch, the
+seeder that initialized it ran earlier on the in-order queue, and no reader
+runs until the launch is behind it on the same queue. One writer needs no
+atomic: `cell = min(cell, x)` and `cell += x` store the very integers the
+atomic forms store. A node with more than one block keeps the atomics. No
+value, order or draw depends on which form ran, so no bit moves.
+
+NVIDIA ONLY by default; `-D MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH=1` opts another
+column in for a measurement and `-D MOJOLEARN_ET_ATOMIC_PUBLISH_ALWAYS=1`
+restores the atomics everywhere for the A/B.
+`-D MOJOLEARN_ET_SAB_PLAIN_PUBLISH=1` is the arm that must move: the plain
+path adds one to every count it publishes, so every cell that took the plain
+path is wrong and the trees move wherever the seam is reached."""
+
+comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
+
+
+@always_inline
+def _publish_add(
+    cell: MutPointer[Int32, MutAnyOrigin], idx: Int, value: Int32, single: Bool
+):
+    """`cell[idx] += value`: plain for a single-writer cell (DEVIATION 3021),
+    `Atomic.fetch_add` otherwise."""
+    comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+        if single:
+            comptime if SAB_PLAIN_PUBLISH:
+                cell[unsafe_offset=idx] += value + Int32(1)
+            else:
+                cell[unsafe_offset=idx] += value
+            return
+    _ = Atomic.fetch_add(cell.unsafe_offset(idx), value)
+
+
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 """The repo-wide numeric mode (`checks/numerics.mojo`)."""
 
@@ -474,10 +523,22 @@ def node_feature_range_kernel[
         out_n_missing[unsafe_offset=slot] += blk_missing
         out_n_merges[unsafe_offset=slot] += Int32(1)
     else:
-        Atomic.min(out_minkey.unsafe_offset(slot), kmin)
-        Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
-        _ = Atomic.fetch_add(out_n_missing.unsafe_offset(slot), blk_missing)
-        _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
+        # DEVIATION 3021: one block means one writer for this cell.
+        var single = num_blocks == 1
+        comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+            if single:
+                if kmin < out_minkey[unsafe_offset=slot]:
+                    out_minkey[unsafe_offset=slot] = kmin
+                if kmax > out_maxkey[unsafe_offset=slot]:
+                    out_maxkey[unsafe_offset=slot] = kmax
+            else:
+                Atomic.min(out_minkey.unsafe_offset(slot), kmin)
+                Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+        else:
+            Atomic.min(out_minkey.unsafe_offset(slot), kmin)
+            Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
+        _publish_add(out_n_missing, slot, blk_missing, single)
+        _publish_add(out_n_merges, slot, Int32(1), single)
 
 
 @always_inline
@@ -1394,10 +1455,12 @@ def node_feature_score_kernel[
     var publishes = not (
         sabotage == SCORE_SAB_BLOCK0_ONLY and offset_blockid != 0
     )
+    # DEVIATION 3021: one block means one writer for this cell.
+    var single = num_blocks == 1
     if Int(thread_idx.x) == 0 and publishes:
-        _ = Atomic.fetch_add(out_n_left.unsafe_offset(slot), blk_n_left)
-        _ = Atomic.fetch_add(out_n_total.unsafe_offset(slot), blk_n_seen)
-        _ = Atomic.fetch_add(out_n_blocks.unsafe_offset(slot), Int32(1))
+        _publish_add(out_n_left, slot, blk_n_left, single)
+        _publish_add(out_n_total, slot, blk_n_seen, single)
+        _publish_add(out_n_blocks, slot, Int32(1), single)
 
     comptime if SHARED_COUNTS:
         var c = Int(thread_idx.x)
@@ -1434,12 +1497,8 @@ def node_feature_score_kernel[
         var bt = block_sum[block_size=TPB](priv_total[unsafe_offset=k])
         _search_barrier()
         if Int(thread_idx.x) == 0 and publishes:
-            _ = Atomic.fetch_add(
-                out_acc_left.unsafe_offset(slot * n_acc + k), bl
-            )
-            _ = Atomic.fetch_add(
-                out_acc_total.unsafe_offset(slot * n_acc + k), bt
-            )
+            _publish_add(out_acc_left, slot * n_acc + k, bl, single)
+            _publish_add(out_acc_total, slot * n_acc + k, bt, single)
 
 
 def node_feature_score_finalize_kernel[
