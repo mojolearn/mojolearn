@@ -102,6 +102,22 @@ from bindings.host_helpers import (
     probability_rows_f32_binding,
     scale_rows_f32_binding,
 )
+from bindings.hotpath_helpers import (
+    cast_elements_binding,
+    check_indices_i64_binding,
+    encode_labels_f32_binding,
+    encode_labels_f64_binding,
+    encode_labels_i32_binding,
+    encode_labels_i64_binding,
+    encode_labels_u32_binding,
+    encode_labels_u8_binding,
+    equal_elements_binding,
+    fold_ids_binding,
+    gather_i32_binding,
+    indices_overlap_i64_binding,
+    reduce_stat_binding,
+    select_fold_i64_binding,
+)
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32, u32_ptr
 from checks.kernel_matrix import (
     COLUMN_CPU,
@@ -1274,6 +1290,24 @@ def PyInit__mojolearn_core_host() abi("C") -> PythonObject:
         module.def_function[center_columns_f32_binding]("center_columns_f32")
         module.def_function[scale_rows_f32_binding]("scale_rows_f32")
         module.def_function[probability_rows_f32_binding]("probability_rows_f32")
+        # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
+        # of bindings/hotpath_helpers.mojo, and the ORDER RULE's encoder the
+        # base binding has carried since DEVIATION 2500, so a CPU-only
+        # install stops encoding labels in a Python loop.
+        module.def_function[cast_elements_binding]("cast_elements")
+        module.def_function[reduce_stat_binding]("reduce_stat")
+        module.def_function[equal_elements_binding]("equal_elements")
+        module.def_function[encode_labels_f32_binding]("encode_labels_f32")
+        module.def_function[encode_labels_f64_binding]("encode_labels_f64")
+        module.def_function[encode_labels_i32_binding]("encode_labels_i32")
+        module.def_function[encode_labels_i64_binding]("encode_labels_i64")
+        module.def_function[encode_labels_u32_binding]("encode_labels_u32")
+        module.def_function[encode_labels_u8_binding]("encode_labels_u8")
+        module.def_function[gather_i32_binding]("gather_i32")
+        module.def_function[check_indices_i64_binding]("check_indices_i64")
+        module.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
+        module.def_function[fold_ids_binding]("fold_ids")
+        module.def_function[select_fold_i64_binding]("select_fold_i64")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_core_host: ", error))
