@@ -59,9 +59,9 @@ comptime FOREST_SHARED_ROW_CAPACITY = 256
 #: engine's SCHEDULE, not its graph. The 32-lane kernels give one row 32
 #: threads, so the 32 threads of a thread group walk 32 DIFFERENT trees at
 #: once and meet at seven barriers over a shared-memory fold. With
-#: `-D MOJOLEARN_FOREST_ROW_THREADS=1` one thread owns an item: it walks the
-#: trees in ascending order, adds each leaf into lane `tree % 32` (so a lane
-#: still sums trees `lane, lane + 32, ...` in that order from +0.0), and
+#: `-D MOJOLEARN_FOREST_ROW_THREADS=1` one thread owns an item: lane by lane
+#: it sums trees `lane, lane + 32, ...` in that order from +0.0, as the
+#: 32-thread kernel's lane does, stores the 32 sums privately, and
 #: folds its 32 private sums 16/8/4/2/1 with the same `forest_add` on the
 #: same operand pairs. Every addition has the operands and the order it had;
 #: only the thread that performs it changed, which is the schedule
@@ -310,10 +310,17 @@ def forest_grove32_row_kernel[RF_INPUT: Bool, PACKED: Bool = False](
             sums[unsafe_offset=lane] = Float32(0)
         var row = item//outputs
         var out = item%outputs
-        for tree in range(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
-            var lane = tree%32
-            sums[unsafe_offset=lane] = forest_add(sums[unsafe_offset=lane],leaves.unsafe_load(node*outputs+out))
+        # Lane by lane, so one running total lives in a register and each
+        # private sum is stored once (a per-tree read-modify-write of the
+        # private array measured slower at eight outputs on the RTX 4090).
+        for lane in range(32):
+            var total = Float32(0)
+            var tree = lane
+            while tree < trees:
+                var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+                total = forest_add(total,leaves.unsafe_load(node*outputs+out))
+                tree += 32
+            sums[unsafe_offset=lane] = total
         comptime if FOREST_ROW_THREADS_SABOTAGE:
             for lane in range(1, 32):
                 sums[unsafe_offset=0] = forest_add(sums[unsafe_offset=0],sums[unsafe_offset=lane])
@@ -343,13 +350,21 @@ def forest_vector_grove32_row_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKE
         var sums = stack_allocation[32*OUTPUT_CAPACITY,Float32]()
         for i in range(32*OUTPUT_CAPACITY):
             sums[unsafe_offset=i] = Float32(0)
-        for tree in range(trees):
-            var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
-            var lane = tree%32
+        # Lane by lane: OUTPUT_CAPACITY running totals in registers, each
+        # private sum stored once (see forest_grove32_row_kernel).
+        for lane in range(32):
+            var totals = SIMD[DType.float32, OUTPUT_CAPACITY](0)
+            var tree = lane
+            while tree < trees:
+                var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)
+                @parameter
+                for c in range(OUTPUT_CAPACITY):
+                    if c < outputs:
+                        totals[c] = forest_add(totals[c],leaves.unsafe_load(node*outputs+c))
+                tree += 32
             @parameter
             for c in range(OUTPUT_CAPACITY):
-                if c < outputs:
-                    sums[unsafe_offset=c*32+lane] = forest_add(sums[unsafe_offset=c*32+lane],leaves.unsafe_load(node*outputs+c))
+                sums[unsafe_offset=c*32+lane] = totals[c]
         comptime if FOREST_ROW_THREADS_SABOTAGE:
             for lane in range(1, 32):
                 @parameter
