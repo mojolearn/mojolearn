@@ -118,11 +118,14 @@ print('PASS installed CPU training binding')
 # refuses a binding that does not read back vendor cpu, IDENTICAL and the
 # CPU kernel-matrix column. The list is the manifest's, never a copy here.
 from mojolearn import _backend, host_surface
+_host_exports = {family['binding']: family['exports'] for family in host_surface.FAMILIES}
 for _name in host_surface.wheel_bindings():
     _so = package / 'host' / (_name + '.so')
     assert _so.exists(), f'installed wheel has no host binding at {_so}'
     assert pathlib.Path(_backend.host_module_path(_name)).resolve() == _so
     _m = _backend.load_host_module(_name)
+    _missing = [name for name in _host_exports[_name] if not callable(getattr(_m, name, None))]
+    assert not _missing, f'{_name} missing callable host exports: {_missing}'
     _p = _name[len('_mojolearn_'):]
     assert getattr(_m, _p + '_vendor')() == 'cpu' and getattr(_m, _p + '_numeric_mode')() == 1
     assert str(getattr(_m, _p + '_column')()) == 'cpu', f'{_name} did not compile as the CPU column'
