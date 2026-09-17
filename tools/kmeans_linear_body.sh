@@ -106,6 +106,7 @@ identity_cpu)
 diff)
     # sh tools/kmeans_linear_body.sh diff LABEL A.json B.json [...]
     shift 2
+    [ "${1:-}" = x ] && shift
     cd "$R" || exit 9
     PYTHONPATH="$R/python:$R/tools" "$P" tools/identity_break.py --diff "$@" > "/root/kls_out/diff.$NAME.txt" 2>&1
     echo "diff $NAME rc=$?" | tee -a /root/kls_out/diff.progress.txt
