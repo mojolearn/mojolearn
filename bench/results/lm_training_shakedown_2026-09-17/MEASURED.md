@@ -152,3 +152,101 @@ this does not extend it.
 At 11.19 s to save and 7.63 s to restore, checkpointing is not a cost worth
 thinking about: every 10 minutes of a 223-hour run is a 1.9% tax, every hour
 is 0.3%.
+
+## 6. THE LONG RUN: it survives, and it costs 2.1x after about step 480
+
+2,000 consecutive steps at batch 1, target shape, one resident session, no
+per-step witnesses. **This is 15.6x the longest run anything in this repository
+had ever done at any size, and 500x the longest at this shape.**
+
+Nothing crashed, nothing went NaN, the loss fell and kept falling, and host
+memory never moved. But the run does not hold its speed, and what it does is
+invisible in three steps.
+
+| step | s/step | device peak | loss |
+|---|---|---|---|
+| 1 | 12.994 (setup) | 15.607 GB | 10.9033 |
+| 51 | 0.20694 | 16.949 GB | |
+| 101 | 0.20676 | 16.949 GB | |
+| 151 | 0.20972 | 16.949 GB | |
+| 201 | 0.20666 | 16.949 GB | |
+| 251 | 0.20753 | 19.902 GB | |
+| 301 | 0.25892 | 24.197 GB | |
+| 351 | 0.28469 | 25.808 GB | |
+| 401 | 0.33653 | 27.150 GB | |
+| 451 | 0.25890 | 31.445 GB | |
+| 501 | 0.31069 | 34.397 GB | |
+| 651 | 0.44045 | 34.397 GB | 2.0090 |
+| 801 | 0.44015 | 34.397 GB | 1.4451 |
+| 951 | 0.46608 | 34.397 GB | 1.8832 |
+| 1101 | 0.44075 | 34.397 GB | 1.7804 |
+
+**Three phases, and the third is a PLATEAU, not a runaway.**
+
+  * **Phase 1, steps 1 to about 210.** 0.207 s a step, 16.949 GB. This is the
+    regime every previously recorded run lived in, because every previously
+    recorded run was three or four steps long.
+  * **Phase 2, steps about 210 to about 480.** Device memory climbs from
+    16.949 GB to 34.397 GB and step time climbs from 0.207 s to about 0.44 s.
+  * **Phase 3, from about step 480 onward.** BOTH SETTLE. Device memory sits at
+    34.397 GB and does not move again through step 1,100 and beyond. Step time
+    sits between 0.440 and 0.466 and does not move again.
+
+At step 650 this looked like an unbounded leak and it is not one. It is a
+one-time transition to a second steady state that costs **2.03x the device
+memory and 2.13x the seconds per step**. Saying "leak" here would be wrong.
+
+**What it is not.** Sampled at step 776 while the run was in phase 3
+(`drift_diagnostics.txt` in the leg directory, collected by hand over ssh):
+
+  * not clock: `clocks.sm` 1980 MHz of `clocks.max.sm` 1980 MHz;
+  * not thermal: 42 C, `HW Thermal Slowdown` and `SW Thermal Slowdown` both
+    Not Active;
+  * not power: 356 W of a 700 W limit, `SW Power Cap` Not Active, and every
+    other clocks-event reason Not Active;
+  * not host CPU contention: the container has a 2210000/100000 cgroup quota,
+    that is 22.1 CPUs of the host's 208, and `/proc/pressure/cpu` reports
+    `full avg10=0.00` with `some avg10=0.09`. The host load average of 29 is
+    14% of 208 cores and is not reaching us. This one was checked
+    specifically because a shared RunPod host is the obvious confound, and the
+    pressure counters rule it out rather than an assertion doing so;
+  * not host memory: `ru_maxrss` 8.193 GB at step 1 and 8.193 GB at step
+    1,100, unchanged to the byte.
+
+So the cost is on the device, inside the step, at full clocks. **What causes
+it is NOT established by this leg and is not guessed at here.**
+
+**The loss is healthy.** 10.9033 at step 1 is ln(50257) = 10.8249 plus
+noise, which is exactly an untrained uniform prediction. It spikes early
+(57.92 at step 3 in the batch-1 sweep cell), recovers, and is bouncing between
+1.4 and 2.3 by step 1,100 on byte-level enwik8. It is not flat and it is not
+NaN. The early spike at lr 1e-3 on a fresh 162M model is worth a learning-rate
+warmup in a real run, and it is not a defect.
+
+## 7. What section 4's recosting is worth, given section 6
+
+**The batch sweep in section 1 is a PHASE 1 MEASUREMENT.** Every cell is three
+steps and every cell therefore lives inside the first 210 steps, where the
+step is fast and the memory is small. If the same transition happens at every
+batch, then every throughput number in section 1 and every hour in section 4
+is optimistic by up to 2.13x, and every device peak is optimistic by up to
+2.03x, which at batch 8 would be 68 GB over a card that has 85.5.
+
+The honest recosting is a range, not a number:
+
+| corpus | if phase 1 can be held | if phase 3 is the truth |
+|---|---|---|
+| FineWeb-Edu 10BT at batch 1 | 280.9 H100-hours | 597.5 H100-hours |
+| 25B tokens at batch 1 | 702.2 H100-hours | 1,493.7 H100-hours |
+
+The original estimate this lane was asked to check (315 h and 789 h) sits at
+the optimistic end. **The pessimistic end is roughly double it.**
+
+Which end is real depends on one question that leg 2 asks: does tearing the
+resident session down and rebuilding it from `export_state()` put the run back
+into phase 1? Section 5 already proved that rebuild is bit-exact at this
+shape, so if it also resets the clock, then a production run recycles its
+session every couple of hundred steps, holds phase 1, and the section 4 table
+stands. If it does not reset, phase 3 is the price and every estimate doubles.
+
+**Do not quote section 4 without section 7.**
