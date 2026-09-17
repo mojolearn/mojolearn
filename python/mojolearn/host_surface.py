@@ -2472,11 +2472,8 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
-    # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
-    # harness no longer produces. `unwatched` would be the wrong reason and
-    # the test below says so by name.
-    "mamba2-dtlimit": "stale reference",
+    # mamba2-dtlimit regained all-nine references at its corrected clamp;
+    # see the CPU verification completion records (2026-09-17).
     # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
     # two same-shape RMSNorm weights were both a vector of ones, so they were
     # the SAME TENSOR and exchanging them on the way in was the identity

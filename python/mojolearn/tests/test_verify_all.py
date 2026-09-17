@@ -618,12 +618,14 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 #: the eight lanes tools/identity_break.py declares a real stepfull part for,
 #: and the hash all four recorded columns landed on
 #: (docs/lanes/LANE_STATUS_lane-decode-columns.md, 2026-09-16)
+#: mamba2-dtlimit was re-recorded at its corrected clamp on 2026-09-17;
+#: see identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json.
 STEPFULL_LANES = {
     "transformer": "99e9fe5ec967e1dd",
     "transformer-window": "a05e05cf5055c79f",
     "mamba1": "f582474b00117f8e",
     "mamba2": "bfd516aa93fe1b12",
-    "mamba2-dtlimit": "44421178c1c5b188",
+    "mamba2-dtlimit": "6cefffbc50e10b84",
     "mamba3": "6a8f4924575a931d",
     "samba": "e9c89afd1eb7f273",
     "samba-untied-dropout-accum": "dc215181275f4d1f",
