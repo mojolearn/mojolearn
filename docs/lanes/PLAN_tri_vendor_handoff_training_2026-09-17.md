@@ -130,21 +130,44 @@ one segment (section 3) is partly a response to exactly this.
 
 ## 6. Cost, from measured cells
 
-Base cell: our IDENTICAL step at this shape is **0.2326 s** on an H100
-(`bench/OPPONENT_REFERENCE.md`, 2026-09-12 13:45Z, commit bb679f19, batch 1,
-length 2048). That is 8,805 tokens/s.
+REVISED 2026-09-17 evening, after `lane/attention-speed` measured the current
+default. The earlier figures in this file used 0.2326 s from
+`bench/OPPONENT_REFERENCE.md` (2026-09-12 13:45Z, commit bb679f19). **Four
+flips have landed since** (DEVIATIONS 2597, 2650, 2651, 2657, plus the GEMM
+`_hg` flip), and the untimed lean step at commit 07707794 is **0.2106 s**, 9.5
+percent faster. That is 9,725 tokens/s on an H100 at batch 1, length 2048.
 
 AMD and Apple per-step costs at this shape are **NOT MEASURED**. The figures
 below assume H100-equivalent throughput on all legs, which is certainly wrong
-for Apple. Treat as a floor.
+for Apple. Treat as a floor, and see section 4 on wall clock.
 
-| token budget | one route | two routes | cost at $2.00 to $2.69/h | wall clock |
+| token budget | one route | two routes | cost at $2.00 to $2.69/h |
+|---|---:|---:|---:|
+| 25B, one twelfth of GPT-3 Small's 300B | 714 h | 1,428 h | $2,856 to $3,842 |
+
+**THE ATTENTION UPSIDE IS MUCH SMALLER THAN THIS FILE FIRST CLAIMED.** An
+earlier draft said attention was 61 percent of the step and that a 4x to 8x
+there would take the two-route run toward $1,500. Measured at the current
+default, attention is **61.9 ms of a 231.5 ms timed envelope, 26.7 percent**.
+That is a ceiling on what the attention lane can ever return:
+
+| attention gets | step | one route | two routes | saved |
 |---|---:|---:|---:|---:|
-| 25B, one twelfth of GPT-3 Small's 300B | 789 h | 1,577 h | $3,155 to $4,243 | bounded by the slower route, see section 4 |
+| 2x faster | 0.1824 s | 619 h | $2,475 to $3,328 | 13.4% |
+| 4x faster | 0.1684 s | 571 h | $2,284 to $3,071 | 20.1% |
+| 8x faster | 0.1613 s | 547 h | $2,188 to $2,943 | 23.4% |
+| **free** | 0.1543 s | 523 h | $2,093 to $2,815 | **26.7%** |
 
-Batch is 1. If `lane/lm-training-shakedown` finds a larger batch fits, both the
-hours and the wall clock fall. If `lane/attention-speed` lands its 2x to 8x,
-the two-route figure falls toward $1,500.
+Even a free attention saves 26.7 percent. **The other 169.6 ms, 73.3 percent
+of the envelope, is where the remaining money is and it is not itemized.** The
+share is measured against the timed envelope, where every tick waits, so it is
+a breakdown and not a price; the untimed step is 210.6 ms, and the 21 ms
+difference is instrumentation. Before any further kernel work is scheduled,
+that 73.3 percent needs the same treatment attention got.
+
+Batch is 1 in every figure. If `lane/lm-training-shakedown` finds a larger
+batch fits, both the hours and the wall clock fall, and that is a larger lever
+than anything in the table above.
 
 ## 7. Phase order
 
