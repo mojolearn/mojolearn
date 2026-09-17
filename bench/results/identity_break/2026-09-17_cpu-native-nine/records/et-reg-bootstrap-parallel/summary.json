@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "et-reg-bootstrap-parallel": {
+      "cells": [
+        {
+          "cell": "et-reg-bootstrap-parallel/base",
+          "context_matches": true,
+          "clean": "19364c9a090a07bf",
+          "sabotage": "d57e3dcafea96da8",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/denormal",
+          "context_matches": true,
+          "clean": "2db72056e0c1f349",
+          "sabotage": "7daa00be8ee4a12d",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/denormal_ftz",
+          "context_matches": true,
+          "clean": "2db72056e0c1f349",
+          "sabotage": "7daa00be8ee4a12d",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/dupes",
+          "context_matches": true,
+          "clean": "5e17e8c07de7964f",
+          "sabotage": "7203450c818a9bd8",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/hashed",
+          "context_matches": true,
+          "clean": "a62b714ab1e0ae24",
+          "sabotage": "70eba8782522c5d3",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/negative",
+          "context_matches": true,
+          "clean": "a9c4589c8d79c6a9",
+          "sabotage": "3ca819501eeaba07",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/odd",
+          "context_matches": true,
+          "clean": "c7241fe5a82049b3",
+          "sabotage": "4c7531d0562fbebf",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/ties",
+          "context_matches": true,
+          "clean": "f9f4327d4f1928cc",
+          "sabotage": "986d7d13ce9f7b74",
+          "detected": true
+        },
+        {
+          "cell": "et-reg-bootstrap-parallel/wide",
+          "context_matches": true,
+          "clean": "d1c206224be7d638",
+          "sabotage": "50deee6b7e1882ca",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

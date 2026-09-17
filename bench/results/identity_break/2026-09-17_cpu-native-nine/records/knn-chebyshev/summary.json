@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "knn-chebyshev": {
+      "cells": [
+        {
+          "cell": "knn-chebyshev/base",
+          "context_matches": true,
+          "clean": "216fff8aa5989758",
+          "sabotage": "f0f4da9b9c688da2",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/denormal",
+          "context_matches": true,
+          "clean": "7529dc2d3cbeffa9",
+          "sabotage": "ea1c6ac9f4bd1f72",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/denormal_ftz",
+          "context_matches": true,
+          "clean": "7529dc2d3cbeffa9",
+          "sabotage": "ea1c6ac9f4bd1f72",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/dupes",
+          "context_matches": true,
+          "clean": "e99889dfad36b7f9",
+          "sabotage": "484ed040f027ae90",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/hashed",
+          "context_matches": true,
+          "clean": "38c9ba5b53bf50b4",
+          "sabotage": "79941e9a48bfffd2",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/negative",
+          "context_matches": true,
+          "clean": "a072add0bea1061c",
+          "sabotage": "ef62bf54404f018b",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/odd",
+          "context_matches": true,
+          "clean": "14e51035498fb41b",
+          "sabotage": "50d27f7cf02b5331",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/ties",
+          "context_matches": true,
+          "clean": "ffb6231807d08ca5",
+          "sabotage": "e1a4be577ee879ff",
+          "detected": true
+        },
+        {
+          "cell": "knn-chebyshev/wide",
+          "context_matches": true,
+          "clean": "5d9dd46c34e7ea9b",
+          "sabotage": "1a78ecb007b5ea18",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

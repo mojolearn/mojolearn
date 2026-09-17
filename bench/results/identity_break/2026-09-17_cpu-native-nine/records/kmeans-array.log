@@ -1,0 +1,3 @@
+kmeans-array: clean
+kmeans-array: sabotage
+kmeans-array: 9/9 controls; passed=True

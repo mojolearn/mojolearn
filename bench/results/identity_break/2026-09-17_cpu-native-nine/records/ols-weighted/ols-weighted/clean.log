@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:14  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START ols-weighted/base repeat=1/train
+# DONE ols-weighted/base repeat=1/train 0.154s
+# START ols-weighted/base repeat=1/infer-save-reload
+# DONE ols-weighted/base repeat=1/infer-save-reload 0.002s
+# START ols-weighted/base repeat=1/batch
+# DONE ols-weighted/base repeat=1/batch 0.002s
+# START ols-weighted/base repeat=1/stepfull
+# DONE ols-weighted/base repeat=1/stepfull 0.000s
+# START ols-weighted/base repeat=2/train
+# DONE ols-weighted/base repeat=2/train 0.158s
+# START ols-weighted/base repeat=2/infer-save-reload
+# DONE ols-weighted/base repeat=2/infer-save-reload 0.001s
+# START ols-weighted/base repeat=2/batch
+# DONE ols-weighted/base repeat=2/batch 0.002s
+# START ols-weighted/base repeat=2/stepfull
+# DONE ols-weighted/base repeat=2/stepfull 0.000s
+# CELL ols-weighted/base STABLE 0.319s
+# START ols-weighted/ties repeat=1/train
+# DONE ols-weighted/ties repeat=1/train 0.167s
+# START ols-weighted/ties repeat=1/infer-save-reload
+# DONE ols-weighted/ties repeat=1/infer-save-reload 0.001s
+# START ols-weighted/ties repeat=1/batch
+# DONE ols-weighted/ties repeat=1/batch 0.002s
+# START ols-weighted/ties repeat=1/stepfull
+# DONE ols-weighted/ties repeat=1/stepfull 0.000s
+# START ols-weighted/ties repeat=2/train
+# DONE ols-weighted/ties repeat=2/train 0.163s
+# START ols-weighted/ties repeat=2/infer-save-reload
+# DONE ols-weighted/ties repeat=2/infer-save-reload 0.001s
+# START ols-weighted/ties repeat=2/batch
+# DONE ols-weighted/ties repeat=2/batch 0.002s
+# START ols-weighted/ties repeat=2/stepfull
+# DONE ols-weighted/ties repeat=2/stepfull 0.000s
+# CELL ols-weighted/ties STABLE 0.338s
+# START ols-weighted/hashed repeat=1/train
+# DONE ols-weighted/hashed repeat=1/train 0.121s
+# START ols-weighted/hashed repeat=1/infer-save-reload
+# DONE ols-weighted/hashed repeat=1/infer-save-reload 0.001s
+# START ols-weighted/hashed repeat=1/batch
+# DONE ols-weighted/hashed repeat=1/batch 0.002s
+# START ols-weighted/hashed repeat=1/stepfull
+# DONE ols-weighted/hashed repeat=1/stepfull 0.000s
+# START ols-weighted/hashed repeat=2/train
+# DONE ols-weighted/hashed repeat=2/train 0.171s
+# START ols-weighted/hashed repeat=2/infer-save-reload
+# DONE ols-weighted/hashed repeat=2/infer-save-reload 0.001s
+# START ols-weighted/hashed repeat=2/batch
+# DONE ols-weighted/hashed repeat=2/batch 0.002s
+# START ols-weighted/hashed repeat=2/stepfull
+# DONE ols-weighted/hashed repeat=2/stepfull 0.000s
+# CELL ols-weighted/hashed STABLE 0.300s
+# START ols-weighted/wide repeat=1/train
+# DONE ols-weighted/wide repeat=1/train 0.154s
+# START ols-weighted/wide repeat=1/infer-save-reload
+# DONE ols-weighted/wide repeat=1/infer-save-reload 0.001s
+# START ols-weighted/wide repeat=1/batch
+# DONE ols-weighted/wide repeat=1/batch 0.002s
+# START ols-weighted/wide repeat=1/stepfull
+# DONE ols-weighted/wide repeat=1/stepfull 0.000s
+# START ols-weighted/wide repeat=2/train
+# DONE ols-weighted/wide repeat=2/train 0.155s
+# START ols-weighted/wide repeat=2/infer-save-reload
+# DONE ols-weighted/wide repeat=2/infer-save-reload 0.001s
+# START ols-weighted/wide repeat=2/batch
+# DONE ols-weighted/wide repeat=2/batch 0.002s
+# START ols-weighted/wide repeat=2/stepfull
+# DONE ols-weighted/wide repeat=2/stepfull 0.000s
+# CELL ols-weighted/wide STABLE 0.316s
+# START ols-weighted/denormal repeat=1/train
+# DONE ols-weighted/denormal repeat=1/train 0.155s
+# START ols-weighted/denormal repeat=1/infer-save-reload
+# DONE ols-weighted/denormal repeat=1/infer-save-reload 0.001s
+# START ols-weighted/denormal repeat=1/batch
+# DONE ols-weighted/denormal repeat=1/batch 0.001s
+# START ols-weighted/denormal repeat=1/stepfull
+# DONE ols-weighted/denormal repeat=1/stepfull 0.000s
+# START ols-weighted/denormal repeat=2/train
+# DONE ols-weighted/denormal repeat=2/train 0.131s
+# START ols-weighted/denormal repeat=2/infer-save-reload
+# DONE ols-weighted/denormal repeat=2/infer-save-reload 0.001s
+# START ols-weighted/denormal repeat=2/batch
+# DONE ols-weighted/denormal repeat=2/batch 0.002s
+# START ols-weighted/denormal repeat=2/stepfull
+# DONE ols-weighted/denormal repeat=2/stepfull 0.000s
+# CELL ols-weighted/denormal STABLE 0.292s
+# START ols-weighted/denormal_ftz repeat=1/train
+# DONE ols-weighted/denormal_ftz repeat=1/train 0.157s
+# START ols-weighted/denormal_ftz repeat=1/infer-save-reload
+# DONE ols-weighted/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START ols-weighted/denormal_ftz repeat=1/batch
+# DONE ols-weighted/denormal_ftz repeat=1/batch 0.002s
+# START ols-weighted/denormal_ftz repeat=1/stepfull
+# DONE ols-weighted/denormal_ftz repeat=1/stepfull 0.000s
+# START ols-weighted/denormal_ftz repeat=2/train
+# DONE ols-weighted/denormal_ftz repeat=2/train 0.150s
+# START ols-weighted/denormal_ftz repeat=2/infer-save-reload
+# DONE ols-weighted/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START ols-weighted/denormal_ftz repeat=2/batch
+# DONE ols-weighted/denormal_ftz repeat=2/batch 0.002s
+# START ols-weighted/denormal_ftz repeat=2/stepfull
+# DONE ols-weighted/denormal_ftz repeat=2/stepfull 0.000s
+# CELL ols-weighted/denormal_ftz STABLE 0.314s
+# START ols-weighted/dupes repeat=1/train
+# DONE ols-weighted/dupes repeat=1/train 0.167s
+# START ols-weighted/dupes repeat=1/infer-save-reload
+# DONE ols-weighted/dupes repeat=1/infer-save-reload 0.001s
+# START ols-weighted/dupes repeat=1/batch
+# DONE ols-weighted/dupes repeat=1/batch 0.003s
+# START ols-weighted/dupes repeat=1/stepfull
+# DONE ols-weighted/dupes repeat=1/stepfull 0.000s
+# START ols-weighted/dupes repeat=2/train
+# DONE ols-weighted/dupes repeat=2/train 0.170s
+# START ols-weighted/dupes repeat=2/infer-save-reload
+# DONE ols-weighted/dupes repeat=2/infer-save-reload 0.001s
+# START ols-weighted/dupes repeat=2/batch
+# DONE ols-weighted/dupes repeat=2/batch 0.002s
+# START ols-weighted/dupes repeat=2/stepfull
+# DONE ols-weighted/dupes repeat=2/stepfull 0.000s
+# CELL ols-weighted/dupes STABLE 0.345s
+# START ols-weighted/odd repeat=1/train
+# DONE ols-weighted/odd repeat=1/train 0.084s
+# START ols-weighted/odd repeat=1/infer-save-reload
+# DONE ols-weighted/odd repeat=1/infer-save-reload 0.001s
+# START ols-weighted/odd repeat=1/batch
+# DONE ols-weighted/odd repeat=1/batch 0.001s
+# START ols-weighted/odd repeat=1/stepfull
+# DONE ols-weighted/odd repeat=1/stepfull 0.000s
+# START ols-weighted/odd repeat=2/train
+# DONE ols-weighted/odd repeat=2/train 0.082s
+# START ols-weighted/odd repeat=2/infer-save-reload
+# DONE ols-weighted/odd repeat=2/infer-save-reload 0.001s
+# START ols-weighted/odd repeat=2/batch
+# DONE ols-weighted/odd repeat=2/batch 0.002s
+# START ols-weighted/odd repeat=2/stepfull
+# DONE ols-weighted/odd repeat=2/stepfull 0.000s
+# CELL ols-weighted/odd STABLE 0.172s
+# START ols-weighted/negative repeat=1/train
+# DONE ols-weighted/negative repeat=1/train 0.149s
+# START ols-weighted/negative repeat=1/infer-save-reload
+# DONE ols-weighted/negative repeat=1/infer-save-reload 0.001s
+# START ols-weighted/negative repeat=1/batch
+# DONE ols-weighted/negative repeat=1/batch 0.002s
+# START ols-weighted/negative repeat=1/stepfull
+# DONE ols-weighted/negative repeat=1/stepfull 0.000s
+# START ols-weighted/negative repeat=2/train
+# DONE ols-weighted/negative repeat=2/train 0.158s
+# START ols-weighted/negative repeat=2/infer-save-reload
+# DONE ols-weighted/negative repeat=2/infer-save-reload 0.001s
+# START ols-weighted/negative repeat=2/batch
+# DONE ols-weighted/negative repeat=2/batch 0.002s
+# START ols-weighted/negative repeat=2/stepfull
+# DONE ols-weighted/negative repeat=2/stepfull 0.000s
+# CELL ols-weighted/negative STABLE 0.314s
+| ols-weighted           | 91b9e03ba0bb0253 | c1ca9fe57ffb7eae | d62862f84d0ef31b | 48bdc43467ad540d | 9896adcaa53b73e3 | 9896adcaa53b73e3 | 6a1b8a31f7df591b | 806d776bed929869 | 01d7938b81ede493 |
+| ols-weighted infer     | aa6de46fa1ca4da9 | 37f47b1777c31475 | 3cb168642ca31497 | b8ae1e1fdeeab4f7 | d0bc0fd5d809e428 | d0bc0fd5d809e428 | 96156cbd816b07d7 | 9c27cf5534996fea | 76a789c76b3c15ca |
+| ols-weighted model     | 22419c862a253d42 | d12ed3ca95665f83 | a5cef9462352d9ad | 62c14429ef91f39f | 414bf055344a03b7 | 414bf055344a03b7 | ca1f20e6a4e8b04c | aa11e8df832f5320 | 8fe88cc7e3ba1aee |
+| ols-weighted batch     | 488e990b37795fd5 | 0cd6cb83cde65d00 | 5f44eb4b9053a16f | 69531a1f3eaddcfb | 45a3a04f42105be5 | 45a3a04f42105be5 | 5e5fd0b4a4cae6d3 | 8d21160ea1720605 | 6ce11d47cdfc3a88 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: ols-weighted stepfull n/a:no-decode-state
+wrote /root/leg_out/records/ols-weighted/ols-weighted/cpu-clean.json

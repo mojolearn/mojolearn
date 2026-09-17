@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:41:35  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-exponential-chebyshev/base repeat=1/train
+# DONE kde-exponential-chebyshev/base repeat=1/train 0.021s
+# START kde-exponential-chebyshev/base repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/base repeat=1/infer-save-reload 0.045s
+# START kde-exponential-chebyshev/base repeat=1/batch
+# DONE kde-exponential-chebyshev/base repeat=1/batch 0.045s
+# START kde-exponential-chebyshev/base repeat=1/stepfull
+# DONE kde-exponential-chebyshev/base repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/base repeat=2/train
+# DONE kde-exponential-chebyshev/base repeat=2/train 0.021s
+# START kde-exponential-chebyshev/base repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/base repeat=2/infer-save-reload 0.043s
+# START kde-exponential-chebyshev/base repeat=2/batch
+# DONE kde-exponential-chebyshev/base repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/base repeat=2/stepfull
+# DONE kde-exponential-chebyshev/base repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/base STABLE 0.220s
+# START kde-exponential-chebyshev/ties repeat=1/train
+# DONE kde-exponential-chebyshev/ties repeat=1/train 0.039s
+# START kde-exponential-chebyshev/ties repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/ties repeat=1/infer-save-reload 0.078s
+# START kde-exponential-chebyshev/ties repeat=1/batch
+# DONE kde-exponential-chebyshev/ties repeat=1/batch 0.081s
+# START kde-exponential-chebyshev/ties repeat=1/stepfull
+# DONE kde-exponential-chebyshev/ties repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/ties repeat=2/train
+# DONE kde-exponential-chebyshev/ties repeat=2/train 0.037s
+# START kde-exponential-chebyshev/ties repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/ties repeat=2/infer-save-reload 0.077s
+# START kde-exponential-chebyshev/ties repeat=2/batch
+# DONE kde-exponential-chebyshev/ties repeat=2/batch 0.080s
+# START kde-exponential-chebyshev/ties repeat=2/stepfull
+# DONE kde-exponential-chebyshev/ties repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/ties STABLE 0.393s
+# START kde-exponential-chebyshev/hashed repeat=1/train
+# DONE kde-exponential-chebyshev/hashed repeat=1/train 0.021s
+# START kde-exponential-chebyshev/hashed repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/hashed repeat=1/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/hashed repeat=1/batch
+# DONE kde-exponential-chebyshev/hashed repeat=1/batch 0.044s
+# START kde-exponential-chebyshev/hashed repeat=1/stepfull
+# DONE kde-exponential-chebyshev/hashed repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/hashed repeat=2/train
+# DONE kde-exponential-chebyshev/hashed repeat=2/train 0.020s
+# START kde-exponential-chebyshev/hashed repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/hashed repeat=2/infer-save-reload 0.043s
+# START kde-exponential-chebyshev/hashed repeat=2/batch
+# DONE kde-exponential-chebyshev/hashed repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/hashed repeat=2/stepfull
+# DONE kde-exponential-chebyshev/hashed repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/hashed STABLE 0.214s
+# START kde-exponential-chebyshev/wide repeat=1/train
+# DONE kde-exponential-chebyshev/wide repeat=1/train 0.021s
+# START kde-exponential-chebyshev/wide repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/wide repeat=1/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/wide repeat=1/batch
+# DONE kde-exponential-chebyshev/wide repeat=1/batch 0.044s
+# START kde-exponential-chebyshev/wide repeat=1/stepfull
+# DONE kde-exponential-chebyshev/wide repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/wide repeat=2/train
+# DONE kde-exponential-chebyshev/wide repeat=2/train 0.021s
+# START kde-exponential-chebyshev/wide repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/wide repeat=2/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/wide repeat=2/batch
+# DONE kde-exponential-chebyshev/wide repeat=2/batch 0.045s
+# START kde-exponential-chebyshev/wide repeat=2/stepfull
+# DONE kde-exponential-chebyshev/wide repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/wide STABLE 0.215s
+# START kde-exponential-chebyshev/denormal repeat=1/train
+# DONE kde-exponential-chebyshev/denormal repeat=1/train 0.020s
+# START kde-exponential-chebyshev/denormal repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/denormal repeat=1/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/denormal repeat=1/batch
+# DONE kde-exponential-chebyshev/denormal repeat=1/batch 0.044s
+# START kde-exponential-chebyshev/denormal repeat=1/stepfull
+# DONE kde-exponential-chebyshev/denormal repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/denormal repeat=2/train
+# DONE kde-exponential-chebyshev/denormal repeat=2/train 0.020s
+# START kde-exponential-chebyshev/denormal repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/denormal repeat=2/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/denormal repeat=2/batch
+# DONE kde-exponential-chebyshev/denormal repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/denormal repeat=2/stepfull
+# DONE kde-exponential-chebyshev/denormal repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/denormal STABLE 0.213s
+# START kde-exponential-chebyshev/denormal_ftz repeat=1/train
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=1/train 0.020s
+# START kde-exponential-chebyshev/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=1/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/denormal_ftz repeat=1/batch
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=1/batch 0.043s
+# START kde-exponential-chebyshev/denormal_ftz repeat=1/stepfull
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/denormal_ftz repeat=2/train
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=2/train 0.021s
+# START kde-exponential-chebyshev/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=2/infer-save-reload 0.042s
+# START kde-exponential-chebyshev/denormal_ftz repeat=2/batch
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/denormal_ftz repeat=2/stepfull
+# DONE kde-exponential-chebyshev/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/denormal_ftz STABLE 0.213s
+# START kde-exponential-chebyshev/dupes repeat=1/train
+# DONE kde-exponential-chebyshev/dupes repeat=1/train 0.022s
+# START kde-exponential-chebyshev/dupes repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/dupes repeat=1/infer-save-reload 0.041s
+# START kde-exponential-chebyshev/dupes repeat=1/batch
+# DONE kde-exponential-chebyshev/dupes repeat=1/batch 0.045s
+# START kde-exponential-chebyshev/dupes repeat=1/stepfull
+# DONE kde-exponential-chebyshev/dupes repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/dupes repeat=2/train
+# DONE kde-exponential-chebyshev/dupes repeat=2/train 0.021s
+# START kde-exponential-chebyshev/dupes repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/dupes repeat=2/infer-save-reload 0.041s
+# START kde-exponential-chebyshev/dupes repeat=2/batch
+# DONE kde-exponential-chebyshev/dupes repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/dupes repeat=2/stepfull
+# DONE kde-exponential-chebyshev/dupes repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/dupes STABLE 0.214s
+# START kde-exponential-chebyshev/odd repeat=1/train
+# DONE kde-exponential-chebyshev/odd repeat=1/train 0.020s
+# START kde-exponential-chebyshev/odd repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/odd repeat=1/infer-save-reload 0.041s
+# START kde-exponential-chebyshev/odd repeat=1/batch
+# DONE kde-exponential-chebyshev/odd repeat=1/batch 0.045s
+# START kde-exponential-chebyshev/odd repeat=1/stepfull
+# DONE kde-exponential-chebyshev/odd repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/odd repeat=2/train
+# DONE kde-exponential-chebyshev/odd repeat=2/train 0.020s
+# START kde-exponential-chebyshev/odd repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/odd repeat=2/infer-save-reload 0.041s
+# START kde-exponential-chebyshev/odd repeat=2/batch
+# DONE kde-exponential-chebyshev/odd repeat=2/batch 0.043s
+# START kde-exponential-chebyshev/odd repeat=2/stepfull
+# DONE kde-exponential-chebyshev/odd repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/odd STABLE 0.211s
+# START kde-exponential-chebyshev/negative repeat=1/train
+# DONE kde-exponential-chebyshev/negative repeat=1/train 0.020s
+# START kde-exponential-chebyshev/negative repeat=1/infer-save-reload
+# DONE kde-exponential-chebyshev/negative repeat=1/infer-save-reload 0.043s
+# START kde-exponential-chebyshev/negative repeat=1/batch
+# DONE kde-exponential-chebyshev/negative repeat=1/batch 0.046s
+# START kde-exponential-chebyshev/negative repeat=1/stepfull
+# DONE kde-exponential-chebyshev/negative repeat=1/stepfull 0.000s
+# START kde-exponential-chebyshev/negative repeat=2/train
+# DONE kde-exponential-chebyshev/negative repeat=2/train 0.020s
+# START kde-exponential-chebyshev/negative repeat=2/infer-save-reload
+# DONE kde-exponential-chebyshev/negative repeat=2/infer-save-reload 0.041s
+# START kde-exponential-chebyshev/negative repeat=2/batch
+# DONE kde-exponential-chebyshev/negative repeat=2/batch 0.044s
+# START kde-exponential-chebyshev/negative repeat=2/stepfull
+# DONE kde-exponential-chebyshev/negative repeat=2/stepfull 0.000s
+# CELL kde-exponential-chebyshev/negative STABLE 0.216s
+| kde-exponential-chebyshev | 4955944cfce4cc2e | 771fafe72c84a4f4 | 9e933d61986426ab | 07e4f1bd67c75580 | 0c35b4bf1699cdf7 | 0c35b4bf1699cdf7 | 4955944cfce4cc2e | 923162f6d57b53ad | 040863f2f11a6101 |
+| kde-exponential-chebyshev infer | 9265e066af938ddd | 1ca4af3183ffe6b3 | 080f542da22a9e37 | f4cf636d78592d9c | 918b3bbe670bbcc5 | 918b3bbe670bbcc5 | 9265e066af938ddd | 47a2eaf4d131dd5a | 1658f6ae7a786d67 |
+| kde-exponential-chebyshev model | a8b0414787a34254 | 3d563f03a2174bfd | d48316c91334687f | 1c0a8729f2bc4f0f | 9f7c5f16c0d7cbed | 52dce22419081c4d | a8b0414787a34254 | c1bced417f68c522 | d27288eaf1e531e3 |
+| kde-exponential-chebyshev batch | e4598d44cb7542c8 | f9107a2d207a84a7 | 22d0bf6bc1dfa28b | 56780ba90c9624f8 | 5e957931032d79c7 | 5e957931032d79c7 | e4598d44cb7542c8 | c6abeccb6eae0822 | e1aa0666dfb84227 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-exponential-chebyshev stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-exponential-chebyshev/kde-exponential-chebyshev/cpu-clean.json

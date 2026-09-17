@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:45:46  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START knn-clf-distance/base repeat=1/train
+# DONE knn-clf-distance/base repeat=1/train 0.034s
+# START knn-clf-distance/base repeat=1/infer-save-reload
+# DONE knn-clf-distance/base repeat=1/infer-save-reload 0.068s
+# START knn-clf-distance/base repeat=1/batch
+# DONE knn-clf-distance/base repeat=1/batch 0.148s
+# START knn-clf-distance/base repeat=1/stepfull
+# DONE knn-clf-distance/base repeat=1/stepfull 0.000s
+# START knn-clf-distance/base repeat=2/train
+# DONE knn-clf-distance/base repeat=2/train 0.034s
+# START knn-clf-distance/base repeat=2/infer-save-reload
+# DONE knn-clf-distance/base repeat=2/infer-save-reload 0.066s
+# START knn-clf-distance/base repeat=2/batch
+# DONE knn-clf-distance/base repeat=2/batch 0.148s
+# START knn-clf-distance/base repeat=2/stepfull
+# DONE knn-clf-distance/base repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/base STABLE 0.499s
+# START knn-clf-distance/ties repeat=1/train
+# DONE knn-clf-distance/ties repeat=1/train 0.076s
+# START knn-clf-distance/ties repeat=1/infer-save-reload
+# DONE knn-clf-distance/ties repeat=1/infer-save-reload 0.151s
+# START knn-clf-distance/ties repeat=1/batch
+# DONE knn-clf-distance/ties repeat=1/batch 0.257s
+# START knn-clf-distance/ties repeat=1/stepfull
+# DONE knn-clf-distance/ties repeat=1/stepfull 0.000s
+# START knn-clf-distance/ties repeat=2/train
+# DONE knn-clf-distance/ties repeat=2/train 0.076s
+# START knn-clf-distance/ties repeat=2/infer-save-reload
+# DONE knn-clf-distance/ties repeat=2/infer-save-reload 0.150s
+# START knn-clf-distance/ties repeat=2/batch
+# DONE knn-clf-distance/ties repeat=2/batch 0.259s
+# START knn-clf-distance/ties repeat=2/stepfull
+# DONE knn-clf-distance/ties repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/ties STABLE 0.970s
+# START knn-clf-distance/hashed repeat=1/train
+# DONE knn-clf-distance/hashed repeat=1/train 0.035s
+# START knn-clf-distance/hashed repeat=1/infer-save-reload
+# DONE knn-clf-distance/hashed repeat=1/infer-save-reload 0.067s
+# START knn-clf-distance/hashed repeat=1/batch
+# DONE knn-clf-distance/hashed repeat=1/batch 0.147s
+# START knn-clf-distance/hashed repeat=1/stepfull
+# DONE knn-clf-distance/hashed repeat=1/stepfull 0.000s
+# START knn-clf-distance/hashed repeat=2/train
+# DONE knn-clf-distance/hashed repeat=2/train 0.034s
+# START knn-clf-distance/hashed repeat=2/infer-save-reload
+# DONE knn-clf-distance/hashed repeat=2/infer-save-reload 0.067s
+# START knn-clf-distance/hashed repeat=2/batch
+# DONE knn-clf-distance/hashed repeat=2/batch 0.150s
+# START knn-clf-distance/hashed repeat=2/stepfull
+# DONE knn-clf-distance/hashed repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/hashed STABLE 0.501s
+# START knn-clf-distance/wide repeat=1/train
+# DONE knn-clf-distance/wide repeat=1/train 0.035s
+# START knn-clf-distance/wide repeat=1/infer-save-reload
+# DONE knn-clf-distance/wide repeat=1/infer-save-reload 0.068s
+# START knn-clf-distance/wide repeat=1/batch
+# DONE knn-clf-distance/wide repeat=1/batch 0.153s
+# START knn-clf-distance/wide repeat=1/stepfull
+# DONE knn-clf-distance/wide repeat=1/stepfull 0.000s
+# START knn-clf-distance/wide repeat=2/train
+# DONE knn-clf-distance/wide repeat=2/train 0.035s
+# START knn-clf-distance/wide repeat=2/infer-save-reload
+# DONE knn-clf-distance/wide repeat=2/infer-save-reload 0.068s
+# START knn-clf-distance/wide repeat=2/batch
+# DONE knn-clf-distance/wide repeat=2/batch 0.155s
+# START knn-clf-distance/wide repeat=2/stepfull
+# DONE knn-clf-distance/wide repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/wide STABLE 0.515s
+# START knn-clf-distance/denormal repeat=1/train
+# DONE knn-clf-distance/denormal repeat=1/train 0.035s
+# START knn-clf-distance/denormal repeat=1/infer-save-reload
+# DONE knn-clf-distance/denormal repeat=1/infer-save-reload 0.069s
+# START knn-clf-distance/denormal repeat=1/batch
+# DONE knn-clf-distance/denormal repeat=1/batch 0.157s
+# START knn-clf-distance/denormal repeat=1/stepfull
+# DONE knn-clf-distance/denormal repeat=1/stepfull 0.000s
+# START knn-clf-distance/denormal repeat=2/train
+# DONE knn-clf-distance/denormal repeat=2/train 0.033s
+# START knn-clf-distance/denormal repeat=2/infer-save-reload
+# DONE knn-clf-distance/denormal repeat=2/infer-save-reload 0.047s
+# START knn-clf-distance/denormal repeat=2/batch
+# DONE knn-clf-distance/denormal repeat=2/batch 0.152s
+# START knn-clf-distance/denormal repeat=2/stepfull
+# DONE knn-clf-distance/denormal repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/denormal STABLE 0.495s
+# START knn-clf-distance/denormal_ftz repeat=1/train
+# DONE knn-clf-distance/denormal_ftz repeat=1/train 0.031s
+# START knn-clf-distance/denormal_ftz repeat=1/infer-save-reload
+# DONE knn-clf-distance/denormal_ftz repeat=1/infer-save-reload 0.063s
+# START knn-clf-distance/denormal_ftz repeat=1/batch
+# DONE knn-clf-distance/denormal_ftz repeat=1/batch 0.148s
+# START knn-clf-distance/denormal_ftz repeat=1/stepfull
+# DONE knn-clf-distance/denormal_ftz repeat=1/stepfull 0.000s
+# START knn-clf-distance/denormal_ftz repeat=2/train
+# DONE knn-clf-distance/denormal_ftz repeat=2/train 0.033s
+# START knn-clf-distance/denormal_ftz repeat=2/infer-save-reload
+# DONE knn-clf-distance/denormal_ftz repeat=2/infer-save-reload 0.064s
+# START knn-clf-distance/denormal_ftz repeat=2/batch
+# DONE knn-clf-distance/denormal_ftz repeat=2/batch 0.153s
+# START knn-clf-distance/denormal_ftz repeat=2/stepfull
+# DONE knn-clf-distance/denormal_ftz repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/denormal_ftz STABLE 0.495s
+# START knn-clf-distance/dupes repeat=1/train
+# DONE knn-clf-distance/dupes repeat=1/train 0.035s
+# START knn-clf-distance/dupes repeat=1/infer-save-reload
+# DONE knn-clf-distance/dupes repeat=1/infer-save-reload 0.065s
+# START knn-clf-distance/dupes repeat=1/batch
+# DONE knn-clf-distance/dupes repeat=1/batch 0.146s
+# START knn-clf-distance/dupes repeat=1/stepfull
+# DONE knn-clf-distance/dupes repeat=1/stepfull 0.000s
+# START knn-clf-distance/dupes repeat=2/train
+# DONE knn-clf-distance/dupes repeat=2/train 0.031s
+# START knn-clf-distance/dupes repeat=2/infer-save-reload
+# DONE knn-clf-distance/dupes repeat=2/infer-save-reload 0.063s
+# START knn-clf-distance/dupes repeat=2/batch
+# DONE knn-clf-distance/dupes repeat=2/batch 0.140s
+# START knn-clf-distance/dupes repeat=2/stepfull
+# DONE knn-clf-distance/dupes repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/dupes STABLE 0.481s
+# START knn-clf-distance/odd repeat=1/train
+# DONE knn-clf-distance/odd repeat=1/train 0.033s
+# START knn-clf-distance/odd repeat=1/infer-save-reload
+# DONE knn-clf-distance/odd repeat=1/infer-save-reload 0.065s
+# START knn-clf-distance/odd repeat=1/batch
+# DONE knn-clf-distance/odd repeat=1/batch 0.150s
+# START knn-clf-distance/odd repeat=1/stepfull
+# DONE knn-clf-distance/odd repeat=1/stepfull 0.000s
+# START knn-clf-distance/odd repeat=2/train
+# DONE knn-clf-distance/odd repeat=2/train 0.034s
+# START knn-clf-distance/odd repeat=2/infer-save-reload
+# DONE knn-clf-distance/odd repeat=2/infer-save-reload 0.066s
+# START knn-clf-distance/odd repeat=2/batch
+# DONE knn-clf-distance/odd repeat=2/batch 0.157s
+# START knn-clf-distance/odd repeat=2/stepfull
+# DONE knn-clf-distance/odd repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/odd STABLE 0.506s
+# START knn-clf-distance/negative repeat=1/train
+# DONE knn-clf-distance/negative repeat=1/train 0.034s
+# START knn-clf-distance/negative repeat=1/infer-save-reload
+# DONE knn-clf-distance/negative repeat=1/infer-save-reload 0.067s
+# START knn-clf-distance/negative repeat=1/batch
+# DONE knn-clf-distance/negative repeat=1/batch 0.154s
+# START knn-clf-distance/negative repeat=1/stepfull
+# DONE knn-clf-distance/negative repeat=1/stepfull 0.000s
+# START knn-clf-distance/negative repeat=2/train
+# DONE knn-clf-distance/negative repeat=2/train 0.034s
+# START knn-clf-distance/negative repeat=2/infer-save-reload
+# DONE knn-clf-distance/negative repeat=2/infer-save-reload 0.067s
+# START knn-clf-distance/negative repeat=2/batch
+# DONE knn-clf-distance/negative repeat=2/batch 0.149s
+# START knn-clf-distance/negative repeat=2/stepfull
+# DONE knn-clf-distance/negative repeat=2/stepfull 0.000s
+# CELL knn-clf-distance/negative STABLE 0.506s
+| knn-clf-distance       | 5d6f66edfe15362c | 5f7ed9edc31eb1ec | f904e61e0194d01a | 9391e4e4cd54795b | b049f105466d025f | b049f105466d025f | 65656a96c0304161 | 32663deab2ca83f8 | e75299d3a91e1db0 |
+| knn-clf-distance infer | 27345d180c69e075 | 51fbb53f70ef95fe | 359639676aeba81b | 277b1687374533da | 161b9103ffcfdd91 | 161b9103ffcfdd91 | df3825c0aa9b0795 | 440957e05a506027 | 39d87d163805dcf3 |
+| knn-clf-distance model | 13ba9e3acab2179f | 9d81f24bb5a3a46d | 59c29fd8202e117b | 9e05696904110682 | 0f588d898c892f10 | 4f2ca5a9a8656623 | 7dd29e4d99cb3e1d | 8c424019c7957f8a | 0798677ba91e437e |
+| knn-clf-distance batch | 71f774c6a3805384 | 2affda44a6cf9d5a | 96b8c8bbcd9f986e | f581ce1c7385393b | 81085f4e1697efb3 | 81085f4e1697efb3 | 5dff5de2207656c1 | 85772560a7f06000 | fe695d85388715cb |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: knn-clf-distance stepfull n/a:no-decode-state
+wrote /root/leg_out/records/knn-clf-distance/knn-clf-distance/cpu-clean.json

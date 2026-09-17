@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:42:02  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-weighted/base repeat=1/train
+# DONE kde-weighted/base repeat=1/train 0.041s
+# START kde-weighted/base repeat=1/infer-save-reload
+# DONE kde-weighted/base repeat=1/infer-save-reload 0.081s
+# START kde-weighted/base repeat=1/batch
+# DONE kde-weighted/base repeat=1/batch 0.084s
+# START kde-weighted/base repeat=1/stepfull
+# DONE kde-weighted/base repeat=1/stepfull 0.000s
+# START kde-weighted/base repeat=2/train
+# DONE kde-weighted/base repeat=2/train 0.041s
+# START kde-weighted/base repeat=2/infer-save-reload
+# DONE kde-weighted/base repeat=2/infer-save-reload 0.080s
+# START kde-weighted/base repeat=2/batch
+# DONE kde-weighted/base repeat=2/batch 0.084s
+# START kde-weighted/base repeat=2/stepfull
+# DONE kde-weighted/base repeat=2/stepfull 0.000s
+# CELL kde-weighted/base STABLE 0.411s
+# START kde-weighted/ties repeat=1/train
+# DONE kde-weighted/ties repeat=1/train 0.055s
+# START kde-weighted/ties repeat=1/infer-save-reload
+# DONE kde-weighted/ties repeat=1/infer-save-reload 0.108s
+# START kde-weighted/ties repeat=1/batch
+# DONE kde-weighted/ties repeat=1/batch 0.114s
+# START kde-weighted/ties repeat=1/stepfull
+# DONE kde-weighted/ties repeat=1/stepfull 0.000s
+# START kde-weighted/ties repeat=2/train
+# DONE kde-weighted/ties repeat=2/train 0.055s
+# START kde-weighted/ties repeat=2/infer-save-reload
+# DONE kde-weighted/ties repeat=2/infer-save-reload 0.110s
+# START kde-weighted/ties repeat=2/batch
+# DONE kde-weighted/ties repeat=2/batch 0.116s
+# START kde-weighted/ties repeat=2/stepfull
+# DONE kde-weighted/ties repeat=2/stepfull 0.000s
+# CELL kde-weighted/ties STABLE 0.560s
+# START kde-weighted/hashed repeat=1/train
+# DONE kde-weighted/hashed repeat=1/train 0.042s
+# START kde-weighted/hashed repeat=1/infer-save-reload
+# DONE kde-weighted/hashed repeat=1/infer-save-reload 0.081s
+# START kde-weighted/hashed repeat=1/batch
+# DONE kde-weighted/hashed repeat=1/batch 0.085s
+# START kde-weighted/hashed repeat=1/stepfull
+# DONE kde-weighted/hashed repeat=1/stepfull 0.000s
+# START kde-weighted/hashed repeat=2/train
+# DONE kde-weighted/hashed repeat=2/train 0.041s
+# START kde-weighted/hashed repeat=2/infer-save-reload
+# DONE kde-weighted/hashed repeat=2/infer-save-reload 0.080s
+# START kde-weighted/hashed repeat=2/batch
+# DONE kde-weighted/hashed repeat=2/batch 0.084s
+# START kde-weighted/hashed repeat=2/stepfull
+# DONE kde-weighted/hashed repeat=2/stepfull 0.000s
+# CELL kde-weighted/hashed STABLE 0.412s
+# START kde-weighted/wide repeat=1/train
+# DONE kde-weighted/wide repeat=1/train 0.041s
+# START kde-weighted/wide repeat=1/infer-save-reload
+# DONE kde-weighted/wide repeat=1/infer-save-reload 0.080s
+# START kde-weighted/wide repeat=1/batch
+# DONE kde-weighted/wide repeat=1/batch 0.084s
+# START kde-weighted/wide repeat=1/stepfull
+# DONE kde-weighted/wide repeat=1/stepfull 0.000s
+# START kde-weighted/wide repeat=2/train
+# DONE kde-weighted/wide repeat=2/train 0.041s
+# START kde-weighted/wide repeat=2/infer-save-reload
+# DONE kde-weighted/wide repeat=2/infer-save-reload 0.079s
+# START kde-weighted/wide repeat=2/batch
+# DONE kde-weighted/wide repeat=2/batch 0.084s
+# START kde-weighted/wide repeat=2/stepfull
+# DONE kde-weighted/wide repeat=2/stepfull 0.000s
+# CELL kde-weighted/wide STABLE 0.409s
+# START kde-weighted/denormal repeat=1/train
+# DONE kde-weighted/denormal repeat=1/train 0.039s
+# START kde-weighted/denormal repeat=1/infer-save-reload
+# DONE kde-weighted/denormal repeat=1/infer-save-reload 0.078s
+# START kde-weighted/denormal repeat=1/batch
+# DONE kde-weighted/denormal repeat=1/batch 0.083s
+# START kde-weighted/denormal repeat=1/stepfull
+# DONE kde-weighted/denormal repeat=1/stepfull 0.000s
+# START kde-weighted/denormal repeat=2/train
+# DONE kde-weighted/denormal repeat=2/train 0.040s
+# START kde-weighted/denormal repeat=2/infer-save-reload
+# DONE kde-weighted/denormal repeat=2/infer-save-reload 0.079s
+# START kde-weighted/denormal repeat=2/batch
+# DONE kde-weighted/denormal repeat=2/batch 0.083s
+# START kde-weighted/denormal repeat=2/stepfull
+# DONE kde-weighted/denormal repeat=2/stepfull 0.000s
+# CELL kde-weighted/denormal STABLE 0.403s
+# START kde-weighted/denormal_ftz repeat=1/train
+# DONE kde-weighted/denormal_ftz repeat=1/train 0.041s
+# START kde-weighted/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-weighted/denormal_ftz repeat=1/infer-save-reload 0.078s
+# START kde-weighted/denormal_ftz repeat=1/batch
+# DONE kde-weighted/denormal_ftz repeat=1/batch 0.082s
+# START kde-weighted/denormal_ftz repeat=1/stepfull
+# DONE kde-weighted/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-weighted/denormal_ftz repeat=2/train
+# DONE kde-weighted/denormal_ftz repeat=2/train 0.040s
+# START kde-weighted/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-weighted/denormal_ftz repeat=2/infer-save-reload 0.078s
+# START kde-weighted/denormal_ftz repeat=2/batch
+# DONE kde-weighted/denormal_ftz repeat=2/batch 0.082s
+# START kde-weighted/denormal_ftz repeat=2/stepfull
+# DONE kde-weighted/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-weighted/denormal_ftz STABLE 0.401s
+# START kde-weighted/dupes repeat=1/train
+# DONE kde-weighted/dupes repeat=1/train 0.041s
+# START kde-weighted/dupes repeat=1/infer-save-reload
+# DONE kde-weighted/dupes repeat=1/infer-save-reload 0.080s
+# START kde-weighted/dupes repeat=1/batch
+# DONE kde-weighted/dupes repeat=1/batch 0.084s
+# START kde-weighted/dupes repeat=1/stepfull
+# DONE kde-weighted/dupes repeat=1/stepfull 0.000s
+# START kde-weighted/dupes repeat=2/train
+# DONE kde-weighted/dupes repeat=2/train 0.040s
+# START kde-weighted/dupes repeat=2/infer-save-reload
+# DONE kde-weighted/dupes repeat=2/infer-save-reload 0.080s
+# START kde-weighted/dupes repeat=2/batch
+# DONE kde-weighted/dupes repeat=2/batch 0.084s
+# START kde-weighted/dupes repeat=2/stepfull
+# DONE kde-weighted/dupes repeat=2/stepfull 0.000s
+# CELL kde-weighted/dupes STABLE 0.409s
+# START kde-weighted/odd repeat=1/train
+# DONE kde-weighted/odd repeat=1/train 0.041s
+# START kde-weighted/odd repeat=1/infer-save-reload
+# DONE kde-weighted/odd repeat=1/infer-save-reload 0.080s
+# START kde-weighted/odd repeat=1/batch
+# DONE kde-weighted/odd repeat=1/batch 0.084s
+# START kde-weighted/odd repeat=1/stepfull
+# DONE kde-weighted/odd repeat=1/stepfull 0.000s
+# START kde-weighted/odd repeat=2/train
+# DONE kde-weighted/odd repeat=2/train 0.041s
+# START kde-weighted/odd repeat=2/infer-save-reload
+# DONE kde-weighted/odd repeat=2/infer-save-reload 0.082s
+# START kde-weighted/odd repeat=2/batch
+# DONE kde-weighted/odd repeat=2/batch 0.086s
+# START kde-weighted/odd repeat=2/stepfull
+# DONE kde-weighted/odd repeat=2/stepfull 0.000s
+# CELL kde-weighted/odd STABLE 0.414s
+# START kde-weighted/negative repeat=1/train
+# DONE kde-weighted/negative repeat=1/train 0.042s
+# START kde-weighted/negative repeat=1/infer-save-reload
+# DONE kde-weighted/negative repeat=1/infer-save-reload 0.081s
+# START kde-weighted/negative repeat=1/batch
+# DONE kde-weighted/negative repeat=1/batch 0.086s
+# START kde-weighted/negative repeat=1/stepfull
+# DONE kde-weighted/negative repeat=1/stepfull 0.000s
+# START kde-weighted/negative repeat=2/train
+# DONE kde-weighted/negative repeat=2/train 0.041s
+# START kde-weighted/negative repeat=2/infer-save-reload
+# DONE kde-weighted/negative repeat=2/infer-save-reload 0.081s
+# START kde-weighted/negative repeat=2/batch
+# DONE kde-weighted/negative repeat=2/batch 0.085s
+# START kde-weighted/negative repeat=2/stepfull
+# DONE kde-weighted/negative repeat=2/stepfull 0.000s
+# CELL kde-weighted/negative STABLE 0.417s
+| kde-weighted           | bdc77e21eaa80446 | 3d7a29d7acbdea68 | c91f2e042980d399 | a33314d24e8b4e93 | 0a4056b1664c5c33 | 0a4056b1664c5c33 | bdc77e21eaa80446 | c269f4ee8fb21fa2 | 5adbe5d0adbf0f1d |
+| kde-weighted infer     | b91c5182892e47b9 | 76c69e561b774c97 | f157aa3efa4dc8aa | 7df7ac57a0ea6fc4 | 2dc9f3f9d88a00f3 | 2dc9f3f9d88a00f3 | b91c5182892e47b9 | 8bc5941a630066ae | 1770272c48733e98 |
+| kde-weighted model     | ed3ad9a95b60986d | baee26310e103854 | 53fe9d82cc4dc276 | c22f395c6857d83a | 43a5eddd0fa6f0be | 6dd6780f2c70aea6 | ed3ad9a95b60986d | c03119066e262d41 | f38733eebd943f9e |
+| kde-weighted batch     | d9ff2a20a82ef36f | ce547bec95e4810b | b852febb5abb3fd8 | ae5b91d64b6bb86f | b85268787d034b48 | b85268787d034b48 | d9ff2a20a82ef36f | 291f5e7d77449c08 | 5f2c577242a9121e |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-weighted stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-weighted/kde-weighted/cpu-sabotage.json

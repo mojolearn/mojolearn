@@ -1,0 +1,3 @@
+elasticnet-l2end-no-intercept: clean
+elasticnet-l2end-no-intercept: sabotage
+elasticnet-l2end-no-intercept: 9/9 controls; passed=True
