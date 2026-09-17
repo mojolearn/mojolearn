@@ -68,15 +68,15 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
 from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
-    host_ols_predict,
-    host_pca_transform,
+    host_ols_predict_into,
+    host_pca_transform_into,
     host_pca_whiten_inverse_transform,
     host_pca_whiten_transform,
-    host_qn_decision,
-    host_qn_decision_multi,
+    host_qn_decision_into,
+    host_qn_decision_multi_into,
     host_qn_sigmoid,
     host_qn_softmax,
-    host_tsvd_transform,
+    host_tsvd_transform_into,
 )
 from core.labeled_reference_host_predict import (
     LABELED_PREDICT_HOST_SABOTAGE,
@@ -101,7 +101,8 @@ from decomposition.host.pca_full_oracle import (
 from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
-from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples
+from core.host_predict_threads import host_list_ptr, host_predict_task_count
+from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
     kde_validate_data_ptr,
@@ -240,16 +241,15 @@ def kde_score_samples_binding(
             raise Error("kde: X must have at least one row (n_query)")
         kde_validate_data_ptr(tp, n_train, n_features, m, "train")
         kde_validate_data_ptr(qp, n_query, n_features, m, "query")
-        var train = read_f32(train_address, n_train * n_features)
-        var query = read_f32(query_address, n_query * n_features)
         # THE ONE CALL THAT COMPUTES ANYTHING. metric_arg is Minkowski's p,
         # 2.0 here as in the GPU binding, which passes no other value.
-        var stages = oracle_score_samples(
-            train, query, weights, has_weights, n_train, n_query, n_features,
-            bandwidth, k, m, Float32(2.0),
+        # DEVIATION 2920: read in place and scored straight into `out`, the
+        # query rows split across the host thread policy; the per-row
+        # arithmetic is `oracle_score_samples`'s, which the checks keep.
+        oracle_score_samples_into(
+            tp, qp, weights, has_weights, n_train, n_query, n_features,
+            bandwidth, k, m, op, host_predict_task_count(n_query), Float32(2.0),
         )
-        for i in range(n_query):
-            op[i] = stages.scores[i]
     return PythonObject(n_query)
 
 
@@ -669,11 +669,14 @@ def ols_predict_binding(
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
-        var x = read_f32(x_address, nr * nf)
+        # DEVIATION 2920: X read in place, the rows split across the host
+        # thread policy, the predictions written straight to `out`.
         var coef = read_f32(coef_address, nf)
-        var out = host_ols_predict(x, coef, nr, nf, intercept)
-        for i in range(nr):
-            op[i] = out[i]
+        host_ols_predict_into(
+            f32_ptr(x_address), host_list_ptr(coef), op, nr, nf, intercept,
+            host_predict_task_count(nr),
+        )
+        _ = coef^
     return PythonObject(0)
 
 
@@ -698,11 +701,12 @@ def tsvd_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        var x = read_f32(x_address, nr * nf)
         var components = read_f32(c_address, nc * nf)
-        var out = host_tsvd_transform(x, components, nr, nf, nc)
-        for i in range(nr * nc):
-            op[i] = out[i]
+        host_tsvd_transform_into(
+            f32_ptr(x_address), host_list_ptr(components), op, nr, nf, nc,
+            host_predict_task_count(nr),
+        )
+        _ = components^
     return PythonObject(0)
 
 
@@ -730,12 +734,14 @@ def pca_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        var x = read_f32(x_address, nr * nf)
         var mu = read_f32(m_address, nf)
         var components = read_f32(c_address, nc * nf)
-        var out = host_pca_transform(x, mu, components, nr, nf, nc)
-        for i in range(nr * nc):
-            op[i] = out[i]
+        host_pca_transform_into(
+            f32_ptr(x_address), host_list_ptr(mu), host_list_ptr(components),
+            op, nr, nf, nc, host_predict_task_count(nr),
+        )
+        _ = mu^
+        _ = components^
     return PythonObject(0)
 
 
@@ -876,17 +882,22 @@ def qn_decision_function_binding(
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
-        var x = read_f32(x_address, nr * nf)
+        # DEVIATION 2920: X read in place, the rows split across the host
+        # thread policy, the scores written straight to `out`.
         if nc > 2:
             var wm = read_f32(w_address, (nf + (1 if fi else 0)) * nc)
-            var outm = host_qn_decision_multi(x, wm, nr, nf, nc, fi)
-            for i in range(nr * nc):
-                op[i] = outm[i]
+            host_qn_decision_multi_into(
+                f32_ptr(x_address), host_list_ptr(wm), op, nr, nf, nc, fi,
+                host_predict_task_count(nr),
+            )
+            _ = wm^
         else:
             var w = read_f32(w_address, nf + (1 if fi else 0))
-            var out = host_qn_decision(x, w, nr, nf, fi)
-            for i in range(nr):
-                op[i] = out[i]
+            host_qn_decision_into(
+                f32_ptr(x_address), host_list_ptr(w), op, nr, nf, fi,
+                host_predict_task_count(nr),
+            )
+            _ = w^
     return PythonObject(0)
 
 
