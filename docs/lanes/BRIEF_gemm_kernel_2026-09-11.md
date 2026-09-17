@@ -1736,3 +1736,140 @@ cell is worth 0.14 ms, and the breadth is exactly what makes a kernel-body
 change pay. It is also the reason the plan's "do NOT open a ninth scheduling
 arm" is right: a scheduling arm can only move one shape's dispatch, and there is
 no shape worth moving.
+
+## 21. The itemization re-run, and the AMD answer (2026-09-17, both measured)
+
+### 21.1 The step, itemized fresh: GEMM is 57.7 percent of it
+
+Evidence: `bench/results/e1g/2026-09-17_203224-nvidia-h100-step-breakdown-after-flips/remote/step-breakdown/`
+(RunPod H100 80GB HBM3, commit b2f4eea71, pod e8rs6eq63pwejl terminated and
+verified gone, corpora staged from R2, every phase in `status.tsv` exit 0,
+`witnesses.tsv` `all bits_identical True`). No new code: this is
+`tools/step_breakdown_leg.sh` (DEVIATION 2630) re-run.
+
+**Shares are of the REAL step, not the envelope.** The envelope is the timed
+figure and it is 3.48 percent larger than the shipped step because of the
+timers; every component below is rescaled onto the untimed step so the
+percentages add to the thing being optimized.
+
+| | enwik8 | Pile GitHub |
+|---|---:|---:|
+| timed envelope | 214.42 ms | 213.67 ms |
+| **REAL step (untimed, shipped build)** | **207.21 ms** | **207.87 ms** |
+| instrumentation | 7.21 ms (3.48%) | 5.80 ms (2.79%) |
+
+| component | ms of the real step | share |
+|---|---:|---:|
+| **GEMM (every GEMM call)** | **119.50** | **57.7%** |
+| attention kernels, launchers, regime scans | 60.12 | 29.0% |
+| remainders (timer prints, host between ticks) | 4.35 | 2.1% |
+| refusal and validation scans | 3.97 | 1.9% |
+| RMSNorm forward | 2.96 | 1.4% |
+| softmax, cross entropy, loss readback | 2.63 | 1.3% |
+| embedding forward and backward | 2.49 | 1.2% |
+| RMSNorm backward | 2.33 | 1.1% |
+| attention rope and kv cache | 2.06 | 1.0% |
+| ids upload, weight unpack, gradient pack | 1.97 | 0.9% |
+| AdamW and its shadow copy | 1.67 | 0.8% |
+| residual adds, copies, fan-in | 1.67 | 0.8% |
+| swiglu backward / forward | 1.01 / 0.68 | 0.5% / 0.3% |
+| binding admission, final wait, publish | 0.03 | 0.01% |
+
+Against 2026-09-11 (144.90 / 116.23 of a 299.78 ms envelope), GEMM fell 21.3 ms
+and attention 54.0 ms, so attention's flips have been the larger half of the
+step's improvement and GEMM's share ROSE from 48.3 to 57.7 percent.
+
+### 21.2 The ceiling each component implies, which is the sentence that matters
+
+GEMM does 1.5180 TFLOP per step (two flops per product step, the twelve LM
+call shapes at their per-step counts). In 118.18 ms that is **12.84 TFLOP/s,
+38.3 percent of the 33.5 TFLOP/s contract ceiling** of section 3.2. On
+2026-09-11 the same arithmetic read 10.68 TFLOP/s and 31.9 percent, so
+`kpack_hg` and the wait removal moved the rate by a fifth.
+
+- **GEMM at its contract ceiling: 45.31 ms, which takes 72.87 ms off the step,
+  35.2 percent.** That is the absolute bound and it is not reachable.
+- GEMM at 60 to 70 percent of the ceiling, which is what section 3.2 bounds a
+  clean SIMT rewrite at: 75.5 to 64.7 ms, taking **42.7 to 53.5 ms off the
+  step, 20.6 to 25.8 percent**.
+- Attention halved would take 30.1 ms off the step, 14.5 percent.
+- Everything that is neither, halved, would take 13.8 ms off, 6.7 percent.
+
+So GEMM is both the largest component and the one with the largest measured
+headroom, and no other single component can be worth more than about 15 percent
+even if it went to zero. **The lane does not stand down.**
+
+### 21.3 Where GEMM's own time is NOT evenly spread, and this is new
+
+Section 20.4 and `lane/attention-speed` 22.6 read "no dominant cell" off the
+2026-09-11 leg. At this commit the leaves have separated by RATE, and that is a
+different reading:
+
+| kind | ms | TFLOP/s |
+|---|---:|---:|
+| `proj_fwd` / `proj_dA` / `proj_dB` | 11.83 / 11.79 / 11.43 | **9.80 / 9.83 / 10.14** |
+| `gateup_fwd` / `_dA` / `_dB` | 10.29 / 12.02 / 11.89 | 15.03 / 12.87 / 13.00 |
+| `down_fwd` / `_dA` / `_dB` | 6.02 / 5.14 / 5.97 | 12.84 / 15.05 / 12.94 |
+| `head_fwd` / `_dA` / `_dB` | 10.49 / 11.30 / 10.01 | 15.07 / 13.99 / 15.79 |
+
+The three `proj_*` kinds are **35.05 ms at about 9.9 TFLOP/s while the other
+nine run 12.8 to 15.8**. They are 144 of the step's GEMM calls, the shape is
+2048 x 768 x 768, and the gap is the largest one left inside GEMM: at 13.0
+TFLOP/s they would be 26.8 ms and at 15.0 they would be 23.2, i.e. **8.3 to 11.9
+ms of the step, 4.0 to 5.7 percent**, without touching the kernel's arithmetic.
+
+**THE CAUSE IS NOT ISOLATED AND IS NOT CLAIMED HERE.** Section 2 recorded these
+calls as running the `ksplit` one-leaf path rather than the TUNED 128 plan the
+kernel-body row serves, and attributed their 9.1 TFLOP/s to a fold launch on a
+one-leaf group plus 576 blocks over 132 SMs in about five ragged rounds. That
+would explain why `kpack_hg` did not move them. But the launch and sync counters
+in this leg's own `breakdown.tsv` are not usable as a check (`gemm.down_dA`
+reads 0.0 launches for 12 calls, `gemm.head_fwd` 0.0 for one, which cannot be
+literally true), so the attribution is a HYPOTHESIS. What settles it is the
+price harness's `PHASE` lines, which give `alloc_ms`, `group_ms` and `fold_ms`
+per call and already exist: `tools/gemm_kernel_leg.sh`, one H100 hour, no new
+code. That is the next NVIDIA measurement and it should be taken before any arm.
+
+### 21.4 The AMD wave-mode lever is DEAD, and the negative found something larger
+
+Evidence: `bench/results/e1g/2026-09-17_205022-amd-mi300x-hotaisle-seam-mode-probe-b/remote/seam-probe/`
+(Hot Aisle MI300X VF, gfx942, `column=amd` written by the wrapper before the
+build, build and run in 7 s, no dataset, VM 7a1b7c34 deleted and verified gone
+1 s after, $0.10).
+
+```
+SEAM_HASH lane=shipped  62a6b5621e27c707 -> rtf
+SEAM_HASH lane=fma      aed7498f99e07f49 -> none
+SEAM_HASH lane=modeftz  eb76eb53d65e0007 -> NONE OF THE THREE
+SEAM_MODE column=amd mode_set=True boundary=00000000
+```
+
+Setting `MODE.FP_DENORM` does NOT give round-then-flush. At the literal boundary
+triple the mode-flushed FMA returns `00000000` where the contract requires
+`00800000`. **So the eight-instructions-to-one lever of section 20.1 is a
+DEFECT, not an optimization, and that question is closed.** It cost one minute
+of MI300X to close, which is what the probe was for.
+
+The negative carries the larger finding. `eb76eb53d65e0007` is EXACTLY the hash
+NVIDIA's `fma.rn.ftz` lane produced on 2026-09-13
+(`bench/results/e1g/2026-09-13_161417-nvidia-h100-seam-probe/remote/seam-probe/seam_probe.log`
+line 7). **AMD's wave-mode flush and NVIDIA's hardware ftz FMA agree bit for bit
+over all 262,144 triples.** Section 14.5 said the three native FMAs disagree,
+which is true of the DEFAULTS; what it could not see is that two of the three
+converge on ONE semantics once AMD's mode register is set, and that the odd
+column is Apple (`f269fc70e5625987`, flush-before-round, section 19).
+
+That is a CONTRACT observation and it is Andrew's, not this lane's: a
+one-instruction seam exists on NVIDIA and AMD and computes the same bits on
+both, and what stands between it and a doubled ceiling is Apple and the
+315 boundary triples. **No contract change is proposed here.**
+
+### 21.5 What AMD is still owed
+
+The seam lever is dead but AMD's SPEED is still unmeasured at this commit. Its
+kernel-body row has been 1 since 18.4, its step was 1.198 s against the H100's
+0.232, and no step itemization has ever been taken on that column. The same
+instrument used in 21.1 is vendor-agnostic and derives its own column, so an
+AMD itemization is one `tools/step_breakdown_leg.sh` run on an MI300X with
+`MOJOLEARN_STAGE_STRICT=1`. That is the AMD measurement worth buying next, and
+it is a measurement, not an arm.
