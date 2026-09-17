@@ -35,7 +35,7 @@
 #   --no-bincache        build from source
 #   --envcache           restore and upload .pixi/envs from R2 (default OFF: measured
 #                        slower than a locked install on RunPod, 37 s against 12 s)
-#   --max-pods N         refuse when N mojolearn-cpu pods are live (default 2)
+#   --max-pods N         refuse when N mojolearn-cpu pods are live (default 8, MOJOLEARN_RUNPOD_CPU_MAX_PODS)
 #   --rent               actually create the pod. Without it: a dry run that
 #                        creates nothing and costs nothing.
 #
