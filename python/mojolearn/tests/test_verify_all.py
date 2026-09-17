@@ -286,6 +286,10 @@ def _doc(vendor, device, device_class, cells, commit="a809d92f2", verdict="VERIF
                             device_class=device_class, device=device, cpu_model="cpu-x",
                             platform="p", python="3.14.6"),
                 bindings=[dict(module="m", sha256="d" * 64, size=1)],
+                verification_contract=dict(harness_sha256='e' * 64,
+                    fixtures={r['fixture']: {'X': 'input'} for r in rows},
+                    heldout={r['fixture']: {'X': 'held'} for r in rows},
+                    protocols={r['part']: {'version': 1} for r in rows}),
                 cells=rows)
 
 

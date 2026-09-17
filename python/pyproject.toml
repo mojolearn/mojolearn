@@ -247,6 +247,7 @@ mojolearn = [
     # portable GPU-trained models with their manifest (docs/VERIFY.md).
     "verify_reference/*.json",
     "verify_reference/models/*",
+    "verify_reference/ctr_models/*.npz",
     "cuda/*.so", "cuda/identical/*.so", "cuda/deterministic/*.so", "cuda/.libs/*",
     "cuda/sm_*/*.so", "cuda/sm_*/identical/*.so", "cuda/sm_*/deterministic/*.so", "cuda/sm_*/.libs/*",
     "hip/*.so", "hip/identical/*.so", "hip/deterministic/*.so", "hip/.libs/*",

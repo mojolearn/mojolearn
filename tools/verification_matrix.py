@@ -190,6 +190,37 @@ def part_value(cell, part):
     return tuple(vals)
 
 
+def stable_digest(cell, part):
+    """A repeated, stable digest; refusal/N/A/one repeat is not evidence."""
+    if not isinstance(cell, dict):
+        return None
+    verdict = cell.get("verdict" if part == "train" else part + "_verdict")
+    values = part_value(cell, part)
+    if (verdict != "STABLE" or not values or len(values) < 2
+            or not all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{16}", v) for v in values)
+            or len(set(values)) != 1):
+        return None
+    return values[0]
+
+
+def negative_control_moves(cell, clean, part):
+    """Require a working clean arm and actual changed bytes or a failed assertion."""
+    baseline = stable_digest(clean, part)
+    if baseline is None:
+        return False
+    changed = stable_digest(cell, part)
+    if changed is not None:
+        return changed != baseline
+    values = part_value(cell, part)
+    verdict = cell.get("verdict" if part == "train" else part + "_verdict", "") if isinstance(cell, dict) else ""
+    if verdict not in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
+        return False
+    # An explicit assertion failure is evidence, an exception or N/A is not.
+    return bool(values and len(values) >= 2 and all(isinstance(v, str) and
+        (re.fullmatch(r"[0-9a-f]{16}", v) or v.startswith(("BATCH_MOVED:", "RLPAIR_MOVED:", "RELOAD-MOVED:")))
+        for v in values) and any(v != baseline for v in values))
+
+
 def read_columns(verify_reference):
     """Every identity_break column committed under bench/results/."""
     cols = []
@@ -205,7 +236,7 @@ def read_columns(verify_reference):
         sab, kind = sabotage_signals(j, rel)
         cols.append(dict(
             rel=rel, dirn=os.path.dirname(rel), root=record_root(rel),
-            vendor=j.get("vendor") or "", commit=(j.get("commit") or "")[:12],
+            vendor=j.get("vendor") or "", commit=(j.get("commit") or ""), record=j,
             cls=verify_reference.device_class(j.get("vendor"), path),
             sabotage=sab, sab_kind=kind,
             admit=verify_reference.admit(j, path),
@@ -260,18 +291,16 @@ def sabotage_moves(cols):
         if not partners:
             unpaired.append(s["rel"])
             continue
-        base = partners[0]
-        same_commit = base["commit"] == s["commit"] and bool(s["commit"])
         for key, cell in s["cells"].items():
-            other = base["cells"].get(key)
-            if other is None:
-                continue
             lane = key.split("/", 1)[0]
             for part in PARTS:
-                a, b = part_value(cell, part), part_value(other, part)
-                if a and b and a != b:
-                    moves[lane][s["sab_kind"]].append(
-                        (part, s["rel"], base["rel"], same_commit))
+                for base in partners:
+                    other = base["cells"].get(key)
+                    if negative_control_moves(cell, other, part):
+                        same_commit = bool(s["commit"] and base["commit"] == s["commit"])
+                        moves[lane][s["sab_kind"]].append(
+                            (part, s["rel"], base["rel"], same_commit))
+                        break
     return moves, unpaired
 
 

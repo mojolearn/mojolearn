@@ -146,3 +146,55 @@ def test_reference_builder_can_include_extended_checks(tmp_path, monkeypatch):
     changed = vr.build_table([str(path)], h, str(tmp_path), parts=vr.PARTS+vr.OPTIONAL_PARTS)
     assert 'batchgrad' not in changed['cells']['x/base']
     assert 'rlpair' in changed['cells']['x/base']
+
+
+def test_historical_evidence_is_exposed_without_release_certification():
+    h = va.load_harness()
+    report = coverage.inventory(h, vr.load_table(), 'cpu')
+    assert report['evidence_provenance']['release_qualified'] is False
+    assert report['evidence_provenance']['sources']
+    for row in report['entries']:
+        assert row['evidence_summary']['release_qualified'] is False
+    for lane in report['lanes'].values():
+        assert 'historical_evidence' in lane
+        assert lane['release_qualified'] is False
+    assert 'not qualification of this wheel' in coverage.format_human(report)
+
+
+@pytest.mark.parametrize('change', ['missing', 'inputs', 'heldout', 'protocol', 'harness'])
+def test_equal_hashes_do_not_hide_incomparable_experiments(change):
+    import copy
+    def document(vendor):
+        return dict(format='mojolearn.verify-all-report.v1', device=dict(vendor=vendor),
+            cells=[dict(lane='x', fixture='base', part='batch', value='a'*16, state='IDENTICAL')],
+            verification_contract=dict(harness_sha256='b'*64,
+                fixtures={'base': {'X': 'input'}}, heldout={'base': {'X': 'held'}},
+                protocols={'batch': {'alone': 16}}))
+    a, b = document('cuda'), document('hip')
+    assert va.compare_documents(a, b)['verdict'] == 'AGREE'
+    if change == 'missing':
+        b.pop('verification_contract')
+    else:
+        key = dict(inputs='fixtures', heldout='heldout', protocol='protocols', harness='harness_sha256')[change]
+        b['verification_contract'][key] = {} if key != 'harness_sha256' else 'c'*64
+    result = va.compare_documents(a, b)
+    assert result['exit'] == va.EXIT_CANNOT_RUN and result['agree'] == 0
+    assert result['verdict'] == 'INCOMPARABLE' and result['context_problems']
+
+
+def test_bundled_ctr_models_are_complete_and_digest_checked(tmp_path):
+    from pathlib import Path
+    from mojolearn import _verification_ctr_models as ctr
+    h = va.load_harness()
+    assert len(ctr.MODEL_SHA256) == len(h.FIXTURES) * 2
+    assert set(("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")) <= set(va.host_surface().public_reference_lanes())
+    for lane in ('gbdt-categorical-ctr-tables', 'gbdt-tensor-ctr-tables'):
+        for fixture in h.FIXTURES:
+            assert Path(ctr.resolve_model(lane, fixture)).is_file()
+    target = tmp_path / 'verify_reference/ctr_models'
+    target.mkdir(parents=True)
+    (target/'gbdt-categorical-ctr-tables.base.npz').write_bytes(b'corrupt')
+    with pytest.raises(RuntimeError, match='digest mismatch'):
+        ctr.resolve_model('gbdt-categorical-ctr-tables', 'base', tmp_path)
+    with pytest.raises(RuntimeError, match='missing verification'):
+        ctr.resolve_model('gbdt-tensor-ctr-tables', 'base', tmp_path)

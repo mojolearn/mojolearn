@@ -1030,7 +1030,7 @@ FAMILIES = (
             "forest_host_numeric_mode", "forest_host_vendor", "forest_host_column",
             "forest_host_sabotage", "forest_host_rf_predict_proba",
             "forest_host_rf_predict_reg", "forest_host_et_predict",
-            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid",
+            "forest_host_gbdt_predict", "forest_host_gbdt_sigmoid", "forest_host_gbdt_sigmoid_pair",
             "forest_host_gbdt_expand_ctr", "forest_host_gbdt_ctr_sabotage",
             "all_finite_f32", "all_finite_f64", "cast_f64_to_f32",
             "argmax_rows_f32", "argmax_rows_f64", "gather_i64", "gather_f64",
@@ -1946,7 +1946,7 @@ FAMILIES = (
             "gbdt_host_numeric_mode", "gbdt_host_vendor", "gbdt_host_column",
             "gbdt_host_sabotage", "gbdt_vendor", "gbdt_numeric_mode",
             "gbdt_fit", "gbdt_predict", "gbdt_predict_multi", "gbdt_model_dim",
-            "gbdt_sigmoid", "gbdt_binary_probabilities", "gbdt_binary_classes",
+            "gbdt_sigmoid", "gbdt_sigmoid_pair", "gbdt_binary_probabilities", "gbdt_binary_classes",
             "gbdt_fit_ordered_rmse", "gbdt_fit_two_level_feature_freq",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
@@ -2520,8 +2520,10 @@ PUBLIC_PENDING_LANES = {
     "gbdt-yeti-rank": "unwatched",
     "arima-exog": "unwatched",
     "arima-exog-seasonal": "unwatched",
-    "gbdt-categorical-ctr-tables": "unwatched",
-    "gbdt-tensor-ctr-tables": "unwatched",
+    # CTR saved-model lanes were promoted after all nine fixtures passed twice
+    # from an installed CPU development wheel with bundled, digest-checked models.
+    # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
+    # inference replay, not CPU CTR training or final release qualification.
     "kmeans-sqrt": "own record",
     "embedding": "own record",
     "embedding-sort": "own record",
