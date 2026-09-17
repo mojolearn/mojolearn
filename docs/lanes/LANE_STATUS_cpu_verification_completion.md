@@ -199,3 +199,16 @@ complete, repeated and input/protocol witnessed. The five new Mac records
 are under `identity_break/2026-09-17_cpu-reference-repair/`. Admission audit
 and 374 passing tests are retained in probe `reference-repairs/`. Installed
 replays of the twelve low-bit lanes and the 29 repairs are next.
+
+
+## Native property exit classification
+
+The installed twelve-low-bit replay passed: 396 IDENTICAL, 144 N/A, zero
+DIVERGENT/OWED/REFUSED. The repaired-29 replay is still active. Linux native
+controls expose DBSCAN unchanged all-noise outputs and an expected refusal
+lane (kmeans-cosine); neither counts as a successful native numerical fault.
+Two byte-LM inference arms do change training bytes on all nine fixtures and
+raise repeated RLPAIR_MOVED. The original exit-one evaluator missed this
+valid evidence; the corrected evaluator accepts only explicit repeated
+numerical mismatches. Original and reevaluated records remain separate in
+probe native-property-exit-recheck; both real records validate, 54 tests pass.

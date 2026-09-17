@@ -45,15 +45,42 @@ def evaluate_pair(clean, sabotage, lane, fixtures):
 
 
 def expected_oracle_failure(record):
-    """Exit one is expected only for repeated, explicit numerical failures."""
+    """Exit one is expected only for repeated training or property failures.
+
+    Native faults can break an independent batch/RL-pair comparison while
+    returning stable wrong training bytes. Refusals and repeat instability
+    remain failures of the control run, not successful negative evidence.
+    """
     cells = record.get('cells', {})
-    return bool(cells and all(
-        c.get('verdict') == 'DIVERGENT'
-        and len(c.get('hashes', [])) >= 2
-        and len(set(c['hashes'])) == 1
-        and len(c.get('oracle_errors', [])) == len(c['hashes'])
-        and all(c['oracle_errors'])
-        for c in cells.values()))
+    observed = False
+    mismatch_kinds = {part: 'BATCH_MOVED' for part in ('batch', 'batchgrad', 'batchscale', 'ragged', 'stepfull')}
+    mismatch_kinds['rlpair'] = 'RLPAIR_MOVED'
+    for cell in cells.values():
+        hashes = cell.get('hashes', [])
+        if (not isinstance(hashes, list) or len(hashes) < 2
+                or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1):
+            return False
+        if any(value for field, value in cell.items() if field == 'error' or field.endswith('_error')):
+            return False
+        if cell.get('verdict') == 'DIVERGENT':
+            errors = cell.get('oracle_errors', [])
+            if len(errors) != len(hashes) or not all(errors):
+                return False
+            observed = True
+        elif cell.get('verdict') != 'STABLE' or cell.get('oracle_errors'):
+            return False
+        for field, verdict in cell.items():
+            if not field.endswith('_verdict') or verdict in ('STABLE', 'N/A'):
+                continue
+            part = field[:-len('_verdict')]
+            values = cell.get(part, [])
+            if (verdict != mismatch_kinds.get(part) or not isinstance(values, list)
+                    or len(values) != len(hashes)
+                    or not all(isinstance(v, str) and v.startswith(verdict + ':') for v in values)
+                    or len(set(values)) != 1):
+                return False
+            observed = True
+    return observed
 
 
 def arm_environment(env, host, sabotage):

@@ -70,6 +70,15 @@ class GateTests(unittest.TestCase):
                 cell['batch_verdict'] = 'REFUSED'
             self.assertEqual(self.column(bad, sabotage=True), 1, mutation)
 
+    def test_native_property_violation_is_not_a_production_pass(self):
+        value = record()
+        value['host']['families']['binding']['sabotage'] = True
+        next(iter(value['cells'].values())).update(
+            rlpair=['RLPAIR_MOVED:measured 0x3ce54c86 vs 0x3ce54c84'] * 2,
+            rlpair_verdict='RLPAIR_MOVED')
+        self.assertEqual(self.column(value), 1)
+        self.assertEqual(self.column(value, sabotage=True), 0)
+
     def test_oracle_shard_exit_is_not_a_general_exit_code_waiver(self):
         for sabotage, code, kind, expected in ((True, 1, 'oracle', 0),
                                               (False, 1, 'oracle', 1),

@@ -79,22 +79,12 @@ def recorded_native_oracle_failure(record):
             or not any(f.get("sabotage") is True for f in (host.get("families") or {}).values())):
         return False
     cells = record.get("cells") or {}
-    failed = False
-    for key, cell in cells.items():
+    for cell in cells.values():
         hashes = cell.get("hashes") or []
         if (not isinstance(hashes, list) or len(hashes) != repeats
                 or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1):
             return False
-        if any(value not in ("STABLE", "N/A") for field, value in cell.items()
-               if field.endswith("_verdict")):
-            return False
-        if cell.get("verdict") == "DIVERGENT":
-            if not expected_oracle_failure(dict(cells={key: cell})):
-                return False
-            failed = True
-        elif cell.get("verdict") != "STABLE" or cell.get("oracle_errors"):
-            return False
-    return failed
+    return expected_oracle_failure(record)
 
 
 def do_readback(args):
@@ -189,7 +179,8 @@ def do_column(args):
             # parts may be N/A; every reported failure stays a failure.
             for field, part_verdict in cell.items():
                 if field.endswith("_verdict"):
-                    need(part_verdict in ("STABLE", "N/A"),
+                    need(part_verdict in ("STABLE", "N/A") or
+                         (oracle_control and part_verdict in ("BATCH_MOVED", "RLPAIR_MOVED")),
                          f"{key}: {field} is {part_verdict}, not STABLE or N/A")
         else:
             need(verdict == "REFUSED", f"{key}: uncovered lane reads {verdict}, not REFUSED; a hash from a lane with no CPU implementation is a routing bug")
