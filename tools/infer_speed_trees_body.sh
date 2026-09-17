@@ -122,14 +122,21 @@ phase_identity() {
     mkdir -p "$OUT/identity"
     AC=$(cat "$R/SHIPPED_COMMIT.txt")
     BC=$(cat "$B/COMMIT")
-    identity_column "$B" before-cuda "$BC" MOJOLEARN_IDENTITY_HOST_INFER=0
-    identity_column "$R" after-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
-    identity_column "$R-sab" sabotage-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
-    identity_column "$B-cpu" before-cpu "$BC" MOJOLEARN_IDENTITY_HOST_INFER=1
-    identity_column "$R-cpu" after-cpu "$AC" MOJOLEARN_IDENTITY_HOST_INFER=1
-    identity_column "$R-cpu" sabotage-cpu "$AC" MOJOLEARN_IDENTITY_HOST_INFER=1 \
-        MOJOLEARN_HOST_DIR="$R-cpu/python/mojolearn/host-sabotage" MOJOLEARN_HOST_ALLOW_SABOTAGE=1 \
-        MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
+    # the CUDA group and the CPU group run side by side: identity is not a
+    # timing, and the box has 16 cores beside the one GPU
+    (
+        identity_column "$B" before-cuda "$BC" MOJOLEARN_IDENTITY_HOST_INFER=0
+        identity_column "$R" after-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+        identity_column "$R-sab" sabotage-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+    ) &
+    (
+        identity_column "$B-cpu" before-cpu "$BC" MOJOLEARN_IDENTITY_HOST_INFER=1
+        identity_column "$R-cpu" after-cpu "$AC" MOJOLEARN_IDENTITY_HOST_INFER=1
+        identity_column "$R-cpu" sabotage-cpu "$AC" MOJOLEARN_IDENTITY_HOST_INFER=1 \
+            MOJOLEARN_HOST_DIR="$R-cpu/python/mojolearn/host-sabotage" MOJOLEARN_HOST_ALLOW_SABOTAGE=1 \
+            MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
+    ) &
+    wait
     cd "$R"
     for pair in "before-cuda after-cuda" "after-cuda sabotage-cuda" "before-cpu after-cpu" "after-cpu sabotage-cpu" "after-cuda after-cpu" "before-cuda before-cpu"; do
         set -- $pair
