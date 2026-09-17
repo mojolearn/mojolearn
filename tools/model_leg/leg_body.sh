@@ -19,11 +19,18 @@
 # KNOBS (all MOJOLEARN_MODEL_LEG_*):
 #   ROOT            the checkout (default /root/mojolearn)
 #   OUT             the record directory (default /root/gemm_leg_out/model-leg)
-#   MODEL           HF repo id or a local directory (default HuggingFaceTB/SmolLM2-360M;
+#   MODEL           the model's repo id (default HuggingFaceTB/SmolLM2-360M;
 #                   TinyLlama/TinyLlama-1.1B-Chat-v1.0 and meta-llama/Llama-3.2-1B
-#                   are the other two named in bench/model/README.md, the last
-#                   needs HF_TOKEN on the box, which no guarded runner passes)
-#   MODEL_DIR       where the files land (default /root/model-leg-models/<slug>, outside the checkout)
+#                   are the other two named in bench/model/README.md). Its last
+#                   path component names the store group models/<name>.
+#   MODEL_DIR       where the STAGED files are (default /root/models/<name>: the
+#                   box path of the store's HOME/models/<name>/* keys, put there by
+#                   tools/stage_from_r2.sh on the Mac BEFORE this body runs,
+#                   DEVIATION 2704). Nothing is downloaded on the box.
+#   ALLOW_HF_DOWNLOAD=1  the runners' --allow-hf-download: when the staged
+#                   directory has no config.json, fetch from Hugging Face on the
+#                   box with a warning naming DEVIATION 2704. Off by default: an
+#                   unstaged model is REFUSED, which is the loud failure.
 #   FORMATS         default float32,bfloat16,int8
 #   MAX_NEW         default 64          RUNS  default 3 (timed runs per prompt)
 #   LABEL           the column label; derived from the device when unset
@@ -43,20 +50,18 @@
 #   VENV            the incumbent's throwaway venv (default /root/.venv-model-leg)
 #   TRANSFORMERS_PIN  e.g. 4.56.2; empty installs the newest and the record pins what ran
 #   SKIP_TORCH=1    no incumbent arm
-#   MODEL_SOURCE_R2 <bucket/prefix>: pull the model files with
-#                   `aws s3 cp --recursive --endpoint-url $R2_ENDPOINT` when
-#                   R2_ENDPOINT, R2_ACCESS_KEY_ID and R2_SECRET_ACCESS_KEY are
-#                   set (bench/model/README.md "The model source"). A documented
-#                   option, not a default; the guarded runners never carry
-#                   those variables to a rented box.
+#
+# No credential ever reaches this body: the store presigns on the Mac and the
+# box verified every staged file against bench/results/dataset_store/manifest.tsv.
 #
 # PHASES, each with its exit code and seconds in status.tsv; a later phase
 # runs even when an earlier one fails, because a red phase is a finding:
 #   detect          vendor, arch, label, device snapshot
 #   build-*         each GPU binding (skipped on a CPU box or with SKIP_BUILD)
 #   build-*_host    each host binding
-#   venv            the incumbent's python: torch found or pinned, transformers, huggingface_hub
-#   fetch-model     the model files (never inside a timing)
+#   venv            the incumbent's python: torch found or pinned, transformers
+#   model           the staged files are present and hashed (never inside a timing);
+#                   REFUSED when not staged unless ALLOW_HF_DOWNLOAD=1
 #   harness         bench/model/harness.py, ours, every format
 #   harness-cpu     the CPU column of this box (CPU_COLUMN_ALSO=1)
 #   torch-twin      bench/model/torch_twin.py, fast and deterministic arms
@@ -78,9 +83,9 @@ PY_OURS=${MOJOLEARN_MODEL_LEG_PYTHON:-pixi run python}
 VENV=${MOJOLEARN_MODEL_LEG_VENV:-/root/.venv-model-leg}
 TRANSFORMERS_PIN=${MOJOLEARN_MODEL_LEG_TRANSFORMERS_PIN:-}
 SKIP_TORCH=${MOJOLEARN_MODEL_LEG_SKIP_TORCH:-0}
-MODEL_SOURCE_R2=${MODEL_SOURCE_R2:-${MOJOLEARN_MODEL_LEG_MODEL_SOURCE_R2:-}}
-SLUG=$(printf '%s' "$MODEL" | sed 's|/|__|g' | tr -c 'A-Za-z0-9_.-' '_')
-MODEL_DIR=${MOJOLEARN_MODEL_LEG_MODEL_DIR:-/root/model-leg-models/$SLUG}
+ALLOW_HF=${MOJOLEARN_MODEL_LEG_ALLOW_HF_DOWNLOAD:-0}
+NAME=$(basename "$MODEL" | tr -c 'A-Za-z0-9_.-' '_')
+MODEL_DIR=${MOJOLEARN_MODEL_LEG_MODEL_DIR:-/root/models/$NAME}
 COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-8}
 # macOS ships no timeout(1); the network steps then run unbounded there
 if ! command -v timeout >/dev/null 2>&1; then timeout() { shift; "$@"; }; fi
@@ -209,29 +214,29 @@ venv() {
         esac
     fi
     if [ -n "$TRANSFORMERS_PIN" ]; then _tf="transformers==$TRANSFORMERS_PIN"; else _tf=transformers; fi
-    timeout 900 "$VENV/bin/python" -m pip install --quiet "$_tf" huggingface_hub safetensors accelerate sentencepiece || return 8
+    _hf=""; [ "$ALLOW_HF" = 1 ] && _hf=huggingface_hub
+    timeout 900 "$VENV/bin/python" -m pip install --quiet "$_tf" safetensors accelerate sentencepiece $_hf || return 8
     "$VENV/bin/python" -m pip freeze > "$OUT/pip_freeze.txt"
     "$VENV/bin/python" -c 'import torch, transformers; print("torch", torch.__version__, "cuda", torch.version.cuda, "hip", getattr(torch.version, "hip", None)); print("transformers", transformers.__version__)'
 }
-if [ "$SKIP_TORCH" != 1 ] || [ ! -d "$MODEL_DIR" ]; then
-    phase venv venv || say "venv FAILED (exit $?): the incumbent arm and the HF fetch need it"
+if [ "$SKIP_TORCH" != 1 ] || [ "$ALLOW_HF" = 1 ]; then
+    phase venv venv || say "venv FAILED (exit $?): the incumbent arm needs it"
 fi
 
-# ---- the model, before any clock ------------------------------------------------
-fetch_model() {
-    mkdir -p "$MODEL_DIR"
+# ---- the model: STAGED from the R2 dataset store before this body ran ----------
+# DEVIATION 2704 (tools/stage_from_r2.sh): the runner staged the store group
+# models/<name> onto this box at /root/models/<name>/, each file verified
+# against bench/results/dataset_store/manifest.tsv, with no credential here.
+# This phase only checks that it happened and hashes what it found; a
+# download on the box is the explicit opt-in below and nothing else.
+model() {
     if [ -f "$MODEL_DIR/config.json" ]; then
-        echo "already on disk: $MODEL_DIR"
-    elif [ -d "$MODEL" ] && [ -f "$MODEL/config.json" ]; then
-        MODEL_DIR=$MODEL
-        echo "local directory: $MODEL_DIR"
-    elif [ -n "$MODEL_SOURCE_R2" ]; then
-        [ -n "${R2_ENDPOINT:-}" ] && [ -n "${R2_ACCESS_KEY_ID:-}" ] && [ -n "${R2_SECRET_ACCESS_KEY:-}" ] \
-            || { echo 'MODEL_SOURCE_R2 is set but R2_ENDPOINT, R2_ACCESS_KEY_ID or R2_SECRET_ACCESS_KEY is not'; return 3; }
-        command -v aws >/dev/null 2>&1 || { echo 'MODEL_SOURCE_R2 needs the aws CLI on this box'; return 3; }
-        AWS_ACCESS_KEY_ID=$R2_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY=$R2_SECRET_ACCESS_KEY AWS_DEFAULT_REGION=auto \
-            timeout 1800 aws s3 cp --recursive "s3://$MODEL_SOURCE_R2" "$MODEL_DIR" --endpoint-url "$R2_ENDPOINT" --only-show-errors || return 4
-    else
+        echo "staged: $MODEL_DIR"
+    elif [ "$ALLOW_HF" = 1 ]; then
+        echo "WARNING: $MODEL_DIR carries no config.json and --allow-hf-download is set: fetching $MODEL"
+        echo "WARNING: from Hugging Face ON THIS BOX, against DEVIATION 2704 (rented boxes stage from R2,"
+        echo "WARNING: never download); this record is not a store-pinned record"
+        mkdir -p "$MODEL_DIR"
         timeout 1800 "$VENV/bin/python" - "$MODEL" "$MODEL_DIR" <<'PY' || return 4
 import os, sys
 from huggingface_hub import snapshot_download
@@ -240,19 +245,30 @@ snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2],
                   token=os.environ.get("HF_TOKEN") or None)
 print("fetched", sys.argv[1], "into", sys.argv[2])
 PY
+        echo "model_source=huggingface-on-box (DEVIATION 2704 opt-in)"
+    else
+        echo "REFUSED: $MODEL_DIR carries no config.json. The model group models/$NAME was not staged"
+        echo "REFUSED: from the R2 dataset store (tools/stage_from_r2.sh, DEVIATION 2704); read the runner's"
+        echo "REFUSED: stage.log. A download on a rented box is --allow-hf-download only."
+        return 2
     fi
     [ -f "$MODEL_DIR/config.json" ] || { echo "no config.json under $MODEL_DIR"; return 2; }
     (cd "$MODEL_DIR" && ls -l && { sha256sum ./* 2>/dev/null || shasum -a 256 ./*; }) > "$OUT/model_files.sha256" 2>&1
     echo "model_dir=$MODEL_DIR"
 }
-phase fetch-model fetch_model || say "fetch-model FAILED (exit $?)"
-_md=$(sed -n 's/^model_dir=//p' "$OUT/logs/fetch-model.log" | tail -1)
-[ -n "$_md" ] && MODEL_DIR=$_md
+phase model model || say "model FAILED (exit $?): not staged"
+if ! grep -q '^model_dir=' "$OUT/logs/model.log"; then
+    say "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ) refused=model-not-staged"
+    cat "$OUT/logs/model.log"
+    echo refused > "$OUT/done.txt"
+    exit 2
+fi
+grep -q 'model_source=huggingface-on-box' "$OUT/logs/model.log" && say "model_source=huggingface-on-box (DEVIATION 2704 opt-in, not store-pinned)"
 say "model_dir=$MODEL_DIR"
 
 # ---- ours -----------------------------------------------------------------------
 phase harness env MOJOLEARN_NUMERIC_MODE=identical $PY_OURS bench/model/harness.py \
-    --model "$MODEL_DIR" --no-download --formats "$FORMATS" --prompts bench/model/prompts.txt \
+    --model "$MODEL_DIR" --formats "$FORMATS" --prompts bench/model/prompts.txt \
     --max-new "$MAX_NEW" --runs "$RUNS" --column "$LABEL" --out "$OUT/ours.$LABEL.json"
 say "harness_exit=$(awk -F'\t' '$1=="harness"{print $2}' "$STATUS")"
 grep -E '^cells=' "$OUT/logs/harness.log" >> "$G" 2>/dev/null
@@ -265,7 +281,7 @@ if [ "$CPU_ALSO" = 1 ] && [ "$VENDOR" != cpu ]; then
     rm -rf "$CPU_PKG/mojolearn/identical" "$CPU_PKG/mojolearn/fast" "$CPU_PKG/mojolearn/deterministic" "$CPU_PKG/mojolearn/host"
     find "$CPU_PKG/mojolearn" \( -name '*.so' -o -name '*.dylib' -o -name '__pycache__' \) -prune -exec rm -rf {} + 2>/dev/null
     phase harness-cpu env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$CPU_PKG" MOJOLEARN_HOST_DIR="$ROOT/python/mojolearn/host" \
-        $PY_OURS bench/model/harness.py --model "$MODEL_DIR" --no-download --formats "$FORMATS" \
+        $PY_OURS bench/model/harness.py --model "$MODEL_DIR" --formats "$FORMATS" \
         --prompts bench/model/prompts.txt --max-new "$MAX_NEW" --runs "$RUNS" --device cpu \
         --column "$LABEL-cpu" --out "$OUT/ours.$LABEL-cpu.json"
     say "harness_cpu_exit=$(awk -F'\t' '$1=="harness-cpu"{print $2}' "$STATUS")"
