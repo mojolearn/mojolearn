@@ -64,6 +64,7 @@ TABLE_NAME = "table.json"
 #: is not free: no row of an EXISTING table carries a value for it, so the
 #: change only lands together with a regenerated table.
 PARTS = ("train", "infer", "model", "batch", "stepfull")
+OPTIONAL_PARTS = ("batchgrad", "batchscale", "ragged", "rlpair")
 CLASSES = ("apple", "nvidia", "amd", "cpu")
 
 #: what `mojolearn.vendor()` reads back, as a device class of the table
@@ -181,6 +182,8 @@ def judge(value, ent, error=None):
         return DIVERGENT, "this box gave two different hashes for the same fit (MOVED)"
     if value.startswith("BATCH_MOVED"):
         return DIVERGENT, "batch invariance failed on this box: " + value[:300]
+    if value.startswith("RLPAIR_MOVED"):
+        return DIVERGENT, "sampler/replay or continuous batching failed on this box: " + value[:300]
     if value.startswith("RELOAD-MOVED"):
         return DIVERGENT, "the saved model predicts differently from the model in memory"
     if ent is None:
@@ -286,11 +289,15 @@ def _part_value(cell, part):
     return v
 
 
-def build_table(record_paths, harness, repo_root, lanes=None, log=None):
+def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=None):
     """The table dict from the column JSONs at `record_paths`. `harness` is
     the imported identity_break module: its fixtures decide which columns
     hashed the current input bytes, and its LANES decide which cells are
     kept. `repo_root` is the checkout whose git history dates the commits."""
+    parts = tuple(PARTS if parts is None else parts)
+    unknown = set(parts) - set(PARTS + OPTIONAL_PARTS)
+    if unknown:
+        raise ValueError(f"unknown reference parts: {sorted(unknown)}")
     log = log or (lambda s: None)
     lanes = set(lanes if lanes is not None else harness.LANES)
     want_fix = {f: dict(X=harness._h(X), y_clf=harness._h(yc), y_reg=harness._h(yr))
@@ -336,7 +343,13 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None):
                 continue
             if lane in revs and have_revs.get(lane) != revs[lane]:
                 continue
-            for part in PARTS:
+            for part in parts:
+                if part in OPTIONAL_PARTS:
+                    expected = (harness._rlpair_protocol() if part == "rlpair" else
+                                harness._part_protocol(part, harness.BATCH_ALONE))
+                    # A different split/length protocol is a different claim.
+                    if j.get(f"{part}_protocol") != expected:
+                        continue
                 value = _part_value(cell, part)
                 if value is None:
                     continue

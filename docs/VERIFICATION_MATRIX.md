@@ -26,9 +26,9 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **214** (164 single-device, 50 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **201**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **121** of 201.
+- Lanes: **215** (165 single-device, 50 `par-*` multi-GPU drivers).
+- Source public API entries enumerated from the public API: **202**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **121** of 202.
 - Source public API entries with NO IDENTITY LANE AT ALL: **5**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -37,28 +37,28 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 189 | 12 |
-| cpu verifier | 158 | 43 |
-| sabotage seen to move a build | 122 | 79 |
-| batch part or named n/a | 194 | 7 |
+| gpu column | 189 | 13 |
+| cpu verifier | 159 | 43 |
+| sabotage seen to move a build | 122 | 80 |
+| batch part or named n/a | 195 | 7 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 194 | 20 |
-| gpu column on all three classes | 171 | 43 |
-| cpu verifier declared | 175 | 39 |
-| sabotage seen to move a build | 126 | 88 |
-| batch part or named n/a | 214 | 0 |
-| ALL FOUR | 125 | 89 |
+| gpu column (any class) | 194 | 21 |
+| gpu column on all three classes | 171 | 44 |
+| cpu verifier declared | 176 | 39 |
+| sabotage seen to move a build | 126 | 89 |
+| batch part or named n/a | 215 | 0 |
+| ALL FOUR | 125 | 90 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
 | seen(build) | 126 | a sabotage BUILD moved the bytes; a real negative control |
-| seen(harness) | 6 | only the harness batch switch moved; the probe can fail, the build is unproven |
+| seen(harness) | 7 | only the harness batch switch moved; the probe can fail, the build is unproven |
 | declared | 46 | the family declares a define; no committed pair moves this lane |
 | none | 36 | no define reaches the lane and nothing has moved it |
 
@@ -284,6 +284,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `resample.bootstrap` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `resample.monte_carlo_integrate` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `resample.permutation_test` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `select_d` | 1 |  | training | seen(harness) | part | NO |
 | `tokenizer.BpeVocabularyTrainer` | 1 |  |  | none | n/a | NO |
 | `tokenizer.GPT2Tokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.TrainedBpeVocabulary` | **0** |  |  |  |  | NO |
@@ -511,6 +512,7 @@ A blank cell means no lane of this algorithm has that kind.
 | ridge-no-intercept | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | samba | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | samba-untied-dropout-accum | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
+| select-d | - | training | seen(harness) | `bench/results/public-verification-probe/2026-09-17/select-d-batch-sabotage.json` | part | NO |
 | spectral | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | spectral-precomputed | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | standard-scaler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
@@ -530,9 +532,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 ## Lanes missing each kind, by name
 
-**No GPU column at all: 20**
+**No GPU column at all: 21**
 
-> arima-exog, arima-exog-seasonal, bpe-trainer, cross-val-folds, gbdt-adapter-score-weighted, metrics-fowlkes-mallows, metrics-homogeneity-completeness, ordered-gradient-sum, par-boosting-clf, par-boosting-reg, par-cd-elasticnet, par-forest-et-clf, par-forest-reg, par-gram-ols, par-gram-pca, par-gram-tsvd, par-queries-nn, par-scaler-minmax, par-svm-svr, rf-score-weighted
+> arima-exog, arima-exog-seasonal, bpe-trainer, cross-val-folds, gbdt-adapter-score-weighted, metrics-fowlkes-mallows, metrics-homogeneity-completeness, ordered-gradient-sum, par-boosting-clf, par-boosting-reg, par-cd-elasticnet, par-forest-et-clf, par-forest-reg, par-gram-ols, par-gram-pca, par-gram-tsvd, par-queries-nn, par-scaler-minmax, par-svm-svr, rf-score-weighted, select-d
 
 **GPU column on fewer than three classes: 23**
 
@@ -542,9 +544,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-scaler-minmax, par-svm, par-svm-svr
 
-**Sabotage not seen to move a build: 88**
+**Sabotage not seen to move a build: 89**
 
-> arima-exog, arima-exog-seasonal, bpe-trainer, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, cross-entropy-arms, cross-val, cross-val-folds, et-clf, et-clf-entropy-bestfirst, et-reg, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-adapter-score-weighted, gbdt-depthwise, gbdt-exact-mae, gbdt-lossguide, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-nan-modes, gbdt-onevsall, gbdt-pair-logit, gbdt-parametric-losses, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-yeti-rank, metrics-homogeneity-completeness, optim-adam-clip, optim-sgd, ordered-gradient-sum, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, rf-score-weighted, training-primitives
+> arima-exog, arima-exog-seasonal, bpe-trainer, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, cross-entropy-arms, cross-val, cross-val-folds, et-clf, et-clf-entropy-bestfirst, et-reg, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-adapter-score-weighted, gbdt-depthwise, gbdt-exact-mae, gbdt-lossguide, gbdt-lossguide-newtoncosine, gbdt-multiclass, gbdt-nan-modes, gbdt-onevsall, gbdt-pair-logit, gbdt-parametric-losses, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-yeti-rank, metrics-homogeneity-completeness, optim-adam-clip, optim-sgd, ordered-gradient-sum, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, rf-score-weighted, select-d, training-primitives
 
 **Batch undeclared: 0**
 
@@ -558,5 +560,5 @@ tier switches, result containers, option lists and the caller-owned state
 containers a block returns from `allocate_state`, whose buffers are hashed
 through their block's own lanes.
 
-> `Array`, `Mamba1State`, `Mamba2State`, `Mamba3State`, `TransformerState`, `__version__`, `gpu_arch`, `gpu_arch_how`, `linalg.PROFILE`, `linalg.PROFILE_FAMILY`, `linalg.PROFILE_VERSION`, `linalg.numeric_mode`, `linalg.profile`, `linalg.require_identical`, `mamba.Mamba1State`, `mamba.Mamba2State`, `mamba.Mamba3State`, `numeric_mode`, `resample.ALTERNATIVES`, `resample.BootstrapResult`, `resample.INTEGRANDS`, `resample.METHODS`, `resample.MonteCarloResult`, `resample.PermutationTestResult`, `resample.STATISTICS`, `select_d`, `set_numeric_mode`, `training.numeric_mode_used`, `training.vendor_used`, `transformer.TransformerState`, `vendor`
+> `Array`, `Mamba1State`, `Mamba2State`, `Mamba3State`, `TransformerState`, `__version__`, `gpu_arch`, `gpu_arch_how`, `linalg.PROFILE`, `linalg.PROFILE_FAMILY`, `linalg.PROFILE_VERSION`, `linalg.numeric_mode`, `linalg.profile`, `linalg.require_identical`, `mamba.Mamba1State`, `mamba.Mamba2State`, `mamba.Mamba3State`, `numeric_mode`, `resample.ALTERNATIVES`, `resample.BootstrapResult`, `resample.INTEGRANDS`, `resample.METHODS`, `resample.MonteCarloResult`, `resample.PermutationTestResult`, `resample.STATISTICS`, `set_numeric_mode`, `training.numeric_mode_used`, `training.vendor_used`, `transformer.TransformerState`, `vendor`
 

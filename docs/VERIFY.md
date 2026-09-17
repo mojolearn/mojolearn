@@ -1,15 +1,58 @@
 # Verify the identity claims on your own machine
 
-mojolearn claims three things under the IDENTICAL tier: the same fit gives
-the same bits on Apple, NVIDIA, AMD and CPU; a row's answer does not depend
-on which other rows were in the call (batch invariance); and a model trained
-on a GPU predicts the same bits wherever it is loaded. One command checks
-all three on the machine you installed on.
+This page describes the **0.8.7 release candidate**, including commands that
+are not in older published wheels. Source coverage and a development-wheel
+check do not qualify the final PyPI release.
+
+Under the IDENTICAL tier, verification compares fixed fixtures with recorded
+hashes and checks applicable local contracts, including batch invariance:
+the same row must retain its output bits when its batch neighbors change.
+A pass covers the selected fixtures, routes and properties; it does not prove
+every input, parameter combination or GPU generation.
+
+Inspect the installed package's scope before running the checks:
 
 ```sh
-pip install mojolearn
-python -m mojolearn verify --all
+python -m mojolearn verify --coverage
+python -m mojolearn verify --coverage --json-out coverage.json
+python -m mojolearn verify --all --json-out verification.json
 ```
+
+The inventory maps **all 246 algorithms and variants from the MLSys appendix**
+to lanes or named alternative gates. It also lists every additional registered
+lane, so newer features cannot disappear behind the historical count. Entries
+are not distinct Python classes and mappings are not execution certificates.
+For every lane the inventory shows CPU availability, withheld-reference reasons,
+batch applicability and reference-fixture counts. It executes no algorithms.
+
+`--all` runs standard whole/individual/split/prefix batch checks where declared,
+and the applicable step-versus-full sequence checks. For the additional gradient,
+batch-size, ragged-batch and sampler/replay properties, opt in explicitly (these cost more work):
+
+```sh
+python -m mojolearn verify --batch-checks --lanes ols --fixtures base --json-out batches.json
+```
+
+The additional probes reuse each fitted model. A cell's `local_check: passed`
+means its local equality assertions passed, not that it matched a trusted hash.
+Without a usable reference it remains `OWED`, and the overall result is nonzero.
+The newly exposed optional probes do not yet have bundled reference hashes;
+their local checks can pass while reference comparison remains OWED.
+Per-property results, including batch results, appear in both the human report
+and JSON. A global statistic, corpus-wide vocabulary trainer, or fixed fitted
+membership table has a stated reason where per-row batch invariance is inapplicable.
+
+Missing reference parts, failed/refused parts, and withheld lanes in a full
+request prevent an overall `VERIFIED` result. Explicit `--lanes` requests can
+exercise pending declared CPU routes; they are not silently promoted into the
+default qualified set. A successful explicit subset is only that subset.
+BPE training and fold construction also run on CPU; they currently owe reference
+hashes. Saved-model host APIs still have dedicated gates and portable-model
+checks; the inventory does not claim full per-API wheel qualification for them.
+
+The appendix's “seasonal-difference selection” entry maps to `select_d`, which
+chooses ordinary order `d` with seasonal order `D` supplied by the caller.
+Automatic selection of seasonal `D` is not implemented.
 
 No repository, no dataset, no network and no other machine-learning library is needed. The
 command selects the IDENTICAL tier itself when `MOJOLEARN_NUMERIC_MODE` is
@@ -36,7 +79,7 @@ requires equal values.
   per constructor value that selects a different numeric path, the linalg
   and metrics functions, and the multi-GPU drivers on one device).
 - **On a CPU-only install** the public CPU reference lanes run
-  (`host_surface.public_reference_lanes()`, 122 of them), fitted inside the
+  (`host_surface.public_reference_lanes()`; use `--coverage` for the current count), fitted inside the
   verifier's reference scope. The list is DERIVED, not hand-written: every
   lane with a CPU training path that a release record covers and the shipped
   table carries a reference for, less the `par-*` multi-GPU drivers and the
@@ -49,11 +92,6 @@ requires equal values.
   embedding's transform, the pinned GEMM and the Cholesky solve, the KPSS
   test, the bootstrap, the permutation test and Monte Carlo integration, and
   tokenizer, which loads the synthetic vocabulary mojolearn trains itself.
-  It was 9 lanes until 2026-09-16, then 39 when thirty more were measured
-  IDENTICAL against the Apple, NVIDIA and AMD columns, and then 122 when
-  every host family began shipping (lane/ship-cpu-host-families) and 83 lanes
-  stopped being unreachable on the machine you installed on. Each of the 83
-  was watched reading IDENTICAL on a CPU-only install before it was added.
 - **Portable models** run on every install: small models trained on a GPU
   and saved, shipped in `mojolearn/verify_reference/models/` (a random
   forest, a symmetric boosting model, a linear regression and a PCA, 179 KB
@@ -63,7 +101,7 @@ requires equal values.
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
 
-Every cell (a lane on a fixture) has five parts:
+Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:
 
 | part | question |
 |---|---|
@@ -345,12 +383,12 @@ is a per-release question.
 
 | exit | meaning |
 |---|---|
-| 0 | `VERIFIED`: at least one part IDENTICAL, no part DIVERGENT, and **nothing REFUSED**. OWED and N/A parts are counted, not passed |
+| 0 | `VERIFIED`: at least one part IDENTICAL; no DIVERGENT, REFUSED or OWED parts, and no withheld lanes in the requested full scope. N/A is inapplicable, not a passed test |
 | 1 | `MISMATCH`: at least one part DIVERGENT. A wrong answer outranks an absent one, so this is read before INCOMPLETE |
 | 2 | invalid usage |
 | 3 | refused: the process loaded a tier other than IDENTICAL |
 | 4 | `INCOMPLETE`, or cannot run: **any** judged part REFUSED, or the import raised, or the fixtures differ. A part that did not run is not a part that passed, and there is no number of parts that did run which makes up for one that did not |
-| 5 | no reference: no table in this install, or every part OWED |
+| 5 | missing reference or incomplete scope: no table, any OWED part, or withheld/stale lanes in the requested full scope |
 
 Before 2026-09-16 one IDENTICAL part outranked any number of REFUSED ones, so
 an install missing most of its host bindings printed `VERIFIED, exit 0` having
@@ -482,3 +520,13 @@ sabotage-sensitive review as any other numerical contract change.
 
 For portable external-implementation artifacts, use
 [conformance bundles](CONFORMANCE.md).
+
+### Recording references for the optional batch checks
+
+Maintainers can include the extra recorded parts with
+`verify --all --batch-checks --emit-reference candidate-table.json`, using
+the existing record-selection arguments. The source columns must actually
+carry `batchgrad`, `batchscale`, `ragged` and `rlpair` results. The builder
+uses the same admission, fixture, revision and conflict rules as the five
+standard parts; missing observations remain missing. Generating a table is
+not final-wheel qualification or permission to publish it.

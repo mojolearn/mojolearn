@@ -3021,6 +3021,27 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(flags=_h(np.asarray(flat)), diffed=_h(np.asarray(diffed)), stat=_h(np.asarray(stat))))
 
 
+def _select_d_series(values):
+    series = np.array(values, dtype=np.float32, order="C", copy=True)
+    # Mixed stationary, integrated and twice-integrated series exercise
+    # first-round success, a later success and the d_max fallback.
+    series[:, 1] = np.cumsum(series[:, 1], dtype=np.float32)
+    series[:, 2] = np.cumsum(np.cumsum(series[:, 2], dtype=np.float32), dtype=np.float32)
+    return series
+
+
+@lane("select-d")
+def _(ml, X, yc, yr, Xh=None):
+    """Public differencing-order selection, including caller-supplied seasonal D.
+
+    This chooses ordinary d, not automatic seasonal D (which is not exposed).
+    Hash the per-series results with both seasonal and nonseasonal inputs.
+    """
+    series = _select_d_series(X[:512, :4])
+    return _fit({f"D{D}": _h(np.asarray(ml.select_d(series, D=D, s=12 if D else 0,
+                                                   d_max=2-D))) for D in (0, 1)})
+
+
 @lane("arima-011")
 def _(ml, X, yc, yr, Xh=None):
     """Differencing and a moving-average term, and no intercept (trend
@@ -5834,6 +5855,16 @@ def _batch_ivf_extend(ml, e, Xh):
 _batch_decl(_batch_ivf_extend, "ivf-extend")
 _batch_decl(_batch_embedding, "embedding", "embedding-sort")
 _batch_decl(_batch_cross_entropy, "cross-entropy-arms")
+def _batch_select_d(ml, e, Xh):
+    # A sample here is a time series: split series columns, never time steps.
+    series_rows = np.ascontiguousarray(_select_d_series(Xh[:256, :8]).T)
+    return [_BatchRows(f"select_d D={D}", series_rows,
+                      lambda rows, D=D: (np.asarray(ml.select_d(np.ascontiguousarray(rows.T),
+                          D=D, s=12 if D else 0, d_max=2-D)),)) for D in (0, 1)]
+
+
+_batch_decl(_batch_select_d, "select-d")
+
 _batch_decl(_batch_training_primitives, "training-primitives")
 _batch_decl("n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
             "ordered-gradient-sum")
@@ -6788,6 +6819,14 @@ RLPAIR_BLOCK_VOCAB = 48
 RLPAIR = {}
 
 
+def _rlpair_protocol(enabled=True):
+    return dict(seqs=RLPAIR_SEQS, prompt=RLPAIR_PROMPT, decode=RLPAIR_DECODE,
+                trainer_split=list(RLPAIR_SPLIT) + ["n"], joiner=RLPAIR_JOINER,
+                join_at=RLPAIR_JOIN_AT, join_row=RLPAIR_JOIN_ROW, leaver=RLPAIR_LEAVER,
+                leave_after=RLPAIR_LEAVE_AFTER, block_vocab=RLPAIR_BLOCK_VOCAB,
+                logprob="training.cross_entropy(reduction='none')", enabled=enabled)
+
+
 def _rlpair_decl(spec, *names):
     for n in names:
         if n in RLPAIR:
@@ -7501,11 +7540,7 @@ def _run_reference(args):
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
     rlpair_sabotage = os.environ.get(RLPAIR_SABOTAGE_ENV, "").strip() not in ("", "0")
-    rlpair_protocol = dict(seqs=RLPAIR_SEQS, prompt=RLPAIR_PROMPT, decode=RLPAIR_DECODE,
-                           trainer_split=list(RLPAIR_SPLIT) + ["n"], joiner=RLPAIR_JOINER,
-                           join_at=RLPAIR_JOIN_AT, join_row=RLPAIR_JOIN_ROW, leaver=RLPAIR_LEAVER,
-                           leave_after=RLPAIR_LEAVE_AFTER, block_vocab=RLPAIR_BLOCK_VOCAB,
-                           logprob="training.cross_entropy(reduction='none')", enabled=not args.no_rlpair)
+    rlpair_protocol = _rlpair_protocol(enabled=not args.no_rlpair)
     if rlpair_sabotage:
         print(f"# {RLPAIR_SABOTAGE_ENV} is ON: the first sampler log-probability of every rlpair cell is "
               "perturbed by one low-bit flip; every rlpair cell with a hash MUST read RLPAIR_MOVED. "

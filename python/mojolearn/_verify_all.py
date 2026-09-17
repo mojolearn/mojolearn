@@ -146,7 +146,13 @@ def select_lanes(harness, table, vendor_class, depth, asked):
     """(lanes, fixtures) for this run, or raises ValueError naming the problem."""
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
-        allowed = [l for l in host_surface().public_reference_lanes() if l in harness.LANES]
+        surface = host_surface()
+        public = surface.public_reference_lanes()
+        # A user may explicitly exercise a declared CPU route before its
+        # reference is ready. Its results read OWED, never VERIFIED.
+        eligible = (set(public) | set(surface.covered_lanes())) if asked else set(public)
+        allowed = [l for l in harness.LANES if l in eligible
+                   and not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES)]
     else:
         allowed = all_lanes
     if asked:
@@ -189,7 +195,7 @@ def _collapse(values, errors):
     if not values or any(v is None for v in values):
         return None, (errors[0] if errors else "raised")
     for v in values:
-        if isinstance(v, str) and (v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED")):
+        if isinstance(v, str) and (v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED") or v.startswith("RLPAIR_MOVED")):
             return v, None
     return (values[0], None) if len(set(values)) == 1 else ("MOVED", None)
 
@@ -224,22 +230,23 @@ def _probe_stepfull(harness, fit, lane, ml, held):
     return value, err
 
 
-def run_cell(harness, ml, lane, fixture, data, held, repeats):
+def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     """{part: (value, error)} for one cell, through the harness's own calls,
     in the harness's order (train, then infer and model, then batch, then
     stepfull). The order is load bearing: every part after the first runs on
     its OWN copy of the held-out rows and after the parts it must not move, so
     no hash a record already carries can change because a part was added."""
     X, yc, yr = data
-    vals = {p: [] for p in vref.PARTS}
-    errs = {p: [] for p in vref.PARTS}
+    parts = tuple(vref.PARTS) + tuple(extra_parts)
+    vals = {p: [] for p in parts}
+    errs = {p: [] for p in parts}
     for repeat in range(repeats):
         harness._DUMP_TAG = f"{lane}/{fixture}/{repeat}"
         try:
             fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
         except Exception as exc:
             text = f"{type(exc).__name__}: {exc}"[:400]
-            return {p: (None, text) for p in vref.PARTS}
+            return {p: (None, text) for p in parts}
         vals["train"].append(harness._train_hash(fit))
         infer, model, reload, err = harness._probe_fit(fit, lane)
         if err:
@@ -260,7 +267,24 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats):
         if serr:
             errs[STEPFULL].append(serr[:400])
         vals[STEPFULL].append(step)
-    return {p: _collapse(vals[p], errs[p]) for p in vref.PARTS}
+        for part in extra_parts:
+            try:
+                if part == "rlpair":
+                    if not hasattr(harness, "RLPAIR") or not hasattr(harness, "_probe_rlpair"):
+                        raise RuntimeError("this harness has no sampler/replay probe")
+                    if lane not in harness.RLPAIR:
+                        value, error = "n/a:no-sampler-trainer-pair", None
+                    else:
+                        value, error, _notes = harness._probe_rlpair(fit, lane, ml, held.copy(), False)
+                else:
+                    value, error, _notes = harness._probe_part(
+                        part, fit, lane, ml, held.copy(), harness.BATCH_ALONE, "")
+            except Exception as exc:
+                value, error = None, f"{part}: {type(exc).__name__}: {exc}"[:400]
+            vals[part].append(value)
+            if error:
+                errs[part].append(error)
+    return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
 def run_models(harness, ml, table, pkg_dir=None, log=None):
@@ -270,10 +294,15 @@ def run_models(harness, ml, table, pkg_dir=None, log=None):
     log = log or (lambda s: None)
     base = os.path.join(pkg_dir or _pkg_dir(), vref.TABLE_DIR, MODELS_DIR)
     manifest_path = os.path.join(base, MODELS_MANIFEST)
-    if not os.path.isfile(manifest_path):
-        return []
-    with open(manifest_path, "r", encoding="utf-8") as fh:
-        manifest = json.load(fh)
+    def manifest_refusal(detail):
+        return [dict(lane="portable:manifest", fixture="manifest", part="model", value=None, error=detail)]
+    try:
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return manifest_refusal(f"portable model manifest unavailable: {exc}")
+    if not isinstance(manifest, dict) or not isinstance(manifest.get("models"), list) or not manifest["models"]:
+        return manifest_refusal("portable model manifest has no model entries")
     rows = []
     held_cache = {}
     for m in manifest.get("models", []):
@@ -348,7 +377,7 @@ def summarize(rows, families):
     return [(fam, table[fam]) for fam in order]
 
 
-def verdict(counts):
+def verdict(counts, scope_gaps=()):
     """(exit code, headline) from the state counts of every judged part.
 
     A REFUSED PART DID NOT RUN, so it is never evidence of success, and the
@@ -366,6 +395,8 @@ def verdict(counts):
         return EXIT_MISMATCH, "MISMATCH"
     if counts[vref.REFUSED]:
         return EXIT_CANNOT_RUN, "INCOMPLETE"
+    if counts[vref.OWED] or scope_gaps:
+        return EXIT_NO_REFERENCE, "INCOMPLETE" if counts[vref.IDENTICAL] else "NO REFERENCE"
     if counts[vref.IDENTICAL]:
         return EXIT_VERIFIED, "VERIFIED"
     return EXIT_NO_REFERENCE, "NO REFERENCE"
@@ -817,7 +848,7 @@ _HASH_RE = re.compile(r"\A[0-9a-f]{8,64}\Z")
 #: machines "agreeing" that neither of them is deterministic, reported as a
 #: pass. That is the precise opposite of the claim being checked, so it gets
 #: its own verdict and its own non-zero exit.
-_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED")
+_SELF_CONTRADICTED = ("MOVED", "BATCH_MOVED", "RELOAD-MOVED", "RLPAIR_MOVED")
 
 
 def _value_kind(v):
@@ -825,7 +856,7 @@ def _value_kind(v):
     pattern two machines can agree ON; the rest are agreements about nothing."""
     if not isinstance(v, str) or not v:
         return "missing"                       # None where the probe raised
-    if v == "MOVED" or v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED"):
+    if v == "MOVED" or v.startswith("BATCH_MOVED") or v.startswith("RELOAD-MOVED") or v.startswith("RLPAIR_MOVED"):
         return "moved"
     if v.startswith("n/a"):
         return "n/a"
@@ -1183,11 +1214,12 @@ def lanes_line(report):
     the two counts cannot be confused with each other."""
     cells = report["cells"]
     lanes = {r["lane"] for r in cells}
-    clean = {l for l in lanes
-             if not any(r["state"] in (vref.DIVERGENT, vref.REFUSED) for r in cells if r["lane"] == l)}
-    judged = {l for l in lanes if any(r["state"] == vref.IDENTICAL for r in cells if r["lane"] == l)}
+    clean = {l for l in lanes if all(r["state"] in (vref.IDENTICAL, vref.NA)
+                                     for r in cells if r["lane"] == l)}
+    judged = {l for l in clean if any(r["state"] == vref.IDENTICAL for r in cells if r["lane"] == l)}
     return (f"checked {len(judged)} of {len(lanes)} lanes end to end "
-            f"({len(lanes) - len(clean)} with a divergent or refused part)")
+            f"({len(lanes) - len(clean)} with a divergent, refused or unreferenced part)")
+
 
 
 def judge_rows(raw, table, families=None):
@@ -1203,6 +1235,10 @@ def judge_rows(raw, table, families=None):
                         columns=vref.columns_of(table, ent),
                         # carried through from the run: a cell reported at zero
                         # seconds did not happen, so the document keeps it
+                        local_check=("not_run" if r["value"] is None or r.get("error")
+                                     else "not_applicable" if isinstance(r["value"], str) and r["value"].startswith("n/a")
+                                     else "passed" if isinstance(r["value"], str) and _HASH_RE.fullmatch(r["value"]) and not r.get("error")
+                                     else "failed") if part in ("batch", "stepfull", "batchgrad", "batchscale", "ragged", "rlpair") else None,
                         seconds=r.get("seconds"),
                         family=(families or {}).get(lane, "portable models" if lane.startswith("portable:") else "other")))
     return out
@@ -1255,6 +1291,16 @@ def format_human(report):
             if len(seen) >= 20:
                 break
     lines.append("")
+    if report.get("scope_gaps"):
+        lines.append(f"UNVERIFIED LANES ({len(report['scope_gaps'])}):")
+        lines.extend(f"  {name}: {reason}" for name, reason in report["scope_gaps"].items())
+    if "properties" in report:
+        batch = report["properties"].get("batch", {})
+        lines.append("Batch invariance: " + ", ".join(f"{state}={n}" for state, n in batch.items()))
+        for part in ("batchgrad", "batchscale", "ragged", "rlpair"):
+            if part in report["properties"]:
+                lines.append(part + ": " + ", ".join(f"{state}={n}" for state, n in report["properties"][part].items()))
+    lines.append("Scope: selected fixtures and properties only; use verify --coverage for omissions.")
     lines.append(f"RESULT: {report['verdict']} ({report['detail']}). {report['elapsed_s']:.1f}s. exit {report['exit']}")
     return "\n".join(lines)
 
@@ -1336,6 +1382,18 @@ def cmd_verify_all(args):
     vclass = vref.VENDOR_CLASS.get(vendor)
     if vclass is None:
         return _finish(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"unknown vendor read-back {vendor!r}")
+    from . import _verification_coverage as coverage
+    coverage_report = coverage.inventory(harness, table, vclass)
+    if getattr(args, "coverage", False):
+        _emit(json.dumps(coverage_report, indent=1, sort_keys=True) if json_out
+              else coverage.format_human(coverage_report))
+        out_path = getattr(args, "json_out", None)
+        if out_path:
+            with open(out_path, "w", encoding="utf-8") as fh:
+                json.dump(coverage_report, fh, indent=1, sort_keys=True)
+                fh.write("\n")
+        return EXIT_VERIFIED  # successful inspection, explicitly not execution
+
     asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
     try:
         lanes, fixtures = select_lanes(harness, table, vclass, depth, asked)
@@ -1398,13 +1456,14 @@ def cmd_verify_all(args):
     # Wall time per lane and per cell. Weak evidence alone, but cheap, and a
     # fit reported at zero milliseconds did not happen, so a fabricated run is
     # obvious in the document (lane/expose-inference-surface, 2026-09-16).
+    extra_parts = vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()
     lane_seconds, cell_seconds = {}, {}
     with reference_training():
         for lane in lanes:
             t0 = time.time()
             for f in fixtures:
                 c0 = time.time()
-                parts = run_cell(harness, ml, lane, f, data[f], held[f], repeats)
+                parts = run_cell(harness, ml, lane, f, data[f], held[f], repeats, extra_parts=extra_parts)
                 cell_seconds[(lane, f)] = round(time.time() - c0, 4)
                 for part, (value, error) in parts.items():
                     raw.append(dict(lane=lane, fixture=f, part=part, value=value, error=error,
@@ -1420,6 +1479,13 @@ def cmd_verify_all(args):
         c = dict(c)
         c["lanes"] = len(c["lanes"])
         fams.append((fam, c))
+    # An explicitly selected subset can pass its own scope. A full request
+    # cannot hide withheld CPU routes or lanes dropped for stale references.
+    withheld = {name: row["reason"] for name, row in coverage_report["lanes"].items()
+                if row["status"] == "withheld"}
+    scope_gaps = dict(withheld) if not asked and depth == "full" else {}
+    scope_gaps.update({name: "stale reference" for name in stale})
+    code, headline = verdict(counts, scope_gaps)
     detail = detail_line(counts)
     harness_sha = vref.sha256_file(harness_file)
     report = dict(
@@ -1433,6 +1499,9 @@ def cmd_verify_all(args):
                    records=len(table["records"]), harness_sha256=table.get("harness_sha256")),
         counts=counts, families=fams, cells=rows,
         lane_seconds=lane_seconds,
+        coverage=coverage_report, scope_gaps=scope_gaps,
+        properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
+                           for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
     try:
         from . import _verify
@@ -1464,6 +1533,11 @@ def cmd_verify_all(args):
         report["self_test"] = self_test(harness, ml, table)
     except Exception as exc:
         report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
+
+    if report["self_test"].get("passed") is False:
+        code, headline = EXIT_MISMATCH, "MISMATCH"
+        report.update(exit=code, verdict=headline,
+                      detail=report["detail"] + "; comparator self-test failed")
 
     # THE THIRD CHECK, in the same artifact (lane/verify-cross-check,
     # 2026-09-16). A reader's agent should see all three at once, because they
@@ -1555,10 +1629,10 @@ def lane_counts(rows, lanes, stale=()):
         checked, skipped = [], {}
         for lane in sorted(names):
             states = by_lane[lane]
-            if any(s == vref.IDENTICAL for s in states):
+            if any(s == vref.IDENTICAL for s in states) and all(s in (vref.IDENTICAL, vref.NA) for s in states):
                 checked.append(lane)
-            elif all(s == vref.REFUSED for s in states):
-                skipped[lane] = "every part refused: this install could not run it"
+            elif any(s in (vref.REFUSED, vref.DIVERGENT, vref.OWED) for s in states):
+                skipped[lane] = "one or more parts are divergent, refused or lack a reference"
             elif all(s in (vref.OWED, vref.NA) for s in states):
                 skipped[lane] = "no committed record carries a comparable part yet"
             else:
@@ -1637,7 +1711,8 @@ def _cmd_emit_reference(args):
         _emit(f"CANNOT RUN: {exc}", sys.stderr)
         return EXIT_CANNOT_RUN
     logs = []
-    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append)
+    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append,
+                             parts=vref.PARTS + (vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()))
     vref.write_table(table, args.emit_reference)
     for line in logs:
         _emit(line, sys.stderr)

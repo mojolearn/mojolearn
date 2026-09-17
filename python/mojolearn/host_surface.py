@@ -304,6 +304,7 @@ FOREST_RECORDED_ROOT = "bench/results/forest_host"
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.
 TRAINING_LANE_NAMES = {
+    "select-d": "ordinary differencing order selection",
     "gemm-pinned": "pinned GEMM",
     "kde": "kernel density",
     "holtwinters": "Holt-Winters",
@@ -1420,10 +1421,10 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "par-holtwinters"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d", "par-holtwinters"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("ExponentialSmoothing", "kpss_test"),
+        classes=("ExponentialSmoothing", "kpss_test", "select_d"),
         display="Holt-Winters",
         host_modules=("holtwinters/host/hw_oracle.mojo", "tsa/checks/kpss_oracle.mojo",
                       "holtwinters/host/hw_predict.mojo", "bindings/holtwinters_host_predict.mojo",
@@ -1435,7 +1436,8 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: holtwinters_fit and the KPSS test, so the holtwinters and kpss lanes can be "
+            "Ships: holtwinters_fit and the KPSS test (also used by the Python select_d controller), "
+            "so the holtwinters, kpss and select-d lanes can be "
             "checked on an installed CPU. A saved ExponentialSmoothing still forecasts through the "
             "shipped forecast binding, which registers kpss_test from the same shared module "
             "(bindings/kpss_host_test.mojo), so the two binaries cannot drift."
@@ -2440,6 +2442,7 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    "select-d": "no reference",
     "ordered-gradient-sum": "no reference",
     "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
@@ -2546,7 +2549,11 @@ def public_reference_lanes():
 #: lane/ship-cpu-host-families widened the set and narrowing it would be a
 #: regression, which is why the derivation adds it back rather than deriving
 #: it: it is the one public lane a run selects without comparing.
-PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer"}
+# BPE vocabulary training and fold construction are pure host operations.
+# Their fixtures run locally, but missing reference hashes must read OWED.
+# None means pure Python: no native host binding is required.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
+                          "cross-val-folds": None}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:

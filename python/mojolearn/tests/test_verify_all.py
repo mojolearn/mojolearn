@@ -162,7 +162,7 @@ def test_verdict_exit_codes():
     # a refused part did not run, so it costs the run its pass
     # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_NO_REFERENCE
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1))[0] == va.EXIT_MISMATCH
     assert va.verdict(_counts(REFUSED=2, OWED=1))[0] == va.EXIT_CANNOT_RUN
     assert va.verdict(_counts(OWED=4, NA=1))[0] == va.EXIT_NO_REFERENCE
@@ -190,8 +190,8 @@ def test_a_run_that_refused_is_not_reported_as_verified():
 
     # one refused part is enough
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1)) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
-    # a run with nothing refused is still VERIFIED, and OWED and N/A do not spoil it
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_VERIFIED, "VERIFIED")
+    # Missing references cannot be offset by successful comparisons; N/A is different.
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_NO_REFERENCE, "INCOMPLETE")
     # a wrong answer still outranks an absent one
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1, REFUSED=9))[0] == va.EXIT_MISMATCH
 
