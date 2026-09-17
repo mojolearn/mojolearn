@@ -92,7 +92,8 @@ deliberately ships none. Details and scoping in `DATA_PIPELINE.md`.
 ## The blockers, ranked
 
 1. **The step counter is capped at 999,999**, in the host, the binding and the
-   Mojo trainer alike (ten guards, listed in `SOURCE_BLOCKERS.md`). At batch 8
+   Mojo trainer alike (fourteen guards across five files, listed in
+   `SOURCE_BLOCKERS.md`). At batch 8
    that is 16.4B tokens, so 10BT fits and **25B does not, at any batch the
    card admits**. The way past it is `ParallelByteLanguageModelTrainer` with
    `logical_shards` and `devices=(0,)`, which sums K microbatches into one
