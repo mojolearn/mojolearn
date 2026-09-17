@@ -60,6 +60,8 @@ from extratrees.impl.decisiontree.flatnode import (
     TreeMetaDataNode,
 )
 from extratrees.impl.randomforest.randomforest import Forest, forest_vote
+from core.forest_host_predict import et_host_predict, et_host_trees
+from hostptr import read_f32
 
 
 # DEVIATION 2482: fit/export ownership is separate from inference residency.
@@ -492,46 +494,31 @@ def et_predict_binding(
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
 
+    # DEVIATION 2900 (lane/infer-speed-trees, 2026-09-17): the walk is
+    # `core/forest_host_predict.mojo`'s, which is `forest_vote` row for row
+    # (zero, `predict_one_accumulate` per tree in tree order, divide by
+    # `Float32(n_trees)`) with the rows spread over host threads
+    # (`MOJOLEARN_CPU_THREADS`), the tree rebuild in `TreeMetaDataNode`'s
+    # own layout bounds-checked, and the input copied as one memcpy. The
+    # CPU training column runs this same function.
+    if n_rows == 0:
+        return PythonObject(0)
+    var n_nodes = Int(offsets_p[n_trees])
+    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
+        raise Error("et_predict: tree_offsets must start at 0 and hold at least one node per tree")
     var wrote = 0
     with GILReleased(Python()):
-        # Rebuild the forest in `TreeMetaDataNode`'s own layout so the
-        # traversal that runs is flatnode.mojo's, not a copy of it here.
-        # `instance_count` and `best_metric_val` are zero: the traversal
-        # reads neither, and the docstring above says so where a caller can
-        # see it.
-        var forest = Forest(Int32(num_outputs))
-        for t in range(n_trees):
-            var lo = Int(offsets_p[t])
-            var hi = Int(offsets_p[t + 1])
-            if lo < 0 or hi < lo:
-                raise Error("et_predict: tree_offsets are not a prefix scan")
-            var nodes = List[SparseTreeNode[DType.float32]](
-                capacity=hi - lo
-            )
-            var vleaf = List[Float32](capacity=(hi - lo) * num_outputs)
-            for i in range(lo, hi):
-                nodes.append(
-                    SparseTreeNode[DType.float32](
-                        colid_p[i], quesval_p[i], 0.0, left_p[i], 0
-                    )
-                )
-                for k in range(num_outputs):
-                    vleaf.append(leaves_p[i * num_outputs + k])
-            forest.trees.append(
-                TreeMetaDataNode[DType.float32](
-                    Int32(t), 0, 0, Int32(num_outputs), vleaf^, nodes^
-                )
-            )
-        forest.n_trees = Int32(n_trees)
-
-        var row = List[Float32](capacity=n_rows * n_features)
-        for i in range(n_rows * n_features):
-            row.append(xp[i])
-        for r in range(n_rows):
-            var vote = forest_vote(forest, row, r * n_features)
-            for k in range(num_outputs):
-                op[r * num_outputs + k] = vote[k]
-            wrote += 1
+        var rows = read_f32(Int(py=x_addr), n_rows * n_features)
+        var out = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
+        var trees = et_host_trees(
+            offsets_p, colid_p, quesval_p, left_p, leaves_p,
+            n_trees, n_nodes, n_features, num_outputs,
+        )
+        et_host_predict(trees, rows, n_rows, n_features, n_trees, num_outputs, out)
+        for i in range(n_rows * num_outputs):
+            op[i] = out[i]
+        wrote = n_rows
+    _ = xp
     return PythonObject(wrote)
 
 

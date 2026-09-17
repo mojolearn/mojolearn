@@ -32,7 +32,10 @@ the bounds checks a file read off disk needs.
 The restatement is a prediction until measured. tools/forest_host_gate.py is
 the measurement, and the brief in docs/lanes/ records what it has shown.
 """
+from max.algorithm import sync_parallelize
+from std.os import getenv
 from std.sys.compile import is_defined
+from std.sys.info import num_physical_cores
 
 from ensemble.decisiontree.decisiontree import DecisionTree
 from ensemble.decisiontree.decisiontree import TreeMetaDataNode as RfTree
@@ -48,6 +51,19 @@ from extratrees.impl.decisiontree.flatnode import predict_one_accumulate
 #: `forest_host_sabotage` and refused outside the gate by `_forest_host.py`.
 comptime FOREST_HOST_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
 
+#: DEVIATION 2900 (lane/infer-speed-trees, 2026-09-17): the sequential
+#: forest walk runs its rows on a pool of host threads. Each thread owns a
+#: contiguous row range and every row's arithmetic is the reference loop
+#: unchanged (zero, add every tree's leaf in increasing tree order, divide
+#: by the tree count), so no output bit depends on the thread count. The
+#: count is `MOJOLEARN_CPU_THREADS` (absent or 0: one per physical core;
+#: 1: the calling thread and no pool at all), capped here. A task takes at
+#: least `FOREST_HOST_MIN_ROWS_PER_TASK` rows, so a five-row fixture does
+#: not fan out.
+comptime FOREST_HOST_MAX_THREADS = 1024
+comptime FOREST_HOST_MIN_ROWS_PER_TASK = 64
+comptime FOREST_HOST_THREADS_ENV = "MOJOLEARN_CPU_THREADS"
+
 
 def _divisor(n_trees: Int) -> Float32:
     """`Scalar[DType.float32](n_trees)` in `RandomForest.predict_proba`,
@@ -55,6 +71,41 @@ def _divisor(n_trees: Int) -> Float32:
     comptime if FOREST_HOST_SABOTAGE:
         return Float32(n_trees + 1)
     return Float32(n_trees)
+
+
+def host_worker_count(workers: Int = 0) -> Int:
+    """The thread count of a host prediction (DEVIATION 2900). `workers`
+    above zero as given; zero reads `MOJOLEARN_CPU_THREADS`, and an absent,
+    empty, zero or unparsable value means one thread per physical core.
+    Always in `[1, FOREST_HOST_MAX_THREADS]`."""
+    var count = workers
+    if count <= 0:
+        var raw = getenv(FOREST_HOST_THREADS_ENV)
+        count = 0
+        if raw != "":
+            try:
+                count = Int(raw)
+            except:
+                count = 0
+        if count <= 0:
+            count = num_physical_cores()
+    if count < 1:
+        return 1
+    if count > FOREST_HOST_MAX_THREADS:
+        return FOREST_HOST_MAX_THREADS
+    return count
+
+
+def host_task_count(n_rows: Int, workers: Int) -> Int:
+    """How many contiguous row tasks `n_rows` rows fan out to on `workers`
+    threads: never more than the threads, never fewer than one, and never
+    so many that a task holds under `FOREST_HOST_MIN_ROWS_PER_TASK` rows."""
+    var tasks = (n_rows + FOREST_HOST_MIN_ROWS_PER_TASK - 1) // FOREST_HOST_MIN_ROWS_PER_TASK
+    if tasks > workers:
+        tasks = workers
+    if tasks < 1:
+        tasks = 1
+    return tasks
 
 
 def _tree_span(
@@ -142,6 +193,7 @@ def rf_host_predict(
     n_trees: Int,
     num_outputs: Int,
     mut out: List[Float32],
+    workers: Int = 0,
 ) raises:
     """MIRRORS `RandomForest.predict_proba`, `ensemble/randomforest.mojo:1140-1161`.
 
@@ -150,6 +202,7 @@ def rf_host_predict(
     else (the classifier's argmax is the Python layer's, as it is for the GPU
     binding; the regressor reads output 0 of a one-output vote, which is
     what `RandomForest.predict`'s REGRESSION branch does at `:1071-1074`).
+    `workers` is the thread count, `host_worker_count`'s reading of zero.
     """
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
@@ -159,27 +212,59 @@ def rf_host_predict(
         raise Error("forest host: rows holds fewer than n_rows * n_cols values")
     if len(out) < n_rows * num_outputs:
         raise Error("forest host: out holds fewer than n_rows * num_outputs values")
+    # `decisiontree.cuh:350-352`, `DecisionTree.predict`'s refusal of an
+    # empty tree, asked once per tree here instead of once per row and tree.
+    # The other two checks `DecisionTree.predict` makes are the two bounds
+    # facts asserted just above, once for every row.
+    for i in range(n_trees):
+        if len(trees[i].sparsetree) == 0:
+            raise Error("Cannot predict w/ empty tree, tree size 0")
     var divisor = _divisor(n_trees)
-    for row_id in range(n_rows):
-        # `randomforest.cuh:403`, zero-initialized once per row.
-        var row_prediction = List[Float32]()
-        for _ in range(num_outputs):
-            row_prediction.append(0)
-        # `:404-412`, one row at a time, every tree adds into it.
-        for i in range(n_trees):
-            DecisionTree.predict(
-                trees[i],
-                rows,
-                1,
-                n_cols,
-                row_prediction,
-                num_outputs,
-                rows_offset=row_id * n_cols,
-                preds_offset=0,
-            )
-        # `:414-416`, divide by n_trees, and stop.
-        for k in range(num_outputs):
-            out[row_id * num_outputs + k] = row_prediction[k] / divisor
+    # DEVIATION 2900: rows fan out to contiguous tasks; each task runs the
+    # reference loop below for its own rows and writes only its own rows.
+    # The tasks capture pointers, never the lists (the parallelize trap of
+    # `ensemble/host_layout.mojo`); the caller keeps `trees`, `rows` and
+    # `out` alive across this call.
+    var tasks = host_task_count(n_rows, host_worker_count(workers))
+    var chunk = (n_rows + tasks - 1) // tasks
+    var failed = List[Int](length=tasks, fill=0)
+    var tp = Pointer(to=trees)
+    var rp = Pointer(to=rows)
+    var op = out.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+
+    def _rows_task(c: Int) {imm tp, imm rp, imm op, imm fp, imm chunk, imm n_rows,
+                            imm n_cols, imm n_trees, imm num_outputs, imm divisor}:
+        try:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > n_rows:
+                hi = n_rows
+            # `randomforest.cuh:403`, zero-initialized once per row.
+            var row_prediction = List[Float32](length=num_outputs, fill=Float32(0.0))
+            for row_id in range(lo, hi):
+                for k in range(num_outputs):
+                    row_prediction[k] = Float32(0.0)
+                # `:404-412`, one row at a time, every tree adds into it:
+                # `DecisionTree.predict` with `n_rows=1` is `predict_all`
+                # over one row is `predict_one` at that row's offset.
+                for i in range(n_trees):
+                    DecisionTree.predict_one(
+                        rp[], row_id * n_cols, tp[][i], row_prediction, 0, num_outputs
+                    )
+                # `:414-416`, divide by n_trees, and stop.
+                for k in range(num_outputs):
+                    op.unsafe_store(row_id * num_outputs + k, row_prediction[k] / divisor)
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _rows_task(0)
+    else:
+        sync_parallelize(_rows_task, tasks)
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("forest host: the walk of row task " + String(c) + " raised")
 
 
 def et_host_trees(
@@ -224,9 +309,12 @@ def et_host_predict(
     n_trees: Int,
     num_outputs: Int,
     mut out: List[Float32],
+    workers: Int = 0,
 ) raises:
-    """MIRRORS `forest_vote`, `extratrees/impl/randomforest/randomforest.mojo:516-547`,
-    once per row, into `out` as `et_predict_binding` writes it (`:528-532`)."""
+    """MIRRORS `forest_vote`, `extratrees/impl/randomforest/randomforest.mojo:611-641`,
+    once per row, into `out` as `et_predict_binding` writes it (`:528-532`).
+    `workers` is the thread count, `host_worker_count`'s reading of zero
+    (DEVIATION 2900, the same fan-out as `rf_host_predict`)."""
     if n_rows <= 0 or n_cols <= 0:
         raise Error("forest host: n_rows and n_cols must be positive")
     if n_trees <= 0 or len(trees) != n_trees:
@@ -236,19 +324,39 @@ def et_host_predict(
     if len(out) < n_rows * num_outputs:
         raise Error("forest host: out holds fewer than n_rows * num_outputs values")
     var divisor = _divisor(n_trees)
-    for r in range(n_rows):
-        # `std::vector<T> row_prediction(num_outputs)`, zero-initialized.
-        var acc = List[Float32](length=num_outputs, fill=Float32(0.0))
-        # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
-        for i in range(n_trees):
-            predict_one_accumulate(
-                rows,
-                r * n_cols,
-                trees[i],
-                acc,
-                0,
-                num_outputs,
-            )
-        # `row_prediction[k] /= n_trees`.
-        for k in range(num_outputs):
-            out[r * num_outputs + k] = acc[k] / divisor
+    var tasks = host_task_count(n_rows, host_worker_count(workers))
+    var chunk = (n_rows + tasks - 1) // tasks
+    var failed = List[Int](length=tasks, fill=0)
+    var tp = Pointer(to=trees)
+    var rp = Pointer(to=rows)
+    var op = out.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+
+    def _rows_task(c: Int) {imm tp, imm rp, imm op, imm fp, imm chunk, imm n_rows,
+                            imm n_cols, imm n_trees, imm num_outputs, imm divisor}:
+        try:
+            var lo = c * chunk
+            var hi = lo + chunk
+            if hi > n_rows:
+                hi = n_rows
+            # `std::vector<T> row_prediction(num_outputs)`, zero-initialized.
+            var acc = List[Float32](length=num_outputs, fill=Float32(0.0))
+            for r in range(lo, hi):
+                for k in range(num_outputs):
+                    acc[k] = Float32(0.0)
+                # `predict_one`'s `+=`, every tree in order (DEVIATION 147).
+                for i in range(n_trees):
+                    predict_one_accumulate(rp[], r * n_cols, tp[][i], acc, 0, num_outputs)
+                # `row_prediction[k] /= n_trees`.
+                for k in range(num_outputs):
+                    op.unsafe_store(r * num_outputs + k, acc[k] / divisor)
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _rows_task(0)
+    else:
+        sync_parallelize(_rows_task, tasks)
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("forest host: the walk of row task " + String(c) + " raised")

@@ -48,6 +48,7 @@ the wrapper holds the caller's arrays for the length of the call.
 
 from std.os import abort
 from std.python import Python, PythonObject
+from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -145,6 +146,41 @@ def gbdt_sigmoid_binding(
     for i in range(count):
         var r = rp.unsafe_load(i)
         op.unsafe_store(i, 1.0 / (1.0 + identical_exp64(-r)))
+    return PythonObject(count)
+
+
+#: The identity gate's negative control for `gbdt_sigmoid_pair`: the same
+#: define the forest and GBDT host walks take (`core/forest_host_predict.mojo`),
+#: passed to this build through MOJOLEARN_EXTRA_DEFINES. A build with it
+#: writes the two probability columns swapped.
+comptime GBDT_PAIR_SABOTAGE = is_defined["MOJOLEARN_FOREST_HOST_SABOTAGE"]()
+
+
+def gbdt_sigmoid_pair_binding(
+    raw_addr: PythonObject, out_addr: PythonObject, n: PythonObject
+) raises -> PythonObject:
+    """DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both columns of
+    a Logloss or CrossEntropy `predict_proba` in one pass, `out[2 * i] =
+    1 - p` and `out[2 * i + 1] = p` with `p` exactly `gbdt_sigmoid`'s
+    value, `n` rows, both buffers float64 and the caller's. `1.0 - p` is
+    the one IEEE double subtraction the Python layer computed per row
+    (DEVIATION 2333, retired where the binary carries this entry point);
+    a lone subtraction has no fusion partner and no association, so the
+    column's bits are the Python column's on every host."""
+    var rp = _f64_ptr(Int(py=raw_addr))
+    var op = _f64_ptr(Int(py=out_addr))
+    var count = Int(py=n)
+    if count < 0:
+        raise Error("gbdt_sigmoid_pair: n must be non-negative")
+    for i in range(count):
+        var r = rp.unsafe_load(i)
+        var p = 1.0 / (1.0 + identical_exp64(-r))
+        comptime if GBDT_PAIR_SABOTAGE:
+            op.unsafe_store(2 * i, p)
+            op.unsafe_store(2 * i + 1, 1.0 - p)
+        else:
+            op.unsafe_store(2 * i, 1.0 - p)
+            op.unsafe_store(2 * i + 1, p)
     return PythonObject(count)
 
 
@@ -656,6 +692,7 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         m.def_function[gbdt_binary_prediction_binding[True,DType.float32]]("gbdt_binary_probabilities")
         m.def_function[gbdt_binary_prediction_binding[False,DType.int32]]("gbdt_binary_classes")
         m.def_function[gbdt_sigmoid_binding]("gbdt_sigmoid")
+        m.def_function[gbdt_sigmoid_pair_binding]("gbdt_sigmoid_pair")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_gbdt module: ", e))

@@ -1644,16 +1644,31 @@ class GradientBoosting(NumericModeMixin):
         # between two exps; neither tier has a bitwise card on proba, and
         # FAST is never asked a bitwise question. `1 - p` is the same one
         # float64 subtraction as before, so column 0 keeps its bits.
+        binding = self._bind("_mojolearn_gbdt")
+        pair = getattr(binding, "gbdt_sigmoid_pair", None)
+        if pair is not None:
+            # DEVIATION 2902 (lane/infer-speed-trees, 2026-09-17): both
+            # columns from the binding in one pass. `p` is `gbdt_sigmoid`'s
+            # value and `1 - p` is the same one IEEE double subtraction the
+            # comprehension below computed per row; the bits are unchanged,
+            # only the O(rows) Python loop is gone.
+            out = empty((n_rows, 2), "<f8")
+            wrote = pair(addr_ro(raw, name="raw"), addr(out, name="proba"), n_rows)
+            if int(wrote) != n_rows:
+                raise RuntimeError(
+                    f"mojolearn: gbdt_sigmoid_pair wrote {wrote} of {n_rows} rows"
+                )
+            return out
         p1 = empty((n_rows,), "<f8")
-        self._bind("_mojolearn_gbdt").gbdt_sigmoid(
+        binding.gbdt_sigmoid(
             addr_ro(raw, name="raw"), addr(p1, name="p1"), n_rows
         )
         # DEVIATION 2333, A DEFECT NAMED RATHER THAN HIDDEN: the
         # `1 - p1` column is an O(rows) Python comprehension. There is no
         # host arithmetic on `Array` and no native helper for it; the bits
         # are exactly numpy's (one IEEE subtraction per element, order
-        # independent), only the time is wrong. A `gbdt_sigmoid` variant
-        # that writes both columns would retire it.
+        # independent), only the time is wrong. This branch remains for a
+        # binary built before `gbdt_sigmoid_pair` existed.
         pv = flat_view(p1, "d")
         return Array.from_list([[1.0 - p, p] for p in pv], "<f8")
 
