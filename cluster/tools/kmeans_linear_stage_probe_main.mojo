@@ -8,7 +8,7 @@
 #
 #   pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 \
 #       cluster/tools/kmeans_linear_stage_probe_main.mojo -o kls_probe
-#   ./kls_probe <prefix> <rows> <cols> <k> <iters>
+#   ./kls_probe <prefix> <rows> <cols> <k> <iters> <base|blocked|sabotage>
 #
 # <prefix>_X.bin (float32 rows x cols) and <prefix>_init.bin (k x cols), the
 # files bench/results/linear_cluster_istella_2026-09-11/probe_bins.py writes.
@@ -25,8 +25,11 @@ from cluster.checks.reduce_by_key import (
     copy_f32_kernel,
     finalize_centroids_kernel,
     finish_sum_kernel,
+    blocked_acc_table_cells,
     launch_accumulate_centroid_sums,
+    launch_accumulate_centroid_sums_blocked,
     launch_accumulate_weight_per_cluster,
+    launch_accumulate_weight_per_cluster_blocked,
     sum_partials_kernel,
     zero_i32_kernel,
 )
@@ -66,8 +69,9 @@ def _fnv(p: MutPointer[UInt8, MutUntrackedOrigin], n: Int) -> UInt64:
 
 def main() raises:
     var args = argv()
-    if len(args) != 6:
-        raise Error("usage: kls_probe <prefix> <rows> <cols> <k> <iters>")
+    if len(args) != 7:
+        raise Error("usage: kls_probe <prefix> <rows> <cols> <k> <iters> <base|blocked|sabotage>")
+    var arm = String(args[6])
     var prefix = String(args[1])
     var rows = Int(atol(args[2]))
     var cols = Int(atol(args[3]))
@@ -93,7 +97,7 @@ def main() raises:
     _ = bx^
     _ = bi^
 
-    for rep in range(3):
+    for rep in range(1):
         var t0 = _now()
         var s = plan_sum_scale(hx.unsafe_ptr(), rows, cols)
         print("plan_sum_scale rep=" + String(rep) + " ms=" + String(_ms(t0)) + " scale=" + String(s))
@@ -111,6 +115,8 @@ def main() raises:
     var dist = ctx.enqueue_create_buffer[DType.float32](1)
     var sums = ctx.enqueue_create_buffer[DType.int32](cd)
     var wsum = ctx.enqueue_create_buffer[DType.int32](k)
+    var table = ctx.enqueue_create_buffer[DType.int32](blocked_acc_table_cells(rows, cols, k))
+    var table_w = ctx.enqueue_create_buffer[DType.int32](blocked_acc_table_cells(rows, 1, k))
     var partials = ctx.enqueue_create_buffer[DType.float32](256)
     var d_shift = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
@@ -149,11 +155,19 @@ def main() raises:
         ctx.synchronize()
         var t_assign = _ms(t0)
         t0 = _now()
-        launch_accumulate_centroid_sums(ctx, sums, x, lab, w, rows, cols, k, sum_scale)
+        if arm == "blocked":
+            launch_accumulate_centroid_sums_blocked(ctx, sums, table, x, lab, w, rows, cols, k, sum_scale)
+        elif arm == "sabotage":
+            launch_accumulate_centroid_sums_blocked[True](ctx, sums, table, x, lab, w, rows, cols, k, sum_scale)
+        else:
+            launch_accumulate_centroid_sums(ctx, sums, x, lab, w, rows, cols, k, sum_scale)
         ctx.synchronize()
         var t_sums = _ms(t0)
         t0 = _now()
-        launch_accumulate_weight_per_cluster(ctx, wsum, lab, w, rows, k, weight_scale)
+        if arm == "base":
+            launch_accumulate_weight_per_cluster(ctx, wsum, lab, w, rows, k, weight_scale)
+        else:
+            launch_accumulate_weight_per_cluster_blocked(ctx, wsum, table_w, lab, w, rows, k, weight_scale)
         ctx.synchronize()
         var t_w = _ms(t0)
         t0 = _now()
@@ -210,3 +224,5 @@ def main() raises:
     _ = md^
     _ = lab^
     _ = dist^
+    _ = table^
+    _ = table_w^
