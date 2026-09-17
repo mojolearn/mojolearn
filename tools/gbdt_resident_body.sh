@@ -173,19 +173,21 @@ phase_identity_diff() {
     : > "$OUT/identity.done"
 }
 
-AB_ROUNDS="${AB_ROUNDS:-5}"
+AB_ROUNDS="${AB_ROUNDS:-7}"
 SPEED_DIR="${SPEED_DIR:-speed}"
 DATASETS="${DATASETS:-taxi,taxireg,higgs,covtype}"
 
 time_one() {
-    # $1 model key, $2 path, $3 calls, $4 order, $5 index
-    _m=$1; _p=$2; _c=$3; _o=$4; _i=$5
+    # $1 model key, $2 path, $3 calls, $4 order, $5 index, $6 arms (default both, interleaved)
+    _m=$1; _p=$2; _c=$3; _o=$4; _i=$5; _a=${6:-resident,percall}
     cd "$R" || return 1
     _x=$(PYTHONPATH=python pixi run python3 -c "import json; m = json.load(open('$AB/manifest.json'))['models']['$_m']; print(m['x'])")
     _y=$(PYTHONPATH=python pixi run python3 -c "import json; m = json.load(open('$AB/manifest.json'))['models']['$_m']; print(m['y'])")
+    _tag=""
+    [ "$_a" = "resident,percall" ] || _tag=".$(echo "$_a" | tr ',' '-')"
     PYTHONPATH=python pixi run python3 bench/speed/gbdt_resident_ab.py time \
         --model "$AB/$_m.npz" --x "$_x" --y "$_y" --path "$_p" --rounds "$AB_ROUNDS" --calls "$_c" --order "$_o" \
-        --label "after" --json "$OUT/$SPEED_DIR/$_m.$_p.c$_c.$_o.$_i.json" 2>&1 | tail -1
+        --arms "$_a" --label "after$_tag" --json "$OUT/$SPEED_DIR/$_m.$_p.c$_c.$_o$_tag.$_i.json" 2>&1 | tail -1
 }
 
 model_keys() {
@@ -208,6 +210,10 @@ phase_speed() {
                 say "$(time_one "$key" "$p" 1 C "$i")"
             done
             say "$(time_one "$key" "$p" 8 C 1)"
+            # each arm alone in its own process, so the interleaving itself
+            # is not what either number measures
+            say "$(time_one "$key" "$p" 1 C 1 percall)"
+            say "$(time_one "$key" "$p" 1 C 1 resident)"
         done
         # the F-order input: what the call costs without the per-call transpose
         say "$(time_one "$key" predict 1 F 1)"

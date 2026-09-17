@@ -375,10 +375,10 @@ def summarize(args):
             r["_file"] = p
             recs.append(r)
     table = []
-    keys = sorted(set((os.path.basename(r["model"]), r["path"], r.get("calls", 1), r.get("order", "")) for r in recs))
-    for model, path, calls, order in keys:
-        rs = [r for r in recs if (os.path.basename(r["model"]), r["path"], r.get("calls", 1), r.get("order", "")) == (model, path, calls, order)]
-        row = dict(model=model, path=path, calls=calls, order=order, rows=rs[0]["rows"], processes=len(rs),
+    keys = sorted(set((os.path.basename(r["model"]), r["path"], r.get("calls", 1), r.get("order", ""), r.get("label", "")) for r in recs))
+    for model, path, calls, order, label in keys:
+        rs = [r for r in recs if (os.path.basename(r["model"]), r["path"], r.get("calls", 1), r.get("order", ""), r.get("label", "")) == (model, path, calls, order, label)]
+        row = dict(model=model, path=path, calls=calls, order=order, label=label, rows=rs[0]["rows"], processes=len(rs),
                    n_trees=rs[0].get("n_trees"), loss=rs[0].get("loss"))
         arms = {}
         for r in rs:
