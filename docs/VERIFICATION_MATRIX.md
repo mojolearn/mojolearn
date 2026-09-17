@@ -474,7 +474,7 @@ A blank cell means no lane of this algorithm has that kind.
 | metrics | amd,apple,nvidia | training | declared | - | n/a n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification) | NO |
 | metrics-classification | amd,apple,nvidia | training | declared | - | part | NO |
 | metrics-fowlkes-mallows | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-public-promotion/cpu-sabotage.json` | n/a n/a:function | NO |
-| metrics-homogeneity-completeness | - | training | seen(build) | `bench/results/release087-coverage-probe/2026-09-17/metrics-cpu-sabotage.json` | n/a n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output) | NO |
+| metrics-homogeneity-completeness | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-metrics-constant/cpu-sabotage.json` | n/a n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output) | NO |
 | minmax-scaler | amd,apple,nvidia | training | declared | - | part | NO |
 | minmax-scaler-clip | amd,apple,nvidia | training | declared | - | part | NO |
 | mlp | amd,apple,nvidia | training | declared | - | part | NO |

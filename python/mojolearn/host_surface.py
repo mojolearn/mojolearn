@@ -2473,7 +2473,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
     "ordered-gradient-sum": "no reference",
-    "metrics-homogeneity-completeness": "no reference",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
     # shipped table describes bytes this build no longer produces. The

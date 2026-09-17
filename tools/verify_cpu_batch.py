@@ -80,9 +80,9 @@ def main():
             if path.exists():
                 raise SystemExit(f'record already exists: {path}')
             command = [sys.executable, str(root / 'tools/identity_break.py'), '--lanes', lane,
-                       '--repeats', '2', '--require-cpu', '--json', str(path)]
+                       '--repeats', '2', '--require-cpu', '--step-full', '--json', str(path)]
             if args.properties:
-                command.extend(['--step-full', '--batch-grad', '--batch-scale', '--ragged'])
+                command.extend(['--batch-grad', '--batch-scale', '--ragged'])
             print(f'{lane}: {arm}', flush=True)
             with (directory / f'{arm}.log').open('w') as log:
                 try:
