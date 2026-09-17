@@ -184,6 +184,10 @@ def cmd_summarize(args):
             if n >= 0:
                 same = arms["before"]["dig"] == arms["after"]["dig"] and len(arms["after"]["dig"]) == 1
                 line += " digests_equal=%s %s" % (same, sorted(arms["after"]["dig"]))
+        if "before" in arms and "fast" in arms:
+            # FAST carries no bit promise: a time ratio only, never a digest
+            line += " | fast/before=%.3f" % (
+                statistics.median(arms["fast"]["ms"]) / statistics.median(arms["before"]["ms"]))
         print(line)
     return 0
 
