@@ -273,8 +273,56 @@ phase_fil() {
     : > "$OUT/fil.done"
 }
 
+phase_final() {
+    # After the A/B chose the packed layout as the default: rebuild AFTER's
+    # rf and trees bindings from the pushed sources, run the small NVIDIA
+    # layout matrix (both layouts, IDENTICAL), rerun the after-cuda identity
+    # column and the groves column against the new build, then the AFTER
+    # timing processes (and BEFORE where a process is missing).
+    cd "$R"
+    build_gpu "$R" after2 ""
+    mkdir -p "$OUT/layouts"
+    for layout in packed_default separate_arrays; do
+        defs="-D MOJOLEARN_NUMERIC_IDENTICAL=1"
+        [ "$layout" = separate_arrays ] && defs="$defs -D MOJOLEARN_FOREST_SEPARATE_NODES=1"
+        stem="$OUT/layouts/$layout"
+        # shellcheck disable=SC2086
+        step "layout_build_$layout" pixi run mojo build -I . $defs checks/forest_inference_model.mojo -o "$stem"
+        step "layout_run_$layout" "$stem"
+        tail -2 "$OUT/layout_run_$layout.log"
+    done
+    mkdir -p "$OUT/identity" "$OUT/groves"
+    AC=$(cat "$R/SHIPPED_COMMIT.txt")
+    identity_column "$R" after2-cuda "$AC" MOJOLEARN_IDENTITY_HOST_INFER=0
+    for pair in "before-cuda after2-cuda" "after2-cuda after-cpu"; do
+        set -- $pair
+        PYTHONPATH=python pixi run python3 tools/identity_break.py --diff "$OUT/identity/$1.json" "$OUT/identity/$2.json" \
+            > "$OUT/identity/diff.$1.vs.$2.txt" 2>&1
+        say "diff $1 vs $2: $(grep '^summary' "$OUT/identity/diff.$1.vs.$2.txt" | tr '\n' ' ')"
+    done
+    step groves2_production env PYTHONPATH=python pixi run python3 tools/forest_groves_identity.py lanes \
+        --fixtures "$FIXTURES" --json "$OUT/groves/production2.json"
+    tail -1 "$OUT/groves2_production.log"
+    step groves2_large env PYTHONPATH=python pixi run python3 tools/forest_groves_identity.py large \
+        --models-dir "$AB" --json "$OUT/groves/large2.json"
+    tail -1 "$OUT/groves2_large.log"
+    MODELS="${MODELS:-rf-higgs-100x16 et-higgs-100x16 rf-covtype-100x16 et-year-100x16 rf-higgs-500x16}"
+    for model in $MODELS; do
+        x=$(PYTHONPATH=python pixi run python3 -c "import json;print(json.load(open('$AB/manifest.json'))['models']['$model']['x'])")
+        for i in 1 2; do
+            [ -f "$OUT/$SPEED_DIR/$model.groves.before.$i.json" ] || say "$(time_one "$B" before "$AB/$model.npz" "$AB/$x" groves "$i")"
+            say "$(time_one "$R" after2 "$AB/$model.npz" "$AB/$x" groves "$i")"
+        done
+    done
+    cd "$R"
+    PYTHONPATH=python pixi run python3 tools/forest_groves_speed.py summarize "$OUT/$SPEED_DIR/*.*.*.*.json" \
+        --out "$OUT/$SPEED_DIR/summary.json" > "$OUT/$SPEED_DIR/summary.txt" 2>&1
+    : > "$OUT/final.done"
+}
+
 case "${1:-}" in
     setup) phase_setup ;;
+    final) phase_final ;;
     variants) phase_variants ;;
     identity) phase_identity ;;
     groves) phase_groves ;;

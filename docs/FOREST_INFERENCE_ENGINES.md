@@ -136,10 +136,12 @@ single calls. No ET throughput gain is certified; those pairs were noisy. The
 Metal Year cell and NVIDIA RF single calls also failed stability. Those noisy
 cells do not justify a speed claim or the default selection.
 
-RF/HIGGS throughput is now a qualified competitor comparison for this one cell:
-21.09 ms/call versus cuML's 10.70 ms/call, averaged within eight-call blocks.
-MojoLearn remains about 1.97 times slower. The forests are independently trained;
-this is not same-model inference or evidence of a cost caused by IDENTICAL.
+RF/HIGGS throughput was a qualified competitor comparison for this one cell
+on the H100 (2026-09-10): 21.09 ms/call versus cuML's 10.70 ms/call, averaged
+within eight-call blocks, the forests independently trained. The 2026-09-17
+L40S measurement with the packed default and cuML FIL on OUR OWN trees is in
+the lane status named below; it is a different box and not comparable to the
+H100 numbers by ratio.
 
 Native lifecycle checks passed on CUDA IDENTICAL and Metal FAST/IDENTICAL,
 including reuse, resize, empty input, changed values, error paths and cleanup.
@@ -148,15 +150,26 @@ checks with baseline and reuse paths. The promoted default was checked on CUDA
 IDENTICAL and Metal FAST, and 67 host tests passed. HIP and broader large-model
 cross-vendor qualification remain open.
 
-### Packed resident layout candidate
+### Packed resident layout, the default since 2026-09-17
 
 Shared RF/ET inference changes apply to both Metal FAST and NVIDIA IDENTICAL;
-each platform still needs its own performance measurement. The diagnostic build
-define `MOJOLEARN_FOREST_PACKED_NODES` selects one-time resident node packing and
-compact leaf outputs while preserving the existing grove arithmetic. It is not
-a new engine or a production default. Both layouts pass the initial Metal FAST
-and IDENTICAL correctness matrix; NVIDIA qualification and large-data layout
-A/B remain pending. See the [layout experiment](lanes/GPU_FOREST_INFERENCE_NEXT.md#next-layout-experiment-after-io-measurement).
+each platform still needs its own performance measurement. The resident
+snapshot packs each node's four words (threshold bits or leaf id, local left
+child, feature, padding) once at preparation and stores only leaf vectors,
+preserving the grove arithmetic; the kernel reads a node with one 16-byte
+load (DEVIATION 2963). This layout is the default since
+lane/forest-groves-cpu-and-speed; `-D MOJOLEARN_FOREST_SEPARATE_NODES=1`
+builds the separate-arrays arm (the old opt-in `MOJOLEARN_FOREST_PACKED_NODES`
+is accepted and inert). Both layouts pass the small correctness matrix on
+Metal (FAST and IDENTICAL, 2026-09-10) and on NVIDIA IDENTICAL (L40S,
+2026-09-17), and the L40S A/B on HIGGS, Covtype and Year at 100 and 500
+trees read the same output hashes from both layouts with the packed one
+faster on every model (RF/HIGGS 100 trees 45.9 to 24.8 ms per call in
+eight-call blocks, 500 trees 224 to 128 ms; the table is in
+[LANE_STATUS_lane-forest-groves-cpu-and-speed.md](lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md)).
+Metal speed under the packed default is not measured. See the
+[layout experiment](lanes/GPU_FOREST_INFERENCE_NEXT.md#next-layout-experiment-after-io-measurement)
+for the source basis.
 
 ## Host inference with no GPU
 
