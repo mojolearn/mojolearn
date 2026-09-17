@@ -12,8 +12,8 @@ for mode in fast deterministic identical; do
         elif [[ "$mode" == deterministic ]]; then
             defines+=(-D MOJOLEARN_NUMERIC_DETERMINISTIC=1)
         fi
-        if [[ "$layout" == packed_siblings ]]; then
-            defines+=(-D MOJOLEARN_FOREST_PACKED_NODES=1)
+        if [[ "$layout" == separate_arrays ]]; then
+            defines+=(-D MOJOLEARN_FOREST_SEPARATE_NODES=1)   # packed is the default (2026-09-17)
         fi
         stem="$output_dir/$mode-$layout"
         echo "CHECK resident layout=$layout mode=$mode (small correctness fixture)"

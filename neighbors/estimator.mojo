@@ -239,6 +239,8 @@ comptime QUERY_TILE_512_CANDIDATE = (
 # DEVIATION 2631 (kernel-matrix row `knn_query_tile_for`): the row's tile
 # replaces the 512 candidate where it is set; 0 keeps the historical rule.
 from neighbors.impl.detail.knn_brute_force import tiled_radix_scratch_len, tiled_distance_tile_cells
+from neighbors.impl.detail.knn_brute_force import KNN_PHASE_TIMERS
+from std.time import perf_counter_ns
 comptime KNN_ROW_QUERY_TILE =knn_query_tile_for[TARGET_COLUMN, GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL]()
 comptime DEFAULT_QUERY_TILE = (
     KNN_ROW_QUERY_TILE if (QUERY_TILE_512_CANDIDATE and KNN_ROW_QUERY_TILE > 0)
@@ -627,8 +629,22 @@ def _knn_search_on_device_index(
     var out_i32 = ctx.enqueue_create_buffer[DType.int32](n_queries * k)
     ctx.synchronize()
 
+    # PHASE TIMERS (`-D MOJOLEARN_KNN_PHASE_TIMERS=1`, lane/knn-tiled-distance):
+    # the request's stages outside the tiled arm, printed as one line so the
+    # transfer, norm, readback and sort costs sit beside the arm's classes.
+    var t_phase = 0
+    var ns_upload = 0
+    var ns_norms = 0
+    var ns_search = 0
+    var ns_readback = 0
+    var ns_sort = 0
+    comptime if KNN_PHASE_TIMERS:
+        t_phase = perf_counter_ns()
     ctx.enqueue_copy(dst_buf=queries, src_ptr=queries_ptr)
     ctx.synchronize()
+    comptime if KNN_PHASE_TIMERS:
+        ns_upload = perf_counter_ns() - t_phase
+        t_phase = perf_counter_ns()
 
     # `knn_brute_force.cuh:117-140`: WHICH norm, and whether one at all,
     # is the metric's decision. L2 wants the SQUARED norm on both sides,
@@ -647,6 +663,9 @@ def _knn_search_on_device_index(
         ctx, queries, query_norm, n_queries, n_features, mtr
     )
     ctx.synchronize()
+    comptime if KNN_PHASE_TIMERS:
+        ns_norms = perf_counter_ns() - t_phase
+        t_phase = perf_counter_ns()
 
     # THE STAGE HASHES (`core/identity_trace.mojo`), off unless
     # `MOJOLEARN_IDENTITY_TRACE` is set. FOUR records, and the split
@@ -711,6 +730,9 @@ def _knn_search_on_device_index(
             metric_arg,
         )
     ctx.synchronize()
+    comptime if KNN_PHASE_TIMERS:
+        ns_search = perf_counter_ns() - t_phase
+        t_phase = perf_counter_ns()
 
     # Device -> pinned host buffer -> the caller's memory. The second hop is
     # not decoration: `archive/plans/UNWIRED.md:31` records that a pointer from
@@ -736,6 +758,9 @@ def _knn_search_on_device_index(
     ctx.enqueue_copy(dst_ptr=hd.unsafe_ptr(), src_buf=out_dist)
     ctx.enqueue_copy(dst_ptr=hi.unsafe_ptr(), src_buf=out_idx)
     ctx.synchronize()
+    comptime if KNN_PHASE_TIMERS:
+        ns_readback = perf_counter_ns() - t_phase
+        t_phase = perf_counter_ns()
 
     # THE SORT, AND IT IS A CORRECTNESS REQUIREMENT RATHER THAN A COURTESY.
     #
@@ -802,6 +827,15 @@ def _knn_search_on_device_index(
     for i in range(n_queries * k):
         out_dist_ptr.unsafe_store(i, hd.unsafe_ptr().unsafe_load(i))
         out_idx_ptr.unsafe_store(i, hi.unsafe_ptr().unsafe_load(i))
+    comptime if KNN_PHASE_TIMERS:
+        ns_sort = perf_counter_ns() - t_phase
+        print(
+            "KNN_PHASE_TIMERS", "request", "upload_ms", Float64(ns_upload) / 1000000.0,
+            "norms_ms", Float64(ns_norms) / 1000000.0,
+            "search_ms", Float64(ns_search) / 1000000.0,
+            "readback_ms", Float64(ns_readback) / 1000000.0,
+            "sort_ms", Float64(ns_sort) / 1000000.0,
+        )
 
     # DEVIATION 2487: retain the existing sorted device indices. A real
     # host permutation must be uploaded; an already-sorted result needs no
@@ -961,6 +995,132 @@ def knn_classifier_predict(
     _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
         n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
         out_proba_ptr, out_uniq_ptr, want_proba, weighted)
+    _ = h_dist^
+    _ = h_idx^
+    return used_tile
+
+
+def knn_classifier_predict_resident(
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    n_outputs: Int,
+    n_classes: List[Int],
+    out_labels_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    out_proba_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_uniq_ptr: MutPointer[Int32, MutUntrackedOrigin],
+    want_proba: Bool,
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+) raises -> Int:
+    """`knn_classifier_predict` over an index ALREADY ON THE DEVICE
+    (DEVIATION 3002, lane/knn-tiled-distance, 2026-09-17; the same door as
+    DEVIATION 2921's `knn_search_resident`). `index` holds the bytes
+    `index_ptr` holds, uploaded once by `neighbors/resident_index.mojo`;
+    the search is `_knn_search_on_device_index`, the body
+    `_knn_search_traced_retaining` runs after its own upload, and the vote
+    is `_knn_classifier_vote` unchanged, so every statement after the
+    upload is the one `knn_classifier_predict` runs and the bits are its.
+    """
+    if n_outputs < 1:
+        raise Error(
+            "knn_classifier_predict: n_outputs must be positive, got "
+            + String(n_outputs)
+        )
+    if len(n_classes) != n_outputs:
+        raise Error(
+            "knn_classifier_predict: n_classes has "
+            + String(len(n_classes))
+            + " entries for "
+            + String(n_outputs)
+            + " outputs"
+        )
+    var trace = IdentityTrace()
+    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+    ctx.synchronize()
+    var weighted = weights == WEIGHTS_DISTANCE
+    if weights != WEIGHTS_UNIFORM and not weighted:
+        raise Error(
+            "knn_classifier_predict: weights value "
+            + String(weights)
+            + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
+        )
+    var plan = _knn_search_plan(
+        index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+    )
+    var retained_indices = List[DeviceBuffer[DType.uint32]]()
+    var used_tile = _knn_search_on_device_index(
+        ctx, trace, retained_indices, True, index, n_index, queries_ptr,
+        n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3],
+    )
+    _knn_classifier_vote(ctx, trace, retained_indices, h_dist.unsafe_ptr(),
+        n_index, n_queries, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
+        out_proba_ptr, out_uniq_ptr, want_proba, weighted)
+    _ = h_dist^
+    _ = h_idx^
+    return used_tile
+
+
+def knn_regressor_predict_resident(
+    ctx: DeviceContext,
+    mut index: DeviceBuffer[DType.float32],
+    index_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_index: Int,
+    queries_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_queries: Int,
+    n_features: Int,
+    k: Int,
+    y_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_outputs: Int,
+    out_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    requested_query_tile: Int = DEFAULT_QUERY_TILE,
+    metric: Int = METRIC_FROM_IS_SQRT,
+    metric_arg: Float32 = Float32(2.0),
+    weights: Int = WEIGHTS_UNIFORM,
+) raises -> Int:
+    """`knn_regressor_predict` over an index ALREADY ON THE DEVICE
+    (DEVIATION 3002): the search is `_knn_search_on_device_index` and the
+    fold is `_knn_regressor_vote` unchanged; see
+    `knn_classifier_predict_resident`."""
+    if n_outputs < 1:
+        raise Error(
+            "knn_regressor_predict: n_outputs must be positive, got "
+            + String(n_outputs)
+        )
+    var trace = IdentityTrace()
+    var h_dist = ctx.enqueue_create_host_buffer[DType.float32](n_queries * k)
+    var h_idx = ctx.enqueue_create_host_buffer[DType.uint32](n_queries * k)
+    ctx.synchronize()
+    var weighted = weights == WEIGHTS_DISTANCE
+    if weights != WEIGHTS_UNIFORM and not weighted:
+        raise Error(
+            "knn_regressor_predict: weights value "
+            + String(weights)
+            + " is neither WEIGHTS_UNIFORM nor WEIGHTS_DISTANCE"
+        )
+    var plan = _knn_search_plan(
+        index_ptr, n_index, queries_ptr, n_queries, n_features, k, weighted,
+        requested_query_tile, KNN_METHOD_AUTO, metric, metric_arg,
+    )
+    var retained_indices = List[DeviceBuffer[DType.uint32]]()
+    var used_tile = _knn_search_on_device_index(
+        ctx, trace, retained_indices, False, index, n_index, queries_ptr,
+        n_queries, n_features, k, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
+        weighted, plan[2], KNN_METHOD_AUTO, plan[0], metric_arg, plan[1], plan[3],
+    )
+    _knn_regressor_vote(ctx, trace, h_dist.unsafe_ptr(), h_idx.unsafe_ptr(),
+                        n_index, n_queries, k, y_ptr, n_outputs, out_ptr, weighted)
     _ = h_dist^
     _ = h_idx^
     return used_tile

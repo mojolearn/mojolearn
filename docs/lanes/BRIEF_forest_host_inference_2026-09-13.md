@@ -153,7 +153,9 @@ byte LM host binding already carries the first three under DEVIATION 2614.
 
 The Python side then needs a loader that reads the npz, refuses the
 `-parallel-groves-1` archives by name (their recorded GPU predictions are the
-other algorithm's bits, and the host engine is the sequential one), and
+other algorithm's bits, and the host engine is the sequential one; since
+2026-09-17 they are no longer refused and predict through the host grove engine
+`core/forest_host_groves.mojo`, lane/forest-groves-cpu-and-speed), and
 returns exactly the dtypes the GPU classes return. RF probabilities float32,
 RF regression float32, ET probabilities and regression float64, class labels
 through `decode_labels`.

@@ -14,7 +14,7 @@ from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div
-from core.forest_inference import forest_add, reached_leaf, require_finite
+from core.forest_inference import forest_add, reached_leaf, require_finite, FOREST_PACKED_NODES
 
 
 def forest_device_count() raises -> Int:
@@ -103,7 +103,7 @@ struct ForestGroveOwner(Movable):
         self.nodes = len(columns)
         var packed_nodes = List[Int32]()
         var compact_leaves = List[Float32]()
-        comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+        comptime if FOREST_PACKED_NODES:
             for node in range(len(columns)):
                 var payload = bitcast[DType.int32](thresholds[node])
                 if left[node] == -1:
@@ -122,7 +122,7 @@ struct ForestGroveOwner(Movable):
             self.ctx.value().enqueue_copy(dst_buf=self.offsets.value(), src_ptr=offsets.unsafe_ptr())
             self.ctx.value().enqueue_copy(dst_buf=self.starts.value(), src_ptr=starts.unsafe_ptr())
             self.ctx.value().enqueue_copy(dst_buf=self.counts.value(), src_ptr=counts.unsafe_ptr())
-            comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+            comptime if FOREST_PACKED_NODES:
                 self.columns = self.ctx.value().enqueue_create_buffer[DType.int32](len(packed_nodes))
                 self.thresholds = self.ctx.value().enqueue_create_buffer[DType.float32](1)
                 self.left = self.ctx.value().enqueue_create_buffer[DType.int32](1)
@@ -184,7 +184,7 @@ struct ForestGroveOwner(Movable):
         var host = ctx.enqueue_create_host_buffer[DType.float32](items * 32)
         try:
             ctx.enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_offset(first_row * features))
-            ctx.enqueue_function[forest_owned_groves_kernel[RF_INPUT, is_defined["MOJOLEARN_FOREST_PACKED_NODES"]()]](
+            ctx.enqueue_function[forest_owned_groves_kernel[RF_INPUT, FOREST_PACKED_NODES]](
                 self.offsets.value().unsafe_ptr(), self.columns.value().unsafe_ptr(),
                 self.thresholds.value().unsafe_ptr(), self.left.value().unsafe_ptr(),
                 self.leaves.value().unsafe_ptr(), self.starts.value().unsafe_ptr(),
@@ -234,7 +234,7 @@ struct PooledForest(Movable):
                 var first = Int(offsets[tree])
                 var last = Int(offsets[tree+1])
                 var size = (last - first) * (12 + 4 * outputs) + 4
-                comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+                comptime if FOREST_PACKED_NODES:
                     size = (last - first) * 16 + 4
                     for node in range(first, last):
                         if left[node] == -1:

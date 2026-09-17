@@ -43,29 +43,54 @@ def finite_key(value: Float32) -> UInt32:
     return ~bits if (bits & UInt32(0x80000000)) != 0 else bits ^ UInt32(0x80000000)
 
 
+#: DEVIATION 2963 (lane/forest-groves-cpu-and-speed, 2026-09-17): two
+#: kernel candidates that keep the 32-group topology, the 16/8/4/2/1 fold and
+#: every FTZ rule and change only how the same bits are fetched.
+#: `MOJOLEARN_FOREST_PACKED_NODES` (the existing packed layout) now reads a
+#: node's four Int32 words with ONE 16-byte load instead of three field
+#: loads; `MOJOLEARN_FOREST_SHARED_ROWS=1` stages a block's four input rows
+#: in shared memory once (when `features <= FOREST_SHARED_ROW_CAPACITY`) and
+#: every lane's feature reads come from that tile. The values compared are
+#: the same words in either case. Both are default off until the pod A/B.
+comptime FOREST_SHARED_ROWS = is_defined["MOJOLEARN_FOREST_SHARED_ROWS"]()
+comptime FOREST_SHARED_ROW_CAPACITY = 256
+
+#: The resident node layout. Packed is the default since
+#: lane/forest-groves-cpu-and-speed (2026-09-17, the L40S A/B in
+#: docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md);
+#: `-D MOJOLEARN_FOREST_SEPARATE_NODES=1` selects the separate-arrays layout,
+#: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
+#: accepted and changes nothing. The layout is a device-side cache of the
+#: same nodes; the archive arrays, the comparison and the fold are the same.
+comptime FOREST_PACKED_NODES = not is_defined["MOJOLEARN_FOREST_SEPARATE_NODES"]()
+
+
 @always_inline
-def reached_leaf[RF_INPUT: Bool, PACKED: Bool = False](
+def reached_leaf[xorigin: MutOrigin, xspace: AddressSpace, //, RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],
-    x: MutPointer[Float32, MutAnyOrigin], tree: Int, row: Int, features: Int,
+    x: MutPointer[Float32, xorigin, address_space=xspace], tree: Int, row: Int, features: Int,
 ) -> Int:
     comptime if PACKED:
         # nvForest cef3a50d detail/node.hpp:81-175 and evaluate_tree.hpp:44-65.
         # Four Int32 words: threshold-bits OR compact leaf ID, local left,
-        # feature, padding. Field loads avoid Metal whole-struct load issues.
+        # feature, padding, read as one 16-byte vector (DEVIATION 2963; the
+        # buffer base is 16-byte aligned and node * 4 words keeps it so).
         # Existing sibling layout and inclusive finite-key comparison remain.
         var base = Int(offsets.unsafe_load(tree))
         var node = base
-        var child = Int(columns.unsafe_load(node * 4 + 1))
+        var words = columns.unsafe_load[width=4](node * 4)
+        var child = Int(words[1])
         while child != -1:
-            var value = x.unsafe_load(row * features + Int(columns.unsafe_load(node * 4 + 2)))
+            var value = x.unsafe_load(row * features + Int(words[2]))
             comptime if RF_INPUT:
                 value = ftz(value)
-            var threshold = bitcast[DType.float32](columns.unsafe_load(node * 4))
+            var threshold = bitcast[DType.float32](words[0])
             var go_left = finite_key(value) <= finite_key(threshold)
             node = base + child + (0 if go_left else 1)
-            child = Int(columns.unsafe_load(node * 4 + 1))
-        return Int(columns.unsafe_load(node * 4))
+            words = columns.unsafe_load[width=4](node * 4)
+            child = Int(words[1])
+        return Int(words[0])
     var base = Int(offsets.unsafe_load(tree))
     var node = base
     var child = Int(left.unsafe_load(node))
@@ -113,7 +138,28 @@ def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     var lane = tid%32
     var item = Int(block_idx.x)*4+tid//32
     var total = Float32(0)
-    if item < rows*outputs:
+    var tiled = False
+    comptime if FOREST_SHARED_ROWS:
+        # DEVIATION 2963: with one output an item is a row, so the block's
+        # four rows tile into shared memory; every thread hits the barrier.
+        var xs = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+        if outputs == 1 and features <= FOREST_SHARED_ROW_CAPACITY:
+            tiled = True
+            var row0 = Int(block_idx.x)*4
+            var count = 4*features
+            var i = tid
+            while i < count:
+                var r = row0+i//features
+                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
+                i += 128
+            barrier()
+            if item < rows:
+                var tree = lane
+                while tree < trees:
+                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
+                    total = forest_add(total,leaves.unsafe_load(node))
+                    tree += 32
+    if not tiled and item < rows*outputs:
         var tree = lane
         while tree < trees:
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,item//outputs,features)
@@ -171,7 +217,30 @@ def forest_vector_grove32_kernel[RF_INPUT: Bool, OUTPUT_CAPACITY: Int, PACKED: B
     @parameter
     for c in range(OUTPUT_CAPACITY):
         totals[unsafe_offset=c] = Float32(0)
-    if row < rows:
+    var tiled = False
+    comptime if FOREST_SHARED_ROWS:
+        # DEVIATION 2963: the block's four rows tiled into shared memory.
+        var xs = stack_allocation[4*FOREST_SHARED_ROW_CAPACITY,Float32,address_space=AddressSpace.SHARED]()
+        if features <= FOREST_SHARED_ROW_CAPACITY:
+            tiled = True
+            var row0 = Int(block_idx.x)*4
+            var count = 4*features
+            var i = tid
+            while i < count:
+                var r = row0+i//features
+                xs[unsafe_offset=i] = x.unsafe_load(r*features+i%features) if r < rows else Float32(0)
+                i += 128
+            barrier()
+            if row < rows:
+                var tree = lane
+                while tree < trees:
+                    var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,xs,tree,tid//32,features)
+                    @parameter
+                    for c in range(OUTPUT_CAPACITY):
+                        if c < outputs:
+                            totals[unsafe_offset=c] = forest_add(totals[unsafe_offset=c],leaves.unsafe_load(node*outputs+c))
+                    tree += 32
+    if not tiled and row < rows:
         var tree = lane
         while tree < trees:
             var node = reached_leaf[RF_INPUT, PACKED](offsets,columns,thresholds,left,x,tree,row,features)

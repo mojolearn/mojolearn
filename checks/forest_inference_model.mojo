@@ -5,7 +5,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
 from std.sys.compile import is_defined
-from core.forest_inference import forest_predict_gpu
+from core.forest_inference import forest_predict_gpu, FOREST_PACKED_NODES
 from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into
 
 
@@ -94,7 +94,7 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
                 raise Error("resident layout/direct GPU bit mismatch")
             if bitcast[DType.uint32](actual[i]) != bitcast[DType.uint32](staged[i]):
                 raise Error("WP3 List/pointer boundary bit mismatch")
-    comptime if is_defined["MOJOLEARN_FOREST_PACKED_NODES"]():
+    comptime if FOREST_PACKED_NODES:
         # Sabotage actual packed device leaf data, then require prediction to
         # change. This proves the candidate buffer is reached, not just built.
         var leaf_count = 0
@@ -114,7 +114,7 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
 
 
 def main() raises:
-    print("RESIDENT_LAYOUT_PACKED", is_defined["MOJOLEARN_FOREST_PACKED_NODES"]())
+    print("RESIDENT_LAYOUT_PACKED", FOREST_PACKED_NODES)
     var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
     for outputs in output_counts:
         check_layout[True](outputs)
