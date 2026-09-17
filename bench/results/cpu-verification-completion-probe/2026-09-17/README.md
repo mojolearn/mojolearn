@@ -37,3 +37,11 @@ Metrics, training and linalg are fresh; other native bindings remain reused.
 `neural-five-wheel-receipt.json` identifies the successful artifact and runtime
 closure; wheel binaries are archived externally by SHA-256. The post-merge
 focused suite passes 336 tests. This remains scoped development-wheel evidence.
+
+The 32-family export audit initially found stale forest and GBDT bindings.
+Fresh builds remove all missing exports. The wheel at `7f5b786ae` then passes
+seven affected tree lanes: 198 IDENTICAL, 117 N/A, zero failures or owed parts.
+`host-export-*` receipts/logs and `installed-exports-*` audits retain both
+outcomes. Mac and Linux packaging gates now require callable manifest exports;
+167 packaging/manifest tests pass. Five families are freshly built at this
+point; the subsequent frozen all-family rebuild is separate work.
