@@ -170,15 +170,29 @@ own RandomForest fit on the same training rows with the same trees, depth,
 n_bins and max_features, timed through its cached nvForest model
 (independent trees). Seven rounds; single call / eight-call block, ms per call:
 
-| model | fil-ours | cuml-rf | ours after2 (packed) |
-|---|---|---|---|
-| RF HIGGS 100x16 | 18.4u / 14.6u | 17.9u / 16.4u | AFTER2 |
-| ET HIGGS 100x16 | 13.0 / 14.1u | (no cuML ET) | AFTER2 |
-| RF Covtype 100x16 | 24.1u / 19.5u | 19.6 / 22.0u | AFTER2 |
-| ET Year 100x16 | 26.9 / 27.3u | (no cuML ET) | AFTER2 |
-| RF HIGGS 500x16 | 40.9 / 41.9 | 48.3u / 43.5 | AFTER2 |
+| model | fil-ours, 7 rounds | fil-ours, 15 rounds | cuml-rf, 7 rounds | cuml-rf, 15 rounds | ours after2 (packed), 7 rounds, 2 processes |
+|---|---|---|---|---|---|
+| RF HIGGS 100x16 | 18.4u / 14.6u | 14.7 / 14.4u | 17.9u / 16.4u | 16.0u / 15.4u | 24.4, 24.5 / 24.8, 24.8 |
+| ET HIGGS 100x16 | 13.0 / 14.1u | 14.2u / 13.1u | (no cuML ET) | (no cuML ET) | 70.7u, 75.5u / 77.2, 78.1 |
+| RF Covtype 100x16 | 24.1u / 19.5u | 19.7u / 18.8u | 19.6 / 22.0u | 20.2u / 20.6u | 24.0u, 27.0 / 28.1, 31.1 |
+| ET Year 100x16 | 26.9 / 27.3u | 27.4u / 26.3u | (no cuML ET) | (no cuML ET) | 62.9u, 67.9 / 63.3, 64.3u |
+| RF HIGGS 500x16 | 40.9 / 41.9 | 41.5u / 42.1 | 48.3u / 43.5 | 42.0u / 43.0 | 126.9, 129.0 / 126.9, 129.5 |
 
-FILRERUN
+Read across, not as a ratio: FIL's spreads sit above the 1.10 gate in most
+cells at both round counts (its medians agree between the two runs, so this
+is its own call-to-call jitter on this box, not drift), while our packed
+arm passes the gate in eight-call blocks on HIGGS and the 500-tree model.
+On the same box and the same rows, FIL on our own trees answers RF/HIGGS
+100x16 in about 14.5 ms per call where our packed groves engine takes
+24.8; the 500-tree model 42 against 128; Covtype 19 against 28; ET/Year 26
+against 64; ET/HIGGS 13 against 77. The H100 figure in the engine contract
+(21.09 against cuML's 10.70) was a different box. The ET gap is the widest
+and is the next kernel question: ET's random thresholds make every root to
+leaf walk the full depth, and the per-lane traversal reads 16 packed nodes
+per tree per row where FIL's layout and chunking (nvForest
+`detail/infer/gpu.cuh`) keep more of a tree in cache; a depth-first node
+order inside the packed layout that keeps the lane-to-tree assignment is
+the candidate that keeps the reduction graph.
 
 ## Commands
 
