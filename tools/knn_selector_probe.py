@@ -92,9 +92,12 @@ def main():
                     for f in ("distance_ms", "select_ms", "merge_ms"):
                         cell[f] = statistics.median([t[f] for t in tiled])
                     line += " distance=%.2f select=%.2f merge=%.2f" % (cell["distance_ms"], cell["select_ms"], cell["merge_ms"])
-                fb = [l for c in calls for l in c if l.startswith("KNN_SELECT_FALLBACK")]
+                # the flagged-launch rows of the LAST timed call, summed over its column tiles
+                fb = [phase_fields(l) for l in (calls[-1] if calls else []) if l.startswith("KNN_SELECT_FALLBACK")]
                 if fb:
-                    line += " | " + fb[-1]
+                    cell["fallback_rows"] = int(sum(t["flagged"] for t in fb))
+                    cell["fallback_row_tiles"] = int(sum(t["rows"] for t in fb))
+                    line += " fallback=%d/%d" % (cell["fallback_rows"], cell["fallback_row_tiles"])
                 print(line, flush=True)
                 if r.returncode != 0:
                     print("   stderr:", r.stderr[-600:], flush=True)

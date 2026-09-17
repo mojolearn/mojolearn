@@ -105,6 +105,9 @@ comptime SBC_DEPTH = 8 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C8"]() else (
     2 if is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_C2"]() else 4
 )
 comptime SBC_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
+#: TIMING ONLY, OUTPUT INVALID on flagged rows: no flagged launch, so a timer
+#: build prices that launch by difference. Never shipped.
+comptime SBC_TIMING_NOFLAG = is_defined["MOJOLEARN_KNN_SELECTOR_BOUND_TIMING_NOFLAG"]()
 
 
 @always_inline
@@ -258,9 +261,10 @@ def bound_compact_select_launch(
         Int32(length), Int32(k), Int32(select_min),
         grid_dim=(rows, 1, 1), block_dim=(SBC_BLOCK, 1, 1),
     )
-    smallk_flagged_launch[SBC_FALLBACK_SABOTAGE](
-        ctx, values, out_values, out_indices, flag_ptr, rows, length, k, select_min
-    )
+    comptime if not SBC_TIMING_NOFLAG:
+        smallk_flagged_launch[SBC_FALLBACK_SABOTAGE](
+            ctx, values, out_values, out_indices, flag_ptr, rows, length, k, select_min
+        )
     comptime if SBC_PHASE_TIMERS:
         # Timer builds only: how many rows the flagged launch served.
         var host = ctx.enqueue_create_host_buffer[DType.uint32](len(flags))

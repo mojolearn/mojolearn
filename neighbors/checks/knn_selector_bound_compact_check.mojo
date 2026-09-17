@@ -38,9 +38,9 @@ comptime ROWS = 6
 
 
 def splitmix64(x: UInt64) -> UInt64:
-    var z = x &+ UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> UInt64(30))) &* UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> UInt64(27))) &* UInt64(0x94D049BB133111EB)
+    var z = x + UInt64(0x9E3779B97F4A7C15)
+    z = (z ^ (z >> UInt64(30))) * UInt64(0xBF58476D1CE4E5B9)
+    z = (z ^ (z >> UInt64(27))) * UInt64(0x94D049BB133111EB)
     return z ^ (z >> UInt64(31))
 
 
