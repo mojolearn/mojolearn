@@ -28,7 +28,7 @@ The four kinds, for one lane:
 
 - Lanes: **229** (179 single-device, 50 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **224**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **61** of 224.
+- Source public API entries with ALL FOUR kinds on at least one lane: **63** of 224.
 - Source public API entries with NO IDENTITY LANE AT ALL: **19**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -39,7 +39,7 @@ Per kind, over the public API entries:
 |---|---|---|
 | gpu column | 197 | 27 |
 | cpu verifier | 167 | 57 |
-| sabotage seen to move a build | 72 | 152 |
+| sabotage seen to move a build | 75 | 149 |
 | batch part or named n/a | 203 | 21 |
 
 Per kind, over the lanes:
@@ -49,17 +49,17 @@ Per kind, over the lanes:
 | gpu column (any class) | 208 | 21 |
 | gpu column on all three classes | 171 | 58 |
 | cpu verifier declared | 190 | 39 |
-| sabotage seen to move a build | 61 | 168 |
+| sabotage seen to move a build | 63 | 166 |
 | batch part or named n/a | 229 | 0 |
-| ALL FOUR | 54 | 175 |
+| ALL FOUR | 55 | 174 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 61 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 63 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 129 | the family declares a define; no committed pair moves this lane |
+| declared | 127 | the family declares a define; no committed pair moves this lane |
 | none | 39 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -195,7 +195,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `TransformerBlock` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlockInference` | 15 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TruncatedSVD` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `UMAP` | 2 | amd,apple,nvidia | training | declared | part | NO |
+| `UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `WhiteKernel` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `clip_grad_norm_` | 1 | amd,apple,nvidia | training | declared | part | NO |
 | `cross_entropy` | 1 | amd,apple,nvidia | training | declared | part | NO |
@@ -313,7 +313,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_preprocessing.transform_scaler` | 2 | amd,apple,nvidia | training | declared | part | NO |
 | `parallel_training.ParallelByteLanguageModelTrainer` | 3 | amd,apple,nvidia |  | none | n/a | NO |
 | `parallel_training.ParallelNeuralTrainer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `parallel_training.ordered_sum_gradients` | 1 |  | training | declared | n/a | NO |
+| `parallel_training.ordered_sum_gradients` | 1 |  | training | seen(build) | n/a | NO |
 | `preprocessing.MinMaxScaler` | 3 | amd,apple,nvidia | training | declared | part | NO |
 | `preprocessing.StandardScaler` | 4 | amd,apple,nvidia | training | declared | part | NO |
 | `resample.bootstrap` | 2 | amd,apple,nvidia | training | declared | part | NO |
@@ -344,7 +344,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `training.rms_norm_forward` | 1 | amd,apple,nvidia | training | declared | part | NO |
 | `transformer.TransformerBlock` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `transformer.TransformerDecodeSession` | **0** |  |  |  |  | NO |
-| `umap.UMAP` | 2 | amd,apple,nvidia | training | declared | part | NO |
+| `umap.UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 
 ## The lane matrix
 
@@ -487,7 +487,7 @@ A blank cell means no lane of this algorithm has that kind.
 | ols-weighted | amd,apple,nvidia | training | declared | - | part | NO |
 | optim-adam-clip | amd,apple,nvidia | training | declared | - | part | NO |
 | optim-sgd | amd,apple,nvidia | training | declared | - | part | NO |
-| ordered-gradient-sum | - | training | declared | - | n/a n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | NO |
+| ordered-gradient-sum | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-ordered-sum-completion/cpu-sabotage.json` | n/a n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | NO |
 | par-arima | amd,apple,nvidia | training | declared | - | part | NO |
 | par-boosting | amd,apple,nvidia | - | none | - | part | NO |
 | par-boosting-clf | - | - | none | - | part | NO |
@@ -578,7 +578,7 @@ A blank cell means no lane of this algorithm has that kind.
 | transformer-int8w | apple | training | declared | - | part | NO |
 | transformer-window | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
 | tsvd | amd,apple,nvidia | training | declared | - | part | NO |
-| umap | amd,apple,nvidia | training | declared | - | part | NO |
+| umap | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-umap-completion/cpu-sabotage.json` | part | yes |
 
 ## Lanes missing each kind, by name
 
@@ -594,9 +594,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-scaler-minmax, par-svm, par-svm-svr
 
-**Sabotage not seen to move a build: 168**
+**Sabotage not seen to move a build: 166**
 
-> arima, arima-011, arima-seasonal-c, bootstrap, bpe-trainer, byte-lm, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, cross-val, cross-val-folds, dbscan, dbscan-brute-l1, dbscan-weighted, elasticnet, elasticnet-l2end-no-intercept, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-categorical-ctr, gbdt-categorical-ctr-tables, gbdt-depthwise, gbdt-exact-mae, gbdt-feature-freq, gbdt-lossguide, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-pointwise-l2-bayesian-eval, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-tensor-ctr-tables, gemm-bf16, gemm-int8, gemm-pinned, gemm-transposed, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, iforest-tuned, kde, kde-cosine-minkowski, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-tophat-sqeuclidean, kde-weighted, kmeans-cosine, knn, knn-chebyshev, knn-clf, knn-clf-distance, knn-cosine, knn-manhattan, knn-minkowski-p3, knn-rbc, knn-reg, knn-reg-distance, knn-sqeuclidean, lasso, logistic, logistic-elasticnet, logistic-l1, logistic-multiclass, logistic-unpenalized-no-intercept, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, metrics, metrics-classification, minmax-scaler, minmax-scaler-clip, mlp, mlp-bf16w, mlp-int8w, monte-carlo, ols-no-intercept, ols-weighted, optim-adam-clip, optim-sgd, ordered-gradient-sum, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-holtwinters, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, pca, pca-full-whiten, pca-whiten, permutation-test, radius, radius-chebyshev, radius-manhattan, radius-minkowski-p3, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, ridge-no-intercept, samba-bf16w, samba-int8w, spectral-precomputed, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std, training-primitives, transformer-bf16w, transformer-int8w, tsvd, umap
+> arima, arima-011, arima-seasonal-c, bootstrap, bpe-trainer, byte-lm, byte-lm-host-infer, byte-lm-host-infer-threaded, byte-lm-host-train, byte-lm-resident, cross-entropy-arms, cross-val, cross-val-folds, dbscan, dbscan-brute-l1, dbscan-weighted, elasticnet, elasticnet-l2end-no-intercept, et-clf-entropy-bestfirst, et-reg-bootstrap-parallel, gbdt-adapter-clf, gbdt-adapter-reg, gbdt-categorical-ctr, gbdt-categorical-ctr-tables, gbdt-depthwise, gbdt-exact-mae, gbdt-feature-freq, gbdt-lossguide, gbdt-multiclass, gbdt-onevsall, gbdt-ordered-rmse, gbdt-pointwise-l2-bayesian-eval, gbdt-query-rmse, gbdt-rmse, gbdt-symmetric, gbdt-tensor-ctr-tables, gemm-bf16, gemm-int8, gemm-pinned, gemm-transposed, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, iforest-tuned, kde, kde-cosine-minkowski, kde-epanechnikov-l1, kde-exponential-chebyshev, kde-linear-cosine, kde-tophat-sqeuclidean, kde-weighted, kmeans-cosine, knn, knn-chebyshev, knn-clf, knn-clf-distance, knn-cosine, knn-manhattan, knn-minkowski-p3, knn-rbc, knn-reg, knn-reg-distance, knn-sqeuclidean, lasso, logistic, logistic-elasticnet, logistic-l1, logistic-multiclass, logistic-unpenalized-no-intercept, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, metrics, metrics-classification, minmax-scaler, minmax-scaler-clip, mlp, mlp-bf16w, mlp-int8w, monte-carlo, ols-no-intercept, ols-weighted, optim-adam-clip, optim-sgd, par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest, par-forest-et, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-holtwinters, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-mlp, par-nystroem, par-ordered-rmse, par-queries-kde, par-queries-knn, par-queries-nn, par-queries-radius, par-rbf-sampler, par-reference-knn, par-reference-knn-reg, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr, pca, pca-full-whiten, pca-whiten, permutation-test, radius, radius-chebyshev, radius-manhattan, radius-minkowski-p3, rf-clf, rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg, rf-reg-gamma-ig, rf-reg-poisson, ridge-no-intercept, samba-bf16w, samba-int8w, spectral-precomputed, standard-scaler, standard-scaler-no-mean, standard-scaler-no-std, training-primitives, transformer-bf16w, transformer-int8w, tsvd
 
 **Batch undeclared: 0**
 

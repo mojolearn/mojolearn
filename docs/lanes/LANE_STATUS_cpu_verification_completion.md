@@ -87,3 +87,24 @@ vendor-held candidates, all other missing native/property coverage, hardware
 and multi-GPU pairs, and final artifact qualification. The development wheels
 reuse Mac bindings except the freshly compiled metrics binding; their receipts
 must not be treated as certification of all current native sources.
+
+## Additional completed work at `5e5e0a84c`
+
+UMAP and ordered gradient sum now have all-nine strict references and native
+controls, bringing availability to 144 and withholding to 35. UMAP uses the
+fresh metrics builds and passes held-out, saved model and batch checks. Ordered
+sum needed a native accumulation fault: reversing two addends cannot change an
+addition. Sabotage now zeros the first accumulated result; production is
+unchanged. The independent oracle catches all nine wrong outputs. The harness
+retains repeated measured hashes as DIVERGENT, still exits one, and never admits
+those failed results as references. Ordinary exceptions remain REFUSED.
+
+The CPU batch runner now rejects clean property failures even when the training
+control moved. The in-flight pod used the earlier runner: its reported training
+successes must be reevaluated. Its Mamba/Samba stepfull properties currently
+refuse because the build list omitted the neural binding. Keep these failures;
+rerun affected lanes with the full native dependency set. The original ordered
+sum native control was unchanged and remains a failed control.
+
+307 focused tests pass. The next installed development artifact adds the freshly
+built training binding alongside metrics; all other Mac bindings remain reused.
