@@ -2530,6 +2530,7 @@ PUBLIC_PENDING_LANES = {
     # The other fix-record lanes passed installed reference-table replay;
     # legacy `identity` still restricts itself to its original column scope.
     "kmeans-sqrt": "own record",
+    "ivf": "own record",  # ties still owes a qualifying native training control
     # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
     "gemm-bf16": "no reference", "gemm-int8": "no reference",
     "transformer-bf16w": "no reference", "transformer-int8w": "no reference",

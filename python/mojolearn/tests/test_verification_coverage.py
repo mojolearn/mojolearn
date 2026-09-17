@@ -227,3 +227,13 @@ def test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match():
     rows=va.judge_rows([dict(lane='x',fixture='base',part='model',value=parts['model'][0],error=parts['model'][1])],
                       dict(cells={'x/base':{'model':dict(ref=digest)}}))
     assert rows[0]['state']==vr.REFUSED
+
+
+def test_scoped_admission_is_visible_without_upgrading_legacy_lanes():
+    table = vr.load_table()
+    report = coverage.inventory(va.load_harness(), table, 'cpu')
+    for lane in ('embedding', 'embedding-sort', 'ivf-euclidean'):
+        assert report['lanes'][lane]['reference_admission']['policy']['min_repeats'] == 2
+        assert report['lanes'][lane]['status'] == 'available'
+    assert report['reference_admission_policy']['status'] == 'legacy'
+    assert report['lanes']['ols']['reference_admission']['policy']['status'] == 'legacy'
