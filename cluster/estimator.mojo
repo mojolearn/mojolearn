@@ -109,7 +109,10 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 """
 
 from max.algorithm import sync_parallelize
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
+from std.gpu import block_dim, block_idx, thread_idx
+from std.math import isfinite
+from std.sys.compile import is_defined
 
 from cluster.impl.detail.kmeans_common import (
     centroid_norms_take_sqrt,
@@ -220,6 +223,170 @@ def plan_sum_scale(
     return choose_scale(worst, n_samples)
 
 
+#: DEVIATION 3081 (2026-09-17, lane kmeans-linear-speed): `sum_scale` from a
+#: CERTIFIED DEVICE MAGNITUDE, the host pass kept as the fallback. Off unless
+#: the define is given. See `plan_sum_scale_certified`.
+comptime KMEANS_DEVICE_SCALE = is_defined[
+    "MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE"
+]()
+#: The reach control for 3081: the device magnitude is multiplied by 4 before
+#: it is certified, so the scale moves two binades. NEVER a shipping define.
+comptime KMEANS_DEVICE_SCALE_SABOTAGE = is_defined[
+    "MOJOLEARN_KMEANS_DEVICE_SCALE_SABOTAGE"
+]()
+
+#: Rows one thread folds serially. The certificate's relative error bound is
+#: proportional to `DEVICE_SCALE_CHUNK + ceil(n / DEVICE_SCALE_CHUNK)`.
+comptime DEVICE_SCALE_CHUNK = 2048
+comptime DEVICE_SCALE_TPB = 256
+
+
+def abs_chunk_sums_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+):
+    """Thread `(chunk b, feature f)`: the float32 sum of `abs(x[r, f])` over
+    the chunk's rows, serially. A BOUND's input, never a model's: see
+    `plan_sum_scale_certified`."""
+    var n_rows = Int(n_rows_in)
+    var n_features = Int(n_features_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // n_features
+    var f = gid - b * n_features
+    var r0 = b * DEVICE_SCALE_CHUNK
+    if r0 >= n_rows:
+        return
+    var r1 = r0 + DEVICE_SCALE_CHUNK
+    if r1 > n_rows:
+        r1 = n_rows
+    var acc = Float32(0.0)
+    for row in range(r0, r1):
+        acc = acc + abs(x.unsafe_load(row * n_features + f))
+    out.unsafe_store(gid, acc)
+
+
+def abs_fold_chunks_kernel(
+    out: MutPointer[Float32, MutAnyOrigin],
+    chunk_sums: MutPointer[Float32, MutAnyOrigin],
+    n_chunks_in: Int32,
+    n_features_in: Int32,
+):
+    """Thread `f`: the serial float32 fold of feature `f`'s chunk sums."""
+    var n_chunks = Int(n_chunks_in)
+    var n_features = Int(n_features_in)
+    var f = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if f >= n_features:
+        return
+    var acc = Float32(0.0)
+    for b in range(n_chunks):
+        acc = acc + chunk_sums.unsafe_load(b * n_features + f)
+    out.unsafe_store(f, acc)
+
+
+def plan_sum_scale_certified(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+) raises -> Float64:
+    """DEVIATION 3081. `plan_sum_scale`'s answer from the design ALREADY ON
+    THE DEVICE, or 0.0 when the device cannot CERTIFY it (the caller then
+    runs the host pass, which is the definition).
+
+    WHAT WAS MEASURED FIRST (RTX 4090 pod, EPYC 7642 host, 2026-09-17): the
+    host pass is 606 to 711 ms at Istella-S 2,043,304 x 220 and 156 to 215 ms
+    at taxi 4,000,000 x 11, against 9.3 ms and 1.8 ms for one fused
+    assignment. It is a walk over every value of a matrix the fit is about
+    to upload anyway.
+
+    WHY NO BIT MOVES. The fit never consumes the magnitude, only
+    `choose_scale(worst, n)`, and `choose_scale` is a STEP function: the
+    largest power of two `s` with `worst * s <= limit`, non-increasing in
+    `worst`. So any interval `[lo, hi]` that provably contains the host's
+    `worst` and satisfies `choose_scale(lo) == choose_scale(hi)` names the
+    host's scale exactly. The interval comes from float32 device sums `W_f`
+    of `abs(x[:, f])` formed by a reduction of height `h = DEVICE_SCALE_CHUNK
+    + n_chunks` (a serial chunk fold, then a serial fold of the chunk sums).
+    Every term is non-negative, so each rounded addition is the exact one
+    times `(1 + e)`, `|e| <= u = 2^-24`, and `W_f` lies within `[(1 - u)^h,
+    (1 + u)^h]` of the exact real sum; the host's sequential float64 chain
+    lies within `n * 2^-52` of the same real sum; flushed denormals move
+    either by less than `2 n * 2^-126` in absolute terms. `delta` below is
+    twice the sum of those bounds and the interval is `W * (1 -+ 2 delta)`,
+    `W = max_f W_f` (the host's `worst` is the max of the per-column chains,
+    each inside its own column's interval). REFUSALS, each a return of 0.0:
+    any `W_f` not finite (on an IEEE device a NaN or an infinity in column
+    `f`, or a float32 overflow of the sum, makes `W_f` non-finite, so a
+    finite vector also certifies every input finite); `W < 2^-40` (the
+    all-zero plane and the range where the flush bound stops being
+    negligible); `delta >= 2^-4`; and the two ends of the interval
+    disagreeing, which is a magnitude within `2 delta` of a power-of-two
+    boundary.
+
+    NVIDIA ONLY until another column's NaN propagation through `abs` and
+    `+` is verified: the certificate's finiteness clause needs IEEE
+    semantics on the device.
+    """
+    var n_chunks = (n_samples + DEVICE_SCALE_CHUNK - 1) // DEVICE_SCALE_CHUNK
+    var height = DEVICE_SCALE_CHUNK + n_chunks
+    var delta = (
+        2.0 * (2.0 * Float64(height) * 5.9604644775390625e-08)
+        + 2.0 * Float64(n_samples) * 2.220446049250313e-16
+        + 9.5367431640625e-07
+    )
+    if delta >= 0.0625:
+        return 0.0
+    var chunk_sums = ctx.enqueue_create_buffer[DType.float32](
+        n_chunks * n_features
+    )
+    var col = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var h_col = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    var threads = n_chunks * n_features
+    ctx.enqueue_function[abs_chunk_sums_kernel](
+        chunk_sums.unsafe_ptr(),
+        x.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        grid_dim=((threads + DEVICE_SCALE_TPB - 1) // DEVICE_SCALE_TPB, 1, 1),
+        block_dim=(DEVICE_SCALE_TPB, 1, 1),
+    )
+    ctx.enqueue_function[abs_fold_chunks_kernel](
+        col.unsafe_ptr(),
+        chunk_sums.unsafe_ptr(),
+        Int32(n_chunks),
+        Int32(n_features),
+        grid_dim=(
+            (n_features + DEVICE_SCALE_TPB - 1) // DEVICE_SCALE_TPB, 1, 1
+        ),
+        block_dim=(DEVICE_SCALE_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_col.unsafe_ptr(), src_buf=col)
+    ctx.synchronize()
+    var worst = Float64(0.0)
+    for f in range(n_features):
+        var v = h_col.unsafe_ptr().unsafe_load(f)
+        if not isfinite(v):
+            return 0.0
+        if Float64(v) > worst:
+            worst = Float64(v)
+    _ = chunk_sums^
+    _ = col^
+    _ = h_col^
+    comptime if KMEANS_DEVICE_SCALE_SABOTAGE:
+        worst = worst * 4.0
+    if worst < 9.094947017729282e-13:
+        return 0.0
+    var lo = worst * (1.0 - 2.0 * delta)
+    var hi = worst * (1.0 + 2.0 * delta)
+    var s_hi = choose_scale(lo, n_samples)
+    var s_lo = choose_scale(hi, n_samples)
+    if s_hi != s_lo:
+        return 0.0
+    return s_lo
+
+
 def kmeans_fit(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -286,8 +453,9 @@ def kmeans_fit(
         )
 
     var sum_scale = requested_sum_scale
-    if sum_scale <= 0.0:
-        sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
+    comptime if not KMEANS_DEVICE_SCALE:
+        if sum_scale <= 0.0:
+            sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
     # THE WEIGHT BOUND IS NOT ALWAYS n_samples. Unit weights sum to exactly
     # that, but caller-supplied weights can sum to anything, and using
     # n_samples for them would understate the bound and overflow the
@@ -324,6 +492,14 @@ def kmeans_fit(
     ctx.synchronize()
 
     ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+
+    # DEVIATION 3081: the scale from the design now on the device, certified
+    # equal to the host pass's, which remains the fallback and the definition.
+    comptime if KMEANS_DEVICE_SCALE:
+        if sum_scale <= 0.0:
+            sum_scale = plan_sum_scale_certified(ctx, x, n_samples, n_features)
+        if sum_scale <= 0.0:
+            sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
 
     # DEVIATION 2672 (2026-09-11, linear-cluster-istella): NO HOST WEIGHT
     # VECTOR. The fit used to allocate an `n_samples` pinned host buffer,

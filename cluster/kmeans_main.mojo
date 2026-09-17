@@ -12,6 +12,7 @@ from cluster.checks.estimator_check import (
     check_kmeans_fit_rejects_bad_shapes,
     check_kmeans_fit_weight_arms_agree,
     check_plan_sum_scale,
+    check_plan_sum_scale_certified,
 )
 from cluster.checks.kmeans_check import (
     check_accumulate_veclen_dispatch,
@@ -50,6 +51,7 @@ def main() raises:
     # The caller-facing surface, last: it is the only thing here a user can
     # reach, and it is worth nothing if the kernels above are wrong.
     check_plan_sum_scale()
+    check_plan_sum_scale_certified()
     check_kmeans_fit_recovers_planted()
     check_kmeans_fit_weight_arms_agree()
     check_kmeans_fit_rejects_bad_shapes()
