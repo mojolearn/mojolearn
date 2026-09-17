@@ -242,7 +242,7 @@ comptime DEVICE_SCALE_TPB = 256
 
 
 def abs_chunk_sums_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
     n_rows_in: Int32,
     n_features_in: Int32,
@@ -264,11 +264,11 @@ def abs_chunk_sums_kernel(
     var acc = Float32(0.0)
     for row in range(r0, r1):
         acc = acc + abs(x.unsafe_load(row * n_features + f))
-    out.unsafe_store(gid, acc)
+    dst.unsafe_store(gid, acc)
 
 
 def abs_fold_chunks_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    dst: MutPointer[Float32, MutAnyOrigin],
     chunk_sums: MutPointer[Float32, MutAnyOrigin],
     n_chunks_in: Int32,
     n_features_in: Int32,
@@ -282,7 +282,7 @@ def abs_fold_chunks_kernel(
     var acc = Float32(0.0)
     for b in range(n_chunks):
         acc = acc + chunk_sums.unsafe_load(b * n_features + f)
-    out.unsafe_store(f, acc)
+    dst.unsafe_store(f, acc)
 
 
 def plan_sum_scale_certified(
