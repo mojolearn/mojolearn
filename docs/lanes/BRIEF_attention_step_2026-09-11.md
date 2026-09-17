@@ -3634,3 +3634,103 @@ The M4 gates ran first, one at a time under `nice 19` through
 - `transformer_fused_check` with NO trial define: `DEFAULT column=apple
   arm=stash_tiled word=7 trial_hook=False`, PASS, 15 cases, every buffer
   bit-identical, so the shipped Apple build is untouched.
+
+### 22.6 For `lane/gemm-next`: the per-leaf GEMM detail this lane already holds
+
+Filed here rather than sent, so the re-ranking lane can read it from the
+record. Nothing below is new measurement; it is the existing evidence read
+carefully, plus two corrections a reader of the docs alone would get wrong.
+
+THE INSTRUMENT ALREADY EXISTS AND HAS ALREADY RUN. `core/step_phase.mojo`
+(DEVIATION 2630) compiles every `pc.tick` / `pp.tick` only under a SECOND
+define, `-D MOJOLEARN_STEP_PHASE_TIMERS=1`, beyond the runtime switch
+`MOJOLEARN_TRANSFORMER_TIMING=1` that the `block.*`, `bwd.*`, `step.*` and
+`attn.*` lines need. An ordinary timing build prints none of the `grad.*`,
+`fwd.*` or `gemm.*` leaves. `tools/step_breakdown_leg.sh` and
+`tools/step_breakdown_summary.py` are the leg and the summarizer, and
+`bench/results/e1g/2026-09-11_190725-nvidia-h100-80gb-hbm3-step-breakdown/remote/step-breakdown/breakdown.tsv`
+is a complete parent / child / remainder tree with per-leaf ms, launches and
+syncs per step, plus `category` and `gemm.<kind>` cross-cuts.
+
+CORRECTION 1, the shape. `docs/lanes/BRIEF_step_glue_2026-09-11.md` section 1
+said that leg was "Target shape B2 L1024". It was not: the leg's own
+`lean-shipped-enwik8/result.json` reads `"batch": 1, "length": 2048`, the
+target shape. M is 2,048 token rows either way so no number moves, but the
+wrong spelling had already been quoted as a reason to discount the whole
+breakdown. Fixed at a2ac5e304.
+
+CORRECTION 2, the 52 ms that an ordinary timing build cannot see.
+`envelope.blocks_backward` is 114.52 ms in the 2026-09-12 run while
+`bwd.before_attention` + `bwd.attention` + `bwd.after_attention` sum to
+62.13 ms. The missing 52.39 ms is not a mystery and not host overhead: the
+`bwd.*` clock is initialized at `transformer/checks/transformer_backward.mojo`
+lines 3065 to 3066 and `bwd.before_attention` fires at 3067, so that tick
+measures nothing (it reads 0.033 ms over 12 layers, 2.7 us per layer, which
+is what an already-drained queue costs). Everything before line 3065 is
+outside all three `bwd.*` ticks and inside the envelope: the per-layer
+refusal scan (2828), the six MLP backward GEMMs, the SiLU and gate
+elementwise backward, norm2 backward, the residual adds, and the two o_proj
+backward GEMMs. Under `MOJOLEARN_STEP_PHASE_TIMERS` that whole region has a
+name, `bwd.mlp_through_oproj`, and it read 54.92 ms at commit b4ddb4585
+against this subtraction's 52.39 ms at bb679f19.
+
+THE GEMM LEAVES, from that `breakdown.tsv` (target shape, H100 80GB HBM3 at
+1980 MHz, 299.78 ms timed envelope, 295.79 ms untimed shipped step, commit
+b4ddb4585, 2026-09-11, BEFORE both the attention estash flip and the GEMM
+`kpack_hg` flip):
+
+| `gemm.<kind>` | ms per step | share of envelope |
+|---|---:|---:|
+| `gemm.gateup_dB` | 14.177 | 4.73% |
+| `gemm.gateup_dA` | 13.907 | 4.64% |
+| `gemm.head_dA` | 14.391 | 4.80% |
+| `gemm.head_dB` | 14.020 | 4.68% |
+| `gemm.head_fwd` | 13.884 | 4.63% |
+| `gemm.gateup_fwd` | 13.548 | 4.52% |
+| `gemm.proj_dA` | 13.122 | 4.38% |
+| `gemm.proj_fwd` | 13.030 | 4.35% |
+| `gemm.proj_dB` | 13.028 | 4.35% |
+| `gemm.down_dB` | 7.136 | 2.38% |
+| `gemm.down_dA` | 6.915 | 2.31% |
+| `gemm.down_fwd` | 6.915 | 2.31% |
+| `gemm.norm_dW` | 0.805 | 0.27% |
+| **`gemm.total`** | **144.875** | **48.33%** |
+
+Two readings a re-ranking lane should not have to rediscover. FIRST, there is
+no dominant GEMM cell: nine of the thirteen kinds sit between 13.0 and 14.4
+ms and together are 123.1 ms of the 144.9. The three head calls are 42.3 ms
+of it and are the only ones over a 50,257-wide operand; the other nine are
+the per-layer projections summed over 12 layers. So a win has to come from
+the GEMM KERNEL or its dispatch, not from one cell, and a 1 percent kernel
+win is worth about 1.45 ms of the step where a 1 percent win on the largest
+single cell is worth 0.14 ms. SECOND, `gemm.*_dA` and `gemm.*_dB` are not
+separate arithmetic: `identical_gemm_backward_a_into` and
+`identical_gemm_backward_b_into` (`gemm/checks/gemm_backward.mojo:449` and
+`:503`) reorder operands and shape and forward to ONE
+`identical_gemm_into` each, so all thirteen kinds are the same kernel at
+different shapes, and 27 of the step's GEMM calls are one entry point.
+
+THE CATEGORY CROSS-CUT at that commit: GEMM 144.90 ms (48.3%), attention
+kernels and scans 116.23 (38.8%), refusal and validation scans 6.36 (2.1%),
+RMSNorm forward 6.14 (2.1%), remainders 4.26 (1.4%), RMSNorm backward 4.05
+(1.4%), AdamW and shadow copy 4.02 (1.3%), and nothing else above 2.8.
+
+WHAT HAS MOVED SINCE, AND WHY THE RE-RUN IS OWED. Attention went 116.2 to
+61.9 ms (DEVIATION 2657, estash) and GEMM went 144.9 to about 123
+(DEVIATION 2707, `kpack_hg`, whose own brief section 17.4 is titled
+"`kpack_hg` takes the lean step 0.232 to 0.211 s"). PROJECTING those two onto
+the 210.6 ms step at 07707794 gives roughly GEMM 58 percent, attention 29
+percent, everything else 13 percent. THAT IS A PROJECTION AND NOT A
+MEASUREMENT: it carries two flips across three commits and it does not say
+how `kpack_hg` redistributed itself across the thirteen kinds, which is
+exactly the thing a re-ranking needs. The re-run at the current commit is
+what turns it into evidence.
+
+FINALLY, THE INSTRUMENT'S OWN PRICE, measured on that leg and worth quoting
+before anyone discounts its shares: `lean.shipped_build` 295.789 ms,
+`lean.timers_build_switch_off` 294.746, `lean.timers_build_switch_on_wall`
+300.441, `lean.shipped_build_again` 294.408. Compiling the timers in costs
+nothing measurable (-1.04 ms, inside the run-to-run spread of the two shipped
+builds) and switching them on costs 4.65 ms, 1.55 percent. A share of that
+tree is a share of the price to within about 1.5 percent, which is a stronger
+statement than a breakdown usually earns.
