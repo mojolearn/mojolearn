@@ -71,3 +71,18 @@ batched_levelalgo/objectives.mojo:601,612,617,675,690; spectral/impl/
 spectral_predict.mojo:77; umap/optimizer_identical_device.mojo:165,210.
 Class 2 cannot be repaired by the zero-result repair: Apple would have to
 PRESERVE subnormals, which its FMA does not do natively.
+
+## In flight (2026-09-18 ~10:10 ET)
+- Metal slot held by release_runner (release-087-final, pid 92580, 7200 s
+  timeout from 09:25). Queued behind it: probe/run.sh (ticket 95), then
+  price/run.sh (Apple GEMM sum, norepair/repair/repair/norepair, 11 rounds).
+- FINDING before any run: the repair's Apple price binary embeds a 33.8 MB
+  metallib against 3.1 MB for the no-repair arm (`__const` 0x204b4ad vs
+  0x2f210d): the integer repair is inlined into every unrolled step. Expect a
+  real price; a deferred (per-block flag, recompute) spelling is the candidate
+  if it is large.
+- xasm/xcheck.sh running on one CPU core: it SWAPS the five changed source
+  files to origin/main's bytes and back (restores from a byte copy on exit).
+  If the session dies mid-run, restore with `git checkout HEAD -- <file>` for
+  checks/kernel_matrix.mojo core/gemm.mojo core/gram_multi_gpu.mojo
+  gemm/checks/gemm_identical.mojo gemm/checks/gemm_lowbit.mojo (all committed).
