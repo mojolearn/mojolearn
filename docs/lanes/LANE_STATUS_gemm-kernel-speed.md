@@ -47,3 +47,23 @@ Apple remains a possible bounded explicit diagnostic through the shared Metal
 scheduler; no full Apple column or heavy Mac compute is planned. GPU core
 partitioning has not been established. The known Apple FMA boundary discrepancy
 prevents a universal cross-vendor identity claim; do not silently change it.
+
+## Registered experiment 2: AMD operand-flush transport
+
+Source inspection: TUNED_STAGE_FTZ defaults on only for NVIDIA. AMD's gather
+body currently flushes at operand use; the already implemented opt-in moves
+that same operation to staging. This is not the shipped AMD post-FMA class
+flush and does not replace its RN-FMA then post-round flush seam.
+
+Prediction before rental: enabling existing MOJOLEARN_GEMM_STAGE_FTZ on
+MI300X lowers the fixed 12-call weighted GEMM sum by at least 3 percent from
+the same-device legacy-stage build. Two ABBA passes must agree. A smaller
+change is INERT for this hypothesis; a regression rejects the default flip.
+The 144 gather fixtures (3 operations, 8 K lengths, 2 operand swaps, 3 group
+sizes) must match PLAN_FLAT and the host contract word for word in both
+builds. Omit the actual gather flush deliberately and require a mismatch;
+sabotage a priced device arm and require rejection. Print all 144 matching
+triples of digests in each clean build, and all 12 cross-build price matches.
+Any changed word is a defect. Both corpora at 700 steps remain required
+before shipping a measured candidate. No training run is owed until it is
+registered and launched.

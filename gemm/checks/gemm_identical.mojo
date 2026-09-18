@@ -5014,7 +5014,7 @@ def _kpack_gather[
             var oi = base_outer + g + u * G
             if oi < outer_limit:
                 out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
-    comptime if TUNED_STAGE_FTZ:
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FTZ"]():
         comptime for f in range(R):
             out[f] = ftz(out[f])
     return out
