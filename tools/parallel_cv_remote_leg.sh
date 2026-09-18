@@ -57,7 +57,10 @@ capture() {
         fi
         # Preserve any partial capture; never overwrite it with the retry.
         echo 'Profiler/capture failed; inspect retained logs before interpreting results' >> "$OUT/profiler-findings.txt"
-        return 1
+        if [[ $label == cv && -e $OUT/capture ]]; then mv "$OUT/capture" "$OUT/capture-profile-failed"; fi
+        if [[ $label == classical && -e $OUT/classical.json ]]; then mv "$OUT/classical.json" "$OUT/classical-profile-failed.json"; fi
+        run_stage "$label-unprofiled" "$@"
+        return $?
     fi
     printf '%s\n' 'OWED: nsys not installed; PID/device inventory alone is not execution evidence' > "$OUT/physical-trace.txt"
     run_stage "$label" "$@"
@@ -88,6 +91,8 @@ fi
 # Existing freshly built GP/IVF/GBDT bindings can also pay down ordinary holds.
 left=$(remaining)
 if (( left > 180 )); then
+    run_stage build-preprocessing bash bindings/build_preprocessing.sh || failed=1
+    left=$(remaining)
     run_stage ordinary "$PY" tools/capture_ordinary_holds.py --source --python "$PY" \
         --backend cuda --vendor nvidia-L40S --output "$OUT/ordinary" --budget-seconds "$((left-20))" \
         --lanes gpc,gpc-multiclass,gp-normalize-y,gp-sample-y,gp-sample-y-normalize,gp-optimize,gp-optimize-restarts,ivf-extend,gbdt-query-rmse || failed=1
