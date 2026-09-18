@@ -148,3 +148,28 @@ Status refresh: release run 35350125464's Mac build job succeeded at
 certification is running the sabotage stage after the UMAP saved-model failure.
 The RBF regression and fresh Apple capture remain queued behind another lane's
 Metal work. Do not interfere with that lane's lease.
+
+
+## Execution progress, 2026-09-18
+
+- All six queued RBF CPU tests passed in 1.95 seconds, including real native
+  host execution and the reordered-worker negative control. This is source
+  runtime validation; installed-wheel/cross-device qualification remains owed.
+- All 19 installed Apple captures completed (17 ordinary holds + UMAP/PCA),
+  nine fixtures, two repeats, all extra property flags. Raw records passed
+  `admit()`. Against current main's table: 846 numerical values match, zero
+  differ, zero are missing; 567 N/A values excluded from numerical counts.
+  Evidence is committed under 2026-09-18_installed-apple-properties.
+- Fresh 18 UMAP/PCA saved models passed all CPU inference checks and are banked
+  under classical_host/2026-09-18-apple-m4-umap-pca. Release gate refresh still
+  needs explicit supersession and current independent NVIDIA/AMD columns.
+- Kernel CPU implementation is checkpointed on lane/cpu-kernel-identity,
+  worktree cpu-kernel-identity, commit 0b2115bdd. Six pending variant lanes,
+  degree transport and native arithmetic; 164 static checks pass. Do not merge
+  until compilation and numerical comparisons pass. The first build command
+  lacked pixi's standard-library environment; its failed log is retained.
+  Corrected isolated build queue is session 36017, clean/sabotage, one compiler.
+- Removed only clean, merged, inactive cpu-public-promotion, release087-coverage
+  and verification-evidence-audit worktrees. Their branches remain. Skipped
+  cpu-verification-completion because it retains binary/build evidence.
+  Receipt: external next-wheel-coverage/worktree-cleanup.json.
