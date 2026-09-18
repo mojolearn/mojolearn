@@ -317,10 +317,11 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-mojolearn went from 0.1.0 on 2026-08-23 to <!--fact:published_version-->0.8.5<!--/fact--> on <!--fact:published_date-->2026-09-14<!--/fact-->, eleven PyPI
-releases in under three weeks (0.1.0, 0.2.0, 0.3.0, 0.3.1, 0.5.0, 0.6.0,
-0.7.0, 0.8.0, 0.8.1, 0.8.2, 0.8.3; 0.3.2, 0.4.0 and 0.6.1 are recorded in [CHANGELOG.md](CHANGELOG.md) but
-were not published to PyPI). One release was yanked. 0.3.0, published
+The current published release is <!--fact:published_version-->0.8.5<!--/fact-->, dated
+<!--fact:published_date-->2026-09-14<!--/fact-->. [CHANGELOG.md](CHANGELOG.md)
+records published releases and versions that were prepared but never published.
+
+Version 0.3.0, published
 2026-08-30 as the first release with a Linux wheel, had been compiled for the
 build machine's CPU and
 carried unconditional AVX-512 instructions in its host code, so every numeric
