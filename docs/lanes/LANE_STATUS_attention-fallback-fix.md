@@ -31,6 +31,28 @@
   TERMINATED and VERIFIED gone (HTTP 404). **`5guu23hvyqj7tg` IS STILL OUT**
   as of this writing, running leg 3 (`-p 11076 root@103.207.149.101`), armed
   with a 60-minute pod-side dead-man, launched 05:01:38 ET 2026-09-18.
+- **LEG 3 ANSWERED IT. THE FALLBACK IS REMOVABLE AND IT IS WORTH 2.298x AND
+  16,384 MB.** With the backward's corner refusal removed
+  (`-D MOJOLEARN_ATTN_NO_BWD_CORNER=1`), 700 steps of real training on the
+  pinned corpus produce **bit-identical loss, gradients, parameters, m, v and
+  flags at every one of 8 state anchors and every one of 700 steps' losses**;
+  backward refusals go 3,449 -> **0**; the tail goes 0.45721 -> **0.19896 s**
+  against a head of 0.19768, i.e. **the tail equals the head and the 2.13x is
+  gone**; `eager_bytes` stays at **432** with **zero** layers grown; the
+  device peak stays at **15,153 MB** instead of climbing to 31,537.
+- **THAT DOES NOT MAKE "NEVER REFUSE" SHIPPABLE**, and 3112 is a measurement
+  arm that stays off. The corner test exists because the two chains CAN
+  differ; what leg 3 proves is that at this shape they do not, so the cost is
+  being paid for a predicate that is wrong, not for a hazard that is real.
+  The shippable change is a CORRECT predicate (or the signed-zero repair at
+  the end of this document), not a deleted one. **This is the top remaining
+  item in the lane and it is now worth a measured 2.298x, not an argued one.**
+- **ONE HONEST LIMIT ON THAT CLAIM**: the comparison is at the STEP OUTPUTS
+  (loss, gradients, parameters, m, v, flags), not at `d_q_rope`, `d_k_cache`
+  and `d_v_cache` themselves. A signed zero that differs inside those buffers
+  and is absorbed before the parameter gradient would not be caught here. The
+  per-stage identity card records stages 22-24 and would be the check that
+  closes it; it has NOT been run against this arm.
 - **THE EXACT NEXT COMMAND**, if leg 3 was lost:
 
       cd ~/mojolearn-wt/attention-fallback-fix
