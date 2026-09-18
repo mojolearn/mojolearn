@@ -1,0 +1,20 @@
+# CELL ordered-gradient-sum/negative REFUSED 0.001s
+| ordered-gradient-sum   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| ordered-gradient-sum infer | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| ordered-gradient-sum model | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| ordered-gradient-sum batch | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+
+cells=9 stable=0 moved=0 refused=9
+infer: 
+model: 
+batch: 
+REFUSED ordered-gradient-sum/base: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/ties: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/hashed: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/wide: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/denormal: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/denormal_ftz: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/dupes: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/odd: AssertionError: ordered gradient sum differs from Float32 left fold
+REFUSED ordered-gradient-sum/negative: AssertionError: ordered gradient sum differs from Float32 left fold
+wrote /root/leg_out/cpu-x86.sabotage.json

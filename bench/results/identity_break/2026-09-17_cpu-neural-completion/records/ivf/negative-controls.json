@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "ivf/base",
+      "context_matches": true,
+      "clean": "e14f27972422d4e0",
+      "sabotage": "12a96491ac23a096",
+      "detected": true
+    },
+    {
+      "cell": "ivf/denormal",
+      "context_matches": true,
+      "clean": "dc905d6cb32046d8",
+      "sabotage": "be33f80dfafef6ca",
+      "detected": true
+    },
+    {
+      "cell": "ivf/denormal_ftz",
+      "context_matches": true,
+      "clean": "dc905d6cb32046d8",
+      "sabotage": "be33f80dfafef6ca",
+      "detected": true
+    },
+    {
+      "cell": "ivf/dupes",
+      "context_matches": true,
+      "clean": "c9eaf39f6e83e625",
+      "sabotage": "394f77976147476c",
+      "detected": true
+    },
+    {
+      "cell": "ivf/hashed",
+      "context_matches": true,
+      "clean": "6c061012dc979df5",
+      "sabotage": "1896f6f1916e6961",
+      "detected": true
+    },
+    {
+      "cell": "ivf/negative",
+      "context_matches": true,
+      "clean": "9a7f19689600453e",
+      "sabotage": "9d5df2611030dc14",
+      "detected": true
+    },
+    {
+      "cell": "ivf/odd",
+      "context_matches": true,
+      "clean": "26b26d7e4be5c50a",
+      "sabotage": "94b7bf3263086bd6",
+      "detected": true
+    },
+    {
+      "cell": "ivf/ties",
+      "context_matches": true,
+      "clean": "b9d8790b40b5a6ac",
+      "sabotage": "db1a6e575d22f738",
+      "detected": true
+    },
+    {
+      "cell": "ivf/wide",
+      "context_matches": true,
+      "clean": "8ee39ab9ae510966",
+      "sabotage": "2695a5fb42630e71",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

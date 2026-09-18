@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.7 (unreleased 2026-09-16)
+## 0.8.7 (unreleased 2026-09-17)
 
 **0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
 release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded
@@ -16,11 +16,16 @@ never carried the 0.8.6 version bump, so nothing outside that branch ever claime
 wheels that were built are kept as evidence, are not release candidates, and must not be
 published; docs/lanes/RELEASE_087_PLAN.md on release/0.8.7 names each artifact.
 
-Packaging release, with ONE numeric exception, the UMAP transform below. Otherwise nothing in
-a kernel moves; what changes is what the two wheels carry and what a user can check from a pip
-install. The freeze checks of docs/RELEASE_CHECKLIST.md, the per-vendor GPU-box build and the
-byte compare of the host bindings across the three Linux legs are OWED before this heading
-reads published.
+This release expands native kernels, CPU host bindings, and the installed verifier.
+It requires fresh wheels and installed-wheel qualification from the final release
+source; the earlier 0.8.7 packaging freeze does not qualify these changes.
+
+- The wheel verifier exposes 162 default CPU lanes, opt-in execution of pending
+  CPU routes and 17 logical-shard drivers, and repeated portable saved-model
+  checks (`verify --models-only`). Batch invariance and optional step/full,
+  gradient, scaling, ragged-shape, and RL-pair probes retain their actual outcomes.
+  Pending references remain OWED; CPU logical shards do not qualify physical
+  multi-GPU execution. See `docs/VERIFY.md` and the coverage inventory for scope.
 
 - **Every inference class can hold its projection weights as bf16 bits or as int8 codes with a power-of-two exponent per row, and computes bit for bit what the fp32 block computes from the exactly materialized weights.** Two new GEMM profiles sit beside `mojolearn.identical.gemm.fp32.v1` and are named in `gemm/IDENTICAL_LOWBIT_CONTRACT.md` (DEVIATIONS 2900 to 2909): `bf16f32.v1`, which widens bf16 exactly and runs the fp32 profile's arithmetic (a fused flat plan that reads the bf16 right operand directly at the decode shape, a widen plan above it, both required to agree bit for bit), and `int8i32.v1`, which quantizes each row to `[64, 128)` by a power-of-two scale with round-to-nearest-even codes clamped to `[-127, 127]`, accumulates in Int32 exactly, and dequantizes with one exact multiply. Six seams live in `checks/numerics.mojo`, the oracles in `gemm/host/gemm_lowbit_oracle.mojo`, the kernels in `gemm/checks/gemm_lowbit.mojo`, the gates in `gemm/checks/gemm_lowbit_check.mojo` (`pixi run check-gemm-lowbit` and two sabotage arms that must fail). The linalg extension and its host binding export `gemm_bf16`, `gemm_int8`, `quantize_int8`, `dequantize_int8`, `to_bf16`, `from_bf16` and `lowbit_profile_version`; `mojolearn.linalg` exposes `matmul_bf16`, `matmul_int8`, `to_bf16`, `from_bf16`, `quantize_int8` and `dequantize_int8`; `Array` learns uint16 and int8. `mojolearn.lowbit.pack(weights, "bfloat16" | "int8")` packs every 2-D tensor of a weight dict and `TransformerBlock`, `Mamba1Block`, `Mamba2Block`, `Mamba3Block`, their `*Inference` classes, `MLPInference`, `SambaInference` and `LanguageModelInference` (a dict keyed by `parameter_names`) accept the packed dict, materialize it exactly on the selected backend (the linalg kernels on a GPU, the linalg host binding on a CPU, the NumPy spelling with no binding) and expose `weight_format`. Fourteen lanes join the identity harness: `gemm-bf16`, `gemm-int8`, and `-bf16w` / `-int8w` forms of `transformer`, `mamba1`, `mamba2`, `mamba3`, `mlp` and `samba`, in their families' covered sets and in `PUBLIC_PENDING_LANES` as `no reference`. Measured on the Apple M4 (Metal) 2026-09-17: the nine GEMM gates pass, both sabotage arms fail the oracle gates, 16 Python linalg tests and 8 block tests pass (packed block equals fp32 block on the materialized weights, and moves against the raw fp32 model), and all fourteen lanes read STABLE on base, ties and denormal at two repeats. OWED: three-vendor columns for the fourteen lanes (the two profiles have them at the gate shapes, below), a fused bf16 plan inside the blocks (today the blocks materialize and run fp32), and any timing claim (none is made). (lane/identical-lowbit-inference, 2026-09-17)
 - **`mojolearn.identical.gemm.int8i32.v1` runs its product on the integer matrix units of NVIDIA (IMMA, `mma.sync` m16n8k32 s8 to s32) and AMD CDNA3 (MFMA `v_mfma_i32_16x16x32_i8`), bit for bit what the flat kernel and the host oracle compute.** By construction: an int8 product is exact and an Int32 sum of exact integers is order-free, so the unit's tile and internal summation are scheduling and the only floating steps stay in `dequant_int8_pinned` (contract clause L-9, DEVIATION 2910). Ragged `k` and tile edges are padded with zero codes, never floats. `checks/kernel_matrix.mojo::lib_int8_matrix_unit_for` names the columns (NVIDIA, AMD; Apple and the CPU stay on the flat kernel), `identical_gemm_int8_into` dispatches, `-D MOJOLEARN_INT8_FORCE_FLAT=1` pins the flat plan, and `check_int8_mma_matches_flat` requires both plans' bits to match on every shape plus ragged shapes with k = 17, 31, 33, 100, 1000 and 4097. Measured 2026-09-17 on a RunPod H100 (`bench/results/lowbit/2026-09-17_h100-lowbit-mma/`) and a DigitalOcean MI325X (`bench/results/lowbit/2026-09-17_mi325x-lowbit-mma/`): int8 dispatch mma, 10 gates 0 failed on each, forced-flat the same, both sabotage arms failing; with the M4 record the nine gate shapes of both low-bit profiles have three vendor columns against one host oracle. OWED: a CDNA2 form and any timing claim (none is made). (lane/int8-mma, 2026-09-17)

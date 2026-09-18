@@ -1,0 +1,25 @@
+# START par-mlp/ties repeat=1/train
+# DONE par-mlp/ties repeat=1/train 0.406s
+# START par-mlp/ties repeat=1/infer-save-reload
+# DONE par-mlp/ties repeat=1/infer-save-reload 0.006s
+# START par-mlp/ties repeat=1/batch
+# DONE par-mlp/ties repeat=1/batch 0.016s
+# START par-mlp/ties repeat=2/train
+# DONE par-mlp/ties repeat=2/train 0.393s
+# START par-mlp/ties repeat=2/infer-save-reload
+# DONE par-mlp/ties repeat=2/infer-save-reload 0.006s
+# START par-mlp/ties repeat=2/batch
+# DONE par-mlp/ties repeat=2/batch 0.016s
+# CELL par-mlp/ties STABLE 0.844s
+| par-mlp                | 6e5cde4953362927 | 17c96192227e43f1 |
+| par-mlp infer          | b7659ff90ae1ea39 | e1e5086334bdb736 |
+| par-mlp model          | fb3977c1ab222cea | 49ac83c7d65f98af |
+| par-mlp batch          | 16eaba30f0eb372d | 1eed5a0469fcbc24 |
+
+cells=48 stable=48 moved=0 refused=0
+infer: stable=40 n/a=8
+model: stable=16 n/a=32
+batch: stable=36 n/a=12
+rlpair: stable=24
+n/a: byte-lm-host-infer model n/a:no-save, byte-lm-host-infer-threaded model n/a:no-save, byte-lm-host-train batch n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it), byte-lm-host-train model n/a:no-save, cross-entropy-arms infer n/a:function, cross-entropy-arms model n/a:no-save, mamba1-bf16w model n/a:no-save, mamba1-int8w model n/a:no-save, mamba2-bf16w model n/a:no-save, mamba2-int8w model n/a:no-save, mamba3-bf16w model n/a:no-save, mamba3-int8w model n/a:no-save, mlp-bf16w batch n/a:weight-format lane; the batch part is measured on its base lane, mlp-int8w batch n/a:weight-format lane; the batch part is measured on its base lane, optim-adam-clip infer n/a:function, optim-adam-clip model n/a:no-save, optim-sgd infer n/a:function, optim-sgd model n/a:no-save, ordered-gradient-sum batch n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction), ordered-gradient-sum infer n/a:function, ordered-gradient-sum model n/a:no-save, samba-bf16w batch n/a:weight-format lane; the batch part is measured on its base lane, samba-int8w batch n/a:weight-format lane; the batch part is measured on its base lane, training-primitives model n/a:no-save, transformer-bf16w model n/a:no-save, transformer-int8w model n/a:no-save
+wrote /root/leg_out/cpu-x86.json

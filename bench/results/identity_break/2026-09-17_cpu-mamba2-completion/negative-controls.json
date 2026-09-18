@@ -1,0 +1,253 @@
+{
+  "cells": [
+    {
+      "cell": "mamba2-dtlimit/base",
+      "context_matches": true,
+      "clean": "dbe3d4e560695b2e",
+      "sabotage": "c84d3b8febf4a800",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "context_matches": true,
+      "clean": "3702e2e171e31bf9",
+      "sabotage": "d994f95aaf285fac",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "context_matches": true,
+      "clean": "3702e2e171e31bf9",
+      "sabotage": "d994f95aaf285fac",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "context_matches": true,
+      "clean": "f83ae1a2c4db769d",
+      "sabotage": "6b98c4d50ef5efb8",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "context_matches": true,
+      "clean": "ff9113f0d729ce92",
+      "sabotage": "058c6c77585d8dba",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "context_matches": true,
+      "clean": "b5f224b79224b8c5",
+      "sabotage": "a7dd7c4ad9b41072",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "context_matches": true,
+      "clean": "dbe3d4e560695b2e",
+      "sabotage": "c84d3b8febf4a800",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "context_matches": true,
+      "clean": "2987b3e07a61458f",
+      "sabotage": "a9e0ca855ff7e318",
+      "detected": true
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "context_matches": true,
+      "clean": "91fc741adbf429ae",
+      "sabotage": "f366680e5e584205",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "infer_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "model_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "batch_verdict",
+      "verdict": "REFUSED"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "stepfull_verdict",
+      "verdict": "REFUSED"
+    }
+  ],
+  "complete": true,
+  "passed": false
+}

@@ -1,0 +1,207 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:30:07  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START byte-lm-host-infer-threaded/base repeat=1/train
+# DONE byte-lm-host-infer-threaded/base repeat=1/train 0.007s
+# START byte-lm-host-infer-threaded/base repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/base repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/base repeat=1/batch
+# DONE byte-lm-host-infer-threaded/base repeat=1/batch 0.027s
+# START byte-lm-host-infer-threaded/base repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/base repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/base repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/base repeat=1/rlpair 0.188s
+# START byte-lm-host-infer-threaded/base repeat=2/train
+# DONE byte-lm-host-infer-threaded/base repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/base repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/base repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/base repeat=2/batch
+# DONE byte-lm-host-infer-threaded/base repeat=2/batch 0.027s
+# START byte-lm-host-infer-threaded/base repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/base repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/base repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/base repeat=2/rlpair 0.192s
+# CELL byte-lm-host-infer-threaded/base STABLE 0.449s
+# START byte-lm-host-infer-threaded/ties repeat=1/train
+# DONE byte-lm-host-infer-threaded/ties repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/ties repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/ties repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/ties repeat=1/batch
+# DONE byte-lm-host-infer-threaded/ties repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/ties repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/ties repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/ties repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/ties repeat=1/rlpair 0.187s
+# START byte-lm-host-infer-threaded/ties repeat=2/train
+# DONE byte-lm-host-infer-threaded/ties repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/ties repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/ties repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/ties repeat=2/batch
+# DONE byte-lm-host-infer-threaded/ties repeat=2/batch 0.027s
+# START byte-lm-host-infer-threaded/ties repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/ties repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/ties repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/ties repeat=2/rlpair 0.186s
+# CELL byte-lm-host-infer-threaded/ties STABLE 0.441s
+# START byte-lm-host-infer-threaded/hashed repeat=1/train
+# DONE byte-lm-host-infer-threaded/hashed repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/hashed repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/hashed repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/hashed repeat=1/batch
+# DONE byte-lm-host-infer-threaded/hashed repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/hashed repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/hashed repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/hashed repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/hashed repeat=1/rlpair 0.188s
+# START byte-lm-host-infer-threaded/hashed repeat=2/train
+# DONE byte-lm-host-infer-threaded/hashed repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/hashed repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/hashed repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/hashed repeat=2/batch
+# DONE byte-lm-host-infer-threaded/hashed repeat=2/batch 0.026s
+# START byte-lm-host-infer-threaded/hashed repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/hashed repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/hashed repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/hashed repeat=2/rlpair 0.187s
+# CELL byte-lm-host-infer-threaded/hashed STABLE 0.441s
+# START byte-lm-host-infer-threaded/wide repeat=1/train
+# DONE byte-lm-host-infer-threaded/wide repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/wide repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/wide repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/wide repeat=1/batch
+# DONE byte-lm-host-infer-threaded/wide repeat=1/batch 0.027s
+# START byte-lm-host-infer-threaded/wide repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/wide repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/wide repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/wide repeat=1/rlpair 0.189s
+# START byte-lm-host-infer-threaded/wide repeat=2/train
+# DONE byte-lm-host-infer-threaded/wide repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/wide repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/wide repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/wide repeat=2/batch
+# DONE byte-lm-host-infer-threaded/wide repeat=2/batch 0.027s
+# START byte-lm-host-infer-threaded/wide repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/wide repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/wide repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/wide repeat=2/rlpair 0.187s
+# CELL byte-lm-host-infer-threaded/wide STABLE 0.444s
+# START byte-lm-host-infer-threaded/denormal repeat=1/train
+# DONE byte-lm-host-infer-threaded/denormal repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/denormal repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/denormal repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/denormal repeat=1/batch
+# DONE byte-lm-host-infer-threaded/denormal repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/denormal repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/denormal repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/denormal repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/denormal repeat=1/rlpair 0.186s
+# START byte-lm-host-infer-threaded/denormal repeat=2/train
+# DONE byte-lm-host-infer-threaded/denormal repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/denormal repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/denormal repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/denormal repeat=2/batch
+# DONE byte-lm-host-infer-threaded/denormal repeat=2/batch 0.027s
+# START byte-lm-host-infer-threaded/denormal repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/denormal repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/denormal repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/denormal repeat=2/rlpair 0.186s
+# CELL byte-lm-host-infer-threaded/denormal STABLE 0.440s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=1/train
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=1/batch
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=1/batch 0.027s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=1/rlpair 0.186s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=2/train
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=2/batch
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=2/batch 0.026s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/denormal_ftz repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/denormal_ftz repeat=2/rlpair 0.187s
+# CELL byte-lm-host-infer-threaded/denormal_ftz STABLE 0.440s
+# START byte-lm-host-infer-threaded/dupes repeat=1/train
+# DONE byte-lm-host-infer-threaded/dupes repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/dupes repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/dupes repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/dupes repeat=1/batch
+# DONE byte-lm-host-infer-threaded/dupes repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/dupes repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/dupes repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/dupes repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/dupes repeat=1/rlpair 0.188s
+# START byte-lm-host-infer-threaded/dupes repeat=2/train
+# DONE byte-lm-host-infer-threaded/dupes repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/dupes repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/dupes repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/dupes repeat=2/batch
+# DONE byte-lm-host-infer-threaded/dupes repeat=2/batch 0.026s
+# START byte-lm-host-infer-threaded/dupes repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/dupes repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/dupes repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/dupes repeat=2/rlpair 0.187s
+# CELL byte-lm-host-infer-threaded/dupes STABLE 0.440s
+# START byte-lm-host-infer-threaded/odd repeat=1/train
+# DONE byte-lm-host-infer-threaded/odd repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/odd repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/odd repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/odd repeat=1/batch
+# DONE byte-lm-host-infer-threaded/odd repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/odd repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/odd repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/odd repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/odd repeat=1/rlpair 0.188s
+# START byte-lm-host-infer-threaded/odd repeat=2/train
+# DONE byte-lm-host-infer-threaded/odd repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/odd repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/odd repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/odd repeat=2/batch
+# DONE byte-lm-host-infer-threaded/odd repeat=2/batch 0.026s
+# START byte-lm-host-infer-threaded/odd repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/odd repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/odd repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/odd repeat=2/rlpair 0.185s
+# CELL byte-lm-host-infer-threaded/odd STABLE 0.441s
+# START byte-lm-host-infer-threaded/negative repeat=1/train
+# DONE byte-lm-host-infer-threaded/negative repeat=1/train 0.006s
+# START byte-lm-host-infer-threaded/negative repeat=1/infer-save-reload
+# DONE byte-lm-host-infer-threaded/negative repeat=1/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/negative repeat=1/batch
+# DONE byte-lm-host-infer-threaded/negative repeat=1/batch 0.026s
+# START byte-lm-host-infer-threaded/negative repeat=1/stepfull
+# DONE byte-lm-host-infer-threaded/negative repeat=1/stepfull 0.000s
+# START byte-lm-host-infer-threaded/negative repeat=1/rlpair
+# DONE byte-lm-host-infer-threaded/negative repeat=1/rlpair 0.185s
+# START byte-lm-host-infer-threaded/negative repeat=2/train
+# DONE byte-lm-host-infer-threaded/negative repeat=2/train 0.006s
+# START byte-lm-host-infer-threaded/negative repeat=2/infer-save-reload
+# DONE byte-lm-host-infer-threaded/negative repeat=2/infer-save-reload 0.001s
+# START byte-lm-host-infer-threaded/negative repeat=2/batch
+# DONE byte-lm-host-infer-threaded/negative repeat=2/batch 0.026s
+# START byte-lm-host-infer-threaded/negative repeat=2/stepfull
+# DONE byte-lm-host-infer-threaded/negative repeat=2/stepfull 0.000s
+# START byte-lm-host-infer-threaded/negative repeat=2/rlpair
+# DONE byte-lm-host-infer-threaded/negative repeat=2/rlpair 0.185s
+# CELL byte-lm-host-infer-threaded/negative STABLE 0.438s
+| byte-lm-host-infer-threaded | 9a22cf6df14a6ca8 | 5eb6c37f486dcb83 | 23284f15a5a13f7e | 144b4e7374436e15 | dad5258f043269c3 | d1af362bc6ad2ecf | 21c1595573e0f858 | 9a22cf6df14a6ca8 | 957bc9055db7588f |
+| byte-lm-host-infer-threaded infer | b67a1f3d482ffaca | 8ac5fad2d951d6cb | 25857576546d1442 | ec2a92c6e7abd69a | fa0cd27e307b2aba | e30c916c3d69584a | a53e0a81c9acf494 | b67a1f3d482ffaca | 418815fcec6e602a |
+| byte-lm-host-infer-threaded batch | 2eccb20888ca5cee | 4247444b5e741c45 | 2e1facc4833a2235 | c2bbaa85ae76f739 | faffe97b72d9fe37 | 939402dcf3954d4f | 11238b320c9572d3 | 2eccb20888ca5cee | 50b6c632cc98d71b |
+| byte-lm-host-infer-threaded rlpair | 22f7e367585a569c | 839a8419ba0bb3f8 | 7d2514bde61089b8 | 197fdc2b435c16f4 | 47d12f45b839ebe7 | a16267b9b260c0c6 | 22f7e367585a569c | 22f7e367585a569c | f2c3e79023b52c67 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+rlpair: stable=9
+stepfull: n/a=9
+n/a: byte-lm-host-infer-threaded model n/a:no-save, byte-lm-host-infer-threaded stepfull n/a:no-decode-state
+wrote /root/leg_out/records/byte-lm-host-infer-threaded/byte-lm-host-infer-threaded/cpu-clean.json

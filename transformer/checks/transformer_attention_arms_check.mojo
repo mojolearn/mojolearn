@@ -102,6 +102,7 @@ from transformer.checks.transformer_fused_check import (
     status_name,
 )
 from transformer.impl.llama.fused_attention import (
+    ATTN_ARM_BSWZ,
     ATTN_ARM_BWD_KVGRID,
     ATTN_ARM_BWD_KVRECOMPUTE,
     ATTN_ARM_BWD_KVSPLIT,
@@ -195,6 +196,10 @@ def arms() -> List[Int]:
     comptime r3kv = r3 | ATTN_ARM_BWD_KVGRID | ATTN_ARM_KVROWS32
     out.append(r3kv | ATTN_ARM_BWD_ESTASH)
     out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES)
+    # DEVIATION 2900 (brief section 22), on the same word: the causal
+    # block-index map of the four kernels the estash arm runs.
+    out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_BSWZ)
+    out.append(r3kv | ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES | ATTN_ARM_BSWZ)
     return out^
 
 
@@ -246,6 +251,11 @@ def check_names(mut failures: List[String]) raises:
     good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64")
     good.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid+sabotage_new")
     good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32+sabotage_kv")
+    # DEVIATION 2900 (brief section 22).
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r64_bswz")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz+sabotage_new")
+    good.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_bswz+sabotage_kv")
     for i in range(len(good)):
         var n = String(good[i])
         var got = fused_attention_arm_name(fused_attention_arm_parse(n))
@@ -317,6 +327,12 @@ def check_names(mut failures: List[String]) raises:
     bad.append("stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32_kvsplit")
     bad.append("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_estash")
     bad.append("stash_tiled_fgrid_r32_qres_pf_dres_kvgrid_r32")
+    # DEVIATION 2900: without _estash, without _kvgrid, with no arm under it,
+    # and out of order.
+    bad.append("stash_tiled_fgrid_r32_qres_pf_kvgrid_r32_bswz")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_estash_dres_bswz")
+    bad.append("stash_tiled_bswz")
+    bad.append("stash_tiled_fgrid_r32_qres_pf_bswz_estash_dres_kvgrid_r32")
     for i in range(len(bad)):
         var refused = False
         try:

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:33  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START ridge/base repeat=1/train
+# DONE ridge/base repeat=1/train 0.022s
+# START ridge/base repeat=1/infer-save-reload
+# DONE ridge/base repeat=1/infer-save-reload 0.002s
+# START ridge/base repeat=1/batch
+# DONE ridge/base repeat=1/batch 0.002s
+# START ridge/base repeat=1/stepfull
+# DONE ridge/base repeat=1/stepfull 0.000s
+# START ridge/base repeat=2/train
+# DONE ridge/base repeat=2/train 0.021s
+# START ridge/base repeat=2/infer-save-reload
+# DONE ridge/base repeat=2/infer-save-reload 0.002s
+# START ridge/base repeat=2/batch
+# DONE ridge/base repeat=2/batch 0.002s
+# START ridge/base repeat=2/stepfull
+# DONE ridge/base repeat=2/stepfull 0.000s
+# CELL ridge/base STABLE 0.051s
+# START ridge/ties repeat=1/train
+# DONE ridge/ties repeat=1/train 0.021s
+# START ridge/ties repeat=1/infer-save-reload
+# DONE ridge/ties repeat=1/infer-save-reload 0.002s
+# START ridge/ties repeat=1/batch
+# DONE ridge/ties repeat=1/batch 0.002s
+# START ridge/ties repeat=1/stepfull
+# DONE ridge/ties repeat=1/stepfull 0.000s
+# START ridge/ties repeat=2/train
+# DONE ridge/ties repeat=2/train 0.021s
+# START ridge/ties repeat=2/infer-save-reload
+# DONE ridge/ties repeat=2/infer-save-reload 0.002s
+# START ridge/ties repeat=2/batch
+# DONE ridge/ties repeat=2/batch 0.002s
+# START ridge/ties repeat=2/stepfull
+# DONE ridge/ties repeat=2/stepfull 0.000s
+# CELL ridge/ties STABLE 0.049s
+# START ridge/hashed repeat=1/train
+# DONE ridge/hashed repeat=1/train 0.021s
+# START ridge/hashed repeat=1/infer-save-reload
+# DONE ridge/hashed repeat=1/infer-save-reload 0.001s
+# START ridge/hashed repeat=1/batch
+# DONE ridge/hashed repeat=1/batch 0.002s
+# START ridge/hashed repeat=1/stepfull
+# DONE ridge/hashed repeat=1/stepfull 0.000s
+# START ridge/hashed repeat=2/train
+# DONE ridge/hashed repeat=2/train 0.021s
+# START ridge/hashed repeat=2/infer-save-reload
+# DONE ridge/hashed repeat=2/infer-save-reload 0.002s
+# START ridge/hashed repeat=2/batch
+# DONE ridge/hashed repeat=2/batch 0.002s
+# START ridge/hashed repeat=2/stepfull
+# DONE ridge/hashed repeat=2/stepfull 0.000s
+# CELL ridge/hashed STABLE 0.048s
+# START ridge/wide repeat=1/train
+# DONE ridge/wide repeat=1/train 0.021s
+# START ridge/wide repeat=1/infer-save-reload
+# DONE ridge/wide repeat=1/infer-save-reload 0.001s
+# START ridge/wide repeat=1/batch
+# DONE ridge/wide repeat=1/batch 0.002s
+# START ridge/wide repeat=1/stepfull
+# DONE ridge/wide repeat=1/stepfull 0.000s
+# START ridge/wide repeat=2/train
+# DONE ridge/wide repeat=2/train 0.021s
+# START ridge/wide repeat=2/infer-save-reload
+# DONE ridge/wide repeat=2/infer-save-reload 0.002s
+# START ridge/wide repeat=2/batch
+# DONE ridge/wide repeat=2/batch 0.002s
+# START ridge/wide repeat=2/stepfull
+# DONE ridge/wide repeat=2/stepfull 0.000s
+# CELL ridge/wide STABLE 0.049s
+# START ridge/denormal repeat=1/train
+# DONE ridge/denormal repeat=1/train 0.021s
+# START ridge/denormal repeat=1/infer-save-reload
+# DONE ridge/denormal repeat=1/infer-save-reload 0.002s
+# START ridge/denormal repeat=1/batch
+# DONE ridge/denormal repeat=1/batch 0.002s
+# START ridge/denormal repeat=1/stepfull
+# DONE ridge/denormal repeat=1/stepfull 0.000s
+# START ridge/denormal repeat=2/train
+# DONE ridge/denormal repeat=2/train 0.021s
+# START ridge/denormal repeat=2/infer-save-reload
+# DONE ridge/denormal repeat=2/infer-save-reload 0.001s
+# START ridge/denormal repeat=2/batch
+# DONE ridge/denormal repeat=2/batch 0.002s
+# START ridge/denormal repeat=2/stepfull
+# DONE ridge/denormal repeat=2/stepfull 0.000s
+# CELL ridge/denormal STABLE 0.048s
+# START ridge/denormal_ftz repeat=1/train
+# DONE ridge/denormal_ftz repeat=1/train 0.021s
+# START ridge/denormal_ftz repeat=1/infer-save-reload
+# DONE ridge/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START ridge/denormal_ftz repeat=1/batch
+# DONE ridge/denormal_ftz repeat=1/batch 0.002s
+# START ridge/denormal_ftz repeat=1/stepfull
+# DONE ridge/denormal_ftz repeat=1/stepfull 0.000s
+# START ridge/denormal_ftz repeat=2/train
+# DONE ridge/denormal_ftz repeat=2/train 0.021s
+# START ridge/denormal_ftz repeat=2/infer-save-reload
+# DONE ridge/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START ridge/denormal_ftz repeat=2/batch
+# DONE ridge/denormal_ftz repeat=2/batch 0.002s
+# START ridge/denormal_ftz repeat=2/stepfull
+# DONE ridge/denormal_ftz repeat=2/stepfull 0.000s
+# CELL ridge/denormal_ftz STABLE 0.048s
+# START ridge/dupes repeat=1/train
+# DONE ridge/dupes repeat=1/train 0.019s
+# START ridge/dupes repeat=1/infer-save-reload
+# DONE ridge/dupes repeat=1/infer-save-reload 0.001s
+# START ridge/dupes repeat=1/batch
+# DONE ridge/dupes repeat=1/batch 0.002s
+# START ridge/dupes repeat=1/stepfull
+# DONE ridge/dupes repeat=1/stepfull 0.000s
+# START ridge/dupes repeat=2/train
+# DONE ridge/dupes repeat=2/train 0.019s
+# START ridge/dupes repeat=2/infer-save-reload
+# DONE ridge/dupes repeat=2/infer-save-reload 0.001s
+# START ridge/dupes repeat=2/batch
+# DONE ridge/dupes repeat=2/batch 0.002s
+# START ridge/dupes repeat=2/stepfull
+# DONE ridge/dupes repeat=2/stepfull 0.000s
+# CELL ridge/dupes STABLE 0.044s
+# START ridge/odd repeat=1/train
+# DONE ridge/odd repeat=1/train 0.014s
+# START ridge/odd repeat=1/infer-save-reload
+# DONE ridge/odd repeat=1/infer-save-reload 0.001s
+# START ridge/odd repeat=1/batch
+# DONE ridge/odd repeat=1/batch 0.002s
+# START ridge/odd repeat=1/stepfull
+# DONE ridge/odd repeat=1/stepfull 0.000s
+# START ridge/odd repeat=2/train
+# DONE ridge/odd repeat=2/train 0.014s
+# START ridge/odd repeat=2/infer-save-reload
+# DONE ridge/odd repeat=2/infer-save-reload 0.001s
+# START ridge/odd repeat=2/batch
+# DONE ridge/odd repeat=2/batch 0.002s
+# START ridge/odd repeat=2/stepfull
+# DONE ridge/odd repeat=2/stepfull 0.000s
+# CELL ridge/odd STABLE 0.034s
+# START ridge/negative repeat=1/train
+# DONE ridge/negative repeat=1/train 0.021s
+# START ridge/negative repeat=1/infer-save-reload
+# DONE ridge/negative repeat=1/infer-save-reload 0.001s
+# START ridge/negative repeat=1/batch
+# DONE ridge/negative repeat=1/batch 0.002s
+# START ridge/negative repeat=1/stepfull
+# DONE ridge/negative repeat=1/stepfull 0.000s
+# START ridge/negative repeat=2/train
+# DONE ridge/negative repeat=2/train 0.021s
+# START ridge/negative repeat=2/infer-save-reload
+# DONE ridge/negative repeat=2/infer-save-reload 0.001s
+# START ridge/negative repeat=2/batch
+# DONE ridge/negative repeat=2/batch 0.002s
+# START ridge/negative repeat=2/stepfull
+# DONE ridge/negative repeat=2/stepfull 0.000s
+# CELL ridge/negative STABLE 0.049s
+| ridge                  | a91478be750dc756 | 42410e35cdae30cb | fb5037b3d70d60ee | 7215c2605901cdc6 | 2eed6e454ed965da | 2eed6e454ed965da | c69b8fef7932da21 | bdaf14e02a8f07ec | 473e3ff40fc67b0e |
+| ridge infer            | a5a404bb201b0eeb | d23a652e5f82906f | 1f692bf67099df47 | cc8d5d1192f32b52 | 4233d399ae41d2e6 | 4233d399ae41d2e6 | 3e10053ac0b9fbd4 | 83420de0d62b5c95 | 174ab0d4049ee591 |
+| ridge model            | efada80fdc2d4259 | 824a2e3b44b31af4 | 05a9504a256753f0 | 2869ff3b7b3a7558 | 80113efe9b48cc79 | 80113efe9b48cc79 | 11e592057872c1e0 | 3f77c9c16c29bd84 | ad885ca7374525bd |
+| ridge batch            | 5817cf4d9fb9bd91 | 6928f85b10dd8f49 | 1b476bdac9aeaa84 | 5f47b5b61a45d567 | 3d155f9f8c15eb89 | 3d155f9f8c15eb89 | 4a7166ff8bd89cf3 | 34d5126ca77a014e | 670e062d2ee831b0 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: ridge stepfull n/a:no-decode-state
+wrote /root/leg_out/records/ridge/ridge/cpu-clean.json

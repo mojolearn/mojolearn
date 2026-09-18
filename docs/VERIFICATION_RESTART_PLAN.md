@@ -21,6 +21,30 @@ The rest of this document's counts describe the original baseline. See
 packaging fixes, limitations and the remaining queue. Full reference regeneration
 and final artifact qualification remain owed.
 
+## Follow-up: CPU completion, 2026-09-17
+
+CPU availability is now **162**, with **17 withheld** and **50 parallel
+exclusions**. The installed wheel passed all nine fixtures twice for twelve
+new low-bit lanes (396 IDENTICAL, 144 N/A) and 29 repaired lanes (954 IDENTICAL,
+351 N/A). No DIVERGENT, OWED or REFUSED results. All 32 host bindings were
+freshly built; exact artifact and source receipts are retained in
+`bench/results/cpu-verification-completion-probe/2026-09-17/installed-162/`.
+
+The initial complete 150-lane replay found 29 missing-reference failures;
+all original failures remain retained. The repaired 249 numerical references
+match independently measured wheel bytes, without changing any existing
+numerical reference. This is scoped installed CPU verification, not final
+release qualification or a PyPI publication.
+
+[The active checkpoint](lanes/LANE_STATUS_cpu_verification_completion.md)
+tracks the completed 99-lane native-control audit, resource limits, failures,
+remaining five ordinary neural lanes and twelve vendor-held lanes. All 176
+numerical non-parallel lanes now have all-nine historical native training
+controls, exposed in the installed wheel. The refreshed wheel passes 180
+additional numerical checks on the repaired-control lanes; release qualification
+remains incomplete. All rentals from this lane are verified deleted. Read it
+before resuming or renting another pod.
+
 ## Objective and current position
 
 Finish honest, user-runnable verification for every exposed algorithm and

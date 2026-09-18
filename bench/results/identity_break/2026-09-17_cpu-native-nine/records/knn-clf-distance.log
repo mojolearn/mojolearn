@@ -1,0 +1,3 @@
+knn-clf-distance: clean
+knn-clf-distance: sabotage
+knn-clf-distance: 9/9 controls; passed=True

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:36  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START logistic-unpenalized-no-intercept/base repeat=1/train
+# DONE logistic-unpenalized-no-intercept/base repeat=1/train 0.082s
+# START logistic-unpenalized-no-intercept/base repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/base repeat=1/infer-save-reload 0.003s
+# START logistic-unpenalized-no-intercept/base repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/base repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/base repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/base repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/base repeat=2/train
+# DONE logistic-unpenalized-no-intercept/base repeat=2/train 0.081s
+# START logistic-unpenalized-no-intercept/base repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/base repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/base repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/base repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/base repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/base repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/base STABLE 0.173s
+# START logistic-unpenalized-no-intercept/ties repeat=1/train
+# DONE logistic-unpenalized-no-intercept/ties repeat=1/train 0.111s
+# START logistic-unpenalized-no-intercept/ties repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/ties repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/ties repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/ties repeat=1/batch 0.003s
+# START logistic-unpenalized-no-intercept/ties repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/ties repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/ties repeat=2/train
+# DONE logistic-unpenalized-no-intercept/ties repeat=2/train 0.110s
+# START logistic-unpenalized-no-intercept/ties repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/ties repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/ties repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/ties repeat=2/batch 0.003s
+# START logistic-unpenalized-no-intercept/ties repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/ties repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/ties STABLE 0.230s
+# START logistic-unpenalized-no-intercept/hashed repeat=1/train
+# DONE logistic-unpenalized-no-intercept/hashed repeat=1/train 0.080s
+# START logistic-unpenalized-no-intercept/hashed repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/hashed repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/hashed repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/hashed repeat=1/batch 0.003s
+# START logistic-unpenalized-no-intercept/hashed repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/hashed repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/hashed repeat=2/train
+# DONE logistic-unpenalized-no-intercept/hashed repeat=2/train 0.081s
+# START logistic-unpenalized-no-intercept/hashed repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/hashed repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/hashed repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/hashed repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/hashed repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/hashed repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/hashed STABLE 0.169s
+# START logistic-unpenalized-no-intercept/wide repeat=1/train
+# DONE logistic-unpenalized-no-intercept/wide repeat=1/train 0.065s
+# START logistic-unpenalized-no-intercept/wide repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/wide repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/wide repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/wide repeat=1/batch 0.003s
+# START logistic-unpenalized-no-intercept/wide repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/wide repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/wide repeat=2/train
+# DONE logistic-unpenalized-no-intercept/wide repeat=2/train 0.066s
+# START logistic-unpenalized-no-intercept/wide repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/wide repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/wide repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/wide repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/wide repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/wide repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/wide STABLE 0.139s
+# START logistic-unpenalized-no-intercept/denormal repeat=1/train
+# DONE logistic-unpenalized-no-intercept/denormal repeat=1/train 0.086s
+# START logistic-unpenalized-no-intercept/denormal repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/denormal repeat=1/infer-save-reload 0.002s
+# START logistic-unpenalized-no-intercept/denormal repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/denormal repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/denormal repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/denormal repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/denormal repeat=2/train
+# DONE logistic-unpenalized-no-intercept/denormal repeat=2/train 0.086s
+# START logistic-unpenalized-no-intercept/denormal repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/denormal repeat=2/infer-save-reload 0.002s
+# START logistic-unpenalized-no-intercept/denormal repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/denormal repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/denormal repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/denormal repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/denormal STABLE 0.179s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=1/train
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=1/train 0.086s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=2/train
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=2/train 0.078s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/denormal_ftz repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/denormal_ftz repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/denormal_ftz STABLE 0.171s
+# START logistic-unpenalized-no-intercept/dupes repeat=1/train
+# DONE logistic-unpenalized-no-intercept/dupes repeat=1/train 0.153s
+# START logistic-unpenalized-no-intercept/dupes repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/dupes repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/dupes repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/dupes repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/dupes repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/dupes repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/dupes repeat=2/train
+# DONE logistic-unpenalized-no-intercept/dupes repeat=2/train 0.149s
+# START logistic-unpenalized-no-intercept/dupes repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/dupes repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/dupes repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/dupes repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/dupes repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/dupes repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/dupes STABLE 0.309s
+# START logistic-unpenalized-no-intercept/odd repeat=1/train
+# DONE logistic-unpenalized-no-intercept/odd repeat=1/train 0.038s
+# START logistic-unpenalized-no-intercept/odd repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/odd repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/odd repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/odd repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/odd repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/odd repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/odd repeat=2/train
+# DONE logistic-unpenalized-no-intercept/odd repeat=2/train 0.037s
+# START logistic-unpenalized-no-intercept/odd repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/odd repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/odd repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/odd repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/odd repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/odd repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/odd STABLE 0.082s
+# START logistic-unpenalized-no-intercept/negative repeat=1/train
+# DONE logistic-unpenalized-no-intercept/negative repeat=1/train 0.082s
+# START logistic-unpenalized-no-intercept/negative repeat=1/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/negative repeat=1/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/negative repeat=1/batch
+# DONE logistic-unpenalized-no-intercept/negative repeat=1/batch 0.002s
+# START logistic-unpenalized-no-intercept/negative repeat=1/stepfull
+# DONE logistic-unpenalized-no-intercept/negative repeat=1/stepfull 0.000s
+# START logistic-unpenalized-no-intercept/negative repeat=2/train
+# DONE logistic-unpenalized-no-intercept/negative repeat=2/train 0.085s
+# START logistic-unpenalized-no-intercept/negative repeat=2/infer-save-reload
+# DONE logistic-unpenalized-no-intercept/negative repeat=2/infer-save-reload 0.001s
+# START logistic-unpenalized-no-intercept/negative repeat=2/batch
+# DONE logistic-unpenalized-no-intercept/negative repeat=2/batch 0.002s
+# START logistic-unpenalized-no-intercept/negative repeat=2/stepfull
+# DONE logistic-unpenalized-no-intercept/negative repeat=2/stepfull 0.000s
+# CELL logistic-unpenalized-no-intercept/negative STABLE 0.175s
+| logistic-unpenalized-no-intercept | 2d680bec24348fb1 | d033051f5a6423bc | 568f4ba985007559 | 4e980d6d6bb17dd2 | 626de4d1000c3305 | 626de4d1000c3305 | 47baf3583d5b3a72 | 4c2b1a307f3901c0 | 214df080ade37c23 |
+| logistic-unpenalized-no-intercept infer | cdf9799cd24dc82b | 38f30d575ed0e3ae | 4e56c27678586451 | 0b4e034053a507a6 | bb1c22a7662b5818 | bb1c22a7662b5818 | 134809a4502c6363 | 96b781fca9afcde0 | 8da131b207c6a0a0 |
+| logistic-unpenalized-no-intercept model | 39289af0a057344b | 75ac09d41ecaa620 | 5e472ffe0eca8844 | d57eff7feb004860 | d69f80caed7c3bf0 | d69f80caed7c3bf0 | 71e3780659cb12b9 | e82a04f98e35b088 | 500b422fe687f5e5 |
+| logistic-unpenalized-no-intercept batch | 78b7d1e815634918 | 90b523ba197cf6a0 | d188625de03d29e1 | a975cc495acc07a6 | eba48adb0f43e69c | eba48adb0f43e69c | a2dd6aa66245b5f2 | 580129145dacc4f5 | d06d4839c290962d |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: logistic-unpenalized-no-intercept stepfull n/a:no-decode-state
+wrote /root/leg_out/records/logistic-unpenalized-no-intercept/logistic-unpenalized-no-intercept/cpu-clean.json

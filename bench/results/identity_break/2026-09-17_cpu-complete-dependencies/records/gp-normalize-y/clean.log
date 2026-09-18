@@ -1,0 +1,54 @@
+3025 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b4200000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:54:26  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gp-normalize-y/base repeat=1/train
+# DONE gp-normalize-y/base repeat=1/train 0.001s
+# CELL gp-normalize-y/base REFUSED 0.001s
+# START gp-normalize-y/ties repeat=1/train
+# DONE gp-normalize-y/ties repeat=1/train 0.001s
+# CELL gp-normalize-y/ties REFUSED 0.001s
+# START gp-normalize-y/hashed repeat=1/train
+# DONE gp-normalize-y/hashed repeat=1/train 0.001s
+# CELL gp-normalize-y/hashed REFUSED 0.001s
+# START gp-normalize-y/wide repeat=1/train
+# DONE gp-normalize-y/wide repeat=1/train 0.001s
+# CELL gp-normalize-y/wide REFUSED 0.001s
+# START gp-normalize-y/denormal repeat=1/train
+# DONE gp-normalize-y/denormal repeat=1/train 0.001s
+# CELL gp-normalize-y/denormal REFUSED 0.001s
+# START gp-normalize-y/denormal_ftz repeat=1/train
+# DONE gp-normalize-y/denormal_ftz repeat=1/train 0.001s
+# CELL gp-normalize-y/denormal_ftz REFUSED 0.001s
+# START gp-normalize-y/dupes repeat=1/train
+# DONE gp-normalize-y/dupes repeat=1/train 0.001s
+# CELL gp-normalize-y/dupes REFUSED 0.001s
+# START gp-normalize-y/odd repeat=1/train
+# DONE gp-normalize-y/odd repeat=1/train 0.000s
+# CELL gp-normalize-y/odd REFUSED 0.001s
+# START gp-normalize-y/negative repeat=1/train
+# DONE gp-normalize-y/negative repeat=1/train 0.001s
+# CELL gp-normalize-y/negative REFUSED 0.001s
+| gp-normalize-y         | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y infer   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y model   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y batch   | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-normalize-y stepfull | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+
+cells=9 stable=0 moved=0 refused=9
+infer: 
+model: 
+batch: 
+stepfull: 
+REFUSED gp-normalize-y/base: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/hashed: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/wide: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/denormal: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/denormal_ftz: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/dupes: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/odd: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+REFUSED gp-normalize-y/negative: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_estimators_h
+wrote /root/leg_out/records/gp-normalize-y/gp-normalize-y/cpu-clean.json

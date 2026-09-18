@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "gbdt-tensor-ctr-tables": {
+      "cells": [
+        {
+          "cell": "gbdt-tensor-ctr-tables/base",
+          "context_matches": true,
+          "clean": "7cc167fbb56c972e",
+          "sabotage": "7891518ca1e446d9",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/denormal",
+          "context_matches": true,
+          "clean": "1489a9f5968cb79d",
+          "sabotage": "bcbb3ff8994d693f",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/denormal_ftz",
+          "context_matches": true,
+          "clean": "1489a9f5968cb79d",
+          "sabotage": "bcbb3ff8994d693f",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/dupes",
+          "context_matches": true,
+          "clean": "a972ee33b2bbafec",
+          "sabotage": "5d64d1b2ab8807a7",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/hashed",
+          "context_matches": true,
+          "clean": "1da6ad28d961ad35",
+          "sabotage": "fd23ad902ed446cc",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/negative",
+          "context_matches": true,
+          "clean": "0619163e8b8f3fc5",
+          "sabotage": "32b0682332da2c95",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/odd",
+          "context_matches": true,
+          "clean": "7377ac4d24ab4fc7",
+          "sabotage": "7c798b15d54ceb54",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/ties",
+          "context_matches": true,
+          "clean": "a57c449ae1a19b4e",
+          "sabotage": "8b7ae674b0d36e7f",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-tensor-ctr-tables/wide",
+          "context_matches": true,
+          "clean": "89d3d2eb687d4002",
+          "sabotage": "c41f2b1d530f68a6",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

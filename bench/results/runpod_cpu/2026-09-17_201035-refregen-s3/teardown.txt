@@ -1,0 +1,5 @@
+pod=g1yqpcr1tb4v4g
+name=mojolearn-cpu-refregen-s3-20260917-201035
+terminated_verified=1
+exit=0
+at=2026-09-17T20:32:36Z

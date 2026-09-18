@@ -131,6 +131,9 @@ from gbdt.targets.kernel.yeti_rank import (
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
+from std.gpu import block_idx, thread_idx
+
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 # ================= DEVIATION BLOCK 2030 =================
 # FUSED MoveTo + evaluation for the Newton walker (single-dim losses).
@@ -1030,6 +1033,348 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     point[bin * dim_count + dim] = Float32(0.0)
 
 
+# ================= DEVIATION 3041: the oracle's device buffers belong to the FIT =================
+# MEASURED FIRST (RTX 4090, taxi 1,000,000 x 18, IDENTICAL, 101 symmetric
+# trees under nsys, 2026-09-17, `docs/lanes/LANE_STATUS_gbdt-train-speed.md`):
+# 1,476 `cuMemAlloc` and 1,476 `cuMemFree`, 58.9 + 57.9 ms, against 126.3 ms of
+# GPU kernel time for the whole run. About 16 device allocations a tree, 12 of
+# them the ones `make_bin_optimized_oracle` makes for every estimation task
+# (three of `n_rows` or more), and every `cuMemFree` is a device drain.
+# DEVIATION 1890 moved the estimator's gathers to a fit-owned pool of one and
+# named the reference's reason (`TCudaManager` hands these out of a per-device
+# memory pool, `cuda_lib/memory_pool.h`); this is the same repair for the
+# oracle's own buffers (`OracleScratchPool`).
+#
+# WHY NO BIT MOVES. No kernel, grid, launch order, drain or host loop changes:
+# the oracle reads and writes the same cells through handle copies of buffers
+# the fit keeps, instead of through buffers it allocates. The key is EXACT (row
+# count, bin count, cursor and leaf dimensions, value blocks, the resolved
+# machine count), because several of these buffers are the `dst_buf` or
+# `src_buf` of a whole-buffer copy; another bin count gets its own small
+# buffers beside the shared `n_rows`-sized ones, another shape rebuilds. Every cell the
+# oracle reads it has written first in the same task (`d_identity` is refilled
+# by `launch_make_sequence`, `d_bins` by `fill_bins_from_partition_kernel`,
+# `d_leaves` by its copy, the rest by the evaluation that reads them), which the
+# identity lanes check: a read of a never-written cell would now see the
+# previous tree's value where a fresh allocation showed whatever the driver
+# left.
+#
+# The row: on by default on the NVIDIA column, where it was measured;
+# `-D MOJOLEARN_3041_ORACLE_POOL=1` opts another column in and
+# `-D MOJOLEARN_3041_ORACLE_ALLOC_PER_TREE=1` is the kill switch and the BEFORE
+# arm. The caller decides (`oracle_scratch_pooled_for`); with no scratch passed
+# this function allocates exactly as before.
+# `-D MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE=1` is the negative control.
+# ================================================================================================
+
+
+def oracle_scratch_pooled_for[column: Int]() -> Bool:
+    """SCHEDULING row (DEVIATION 3041)."""
+    comptime if is_defined["MOJOLEARN_3041_ORACLE_ALLOC_PER_TREE"]():
+        return False
+    comptime if is_defined["MOJOLEARN_3041_ORACLE_POOL"]():
+        return True
+    return column == COLUMN_NVIDIA
+
+
+comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()
+#: negative control for DEVIATION 3041 (default off): a task that REUSES the
+#: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
+#: fill, in range. It stands in for the stale read this DEVIATION must never
+#: cause (a reusing task reading the previous tree's bins). The first form of
+#: this control skipped the fill outright; a previous tree's bins can index
+#: past a smaller leaf count, and the arm aborted a column with
+#: CUDA_ERROR_ILLEGAL_ADDRESS in gbdt-ordered-rmse (2026-09-17). A fit with
+#: one leaf has no other leaf to move to and the control is inert there.
+comptime ORACLE_POOL_SABOTAGE = is_defined["MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE"]()
+
+
+def oracle_pool_sabotage_kernel(
+    bins: MutPointer[UInt32, MutAnyOrigin], bin_count: Int32
+):
+    """The DEVIATION 3041 negative control: row 0 goes to the next leaf."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        bins.unsafe_store(0, (bins.unsafe_load(0) + 1) % UInt32(bin_count))
+
+
+struct OracleDeviceScratch(Movable):
+    """The twelve device buffers `make_bin_optimized_oracle` needs, under
+    their exact key (DEVIATION 3041). `handles()` gives views onto the same
+    memory."""
+
+    var n_rows: Int
+    var bin_count: Int
+    var cursor_dim: Int
+    var multi_planes: Int
+    var fv_blocks: Int
+    var sm: Int
+    var d_identity: DeviceBuffer[DType.uint32]
+    var d_bins: DeviceBuffer[DType.uint32]
+    var d_leaves: DeviceBuffer[DType.uint32]
+    var d_shift: DeviceBuffer[DType.float32]
+    var d_eval_stats: DeviceBuffer[DType.float32]
+    var d_fv: DeviceBuffer[DType.float32]
+    var d_mag_dummy: DeviceBuffer[DType.float32]
+    var d_partials: DeviceBuffer[DType.float32]
+    var d_multi_partials: DeviceBuffer[DType.float32]
+    var d_part_stats: DeviceBuffer[DType.float32]
+    var d_multi_der: DeviceBuffer[DType.float32]
+    var d_multi_stats: DeviceBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        n_rows: Int,
+        bin_count: Int,
+        cursor_dim: Int,
+        multi_planes: Int,
+        fv_blocks: Int,
+        sm: Int,
+        var d_identity: DeviceBuffer[DType.uint32],
+        var d_bins: DeviceBuffer[DType.uint32],
+        var d_leaves: DeviceBuffer[DType.uint32],
+        var d_shift: DeviceBuffer[DType.float32],
+        var d_eval_stats: DeviceBuffer[DType.float32],
+        var d_fv: DeviceBuffer[DType.float32],
+        var d_mag_dummy: DeviceBuffer[DType.float32],
+        var d_partials: DeviceBuffer[DType.float32],
+        var d_multi_partials: DeviceBuffer[DType.float32],
+        var d_part_stats: DeviceBuffer[DType.float32],
+        var d_multi_der: DeviceBuffer[DType.float32],
+        var d_multi_stats: DeviceBuffer[DType.float32],
+    ):
+        self.n_rows = n_rows
+        self.bin_count = bin_count
+        self.cursor_dim = cursor_dim
+        self.multi_planes = multi_planes
+        self.fv_blocks = fv_blocks
+        self.sm = sm
+        self.d_identity = d_identity^
+        self.d_bins = d_bins^
+        self.d_leaves = d_leaves^
+        self.d_shift = d_shift^
+        self.d_eval_stats = d_eval_stats^
+        self.d_fv = d_fv^
+        self.d_mag_dummy = d_mag_dummy^
+        self.d_partials = d_partials^
+        self.d_multi_partials = d_multi_partials^
+        self.d_part_stats = d_part_stats^
+        self.d_multi_der = d_multi_der^
+        self.d_multi_stats = d_multi_stats^
+
+    def matches(
+        self, n_rows: Int, bin_count: Int, cursor_dim: Int, multi_planes: Int,
+        fv_blocks: Int, sm: Int,
+    ) -> Bool:
+        return (
+            self.n_rows == n_rows
+            and self.bin_count == bin_count
+            and self.cursor_dim == cursor_dim
+            and self.multi_planes == multi_planes
+            and self.fv_blocks == fv_blocks
+            and self.sm == sm
+        )
+
+    def row_matches(self, n_rows: Int, multi_planes: Int, fv_blocks: Int) -> Bool:
+        """The key of the `n_rows`-sized half."""
+        return (
+            self.n_rows == n_rows
+            and self.multi_planes == multi_planes
+            and self.fv_blocks == fv_blocks
+        )
+
+    def handles(self) -> OracleDeviceScratch:
+        """Handle copies onto the same device memory."""
+        return OracleDeviceScratch(
+            self.n_rows, self.bin_count, self.cursor_dim, self.multi_planes,
+            self.fv_blocks, self.sm,
+            self.d_identity.copy(), self.d_bins.copy(), self.d_leaves.copy(),
+            self.d_shift.copy(), self.d_eval_stats.copy(), self.d_fv.copy(),
+            self.d_mag_dummy.copy(), self.d_partials.copy(),
+            self.d_multi_partials.copy(), self.d_part_stats.copy(),
+            self.d_multi_der.copy(), self.d_multi_stats.copy(),
+        )
+
+
+def _oracle_dims(objective: Int, num_classes: Int) -> Tuple[Int, Int]:
+    """`(cursor_dim, single_bin_dim)`, the factory's own rule, for a caller
+    that keys a scratch before the factory has validated `num_classes`."""
+    if objective == OBJECTIVE_MULTICLASS:
+        return (num_classes - 1, num_classes)
+    if objective == OBJECTIVE_MULTICLASS_OVA:
+        return (num_classes, num_classes)
+    return (1, 1)
+
+
+def _oracle_partials_len(bin_count: Int, sm: Int) -> Int:
+    var chunks2 = partition_stats_chunks(sm, 2)
+    var chunks1 = partition_stats_chunks(sm, 1)
+    var partials_len = bin_count * 2 * chunks2
+    if bin_count * 1 * chunks1 > partials_len:
+        partials_len = bin_count * 1 * chunks1
+    return partials_len
+
+
+def _oracle_multi_partials_len(bin_count: Int, sm: Int, multi_planes: Int) -> Int:
+    # the multi-dimensional reduce needs its own partials, sized for the
+    # WIDEST stat count it will ever be asked for
+    var multi_partials_len = 1
+    for sc in range(1, multi_planes + 1):
+        var need = bin_count * sc * partition_stats_chunks(sm, sc)
+        if need > multi_partials_len:
+            multi_partials_len = need
+    return multi_partials_len
+
+
+def make_oracle_device_scratch(
+    ctx: DeviceContext,
+    n_rows: Int,
+    bin_count: Int,
+    cursor_dim: Int,
+    multi_planes: Int,
+    fv_blocks: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """The allocations `make_bin_optimized_oracle` made inline, in its order
+    and at its sizes."""
+    var d_identity = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var d_leaves = ctx.enqueue_create_buffer[DType.uint32](bin_count)
+    var d_shift = ctx.enqueue_create_buffer[DType.float32](
+        bin_count * cursor_dim
+    )
+    var d_eval_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var d_fv = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
+    var d_mag_dummy = ctx.enqueue_create_buffer[DType.float32](2)
+    var d_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = ctx.enqueue_create_buffer[DType.float32](
+        2 * bin_count
+    )
+    # allocated ONCE per tree rather than per Hessian row (and, under
+    # DEVIATION 3041, once per fit)
+    var d_multi_der = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * n_rows
+    )
+    var d_multi_stats = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        n_rows, bin_count, cursor_dim, multi_planes, fv_blocks, sm,
+        d_identity^, d_bins^, d_leaves^, d_shift^, d_eval_stats^, d_fv^,
+        d_mag_dummy^, d_partials^, d_multi_partials^, d_part_stats^,
+        d_multi_der^, d_multi_stats^,
+    )
+
+
+def make_oracle_device_scratch_sharing_rows(
+    ctx: DeviceContext,
+    rows: OracleDeviceScratch,
+    bin_count: Int,
+    cursor_dim: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """A scratch for another `bin_count`: fresh bin-sized buffers, and handle
+    copies of `rows`' `n_rows`-sized ones."""
+    var multi_planes = rows.multi_planes
+    var d_leaves = ctx.enqueue_create_buffer[DType.uint32](bin_count)
+    var d_shift = ctx.enqueue_create_buffer[DType.float32](
+        bin_count * cursor_dim
+    )
+    var d_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = ctx.enqueue_create_buffer[DType.float32](
+        _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = ctx.enqueue_create_buffer[DType.float32](
+        2 * bin_count
+    )
+    var d_multi_stats = ctx.enqueue_create_buffer[DType.float32](
+        multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        rows.n_rows, bin_count, cursor_dim, multi_planes, rows.fv_blocks, sm,
+        rows.d_identity.copy(), rows.d_bins.copy(), d_leaves^, d_shift^,
+        rows.d_eval_stats.copy(), rows.d_fv.copy(), rows.d_mag_dummy.copy(),
+        d_partials^, d_multi_partials^, d_part_stats^,
+        rows.d_multi_der.copy(), d_multi_stats^,
+    )
+
+
+#: the bin-keyed half of the pool holds at most this many keys (a
+#: non-symmetric fit sees a handful of leaf counts; each entry is a few KiB)
+comptime ORACLE_POOL_MAX_BIN_KEYS = 128
+
+
+struct OracleScratchPool(Movable):
+    """The fit's pool (DEVIATION 3041), in two halves because the two halves
+    have different keys. The ROW half (`d_identity`, `d_bins`, `d_eval_stats`,
+    `d_fv`, `d_mag_dummy`, `d_multi_der`: everything of `n_rows` size) is a
+    pool of ONE. The BIN half (`d_leaves`, `d_shift`, the partials, the part
+    stats: a few KiB) is one entry per exact `bin_count`, because a
+    non-symmetric fit's trees do not all have the same leaf count and these
+    buffers are whole-buffer copy endpoints. An entry is a full
+    `OracleDeviceScratch` whose row half is a handle onto the shared one."""
+
+    var entries: List[OracleDeviceScratch]
+
+    def __init__(out self):
+        self.entries = List[OracleDeviceScratch]()
+
+    def take(
+        mut self,
+        ctx: DeviceContext,
+        n_rows: Int,
+        bin_count: Int,
+        objective: Int,
+        num_classes: Int,
+        sm_count: Int,
+        pair_blocks: Int,
+    ) raises -> Optional[OracleDeviceScratch]:
+        """Handle views for this task's exact key, allocating what the pool
+        does not hold. `pair_blocks` is the PairLogit value block count, 0
+        otherwise."""
+        var dims = _oracle_dims(objective, num_classes)
+        if dims[0] < 1:
+            # the factory refuses this `num_classes` in its own words
+            return Optional[OracleDeviceScratch]()
+        var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+        if pair_blocks > 0:
+            fv_blocks = pair_blocks
+        var sm = sm_count
+        if sm < 0:
+            sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+        # a row-half key change (another dataset shape) empties the pool
+        if len(self.entries) > 0 and not self.entries[0].row_matches(
+            n_rows, dims[1], fv_blocks
+        ):
+            self.entries.clear()
+        for i in range(len(self.entries)):
+            if self.entries[i].matches(
+                n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
+            ):
+                return Optional(self.entries[i].handles())
+        if len(self.entries) >= ORACLE_POOL_MAX_BIN_KEYS:
+            self.entries.clear()
+        if len(self.entries) == 0:
+            self.entries.append(
+                make_oracle_device_scratch(
+                    ctx, n_rows, bin_count, dims[0], dims[1], fv_blocks, sm
+                )
+            )
+        else:
+            self.entries.append(
+                make_oracle_device_scratch_sharing_rows(
+                    ctx, self.entries[0], bin_count, dims[0], sm
+                )
+            )
+        return Optional(self.entries[len(self.entries) - 1].handles())
+
+
 def make_bin_optimized_oracle(
     ctx: DeviceContext,
     n_rows: Int,
@@ -1053,6 +1398,9 @@ def make_bin_optimized_oracle(
     var pairs: Optional[PairwiseTargetBuffers] = None,
     var yeti: Optional[YetiRankTargetBuffers] = None,
     yeti_seed: UInt64 = UInt64(0),
+    # DEVIATION 3041: handle views onto the fit's pool of one; None (every
+    # check, and every column the row is off on) allocates as before
+    var scratch: Optional[OracleDeviceScratch] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1092,35 +1440,52 @@ def make_bin_optimized_oracle(
     # planes) and the widest Hessian row (`single_bin_dim` columns)
     var multi_planes = single_bin_dim
 
-    var d_identity = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var fv_blocks = blocks
+    if pairs.__bool__():
+        fv_blocks = pairs.value().blocks()
+    var sm = sm_count
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+
+    # DEVIATION 3041: the fit's buffers when the key is this task's, fresh
+    # ones at the same sizes otherwise
+    var have_scratch = False
+    if scratch.__bool__():
+        have_scratch = scratch.value().matches(
+            n_rows, bin_count, cursor_dim, multi_planes, fv_blocks, sm
+        )
+    if not have_scratch:
+        scratch = Optional(
+            make_oracle_device_scratch(
+                ctx, n_rows, bin_count, cursor_dim, multi_planes, fv_blocks, sm
+            )
+        )
+    var ws = scratch.take()
+    var d_identity = ws.d_identity.copy()
+    var d_bins = ws.d_bins.copy()
+    var d_leaves = ws.d_leaves.copy()
+    var d_shift = ws.d_shift.copy()
+    var d_eval_stats = ws.d_eval_stats.copy()
+    var d_fv = ws.d_fv.copy()
+    var d_mag_dummy = ws.d_mag_dummy.copy()
+    var d_partials = ws.d_partials.copy()
+    var d_multi_partials = ws.d_multi_partials.copy()
+    var d_part_stats = ws.d_part_stats.copy()
+    var d_multi_der = ws.d_multi_der.copy()
+    var d_multi_stats = ws.d_multi_stats.copy()
+
     launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
-    var d_bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
-
-    var d_leaves = ctx.enqueue_create_buffer[DType.uint32](bin_count)
     var h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
     for i in range(bin_count):
         h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
 
-    var d_shift = ctx.enqueue_create_buffer[DType.float32](
-        bin_count * cursor_dim
-    )
     var h_shift = ctx.enqueue_create_host_buffer[DType.float32](
         bin_count * cursor_dim
     )
-    var d_eval_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
-    var blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-    var fv_blocks = blocks
-    if pairs.__bool__():
-        fv_blocks = pairs.value().blocks()
-    var d_fv = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
-    var d_mag_dummy = ctx.enqueue_create_buffer[DType.float32](2)
-
-    var sm = sm_count
-    if sm < 0:
-        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
 
     # their oracle's per-row `Bins`, read off the partition ONCE per tree
     # (their ctor receives it ready-made from the searcher). Machine-sized
@@ -1133,37 +1498,22 @@ def make_bin_optimized_oracle(
         grid_dim=(bins_gx, bin_count, 1),
         block_dim=(256, 1, 1),
     )
+    comptime if ORACLE_POOL_SABOTAGE:
+        # the negative control: a reusing task's row 0 moves to the next
+        # leaf, in range (see the comptime above)
+        if have_scratch:
+            ctx.enqueue_function[oracle_pool_sabotage_kernel](
+                d_bins.unsafe_ptr(), Int32(bin_count),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
 
-    var chunks2 = partition_stats_chunks(sm, 2)
-    var chunks1 = partition_stats_chunks(sm, 1)
-    var partials_len = bin_count * 2 * chunks2
-    if bin_count * 1 * chunks1 > partials_len:
-        partials_len = bin_count * 1 * chunks1
-    var d_partials = ctx.enqueue_create_buffer[DType.float32](partials_len)
-    # the multi-dimensional reduce needs its own partials, sized for the
-    # WIDEST stat count it will ever be asked for
-    var multi_partials_len = 1
-    for sc in range(1, multi_planes + 1):
-        var need = bin_count * sc * partition_stats_chunks(sm, sc)
-        if need > multi_partials_len:
-            multi_partials_len = need
-    var d_multi_partials = ctx.enqueue_create_buffer[DType.float32](
-        multi_partials_len
-    )
-    var d_part_stats = ctx.enqueue_create_buffer[DType.float32](
-        2 * bin_count
-    )
+    # `d_partials`, `d_multi_partials`, `d_part_stats`, `d_multi_der` and
+    # `d_multi_stats` are sized by `make_oracle_device_scratch` (DEVIATION 3041)
     var h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
         2 * bin_count
     )
 
-    # allocated ONCE per tree rather than per Hessian row
-    var d_multi_der = ctx.enqueue_create_buffer[DType.float32](
-        multi_planes * n_rows
-    )
-    var d_multi_stats = ctx.enqueue_create_buffer[DType.float32](
-        multi_planes * bin_count
-    )
     var h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
         multi_planes * bin_count
     )

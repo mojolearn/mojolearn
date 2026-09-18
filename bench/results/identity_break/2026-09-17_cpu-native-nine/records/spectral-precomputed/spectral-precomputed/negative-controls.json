@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "spectral-precomputed/base",
+      "context_matches": true,
+      "clean": "8df6d51dbff9ddaf",
+      "sabotage": "a47b3cee729dfc83",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/denormal",
+      "context_matches": true,
+      "clean": "134d1fdd8654374a",
+      "sabotage": "5103c88b4f01df59",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/denormal_ftz",
+      "context_matches": true,
+      "clean": "134d1fdd8654374a",
+      "sabotage": "5103c88b4f01df59",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/dupes",
+      "context_matches": true,
+      "clean": "8df6d51dbff9ddaf",
+      "sabotage": "a47b3cee729dfc83",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/hashed",
+      "context_matches": true,
+      "clean": "fafd67318e66c8e9",
+      "sabotage": "af90d22152d3b30b",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/negative",
+      "context_matches": true,
+      "clean": "6231ccf8fca2283f",
+      "sabotage": "2a8910a65a579438",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/odd",
+      "context_matches": true,
+      "clean": "bbe40df82c9e623a",
+      "sabotage": "c2ecd9c702a6229f",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/ties",
+      "context_matches": true,
+      "clean": "32ed236da838cb22",
+      "sabotage": "39e5e8c26efdbdd4",
+      "detected": true
+    },
+    {
+      "cell": "spectral-precomputed/wide",
+      "context_matches": true,
+      "clean": "ebeb9c5c4008a66d",
+      "sabotage": "fcb65baf082d66b7",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

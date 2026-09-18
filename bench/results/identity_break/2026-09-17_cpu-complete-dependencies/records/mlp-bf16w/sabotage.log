@@ -1,0 +1,170 @@
+2826 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39bd00000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:26  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START mlp-bf16w/base repeat=1/train
+# DONE mlp-bf16w/base repeat=1/train 0.004s
+# START mlp-bf16w/base repeat=1/infer-save-reload
+# DONE mlp-bf16w/base repeat=1/infer-save-reload 0.010s
+# START mlp-bf16w/base repeat=1/batch
+# DONE mlp-bf16w/base repeat=1/batch 0.002s
+# START mlp-bf16w/base repeat=1/stepfull
+# DONE mlp-bf16w/base repeat=1/stepfull 0.000s
+# START mlp-bf16w/base repeat=2/train
+# DONE mlp-bf16w/base repeat=2/train 0.003s
+# START mlp-bf16w/base repeat=2/infer-save-reload
+# DONE mlp-bf16w/base repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/base repeat=2/batch
+# DONE mlp-bf16w/base repeat=2/batch 0.000s
+# START mlp-bf16w/base repeat=2/stepfull
+# DONE mlp-bf16w/base repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/base STABLE 0.029s
+# START mlp-bf16w/ties repeat=1/train
+# DONE mlp-bf16w/ties repeat=1/train 0.003s
+# START mlp-bf16w/ties repeat=1/infer-save-reload
+# DONE mlp-bf16w/ties repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/ties repeat=1/batch
+# DONE mlp-bf16w/ties repeat=1/batch 0.000s
+# START mlp-bf16w/ties repeat=1/stepfull
+# DONE mlp-bf16w/ties repeat=1/stepfull 0.000s
+# START mlp-bf16w/ties repeat=2/train
+# DONE mlp-bf16w/ties repeat=2/train 0.004s
+# START mlp-bf16w/ties repeat=2/infer-save-reload
+# DONE mlp-bf16w/ties repeat=2/infer-save-reload 0.010s
+# START mlp-bf16w/ties repeat=2/batch
+# DONE mlp-bf16w/ties repeat=2/batch 0.000s
+# START mlp-bf16w/ties repeat=2/stepfull
+# DONE mlp-bf16w/ties repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/ties STABLE 0.028s
+# START mlp-bf16w/hashed repeat=1/train
+# DONE mlp-bf16w/hashed repeat=1/train 0.003s
+# START mlp-bf16w/hashed repeat=1/infer-save-reload
+# DONE mlp-bf16w/hashed repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/hashed repeat=1/batch
+# DONE mlp-bf16w/hashed repeat=1/batch 0.000s
+# START mlp-bf16w/hashed repeat=1/stepfull
+# DONE mlp-bf16w/hashed repeat=1/stepfull 0.000s
+# START mlp-bf16w/hashed repeat=2/train
+# DONE mlp-bf16w/hashed repeat=2/train 0.003s
+# START mlp-bf16w/hashed repeat=2/infer-save-reload
+# DONE mlp-bf16w/hashed repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/hashed repeat=2/batch
+# DONE mlp-bf16w/hashed repeat=2/batch 0.000s
+# START mlp-bf16w/hashed repeat=2/stepfull
+# DONE mlp-bf16w/hashed repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/hashed STABLE 0.026s
+# START mlp-bf16w/wide repeat=1/train
+# DONE mlp-bf16w/wide repeat=1/train 0.004s
+# START mlp-bf16w/wide repeat=1/infer-save-reload
+# DONE mlp-bf16w/wide repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/wide repeat=1/batch
+# DONE mlp-bf16w/wide repeat=1/batch 0.000s
+# START mlp-bf16w/wide repeat=1/stepfull
+# DONE mlp-bf16w/wide repeat=1/stepfull 0.000s
+# START mlp-bf16w/wide repeat=2/train
+# DONE mlp-bf16w/wide repeat=2/train 0.003s
+# START mlp-bf16w/wide repeat=2/infer-save-reload
+# DONE mlp-bf16w/wide repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/wide repeat=2/batch
+# DONE mlp-bf16w/wide repeat=2/batch 0.000s
+# START mlp-bf16w/wide repeat=2/stepfull
+# DONE mlp-bf16w/wide repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/wide STABLE 0.026s
+# START mlp-bf16w/denormal repeat=1/train
+# DONE mlp-bf16w/denormal repeat=1/train 0.004s
+# START mlp-bf16w/denormal repeat=1/infer-save-reload
+# DONE mlp-bf16w/denormal repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/denormal repeat=1/batch
+# DONE mlp-bf16w/denormal repeat=1/batch 0.000s
+# START mlp-bf16w/denormal repeat=1/stepfull
+# DONE mlp-bf16w/denormal repeat=1/stepfull 0.000s
+# START mlp-bf16w/denormal repeat=2/train
+# DONE mlp-bf16w/denormal repeat=2/train 0.004s
+# START mlp-bf16w/denormal repeat=2/infer-save-reload
+# DONE mlp-bf16w/denormal repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/denormal repeat=2/batch
+# DONE mlp-bf16w/denormal repeat=2/batch 0.000s
+# START mlp-bf16w/denormal repeat=2/stepfull
+# DONE mlp-bf16w/denormal repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/denormal STABLE 0.026s
+# START mlp-bf16w/denormal_ftz repeat=1/train
+# DONE mlp-bf16w/denormal_ftz repeat=1/train 0.004s
+# START mlp-bf16w/denormal_ftz repeat=1/infer-save-reload
+# DONE mlp-bf16w/denormal_ftz repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/denormal_ftz repeat=1/batch
+# DONE mlp-bf16w/denormal_ftz repeat=1/batch 0.000s
+# START mlp-bf16w/denormal_ftz repeat=1/stepfull
+# DONE mlp-bf16w/denormal_ftz repeat=1/stepfull 0.000s
+# START mlp-bf16w/denormal_ftz repeat=2/train
+# DONE mlp-bf16w/denormal_ftz repeat=2/train 0.003s
+# START mlp-bf16w/denormal_ftz repeat=2/infer-save-reload
+# DONE mlp-bf16w/denormal_ftz repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/denormal_ftz repeat=2/batch
+# DONE mlp-bf16w/denormal_ftz repeat=2/batch 0.000s
+# START mlp-bf16w/denormal_ftz repeat=2/stepfull
+# DONE mlp-bf16w/denormal_ftz repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/denormal_ftz STABLE 0.026s
+# START mlp-bf16w/dupes repeat=1/train
+# DONE mlp-bf16w/dupes repeat=1/train 0.004s
+# START mlp-bf16w/dupes repeat=1/infer-save-reload
+# DONE mlp-bf16w/dupes repeat=1/infer-save-reload 0.008s
+# START mlp-bf16w/dupes repeat=1/batch
+# DONE mlp-bf16w/dupes repeat=1/batch 0.000s
+# START mlp-bf16w/dupes repeat=1/stepfull
+# DONE mlp-bf16w/dupes repeat=1/stepfull 0.000s
+# START mlp-bf16w/dupes repeat=2/train
+# DONE mlp-bf16w/dupes repeat=2/train 0.003s
+# START mlp-bf16w/dupes repeat=2/infer-save-reload
+# DONE mlp-bf16w/dupes repeat=2/infer-save-reload 0.008s
+# START mlp-bf16w/dupes repeat=2/batch
+# DONE mlp-bf16w/dupes repeat=2/batch 0.000s
+# START mlp-bf16w/dupes repeat=2/stepfull
+# DONE mlp-bf16w/dupes repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/dupes STABLE 0.025s
+# START mlp-bf16w/odd repeat=1/train
+# DONE mlp-bf16w/odd repeat=1/train 0.004s
+# START mlp-bf16w/odd repeat=1/infer-save-reload
+# DONE mlp-bf16w/odd repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/odd repeat=1/batch
+# DONE mlp-bf16w/odd repeat=1/batch 0.000s
+# START mlp-bf16w/odd repeat=1/stepfull
+# DONE mlp-bf16w/odd repeat=1/stepfull 0.000s
+# START mlp-bf16w/odd repeat=2/train
+# DONE mlp-bf16w/odd repeat=2/train 0.004s
+# START mlp-bf16w/odd repeat=2/infer-save-reload
+# DONE mlp-bf16w/odd repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/odd repeat=2/batch
+# DONE mlp-bf16w/odd repeat=2/batch 0.000s
+# START mlp-bf16w/odd repeat=2/stepfull
+# DONE mlp-bf16w/odd repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/odd STABLE 0.026s
+# START mlp-bf16w/negative repeat=1/train
+# DONE mlp-bf16w/negative repeat=1/train 0.003s
+# START mlp-bf16w/negative repeat=1/infer-save-reload
+# DONE mlp-bf16w/negative repeat=1/infer-save-reload 0.009s
+# START mlp-bf16w/negative repeat=1/batch
+# DONE mlp-bf16w/negative repeat=1/batch 0.000s
+# START mlp-bf16w/negative repeat=1/stepfull
+# DONE mlp-bf16w/negative repeat=1/stepfull 0.000s
+# START mlp-bf16w/negative repeat=2/train
+# DONE mlp-bf16w/negative repeat=2/train 0.004s
+# START mlp-bf16w/negative repeat=2/infer-save-reload
+# DONE mlp-bf16w/negative repeat=2/infer-save-reload 0.009s
+# START mlp-bf16w/negative repeat=2/batch
+# DONE mlp-bf16w/negative repeat=2/batch 0.000s
+# START mlp-bf16w/negative repeat=2/stepfull
+# DONE mlp-bf16w/negative repeat=2/stepfull 0.000s
+# CELL mlp-bf16w/negative STABLE 0.026s
+| mlp-bf16w              | 3687a8774b7cfa2a | 80f2afd9eeaeb738 | 849e9caf8a50b881 | 0b93061029e61e71 | 8f672b17d23d41b0 | 8f672b17d23d41b0 | 3687a8774b7cfa2a | 4ead3bf09b4ee270 | c8f056f65443d448 |
+| mlp-bf16w infer        | 7f842e10fdd5259b | 79f9e1a1ad0b4f8d | d98630bd6b98117e | be5f13ca17f2a292 | 778c3605e1ca569b | 778c3605e1ca569b | 7f842e10fdd5259b | 74fa57ee9d9aec39 | 239a9c2fb54d5ccc |
+| mlp-bf16w model        | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: mlp-bf16w batch n/a:weight-format lane; the batch part is measured on its base lane, mlp-bf16w stepfull n/a:no-decode-state
+wrote /root/leg_out/records/mlp-bf16w/mlp-bf16w/cpu-sabotage.json

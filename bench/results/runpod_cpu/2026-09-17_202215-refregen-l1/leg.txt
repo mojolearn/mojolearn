@@ -1,0 +1,6 @@
+lane=refregen-l1
+commit=e7630fea5e5887ed746757a8debe3fd87b632053
+dirty_tracked=1
+worktree=/Users/andrewhendel/mojolearn-wt/reference-regen
+source=2925	19223102	92eb784226cd36cffcb4522a59e725a1ba4af9607c209f1388b44e41aa420838
+box_clock_minus_mac=0

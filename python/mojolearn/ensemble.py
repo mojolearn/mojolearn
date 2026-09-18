@@ -89,9 +89,11 @@ class count is derived from them, as their `TClassificationTargetHelper`
 derives it.
 """
 
+import hashlib
 import itertools
 import numbers
 import math
+import os
 import struct
 
 # GBDT HAS ITS OWN EXTENSION, built by `bindings/build_gbdt.sh`, for the
@@ -109,6 +111,7 @@ from . import _backend, _mojolearn_gbdt, _serialize
 from ._mode import NumericModeMixin
 from ._array import Array
 from ._buffer import (
+    as_f32_forest_layout,
     addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_i64_c,
     empty, frombytes, zeros,
 )
@@ -116,6 +119,12 @@ from ._labels import argmax_rows, finite_integer_codes, flat_view, is_bool
 
 #: The npz model-file format tag `save` writes and `load` requires.
 _MODEL_FORMAT = "mojolearn-gbdt-1"
+
+
+def _model_text_sha256(text):
+    """The key of the device-resident copy (DEVIATION 2980): the sha256 of
+    the model text's utf-8 bytes, the bytes `save` writes."""
+    return hashlib.sha256(str(text).encode("utf-8")).hexdigest()
 
 #: CatBoost's `ELossFunction` spellings that this implementation trains. The list is
 #: the reachable set of their GPU pointwise target
@@ -304,6 +313,18 @@ MULTI_OUTPUT_LOSSES = ("MultiClass", "MultiClassOneVsAll")
 _PREDICT_RAW = 0
 _PREDICT_SOFTMAX = 1   # their `Probability`,      MultiClass
 _PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
+#: `gbdt_resident_predict` only: the Logloss / CrossEntropy `predict_proba`
+#: pair `[1 - p, p]` as float64 (DEVIATION 2980, the resident door's spelling
+#: of `gbdt_sigmoid_pair`)
+_PREDICT_SIGMOID_PAIR = 3
+
+#: DEVIATION 2980: the device-resident parsed model is the default door of
+#: `GradientBoosting.predict` and `predict_proba` wherever the loaded binding
+#: exports `gbdt_resident_prepare`. `MOJOLEARN_GBDT_RESIDENT=0` in the
+#: environment at import, or this name set to False at run time, takes the
+#: per-call parse (`gbdt_predict`, `gbdt_predict_multi`) instead; the speed
+#: harness flips it to interleave the two arms in one process.
+GBDT_RESIDENT = os.environ.get("MOJOLEARN_GBDT_RESIDENT", "1").strip() != "0"
 
 #: Losses whose parameter CatBoost makes MANDATORY. Passing the loss without
 #: it raises here rather than in Mojo, so the message names the Python
@@ -1368,6 +1389,11 @@ class GradientBoosting(NumericModeMixin):
         # host-side check below is a native helper or a C-driven scan over
         # `flat_view` of that storage, never a per-element Python loop
         # except where the contract permits one (label codes).
+        # DEVIATION 2980: a refit drops the device copy of the previous
+        # model HERE, not at the next call. The copy is also keyed on the
+        # text's sha256 (`_resident_handle`), so a subclass fit that
+        # replaces `model_` without passing here is served a fresh copy.
+        self._release_resident()
         Xa, _ = as_f32_colmajor(X, name="X")
         n_rows, n_features = Xa.shape
 
@@ -1571,6 +1597,98 @@ class GradientBoosting(NumericModeMixin):
         )
         return self
 
+    # -- the device-resident parsed model (DEVIATION 2980) ------------------
+    #
+    # `gbdt/resident_model.mojo`: the first `predict` or `predict_proba`
+    # after a fit or a load parses the text once and uploads the packed
+    # ensemble once; every later call searches through an integer handle
+    # held here as `_resident = (binding, text, sha256, handle)`. The rules
+    # are `neighbors.py`'s for the k-NN index (DEVIATION 2921): released on
+    # refit, released when the instance is collected, never carried through
+    # pickle or deepcopy, and a handle is meaningful only for the binding
+    # (tier, vendor) that minted it.
+
+    def _resident_handle(self, binding):
+        """The handle of the device-resident copy of `model_`, prepared on
+        the first call and reused while the text is the same bytes; None
+        where the loaded binding has no `gbdt_resident_prepare` (a binary
+        built before DEVIATION 2980, a CPU-only install's proxy, which
+        refuses an absent name with ImportError) or where `GBDT_RESIDENT`
+        is off, in which case the call takes the per-call parse.
+
+        The fast check is object identity on the text (`str` is
+        immutable, and the entry keeps a reference so the id cannot be
+        reused). A different object is hashed and compared to the sha256
+        the entry was prepared from: the same text keeps the handle, a
+        new text releases it and prepares again."""
+        if not GBDT_RESIDENT:
+            return None
+        try:
+            prepare = binding.gbdt_resident_prepare
+        except (ImportError, AttributeError):
+            return None
+        text = self.model_
+        cached = getattr(self, "_resident", None)
+        if cached is not None:
+            c_binding, c_text, c_sha, c_handle = cached
+            if c_binding is binding and c_text is text:
+                return c_handle
+            sha = _model_text_sha256(text)
+            if c_binding is binding and c_sha == sha:
+                self._resident = (binding, text, sha, c_handle)
+                return c_handle
+            self._release_resident()
+        else:
+            sha = _model_text_sha256(text)
+        handle = int(prepare(text))
+        self._resident = (binding, text, sha, handle)
+        return handle
+
+    def _release_resident(self):
+        """Drop the device copy, if one is held. Quiet on a binding that
+        cannot be reached any more (interpreter shutdown) and on a handle
+        already released."""
+        cached = getattr(self, "_resident", None)
+        if cached is None:
+            return
+        self._resident = None
+        try:
+            cached[0].gbdt_resident_release(cached[3])
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __del__(self):
+        try:
+            self._release_resident()
+        except Exception:  # noqa: BLE001
+            pass
+
+    def __getstate__(self):
+        """A pickle or a deepcopy carries no device handle: the integer is
+        meaningful only in the process and registry that minted it, and an
+        unpickled instance holding it could release ANOTHER model's live
+        copy. The copy prepares its own at its first call."""
+        state = self.__dict__.copy()
+        state.pop("_resident", None)
+        return state
+
+    def _check_fitted_layout(self, X):
+        """`_check_fitted` for the resident door (DEVIATION 2980):
+        `(array, n_rows, row_major)`. A 2-D float32 C-order input is a
+        zero-copy borrow with `row_major` True and the native staging pass
+        transposes it (DEVIATION 2637's shape for the forests); every other
+        input takes the column-major materialization exactly as before."""
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict() before fit()")
+        Xa, row_major = as_f32_forest_layout(X, name="X")
+        n_rows, n_features = Xa.shape
+        if n_features != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn: model was fitted on {self.n_features_in_} "
+                f"features, got {n_features}"
+            )
+        return Xa, n_rows, row_major
+
     def _check_fitted(self, X):
         if self.model_ is None:
             raise RuntimeError("mojolearn: predict() before fit()")
@@ -1599,11 +1717,35 @@ class GradientBoosting(NumericModeMixin):
         would give a different answer. `MultiClassOneVsAll` returns
         `(n_samples, n_classes)` with one raw score per independent head.
         """
-        Xa, n_rows = self._check_fitted(X)
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict() before fit()")
+        binding = self._bind("_mojolearn_gbdt")
 
+        # DEVIATION 2980: the parsed, packed and uploaded model stays on
+        # the device between calls; the per-call parse below is the door
+        # for a binary without the entry point
+        handle = self._resident_handle(binding)
+        if handle is not None:
+            Xa, n_rows, row_major = self._check_fitted_layout(X)
+            out = empty((n_rows * self.approx_dim_,), "<f4")
+            width = binding.gbdt_resident_predict(
+                handle, addr_ro(Xa, name="X"),
+                addr(out, name="predict output"),
+                [n_rows, _PREDICT_RAW, 1 if row_major else 0],
+            )
+            if width != self.approx_dim_:
+                raise RuntimeError(
+                    f"mojolearn: predict wrote width {width}, expected "
+                    f"{self.approx_dim_}"
+                )
+            if self.approx_dim_ == 1:
+                return out
+            return out.reshape((n_rows, width))
+
+        Xa, n_rows = self._check_fitted(X)
         if self.approx_dim_ > 1:
             out = empty((n_rows * self.approx_dim_,), "<f4")
-            width = self._bind("_mojolearn_gbdt").gbdt_predict_multi(
+            width = binding.gbdt_predict_multi(
                 self.model_, addr_ro(Xa, name="X"),
                 addr(out, name="predict output"),
                 [n_rows, _PREDICT_RAW],
@@ -1616,7 +1758,7 @@ class GradientBoosting(NumericModeMixin):
             return out.reshape((n_rows, width))
 
         out = empty((n_rows,), "<f4")
-        wrote = self._bind("_mojolearn_gbdt").gbdt_predict(
+        wrote = binding.gbdt_predict(
             self.model_, addr_ro(Xa, name="X"),
             addr(out, name="predict output"), [n_rows]
         )
@@ -1655,16 +1797,29 @@ class GradientBoosting(NumericModeMixin):
         The returned columns are in class-code order, `0 .. n_classes - 1`.
         """
         if self.loss in MULTI_OUTPUT_LOSSES:
-            Xa, n_rows = self._check_fitted(X)
+            if self.model_ is None:
+                raise RuntimeError("mojolearn: predict_proba() before fit()")
             # 54a8143a libs/model/eval_processing.h:214-226:
             # MultiProbability applies CalcSigmoid elementwise.
             mode = (_PREDICT_SIGMOID if self.loss == "MultiClassOneVsAll"
                     else _PREDICT_SOFTMAX)
-            out = empty((n_rows * self.n_classes_,), "<f4")
-            width = self._bind("_mojolearn_gbdt").gbdt_predict_multi(
-                self.model_, addr_ro(Xa, name="X"),
-                addr(out, name="predict_proba output"), [n_rows, mode]
-            )
+            binding = self._bind("_mojolearn_gbdt")
+            handle = self._resident_handle(binding)  # DEVIATION 2980
+            if handle is not None:
+                Xa, n_rows, row_major = self._check_fitted_layout(X)
+                out = empty((n_rows * self.n_classes_,), "<f4")
+                width = binding.gbdt_resident_predict(
+                    handle, addr_ro(Xa, name="X"),
+                    addr(out, name="predict_proba output"),
+                    [n_rows, mode, 1 if row_major else 0],
+                )
+            else:
+                Xa, n_rows = self._check_fitted(X)
+                out = empty((n_rows * self.n_classes_,), "<f4")
+                width = binding.gbdt_predict_multi(
+                    self.model_, addr_ro(Xa, name="X"),
+                    addr(out, name="predict_proba output"), [n_rows, mode]
+                )
             if width != self.n_classes_:
                 raise RuntimeError(
                     f"mojolearn: predict_proba wrote width {width}, "
@@ -1679,6 +1834,27 @@ class GradientBoosting(NumericModeMixin):
                 f"{self.loss!r}. Use predict() and apply the link "
                 f"yourself."
             )
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict_proba() before fit()")
+        binding = self._bind("_mojolearn_gbdt")
+        handle = self._resident_handle(binding)
+        if handle is not None:
+            Xa, n_rows, row_major = self._check_fitted_layout(X)
+            # DEVIATION 2980: both columns from the resident call, written
+            # by the binding as float64 `[1 - p, p]` with `p` exactly
+            # `gbdt_sigmoid`'s value over the exact widening of the raw
+            # float32 (`gbdt_sigmoid_pair`'s statements, DEVIATION 2902);
+            # the float32 raw array and its `astype` never exist
+            out = empty((n_rows, 2), "<f8")
+            width = binding.gbdt_resident_predict(
+                handle, addr_ro(Xa, name="X"), addr(out, name="proba"),
+                [n_rows, _PREDICT_SIGMOID_PAIR, 1 if row_major else 0],
+            )
+            if int(width) != 2:
+                raise RuntimeError(
+                    f"mojolearn: predict_proba wrote width {width}, expected 2"
+                )
+            return out
         raw = self.predict(X).astype("<f8")  # exact widening
         n_rows = raw.shape[0]
         # DEVIATION 258 made the IDENTICAL tier take the portable double
@@ -1692,7 +1868,6 @@ class GradientBoosting(NumericModeMixin):
         # between two exps; neither tier has a bitwise card on proba, and
         # FAST is never asked a bitwise question. `1 - p` is the same one
         # float64 subtraction as before, so column 0 keeps its bits.
-        binding = self._bind("_mojolearn_gbdt")
         # a CPU-only install's binding proxy raises ImportError, by name, for
         # an entry point its host family does not export
         try:

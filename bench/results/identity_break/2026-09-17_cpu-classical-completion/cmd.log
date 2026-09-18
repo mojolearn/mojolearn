@@ -1,0 +1,33 @@
+metrics-homogeneity-completeness: clean
+metrics-homogeneity-completeness: sabotage
+metrics-homogeneity-completeness: 8/9 controls; passed=False
+gbdt-adapter-score-weighted: clean
+gbdt-adapter-score-weighted: sabotage
+gbdt-adapter-score-weighted: 9/9 controls; passed=True
+rf-score-weighted: clean
+rf-score-weighted: sabotage
+rf-score-weighted: 9/9 controls; passed=True
+gbdt-nan-modes: clean
+gbdt-nan-modes: sabotage
+gbdt-nan-modes: 9/9 controls; passed=True
+gbdt-parametric-losses: clean
+gbdt-parametric-losses: sabotage
+gbdt-parametric-losses: 9/9 controls; passed=True
+gbdt-lossguide-newtoncosine: clean
+gbdt-lossguide-newtoncosine: sabotage
+gbdt-lossguide-newtoncosine: 9/9 controls; passed=True
+gbdt-pair-logit: clean
+gbdt-pair-logit: sabotage
+gbdt-pair-logit: 9/9 controls; passed=True
+gbdt-yeti-rank: clean
+gbdt-yeti-rank: sabotage
+gbdt-yeti-rank: 9/9 controls; passed=True
+hdbscan: clean
+hdbscan: sabotage
+hdbscan: 9/9 controls; passed=True
+hdbscan-leaf: clean
+hdbscan-leaf: sabotage
+hdbscan-leaf: 9/9 controls; passed=True
+kmeans-sqrt: clean
+kmeans-sqrt: sabotage
+kmeans-sqrt: 9/9 controls; passed=True
