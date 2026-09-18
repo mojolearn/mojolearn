@@ -1,0 +1,2 @@
+column=amd (derived on the box, exported before the build)
+gpu_archs=gfx942
