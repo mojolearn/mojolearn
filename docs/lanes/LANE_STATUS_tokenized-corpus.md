@@ -164,3 +164,9 @@ vs bytes, same shape/seed/vocab_size) and the byte-path-vs-main comparison
 d6948abc...; a seed-2 arm must differ). Output:
 `~/mojolearn-evidence/tokenized-corpus-sep18/pod/<stamp>/`. The pod is reaped by the leg;
 verify 404 after.
+
+GPU leg 1 (2026-09-18_135642, RTX 4090 pod ph5zsazy7u4kxn, 96-vCPU x86, 404-verified): builds
+of base (85 s) and byte_lm (206 s) OK; the tokenizer host refused `MOJOLEARN_TARGET_COLUMN=nvidia`
+(it is a CPU-column binding) and train_main then lacked the generated Unicode table, so no
+vocabulary and nothing after ran (extra_exit=4). Fixed in the body (CPU column for the tokenizer
+build, explicit gen_unicode_table.sh). Relaunched.

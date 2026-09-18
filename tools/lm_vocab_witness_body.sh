@@ -78,9 +78,13 @@ sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1
 say "build byte_lm exit=$? secs=$(( $(date +%s) - t0 ))"
 t0=$(date +%s)
 rm -f python/mojolearn/host/_mojolearn_tokenizer_host.so
-sh bindings/build_tokenizer_host.sh > "$OUT/build_tokenizer.log" 2>&1
+# the tokenizer host is a CPU-column binding and refuses TARGET_COLUMN=nvidia
+MOJOLEARN_TARGET_COLUMN=cpu sh bindings/build_tokenizer_host.sh > "$OUT/build_tokenizer.log" 2>&1
 say "build tokenizer_host exit=$? secs=$(( $(date +%s) - t0 ))"
 mkdir -p build
+# train_main imports the generated Unicode table the host build writes; make it explicit
+sh tokenizer/tools/gen_unicode_table.sh > "$OUT/gen_unicode.log" 2>&1
+say "gen_unicode_table exit=$?"
 t0=$(date +%s)
 pixi run mojo build -I . -o build/train_main tokenizer/train/train_main.mojo > "$OUT/build_train_main.log" 2>&1
 say "build train_main exit=$? secs=$(( $(date +%s) - t0 ))"
