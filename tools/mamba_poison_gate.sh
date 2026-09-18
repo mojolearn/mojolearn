@@ -83,6 +83,42 @@ grep -q "^require-columns 3 over .*: OK" "$WORK/diff.txt" || DIVERGENT=$((DIVERG
 IDENT4=$(grep -E "^\| mamba[0-9a-z/_-]* +\| IDENTICAL x4" "$WORK/diff.txt" | wc -l | tr -d ' ')
 echo "poison column: $IDENT4 of 36 Mamba training rows IDENTICAL x4"
 if [ "$SABOTAGE" = 1 ] || [ "$SABOTAGE" = 2 ]; then
+    # A missing binding or another setup refusal is not a detected over-read.
+    # Poison can trip the native NaN guard before a hash is emitted. Admit
+    # only that specific numerical refusal on the affected Mamba2 lanes;
+    # the unaffected Mamba1/Mamba3 controls must still equal all references.
+    pixi run python - "$OUT" $COLUMNS <<'PY_POISON_NEGATIVE'
+import json, re, sys
+from pathlib import Path
+record = json.loads(Path(sys.argv[1]).read_text())
+refs = [json.loads(Path(path).read_text()) for path in sys.argv[2:]]
+lanes = {'mamba1', 'mamba2', 'mamba2-dtlimit', 'mamba3'}
+fixtures = {'base', 'ties', 'hashed', 'wide', 'denormal', 'denormal_ftz', 'dupes', 'odd', 'negative'}
+assert record['complete'] and record['repeats'] == 2
+assert set(record['cells']) == {lane+'/'+fixture for lane in lanes for fixture in fixtures}
+nan_refusals = changed_hashes = 0
+for key, cell in record['cells'].items():
+    lane = key.split('/')[0]
+    expected = {ref['cells'][key]['hashes'][0] for ref in refs}
+    assert len(expected) == 1, ('references disagree', key)
+    if cell['verdict'] == 'REFUSED':
+        assert lane in {'mamba2', 'mamba2-dtlimit'}, ('unaffected control refused', key)
+        assert re.fullmatch(
+            r'Exception: mamba: NaN in state\.[A-Za-z0-9_]+ at flat index [0-9]+ '
+            r'REFUSED \(row 39: NaN payloads are vendor-shaped; no stage may record one\)',
+            cell.get('error', '')), ('unrelated refusal', key, cell.get('error'))
+        nan_refusals += 1
+        continue
+    assert cell['verdict'] in {'STABLE', 'MOVED', 'DIVERGENT'}, (key, cell['verdict'])
+    hashes = cell['hashes']
+    assert len(hashes) == 2 and all(re.fullmatch('[0-9a-f]{16}', h) for h in hashes), key
+    if lane in {'mamba1', 'mamba3'}:
+        assert cell['verdict'] == 'STABLE' and set(hashes) == expected, ('control changed', key)
+    elif set(hashes) != expected:
+        changed_hashes += 1
+assert nan_refusals + changed_hashes > 0, 'No numerical effect from the planted defect'
+print(f'poison negative evidence: {nan_refusals} native NaN refusals, {changed_hashes} changed hashed cells; unaffected controls match')
+PY_POISON_NEGATIVE
     if [ "$IDENT4" -ne 36 ] && [ "$DIVERGENT" -gt 0 ]; then
         echo "check-mamba-poison SABOTAGE $SABOTAGE: the gate FAILED as required ($DIVERGENT Mamba rows not identical, $IDENT4 of 36 identical)"; exit 0
     fi
