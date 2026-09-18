@@ -33,6 +33,9 @@ else
 fi
 [[ "$MOJOLEARN_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid qualification commit witness' >&2; exit 2; }
 export MOJOLEARN_COMMIT
+# Saved-model gates use their own provenance variable; archived source has no
+# .git directory from which to recover it.
+export MOJOLEARN_GATE_COMMIT="$MOJOLEARN_COMMIT"
 cd "$OUT"
 timeout -k 10 600 env -u PYTHONPATH -u PYTHONHOME \
     MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
@@ -50,6 +53,27 @@ timeout -k 10 900 env -u PYTHONPATH -u PYTHONHOME \
     --lanes "$EXTRA_LANES" --repeats 2 --require-backend "$VENDOR" \
     --fail-on-refused --vendor "$COLUMN" \
     --json "$OUT/property-column.json" > "$OUT/property-column.log" 2>&1
+# UMAP's row-separable transform changed the inference hashes after the old
+# saved-model recordings. Capture fresh evidence on each physical vendor from
+# this exact installed wheel, then replay its saved GPU models on the CPU.
+# These files are evidence to review for explicit reference supersession; this
+# script never edits the historical references or admits its own new hashes.
+timeout -k 10 600 env -u PYTHONPATH -u PYTHONHOME \
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
+    "$VPY" -m mojolearn._identity_break \
+    --lanes umap --repeats 2 --require-backend "$VENDOR" \
+    --fail-on-refused --vendor "$COLUMN" \
+    --json "$OUT/umap-column.json" > "$OUT/umap-column.log" 2>&1
+timeout -k 10 600 env -u PYTHONPATH -u PYTHONHOME \
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
+    "$VPY" "$ROOT/tools/classical_host_gate.py" --package-root '' \
+    record "$OUT/umap-saved-models" --lanes umap \
+    > "$OUT/umap-saved-models.log" 2>&1
+timeout -k 10 300 env -u PYTHONPATH -u PYTHONHOME \
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
+    "$VPY" "$ROOT/tools/classical_host_gate.py" --package-root '' \
+    check "$OUT/umap-saved-models" --gpu-column "$OUT/umap-column.json" \
+    --report "$OUT/umap-cpu-replay.json" > "$OUT/umap-cpu-replay.log" 2>&1
 timeout -k 10 900 "$VPY" "$ROOT/tools/qualify_verifier_wheel.py" "$WHEEL" \
     --python "$VPY" --output "$OUT/verifier-cli" > "$OUT/verifier-cli.log" 2>&1
 printf '0\n' > "$OUT/exit_code"

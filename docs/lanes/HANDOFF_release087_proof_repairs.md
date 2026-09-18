@@ -42,3 +42,29 @@ The native freeze is unchanged. Qualification tools changed again; refresh
 source-matched witnesses for the final repaired release source. No fresh rental
 or heavy local build was started while run 35350125464 remained active and
 local memory pressure remained at warning level.
+
+## Timeout diagnosis and prepared UMAP capture
+
+GitHub cancelled hosted Apple job 105616007971 at its 90-minute job timeout
+while the fault sweep was running. The annotation and job metadata are retained
+under bench/results/cpu_certification/2026-09-18-apple-timeout. x86 started after
+that job ended. The workflow now allows 180 minutes for the two 50-minute
+column sweeps plus builds/additional gates; serial matrix/two-shard limits are
+unchanged. The active old run still uses its original budget.
+
+tools/release_installed_checks.sh now captures a repeated all-fixture UMAP
+column, records all nine saved GPU models, and replays them through the installed
+CPU host binding against the fresh column. This runs on each existing bounded
+qualification leg after the property captures. Source archives explicitly set
+MOJOLEARN_GATE_COMMIT for saved-model report provenance. Outputs are
+umap-column.json, umap-saved-models/, umap-cpu-replay.json and their logs.
+
+Two binding-free shell orchestration tests pass, including five failure-stage
+subcases proving supplemental failure leaves exit_code=1 and stops later work.
+bash -n passes. Native UMAP execution is still OWED; no new rental was launched.
+These commands retain evidence but do not overwrite/admit historical hashes.
+Next: finish x86 diagnosis, run the final source-matched GPU qualifications,
+review cross-vendor equality and explicitly supersede the nine stale UMAP
+expectations, then rerun CPU certification and exact-artifact publication gates.
+Keep the rental deadlines; the extra bounded steps do not authorize runaway
+jobs or automatically extend a rental lease.
