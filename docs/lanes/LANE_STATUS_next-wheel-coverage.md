@@ -77,3 +77,12 @@ wheels, tag successful source and merge release into then-current main without
 discarding newer work. New pending-route records still require independent
 NVIDIA/AMD/CPU comparisons and negative controls before promotion. Physical
 parallel claims require real one-vs-two-GPU records on NVIDIA and AMD.
+
+Concurrent main change `5bde47f20` was merged during the final integration:
+`BpeTokenizer` is the new canonical spelling and `GPT2Tokenizer` remains a
+deprecated alias. Re-audit now counts 286 public names / 231 callable entries /
+183 implementation symbols. Only `BpeTokenizer` and `tokenizer.BpeTokenizer`
+are absent from frozen 0.8.7; its old tokenizer implementation is present.
+The scanner now includes declared deprecated imports outside `__all__` too.
+49 targeted tests passed after integrating the tokenizer changes. The earlier
+284-name comparison above remains evidence for its explicitly pinned snapshot.

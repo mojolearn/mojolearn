@@ -27,8 +27,8 @@ The four kinds, for one lane:
 ## The numbers
 
 - Lanes: **228** (178 single-device, 50 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **230**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **164** of 230.
+- Source public API entries enumerated from the public API: **231**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **165** of 231.
 - Source public API entries with NO IDENTITY LANE AT ALL: **24**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -37,10 +37,10 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 198 | 32 |
-| cpu verifier | 168 | 62 |
-| sabotage seen to move a build | 170 | 60 |
-| batch part or named n/a | 204 | 26 |
+| gpu column | 199 | 32 |
+| cpu verifier | 169 | 62 |
+| sabotage seen to move a build | 171 | 60 |
+| batch part or named n/a | 205 | 26 |
 
 Per kind, over the lanes:
 
@@ -334,6 +334,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `select_d` | 1 |  | training | seen(build) | part | NO |
 | `tokenizer.BpeTokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeVocabularyTrainer` | 1 |  |  | seen(build) | n/a | NO |
+| `tokenizer.GPT2Tokenizer` (alias of `BpeTokenizer`) | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.ConstantLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |

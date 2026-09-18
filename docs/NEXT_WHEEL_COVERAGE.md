@@ -55,6 +55,24 @@ not names that should be exported before their contracts and gates exist.
 The model loader is packaged, but the matrix now exposes its missing whole-model
 identity lane instead of hiding it behind the single name `models`.
 
+## Subsequent tokenizer rename on main
+
+While this audit ran, `5bde47f20` renamed `GPT2Tokenizer` to `BpeTokenizer`,
+retaining the old spelling as a deprecated alias. The merged tree now has
+286 public names, 231 filtered callable API entries and the same 183
+implementation symbols. The frozen candidate lacks the new root
+`BpeTokenizer` and `tokenizer.BpeTokenizer` names; it already contains the
+tokenizer implementation under the old name. No existing wheel export is
+missing from the merged source. This is a naming addition for the following
+wheel, not two additional algorithms. The source change's own tokenizer and
+BPE training identity/sabotage evidence is in `LANE_STATUS_tokenized-corpus.md`.
+
+The scanner now includes explicitly declared deprecated imports even when
+they are outside a submodule's `__all__`, so compatibility aliases cannot be
+mistaken for removed capabilities. The latest comparison is retained as
+`wheel-export-audit-after-tokenizer.json`. All 49 targeted tests passed after
+the concurrent main changes were integrated.
+
 ## Reference qualification and pending execution
 
 A reference is an expected digest from a recorded calculation, with source,
