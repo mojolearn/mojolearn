@@ -46,13 +46,16 @@ export GBM_BENCH_DATA=/root/datasets/gbm-bench
 export PYTHONUNBUFFERED=1
 LANES="rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,gbdt-ordered-rmse,gbdt-feature-freq,rf-clf-entropy-log2-noboot,rf-clf-balanced-parallel,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,et-reg-bootstrap-parallel,gbdt-multiclass,gbdt-onevsall,gbdt-parametric-losses,gbdt-lossguide-newtoncosine,gbdt-pointwise-l2-bayesian-eval,gbdt-exact-mae,gbdt-categorical-ctr,gbdt-categorical-ctr-tables,gbdt-tensor-ctr-tables,gbdt-nan-modes,gbdt-adapter-clf,gbdt-adapter-reg,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank,gbdt-adapter-score-weighted,rf-score-weighted"
 FIXTURES="base,ties,odd,dupes,wide"
-# Left out of the CUDA columns only (the CPU columns carry them): on the
-# one-GPU box the parallel lanes' batch part hung the BEFORE column at
-# `rf-clf-balanced-parallel/base repeat=1/batch` (13:57 UTC, 90 minutes in
-# futex_wait, 0% CPU, 0% GPU) on the UNMODIFIED main tree, so it is the
-# parallel pool's batch protocol on this box, not this lane's code.
-# identity_break reports each as SKIPPED.
-SKIP_CUDA="${SKIP_CUDA:-rf-clf-balanced-parallel,et-reg-bootstrap-parallel}"
+# NO LONGER SKIPPED (DEVIATION 3010, 2026-09-18). These two hung the CUDA
+# column at `rf-clf-balanced-parallel/base repeat=1/batch` (90 minutes in
+# futex_wait, 0% CPU, 0% GPU) on the UNMODIFIED main tree, and it was never
+# the batch protocol: it was the resident forest destroying its DeviceContext
+# with the buffer frees its release had enqueued still in flight, which left
+# the MAX runtime allocator's lock held for the whole PROCESS. The `model`
+# part's reloaded estimator is what died before the batch part asked for its
+# first buffer. With the drain, both lanes run the full protocol on one GPU:
+# repeats 2, batch stable, 0 moved (docs/lanes/LANE_STATUS_lane-forest-deadlock.md).
+SKIP_CUDA="${SKIP_CUDA:-}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }
 step() {

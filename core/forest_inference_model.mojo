@@ -206,6 +206,13 @@ struct ResidentForest(Movable):
         _ = self.thresholds^
         _ = self.columns^
         _ = self.offsets^
+        # DEVIATION 2520's drain (see `close` below): the frees the releases
+        # above enqueued must complete before the context is destroyed.
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
         _ = self.ctx^
 
     def close(mut self) raises:
@@ -221,6 +228,20 @@ struct ResidentForest(Movable):
         self.thresholds = None
         self.columns = None
         self.offsets = None
+        # DEVIATION 3010: the drain of DEVIATION 2520, which
+        # `bindings/_mojolearn_byte_lm.mojo` has carried since 2026-09-11,
+        # applied to the resident forest. The `synchronize()` above drains
+        # the last PREDICTION; the ten releases between it and here enqueue
+        # the snapshot's and the workspace pair's buffer FREES on the same
+        # stream, and destroying the context with those frees in flight left
+        # the MAX runtime allocator's lock held on an RTX 4090 (sm_89). The
+        # next `DeviceContext()` in the process then blocked forever inside
+        # its first `enqueue_create_buffer`, which is
+        # `ResidentForest.__init__` for the second model: release then
+        # prepare hung, two live snapshots did not. Host-side drain only; no
+        # kernel, no arithmetic, no output bit.
+        if self.ctx:
+            self.ctx.value().synchronize()
         self.ctx = None
 
     def predict[RF_INPUT: Bool](mut self, x: List[Float32], rows: Int,
