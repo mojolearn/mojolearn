@@ -93,6 +93,7 @@ def ivf_read_index_arrays(
     what: String,
     n_addrs: Int = 9,
     n_params: Int = 7,
+    partial_storage: Bool = False,
 ) raises -> IvfIndexArrays:
     """Addresses 0 to 4 and params 0 to 3 of `ivf_flat_search` (9 addresses,
     7 params) or `ivf_flat_extend` (10 and 5), read and admitted (module
@@ -134,7 +135,7 @@ def ivf_read_index_arrays(
         list_indices.append(UInt32(id))
     ivf_validate_index_arrays(
         n_lists, dim, n, metric, centers, center_norms, offsets, list_indices,
-        list_data,
+        list_data, partial_storage,
     )
     return IvfIndexArrays(
         n_lists, dim, n, metric, centers^, center_norms^, offsets^,

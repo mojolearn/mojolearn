@@ -236,12 +236,12 @@ def ivf_flat_build_binding(
     return PythonObject(0)
 
 
-def ivf_flat_search_binding(
-    addrs: PythonObject, params: PythonObject
+def _ivf_search_arrays(
+    addrs: PythonObject, params: PythonObject, partial_storage: Bool
 ) raises -> PythonObject:
     """`ivf_flat::search` over a built index handed back as five arrays and
     admitted by `ivf_validate_index_arrays`. Returns 0."""
-    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_search"))
+    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_search"), partial_storage=partial_storage)
     var ext = ivf_search_extents(params)
     var m = ext[0]
     var k = ext[1]
@@ -259,12 +259,34 @@ def ivf_flat_search_binding(
         arrays.list_indices.copy(), arrays.list_data.copy(), labels^,
     )
     var ctx = DeviceContext()
-    var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes)
+    var r = ivf_flat_search_host(ctx, index, queries, m, k, n_probes, partial_storage=partial_storage)
     ctx.synchronize()
     ivf_write_search_result(addrs, r.distances, r.indices, r.n_candidates, m, k)
     _ = r^
     _ = index^
     _ = ctx^
+    return PythonObject(0)
+
+
+def ivf_flat_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    return _ivf_search_arrays(addrs, params, False)
+
+
+def ivf_flat_partial_search_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """Disjoint storage with global centers/probes; squared output, valid count=min(k,candidates)."""
+    return _ivf_search_arrays(addrs, params, True)
+
+
+def ivf_finalize_distances_binding(address: PythonObject, count: PythonObject, metric: PythonObject) raises -> PythonObject:
+    from ivf.impl.neighbors.ivf_common import postprocess_distances
+    var n = Int(py=count)
+    if n < 0:
+        raise Error("distance count must be nonnegative")
+    var distances = read_f32(Int(py=address), n)
+    postprocess_distances(distances, Int(py=metric))
+    var dst = f32_ptr(Int(py=address))
+    for i in range(n):
+        dst.unsafe_store(i, distances[i])
     return PythonObject(0)
 
 
@@ -319,6 +341,8 @@ def PyInit__mojolearn_ivf() abi("C") -> PythonObject:
         )
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
+        m.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
+        m.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
         return m.finalize()
     except e:
