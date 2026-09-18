@@ -2616,10 +2616,15 @@ def public_reference_lanes():
 #: regression, which is why the derivation adds it back rather than deriving
 #: it: it is the one public lane a run selects without comparing.
 # BPE vocabulary training and fold construction are pure host operations.
-# Their fixtures run locally, but missing reference hashes must read OWED.
+# Vocabulary serialization and corpus preparation also run on the host, but
+# use the shipped tokenizer binding to encode and decode. Their replay and
+# both negative controls are recorded in 2026-09-18_tokenized-corpus; this is
+# CPU-only evidence, not a claim of independent GPU implementation equality.
+# Missing reference hashes must still read OWED.
 # None means pure Python: no native host binding is required.
 PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
-                          "cross-val-folds": None}
+                          "cross-val-folds": None, "bpe-vocabulary": "tokenizer",
+                          "tokenized-corpus": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:
