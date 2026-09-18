@@ -1197,8 +1197,8 @@ def identical_gemm_emit_kernel(
 # THE TUNED PLANS: register-blocked tiles, the same arithmetic
 # ===========================================================================
 
-#: The per-step seam as ONE hardware instruction where the kernel matrix
-#: says the column has it (`lib_hardware_ftz_fma_for`). Software seam
+#: NVIDIA RN FMA followed by the post-round hardware FTZ multiply, where
+#: the matrix exposes those intrinsics (`lib_hardware_ftz_fma_for`). Software seam
 #: everywhere else and in every non-IDENTICAL build.
 comptime TUNED_HW_FTZ_FMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL

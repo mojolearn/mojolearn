@@ -20,3 +20,14 @@ for line in valid.splitlines():
             raise AssertionError('Accepted broken evidence: '+line)
 gate(valid)
 print('PASS gate sabotage checks')
+
+header = 'SEAM_PROBE column=amd hwftz=False class_shipped=True lanes=shipped,fma,hwftz,swrtf,class\n'
+for bad in (valid, header.replace('class_shipped=True', 'class_shipped=False')+valid, header+header+valid):
+    try:
+        gate(bad, require_shipped_class=True)
+    except ValueError as exc:
+        print('EXPECTED FAIL production dispatch', str(exc))
+    else:
+        raise AssertionError('accepted missing, disabled, or duplicate production dispatch')
+gate(header+valid, require_shipped_class=True)
+print('PASS production-dispatch gate sabotage checks')

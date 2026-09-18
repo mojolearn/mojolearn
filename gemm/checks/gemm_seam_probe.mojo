@@ -18,11 +18,14 @@ whose seam IS the native instruction costs ONE instruction per step on
 every column and closes the Apple gap. This probe measures each column's
 native FMA; it changes no shipped line.
 
-WHAT IT PRINTS, per triple set, four lanes:
+WHAT IT PRINTS, per triple set, five lanes:
   shipped   `_tuned_step(ftz(a), ftz(b), ftz(acc))`, the column's shipped seam
   fma       `identical_mul_add(...)`, the column's native FMA, NO flush after
   hwftz     NVIDIA: `llvm.nvvm.fma.rn.ftz.f`; other columns: the `fma` lane again
   swrtf     `ftz(identical_mul_add(...))`, the software round-then-flush spelling
+  class     post-round AMD class flush; software spelling on other columns
+The closed wave-mode experiment is not launched. `class_shipped` reports
+whether this build enables the class spelling in the production seam.
 and for each lane an FNV-1a 64-bit hash over the 262,144 result words in
 triple order, plus pairwise mismatch counts and the first differing triples
 as hex. `tools/gemm_seam_probe_reference.py` recomputes the three candidate
@@ -44,7 +47,7 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_name
-from gemm.checks.gemm_identical import _tuned_step, _ftz_class, TUNED_HW_FTZ_FMA
+from gemm.checks.gemm_identical import _tuned_step, _ftz_class, TUNED_HW_FTZ_FMA, TUNED_CLASS_FLUSH
 from transformer.impl.llama.modeling_llama import _upload, _download, _zeros
 
 comptime LANES = 5
@@ -169,7 +172,8 @@ def main() raises:
         values.append(bitcast[DType.float32](words[i]))
         wline += " " + _hex(words[i])
     print("SEAM_PROBE column=" + column_name(TARGET_COLUMN) + " hwftz=" + String(TUNED_HW_FTZ_FMA)
-          + " lanes=shipped,fma,hwftz,swrtf")
+          + " class_shipped=" + String(TUNED_CLASS_FLUSH)
+          + " lanes=shipped,fma,hwftz,swrtf,class")
     print(wline)
     var ctx = DeviceContext()
     var inputs = _upload(ctx, values)
