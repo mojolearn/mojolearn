@@ -1,5 +1,21 @@
 # Small training pilot: measured CPU/Apple captures
 
+**Current captures: provenance-v2/.** Initial captures below exposed a shared
+verifier bug: `.git` files in linked worktrees were overlooked and device.commit
+was null. Those initial files are preserved unchanged as historical evidence.
+The lookup is repaired and the pilot now also uses the harness's explicit
+commit witness. All four refreshed captures name source c47301552. The Metal
+device record additionally preserves WORKING TREE DIRTY while the temporary
+native-directory symlink was present; CPU records have no dirty marker. The
+profile/harness digests agree across the records. Their raw logs, exact commands, per-process timing JSON and shared-slot
+timing are retained under provenance-v2/.
+
+Refreshed durations: CPU 0.731 s, CPU replay 0.686 s, Metal 2.414 s, Ridge fault
+0.697 s. The whole serial session took 4.593 s. Again all 180 parts match across
+CPU/replay and CPU/Metal; all 60 Ridge parts move under the native fault. These
+warm runs are not comparable to a cold-start benchmark. Qualification is still
+owed, and the initial timing observations below remain historical.
+
 Profile: small-training-v1. Three lanes (Ridge, StandardScaler, MinMaxScaler),
 15 cases, two independent fits per cell, four compared parts per cell (train,
 inference, saved model, batch invariance). Maximum 257 rows and 17 columns;

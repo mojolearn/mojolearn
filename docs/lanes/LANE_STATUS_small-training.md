@@ -40,3 +40,16 @@ behavior was not qualified by these short numerical runs.
 Continue honoring the Apple full-certification hold. These brief local captures
 did not start another certification workflow or rental. Multi-GPU CV hardware
 qualification and the frozen 0.8.7 UMAP/release gates remain separate work.
+
+Provenance follow-up: _verify._git_commit only recognized .git directories,
+missing linked worktrees' .git files. Two source-identity tests cover the repair
+and preservation of the dirty-tree marker. The pilot also records the harness's
+explicit commit witness. Original null-commit captures remain unmodified;
+provenance-v2/ contains fresh four-arm captures at source c47301552, raw
+logs and exact per-process/slot times. CPU 0.731/0.686 s, Metal 2.414 s, native
+Ridge fault 0.697 s; 4.593 s for the whole serial session. Results again match
+180 parts and catch 60 Ridge fault differences. Current tests inspect those
+refreshed native records; all 33 profile/resource/provenance tests passed.
+The Metal record preserves a dirty-tree marker while the temporary native
+directory symlink was present; it is not presented as a clean-checkout release
+qualification. CPU records are clean and profile/harness hashes match throughout.

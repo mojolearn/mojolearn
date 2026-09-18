@@ -118,12 +118,14 @@ def test_mismatched_inputs_or_source_cannot_be_compared(harness, field):
 
 def test_retained_native_pilot_matches_and_catches_estimator_fault():
     root = Path(__file__).resolve().parents[3]
-    evidence = root / 'bench/results/small_training/2026-09-18-apple-m4'
+    evidence = root / 'bench/results/small_training/2026-09-18-apple-m4/provenance-v2'
     if not evidence.is_dir():
         pytest.skip('source capture evidence is not installed in wheels')
     read = lambda name: json.loads((evidence / name).read_text())
     cpu = read('cpu.json')
+    assert cpu['capture_commit'] == cpu['device']['commit']
     for name, independent in [('cpu-replay.json', False), ('metal.json', True)]:
+        assert read(name)['capture_commit'] == cpu['capture_commit']
         result = small.compare_captures(cpu, read(name))
         assert not result['differences']
         assert result['compared_parts'] == 180
