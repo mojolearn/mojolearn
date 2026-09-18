@@ -2506,6 +2506,11 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     lane and it did not read clean. This reason is the only
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
+#:   qualification pending
+#:                     watched installed CPU core replay passed, but the
+#:                     expanded property/hardware completion plan is not met.
+#:                     Current repeated references remain required; this is
+#:                     neither missing CPU execution nor release admission.
 #:
 #: THE THIRTEEN `stale reference` LANES WERE RESOLVED ON 2026-09-16 by the
 #: regeneration lane/expose-stepfull landed, and the split is the one the
@@ -2525,14 +2530,16 @@ PUBLIC_PENDING_LANES = {
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent
-    # second column clears their former "one column" reason. Watched installed
-    # CPU replay is still owed; NVIDIA/current Apple completion and the exact
-    # expanded 0.8.7 release certificate are separately outstanding.
-    "mamba3": "unwatched",
-    "transformer": "unwatched",
-    "transformer-window": "unwatched",
-    "samba": "unwatched",
-    "samba-untied-dropout-accum": "unwatched",
+    # second column clears their former "one column" reason. All-nine,
+    # twice-repeated installed CPU core replay subsequently passed; see
+    # LANE_STATUS_verifier-installed-continuation.md. Extended installed
+    # properties and NVIDIA/current Apple completion remain owed, as does
+    # the exact expanded 0.8.7 release certificate. Keep the holds explicit.
+    "mamba3": "qualification pending",
+    "transformer": "qualification pending",
+    "transformer-window": "qualification pending",
+    "samba": "qualification pending",
+    "samba-untied-dropout-accum": "qualification pending",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.

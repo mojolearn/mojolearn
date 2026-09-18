@@ -24,27 +24,74 @@ with every wheel package member. No external native override was used.
 - This exposed a reporting bug: `models_checked` counted distinct model lanes
   (10) instead of lane/fixture models (58). The fix reports both counts and
   preserves the human table's lane total. The original wheel report remains
-  unchanged as evidence; validation of the reporting fix is pending.
+  unchanged as evidence. Source runtime validation confirms 58 models across
+  10 lanes and the same 116 passing comparisons after the reporting fix.
 
-## In progress
+## Completed ordinary installed replay
 
-All 23 held routes are being replayed through the installed public CLI, nine
-fixtures, two repeats, with extended properties. Each completed route retains
-its JSON, stderr and receipt. Execution uses the shared slot, nice 19 and one
-numerical worker. The first neural attempt was interrupted before its short
-deadline; completed model/self-test results were retained. The resumed run has
-a 600-second per-route limit and a 2400-second overall limit, with process-group
-cleanup. Its results must be read before claiming any route passed.
+All 23 held routes passed the installed public CLI on all nine fixtures with
+two repeats: **810 numerical comparisons IDENTICAL**, 225 explicit N/A, zero
+DIVERGENT, REFUSED or OWED. The complete ordinary job took 183.70 seconds,
+including the model and self-test checks. JSON, stderr, commands, package-byte
+verification and receipt are retained per route. Execution used the shared
+slot, nice 19 and one numerical worker.
+
+The public reports deliberately still return INCOMPLETE/exit 5 because the
+default qualification holds remain. The five neural reasons now say
+`qualification pending`, rather than incorrectly continuing to say `unwatched`.
+No route was promoted by this development replay.
+
+The all-nine extended Mamba attempt hit its 600-second route limit without a
+complete report. Its process group was terminated; the following Transformer
+attempt was interrupted before switching to the standard replay. Neither is
+a numerical failure or a pass. Extended installed neural properties remain
+owed. The earlier shorter interrupted attempt and all logs remain externally.
+
+The 18 classical/kernel routes also passed a separate all-nine, twice-repeated
+installed run with `--batch-checks`: 612 IDENTICAL, 846 explicit N/A, zero
+DIVERGENT, REFUSED or OWED, in a 55.14-second job. These families declare the
+additional neural properties inapplicable; the N/A values are not numerical
+comparisons. Their full installed property replay is complete for this artifact.
+
+## Whole loaded model and reference-admission repair
+
+Installed `verify-causal-lm` passed all 24 v2 cases across all seven checkpoint
+families and FP32/BF16/int8. All 144 parts match each of the retained CPU, Apple
+and AMD captures through the strict comparator, including its source-digest,
+checkpoint, complete-case and property checks. Composition controls passed;
+this is not new native arithmetic-fault or physical two-device evidence.
+
+The two historical `gp-sample-y/odd` Apple discrepancies were traced to
+`2026-09-15_gp-sample-y/metal-transient/`. That directory's contemporaneous
+README explicitly quarantined its faulty-device runs, but admission still
+accepted them. Admission now rejects only that particular incident directory;
+the regression retains clean GP records and unrelated paths.
+
+The already committed installed Apple sampling captures pass strict repeated
+input/protocol/revision admission and match the CPU/AMD values. A scoped repair
+replaces provenance for the two sampling lanes: 18 selected cells, **every
+existing reference hash unchanged**, and all 2,106 other cells byte-for-byte
+unchanged. Every selected part now has agreeing CPU/Apple/AMD witnesses, and
+no cell anywhere in the resulting table cites the quarantined records. The
+original incident files and historical record metadata remain retained. This
+repairs evidence selection; it does not diagnose the original device incident
+or certify arbitrary Apple inputs.
+
+After the scoped repair, **281 focused tests passed** in 5.44 seconds, with no
+skips. The harness/verifier drift test was explicitly scoped to OLS; the
+separate installed replay covers all 23 held routes. An initial test invocation
+that implicitly launched all public CPU routes was interrupted and retained,
+then replaced by this appropriately scoped validation.
 
 External artifacts:
 `~/mojolearn-evidence/verifier-installed-continuation-2026-09-18/`.
 
 ## Still owed
 
-Current NVIDIA captures, any uncompleted installed CPU property replay, a fresh
+Current NVIDIA captures, extended installed neural property replay, a fresh
 source-pinned expanded wheel/native build and exact-artifact qualification,
-physical two-GPU evidence, and the two historical Apple GP sampling/odd
-disagreements remain separate debts. No reference hash, default hold or
-`release_qualified` flag changed. Historical 178-lane records still have mixed
+physical two-GPU evidence and broader Apple numerical identity remain separate
+debts. No reference hash, default admission or `release_qualified` flag changed.
+Historical 178-lane records still have mixed
 AMD build digests and five missing AMD parallel lanes; they do not qualify this
 development artifact.

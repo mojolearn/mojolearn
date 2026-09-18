@@ -749,6 +749,9 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
                 wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
                                     f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
                                     "'stale reference' and a run would prove nothing")
+        elif why == "qualification pending":
+            assert lane in with_cells and lane not in stale, lane
+            assert len(_reference_classes(table, lane)) >= 2, lane
         elif why == "one column":
             # THE REFERENCE HAS ONE WITNESS (lane/reference-regen, 2026-09-17).
             # The lanes whose fixture or arithmetic moved lost every cell they
