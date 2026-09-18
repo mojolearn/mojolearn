@@ -174,11 +174,17 @@ def main():
     verdict = {}
     before = load(root, 'before')
     after = load(root, 'after')
-    eager = load(root, 'eager-ref')
+    try:
+        eager = load(root, 'eager-ref')
+    except AssertionError as e:
+        print('MISSING ARM:', e, '-- the pure-eager reference is not available, so '
+              'the discarded launch is NOT priced and `eager_vs_before` is not run.')
+        eager = None
     layers = before['shape'][7]
 
     print('=== 0. the witness covers every step, layer and direction ===')
-    for name, arm in (('before', before), ('after', after), ('eager-ref', eager)):
+    arms = [('before', before), ('after', after)] + ([('eager-ref', eager)] if eager else [])
+    for name, arm in arms:
         watch_coverage_fail(arm, 700 if len(arm['steps']) >= 700 else len(arm['steps']))
         validate(arm, len(arm['steps']))
         print('COVERAGE OK', name, len(arm['steps']), 'steps x', layers, 'layers x 2 directions')
@@ -202,13 +208,13 @@ def main():
                    for row in arm['steps'] for k in ('forward_status', 'backward_status'))
     verdict['sticky_observations'] = dict(before=sticky_count(before),
                                           after=sticky_count(after),
-                                          eager_ref=sticky_count(eager))
+                                          eager_ref=sticky_count(eager) if eager else None)
     print('FUSED_SKIPPED_STICKY observations:', verdict['sticky_observations'])
     # Two independent witnesses, both read from INSIDE the process that loaded
     # the binary. The build flag read back from the .so, and the behavior.
     flags = dict(before=before.get('attn_sticky_fallback'),
                  after=after.get('attn_sticky_fallback'),
-                 eager_ref=eager.get('attn_sticky_fallback'))
+                 eager_ref=eager.get('attn_sticky_fallback') if eager else None)
     verdict['attn_sticky_fallback_flag'] = flags
     print('byte_lm_attn_sticky_fallback() read from inside each process:', flags)
     assert flags['before'] is False, ('the `before` arm did not carry '
@@ -221,8 +227,10 @@ def main():
 
     print()
     print('=== 3. BITS. before vs after, and the pure-eager reference ===')
-    for label, left, right in (('after_vs_before', before, after),
-                               ('eager_vs_before', before, eager)):
+    pairs = [('after_vs_before', before, after)]
+    if eager:
+        pairs.append(('eager_vs_before', before, eager))
+    for label, left, right in pairs:
         watch_compare_fail(left, right)
         out = compare(left, right)
         verdict[label] = out
@@ -233,11 +241,10 @@ def main():
 
     print()
     print('=== 4. step time and device footprint ===')
-    verdict['timing'] = {name: timing(arm['steps'], name) for name, arm in
-                         (('before', before), ('after', after), ('eager-ref', eager))}
+    verdict['timing'] = {name: timing(arm['steps'], name) for name, arm in arms}
     tb = verdict['timing']['before']['tail_median_seconds']
     ta = verdict['timing']['after']['tail_median_seconds']
-    te = verdict['timing']['eager-ref']['tail_median_seconds']
+    te = verdict['timing']['eager-ref']['tail_median_seconds'] if eager else float('nan')
     hb = verdict['timing']['before']['head_median_seconds']
     verdict['tail_speedup_after_over_before'] = tb / ta if ta else None
     verdict['remaining_gap_after_over_head'] = ta / hb if hb else None

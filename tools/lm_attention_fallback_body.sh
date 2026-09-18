@@ -108,20 +108,39 @@ build_byte_lm nosticky "-D MOJOLEARN_ATTN_NO_STICKY=1"
 probe before --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
     --smi-every 10 --witness-every 100 $CORPUS_ARG
 probe eager-ref --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
-    --smi-every 10 --witness-every 100 --attention-path eager $CORPUS_ARG
-probe nosticky-forced-eager --shape $CONTROL --steps 1 --tail 0 --attention-path eager
-probe nosticky-forced-fused --shape $CONTROL --steps 1 --tail 0 --attention-path fused
+    --smi-every 10 --witness-every 100 --attention-path eager $CORPUS_ARG || true
+probe nosticky-forced-eager --shape $CONTROL --steps 1 --tail 0 --attention-path eager || true
+probe nosticky-forced-fused --shape $CONTROL --steps 1 --tail 0 --attention-path fused || true
 
 # ---- ARM SET 2: the latch. ------------------------------------------------
 build_byte_lm sticky ""
 probe after --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
     --smi-every 10 --witness-every 100 $CORPUS_ARG
-probe forced-eager --shape $CONTROL --steps 1 --tail 0 --attention-path eager
-probe forced-fused --shape $CONTROL --steps 1 --tail 0 --attention-path fused
-# Best effort, and an OOM here is a RESULT: the latch removes a launch, not a
-# buffer. `|| true` so the verdict below still runs and files what did land.
-probe batch4 --shape $TARGET_B4 --steps "$BATCH_STEPS" --tail 0 \
-    --smi-every 25 --witness-every 0 $CORPUS_ARG || true
+probe forced-eager --shape $CONTROL --steps 1 --tail 0 --attention-path eager || true
+probe forced-fused --shape $CONTROL --steps 1 --tail 0 --attention-path fused || true
+
+# THE VERDICT RUNS BEFORE THE BATCH ARM, on purpose. Everything above is the
+# deliverable; the batch arm is open-ended and the lease is capped at an hour,
+# so it must not be able to take the rest of the leg down with it.
+smi "$OUT/gpu_mid.txt"
+pixi run python tools/lm_attention_fallback_verdict.py "$OUT" > "$OUT/verdict.log" 2>&1 || true
+cat "$OUT/verdict.log"
+echo "verdict_1_written=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ST"
+
+# ---- ARM 3: batch 4. An OOM here is a RESULT, not a failure: the latch
+# removes a LAUNCH, not a BUFFER, so batch 4 is expected to die at about the
+# step at which its layers finish latching. `timeout` bounds it inside the
+# lease; the probe prints every step as it goes, so a kill still leaves the
+# per-step record in the .log even though result.json is never written.
+_t0=$(date +%s)
+_rc=0
+timeout "${MOJOLEARN_LM_BATCH_TIMEOUT:-900}" \
+    pixi run python tools/lm_ce_alias_probe.py --out "$OUT/batch4" \
+    --shape $TARGET_B4 --steps "$BATCH_STEPS" --tail 0 \
+    --smi-every 25 --witness-every 0 $CORPUS_ARG > "$OUT/batch4.log" 2>&1 || _rc=$?
+# 124 is `timeout` killing it, which is the lease running out, NOT an OOM.
+echo "batch4 exit=$_rc secs=$(( $(date +%s) - _t0 )) lines=$(wc -l < "$OUT/batch4.log")" >> "$ST"
+tail -3 "$OUT/batch4.log" >> "$ST" 2>&1 || true
 
 smi "$OUT/gpu_after.txt"
 pixi run python tools/lm_attention_fallback_verdict.py "$OUT" > "$OUT/verdict.log" 2>&1 || true
