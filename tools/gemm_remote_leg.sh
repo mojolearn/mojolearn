@@ -4660,7 +4660,10 @@ RELEASE_SOURCE
             ;;
     esac
     MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-$_stage_default}" \
-        sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || true
+        sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || {
+            leg_say "$(tail -1 "$OUT/stage.log")"
+            [ "${MOJOLEARN_STAGE_STRICT:-0}" != 1 ] || leg_die "Strict R2 staging failed; payload not started"
+        }
     leg_say "$(tail -1 "$OUT/stage.log")"
     # lane/r2-binding-cache (2026-09-15), DEFAULT OFF. MOJOLEARN_BINCACHE=1
     # hands the box presigned URLs for tools/bincache.py; a body opts in per
