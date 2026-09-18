@@ -107,3 +107,15 @@ FINDING: `BpeVocabularyTrainer.train` is the PURE PYTHON trainer (`_bpe_trainer.
 recounts every pair of every pre-token group on every merge. 256 merges on 100 KB took about
 3.8 s including tokenizing. A 50,256-rank vocabulary on 10 MB through the built-in default is
 not practical in Python; measured rate and the question for Andrew go in the report.
+
+## GPU leg (launched 2026-09-18 ~10:05 local)
+
+`tools/lm_vocab_witness_body.sh` on RunPod NVIDIA through `tools/gemm_remote_leg.sh`
+(`--payload gemm --rent --allow-concurrent`, R2 staging strict, enwik8 + pile_github). It
+builds, trains an 8,192-rank vocabulary on the pod with train_main (the 50,256 one is the
+local owed job), tokenizes all of enwik8 once (throughput), runs the gradient witness (tokens
+vs bytes, same shape/seed/vocab_size) and the byte-path-vs-main comparison
+(`tools/lm_byte_path_main_copy.py` rebuilds main's `_byte_lm_impl.py` byte for byte, sha
+d6948abc...; a seed-2 arm must differ). Output:
+`~/mojolearn-evidence/tokenized-corpus-sep18/pod/<stamp>/`. The pod is reaped by the leg;
+verify 404 after.
