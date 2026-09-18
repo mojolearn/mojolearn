@@ -167,6 +167,7 @@ launches. FAST makes no identity claim (contract section 8's last sentence).
 """
 
 from mamba.host.device_shim import launch_count
+from core.step_phase import step_count_sync
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
@@ -435,6 +436,13 @@ def mamba_upload(
     if n_buf < 1:
         n_buf = 1
     var dev = mamba_device_alloc(ctx, n_buf)
+    if n > 0:
+        # Borrowed list storage stays live until this synchronous call returns.
+        # DeviceContext supports ordinary host pointers; pinned staging adds
+        # an allocation, a host copy and a second wait to every tiny transfer.
+        mamba_copy_in(ctx, dev, values.unsafe_ptr(), n)
+        ctx.synchronize()
+        return dev^
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     for i in range(n):
@@ -452,22 +460,22 @@ def mamba_download(
 ) raises -> List[Float32]:
     """The first `n` elements of a device buffer, as a host list. The gates
     read stages with this, and DEVIATION 729's refusal reads inputs with it."""
-    var host = ctx.enqueue_create_host_buffer[DType.float32](n)
-    ctx.synchronize()
+    var out = List[Float32](length=n, fill=Float32(0.0))
+    if n == 0:
+        return out^
     if n == len(buf):
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=buf)
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=buf)
+        ctx.synchronize()
     else:
         var view = buf.create_sub_buffer[DType.float32](0, n)
-        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
-    ctx.synchronize()
-    var out = List[Float32]()
-    for i in range(n):
-        out.append(host.unsafe_ptr().unsafe_load(i))
-    _ = host^
+        ctx.enqueue_copy(dst_ptr=out.unsafe_ptr(), src_buf=view)
+        ctx.synchronize()
+        _ = view^
+    # Keep the output owner alive through completion of the asynchronous copy.
     return out^
 
 
-def mamba_zeros(
+def mamba_zeros[wait: Bool = True](
     ctx: DeviceContext, n: Int
 ) raises -> DeviceBuffer[DType.float32]:
     var n_buf = n
@@ -479,7 +487,10 @@ def mamba_zeros(
         body.enqueue_fill(Float32(0.0))
     else:
         dev.enqueue_fill(Float32(0.0))
-    ctx.synchronize()
+    # The guarded sub-buffer is local; keep its existing completion fence.
+    comptime if wait or MAMBA_GUARD > 0:
+        step_count_sync()
+        ctx.synchronize()
     return dev^
 
 
@@ -545,7 +556,7 @@ def mamba_device_alloc(
 
 
 def mamba_copy_in[
-    origin: MutOrigin
+    origin: Origin
 ](
     ctx: DeviceContext,
     mut dev: DeviceBuffer[DType.float32],
@@ -687,25 +698,30 @@ struct MambaDeviceStages(Movable):
         var di = dims.d_inner
         var r = dims.dt_rank
         var xr = dims.x_proj_rows()
-        self.norm_sumsq = mamba_zeros(ctx, m)
-        self.norm_out = mamba_zeros(ctx, m * dm)
-        self.in_proj = mamba_zeros(ctx, m * 2 * di)
-        self.a_out = mamba_zeros(ctx, di * D_STATE)
-        self.conv_out = mamba_zeros(ctx, m * di)
-        self.silu_out = mamba_zeros(ctx, m * di)
-        self.conv_win = mamba_zeros(ctx, b * di * D_CONV)
-        self.x_proj = mamba_zeros(ctx, m * xr)
-        self.dt_proj = mamba_zeros(ctx, m * di)
-        self.softplus_out = mamba_zeros(ctx, m * di)
-        self.scan_y = mamba_zeros(ctx, m * di)
-        self.scan_h = mamba_zeros(ctx, b * di * D_STATE)
-        self.skip_out = mamba_zeros(ctx, m * di)
-        self.gate_out = mamba_zeros(ctx, m * di)
-        self.out_proj = mamba_zeros(ctx, m * dm)
-        self.residual_out = mamba_zeros(ctx, m * dm)
-        self.dt_low = mamba_zeros(ctx, m * r)
-        self.b_mat = mamba_zeros(ctx, m * D_STATE)
-        self.c_mat = mamba_zeros(ctx, m * D_STATE)
+        self.norm_sumsq = mamba_zeros[False](ctx, m)
+        self.norm_out = mamba_zeros[False](ctx, m * dm)
+        self.in_proj = mamba_zeros[False](ctx, m * 2 * di)
+        self.a_out = mamba_zeros[False](ctx, di * D_STATE)
+        self.conv_out = mamba_zeros[False](ctx, m * di)
+        self.silu_out = mamba_zeros[False](ctx, m * di)
+        self.conv_win = mamba_zeros[False](ctx, b * di * D_CONV)
+        self.x_proj = mamba_zeros[False](ctx, m * xr)
+        self.dt_proj = mamba_zeros[False](ctx, m * di)
+        self.softplus_out = mamba_zeros[False](ctx, m * di)
+        self.scan_y = mamba_zeros[False](ctx, m * di)
+        self.scan_h = mamba_zeros[False](ctx, b * di * D_STATE)
+        self.skip_out = mamba_zeros[False](ctx, m * di)
+        self.gate_out = mamba_zeros[False](ctx, m * di)
+        self.out_proj = mamba_zeros[False](ctx, m * dm)
+        self.residual_out = mamba_zeros[False](ctx, m * dm)
+        self.dt_low = mamba_zeros[False](ctx, m * r)
+        self.b_mat = mamba_zeros[False](ctx, m * D_STATE)
+        self.c_mat = mamba_zeros[False](ctx, m * D_STATE)
+
+        # Owned fields remain live until all fills finish. One production
+        # fence replaces 19 waits; guard-band builds keep their local fences.
+        step_count_sync()
+        ctx.synchronize()
 
 
 # ===========================================================================

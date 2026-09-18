@@ -78,13 +78,15 @@ def arm_euclidean(rep):
 
 def arm_refusals(rep):
     x, q = _data()
-    rep.raises("REFUSE", ValueError, "metric", "metric='cosine' by name", IVFIndex(n_lists=4, n_probes=1, metric="cosine").fit(x).search, q)
-    rep.raises("REFUSE", ValueError, "metric code", "an unknown integer metric code", IVFIndex(n_lists=4, n_probes=1, metric=7).fit(x).search, q)
-    rep.raises("REFUSE", ValueError, "metric codes", "metric code 2 (neither L2 code)", IVFIndex(n_lists=4, n_probes=1, metric=2).fit(x).search, q)
-    rep.raises("REFUSE", TypeError, "n_lists", "n_lists as a float", IVFIndex(n_lists=4.0, n_probes=1).fit(x).search, q)
-    rep.raises("REFUSE", ValueError, "call fit", "search before fit", IVFIndex(n_lists=4, n_probes=1).search, q)
-    rep.raises("REFUSE", ValueError, "features", "queries with another width", IVFIndex(n_lists=4, n_probes=1).fit(x).search, q[:, :4])
-    rep.raises("REFUSE", Exception, "", "n_probes > n_lists, refused on the Mojo host (policy 2)", IVFIndex(n_lists=4, n_probes=5).fit(x).search, q)
+    # Validation may refuse during construction or fit, before search exists.
+    # Defer the complete operation so every named refusal reaches the checker.
+    rep.raises("REFUSE", ValueError, "metric", "metric='cosine' by name", lambda: IVFIndex(n_lists=4, n_probes=1, metric="cosine").fit(x).search(q))
+    rep.raises("REFUSE", ValueError, "metric code", "an unknown integer metric code", lambda: IVFIndex(n_lists=4, n_probes=1, metric=7).fit(x).search(q))
+    rep.raises("REFUSE", ValueError, "metric codes", "metric code 2 (neither L2 code)", lambda: IVFIndex(n_lists=4, n_probes=1, metric=2).fit(x).search(q))
+    rep.raises("REFUSE", TypeError, "n_lists", "n_lists as a float", lambda: IVFIndex(n_lists=4.0, n_probes=1).fit(x).search(q))
+    rep.raises("REFUSE", ValueError, "call fit", "search before fit", lambda: IVFIndex(n_lists=4, n_probes=1).search(q))
+    rep.raises("REFUSE", ValueError, "features", "queries with another width", lambda: IVFIndex(n_lists=4, n_probes=1).fit(x).search(q[:, :4]))
+    rep.raises("REFUSE", Exception, "", "n_probes > n_lists, refused on the Mojo host (policy 2)", lambda: IVFIndex(n_lists=4, n_probes=5).fit(x).search(q))
 
 
 def arm_provenance(rep):

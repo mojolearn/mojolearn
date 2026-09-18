@@ -69,7 +69,11 @@ from cluster.checks.plus_plus import (
     scan_chunk_offsets_kernel,
     write_inclusive_scan_kernel,
 )
+from std.sys.compile import is_defined
 from cluster.checks.reduce_by_key import (
+    blocked_acc_table_cells,
+    launch_accumulate_centroid_sums_blocked,
+    launch_accumulate_weight_per_cluster_blocked,
     REDUCE_BY_KEY_TPB,
     SUM_MODE_PLAIN,
     SUM_MODE_PRODUCT,
@@ -95,6 +99,7 @@ from cluster.impl.detail.kmeans_common import (
 )
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -107,6 +112,27 @@ from cluster.impl.kmeans_params import (
     get_centroids_batch_size,
     get_data_batch_size,
 )
+
+
+#: DEVIATION 3080 (2026-09-17, lane kmeans-linear-speed): the row-block
+#: accumulator of `cluster/checks/reduce_by_key.mojo`, in place of the two
+#: atomic reductions of `update_centroids`. Same Int32 totals by construction
+#: (see the banner there). ON for NVIDIA since 2026-09-18 (RTX 4090,
+#: bench/results/kmeans_linear_2026-09-18/: kmeans taxi 4M x 11 1216 to 100
+#: ms, Istella-S 2M x 220 14167 to 460 ms with 3081, digests equal to main's
+#: and to the H100 record's on every cell, the sabotage arm divergent on 75
+#: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
+#: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
+#: it off. Apple and AMD are untimed and keep the atomic reductions.
+comptime KMEANS_BLOCK_ACC = (
+    not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
+    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]() or TARGET_COLUMN == COLUMN_NVIDIA)
+)
+#: The reach control for 3080: the row-block arm with the first row of every
+#: block dropped. NEVER a shipping define.
+comptime KMEANS_BLOCK_ACC_SABOTAGE = is_defined[
+    "MOJOLEARN_KMEANS_BLOCK_ACC_SABOTAGE"
+]()
 
 
 @fieldwise_init
@@ -1010,6 +1036,17 @@ def kmeans_fit_main_traced(
     var min_dist = ctx.enqueue_create_buffer[DType.float32](n_samples)
     var sums_i32 = ctx.enqueue_create_buffer[DType.int32](cd)
     var weight_i32 = ctx.enqueue_create_buffer[DType.int32](n_clusters)
+    # DEVIATION 3080: the two row-block tables, once per fit. One cell each
+    # when the arm is compiled out.
+    var acc_table_cells = 1
+    var acc_table_w_cells = 1
+    comptime if KMEANS_BLOCK_ACC:
+        acc_table_cells = blocked_acc_table_cells(
+            n_samples, n_features, n_clusters
+        )
+        acc_table_w_cells = blocked_acc_table_cells(n_samples, 1, n_clusters)
+    var acc_table = ctx.enqueue_create_buffer[DType.int32](acc_table_cells)
+    var acc_table_w = ctx.enqueue_create_buffer[DType.int32](acc_table_w_cells)
     var cur_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var new_centroids = ctx.enqueue_create_buffer[DType.float32](cd)
     var partials = ctx.enqueue_create_buffer[DType.float32](256)
@@ -1173,26 +1210,41 @@ def kmeans_fit_main_traced(
             # grids (from the hardware matrix, replacing a magic 1024-block
             # cap that lived here) and the bit-identity argument between the
             # arms all live in `cluster/checks/reduce_by_key.mojo`.
-            launch_accumulate_centroid_sums(
-                ctx,
-                sums_i32,
-                x,
-                labels,
-                weights,
-                n_samples,
-                n_features,
-                n_clusters,
-                sum_scale,
-            )
-            launch_accumulate_weight_per_cluster(
-                ctx,
-                weight_i32,
-                labels,
-                weights,
-                n_samples,
-                n_clusters,
-                weight_scale,
-            )
+            comptime if KMEANS_BLOCK_ACC:
+                # DEVIATION 3080: row-block tables, no atomics. The Int32
+                # totals are the atomic arms' totals (associative adds of
+                # the same addends, bounded inside Int32 by `choose_scale`).
+                launch_accumulate_centroid_sums_blocked[
+                    KMEANS_BLOCK_ACC_SABOTAGE
+                ](
+                    ctx, sums_i32, acc_table, x, labels, weights,
+                    n_samples, n_features, n_clusters, sum_scale,
+                )
+                launch_accumulate_weight_per_cluster_blocked(
+                    ctx, weight_i32, acc_table_w, labels, weights,
+                    n_samples, n_clusters, weight_scale,
+                )
+            else:
+                launch_accumulate_centroid_sums(
+                    ctx,
+                    sums_i32,
+                    x,
+                    labels,
+                    weights,
+                    n_samples,
+                    n_features,
+                    n_clusters,
+                    sum_scale,
+                )
+                launch_accumulate_weight_per_cluster(
+                    ctx,
+                    weight_i32,
+                    labels,
+                    weights,
+                    n_samples,
+                    n_clusters,
+                    weight_scale,
+                )
 
             ctx.enqueue_function[finalize_centroids_kernel](
                 new_centroids.unsafe_ptr(),
@@ -1360,6 +1412,9 @@ def kmeans_fit_main_traced(
             )
             ctx.synchronize()
 
+    # Launches hold raw pointers: keep the tables alive past the last sync.
+    _ = acc_table^
+    _ = acc_table_w^
     if trace.enabled:
         trace.record_device(ctx, tag_prefix + "fit.centroids", centroids, cd)
         trace.record_device(ctx, tag_prefix + "fit.labels", labels, n_samples)

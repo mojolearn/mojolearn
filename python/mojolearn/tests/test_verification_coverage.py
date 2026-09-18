@@ -30,11 +30,13 @@ def test_inspection_and_batch_flags_route_to_suite():
         assert cli._wants_suite(cli.build_parser().parse_args(['verify', flag]))
 
 
-def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted():
+def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted(monkeypatch):
+    # Keep testing this behavior even after every real pending lane is closed.
+    monkeypatch.setitem(va.host_surface().PUBLIC_PENDING_LANES, 'ols', 'unwatched')
     h = va.load_harness()
-    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['samba'])
-    assert lanes == ['samba']
-    assert 'samba' not in va.host_surface().public_reference_lanes()
+    lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['ols'])
+    assert lanes == ['ols']
+    assert 'ols' not in va.host_surface().public_reference_lanes()
     for name in ('bpe-trainer', 'cross-val-folds'):
         assert name in va.host_surface().public_reference_lanes()
 
@@ -227,3 +229,42 @@ def test_failed_reload_refuses_the_model_part_even_when_saved_bytes_match():
     rows=va.judge_rows([dict(lane='x',fixture='base',part='model',value=parts['model'][0],error=parts['model'][1])],
                       dict(cells={'x/base':{'model':dict(ref=digest)}}))
     assert rows[0]['state']==vr.REFUSED
+
+
+def test_no_lane_reports_an_admission_the_table_cannot_support():
+    """A LANE MUST NEVER READ STRICTER THAN THE TABLE IT CAME FROM.
+
+    This began as `test_scoped_admission_is_visible_without_upgrading_legacy_lanes`,
+    guarding `merge_reference_lanes`: a few lanes grafted onto a legacy base
+    are strict, the base is NOT, and the report has to say both. The hazard it
+    was built for is one direction only, a lane claiming more than its
+    evidence.
+
+    On 2026-09-17 lane/reference-regen rebuilt the whole table with
+    `--emit-reference --batch-checks` over every committed record, so there is
+    no legacy base left to protect: every cell in the shipped table was
+    re-derived under `min_repeats=2`, the input witness and the property
+    protocol, and `build_table` writes that policy into the file. The
+    assertion that the global policy reads `legacy` was therefore asserting
+    the ABSENCE of the regeneration, and it is gone. The invariant is kept and
+    now runs the other way: no lane may report weaker than the table either,
+    which is what a dropped `lane_admission` entry would look like.
+
+    `merge_reference_lanes` itself stays covered, on synthetic tables that do
+    not depend on what the shipped one happens to hold today:
+    `test_verify_reference_admit.py`.
+    """
+    table = vr.load_table()
+    report = coverage.inventory(va.load_harness(), table, 'cpu')
+    strict = dict(min_repeats=2, input_witness_required=True, property_protocol_required=True)
+    assert report['reference_admission_policy'] == strict
+    # the lanes the scoped path admitted onto the old legacy base, and one
+    # (`ols`) that was legacy at the time: all of them read the same policy
+    # now, because all of them came out of the same strict global build
+    for lane in ('embedding', 'embedding-sort', 'ivf-euclidean', 'ols'):
+        assert report['lanes'][lane]['reference_admission']['policy'] == strict, lane
+        assert report['lanes'][lane]['status'] == 'available', lane
+    # and nothing anywhere claims a policy the table does not carry
+    for name, lane in report['lanes'].items():
+        policy = lane['reference_admission']['policy']
+        assert policy == strict, (name, policy)

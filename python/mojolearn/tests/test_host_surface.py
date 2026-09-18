@@ -695,9 +695,8 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     trained = set(public) - host_only
     assert trained <= covered, f"public lanes with no CPU training path: {sorted(trained - covered)}"
     assert trained <= with_cells, f"public lanes the shipped table has no cell for: {sorted(trained - with_cells)}"
-    assert trained <= set(host_surface.record_covered_lanes()), (
-        f"public lanes not diffed against the release record: {sorted(trained - set(host_surface.record_covered_lanes()))}"
-    )
+    recorded = set(host_surface.record_covered_lanes()) | set(host_surface.fix_covered_lanes())
+    assert trained <= recorded, f"public lanes without a recorded route: {sorted(trained - recorded)}"
 
     # THE TABLE'S OWN REVISIONS, not merely "this lane has a revision entry"
     # (lane/inference-coverage-complete, 2026-09-16). `stale` means the

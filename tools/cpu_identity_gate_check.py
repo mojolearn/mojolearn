@@ -64,6 +64,29 @@ import time
 REFUSAL = "no CPU implementation of"
 
 
+def recorded_native_oracle_failure(record):
+    """A deliberate native fault returned repeated bytes and failed its oracle.
+
+    This permits the recorder's exit one only in the explicit sabotage arm.
+    It never turns a refusal, unstable result or incomplete shard into evidence.
+    """
+    from verify_cpu_batch import expected_oracle_failure
+    host = record.get("host") or {}
+    repeats = record.get("repeats", 0)
+    if (not record.get("complete") or record.get("mode") != "identical"
+            or not isinstance(repeats, int) or repeats < 2
+            or host.get("column") != "cpu"
+            or not any(f.get("sabotage") is True for f in (host.get("families") or {}).values())):
+        return False
+    cells = record.get("cells") or {}
+    for cell in cells.values():
+        hashes = cell.get("hashes") or []
+        if (not isinstance(hashes, list) or len(hashes) != repeats
+                or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1):
+            return False
+    return expected_oracle_failure(record)
+
+
 def do_readback(args):
     sys.path.insert(0, os.path.abspath(args.package_root))
     try:
@@ -135,6 +158,7 @@ def do_column(args):
         need(b in families, f"host.families lacks {b}")
         need(families.get(b, {}).get("column") == "cpu", f"host.families[{b}].column is not cpu")
     cells = j.get("cells") or {}
+    oracle_control = bool(getattr(args, "sabotage", False) and recorded_native_oracle_failure(j))
     need(len(cells) > 0, "the JSON carries NO cell; a run that was supposed to produce cells produced none")
     need(j.get("complete", False), "the JSON is INCOMPLETE (the run was killed)")
     fixtures = j.get("fixtures") or {}
@@ -148,14 +172,15 @@ def do_column(args):
         seen.add(lane)
         verdict = cell.get("verdict")
         if lane in covered:
-            need(verdict == "STABLE",
+            need(verdict == "STABLE" or (oracle_control and verdict == "DIVERGENT"),
                  f"{key}: covered lane reads {verdict}, not STABLE" + (f" ({cell.get('error', '')[:160]})" if verdict == "REFUSED" else ""))
             # A stable training hash cannot certify a failed inference or
             # metamorphic comparison. Only explicitly inapplicable/skipped
             # parts may be N/A; every reported failure stays a failure.
             for field, part_verdict in cell.items():
                 if field.endswith("_verdict"):
-                    need(part_verdict in ("STABLE", "N/A"),
+                    need(part_verdict in ("STABLE", "N/A") or
+                         (oracle_control and part_verdict in ("BATCH_MOVED", "RLPAIR_MOVED")),
                          f"{key}: {field} is {part_verdict}, not STABLE or N/A")
         else:
             need(verdict == "REFUSED", f"{key}: uncovered lane reads {verdict}, not REFUSED; a hash from a lane with no CPU implementation is a routing bug")
@@ -332,7 +357,26 @@ def do_run_column(args):
         with open(logs[k]) as lf:
             sys.stdout.write(lf.read())
         sys.stdout.flush()
-    bad = [k for k in range(len(shards)) if codes[k] != 0]
+    bad = []
+    for k in range(len(shards)):
+        if codes[k] == 0:
+            continue
+        expected_failure = False
+        if codes[k] == 1 and getattr(args, "sabotage", False):
+            try:
+                with open(parts[k]) as fh:
+                    record = json.load(fh)
+                expected_cells = {f"{lane}/{fixture}" for lane in shards[k]
+                                  for fixture in record.get("fixtures", {})}
+                expected_failure = (bool(expected_cells)
+                                    and set(record.get("cells", {})) == expected_cells
+                                    and recorded_native_oracle_failure(record))
+            except (OSError, ValueError):
+                pass
+        if expected_failure:
+            print(f"run-column: shard {k} recorded an expected native oracle failure", flush=True)
+        else:
+            bad.append(k)
     missing = [parts[k] for k in range(len(shards)) if not os.path.exists(parts[k])]
     for k in bad:
         print(f"run-column FAIL: shard {k} exited {codes[k]}", flush=True)
@@ -406,6 +450,7 @@ def main(argv=None):
     col.add_argument("--covered", default="", help="lanes that must be STABLE, comma separated; every other lane must be REFUSED by name")
     col.add_argument("--commit", default="", help="the commit the JSON must carry")
     col.add_argument("--binding", default="", help="host bindings that must appear in host.families with column cpu, comma separated")
+    col.add_argument("--sabotage", action="store_true", help="accept repeated explicit oracle failures with native sabotage readback")
     ow = sub.add_parser("owed", help="every OWED cell part (identity_break --owed-json) must move under the sabotage host set")
     ow.add_argument("owed_json")
     ow.add_argument("--production", required=True, help="the production CPU column the owed list was diffed from")
@@ -416,6 +461,7 @@ def main(argv=None):
     rc.add_argument("--shards", type=int, default=os.cpu_count() or 1, help="processes the lanes are split across")
     rc.add_argument("--jobs", type=int, default=0, help="shards running at once (default: --shards)")
     rc.add_argument("--heartbeat", type=float, default=120.0, help="seconds between progress lines")
+    rc.add_argument("--sabotage", action="store_true", help="accept exit one only for complete, repeated native oracle failures")
     rc.add_argument("extra", nargs="*", help="after --, arguments passed to every identity_break shard")
     bl = sub.add_parser("build-list", help="the gate's build lists must cover every host binding the manifest declares")
     bl.add_argument("--families", required=True, help="families built for the production set, space or comma separated")

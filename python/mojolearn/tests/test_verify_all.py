@@ -36,7 +36,21 @@ def test_shipped_table_loads_and_is_small():
     path = vref.table_path()
     table = vref.load_table(path)
     assert table["format"] == vref.FORMAT
-    assert os.path.getsize(path) < 1_000_000, "the wheel's reference table must stay under 1 MB"
+    # THE BOUND IS ON WHAT THE WHEEL CARRIES, and it moved once, with the
+    # measurement (lane/reference-regen, 2026-09-17). The regeneration that
+    # closed the optional properties took the table from 6,680 cell parts to
+    # 15,426: `stepfull`, `batchgrad`, `batchscale`, `ragged` and `rlpair` are
+    # emitted now, where before only the four default parts were, and every
+    # registered lane has a cell on every fixture (2,061 = 229 x 9). 1.21 MB
+    # for 2.3x the content is proportionate, and the old 1 MB would be met
+    # only by dropping parts a user can check.
+    #
+    # 192 KB of that, 16 percent of the file, is THIRTY distinct `n/a:` reason
+    # strings repeated 7,402 times, one per cell part. Storing each once and
+    # referring to it would take the file to about 1.02 MB and is the obvious
+    # saving; it is a format change to `ref`, which every reader of the table
+    # destructures, so it is not made here in passing.
+    assert os.path.getsize(path) < 2_000_000, "the wheel's reference table must stay under 2 MB"
     assert table["cells"], "the shipped table carries no cell"
     for rec in table["records"]:
         assert set(("dir", "file", "vendor", "class", "commit")) <= set(rec)
@@ -44,7 +58,12 @@ def test_shipped_table_loads_and_is_small():
     for key, cell in table["cells"].items():
         assert "/" in key
         for part, ent in cell.items():
-            assert part in vref.PARTS
+            # The optional properties are in the shipped table since
+            # lane/reference-regen: they are emitted by
+            # `--emit-reference --batch-checks` and read by
+            # `verify --all --batch-checks`, so a table that carries them is
+            # the point rather than a surprise.
+            assert part in vref.PARTS + vref.OPTIONAL_PARTS
             assert ent.get("conflict") or isinstance(ent["ref"], str), (key, part)
             for cls, ref in ent["cols"].items():
                 idx = ref if isinstance(ref, int) else ref[0]
@@ -618,15 +637,29 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 #: the eight lanes tools/identity_break.py declares a real stepfull part for,
 #: and the hash all four recorded columns landed on
 #: (docs/lanes/LANE_STATUS_lane-decode-columns.md, 2026-09-16)
+#: mamba2-dtlimit was re-recorded at its corrected clamp on 2026-09-17;
+#: see identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json.
+#:
+#: FOUR OF THESE MOVED ON 2026-09-17 (lane/reference-regen) and the reason is
+#: the fixture, not the arithmetic: `transformer`, `transformer-window` and
+#: `mamba3` are at `norms-near-one-1` (their two same-shape RMSNorm weights
+#: stopped being one tensor) and `samba-untied-dropout-accum` is at
+#: `steps-3-1`. Those are exactly the lanes `identity_break.LANE_REVISIONS`
+#: moved, and exactly the lanes whose old cells the regeneration dropped; the
+#: four whose revision did NOT move carry the same hash as before.
+#: `mamba2-dtlimit` is the cross-check: another session recorded it
+#: independently at the corrected clamp and this lane's CPU column reproduced
+#: `6cefffbc50e10b84` bit for bit.
+#: Source: bench/results/identity_break/2026-09-17_reference-regen/.
 STEPFULL_LANES = {
-    "transformer": "99e9fe5ec967e1dd",
-    "transformer-window": "a05e05cf5055c79f",
+    "transformer": "5b8c0b041a329128",
+    "transformer-window": "787dac866cd00329",
     "mamba1": "f582474b00117f8e",
     "mamba2": "bfd516aa93fe1b12",
-    "mamba2-dtlimit": "44421178c1c5b188",
-    "mamba3": "6a8f4924575a931d",
+    "mamba2-dtlimit": "6cefffbc50e10b84",
+    "mamba3": "c1eb221a7da85e5d",
     "samba": "e9c89afd1eb7f273",
-    "samba-untied-dropout-accum": "dc215181275f4d1f",
+    "samba-untied-dropout-accum": "dd836479c7307500",
 }
 
 
@@ -765,6 +798,25 @@ def test_harness_overrides_are_refused(monkeypatch):
         va.load_harness("/nonexistent/identity_break.py")
 
 
+def test_missing_numpy_has_an_actionable_verification_refusal(monkeypatch):
+    def missing(*args):
+        raise ModuleNotFoundError("No module named 'numpy'", name="numpy")
+
+    monkeypatch.setattr(va, "_load_by_path", missing)
+    with pytest.raises(va.CannotRun, match="python -m pip install numpy"):
+        va.load_harness("identity_break.py")
+
+
+def test_other_harness_import_errors_are_not_reported_as_missing_numpy(monkeypatch):
+    def broken(*args):
+        raise ModuleNotFoundError("No module named 'internal_missing'", name="internal_missing")
+
+    monkeypatch.setattr(va, "_load_by_path", broken)
+    with pytest.raises(ModuleNotFoundError) as error:
+        va.load_harness("identity_break.py")
+    assert error.value.name == "internal_missing"
+
+
 # ---------------------------------------------------------------- portable models
 
 def test_models_manifest_points_at_small_files():
@@ -879,18 +931,11 @@ def test_shipped_verifier_hashes_like_the_harness():
     lanes = os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_LANES", "").strip()
     if not lanes:
         selected = list(va.host_surface().public_reference_lanes())
-        # CAP IT ON AN APPLE GPU. This asked for every public reference lane in
-        # one process. That was 9; the 2026-09-16 promotion made it 39 and
-        # lane/ship-cpu-host-families took it to 122, read from the registry
-        # rather than written down here, and
-        # `identity_break.refuse_routine_apple_column` refuses more than 24 in
-        # one Metal process because a full Apple column is a per-release
-        # artifact. The parity this test checks is per lane, so a subset proves
-        # exactly the same thing; asking for a column here only made the test
-        # unrunnable on any Mac with a GPU build (it still passes on a CPU-only
-        # install, which is why this went unseen until a Metal tree ran it).
+        # A routine Metal diagnostic is one lane. The installed-wheel
+        # release gates cover broader device surfaces separately; the CPU
+        # parity check still exercises every public reference lane.
         if sys.platform == "darwin" and vendor != "cpu":
-            selected = selected[:va.APPLE_LANE_CAP]
+            selected = selected[:1]  # current routine Metal diagnostic policy
         lanes = ",".join(selected)
     with tempfile.TemporaryDirectory() as tmp:
         column = os.path.join(tmp, "column.json")

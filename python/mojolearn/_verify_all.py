@@ -123,7 +123,13 @@ def load_harness(path=None):
                         "one-device record. Unset it.")
     if path is None:
         path, _ = harness_path()
-    return _load_by_path("mojolearn_verify_all_harness", path)
+    try:
+        return _load_by_path("mojolearn_verify_all_harness", path)
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        raise CannotRun("Verification requires NumPy. Install it with: "
+                        "python -m pip install numpy") from exc
 
 
 def family_map(lanes):
@@ -142,7 +148,7 @@ def family_map(lanes):
     return out
 
 
-def select_lanes(harness, table, vendor_class, depth, asked):
+def select_lanes(harness, table, vendor_class, depth, asked, include_pending=False):
     """(lanes, fixtures) for this run, or raises ValueError naming the problem."""
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
@@ -150,9 +156,9 @@ def select_lanes(harness, table, vendor_class, depth, asked):
         public = surface.public_reference_lanes()
         # A user may explicitly exercise a declared CPU route before its
         # reference is ready. Its results read OWED, never VERIFIED.
-        eligible = (set(public) | set(surface.covered_lanes())) if asked else set(public)
+        eligible = (set(public) | set(surface.covered_lanes())) if asked or include_pending else set(public)
         allowed = [l for l in harness.LANES if l in eligible
-                   and not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES)]
+                   and (include_pending or not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES))]
     else:
         allowed = all_lanes
     if asked:
@@ -289,7 +295,7 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
-def run_models(harness, ml, table, pkg_dir=None, log=None):
+def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=False):
     """The portable models: for each saved model the file's hash against the
     table's model reference, then the harness's batch part of the LOADED
     model against the table's batch reference. Returns result rows."""
@@ -320,21 +326,26 @@ def run_models(harness, ml, table, pkg_dir=None, log=None):
             continue
         rows.append(dict(lane=key, fixture=fixture, part="model", value=file_hash, error=None,
                          reference_part=("model", lane)))
-        try:
-            # a CPU-only install loads a saved model through the documented
-            # CPU door, `mojolearn.host_model(path)`; a GPU install through
-            # the class's own `load`
-            if ml.vendor() == "cpu":
-                est = ml.host_model(path)
-            else:
-                est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
-            if fixture not in held_cache:
-                held_cache[fixture] = harness.heldout(fixture)
-            fit = harness.Fit({})
-            fit.est = est
-            batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
-        except Exception as exc:
-            batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+        values, errors = [], []
+        for _ in range(max(1, repeats)):
+            try:
+                # --models-only explicitly exercises the CPU saved-model door,
+                # even when the process also has GPU bindings.
+                if host_only or ml.vendor() == "cpu":
+                    est = ml.host_model(path)
+                else:
+                    est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
+                if fixture not in held_cache:
+                    held_cache[fixture] = harness.heldout(fixture)
+                fit = harness.Fit({})
+                fit.est = est
+                batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
+            except Exception as exc:
+                batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+            values.append(batch)
+            if berr:
+                errors.append(berr)
+        batch, berr = _collapse(values, errors)
         rows.append(dict(lane=key, fixture=fixture, part="batch", value=batch, error=berr,
                          reference_part=("batch", lane)))
         log(f"  {key:<34} {fixture:<8} {time.time() - t0:6.1f}s")
@@ -941,7 +952,371 @@ def verification_contract(harness, harness_file, data, held, extra_parts):
                 protocols=protocols)
 
 
-def compare_documents(a, b, label_a="A", label_b="B"):
+# ----------------------------------------------------------- commit-reveal
+#
+# THE HOLE EVERY STRUCTURAL DEFENSE ABOVE LEAVES OPEN. `_read_cells`,
+# `_value_kind` and `compare_documents` all police documents that are
+# malformed or that contradict themselves. None of them says anything about a
+# perfectly well formed document whose numbers were not computed by the
+# machine it names. Whichever party receives the other's file FIRST can paste
+# its cell values into a document carrying their own provenance, and the
+# comparer will read a clean AGREE across two "independent" vendors. That is
+# the exact scenario this feature exists for -- us wanting to show outside
+# corroboration -- and the exact question a reader is right to ask: how do
+# they know we did not manufacture both sides?
+#
+# Commit-reveal closes it and costs nothing. Before either party sees the
+# other's file, each publishes a hash of their own document under a random
+# nonce they keep back. Only then do they exchange documents, nonces included.
+# A party who has published a commitment cannot copy, because what they are
+# bound to was fixed before there was anything to copy from.
+
+COMMITMENT_FORMAT = "mojolearn.verify-commitment.v1"
+
+#: Domain separation. A commitment digest must never be confusable with any
+#: other sha256 this project prints -- a cell hash, a binding digest, the
+#: harness digest, a table digest. Prefixing the preimage with a string that
+#: appears nowhere else means a value lifted out of one context cannot be
+#: replayed as the other.
+_COMMITMENT_DOMAIN = b"mojolearn.verify-commitment.v1\n"
+
+#: Where a sealed document carries its nonce and its own copy of the
+#: commitment. EXCLUDED from the preimage, necessarily: a hash cannot cover
+#: itself, and the nonce is the one field that must differ between two honest
+#: documents.
+REVEAL_KEY = "commitment_reveal"
+
+#: 128 bits. The nonce is not a key and guards no secret; it exists so that
+#: publishing the commitment does not publish the document. Without it the
+#: preimage space is guessable -- our shipped reference table pins every
+#: expected cell hash, and a device block is a handful of short strings -- so
+#: a bare hash of the document would let the party who receives it first
+#: brute-force its content before revealing their own. That is the very
+#: asymmetry commit-reveal removes, so removing it again for tidiness would
+#: be self-defeating.
+NONCE_BYTES = 16
+
+#: What the commitment covers, in the order `commitment_preimage` builds it.
+#: Named here so a test can hold this list against the fields
+#: `compare_documents` actually reads, rather than a reader holding them
+#: against each other by eye.
+COMMITMENT_COVERS = ("format", "cells", "device", "verification_contract",
+                     "bindings", "verdict", "detail")
+
+#: Fields deliberately left OUT, with the reason, because "why is this not
+#: covered" is the question a later lane will ask.
+COMMITMENT_EXCLUDES = {
+    "elapsed_s": "wall clock; nobody compares it and it would bind a party to a stopwatch",
+    "lane_seconds": "wall clock, per lane; same reason",
+    REVEAL_KEY: "the nonce and the commitment itself; a hash cannot cover itself",
+}
+
+
+def commitment_preimage(doc):
+    """The canonical bytes a commitment is taken over.
+
+    WHAT IT COVERS IS THE WHOLE DESIGN, so the reason lives here, in the code
+    a change has to walk past, and not in a document the next lane overrides.
+
+    NOT THE CELLS ALONE. A commitment over cell values only would let a party
+    commit to numbers and then swap the `device` block, claiming an M2
+    produced what a 4090 did. The provenance IS the claim; leaving it out
+    commits a forger to precisely the half they never needed to change.
+
+    NOT THE FILE BYTES. Hashing the file defeats itself. Re-indenting,
+    reordering keys, a different JSON writer, a round trip through any tool
+    would all break an honest document's commitment, and a check that fires
+    on innocent handling is a check people learn to click past. This hashes
+    PARSED values re-serialized canonically, so formatting is invisible and
+    only content moves the digest.
+
+    NOT THE WHOLE PARSED DOCUMENT EITHER. `elapsed_s` and `lane_seconds` are
+    wall clock. Covering them would bind a party to timings no comparison
+    reads, which is the same false-alarm failure one step in.
+
+    THE RULE, and it is checkable rather than tasteful: cover exactly the
+    fields `compare_documents` reads.
+      * a field the comparer reads that the commitment omits is a field a
+        party may still change after seeing the other document -- the hole
+        left open;
+      * a field the commitment covers that the comparer never reads is a
+        false alarm waiting to be normalized.
+    `python/mojolearn/tests/test_verify_compare_commitment.py` mutates each
+    covered field in turn and requires the digest to move, and mutates each
+    excluded field and requires it not to, so a later lane that teaches
+    `compare_documents` to read a new field and forgets this function is
+    caught by a test rather than by an adversary.
+    """
+    if not isinstance(doc, dict):
+        raise ValueError(f"not an evidence document (top level is {type(doc).__name__})")
+    cells = []
+    for r in (doc.get("cells") or []):
+        cells.append([r.get("lane"), r.get("fixture"), r.get("part"), r.get("value"),
+                      r.get("state")] if isinstance(r, dict) else r)
+    # Sorted so that reordering rows is not a change, and DUPLICATES KEPT:
+    # `_read_cells` refuses a document that names one cell part twice, and the
+    # commitment must bind a party to the document that refusal describes, not
+    # to a tidied-up one they never handed over.
+    cells.sort(key=lambda c: json.dumps(c, sort_keys=True, default=str))
+    covered = dict(
+        format=doc.get("format"),
+        cells=cells,
+        # the WHOLE device block, not the eight keys printed side by side.
+        # `numeric_mode` is in there: a party who ran under `fast` and edited
+        # that one word afterwards would otherwise be committing to nothing
+        # about the tier their numbers came from.
+        device=doc.get("device"),
+        # hash agreement is only ever READ under an equal contract
+        # (`comparison_context_problems`), so a party who could swap the
+        # contract after the exchange could turn an INCOMPARABLE into an
+        # AGREE. It carries no wall clock, so covering it whole is safe.
+        verification_contract=doc.get("verification_contract"),
+        # THE BINDING DIGESTS, deliberately. `binding_artifacts()` enumerates
+        # loaded modules from sys.modules and then re-reads the file from disk
+        # to hash it, so there is a window between load and hash in which the
+        # file could be swapped. That window is a limit on what the provenance
+        # block MEASURES, and no commitment can upgrade a self-reported field
+        # into a measurement. It is not a reason to leave the list out: the
+        # comparer reads and prints it, and covering it stops a party editing
+        # their claimed binary after seeing which binary the other party used.
+        bindings=[b.get("sha256") if isinstance(b, dict) else b
+                  for b in (doc.get("bindings") or [])],
+        # each document's own verdict and detail are printed beside the
+        # comparison precisely so a reader can see that one side checked a
+        # fraction of what they assumed. Uncovered, that line is editable.
+        verdict=doc.get("verdict"),
+        detail=doc.get("detail"),
+    )
+    assert tuple(covered) == COMMITMENT_COVERS, "COMMITMENT_COVERS no longer names what is covered"
+    return json.dumps(covered, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=True, default=str).encode("utf-8")
+
+
+def commitment_digest(doc, nonce):
+    """sha256 over domain, nonce and preimage, in that order.
+
+    The nonce goes BEFORE the document bytes. Nothing here is vulnerable to a
+    length extension, but a prefix construction cannot become vulnerable to
+    one later either, and the ordering costs nothing to get right now."""
+    if not isinstance(nonce, str) or not re.match(r"\A[0-9a-f]{16,128}\Z", nonce):
+        raise ValueError("a nonce is 16 to 128 lowercase hex characters")
+    h = hashlib.sha256()
+    h.update(_COMMITMENT_DOMAIN)
+    h.update(nonce.encode("ascii"))
+    h.update(b"\n")
+    h.update(commitment_preimage(doc))
+    return h.hexdigest()
+
+
+def seal_document(doc, nonce=None):
+    """Attach a fresh nonce and its commitment to `doc`, in place, and return
+    the commitment. THE COMMITMENT IS WHAT YOU PUBLISH; the nonce stays in the
+    document and is published only with it, at the reveal."""
+    import secrets
+    nonce = nonce or secrets.token_hex(NONCE_BYTES)
+    commitment = commitment_digest(doc, nonce)
+    doc[REVEAL_KEY] = dict(format=COMMITMENT_FORMAT, nonce=nonce, commitment=commitment,
+                           covers=list(COMMITMENT_COVERS))
+    return commitment
+
+
+def _without_reveal(doc):
+    """The document minus its reveal block.
+
+    SEALING MUST NOT DISARM THE COPY DEFENCE. `same_document` refuses two
+    byte-identical files, which is the cheapest forgery there is: run `--all`
+    once, copy the file, compare it with itself. A nonce is random per seal,
+    so once sealing exists a copied document stops being byte-identical and
+    that refusal would quietly stop firing -- a new check silently removing an
+    old one, which is the failure this file keeps a list of. The nonce is the
+    one field that MUST differ between two honest documents, so it is removed
+    before that comparison rather than compared."""
+    if not isinstance(doc, dict) or REVEAL_KEY not in doc:
+        return doc
+    return {k: v for k, v in doc.items() if k != REVEAL_KEY}
+
+
+_COMMITMENT_HEX = re.compile(r"\A[0-9a-f]{64}\Z")
+
+
+def read_published_commitment(value):
+    """`(commitment_hex, problem)` from whatever a party actually published.
+
+    A commitment is 64 characters. It gets pasted into a message, a mailing
+    list post or a tweet far more often than it gets sent as a file, and a
+    tool that only accepts a file pushes people into writing the file
+    themselves, badly. So: a bare hex string is taken as itself, anything else
+    is opened as a path and read as either the sidecar JSON or a text file
+    holding the line."""
+    if not isinstance(value, str) or not value.strip():
+        return None, "empty commitment"
+    text = value.strip()
+    if _COMMITMENT_HEX.match(text):
+        return text, None
+    try:
+        with open(text, "r", encoding="utf-8") as fh:
+            raw = fh.read()
+    except OSError as exc:
+        return None, (f"{text!r} is neither 64 hex characters nor a readable file: {exc}")
+    stripped = raw.strip()
+    if _COMMITMENT_HEX.match(stripped):
+        return stripped, None
+    try:
+        obj = json.loads(raw)
+    except ValueError:
+        return None, f"{text}: not a commitment file and not a 64-character commitment"
+    if not isinstance(obj, dict):
+        return None, f"{text}: commitment file is {type(obj).__name__}, expected an object"
+    if obj.get("format") != COMMITMENT_FORMAT:
+        return None, (f"{text}: format is {obj.get('format')!r}, expected "
+                      f"{COMMITMENT_FORMAT!r}")
+    got = obj.get("commitment")
+    if not isinstance(got, str) or not _COMMITMENT_HEX.match(got):
+        return None, f"{text}: `commitment` is {got!r}, expected 64 hex characters"
+    return got, None
+
+
+#: Commitment states, most to least informative. Only `verified` binds a
+#: party. `absent` and `self-declared` are WEAKER RESULTS, not failures; the
+#: rest are failures and carry the comparison to COMMITMENT BROKEN.
+_COMMITMENT_OK = ("verified", "absent", "self-declared")
+
+
+def commitment_state(doc, published, label):
+    """What one document's commitment does and does not prove.
+
+    A COMMITMENT THAT TRAVELS WITH ITS NONCE PROVES NOTHING. The reveal block
+    inside a document carries both halves, so anyone holding the document can
+    recompute it; it is a convenience for the party, not evidence. Only a
+    commitment the other side held BEFORE the exchange binds anything, which
+    is why the published value is a separate argument and why a document that
+    merely carries a reveal block is reported as `self-declared` rather than
+    as a check that passed.
+    """
+    out = dict(label=label, state="absent", published=None, recomputed=None,
+               nonce=None, problem=None)
+    reveal = doc.get(REVEAL_KEY) if isinstance(doc, dict) else None
+    pub, pub_problem = (None, None) if published is None else read_published_commitment(published)
+    out["published"] = pub
+    if published is not None and pub is None:
+        out.update(state="UNREADABLE", problem=f"{label}: {pub_problem}")
+        return out
+    if not isinstance(reveal, dict) or not isinstance(reveal.get("nonce"), str):
+        if pub is None:
+            return out                                   # neither side of it exists: absent
+        out.update(state="UNSEALED", problem=(
+            f"{label}: {pub} was published for this document, but the document carries no "
+            f"`{REVEAL_KEY}` nonce, so nothing can be checked against it. An unverifiable "
+            f"commitment is not a verified one. Either the wrong file was handed over, or the "
+            f"reveal was stripped out of it"))
+        return out
+    out["nonce"] = reveal["nonce"]
+    try:
+        recomputed = commitment_digest(doc, reveal["nonce"])
+    except (ValueError, TypeError) as exc:
+        out.update(state="UNREADABLE", problem=f"{label}: cannot recompute its commitment: {exc}")
+        return out
+    out["recomputed"] = recomputed
+    stored = reveal.get("commitment")
+    if isinstance(stored, str) and stored != recomputed:
+        # The document was edited after it was sealed. A forger who reseals
+        # defeats this, which is exactly why the PUBLISHED commitment is the
+        # mechanism and this is only a free extra catch -- but a document that
+        # disagrees with its own commitment is never reported as anything else.
+        out.update(state="SELF-INCONSISTENT", problem=(
+            f"{label}: the document does not match the commitment it carries itself "
+            f"(carries {stored}, recomputes to {recomputed}); it was edited after sealing"))
+        return out
+    if pub is None:
+        out.update(state="self-declared")
+        return out
+    if pub != recomputed:
+        out.update(state="MISMATCH", problem=(
+            f"{label}: does not match the commitment published for it "
+            f"(published {pub}, this document commits to {recomputed})"))
+        return out
+    out.update(state="verified")
+    return out
+
+
+def commitment_report(a, b, label_a, label_b, commitment_a, commitment_b):
+    """The commitment block of a comparison: both states and every cross-check
+    that only makes sense with the pair in hand."""
+    sa = commitment_state(a, commitment_a, label_a)
+    sb = commitment_state(b, commitment_b, label_b)
+    problems = [s["problem"] for s in (sa, sb) if s["problem"]]
+    # ONE COMMITMENT PRESENTED TWICE. A party who copies the other's document
+    # AND their published commitment would otherwise have both sides read
+    # `verified`. Two honest documents cannot collide here: the nonces are 128
+    # random bits, so equal commitments mean literally the same sealed file.
+    if sa["published"] and sa["published"] == sb["published"]:
+        problems.append(
+            f"{label_a} and {label_b} were checked against the SAME published commitment "
+            f"({sa['published']}). That is one commitment handed over twice, not two parties "
+            f"each binding themselves before the exchange")
+    if sa["nonce"] and sa["nonce"] == sb["nonce"]:
+        problems.append(
+            f"{label_a} and {label_b} carry the same nonce ({sa['nonce']}). A nonce is "
+            f"{NONCE_BYTES * 8} random bits; two parties cannot draw the same one, so one "
+            f"document's reveal block was copied from the other")
+    verified = sa["state"] == "verified" and sb["state"] == "verified"
+    published = [s["label"] for s in (sa, sb) if s["published"]]
+    return dict(a=sa, b=sb, problems=problems, both_verified=verified and not problems,
+                published_by=published, broken=bool(problems))
+
+
+def _commitment_lines(c, la, lb):
+    """The paragraph a reader sees about commitments. A comparison run without
+    them is NOT a failure and must not be printed as one -- it is a weaker
+    result, labelled the same way `same_device` is labelled weaker than
+    `independent`, with the thing to do about it spelled out."""
+    lines = []
+    if c["broken"]:
+        lines.append("COMMITMENTS: BROKEN. A document here is not the document that was")
+        lines.append("committed to, so nothing below can be read as corroboration.")
+        for m in c["problems"]:
+            lines.append(f"  {m}")
+        return lines
+    if c["both_verified"]:
+        lines.append("COMMITMENTS: both documents match a commitment published BEFORE the")
+        lines.append("exchange, so neither party could have copied the other's numbers: each was")
+        lines.append("bound to its own document before it could see the other's.")
+        lines.append(f"  {la}: {c['a']['recomputed']}")
+        lines.append(f"  {lb}: {c['b']['recomputed']}")
+        return lines
+    if c["published_by"]:
+        bound = c["published_by"][0]
+        free = lb if bound == la else la
+        lines.append(f"COMMITMENTS: only {bound} is bound. A commitment was published for it")
+        lines.append(f"before the exchange, and none was published for {free}, so {free} could")
+        lines.append("have been written after seeing the other file and copying its cell values")
+        lines.append("under its own provenance. A one-sided commit-reveal is stronger than none")
+        lines.append("and much weaker than two.")
+        return lines
+    selfdec = [s["label"] for s in (c["a"], c["b"]) if s["state"] == "self-declared"]
+    if selfdec:
+        lines.append("COMMITMENTS: none were exchanged. "
+                     f"{' and '.join(selfdec)} carr{'y' if len(selfdec) > 1 else 'ies'} one")
+        lines.append("INSIDE the document, but a commitment that travels with its own nonce")
+        lines.append("proves nothing: anyone holding the document can recompute it. Only a")
+        lines.append("commitment the other party held BEFORE the exchange binds anything, and")
+        lines.append("none was given to this comparison, so neither document is shown to have")
+        lines.append("been computed rather than copied.")
+    else:
+        lines.append("COMMITMENTS: none were exchanged. Nothing here shows that either document's")
+        lines.append("numbers were COMPUTED by the machine it names. Whichever party received the")
+        lines.append("other's file first could have pasted its cell values into a document")
+        lines.append("carrying their own provenance, and this command cannot tell that apart from")
+        lines.append("two honest runs. This result is WEAKER for the same reason two documents")
+        lines.append("from one device are weaker than two vendors.")
+    lines.append("To close it, before either party sees the other's file:")
+    lines.append("  python -m mojolearn verify --commitment mine.json     # publish the line it prints")
+    lines.append("then exchange documents and add")
+    lines.append(f"  --commitment-a <{la}'s published line> --commitment-b <{lb}'s>")
+    return lines
+
+
+def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitment_b=None):
     """Diff two evidence documents: where two machines agree, and where they do not.
 
     THE POINT IS THAT WE ARE NOT IN THE LOOP. Everything else this command
@@ -978,6 +1353,17 @@ def compare_documents(a, b, label_a="A", label_b="B"):
       DIVERGENT against its reference table, is an agreement on an answer one
       of them already recorded as wrong.
 
+    NONE OF THAT TOUCHES THE ONE HOLE A STRUCTURAL CHECK CANNOT REACH: a well
+    formed document whose numbers were never computed by the machine it names,
+    because the party wrote them down after reading the other party's file.
+    `commitment_a` and `commitment_b` are the commitments each party published
+    BEFORE the exchange, and checking a document against one is the only thing
+    here that distinguishes a run from a transcription. Passing neither is not
+    an error and never will be -- a stranger with two files and no prior
+    arrangement still gets a full comparison -- it is a WEAKER result, and
+    `_commitment_lines` says so in the output in the same place and the same
+    voice `same_device` is called weaker than `independent`.
+
     AGREE IS THE LAST OUTCOME TRIED, and that ordering is the point. On
     2026-09-16 `verdict()` was fixed for the same defect one level down: it
     returned VERIFIED as soon as ONE part read IDENTICAL, before it looked at
@@ -990,6 +1376,12 @@ def compare_documents(a, b, label_a="A", label_b="B"):
     ca, sa, pa_ = _read_cells(a, label_a)
     cb, sb, pb_ = _read_cells(b, label_b)
     problems = pa_ + pb_
+    # COMPUTED EVEN FOR A MALFORMED DOCUMENT, and reported even when the cells
+    # are never compared. The preimage is built from the raw rows, so a
+    # document with a duplicated cell part still has one; "this file is not the
+    # file you were promised" is a thing a reader must be told whether or not
+    # the file also failed to parse as evidence.
+    commitment = commitment_report(a, b, label_a, label_b, commitment_a, commitment_b)
 
     def _sortkey(k):
         return tuple("" if x is None else str(x) for x in k)
@@ -1033,7 +1425,8 @@ def compare_documents(a, b, label_a="A", label_b="B"):
     same_class = da.get("device_class") == db.get("device_class")
     same_device = (da.get("device"), da.get("cpu_model")) == (db.get("device"), db.get("cpu_model"))
     try:
-        same_document = json.dumps(a, sort_keys=True) == json.dumps(b, sort_keys=True)
+        same_document = (json.dumps(_without_reveal(a), sort_keys=True)
+                         == json.dumps(_without_reveal(b), sort_keys=True))
     except (TypeError, ValueError):
         same_document = False
     prov = dict(
@@ -1053,10 +1446,18 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         own_verdict_b=(b.get("verdict") if isinstance(b, dict) else None),
         own_detail_a=(a.get("detail") if isinstance(a, dict) else None),
         own_detail_b=(b.get("detail") if isinstance(b, dict) else None),
+        commitments_verified=commitment["both_verified"],
     )
 
     if problems:
         verdict_, code = "MALFORMED", EXIT_USAGE
+    elif commitment["broken"]:
+        # ABOVE EVERY CELL OUTCOME, INCLUDING MISMATCH. If a document is not
+        # the one its party committed to, the reader does not yet know that
+        # its cells are the cells that were computed, so no headline about
+        # those cells is honest. Only MALFORMED outranks it, because a file
+        # that will not parse was never a document at all.
+        verdict_, code = "COMMITMENT BROKEN", EXIT_MISMATCH
     elif same_document:
         verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
     elif context_problems:
@@ -1075,7 +1476,7 @@ def compare_documents(a, b, label_a="A", label_b="B"):
         verdict_, code = "NOTHING COMPARED", EXIT_CANNOT_RUN
     return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
                 labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
-                context_problems=context_problems,
+                context_problems=context_problems, commitment=commitment,
                 agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
                 uncomputed=len(uncomputed), n_a_differing=len(na_differ),
                 agreed_divergent=len(agreed_div),
@@ -1098,6 +1499,9 @@ def _cell_lines(title, rows, la, lb, limit=40):
 
 def format_compare(r):
     p, la, lb = r["provenance"], r["labels"]["a"], r["labels"]["b"]
+    commitment = r.get("commitment") or dict(broken=False, both_verified=False,
+                                             published_by=[], problems=[],
+                                             a=dict(state="absent"), b=dict(state="absent"))
     lines = ["# python -m mojolearn verify --compare", ""]
     if r["problems"]:
         lines.append("THESE FILES ARE NOT BOTH READABLE EVIDENCE DOCUMENTS:")
@@ -1105,6 +1509,11 @@ def format_compare(r):
             lines.append(f"  {m}")
         if len(r["problems"]) > 20:
             lines.append(f"  ... and {len(r['problems']) - 20} more")
+        lines.append("")
+        # the commitment paragraph prints here too. A malformed file that is
+        # ALSO not the file its party committed to says more about why it is
+        # malformed than the parse errors do.
+        lines += _commitment_lines(commitment, la, lb)
         lines.append("")
         lines.append("RESULT: MALFORMED. Nothing was compared, and this is NOT a pass.")
         return "\n".join(lines)
@@ -1122,7 +1531,17 @@ def format_compare(r):
         if p.get(key):
             lines.append(f"    {lbl}: {p[key]}")
     lines.append("")
-    if p["same_document"]:
+    if commitment["broken"]:
+        # THE INDEPENDENCE SENTENCE IS EXACTLY WHAT A FORGER WANTS A SKIMMER TO
+        # READ, and it is read out of the provenance block, which is the part a
+        # broken commitment says cannot be taken at face value. Printing "two
+        # independent machines reaching the same bits" above a broken
+        # commitment would hand the forgery the strongest line this command has.
+        lines.append("THE PROVENANCE ABOVE CANNOT BE TAKEN AT FACE VALUE. A document here does not")
+        lines.append("match the commitment its party published before the exchange, so the hardware")
+        lines.append("it names is not something this comparison can stand behind. Nothing is said")
+        lines.append("here about how independent the two machines were.")
+    elif p["same_document"]:
         lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
         lines.append("not two parties comparing, and it can only ever agree with itself.")
     elif p["independent"]:
@@ -1135,6 +1554,8 @@ def format_compare(r):
     else:
         lines.append("NOTE: these documents share a device class. Agreement is weaker evidence")
         lines.append("than two genuinely different vendors would give.")
+    lines.append("")
+    lines += _commitment_lines(commitment, la, lb)
     lines.append("")
     lines.append(f"  agree {r['agree']}   differ {r['differ']}   self-contradicted {r['moved']}   "
                  f"neither computed {r['uncomputed']}   agreed on a divergence "
@@ -1164,13 +1585,28 @@ def format_compare(r):
             if len(keys) > 20:
                 lines.append(f"  ... and {len(keys) - 20} more")
     lines.append("")
-    if r["verdict"] == "INCOMPARABLE":
+    if r["verdict"] == "COMMITMENT BROKEN":
+        lines.append("RESULT: COMMITMENT BROKEN. A document here is not the document its party")
+        lines.append("committed to before the exchange, so whatever its cells say, they cannot be")
+        lines.append("read as an independent run. This is NOT a pass.")
+        lines.extend("  " + problem for problem in commitment["problems"])
+    elif r["verdict"] == "INCOMPARABLE":
         lines.append("RESULT: INCOMPARABLE. Input or protocol provenance is missing or differs.")
         lines.extend("  " + problem for problem in r['context_problems'])
     elif r["verdict"] == "AGREE":
         lines.append(f"RESULT: AGREE. {r['agree']} cell parts match across both documents, none")
         lines.append("differ, and none is present in only one. Neither machine trusted the other,")
         lines.append("and neither had to trust us.")
+        if commitment["both_verified"]:
+            lines.append("Both documents were committed to before either party saw the other's, so")
+            lines.append("neither set of numbers could have been copied from the other.")
+        else:
+            # THE QUALIFIER RIDES ON THE RESULT LINE, not only in a paragraph
+            # above it. A reader who greps for `RESULT:` -- and a script that
+            # prints the last few lines -- must not get the strong sentence
+            # without the reason it is weaker.
+            lines.append("WEAKER THAN IT LOOKS: no commitment was exchanged, so neither document is")
+            lines.append("shown to have been computed rather than copied. See COMMITMENTS above.")
     elif r["verdict"] == "MISMATCH":
         lines.append(f"RESULT: MISMATCH. {r['differ']} cell parts differ; they are named above.")
     elif r["verdict"] == "SELF-CONTRADICTED":
@@ -1223,7 +1659,9 @@ def _cmd_compare(args):
                     docs.append(json.load(fh))
             except (OSError, ValueError) as exc:
                 return _compare_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {p}: {exc}")
-        r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb))
+        r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb),
+                              commitment_a=getattr(args, "commitment_a", None),
+                              commitment_b=getattr(args, "commitment_b", None))
     except Exception as exc:                      # never let a crash exit 1 and read as MISMATCH
         return _compare_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
                                 f"comparing raised {type(exc).__name__}: {exc}")
@@ -1232,6 +1670,116 @@ def _cmd_compare(args):
     else:
         _emit(format_compare(r))
     return r["exit"]
+
+
+def _cmd_commitment(args):
+    """`verify --commitment DOC`: seal an evidence document and print the line
+    to publish. No GPU, no bindings, no network, no repo.
+
+    IT IS A SEPARATE COMMAND ON PURPOSE. Folding the seal into
+    `--all --json-out` would put a random nonce into every evidence document
+    anyone ever writes, including the ones we publish, and would make the
+    binding step look like something the harness does rather than something a
+    party does. It does not: the binding property comes entirely from
+    PUBLISHING the commitment before you have seen the other document, and no
+    amount of code here can supply that. A separate command puts the one act
+    that matters in the party's own hands, where it belongs.
+
+    Sealing is idempotent. A document that already carries a nonce is
+    re-checked and its commitment reprinted rather than re-nonced, so running
+    this twice cannot invalidate a line you already published.
+    """
+    path = args.commitment
+    if getattr(args, "compare", None):
+        _emit("USAGE: --commitment seals ONE document; --compare checks two against "
+              "commitments already published. Use --commitment-a/--commitment-b with "
+              "--compare.", sys.stderr)
+        return EXIT_USAGE
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError) as exc:
+        _emit(f"# python -m mojolearn verify --commitment\n\n"
+              f"RESULT: CANNOT READ. cannot read {path}: {exc}")
+        return EXIT_USAGE
+    if not isinstance(doc, dict) or doc.get("format") != COMPARE_INPUT_FORMAT:
+        fmt = doc.get("format") if isinstance(doc, dict) else type(doc).__name__
+        _emit(f"# python -m mojolearn verify --commitment\n\n"
+              f"RESULT: NOT AN EVIDENCE DOCUMENT. {path} announces {fmt!r}, expected "
+              f"{COMPARE_INPUT_FORMAT!r}. Write it with `verify --all --json-out {path}`.")
+        return EXIT_USAGE
+    reveal = doc.get(REVEAL_KEY)
+    resealed = False
+    try:
+        if isinstance(reveal, dict) and isinstance(reveal.get("nonce"), str):
+            commitment = commitment_digest(doc, reveal["nonce"])
+            if reveal.get("commitment") != commitment:
+                _emit(f"# python -m mojolearn verify --commitment\n\n"
+                      f"RESULT: BROKEN. {path} was edited after it was sealed: it carries "
+                      f"{reveal.get('commitment')} and now commits to {commitment}. If you have "
+                      f"already published the old line, this document is not the one you "
+                      f"published it for.")
+                return EXIT_MISMATCH
+        else:
+            commitment = seal_document(doc)
+            resealed = True
+    except (ValueError, TypeError) as exc:
+        _emit(f"# python -m mojolearn verify --commitment\n\n"
+              f"RESULT: CANNOT RUN. sealing raised {type(exc).__name__}: {exc}")
+        return EXIT_CANNOT_RUN
+    sidecar = path + ".commitment"
+    if resealed:
+        try:
+            with open(path, "w", encoding="utf-8") as fh:
+                json.dump(doc, fh, indent=1, sort_keys=True)
+                fh.write("\n")
+        except OSError as exc:
+            _emit(f"# python -m mojolearn verify --commitment\n\n"
+                  f"RESULT: CANNOT RUN. cannot write the nonce back into {path}: {exc}")
+            return EXIT_CANNOT_RUN
+    try:
+        with open(sidecar, "w", encoding="utf-8") as fh:
+            json.dump(dict(format=COMMITMENT_FORMAT, commitment=commitment,
+                           document=os.path.basename(path), covers=list(COMMITMENT_COVERS),
+                           note=("Publish this, or just the commitment string, BEFORE you see the "
+                                 "other party's document. It does not contain the nonce; the nonce "
+                                 "travels inside the document and is revealed with it.")),
+                      fh, indent=1, sort_keys=True)
+            fh.write("\n")
+    except OSError as exc:
+        _emit(f"# python -m mojolearn verify --commitment\n\n"
+              f"RESULT: CANNOT RUN. cannot write {sidecar}: {exc}")
+        return EXIT_CANNOT_RUN
+    if getattr(args, "json", False):
+        _emit(json.dumps(dict(format=COMMITMENT_FORMAT, commitment=commitment,
+                              document=path, sidecar=sidecar, sealed_now=resealed,
+                              covers=list(COMMITMENT_COVERS),
+                              excludes=COMMITMENT_EXCLUDES), indent=1, sort_keys=True))
+        return EXIT_VERIFIED
+    lines = ["# python -m mojolearn verify --commitment", ""]
+    lines.append(f"  document   {path}")
+    lines.append(f"  nonce      {'written into the document just now' if resealed else 'already in the document'}"
+                 "; do not publish the document yet")
+    lines.append(f"  covers     {', '.join(COMMITMENT_COVERS)}")
+    lines.append(f"  excludes   {', '.join(sorted(COMMITMENT_EXCLUDES))}")
+    lines.append("")
+    lines.append("PUBLISH THIS LINE NOW, BEFORE YOU SEE THE OTHER PARTY'S DOCUMENT:")
+    lines.append("")
+    lines.append(f"  {commitment}")
+    lines.append("")
+    lines.append(f"(the same value is in {sidecar}; either form is accepted)")
+    lines.append("")
+    lines.append("Then exchange documents -- they carry the nonces -- and either party runs:")
+    lines.append("")
+    lines.append("  python -m mojolearn verify --compare mine.json theirs.json \\")
+    lines.append("      --commitment-a <the line you published> \\")
+    lines.append("      --commitment-b <the line they published>")
+    lines.append("")
+    lines.append("RESULT: SEALED. This binds THIS document. It proves nothing on its own: what")
+    lines.append("makes it evidence is that the other party held the line above before they sent")
+    lines.append("you anything, so you could not have copied their answers into it.")
+    _emit("\n".join(lines))
+    return EXIT_VERIFIED
 
 
 def _compare_refusal(args, code, headline, detail):
@@ -1269,13 +1817,14 @@ def lanes_line(report):
 
 
 
-def judge_rows(raw, table, families=None):
+def judge_rows(raw, table, families=None, unreferenced_lanes=()):
     """Attach state, detail and reference columns to raw result rows."""
     out = []
     for r in raw:
         part, lane = r["part"], r["lane"]
         ref_part, ref_lane = r.get("reference_part") or (part, lane)
-        ent = vref.entry(table, ref_lane, r["fixture"], ref_part)
+        ent = (None if ref_lane in unreferenced_lanes else
+               vref.entry(table, ref_lane, r["fixture"], ref_part))
         state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
                         detail=detail, reference=(ent or {}).get("ref"),
@@ -1359,6 +1908,9 @@ def format_human(report):
 def _depth(args):
     if getattr(args, "quick", False) and getattr(args, "full", False):
         raise ValueError("--quick and --full are exclusive")
+    if getattr(args, "models_only", False) and any(getattr(args, flag, False)
+            for flag in ("no_models", "lanes", "fixtures", "include_pending", "batch_checks", "quick")):
+        raise ValueError("--models-only cannot be combined with lane, fixture, pending, batch, quick or no-models selection")
     return "quick" if getattr(args, "quick", False) else "full"
 
 
@@ -1383,6 +1935,16 @@ def cmd_verify_all(args):
     # that a third party can run it on a machine that has none of ours.
     if getattr(args, "compare", None):
         return _cmd_compare(args)
+    # Sealing a document is the same kind of thing: a pure function over one
+    # JSON file, run by a party who may have none of our bindings.
+    if getattr(args, "commitment", None):
+        return _cmd_commitment(args)
+    for flag in ("commitment_a", "commitment_b"):
+        if getattr(args, flag, None):
+            _emit(f"USAGE: --{flag.replace('_', '-')} is only meaningful with --compare; it is "
+                  "the commitment that party published before the two documents were exchanged.",
+                  sys.stderr)
+            return EXIT_USAGE
     try:
         depth = _depth(args)
     except ValueError as exc:
@@ -1442,8 +2004,12 @@ def cmd_verify_all(args):
         return EXIT_VERIFIED  # successful inspection, explicitly not execution
 
     asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    include_pending = getattr(args, "include_pending", False)
+    models_only = getattr(args, "models_only", False)
     try:
-        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked)
+        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked, include_pending)
+        if models_only:
+            lanes, fixtures = [], []
     except ValueError as exc:
         _emit(f"USAGE: {exc}", sys.stderr)
         return EXIT_USAGE
@@ -1486,7 +2052,7 @@ def cmd_verify_all(args):
     # comparison and named, so the run is short of coverage (which the
     # verdict reflects) rather than quietly wrong.
     stale = [l for l in vref.stale_reference_lanes(table, harness) if l in lanes]
-    if stale:
+    if stale and not include_pending:
         log(f"# STALE REFERENCE, not compared ({len(stale)}): {', '.join(stale)}")
         log("#   their fixture moved (identity_break LANE_REVISIONS) past the reference this table "
             "carries; the next release record regenerates it")
@@ -1521,8 +2087,8 @@ def cmd_verify_all(args):
                                     seconds=cell_seconds[(lane, f)]))
             lane_seconds[lane] = round(time.time() - t0, 3)
             log(f"  {lane:<34} {families[lane]:<16} {lane_seconds[lane]:6.1f}s")
-    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log)
-    rows = judge_rows(raw + model_rows, table, families)
+    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log, repeats=repeats, host_only=models_only)
+    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale)
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
     fams = []
@@ -1534,7 +2100,16 @@ def cmd_verify_all(args):
     # cannot hide withheld CPU routes or lanes dropped for stale references.
     withheld = {name: row["reason"] for name, row in coverage_report["lanes"].items()
                 if row["status"] == "withheld"}
-    scope_gaps = dict(withheld) if not asked and depth == "full" else {}
+    scope_gaps = dict(withheld) if not asked and depth == "full" and not models_only else {}
+    if include_pending:
+        scope_gaps.update({name: withheld[name] for name in lanes if name in withheld})
+        if vclass == "cpu":
+            # A CPU checks the driver's logical shards, never physical GPU communication.
+            scope_gaps.update({name: "CPU logical-shard replay; physical multi-GPU qualification pending"
+                               for name in lanes if name.startswith("par-")})
+            if not asked and depth == "full":
+                scope_gaps.update({name: row["reason"] for name, row in coverage_report["lanes"].items()
+                                   if name not in lanes and row["status"] in ("excluded", "unavailable")})
     scope_gaps.update({name: "stale reference" for name in stale})
     code, headline = verdict(counts, scope_gaps)
     detail = detail_line(counts)
@@ -1551,6 +2126,8 @@ def cmd_verify_all(args):
         counts=counts, families=fams, cells=rows,
         lane_seconds=lane_seconds,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
+        selection=dict(include_pending=include_pending, models_only=models_only,
+                       cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
@@ -1581,7 +2158,9 @@ def cmd_verify_all(args):
     report["lanes_summary"] = lane_counts(rows, lanes, stale)
     report["reference_evidence"] = reference_evidence(rows)
     try:
-        report["self_test"] = self_test(harness, ml, table)
+        report["self_test"] = (dict(passed=None, ran=False,
+            reason="models-only does not train; run verify --self-test separately")
+            if models_only else self_test(harness, ml, table))
     except Exception as exc:
         report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
 
@@ -1660,8 +2239,9 @@ def lane_counts(rows, lanes, stale=()):
     """Lanes checked, lanes skipped and why. Kept apart from the cell-part
     counts so `39 of 39 lanes` and `1065 of 1412 parts` cannot be confused.
 
-    `stale` are lanes DROPPED before the run because their fixture moved past
-    the reference this table carries (lane/identity-fixtures-light). They are
+    `stale` are lanes whose fixture moved past the reference this table
+    carries. They are dropped by default or executed without references
+    under --include-pending. They are
     logged by `cmd_verify_all`, but a lane that silently vanished from the
     comparison is precisely what this block exists to surface, so they are
     named here too.
@@ -1695,9 +2275,10 @@ def lane_counts(rows, lanes, stale=()):
     checked, skipped = classify(lane_names)
     m_checked, m_skipped = classify(model_names)
     stale_note = "fixture moved past the reference this table carries; not comparable"
-    return dict(requested=len(asked) + len(stale), checked=len(checked), checked_lanes=checked,
-                skipped=len(skipped) + len(stale),
-                skipped_lanes=dict(skipped, **{l: stale_note for l in stale}),
+    skipped.update({l: stale_note for l in stale})
+    return dict(requested=len(asked | set(stale)), checked=len(checked), checked_lanes=checked,
+                attempted=len(lane_names), attempted_lanes=sorted(lane_names),
+                skipped=len(skipped), skipped_lanes=skipped,
                 stale_references=sorted(stale),
                 not_run=sorted(asked - lane_names),
                 portable_models=dict(checked=len(m_checked), checked_models=m_checked,
@@ -1762,8 +2343,19 @@ def _cmd_emit_reference(args):
         _emit(f"CANNOT RUN: {exc}", sys.stderr)
         return EXIT_CANNOT_RUN
     logs = []
-    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append,
+    lanes = [lane.strip() for lane in getattr(args, "lanes", "").split(",") if lane.strip()]
+    unknown = set(lanes) - set(harness.LANES)
+    if unknown:
+        _emit(f"USAGE: unknown reference lanes: {sorted(unknown)}", sys.stderr)
+        return EXIT_USAGE
+    table = vref.build_table(paths, harness, root or os.getcwd(), log=logs.append, lanes=lanes or None,
                              parts=vref.PARTS + (vref.OPTIONAL_PARTS if getattr(args, "batch_checks", False) else ()))
+    if getattr(args, "reference_table", None):
+        try:
+            table = vref.merge_reference_lanes(vref.load_table(args.reference_table), table, lanes)
+        except vref.TableError as exc:
+            _emit(f"REFUSED: {exc}", sys.stderr)
+            return EXIT_USAGE
     vref.write_table(table, args.emit_reference)
     for line in logs:
         _emit(line, sys.stderr)

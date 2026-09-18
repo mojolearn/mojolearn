@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:37:05  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=1/train 2.821s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=1/infer-save-reload 0.068s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=1/batch 0.242s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=2/train 2.810s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=2/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=2/batch 0.215s
+# START gbdt-pointwise-l2-bayesian-eval/base repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/base repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/base STABLE 6.220s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=1/train 2.616s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=1/infer-save-reload 0.040s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=1/batch 0.190s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=2/train 2.625s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=2/infer-save-reload 0.042s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=2/batch 0.186s
+# START gbdt-pointwise-l2-bayesian-eval/ties repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/ties repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/ties STABLE 5.700s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/train 2.656s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/batch 0.228s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/train 2.691s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/batch 0.223s
+# START gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/hashed STABLE 5.924s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=1/train 2.808s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=1/infer-save-reload 0.064s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=1/batch 0.225s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=2/train 2.751s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=2/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=2/batch 0.223s
+# START gbdt-pointwise-l2-bayesian-eval/wide repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/wide repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/wide STABLE 6.135s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/train 2.754s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/batch 0.223s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/train 2.827s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/infer-save-reload 0.062s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/batch 0.213s
+# START gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/denormal STABLE 6.144s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/train 2.767s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/infer-save-reload 0.062s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/batch 0.224s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/train 2.766s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/infer-save-reload 0.062s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/batch 0.228s
+# START gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/denormal_ftz STABLE 6.110s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/train 2.783s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/infer-save-reload 0.058s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/batch 0.221s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/train 2.727s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/infer-save-reload 0.059s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/batch 0.220s
+# START gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/dupes STABLE 6.067s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=1/train 2.646s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=1/infer-save-reload 0.046s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=1/batch 0.165s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=2/train 2.646s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=2/infer-save-reload 0.043s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=2/batch 0.175s
+# START gbdt-pointwise-l2-bayesian-eval/odd repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/odd repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/odd STABLE 5.721s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=1/train
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=1/train 2.759s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=1/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=1/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=1/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=1/batch 0.225s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=1/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=1/stepfull 0.000s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=2/train
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=2/train 2.809s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=2/infer-save-reload
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=2/infer-save-reload 0.063s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=2/batch
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=2/batch 0.224s
+# START gbdt-pointwise-l2-bayesian-eval/negative repeat=2/stepfull
+# DONE gbdt-pointwise-l2-bayesian-eval/negative repeat=2/stepfull 0.000s
+# CELL gbdt-pointwise-l2-bayesian-eval/negative STABLE 6.143s
+| gbdt-pointwise-l2-bayesian-eval | 2ac238ddce22e2ef | 84ba6825b4967e89 | d9ff6008c1161f15 | b677c76dcdb5e233 | 2ac238ddce22e2ef | 2ac238ddce22e2ef | 86fffcdb2023b393 | 59cf66d7ddc936b4 | 4d75d6379c698eb9 |
+| gbdt-pointwise-l2-bayesian-eval infer | 2754757c200872f3 | 92b20ebae1dabad7 | c873cc2813bbb900 | 194456fd0ea51325 | 2754757c200872f3 | 2754757c200872f3 | 9c447c2e24529fa4 | e1aec5dad8dc37f0 | 69fe3fa629a1097d |
+| gbdt-pointwise-l2-bayesian-eval model | c29dddb945d072a8 | 293e124b96e008e4 | bc91bc55d5b974b4 | 9ca08d3b891657ed | cc76fd996e83a163 | cc76fd996e83a163 | fee0ed429e482b4f | 6ea8282d329c6c7e | f98af47bb5375e00 |
+| gbdt-pointwise-l2-bayesian-eval batch | 3fd0fe4443273a54 | 405d98bc60e93077 | aaa3c0c9e9ff0239 | 86f88156299d777e | 3fd0fe4443273a54 | 3fd0fe4443273a54 | 6e7098112cfe3ef6 | 149b530e8adbf44b | dee639c44dd07990 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-pointwise-l2-bayesian-eval stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-pointwise-l2-bayesian-eval/gbdt-pointwise-l2-bayesian-eval/cpu-clean.json

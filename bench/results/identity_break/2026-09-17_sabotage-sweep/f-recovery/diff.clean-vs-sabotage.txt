@@ -1,0 +1,69 @@
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_preprocessing_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_preprocessing_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| cross-val/base               | DIVERGENT  | parts differ: scores; agree: - | f41b143e5470ee72 |
+| cross-val/ties               | DIVERGENT  | parts differ: scores; agree: - | 9cb67e6af41d49cd |
+| gbdt-adapter-score-weighted/base | DIVERGENT  | parts differ: clf_weighted,clf_zeroed,clf_unit,clf_unweighted,reg_weighted,reg_zeroed,reg_unit,reg_unweighted; agree: - | 4cd24e12aa8473b5 |
+| gbdt-adapter-score-weighted/ties | DIVERGENT  | parts differ: clf_unweighted,reg_weighted,reg_zeroed,reg_unit,reg_unweighted; agree: clf_weighted,clf_zeroed,clf_unit | 3cdf8bde8b1eedb5 |
+| gbdt-categorical-ctr-tables/base | DIVERGENT  | parts differ: predict,proba; agree: - | 72cde7b15ef5f221 |
+| gbdt-categorical-ctr-tables/ties | DIVERGENT  | parts differ: predict,proba; agree: - | ac535fdcf35626e6 |
+| gbdt-tensor-ctr-tables/base  | DIVERGENT  | parts differ: predict; agree: - | 81ff1ddfff5a6b06 |
+| gbdt-tensor-ctr-tables/ties  | DIVERGENT  | parts differ: predict; agree: - | c65d72201a6fde9b |
+| gp-normalize-y/base          | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: y_stats | 043a748442e6e335 |
+| gp-normalize-y/ties          | DIVERGENT  | parts differ: alpha,L,lml,mean,std; agree: y_stats | c740a60b02462016 |
+| gp-sample-y-normalize/base   | DIVERGENT  | parts differ: sample; agree: - | 333d846596227ae4 |
+| gp-sample-y-normalize/ties   | DIVERGENT  | parts differ: sample; agree: - | 2752144b09ca115c |
+| rf-score-weighted/base       | DIVERGENT  | parts differ: clf_weighted,clf_zeroed,clf_unit,clf_unweighted,reg_weighted,reg_zeroed,reg_unit,reg_unweighted; agree: - | 584ee6b4c17b3f25 |
+| rf-score-weighted/ties       | DIVERGENT  | parts differ: clf_weighted,clf_zeroed,clf_unit,clf_unweighted,reg_weighted,reg_zeroed,reg_unit,reg_unweighted; agree: - | a8230346c69fb755 |
+
+summary: DIVERGENT=14
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| cross-val/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val/base               | batch  | DIVERGENT    | eb370fca368a0681 | 9db568120272f7ee |
+| cross-val/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val/ties               | batch  | DIVERGENT    | 38aedcbfef09cd20 | 4a7a75de5373f207 |
+| gbdt-adapter-score-weighted/base | infer  | N/A          | n/a:function     | n/a:function     |
+| gbdt-adapter-score-weighted/base | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gbdt-adapter-score-weighted/base | batch  | N/A          | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) |
+| gbdt-adapter-score-weighted/ties | infer  | N/A          | n/a:function     | n/a:function     |
+| gbdt-adapter-score-weighted/ties | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| gbdt-adapter-score-weighted/ties | batch  | N/A          | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) |
+| gbdt-categorical-ctr-tables/base | infer  | DIVERGENT    | a624d9f200295ebd | 6ca674d84461ffb0 |
+| gbdt-categorical-ctr-tables/base | model  | N/A          | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/base | batch  | DIVERGENT    | d37a90de0b078e27 | 1031a2dfc55c782f |
+| gbdt-categorical-ctr-tables/ties | infer  | DIVERGENT    | ba5bb1e19090253b | ce0017bfa23417e6 |
+| gbdt-categorical-ctr-tables/ties | model  | N/A          | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-categorical-ctr-tables/ties | batch  | DIVERGENT    | da78c16224627804 | 701a4a12b42c58c4 |
+| gbdt-tensor-ctr-tables/base  | infer  | DIVERGENT    | 18c29c1d0b000438 | 36e6f556a3ce2399 |
+| gbdt-tensor-ctr-tables/base  | model  | N/A          | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/base  | batch  | DIVERGENT    | c14b5f2874153914 | acdd0381685f59cd |
+| gbdt-tensor-ctr-tables/ties  | infer  | DIVERGENT    | 1659c6bbc45fd69d | cff255aadabb8f0c |
+| gbdt-tensor-ctr-tables/ties  | model  | N/A          | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) | n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none) |
+| gbdt-tensor-ctr-tables/ties  | batch  | DIVERGENT    | c648d9eb03bb1455 | c79adc440339285f |
+| gp-normalize-y/base          | infer  | DIVERGENT    | 7c5123dc7a512038 | eb6fa792d89c866a |
+| gp-normalize-y/base          | model  | DIVERGENT    | 988bc1c3b51246a4 | 20a0103122abfd63 |
+| gp-normalize-y/base          | batch  | DIVERGENT    | 10f20ff36a173c93 | 79691eb508e9a37a |
+| gp-normalize-y/ties          | infer  | DIVERGENT    | 0e6c262796044cb8 | 5034caaab702e5d4 |
+| gp-normalize-y/ties          | model  | DIVERGENT    | 4af86e76b34e092c | 98704c7053668983 |
+| gp-normalize-y/ties          | batch  | DIVERGENT    | d3aaf331f5414e4b | 8f8c4d3e2f2ae267 |
+| gp-sample-y-normalize/base   | infer  | DIVERGENT    | 0c4beaeb3b1aeb90 | 7852046405f59bb4 |
+| gp-sample-y-normalize/base   | model  | DIVERGENT    | 988bc1c3b51246a4 | 20a0103122abfd63 |
+| gp-sample-y-normalize/base   | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| gp-sample-y-normalize/ties   | infer  | DIVERGENT    | 37a77ee22082dc29 | 221b7cf5a9079dde |
+| gp-sample-y-normalize/ties   | model  | DIVERGENT    | 4af86e76b34e092c | 98704c7053668983 |
+| gp-sample-y-normalize/ties   | batch  | N/A          | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) | n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior) |
+| rf-score-weighted/base       | infer  | N/A          | n/a:function     | n/a:function     |
+| rf-score-weighted/base       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| rf-score-weighted/base       | batch  | N/A          | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) |
+| rf-score-weighted/ties       | infer  | N/A          | n/a:function     | n/a:function     |
+| rf-score-weighted/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| rf-score-weighted/ties       | batch  | N/A          | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) |
+
+summary (infer/model): DIVERGENT=12, N/A=16
+summary (batch): DIVERGENT=8, N/A=6
+summary (rlpair): 

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:53  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START tsvd/base repeat=1/train
+# DONE tsvd/base repeat=1/train 0.007s
+# START tsvd/base repeat=1/infer-save-reload
+# DONE tsvd/base repeat=1/infer-save-reload 0.002s
+# START tsvd/base repeat=1/batch
+# DONE tsvd/base repeat=1/batch 0.002s
+# START tsvd/base repeat=1/stepfull
+# DONE tsvd/base repeat=1/stepfull 0.000s
+# START tsvd/base repeat=2/train
+# DONE tsvd/base repeat=2/train 0.006s
+# START tsvd/base repeat=2/infer-save-reload
+# DONE tsvd/base repeat=2/infer-save-reload 0.001s
+# START tsvd/base repeat=2/batch
+# DONE tsvd/base repeat=2/batch 0.002s
+# START tsvd/base repeat=2/stepfull
+# DONE tsvd/base repeat=2/stepfull 0.000s
+# CELL tsvd/base STABLE 0.020s
+# START tsvd/ties repeat=1/train
+# DONE tsvd/ties repeat=1/train 0.006s
+# START tsvd/ties repeat=1/infer-save-reload
+# DONE tsvd/ties repeat=1/infer-save-reload 0.001s
+# START tsvd/ties repeat=1/batch
+# DONE tsvd/ties repeat=1/batch 0.002s
+# START tsvd/ties repeat=1/stepfull
+# DONE tsvd/ties repeat=1/stepfull 0.000s
+# START tsvd/ties repeat=2/train
+# DONE tsvd/ties repeat=2/train 0.006s
+# START tsvd/ties repeat=2/infer-save-reload
+# DONE tsvd/ties repeat=2/infer-save-reload 0.001s
+# START tsvd/ties repeat=2/batch
+# DONE tsvd/ties repeat=2/batch 0.002s
+# START tsvd/ties repeat=2/stepfull
+# DONE tsvd/ties repeat=2/stepfull 0.000s
+# CELL tsvd/ties STABLE 0.017s
+# START tsvd/hashed repeat=1/train
+# DONE tsvd/hashed repeat=1/train 0.006s
+# START tsvd/hashed repeat=1/infer-save-reload
+# DONE tsvd/hashed repeat=1/infer-save-reload 0.001s
+# START tsvd/hashed repeat=1/batch
+# DONE tsvd/hashed repeat=1/batch 0.002s
+# START tsvd/hashed repeat=1/stepfull
+# DONE tsvd/hashed repeat=1/stepfull 0.000s
+# START tsvd/hashed repeat=2/train
+# DONE tsvd/hashed repeat=2/train 0.006s
+# START tsvd/hashed repeat=2/infer-save-reload
+# DONE tsvd/hashed repeat=2/infer-save-reload 0.001s
+# START tsvd/hashed repeat=2/batch
+# DONE tsvd/hashed repeat=2/batch 0.002s
+# START tsvd/hashed repeat=2/stepfull
+# DONE tsvd/hashed repeat=2/stepfull 0.000s
+# CELL tsvd/hashed STABLE 0.017s
+# START tsvd/wide repeat=1/train
+# DONE tsvd/wide repeat=1/train 0.006s
+# START tsvd/wide repeat=1/infer-save-reload
+# DONE tsvd/wide repeat=1/infer-save-reload 0.001s
+# START tsvd/wide repeat=1/batch
+# DONE tsvd/wide repeat=1/batch 0.002s
+# START tsvd/wide repeat=1/stepfull
+# DONE tsvd/wide repeat=1/stepfull 0.000s
+# START tsvd/wide repeat=2/train
+# DONE tsvd/wide repeat=2/train 0.005s
+# START tsvd/wide repeat=2/infer-save-reload
+# DONE tsvd/wide repeat=2/infer-save-reload 0.001s
+# START tsvd/wide repeat=2/batch
+# DONE tsvd/wide repeat=2/batch 0.002s
+# START tsvd/wide repeat=2/stepfull
+# DONE tsvd/wide repeat=2/stepfull 0.000s
+# CELL tsvd/wide STABLE 0.017s
+# START tsvd/denormal repeat=1/train
+# DONE tsvd/denormal repeat=1/train 0.006s
+# START tsvd/denormal repeat=1/infer-save-reload
+# DONE tsvd/denormal repeat=1/infer-save-reload 0.001s
+# START tsvd/denormal repeat=1/batch
+# DONE tsvd/denormal repeat=1/batch 0.002s
+# START tsvd/denormal repeat=1/stepfull
+# DONE tsvd/denormal repeat=1/stepfull 0.000s
+# START tsvd/denormal repeat=2/train
+# DONE tsvd/denormal repeat=2/train 0.006s
+# START tsvd/denormal repeat=2/infer-save-reload
+# DONE tsvd/denormal repeat=2/infer-save-reload 0.001s
+# START tsvd/denormal repeat=2/batch
+# DONE tsvd/denormal repeat=2/batch 0.001s
+# START tsvd/denormal repeat=2/stepfull
+# DONE tsvd/denormal repeat=2/stepfull 0.000s
+# CELL tsvd/denormal STABLE 0.017s
+# START tsvd/denormal_ftz repeat=1/train
+# DONE tsvd/denormal_ftz repeat=1/train 0.006s
+# START tsvd/denormal_ftz repeat=1/infer-save-reload
+# DONE tsvd/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START tsvd/denormal_ftz repeat=1/batch
+# DONE tsvd/denormal_ftz repeat=1/batch 0.002s
+# START tsvd/denormal_ftz repeat=1/stepfull
+# DONE tsvd/denormal_ftz repeat=1/stepfull 0.000s
+# START tsvd/denormal_ftz repeat=2/train
+# DONE tsvd/denormal_ftz repeat=2/train 0.006s
+# START tsvd/denormal_ftz repeat=2/infer-save-reload
+# DONE tsvd/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START tsvd/denormal_ftz repeat=2/batch
+# DONE tsvd/denormal_ftz repeat=2/batch 0.002s
+# START tsvd/denormal_ftz repeat=2/stepfull
+# DONE tsvd/denormal_ftz repeat=2/stepfull 0.000s
+# CELL tsvd/denormal_ftz STABLE 0.017s
+# START tsvd/dupes repeat=1/train
+# DONE tsvd/dupes repeat=1/train 0.006s
+# START tsvd/dupes repeat=1/infer-save-reload
+# DONE tsvd/dupes repeat=1/infer-save-reload 0.001s
+# START tsvd/dupes repeat=1/batch
+# DONE tsvd/dupes repeat=1/batch 0.002s
+# START tsvd/dupes repeat=1/stepfull
+# DONE tsvd/dupes repeat=1/stepfull 0.000s
+# START tsvd/dupes repeat=2/train
+# DONE tsvd/dupes repeat=2/train 0.006s
+# START tsvd/dupes repeat=2/infer-save-reload
+# DONE tsvd/dupes repeat=2/infer-save-reload 0.001s
+# START tsvd/dupes repeat=2/batch
+# DONE tsvd/dupes repeat=2/batch 0.002s
+# START tsvd/dupes repeat=2/stepfull
+# DONE tsvd/dupes repeat=2/stepfull 0.000s
+# CELL tsvd/dupes STABLE 0.017s
+# START tsvd/odd repeat=1/train
+# DONE tsvd/odd repeat=1/train 0.004s
+# START tsvd/odd repeat=1/infer-save-reload
+# DONE tsvd/odd repeat=1/infer-save-reload 0.001s
+# START tsvd/odd repeat=1/batch
+# DONE tsvd/odd repeat=1/batch 0.002s
+# START tsvd/odd repeat=1/stepfull
+# DONE tsvd/odd repeat=1/stepfull 0.000s
+# START tsvd/odd repeat=2/train
+# DONE tsvd/odd repeat=2/train 0.004s
+# START tsvd/odd repeat=2/infer-save-reload
+# DONE tsvd/odd repeat=2/infer-save-reload 0.001s
+# START tsvd/odd repeat=2/batch
+# DONE tsvd/odd repeat=2/batch 0.001s
+# START tsvd/odd repeat=2/stepfull
+# DONE tsvd/odd repeat=2/stepfull 0.000s
+# CELL tsvd/odd STABLE 0.013s
+# START tsvd/negative repeat=1/train
+# DONE tsvd/negative repeat=1/train 0.006s
+# START tsvd/negative repeat=1/infer-save-reload
+# DONE tsvd/negative repeat=1/infer-save-reload 0.001s
+# START tsvd/negative repeat=1/batch
+# DONE tsvd/negative repeat=1/batch 0.002s
+# START tsvd/negative repeat=1/stepfull
+# DONE tsvd/negative repeat=1/stepfull 0.000s
+# START tsvd/negative repeat=2/train
+# DONE tsvd/negative repeat=2/train 0.006s
+# START tsvd/negative repeat=2/infer-save-reload
+# DONE tsvd/negative repeat=2/infer-save-reload 0.001s
+# START tsvd/negative repeat=2/batch
+# DONE tsvd/negative repeat=2/batch 0.002s
+# START tsvd/negative repeat=2/stepfull
+# DONE tsvd/negative repeat=2/stepfull 0.000s
+# CELL tsvd/negative STABLE 0.017s
+| tsvd                   | d2837d710d0a89ba | e36a3b0ecc18c1e4 | 9151d4d39aed5e2a | 494ef36cda6f54d0 | 0fc5be4fe5241da3 | 0fc5be4fe5241da3 | 1006ab6912f3d081 | 0f0edabd199ae22a | 347812ae784c6e69 |
+| tsvd infer             | 2e22eca1764ea4c5 | fce8cbbd3d458e61 | fc0770af5927a4fc | 38b17746d489ac9a | 43347f5bf158d24c | 43347f5bf158d24c | 41a0c54a00e78427 | 398ec94d2df6c24c | b2da092d4b9ee1d7 |
+| tsvd model             | 9658f1df51b8b6c0 | 5aa8d4139303b4c2 | 384beb321d622dc4 | 1e9c79bde570c8ee | a432195846dc5011 | a432195846dc5011 | 3378db9ba4fcadfc | 1d90dc3daed7e0f9 | 501ecc2093c5bfd0 |
+| tsvd batch             | 41e16d6d57e50fd8 | a2bc9522d4c836e1 | 680c697705dfcf51 | 2a505bcfe8aa76ec | a05b07104db5738f | a05b07104db5738f | 2a3ccfb47ef0d087 | 823cd210627663f3 | b2e1d5b38416e95f |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: tsvd stepfull n/a:no-decode-state
+wrote /root/leg_out/records/tsvd/tsvd/cpu-sabotage.json

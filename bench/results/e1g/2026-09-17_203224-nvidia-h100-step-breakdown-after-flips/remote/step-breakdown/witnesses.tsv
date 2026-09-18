@@ -1,0 +1,24 @@
+corpus	run	step	witnesses_equal_shipped
+enwik8	timers_off	1	True
+enwik8	timers_off	2	True
+enwik8	timers_off	3	True
+enwik8	timers_off	4	True
+enwik8	timers_on	1	True
+enwik8	timers_on	2	True
+enwik8	timers_on	3	True
+enwik8	timers_on	4	True
+enwik8	shipped_again	1	True
+enwik8	shipped_again	2	True
+enwik8	shipped_again	3	True
+enwik8	shipped_again	4	True
+enwik8	bits_identical		True
+pilegithub	timers_off	1	True
+pilegithub	timers_off	2	True
+pilegithub	timers_off	3	True
+pilegithub	timers_off	4	True
+pilegithub	timers_on	1	True
+pilegithub	timers_on	2	True
+pilegithub	timers_on	3	True
+pilegithub	timers_on	4	True
+pilegithub	bits_identical		True
+all	bits_identical		True

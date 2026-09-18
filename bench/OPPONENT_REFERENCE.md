@@ -35,6 +35,118 @@ column beside the fast arm, so that the incumbent's own determinism cost
 is on the same record; the reported ratio is still ours against the fast
 arm.
 
+## Where the opponent bytes come from (2026-09-17, lane/r2-opponent-hygiene)
+
+A row below is valid for one tuple, and the LIBRARY VERSION is a member of
+that tuple. Until 2026-09-17 every leg resolved its opponents from PyPI at the
+minute the lease started, several of them with no `==` at all
+(`pipget --extra-index-url=https://pypi.nvidia.com cuml-cu12`), so the bytes a
+row was measured against and the bytes the next leg installed were the same
+only by luck. The opponent wheels are now mirrored in the R2 store
+(bucket `mojolearn-data`) beside the corpora, pinned by size AND sha256 in
+`bench/results/dataset_store/manifest.tsv`, staged by
+`tools/stage_from_r2.sh` and installed with `--no-index --find-links`, so a
+box refuses a wheel whose bytes do not match and never reaches pypi.org.
+`tools/opponent_wheels.sh` holds the pins and resolves the sets.
+
+| set | key group | pins | wheels | bytes |
+|---|---|---|---:|---:|
+| trees | `opponents/trees-linux-x86_64-cp311` | catboost 1.2.10, xgboost 3.2.0, lightgbm 4.7.0, scikit-learn 1.7.2 | 23 | 340,800,751 |
+| rapids | `opponents/rapids-linux-x86_64-cp311` | cuml-cu12 26.8.0, cuvs-cu12 26.8.1 | 48 | 2,133,261,976 |
+
+THE MIRRORED VERSIONS MATCH THE ROWS, WITH ONE EXCEPTION THAT IS SAID OUT
+LOUD. CatBoost 1.2.10, XGBoost 3.2.0, LightGBM 4.7.0 and cuML 26.8.0 are the
+versions named in the rows below and are the versions mirrored. cuVS is
+mirrored at **26.8.1**, which is what the kNN rows further down were measured
+at -- and `tools/knn_tiled_body.sh` pinned `cuvs-cu12==26.8.0`, WHICH DOES NOT
+EXIST: pypi.nvidia.com goes 26.6.0 -> 26.8.1 for that package (checked
+2026-09-17), so that pin could only ever resolve to nothing. The leg is
+corrected to 26.8.1, the version the rows already name. No row below is
+rebound to different bytes by this change.
+
+THE PYTHON TAG IS PART OF THE SET AND NOT DECORATION. catboost, cuml-cu12,
+scikit-learn and numpy ship per-interpreter wheels (xgboost and lightgbm are
+`py3-none`), so `cp311` is the tag of the image these legs rent,
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1`. A box on another interpreter finds
+no compatible wheel and refuses by name, which is correct; add a set for that
+interpreter rather than widening this one.
+
+WHAT IS DELIBERATELY NOT MIRRORED. torch is not: every image these legs rent
+already ships it, the model and byte-LM legs pin it from
+`download.pytorch.org` and `repo.radeon.com` by exact version plus sha256 in
+the URL (`tools/model_leg/leg_body.sh`, `tools/torch_lm_step_opponent_leg.sh`,
+`tools/classical_two_datasets_leg.sh`), and mirroring a 797 MB wheel plus its
+nvidia-* closure to replace a pinned, hashed URL buys nothing. The LightGBM
+CUDA learner is not mirrored either: it is not a wheel, it is a source build
+on the box, and the way to stop paying for it is not to run it (see below).
+
+RAPIDS WAS MIRRORED EVEN THOUGH IT IS LARGE, AND THE NUMBER IS THE REASON.
+The full cuml+cuvs closure is 2.13 GB in 48 wheels. R2 charges no egress and a
+pod pulls at datacenter speed, against a PyPI resolve measured at 74-135 s for
+cuml alone and once killed outright at its 240 s cap
+(`bench/results/e1g/2026-09-05_074536-nvidia-mamba/remote/campaign/results.tsv`
+`vendor-rapids-wheels 124`). Version drift, not seconds, was the argument.
+
+## Where the measure-once rule is not enforced (audited 2026-09-17)
+
+THE RULE AT THE TOP OF THIS FILE HAS NO ENFORCEMENT ANYWHERE. Nothing in the
+repository READS this file at run time. `git grep -n OPPONENT_REFERENCE` over
+`*.py *.sh *.mojo` returns comments and docstrings, with exactly two
+exceptions that carry numbers: `tools/knn_selection_gate.py` (cached rows
+arrive through `--cached-opponent*` flags and are labelled as cached) and
+`tools/gemm_identical_table.py:25-47` (a hand-transcribed `REFERENCE` dict).
+There is no "does this tuple already have a row?" guard. Compliance rests
+entirely on an operator typing `--ours-only`, leaving `--opponents` off, and
+not invoking a phase twice.
+
+Fixed in this lane (`tools/gemm_remote_leg.sh`): the `classical`, `forest` and
+`gemmseq` families no longer install or run an opponent by default. The new
+`--opponents` flag is what a leg passes when it OWES a missing row, and it is
+not a refresh switch. At the default the leg records
+`opponent_install SKIPPED`, `vendor_arm_skipped` and
+`lightgbm_cuda_build=SKIPPED at opponents=0` in `leg.txt`, so a missing vendor
+column reads as a decision rather than a failure, and the forest arm runs with
+`--ours-only`.
+
+STILL RE-MEASURING A TUPLE THAT ALREADY HAS A ROW HERE, by file and line:
+
+- `bench/speed/forest_speed_arm.py:578-606` -- opponents are interleaved BY
+  DEFAULT; `--ours-only` is the exception, not the default.
+- `tools/trees_identical_ab.sh:128-131` -- the fall-through case omits
+  `--ours-only`, and `full` is the documented default mode.
+- `tools/bench_all_ours.sh:145-156,258-272` -- `--opponents`, whose own
+  synopsis calls it "THE BOARD", re-times cuML and the three GBDT libraries on
+  taxi and Istella-S, all of which have rows.
+- `tools/trees_hotaisle_body.sh:357` -- passes `full` on MI300X tuples with
+  rows at the MI300X sections below.
+- `tools/gbdt_fairness_body.sh:64-65` -- re-runs CatBoost GPU symmetric on
+  taxi 1M, the 709.0 ms row in the H100 section. This file already records
+  what that re-run produced: 624-636 ms against the 709.0 ms recorded here.
+- `tools/gbdt_fairness_probe.py:266-273,382-392` and
+  `tools/xgboost_gap_probe.py:98-110` -- the `100`-tree rung of each ladder is
+  the pinned configuration of an existing row; the 1- and 10-tree rungs are
+  new tuples and are legitimate. Nothing in either file separates them.
+- `bench/speed/gbdt_resident_ab.py:333-352` (via
+  `tools/gbdt_resident_body.sh:235-238`), `tools/forest_groves_fil.py:171-176,192-214`
+  (via `tools/forest_groves_body.sh:269-270`) and
+  `tools/knn_tiled_body.sh:330-362` -- all three re-measure rows ADDED TO THIS
+  FILE ON 2026-09-17, under headings that say they were added "so they are
+  looked up, not re-measured".
+- `tools/classical_two_datasets.py race --arms ours,cuml-gpu` -- a paired cuML
+  re-measurement with no cached path in the file.
+
+AND THE INVERSE: a cached number presented as a paired one.
+`tools/gemm_identical_table.py:118-131` prints `| cublas-fp32 ms |` and
+`| v1 / cublas-fp32 |` with no cached marker, while our two columns come from
+today's leg and the opponent column comes from `e1g/2026-08-25_155542` or
+`e1g/2026-09-09_123601`. The docstring names the source; the emitted table,
+which is what gets pasted into a handoff, does not, and there is no check that
+the leg's box matches the `--reference` value (default `h100`, silently).
+`tools/fast_speed_table.py:241-269` pairs any `ours` FSPEED line with any
+non-`ours` line sharing `(lane, shape)` across every `.log` in a directory,
+with no run, process or date check, and prints "we are N.NNx FASTER"; it reads
+no cached number today, but it is one file-copy away from doing so.
+
 ## NVIDIA H100 80GB HBM3, driver 580.126.09, CUDA 12.4, torch 2.4.1+cu124
 
 Trees, HIGGS (28 float32 features), 100 estimators, depth 6, lr 0.1, seed 7.
@@ -480,6 +592,27 @@ THIS TABLE DOES NOT INCLUDE THE STEP GLUE FLIP. The pod ran commit
 geomean 0.9723 on its own leg). The next pod that measures this table should
 read a smaller cell for ours again.
 
+OUR CELL IS STALE BY TWO MORE FLIPS AND THE 0.2326 ABOVE MUST NOT BE QUOTED
+AS CURRENT (added 2026-09-17, lane `lane/attention-speed`). Since bb679f19 our
+own lean step at this exact shape has moved twice, each measured on its own
+pod against its own same-pod baseline:
+
+| flip | leg | our lean step, enwik8 / Pile GitHub |
+|---|---|---|
+| this table, bb679f19 | e1g/2026-09-12_133007-nvidia-h100-owed-rest | 0.2326 / 0.2309 |
+| DEVIATION 2707, GEMM `kpack_hg` | e1g/2026-09-13_183737-nvidia-h100-gemm-hg-flip | 0.2106 (enwik8) |
+| DEVIATION 2900, attention `_bswz` | e1g/2026-09-17_201140-nvidia-h100-attention-bswz | 0.19786 / 0.19827 |
+
+NO RATIO AGAINST ANY TORCH COLUMN IS IMPLIED BY THOSE THREE ROWS AND NONE MAY
+BE COMPUTED FROM THEM. Neither of the two later legs ran torch at all, and
+the two columns that would carry a ratio drift in opposite ways pod to pod
+(the paragraph above measured `compile_bf16` moving 9 to 12 percent between
+physical H100s while `eager_fp32` held to half a percent). Dividing today's
+number for ours by a torch cell measured on a pod that died in September
+would be exactly the arithmetic this file exists to prevent. The next leg
+that measures BOTH cells on ONE pod writes the next table; until then the
+table above stands as what it is, a paired measurement at bb679f19.
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`
@@ -491,9 +624,21 @@ float32 kinematic features, no shuffle, no scaling, no deduplication;
 prefix rows 0..399,999 are the index, 400,000..403,999 the queries), the
 same bytes `tools/knn_selection_gate.py`'s `higgs` fixture times. A second
 dataset is a new opponent tuple, measured ONCE on its first leg and never
-rerun; later gate legs pass the numbers through
-`MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS=k10=<ms>,k15=<ms>` and quote
-them as a cached-reference ratio, never as a paired opponent measurement.
+rerun; later gate legs pass the numbers through and quote them as a
+cached-reference ratio, never as a paired opponent measurement.
+
+CORRECTION (2026-09-17): `MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_HIGGS` IS
+NOT READ BY ANYTHING. `tools/knn_selection_gate.sh` reads only
+`MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT` (the dyadic-v1 tuple),
+`..._CACHED_OPPONENT_TAXI` and `..._CACHED_OPPONENT_ISTELLA`; the HIGGS cache
+is reachable only by passing `--cached-opponent-higgs` to
+`tools/knn_selection_gate.py` directly, and HIGGS is retired anyway, so the
+path exists to re-derive an old JSON and is never a result. A line here that
+names an env var no file reads is how a cached number stops being labelled as
+one; the labelling in `tools/knn_selection_gate.py` (`cached_opponent_ms`,
+`cached_opponent_ratio`, `cached_opponent_note`, each note carrying the tuple
+and the words "not a paired opponent measurement") is the mechanism that
+actually works, and it is the model for every other cached reference.
 
 | index | queries | k | features | cuML brute NearestNeighbors request ms | cuML device ms | GPU, driver, cuML | sha256_block | evidence |
 |---:|---:|---:|---:|---:|---:|---|---|---|
@@ -870,6 +1015,33 @@ its rows are here because the lane timed them. Source:
 | HIGGS Logloss 1000 trees | 1,000,000 | 267.9 | 191.8u | 273.9 | 201.7u |
 | Covtype MultiClass 100 trees | 581,012 | refused | 174.8u | refused | 159.5u |
 | Covtype MultiClass 1000 trees | 581,012 | refused | 352.1u | refused | 352.1u |
+
+### RTX 4090 cuML k-means, OLS and PCA at full size, measured 2026-09-18 (lane kmeans-linear-speed)
+
+Pod 0knlkeg0ni0y08, RTX 4090, driver 580.178.04, cuML 26.8.0 in the image's
+Python, its inputs on the device, 5 rounds, medians (min..max) in ms. OLS
+Istella-S is struck for quality (r2 -15111, its eigensolve on near-constant
+columns; ours 0.332). Source: `docs/lanes/LANE_STATUS_kmeans-linear-speed.md`
+("cuML on the same box").
+
+| lane | dataset | rows x cols | cuML ms |
+|---|---|---|---|
+| kmeans (k 64, 20 it) | taxi | 4,000,000 x 11 | 129.5 (127.6..140.5) |
+| kmeans | Istella-S | 2,043,304 x 220 | 321.4 (319.2..327.9) |
+| ols | taxi | 4,000,000 x 11 | 23.2 (23.0..24.0) |
+| ols | Istella-S | 2,043,304 x 220 | 73.6 (71.0..75.0), quality struck |
+| pca (8 comp) | taxi | 4,000,000 x 11 | 18.8 (18.5..20.4) |
+| pca | Istella-S | 2,043,304 x 220 | 68.1 (66.8..70.2) |
+### RTX 4090 CatBoost YetiRank training, driver 580.159.04 (2026-09-17, lane gbdt-train-speed)
+
+Measured once on pod 2ofug65rltppi5 (RTX 4090, EPYC 7542), 5 rounds; the log is
+`~/mojolearn-evidence/gbdt-train-speed/final_pull_pause/leg_out/opponent/catboost-yeti.log`.
+Ours on the same box after DEVIATION 3040: 5,214 ms at 100 trees, 8.20 ms a tree
+(`docs/lanes/LANE_STATUS_gbdt-train-speed.md`).
+
+| library | version | dataset | rows x cols | parameters | inputs | 100 trees ms, median (min..max) | 10 trees ms | per tree ms | rounds |
+|---|---|---|---|---|---|---|---|---|---|
+| CatBoost GPU YetiRank | 1.2.10 | Istella-S LETOR, 19,245 queries | 2,043,304 x 220 | SymmetricTree, depth 6, lr 0.1, l2 1.0, border_count 254, bootstrap No, Plain, seed 7 | host arrays, Pool built inside the clock | 4176 (4133..4215) | 3029 (2934..3063) | 12.74 | 5 |
 
 ### L40S forest inference, cuML 26.08.00 FIL, measured 2026-09-17
 

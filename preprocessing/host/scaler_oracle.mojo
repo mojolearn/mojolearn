@@ -59,8 +59,9 @@ in the binding.
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` shifts the slab
 tree's chunk boundaries by one value (the standard scaler's mean, variance
 and scale move where the column's sums are inexact) and turns the min-max
-offset's subtraction into an addition (`min_` and every min-max transform
-move). Since lane/inference-linear-svm (2026-09-15) it also makes both
+offset's subtraction into an addition. When data_min is zero, it adds one
+to the offset instead: changing the sign of zero left the constant-zero
+fixture unchanged. Since lane/inference-linear-svm (2026-09-15) it also makes both
 transform kernels read the next column's statistics: saved-model inference
 (`mojolearn.host_model`, through the estimators host binding) runs the
 transforms alone with stored statistics, and the fit arms never reached it
@@ -226,6 +227,10 @@ def host_minmax_fit(
             # THE SABOTAGE ARM: the offset's subtraction as an addition.
             # Wrong on purpose; see SCALER_ORACLE_HOST_SABOTAGE.
             offset = ftz(ftz(lower) + ftz(identical_mul(ftz(data_min), scale)))
+            if data_min == Float32(0.0):
+                # A sign change of zero is inert. Corrupt the actual fitted
+                # offset on constant-zero columns as well.
+                offset = ftz(offset + Float32(1.0))
         else:
             offset = ftz(ftz(lower) - ftz(identical_mul(ftz(data_min), scale)))
         out[column] = data_min

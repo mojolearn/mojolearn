@@ -27,10 +27,12 @@
 # (variants), /root/leg_out (every log and JSON, pulled home after each phase),
 # /root/ab (saved models and fixed prediction rows).
 set -u
-R=/root/mojolearn
-B=/root/mojolearn-before
-OUT=/root/leg_out
-AB=/root/ab
+# The four roots are overridable so a second lane can share a pod whose
+# /root/mojolearn, /root/leg_out and /root/ab belong to another lane.
+R=${FG_R:-/root/mojolearn}
+B=${FG_B:-/root/mojolearn-before}
+OUT=${FG_OUT:-/root/leg_out}
+AB=${FG_AB:-/root/ab}
 mkdir -p "$OUT" "$AB"
 export PATH="$HOME/.pixi/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical
@@ -121,6 +123,19 @@ phase_setup() {
     (cd "$B" && PYTHONPATH=python pixi run python3 -c "import mojolearn; print('before import', mojolearn.vendor())") > "$OUT/before_import.log" 2>&1
     cat "$OUT"/cpu_probe_*.log "$OUT/after_import.log" "$OUT/before_import.log"
     : > "$OUT/setup.done"
+}
+
+phase_setup_lite() {
+    # AFTER only, no BEFORE tree and no sabotage host sets: for a lane whose
+    # default build IS the before arm and whose candidates are variants.
+    cd "$R"
+    pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1
+    nvidia-smi --query-gpu=name,driver_version --format=csv,noheader > "$OUT/gpu.txt"
+    lscpu | grep "Model name" >> "$OUT/gpu.txt"; nproc >> "$OUT/gpu.txt"
+    build_full "$R" after
+    (cd "$R" && PYTHONPATH=python pixi run python3 -c "import mojolearn; print('after import', mojolearn.vendor())") > "$OUT/after_import.log" 2>&1
+    cat "$OUT/after_import.log"
+    : > "$OUT/setup_lite.done"
 }
 
 phase_variants() {
@@ -217,7 +232,7 @@ phase_speed() {
     mkdir -p "$OUT/$SPEED_DIR"
     cd "$R"
     if [ ! -f "$AB/manifest.json" ]; then
-        step prepare env PYTHONPATH=python pixi run python3 tools/forest_groves_speed.py prepare --out "$AB"
+        step prepare env PYTHONPATH=python pixi run python3 tools/forest_groves_speed.py prepare --out "$AB" --models "${PREPARE_MODELS:-}"
         cp "$AB/manifest.json" "$OUT/$SPEED_DIR/manifest.json"
     fi
     # ARMS="label:tree ..." default: before, after and every variant built
@@ -322,6 +337,7 @@ phase_final() {
 
 case "${1:-}" in
     setup) phase_setup ;;
+    setup-lite) phase_setup_lite ;;
     final) phase_final ;;
     variants) phase_variants ;;
     identity) phase_identity ;;

@@ -1,0 +1,25 @@
+# opponents/trees-linux-x86_64-cp311 -- written by tools/opponent_wheels.sh fetch
+# pins: catboost==1.2.10 xgboost==3.2.0 lightgbm==4.7.0 scikit-learn==1.7.2
+catboost-1.2.10-cp311-cp311-manylinux2014_x86_64.whl
+cloudpickle-3.1.2-py3-none-any.whl
+contourpy-1.3.3-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+cycler-0.12.1-py3-none-any.whl
+fonttools-4.65.0-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+graphviz-0.21-py3-none-any.whl
+joblib-1.6.0-py3-none-any.whl
+kiwisolver-1.5.1-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+lightgbm-4.7.0-py3-none-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+matplotlib-3.11.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+narwhals-2.26.0-py3-none-any.whl
+numpy-2.4.6-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+packaging-26.3-py3-none-any.whl
+pandas-3.0.5-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl
+pillow-12.3.0-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+plotly-7.1.0-py3-none-any.whl
+pyparsing-3.3.2-py3-none-any.whl
+python_dateutil-2.9.0.post0-py2.py3-none-any.whl
+scikit_learn-1.7.2-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl
+scipy-1.17.1-cp311-cp311-manylinux_2_27_x86_64.manylinux_2_28_x86_64.whl
+six-1.17.0-py2.py3-none-any.whl
+threadpoolctl-3.7.0-py3-none-any.whl
+xgboost-3.2.0-py3-none-manylinux_2_28_x86_64.whl

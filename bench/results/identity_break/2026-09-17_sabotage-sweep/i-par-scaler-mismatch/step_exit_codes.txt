@@ -1,0 +1,4 @@
+prod	0
+sab	1
+diff	1
+diff_prod	0

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:12  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START ols-no-intercept/base repeat=1/train
+# DONE ols-no-intercept/base repeat=1/train 0.008s
+# START ols-no-intercept/base repeat=1/infer-save-reload
+# DONE ols-no-intercept/base repeat=1/infer-save-reload 0.002s
+# START ols-no-intercept/base repeat=1/batch
+# DONE ols-no-intercept/base repeat=1/batch 0.002s
+# START ols-no-intercept/base repeat=1/stepfull
+# DONE ols-no-intercept/base repeat=1/stepfull 0.000s
+# START ols-no-intercept/base repeat=2/train
+# DONE ols-no-intercept/base repeat=2/train 0.007s
+# START ols-no-intercept/base repeat=2/infer-save-reload
+# DONE ols-no-intercept/base repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/base repeat=2/batch
+# DONE ols-no-intercept/base repeat=2/batch 0.002s
+# START ols-no-intercept/base repeat=2/stepfull
+# DONE ols-no-intercept/base repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/base STABLE 0.022s
+# START ols-no-intercept/ties repeat=1/train
+# DONE ols-no-intercept/ties repeat=1/train 0.007s
+# START ols-no-intercept/ties repeat=1/infer-save-reload
+# DONE ols-no-intercept/ties repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/ties repeat=1/batch
+# DONE ols-no-intercept/ties repeat=1/batch 0.002s
+# START ols-no-intercept/ties repeat=1/stepfull
+# DONE ols-no-intercept/ties repeat=1/stepfull 0.000s
+# START ols-no-intercept/ties repeat=2/train
+# DONE ols-no-intercept/ties repeat=2/train 0.007s
+# START ols-no-intercept/ties repeat=2/infer-save-reload
+# DONE ols-no-intercept/ties repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/ties repeat=2/batch
+# DONE ols-no-intercept/ties repeat=2/batch 0.002s
+# START ols-no-intercept/ties repeat=2/stepfull
+# DONE ols-no-intercept/ties repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/ties STABLE 0.019s
+# START ols-no-intercept/hashed repeat=1/train
+# DONE ols-no-intercept/hashed repeat=1/train 0.007s
+# START ols-no-intercept/hashed repeat=1/infer-save-reload
+# DONE ols-no-intercept/hashed repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/hashed repeat=1/batch
+# DONE ols-no-intercept/hashed repeat=1/batch 0.001s
+# START ols-no-intercept/hashed repeat=1/stepfull
+# DONE ols-no-intercept/hashed repeat=1/stepfull 0.000s
+# START ols-no-intercept/hashed repeat=2/train
+# DONE ols-no-intercept/hashed repeat=2/train 0.007s
+# START ols-no-intercept/hashed repeat=2/infer-save-reload
+# DONE ols-no-intercept/hashed repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/hashed repeat=2/batch
+# DONE ols-no-intercept/hashed repeat=2/batch 0.001s
+# START ols-no-intercept/hashed repeat=2/stepfull
+# DONE ols-no-intercept/hashed repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/hashed STABLE 0.018s
+# START ols-no-intercept/wide repeat=1/train
+# DONE ols-no-intercept/wide repeat=1/train 0.007s
+# START ols-no-intercept/wide repeat=1/infer-save-reload
+# DONE ols-no-intercept/wide repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/wide repeat=1/batch
+# DONE ols-no-intercept/wide repeat=1/batch 0.001s
+# START ols-no-intercept/wide repeat=1/stepfull
+# DONE ols-no-intercept/wide repeat=1/stepfull 0.000s
+# START ols-no-intercept/wide repeat=2/train
+# DONE ols-no-intercept/wide repeat=2/train 0.006s
+# START ols-no-intercept/wide repeat=2/infer-save-reload
+# DONE ols-no-intercept/wide repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/wide repeat=2/batch
+# DONE ols-no-intercept/wide repeat=2/batch 0.001s
+# START ols-no-intercept/wide repeat=2/stepfull
+# DONE ols-no-intercept/wide repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/wide STABLE 0.018s
+# START ols-no-intercept/denormal repeat=1/train
+# DONE ols-no-intercept/denormal repeat=1/train 0.007s
+# START ols-no-intercept/denormal repeat=1/infer-save-reload
+# DONE ols-no-intercept/denormal repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/denormal repeat=1/batch
+# DONE ols-no-intercept/denormal repeat=1/batch 0.002s
+# START ols-no-intercept/denormal repeat=1/stepfull
+# DONE ols-no-intercept/denormal repeat=1/stepfull 0.000s
+# START ols-no-intercept/denormal repeat=2/train
+# DONE ols-no-intercept/denormal repeat=2/train 0.007s
+# START ols-no-intercept/denormal repeat=2/infer-save-reload
+# DONE ols-no-intercept/denormal repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/denormal repeat=2/batch
+# DONE ols-no-intercept/denormal repeat=2/batch 0.002s
+# START ols-no-intercept/denormal repeat=2/stepfull
+# DONE ols-no-intercept/denormal repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/denormal STABLE 0.019s
+# START ols-no-intercept/denormal_ftz repeat=1/train
+# DONE ols-no-intercept/denormal_ftz repeat=1/train 0.007s
+# START ols-no-intercept/denormal_ftz repeat=1/infer-save-reload
+# DONE ols-no-intercept/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/denormal_ftz repeat=1/batch
+# DONE ols-no-intercept/denormal_ftz repeat=1/batch 0.002s
+# START ols-no-intercept/denormal_ftz repeat=1/stepfull
+# DONE ols-no-intercept/denormal_ftz repeat=1/stepfull 0.000s
+# START ols-no-intercept/denormal_ftz repeat=2/train
+# DONE ols-no-intercept/denormal_ftz repeat=2/train 0.007s
+# START ols-no-intercept/denormal_ftz repeat=2/infer-save-reload
+# DONE ols-no-intercept/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/denormal_ftz repeat=2/batch
+# DONE ols-no-intercept/denormal_ftz repeat=2/batch 0.002s
+# START ols-no-intercept/denormal_ftz repeat=2/stepfull
+# DONE ols-no-intercept/denormal_ftz repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/denormal_ftz STABLE 0.019s
+# START ols-no-intercept/dupes repeat=1/train
+# DONE ols-no-intercept/dupes repeat=1/train 0.007s
+# START ols-no-intercept/dupes repeat=1/infer-save-reload
+# DONE ols-no-intercept/dupes repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/dupes repeat=1/batch
+# DONE ols-no-intercept/dupes repeat=1/batch 0.002s
+# START ols-no-intercept/dupes repeat=1/stepfull
+# DONE ols-no-intercept/dupes repeat=1/stepfull 0.000s
+# START ols-no-intercept/dupes repeat=2/train
+# DONE ols-no-intercept/dupes repeat=2/train 0.007s
+# START ols-no-intercept/dupes repeat=2/infer-save-reload
+# DONE ols-no-intercept/dupes repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/dupes repeat=2/batch
+# DONE ols-no-intercept/dupes repeat=2/batch 0.002s
+# START ols-no-intercept/dupes repeat=2/stepfull
+# DONE ols-no-intercept/dupes repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/dupes STABLE 0.018s
+# START ols-no-intercept/odd repeat=1/train
+# DONE ols-no-intercept/odd repeat=1/train 0.004s
+# START ols-no-intercept/odd repeat=1/infer-save-reload
+# DONE ols-no-intercept/odd repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/odd repeat=1/batch
+# DONE ols-no-intercept/odd repeat=1/batch 0.002s
+# START ols-no-intercept/odd repeat=1/stepfull
+# DONE ols-no-intercept/odd repeat=1/stepfull 0.000s
+# START ols-no-intercept/odd repeat=2/train
+# DONE ols-no-intercept/odd repeat=2/train 0.004s
+# START ols-no-intercept/odd repeat=2/infer-save-reload
+# DONE ols-no-intercept/odd repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/odd repeat=2/batch
+# DONE ols-no-intercept/odd repeat=2/batch 0.001s
+# START ols-no-intercept/odd repeat=2/stepfull
+# DONE ols-no-intercept/odd repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/odd STABLE 0.013s
+# START ols-no-intercept/negative repeat=1/train
+# DONE ols-no-intercept/negative repeat=1/train 0.007s
+# START ols-no-intercept/negative repeat=1/infer-save-reload
+# DONE ols-no-intercept/negative repeat=1/infer-save-reload 0.001s
+# START ols-no-intercept/negative repeat=1/batch
+# DONE ols-no-intercept/negative repeat=1/batch 0.002s
+# START ols-no-intercept/negative repeat=1/stepfull
+# DONE ols-no-intercept/negative repeat=1/stepfull 0.000s
+# START ols-no-intercept/negative repeat=2/train
+# DONE ols-no-intercept/negative repeat=2/train 0.007s
+# START ols-no-intercept/negative repeat=2/infer-save-reload
+# DONE ols-no-intercept/negative repeat=2/infer-save-reload 0.001s
+# START ols-no-intercept/negative repeat=2/batch
+# DONE ols-no-intercept/negative repeat=2/batch 0.002s
+# START ols-no-intercept/negative repeat=2/stepfull
+# DONE ols-no-intercept/negative repeat=2/stepfull 0.000s
+# CELL ols-no-intercept/negative STABLE 0.019s
+| ols-no-intercept       | bc9714aa8394d319 | c7741b3caaf46628 | 5400b995ec922d18 | 4339ec7acdc59c11 | 172fbbe0bc0a7c91 | 172fbbe0bc0a7c91 | 93ef26a5fe27fd51 | 3d456f2024b12b13 | 7309f31c6bb18bd1 |
+| ols-no-intercept infer | 5fbab3a7de51017a | d86d457c4deed731 | 03c5834fb6a755fe | fee22f64b62d80da | 15ca54a4cd747c03 | 15ca54a4cd747c03 | 4dba21ec983fd44e | 2659af88e6d096ad | 23304e904ac46a38 |
+| ols-no-intercept model | f3ef9126ad986141 | c04daec8f88a4585 | 2076321d9b32836b | d50e2658e2055960 | eb819356230f741a | eb819356230f741a | 8ddf302c2787689c | 6c6ad7bbc740a643 | e6f7874e0796186c |
+| ols-no-intercept batch | dc55264f9670b923 | 9d1d8f455d92979f | e9f015d0a85eb328 | 8a32b2bb86b0169c | 6af1552ec8d1ebef | 6af1552ec8d1ebef | a238adf13af9728f | 316836dd567e0c8b | 422f481f4b1868be |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: ols-no-intercept stepfull n/a:no-decode-state
+wrote /root/leg_out/records/ols-no-intercept/ols-no-intercept/cpu-clean.json

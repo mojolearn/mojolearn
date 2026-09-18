@@ -1,0 +1,167 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:10  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START monte-carlo/base repeat=1/train
+# DONE monte-carlo/base repeat=1/train 0.012s
+# START monte-carlo/base repeat=1/infer-save-reload
+# DONE monte-carlo/base repeat=1/infer-save-reload 0.000s
+# START monte-carlo/base repeat=1/batch
+# DONE monte-carlo/base repeat=1/batch 0.000s
+# START monte-carlo/base repeat=1/stepfull
+# DONE monte-carlo/base repeat=1/stepfull 0.000s
+# START monte-carlo/base repeat=2/train
+# DONE monte-carlo/base repeat=2/train 0.012s
+# START monte-carlo/base repeat=2/infer-save-reload
+# DONE monte-carlo/base repeat=2/infer-save-reload 0.000s
+# START monte-carlo/base repeat=2/batch
+# DONE monte-carlo/base repeat=2/batch 0.000s
+# START monte-carlo/base repeat=2/stepfull
+# DONE monte-carlo/base repeat=2/stepfull 0.000s
+# CELL monte-carlo/base STABLE 0.024s
+# START monte-carlo/ties repeat=1/train
+# DONE monte-carlo/ties repeat=1/train 0.011s
+# START monte-carlo/ties repeat=1/infer-save-reload
+# DONE monte-carlo/ties repeat=1/infer-save-reload 0.000s
+# START monte-carlo/ties repeat=1/batch
+# DONE monte-carlo/ties repeat=1/batch 0.000s
+# START monte-carlo/ties repeat=1/stepfull
+# DONE monte-carlo/ties repeat=1/stepfull 0.000s
+# START monte-carlo/ties repeat=2/train
+# DONE monte-carlo/ties repeat=2/train 0.011s
+# START monte-carlo/ties repeat=2/infer-save-reload
+# DONE monte-carlo/ties repeat=2/infer-save-reload 0.000s
+# START monte-carlo/ties repeat=2/batch
+# DONE monte-carlo/ties repeat=2/batch 0.000s
+# START monte-carlo/ties repeat=2/stepfull
+# DONE monte-carlo/ties repeat=2/stepfull 0.000s
+# CELL monte-carlo/ties STABLE 0.023s
+# START monte-carlo/hashed repeat=1/train
+# DONE monte-carlo/hashed repeat=1/train 0.011s
+# START monte-carlo/hashed repeat=1/infer-save-reload
+# DONE monte-carlo/hashed repeat=1/infer-save-reload 0.000s
+# START monte-carlo/hashed repeat=1/batch
+# DONE monte-carlo/hashed repeat=1/batch 0.000s
+# START monte-carlo/hashed repeat=1/stepfull
+# DONE monte-carlo/hashed repeat=1/stepfull 0.000s
+# START monte-carlo/hashed repeat=2/train
+# DONE monte-carlo/hashed repeat=2/train 0.011s
+# START monte-carlo/hashed repeat=2/infer-save-reload
+# DONE monte-carlo/hashed repeat=2/infer-save-reload 0.000s
+# START monte-carlo/hashed repeat=2/batch
+# DONE monte-carlo/hashed repeat=2/batch 0.000s
+# START monte-carlo/hashed repeat=2/stepfull
+# DONE monte-carlo/hashed repeat=2/stepfull 0.000s
+# CELL monte-carlo/hashed STABLE 0.023s
+# START monte-carlo/wide repeat=1/train
+# DONE monte-carlo/wide repeat=1/train 0.011s
+# START monte-carlo/wide repeat=1/infer-save-reload
+# DONE monte-carlo/wide repeat=1/infer-save-reload 0.000s
+# START monte-carlo/wide repeat=1/batch
+# DONE monte-carlo/wide repeat=1/batch 0.000s
+# START monte-carlo/wide repeat=1/stepfull
+# DONE monte-carlo/wide repeat=1/stepfull 0.000s
+# START monte-carlo/wide repeat=2/train
+# DONE monte-carlo/wide repeat=2/train 0.011s
+# START monte-carlo/wide repeat=2/infer-save-reload
+# DONE monte-carlo/wide repeat=2/infer-save-reload 0.000s
+# START monte-carlo/wide repeat=2/batch
+# DONE monte-carlo/wide repeat=2/batch 0.000s
+# START monte-carlo/wide repeat=2/stepfull
+# DONE monte-carlo/wide repeat=2/stepfull 0.000s
+# CELL monte-carlo/wide STABLE 0.023s
+# START monte-carlo/denormal repeat=1/train
+# DONE monte-carlo/denormal repeat=1/train 0.012s
+# START monte-carlo/denormal repeat=1/infer-save-reload
+# DONE monte-carlo/denormal repeat=1/infer-save-reload 0.000s
+# START monte-carlo/denormal repeat=1/batch
+# DONE monte-carlo/denormal repeat=1/batch 0.000s
+# START monte-carlo/denormal repeat=1/stepfull
+# DONE monte-carlo/denormal repeat=1/stepfull 0.000s
+# START monte-carlo/denormal repeat=2/train
+# DONE monte-carlo/denormal repeat=2/train 0.011s
+# START monte-carlo/denormal repeat=2/infer-save-reload
+# DONE monte-carlo/denormal repeat=2/infer-save-reload 0.000s
+# START monte-carlo/denormal repeat=2/batch
+# DONE monte-carlo/denormal repeat=2/batch 0.000s
+# START monte-carlo/denormal repeat=2/stepfull
+# DONE monte-carlo/denormal repeat=2/stepfull 0.000s
+# CELL monte-carlo/denormal STABLE 0.023s
+# START monte-carlo/denormal_ftz repeat=1/train
+# DONE monte-carlo/denormal_ftz repeat=1/train 0.012s
+# START monte-carlo/denormal_ftz repeat=1/infer-save-reload
+# DONE monte-carlo/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START monte-carlo/denormal_ftz repeat=1/batch
+# DONE monte-carlo/denormal_ftz repeat=1/batch 0.000s
+# START monte-carlo/denormal_ftz repeat=1/stepfull
+# DONE monte-carlo/denormal_ftz repeat=1/stepfull 0.000s
+# START monte-carlo/denormal_ftz repeat=2/train
+# DONE monte-carlo/denormal_ftz repeat=2/train 0.011s
+# START monte-carlo/denormal_ftz repeat=2/infer-save-reload
+# DONE monte-carlo/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START monte-carlo/denormal_ftz repeat=2/batch
+# DONE monte-carlo/denormal_ftz repeat=2/batch 0.000s
+# START monte-carlo/denormal_ftz repeat=2/stepfull
+# DONE monte-carlo/denormal_ftz repeat=2/stepfull 0.000s
+# CELL monte-carlo/denormal_ftz STABLE 0.023s
+# START monte-carlo/dupes repeat=1/train
+# DONE monte-carlo/dupes repeat=1/train 0.011s
+# START monte-carlo/dupes repeat=1/infer-save-reload
+# DONE monte-carlo/dupes repeat=1/infer-save-reload 0.000s
+# START monte-carlo/dupes repeat=1/batch
+# DONE monte-carlo/dupes repeat=1/batch 0.000s
+# START monte-carlo/dupes repeat=1/stepfull
+# DONE monte-carlo/dupes repeat=1/stepfull 0.000s
+# START monte-carlo/dupes repeat=2/train
+# DONE monte-carlo/dupes repeat=2/train 0.010s
+# START monte-carlo/dupes repeat=2/infer-save-reload
+# DONE monte-carlo/dupes repeat=2/infer-save-reload 0.000s
+# START monte-carlo/dupes repeat=2/batch
+# DONE monte-carlo/dupes repeat=2/batch 0.000s
+# START monte-carlo/dupes repeat=2/stepfull
+# DONE monte-carlo/dupes repeat=2/stepfull 0.000s
+# CELL monte-carlo/dupes STABLE 0.021s
+# START monte-carlo/odd repeat=1/train
+# DONE monte-carlo/odd repeat=1/train 0.011s
+# START monte-carlo/odd repeat=1/infer-save-reload
+# DONE monte-carlo/odd repeat=1/infer-save-reload 0.000s
+# START monte-carlo/odd repeat=1/batch
+# DONE monte-carlo/odd repeat=1/batch 0.000s
+# START monte-carlo/odd repeat=1/stepfull
+# DONE monte-carlo/odd repeat=1/stepfull 0.000s
+# START monte-carlo/odd repeat=2/train
+# DONE monte-carlo/odd repeat=2/train 0.010s
+# START monte-carlo/odd repeat=2/infer-save-reload
+# DONE monte-carlo/odd repeat=2/infer-save-reload 0.000s
+# START monte-carlo/odd repeat=2/batch
+# DONE monte-carlo/odd repeat=2/batch 0.000s
+# START monte-carlo/odd repeat=2/stepfull
+# DONE monte-carlo/odd repeat=2/stepfull 0.000s
+# CELL monte-carlo/odd STABLE 0.021s
+# START monte-carlo/negative repeat=1/train
+# DONE monte-carlo/negative repeat=1/train 0.011s
+# START monte-carlo/negative repeat=1/infer-save-reload
+# DONE monte-carlo/negative repeat=1/infer-save-reload 0.000s
+# START monte-carlo/negative repeat=1/batch
+# DONE monte-carlo/negative repeat=1/batch 0.000s
+# START monte-carlo/negative repeat=1/stepfull
+# DONE monte-carlo/negative repeat=1/stepfull 0.000s
+# START monte-carlo/negative repeat=2/train
+# DONE monte-carlo/negative repeat=2/train 0.011s
+# START monte-carlo/negative repeat=2/infer-save-reload
+# DONE monte-carlo/negative repeat=2/infer-save-reload 0.000s
+# START monte-carlo/negative repeat=2/batch
+# DONE monte-carlo/negative repeat=2/batch 0.000s
+# START monte-carlo/negative repeat=2/stepfull
+# DONE monte-carlo/negative repeat=2/stepfull 0.000s
+# CELL monte-carlo/negative STABLE 0.022s
+| monte-carlo            | 8e9c8f645bff5388 | 423ad4b3f043c930 | fb9ff69f912c2610 | 00c35a92f758a704 | a333b60042b9427d | a333b60042b9427d | d8707876e5175731 | a6dec3e42aceff1e | 5d4fd85b7b6d03f8 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: monte-carlo batch n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against), monte-carlo infer n/a:function, monte-carlo model n/a:no-save, monte-carlo stepfull n/a:no-decode-state
+wrote /root/leg_out/records/monte-carlo/monte-carlo/cpu-sabotage.json
