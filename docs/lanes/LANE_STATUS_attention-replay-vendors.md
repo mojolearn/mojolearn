@@ -241,7 +241,7 @@ no stock), source 2e33978dd, R2 staged, DELETE 204 then GET 404 at 15:41Z.
   HD64 fused kernels' corner, so for the replay they are INERT: they show the
   flip moved no bit of the lanes that exist, not that the replay is right.
 
-## Post-merge AMD confirmation, registered before running (15:55Z)
+## Post-merge AMD confirmation, registered before running (15:44Z)
 
 Main dbc7bd4a3 merged this lane with main's independently qualified AMD GEMM
 operand staging (`lib_gemm_stage_ftz_for`, 1a22490ed/112108c52), which my AMD
@@ -252,6 +252,18 @@ hashes and per-layer routing equal NVIDIA's again (3697 -> 0, dQ 3449);
 the repaired late step drops below 0.632 s because the GEMM share shrinks,
 and the replay speedup rises above 1.3214x. Any differing bit is a defect in
 the combination and reverts the AMD row until explained.
+
+### Result: PASS (droplet 601734705, 404 verified 16:05Z)
+
+Source 74141e520 (contains main dbc7bd4a3), DigitalOcean MI325X, strict R2.
+`amd_postmerge_enwik8_vs_nvidia.log` (22 controls fail first): all 700
+losses, six hashes at 0/699 and per-layer routing equal NVIDIA's in both
+arms; 3697 -> 0 refusals, dQ 3449 sites, zdot 0. Late median 0.762693 ->
+0.550012 s = **1.3867x** (head 0.547 / 0.549 s). Predictions passed. This is
+an MI325X figure on the merged source, so it is not directly comparable with
+the MI300X 1.3214x. rocm-smi on this droplet reports real usage: device
+33981 -> 18069 MiB late in the run (the MI300X VM reported a flat 183625 MiB
+reservation).
 
 ## Candidates (not opened)
 
