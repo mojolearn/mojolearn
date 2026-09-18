@@ -12,6 +12,10 @@ _ivf_snapshot = None
 def execute(request):
     global _forest_snapshot, _ivf_snapshot
     operation, state, args = request
+    if operation == 'device_inventory':
+        from . import _backend
+        from ._gpu_witness import visible_gpu_inventory
+        return visible_gpu_inventory(_backend.vendor())
     if operation == 'causal_lm_layer':
         from ._causal_lm_worker import execute as run_layer
         return run_layer(state, args)
