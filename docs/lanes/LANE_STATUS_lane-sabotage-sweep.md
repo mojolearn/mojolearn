@@ -149,3 +149,111 @@ plain checkout of the tracked tree alone.** Their CTR fixtures live under
 runner that excludes `bench/results` leaves at home. `f-recovery` passed
 `--include` for them. Anything that ships the source without that path will see
 both lanes REFUSE, and a REFUSED cell in a sabotage column reads as a catch.
+
+---
+
+# CLOSING SECTION, written after the session that ran this lane was killed
+
+**Nothing was lost.** Every commit this lane made was already merged into
+`origin/main` before the session ended: the seven evidence shards under
+`bench/results/identity_break/2026-09-17_sabotage-sweep/`, the regenerated
+`docs/VERIFICATION_MATRIX.md`, the `bpe-trainer` docstring correction and this
+file. The branch `lane/sabotage-sweep` is a fast-forward of `origin/main` and
+carries no unmerged work. A session resuming here should read the numbers below
+rather than the ones above, which were current at 475b3dbd6.
+
+## Where the count stands on main now
+
+| | before this lane | after it | on main today |
+|---|---|---|---|
+| seen(build) | 54 | 189 | **190** |
+| declared | 136 | 3 | 6 |
+| none | 39 | 37 | 33 |
+| all four kinds | 49 | 180 | see the matrix |
+
+The 39 lanes still not seen are `kmeans-cosine` plus 38 `par-*` multi-GPU
+drivers. `kmeans-cosine` is not a gap: its cell is the hash of a REFUSAL
+SENTENCE (`metric='cosine'` is refused by name in
+`cluster/impl/kmeans_params.mojo::validate`), no arithmetic runs, and a column
+that HASHES there means the refusal was lifted. **No arm should be written for
+it.** The `par-*` lanes need a multi-device box and are release work; four of
+them (`par-cholesky`, `par-gmm`, `par-resample`, `par-graph-agglomerative`)
+already have a Mojo define the matrix cannot see, because the matrix reads
+defines only from `host_surface.FAMILIES`, so `none` overstates their gap.
+
+## The one thing this lane was mid-way through, and how it ended
+
+The last open question was `ordered-gradient-sum`. This lane measured it INERT
+on all nine fixtures, wrote `SAMBA_ACCUMULATE_HOST_SABOTAGE` in
+`training/host/samba_ops_oracle.mojo` to give it an arm, and then found that
+the arm fires but the LANE converts the catch into a refusal: it compares
+`ordered_sum_gradients` against an independent NumPy left fold and raised
+`AssertionError`, so the cell read REFUSED on all nine fixtures. That mattered
+twice -- a refusal is not a catch, and
+`tools/cpu_identity_gate_check.py column` requires every covered lane to read
+STABLE in the sabotage column, so shipping the arm on the family define would
+have turned a green CPU identity gate red. The lane re-gated it onto its own
+`MOJOLEARN_ACCUMULATE_SABOTAGE`, set by no build script and no gate, and named
+the real repair as owed: hash the comparison instead of raising it.
+
+**`lane/cpu-ordered-sum-completion` then did exactly that repair, and did it
+better.** On main today the lane raises `NumericalMismatch(..., parts)`, an
+exception that CARRIES the hashed parts, so the harness records a DIVERGENT
+cell with stable hashes instead of a REFUSED one, and the arm is back on the
+family define (`comptime if GEMM_ORACLE_HOST_SABOTAGE: cur[0] = 0.0`).
+`bench/results/identity_break/2026-09-17_cpu-ordered-sum-completion/cpu-sabotage.json`
+reads DIVERGENT with two stable repeats on all nine fixtures, and the matrix
+counts it.
+
+**Do not reapply `MOJOLEARN_ACCUMULATE_SABOTAGE`.** It is superseded. The pod
+that was queued to prove the own define left the gate alone is moot and was
+never needed.
+
+## The remaining piece of that same shape
+
+`par-scaler` is still `declared` for the identical reason
+`ordered-gradient-sum` was: under the preprocessing family's sabotage build the
+lane raises its own `ValueError: transform_scaler and plain transform differ:
+2847 bytes of 16384`, so the cell reads REFUSED while the clean cell reads
+STABLE. The arm works; the lane swallows it. **The remedy now exists in the
+tree**: `NumericalMismatch` in `tools/identity_break.py`. Converting
+`par-scaler`'s raise to it is a small, cheap change that does not touch the
+clean cell, and it is the single highest-value item left that does not need a
+multi-GPU box. `par-scaler-minmax` should be checked for the same shape.
+
+## The other things a session with no context should not rediscover
+
+- **Every committed sabotage column before 2026-09-17 was taken at
+  `--repeats 1`, and the matrix discards all of them.**
+  `verification_matrix.py::negative_control_moves` asks `stable_digest()` of
+  the sabotage cell, which refuses a part with fewer than two repeats. The CPU
+  identity gate does one repeat deliberately and every manual lane copied it.
+  That single flag, not 175 broken arms, is what the "not seen" column was
+  measuring. About seventy columns in the tree are one re-run away each.
+- **The CPU identity gate still manufactures this evidence on every run and
+  throws it away** (`lane/sabotage-evidence`'s finding, 2026-09-16). It builds
+  the host set a second time with the manifest's defines, runs every covered
+  lane under it, requires the four-column diff to fail, and uploads the result
+  as an expiring artifact. At one repeat it would not have counted anyway.
+- **FIVE FLIPS HAVE NO SWITCH TO FLIP** and cannot be sabotaged as they stand:
+  DEVIATIONS 2620, 2621, 2622 (the OLS and min-norm rank guards), 2671 and 2672
+  (the Jacobi phase merge and the k-means host staging), and the KDE ones 2625,
+  2626 and 2660. Their old code was DELETED rather than gated, so there is zero
+  `is_defined` to build against. Note them; do not fake an arm for them.
+- **`gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables` cannot run from
+  the tracked tree alone.** Their CTR fixtures live under
+  `bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models`, which every
+  runner that excludes `bench/results` leaves at home. Pass `--include` for
+  them, or both lanes REFUSE -- and a REFUSED cell in a sabotage column reads
+  as a catch.
+- **Shard your pods by host family, and build every family a lane routes to.**
+  Five lanes in this sweep refused only because the shard's build lacked the
+  family they route to (`metrics` for `cross-val`,
+  `gbdt-adapter-score-weighted` and `rf-score-weighted`; `preprocessing` for
+  `gp-normalize-y` and `gp-sample-y-normalize`). One recovery pod fixed all of
+  them for $0.0225.
+
+## Cost
+
+Seven RunPod CPU pods, every DELETE verified, **$0.478 total** for 135 of 138
+lanes. The eighth (`sabsweep-h`) was queued and is moot; it never ran.
