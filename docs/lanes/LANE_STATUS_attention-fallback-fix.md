@@ -99,23 +99,64 @@ Each check in `tools/lm_attention_fallback_verdict.py` is run against a
 deliberately corrupted copy of its own input first and must reject it BY
 NAME, printing the match rather than a count.
 
-## What is NOT in this change, and what it would take
+## What is NOT in this change: the forward corner is REPAIRABLE, exactly
 
-`A_e` survives because the refusal is honest: at a corner the fused output
-and the eager output differ, so the eager bits are the contract's bits.
+`A_e` survives the latch because the refusal is honest. But the divergence
+the corner guards against is ONLY EVER THE SIGN OF A ZERO, and the eager
+answer for a cornered cell is decidable without running the eager path at
+all. This is DERIVED FROM THE CODE, not from the brief's two candidates, and
+it is NOT MEASURED HERE.
 
-The difference is only ever THE SIGN OF A ZERO. The fused kernel folds the
-row's VISIBLE key range; the eager reference folds the full `[0, s-1]`, where
-the masked cells carry weight exactly `+0.0`. Folding a run of signed zeros
-onto `-0.0` gives `-0.0` only when every one of them is `-0.0`, and `+0.0`
-otherwise. So the eager answer for a corner cell is decidable from a suffix
-scan of the sign bits of `v` -- an `[b, n_kv, s, head_dim]` array, 6.3 MB at
-this shape -- instead of from re-running the whole eager path and its 1,376
-MiB of stages. That is the change that would remove `A_e`.
+Both chains are the same chain:
 
-IT IS NOT BUILT AND NOT MEASURED HERE. It reproduces the eager path's exact
-semantics from reasoning about signed zeros and FTZ, and every one of those
-steps is a place to be wrong by one bit; it also has to be done a second time
-for the backward's `dq`/`dk`/`dv`, whose corner conditions are not the
-forward's. It is written down so the next session starts from the arithmetic
-rather than from the brief's two candidates.
+  eager   `attn_context_kernel` (modeling_llama.mojo:3057-3125): one thread
+          per output cell, `acc = +0.0`, then `acc = ftz(fma(w[j], v[j][d],
+          acc))` SERIAL ASCENDING over the ABSOLUTE key index `j` in
+          `[0, s)`. Contract DEVIATION 807 makes this deliberately NOT a
+          gemm call, for exactly this reason.
+  fused   `fused_attn_forward_regblocked_kernel`: `cacc` seeded `0.0`
+          (`fused_attention.mojo:1889`), `_step(w, v, cacc)` -- the same
+          `ftz(fma(...))` seam -- over the VISIBLE run `[rr[0], rr[1]]`
+          only.
+
+A masked cell's weight is EXACTLY `+0.0`: S13 adds `-FLT_MAX`, S15's
+`exp(masked - amax)` is `+0.0`, and S18 divides by a positive denominator.
+So the two chains differ only in the masked terms the eager one also folds:
+
+  LEADING masked terms (`j < rr[0]`) are INERT. `acc` is still `+0.0` there
+  and `fma(+0.0, v, +0.0)` is `(+-0.0) + (+0.0)` = `+0.0` for every `v`.
+  That is why the corner predicate does not test `rr[0] > 0`.
+
+  TRAILING masked terms (`j > rr[1]`) are inert too, for every `acc` EXCEPT
+  `acc = -0.0`. `fma(+0.0, v, -0.0)` is `sign(v) * 0.0 + (-0.0)`, which is
+  `+0.0` when `v`'s sign bit is CLEAR and `-0.0` when it is SET. Once it
+  flips to `+0.0` it stays there.
+
+  `acc` reaches `-0.0` at all because `_step` FLUSHES: `ftz` of a negative
+  subnormal is `-0.0`, sign preserved. The kernel docstring's "the `+0.0`
+  seed forbids that" is true of the SEED and not of the chain, which is why
+  `FUSED_CORNER` is a runtime flag and not a proof.
+
+So, exactly:
+
+  **eager(cell) == fused(cell), EXCEPT when fused(cell) has the bits of
+  `-0.0` and `rr[1] < s - 1`, and then eager(cell) is `+0.0` if ANY
+  `v[b][h // n_rep][j][d]` for `j` in `(rr[1], s - 1]` has its sign bit
+  clear, and `-0.0` otherwise.**
+
+That is a suffix scan of SIGN BITS over `v_cache`, `[b, n_kv, s, head_dim]`,
+1,572,864 entries at this shape -- 1.6 MB as bytes -- plus one patch kernel
+over `ctxv`. It replaces a 620,756,992-byte eager forward set, five stage
+kernels and a per-head gather/GEMM/scatter with two cheap kernels and no
+quadratic buffer at all. That is the change that removes `A_e` from the
+forward.
+
+IT IS NOT BUILT AND NOT MEASURED. Two things stand between the derivation
+and a merge:
+  1. It must be measured against the eager path bit for bit at the target
+     shape, because every line above is a claim about signed zeros and FTZ
+     and every one of them is a place to be wrong by one bit.
+  2. THE BACKWARD IS A SEPARATE DERIVATION AND IS NOT DONE. Its `dk`/`dv`
+     corner (`fused_attention.mojo:3028-3030`) has NO `j_hi < s - 1` guard
+     at all, so its predicate is not the forward's and neither is its
+     repair. Nothing above should be read as covering it.

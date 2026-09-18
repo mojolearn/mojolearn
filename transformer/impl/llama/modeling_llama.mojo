@@ -3571,7 +3571,18 @@ def eager_attention_forward(
     # DEVIATION 3110: a layer that refused once is not launched again. The
     # eager path below is the one the refusal mandates; skipping the launch
     # removes the discarded fused kernel and its synchronize, nothing else.
-    if choice != ATTN_PATH_EAGER and stages.attn_fused_off and not ATTN_NO_STICKY:
+    #
+    # `not need_eager` CONFINES THE LATCH TO THE TRACE-OFF TRAINER PATH. With
+    # the trace on, the eager kernels run and record S11-S18 and then the
+    # fused kernels rewrite `ctxv` so `attn.ctx` is recorded FROM THE FUSED
+    # OUTPUT, which is what gates the fused path at every fixture. Latching
+    # there would record `attn.ctx` from the eager output instead on the call
+    # after a refusal, which is a different card. Under `need_eager` this
+    # whole branch reduces to the code that was here before, so the identity
+    # card is untouched by this commit and the measured path is the one that
+    # was measured.
+    if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
+            and not ATTN_NO_STICKY and not need_eager):
         status = FUSED_SKIPPED_STICKY
         if not need_eager:
             attention_eager_core(
@@ -3606,7 +3617,7 @@ def eager_attention_forward(
                 dims.head_dim, s, pos0, key_lo, window,
                 llama_attention_scale(dims.head_dim),
             )
-        if status != FUSED_RAN:
+        if status != FUSED_RAN and not need_eager:
             stages.attn_fused_off = True
         if status != FUSED_RAN and not need_eager:
             attention_eager_core(

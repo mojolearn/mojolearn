@@ -3086,7 +3086,11 @@ def llama_decoder_layer_backward_device(
     # `ensure_attention_materialized`, which recomputes this layer's whole
     # EAGER FORWARD as well -- so the discarded launch is paid on top of two
     # eager passes. The latch removes the launch.
-    if choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off and not ATTN_NO_STICKY:
+    # `not need_eager` confines the latch to the trace-off trainer path; see
+    # `eager_attention_forward`. Under `need_eager` this branch reduces to the
+    # code that was here before, so the identity card is untouched.
+    if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
+            and not ATTN_NO_STICKY and not need_eager):
         bst.attn_backward_status = FUSED_SKIPPED_STICKY
         if not need_eager:
             bwd_attention_eager_stages(
@@ -3122,7 +3126,7 @@ def llama_decoder_layer_backward_device(
                 fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
             )
         bst.attn_backward_status = status
-        if status != FUSED_RAN:
+        if status != FUSED_RAN and not need_eager:
             bst.attn_bwd_fused_off = True
         if status != FUSED_RAN and not need_eager:
             bwd_attention_eager_stages(
