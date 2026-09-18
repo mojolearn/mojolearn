@@ -500,6 +500,71 @@ class SabotageVerdictTests(unittest.TestCase):
         self.assertEqual(code, 1)
         self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
 
+    def test_gpu_column_disagreement_alone_is_not_a_fault_catch(self):
+        # do_check also folds optional GPU column disagreements into
+        # verdict_ok. Those cannot prove that this CPU output moved.
+        for options in ({}, {'every_lane': True}, {'every_fixture': True}):
+            with self.subTest(options=options):
+                verdict, code, _ = self.verdict(False, [], ['ivf/base'], **options)
+                self.assertEqual(code, 1)
+                self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
+
+    def test_empty_fault_evidence_cannot_pass(self):
+        for options in ({}, {'every_lane': True}, {'every_fixture': True}):
+            with self.subTest(options=options):
+                self.assertEqual(self.verdict(False, [], [], **options)[1], 1)
+
+
+class ClassicalColumnFaultTests(unittest.TestCase):
+    """Exercise the gate with real fixture/reference files and mocked inference."""
+
+    def check(self, *, expect_mismatch, cpu_hash):
+        # This suite also runs before any package/native binding is built.
+        mojolearn = SimpleNamespace(vendor=lambda: 'cpu')
+        host = SimpleNamespace(
+            host_model=lambda _: SimpleNamespace(estimator='LinearRegression'),
+            binary_path=lambda: 'mock', binary_paths=lambda: [])
+        gate = load_classical_gate()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / 'ols' / 'base'
+            directory.mkdir(parents=True)
+            (directory / 'model.npz').write_bytes(b'saved model')
+            (directory / 'fixture.json').write_text(json.dumps(dict(
+                lane='ols', kind='base', probe_rows=256, x_sha256='input')))
+            prediction = dict(sha256='prediction', dtype='float32', shape=[256])
+            (directory / 'expected.json').write_text(json.dumps(dict(
+                status='RECORDED', estimator='LinearRegression', x_sha256='input',
+                model_sha256=gate.sha256_bytes(b'saved model'),
+                predictions=dict(identity_hash='a' * 16, predict=prediction))))
+            column = Path(tmp) / 'gpu.json'
+            column.write_text(json.dumps(dict(vendor='cuda', cells={
+                'ols/base': dict(infer=['b' * 16, 'b' * 16])})))
+            args = SimpleNamespace(package_root=None, fixture_dir=[directory],
+                gpu_column=[str(column)], expect_mismatch=expect_mismatch,
+                every_lane=False, every_fixture=False, lane_rule_only=[], report=None)
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                stack.enter_context(patch.dict('sys.modules', {
+                    'mojolearn': mojolearn, 'mojolearn._classical_host': host}))
+                stack.enter_context(patch.object(gate, 'package_root'))
+                stack.enter_context(patch.object(gate, 'identity_tool',
+                    return_value=SimpleNamespace(FIXTURES=['base'])))
+                stack.enter_context(patch.object(gate, 'held_out', return_value=(None, 'input')))
+                stack.enter_context(patch.object(gate, 'digests_for', return_value=dict(
+                    identity_hash=cpu_hash, predict=prediction, seconds=0)))
+                stack.enter_context(patch.object(gate, 'host_info', return_value={}))
+                stack.enter_context(patch.object(gate, 'git_commit', return_value='test'))
+                return gate.do_check(args)
+
+    def test_column_disagreement_still_fails_clean_check(self):
+        self.assertEqual(self.check(expect_mismatch=False, cpu_hash='a' * 16), 1)
+
+    def test_column_disagreement_does_not_pass_fault_check(self):
+        self.assertEqual(self.check(expect_mismatch=True, cpu_hash='a' * 16), 1)
+
+    def test_changed_cpu_output_still_passes_fault_check(self):
+        self.assertEqual(self.check(expect_mismatch=True, cpu_hash='c' * 16), 0)
+
 
 if __name__ == '__main__':
     unittest.main()

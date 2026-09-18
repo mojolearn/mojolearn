@@ -129,9 +129,15 @@ class DevicePool:
                 for name in names:
                     visible = os.environ.get(name)
                     if visible is not None:
-                        ids = visible.split(',')
-                        if max(group) >= len(ids) or any(not ids[d] for d in group):
+                        ids = [token.strip() for token in visible.split(',')]
+                        if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
                             raise ValueError('device index outside ' + name)
+                        # Validate the entire pool before its first worker:
+                        # distinct logical indices can repeat the same visible
+                        # token. This catches duplicate masks, not UUID aliases;
+                        # physical qualification still needs device witnesses.
+                        if len({ids[d] for d in self.devices}) != len(self.devices):
+                            raise ValueError('selected devices repeat an identifier in ' + name)
                         env[name] = ','.join(ids[d] for d in group)
                     else:
                         env[name] = ','.join(str(d) for d in group)

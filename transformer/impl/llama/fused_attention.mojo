@@ -7139,14 +7139,54 @@ def fused_backward_launch_ran(
     arm: Int,
     mut ran: Int,
 ) raises -> Int:
+    """`fused_backward_launch_ran_report` without the replay-site report."""
+    var repaired = 0
+    return fused_backward_launch_ran_report(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+    )
+
+
+def fused_backward_launch_ran_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+    mut repaired: Int,
+) raises -> Int:
     """`fused_backward_launch_arm`, also reporting in `ran` the arm word of
     the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
     or a refusal before any kernel, `bwd_stash` / `bwd_stash_tiled` for the
     first-round stash, the `_pf` and `_ztiled` words (rows resolved) for the
     second-round launches. Written inside the launching branch;
     `fused_attention_arm_backward_resolved` is what it must equal at
-    head_dim 64. Sabotage bits are never reported."""
+    head_dim 64. Sabotage bits are never reported. `repaired` reports the
+    exact masked-tail replay bits the kernels raised (1 zdot, 2 dQ), read
+    from the same flag buffer as the corner: metadata, no arithmetic. Before
+    lane/attention-replay-vendors this path discarded them, so a column whose
+    default arm is not `_estash` (AMD) reported zero replay sites even when
+    `fused_bwd_dq_tiled_pf_kernel` replayed."""
     ran = ATTN_ARM_BASELINE
+    repaired = 0
     if not fused_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     comptime if ATTN_OPERAND_DUMP:
@@ -7504,7 +7544,9 @@ def fused_backward_launch_ran(
             )
     step_count_sync()
     ctx.synchronize()
-    var hit = _read_flag(ctx, corner)
+    var flags = _read_flags(ctx, corner)
+    var hit = flags[0]
+    repaired = flags[1]
     _ = corner^
     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
     if hit:
@@ -7837,7 +7879,7 @@ def fused_backward_launch_estash_report(
                 comptime if not ATTN_NO_BWD_CORNER:
                     return FUSED_CORNER
             return FUSED_RAN
-    return fused_backward_launch_ran(
+    return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
-        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
     )
