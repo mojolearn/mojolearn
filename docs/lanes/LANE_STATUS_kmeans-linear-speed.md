@@ -221,4 +221,111 @@ same way (94..106 ms and 408..443 ms in every race on both pods). The OLS gap be
 trees whose OLS code is byte-identical (475 vs 548 ms) is this pod's noise floor for a
 host-side-heavy fit. The first pod's A/B (both arms inside the 1.10 gate) remains the
 quoted number; this pod's races are consistent with it in direction and larger in
-magnitude. A k-means rerun on an idle GPU with more rounds follows the identity phases.
+magnitude.
+
+### The k-means rerun on the idle GPU, 9 rounds (second pod, after every identity phase, `ab-*` dirs; the 7-round ones are `ab-*.r1`)
+
+| lane / dataset | before arm | before ms med (min..max, spread) | after arm | after ms med (min..max, spread) |
+|---|---|---|---|---|
+| kmeans taxi | base | 3101.9 (2638.4..3364.6, 1.275) `u` | both | 99.0 (92.9..102.3, 1.101) |
+| kmeans Istella-S | base | 12556.6 (12354.0..12884.6, 1.043) | both | 442.3 (431.8..497.4, 1.152) `u` |
+| kmeans taxi | base | 2929.6 (2757.9..3461.9, 1.255) `u` | blk | 421.1 (346.8..484.2, 1.396) `u` |
+| kmeans Istella-S | base | 34066.7 (30248.5..38238.1, 1.264) `u` | blk | 881.2 (834.3..930.5, 1.115) `u` |
+| kmeans taxi | blk | 369.3 (172.1..594.8, 3.457) `u` | both | 99.7 (96.9..103.6, 1.070) |
+| kmeans Istella-S | blk | 967.3 (922.5..1084.5, 1.176) `u` | both | 482.0 (440.5..563.9, 1.280) `u` |
+
+The only arm that holds the gate on this box is `both` on taxi, the one fit with neither
+a host pass nor an atomic. `blk` still runs the host scale pass and swings 172 to 595 ms
+on taxi (the host is two NUMA nodes and tcmalloc cannot bind memory); `base` swings with
+its atomics. This pod cannot give a gated before-arm, so no ratio is quoted from it.
+
+### cuML on the same box, measured ONCE (bench/OPPONENT_REFERENCE.md's rule; no RTX 4090 row existed for k-means, OLS or PCA)
+
+`opponent-both/`, `tools/classical_two_datasets.py race --arms ours,cuml-gpu`, 5 rounds,
+cuML 26.8.0 (cupy 14.2.0, numpy 2.4.6 in the image's Python 3.11.10), RTX 4090 driver
+580.178.04, cuML's inputs already on the device, ours uploaded inside the clock, k = 64,
+20 iterations (ours reports 21), PCA 8 components, OLS with intercept. cuML's k-means
+digests differ round to round (6 distinct in 5 rounds on both datasets); ours are one hash.
+
+| lane / dataset | cuML ms med (min..max) | ours (3080 + 3081) ms med (min..max) | ours over cuML |
+|---|---|---|---|
+| kmeans taxi 4M x 11 | 129.5 (127.6..140.5) | 102.8 (96.2..122.9, spread 1.278 `u`) | 0.79 |
+| kmeans Istella-S 2M x 220 | 321.4 (319.2..327.9) | 431.4 (426.4..446.4) | 1.34 |
+| ols taxi | 23.2 (23.0..24.0) | 461.0 (436.2..476.6) | 19.9 |
+| ols Istella-S | 73.6 (71.0..75.0), r2 -15111 (its eig solve on near-constant columns) | 1620.3 (1586.9..1703.8), r2 0.332 | 22.0 |
+| pca taxi | 18.8 (18.5..20.4) | 32.8 (31.5..34.4) | 1.74 |
+| pca Istella-S | 68.1 (66.8..70.2) | 285.2 (278.5..410.2, `u`) | 4.19 |
+
+Rows for the table's RTX 4090 section (the orchestrator adds them; the log is
+`~/mojolearn-evidence/kmeans-linear-speed/pod2_final/kls_out/opponent-both/`, pod
+0knlkeg0ni0y08, 2026-09-18 03:00Z):
+
+| lane | shape | parameters | opponent | inputs on device | median ms (min..max) | rounds |
+|---|---|---|---|---|---|---|
+| kmeans | 4,000,000 x 11 (taxi) | k 64, 20 iterations, shared init array | cuML 26.8.0 KMeans | yes | 129.5 (127.6..140.5) | 5 |
+| kmeans | 2,043,304 x 220 (Istella-S) | k 64, 20 iterations, shared init array | cuML 26.8.0 KMeans | yes | 321.4 (319.2..327.9) | 5 |
+| ols | 4,000,000 x 11 (taxi) | intercept | cuML 26.8.0 LinearRegression | yes | 23.2 (23.0..24.0) | 5 |
+| ols | 2,043,304 x 220 (Istella-S) | intercept | cuML 26.8.0 LinearRegression | yes | 73.6 (71.0..75.0) | 5 |
+| pca | 4,000,000 x 11 (taxi) | 8 components | cuML 26.8.0 PCA | yes | 18.8 (18.5..20.4) | 5 |
+| pca | 2,043,304 x 220 (Istella-S) | 8 components | cuML 26.8.0 PCA | yes | 68.1 (66.8..70.2) | 5 |
+
+## Decision
+
+Both candidates pass every gate that can be run on one NVIDIA pod: bits unchanged on 140
+fit cells and their infer, model and batch parts on cuda and on cpu, before against after
+and cuda against cpu; every pinned reduction order untouched (the Int32 totals are the
+same addends, and the scale is the host's scale or the host pass itself); sabotage seen
+DIVERGENT on every cell that records the affected output; the A/B says flip with a large
+margin on both datasets and no dataset regresses.
+
+Ratio of record (first pod, both arms inside the 1.10 gate, 7 rounds, digests equal):
+taxi 12.17x (1216.1 to 99.9 ms), Istella-S 30.80x (14167.4 to 459.9 ms), GEOMETRIC MEAN
+19.4x. The second pod's races agree in direction and are larger (taxi 31x to 33x,
+Istella-S 28x to 30x from the same both arm and a slower base) but their before arms
+fail the spread gate and are not quoted. Split by change (the only gated pair is the first
+pod's taxi blk to both, 2.63x): 3080 removes the atomics, 3081 removes the host pass; on
+taxi after 3080 the host pass IS the fit (blk 264 to 580 ms against both's 100 ms), on
+Istella-S 3080 alone is 15x and 3081 doubles it again.
+
+Against cuML on the same RTX 4090, ours (IDENTICAL, one hash, input uploaded inside the
+clock) reads 0.79x of cuML's time on taxi and 1.34x on Istella-S, geometric mean 1.03x;
+main's k-means on that box read 1.3 to 3.4 s on taxi and 12.4 to 43.8 s on Istella-S,
+that is 10x to 26x and 39x to 136x of cuML's time.
+
+NOT DONE, ON PURPOSE. The defaults are still OFF. Flipping them for NVIDIA is one line
+each (`KMEANS_BLOCK_ACC = is_defined[...]() or TARGET_COLUMN == COLUMN_NVIDIA` with a
+`MOJOLEARN_KMEANS_BLOCK_ACC_OFF` opt-out, the same for 3081 in `cluster/estimator.mojo`),
+but that is a binary this lane has not built or run, and unrun code stays unflipped.
+Apple and AMD columns are owed at the next release for both (3081's certificate needs IEEE
+NaN propagation through `abs` and `+` on the device, which only NVIDIA has been checked
+for; 3080 is plain Int32 loads and stores and should be inert everywhere, unverified).
+
+## Rejected
+
+Nothing on the branch moved a bit. No candidate lost. The `blk` arm alone is not worth
+shipping without 3081 on taxi-shaped data (the host pass dominates it), which is why the
+two ship together.
+
+## Owed and next
+
+1. The NVIDIA default flip (above), then one identity run of the flipped binary.
+2. Apple and AMD columns at the release record.
+3. OLS: the Python-side `host._column_means` (165 ms of 329 ms on taxi through the public
+   API) and the Istella-S device Jacobi (425 to 503 ms of 668 to 746 ms in the entry);
+   PCA Istella-S likewise (150 to 221 ms of 318 to 389). Measured, untouched.
+4. `PRIVATE_ACC_CELLS` (6,144) is now a dead constant on NVIDIA once 3080 is default;
+   leave it for the other columns.
+
+## Commands
+
+Pod: `TREES_LEG_NAME=mojolearn-kmeans-linear-speed TREES_LEG_CUDA_VERSIONS=13.0
+MOJOLEARN_STAGE_KEYS="gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz"
+sh tools/trees_leg.sh rent --gpu "NVIDIA GeForce RTX 4090" --minutes 150`; unpack
+`git archive origin/main` into `/root/mainsrc` with its `SHIPPED_COMMIT.txt`; on the pod
+`nohup setsid sh tools/kmeans_linear_resume_chain.sh > /root/kls_out/chain.log 2>&1 < /dev/null &`;
+then `sh tools/kmeans_linear_body.sh ab both base 9 kmeans taxi,istella` (and blk base,
+both blk) and `sh tools/kmeans_linear_body.sh opponent both 5 kmeans,ols,pca taxi,istella`;
+`sh tools/trees_leg.sh pull /root/kls_out <dir>`; `sh tools/trees_leg.sh reap`.
+
+Second pod 0knlkeg0ni0y08: 01:37Z to 03:04Z, 1.45 h at $0.74/h, $1.07; reaped, HTTP 404
+verified. Both pods together about $2.0.
