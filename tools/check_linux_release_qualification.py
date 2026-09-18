@@ -2,7 +2,7 @@
 """Admit one final dual-vendor Linux wheel using retained hardware evidence.
 
 Staging convention: WHEEL_DIR/qualification/{hip,cuda}/ contains each complete
-24-job qualification directory and its original build-provenance.json. The
+complete qualification directory and its original build-provenance.json. The
 proof is bound by wheel-audit.json's build_provenance_sha256, even when copied
 into this directory after qualification. Both runs must install the exact
 final staged wheel; separately qualified vendor candidates are insufficient.
@@ -207,7 +207,13 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
                 require(surface.is_release_profile(audit)  # DEVIATION 2290
                         and audit.get('runtime_architecture') == arch,
                         'Missing architecture-specific wheel audit')
-                require(installed.get('device_architecture') == arch
+                device = installed.get('device_architecture')
+                # CUDA reports Hopper compute capability as sm_90; its
+                # architecture-specific sm_90a binary is selected explicitly.
+                # This exact pair does not authorize arbitrary suffixes.
+                native_match = device == arch or (
+                    vendor == 'cuda' and device == 'sm_90' and arch == 'sm_90a')
+                require(native_match
                         and installed.get('selected_architecture') == arch
                         and installed.get('architecture_probe')
                         and installed.get('architecture_override_absent') is True,
@@ -403,7 +409,7 @@ def check_release061(wheel, qualification_root, source_root):
                 qualification_tiers=tiers,
                 observed_job_failures=observed_failures,
                 comparisons=comparisons,
-                scope='Exact final wheel; FULL 25 installed jobs on one architecture per advertised vendor '
+                scope=f'Exact final wheel; FULL {len(surface.expected_jobs({"assembly_profile": surface.RELEASE_PROFILE}))} installed jobs on one architecture per advertised vendor '
                       'and SMOKE (install, import, selector read-back, smoke surface in three modes) on every '
                       'other architecture the wheel carries; any job seen failing on a smoke column is listed '
                       'in observed_job_failures and is NOT claimed to pass; a FULL column may carry KNOWN '

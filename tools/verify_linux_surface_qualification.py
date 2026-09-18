@@ -286,6 +286,11 @@ def sources(root):
     paths.update((root / 'packaging/linux').glob('*.py'))
     paths.update((root / 'tools').glob('*.py'))
     paths.add(root / 'tools/linux_surface_qualification.sh')
+    # Installed qualification scripts are witnessed separately from native builds.
+    for name in ('release_linux_surface_qualification.sh', 'release_installed_checks.sh'):
+        path = root / 'tools' / name
+        if path.is_file():
+            paths.add(path)
     # The installed Mamba surface gate reads these committed reference operands.
     for case in CORPUS_CASES:
         directory = root / 'mamba/corpus' / case

@@ -17,7 +17,7 @@ class InstalledSupplementTests(unittest.TestCase):
             tools.mkdir()
             shutil.copyfile(Path(__file__).with_name('release_installed_checks.sh'),
                             tools / 'release_installed_checks.sh')
-            (tools / 'linux_surface_qualification.sh').write_text('exit 0\n')
+            (tools / 'release_linux_surface_qualification.sh').write_text('exit 0\n')
             (root / 'commit.txt').write_text('a' * 40 + '\n')
             out = root / 'output'
             venv = out / 'venv/bin'
