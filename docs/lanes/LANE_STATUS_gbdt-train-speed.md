@@ -6,16 +6,34 @@ moved, and a measured statement of what the FAST tier could drop.
 
 Branch `lane/gbdt-train-speed` from main `86d33fcdf`. Worktree
 `~/mojolearn-wt/gbdt-train-speed`. Evidence (every log, JSON and table quoted
-here) under `~/mojolearn-evidence/gbdt-train-speed/leg_out/`. DEVIATION range
-3040-3059; 3040 and 3041 are used.
+here) under `~/mojolearn-evidence/gbdt-train-speed/`: `final_pull_pause/leg_out/`
+is the first pod's output (the pull taken at the 2026-09-17 pause; `leg_out/`
+is an earlier partial pull of the same pod), `run2/leg_out/` is the second
+pod's. DEVIATION range 3040-3059; 3040 and 3041 are used.
 
-## The box
+## The boxes
 
-RunPod pod `2ofug65rltppi5`, NVIDIA GeForce RTX 4090, driver 580.159.04, AMD
-EPYC 7542 (64 threads visible, shared host, load average about 6 from other
-tenants), Mojo 1.0.0 (ed45d567), CatBoost 1.2.10. Datasets staged from R2:
-`taxi_speed.npz`, `istella_speed.npz`, `istella_rank.npz`. Every number below
-is THIS box; none is comparable with the H100 board rows.
+Two RunPod pods, both NVIDIA GeForce RTX 4090, both on host 213.181.111.2,
+Mojo 1.0.0 (ed45d567), CatBoost 1.2.10, datasets staged from R2
+(`taxi_speed.npz`, `istella_speed.npz`, `istella_rank.npz`). Every number
+below is one of these boxes and says which; none is comparable with the H100
+board rows.
+
+- Pod 1, `2ofug65rltppi5` (2026-09-17, 19:36 to 20:54 UTC): driver
+  580.159.04, AMD EPYC 7542, 64 threads visible, shared host, load average
+  about 6 from other tenants. The attribution, the first identity runs, the
+  five-round A/B, the pinning ledger and the CatBoost row are this pod. Its
+  code tip was `14ba7502d`.
+- Pod 2, `tv2hfhd6s53ggl` (2026-09-18, 01:32 UTC): driver 580.126.20, AMD
+  EPYC 7513, 64 threads visible, load average about 3.5. The seven-round rerun
+  of the two `u` cells, the tip identity run with its CPU columns and the
+  gentler DEVIATION 3041 control are this pod. Its code tip is `09b08f89d`
+  (the control's only change is under the sabotage define; the AFTER binding
+  has the same size, 7,091,160 bytes, as pod 1's, and the sabotage2 binding
+  grew from 7,095,256 to 7,099,568). Pod 2's
+  fits run 10 to 15 percent faster than pod 1's on the same arm (symmetric
+  taxi BEFORE 349 against 405 ms), so a ratio is only ever quoted between
+  arms of one pod.
 
 ## What was measured first
 
@@ -121,9 +139,14 @@ keys).
 Why no bit moves: no kernel, grid, launch order, drain or host loop changes.
 The oracle reads and writes the same cells through handle copies of buffers
 the fit keeps. Every cell it reads it wrote earlier in the same task; the
-negative control below is exactly the failure that would break this (a task
-that reuses the pool skips the fill of `d_bins` and reads the previous
-tree's).
+negative control below stands in for the failure that would break this (a
+reusing task reading the previous tree's `d_bins`). Its first form skipped
+the fill of `d_bins` on reuse; a previous tree's bins can index past a
+smaller leaf count and the arm aborted a column with
+`CUDA_ERROR_ILLEGAL_ADDRESS` (pod 1). The form on the branch
+(`oracle_pool_sabotage_kernel`, one thread) always fills and then, on a
+reusing task only, moves row 0 to the next leaf in range; a fit with one
+leaf has no other leaf and the control is inert there.
 
 After the change (taxi, 51 trees under nsys): symmetric 763 to 288 device
 allocations, `cuMemAlloc` + `cuMemFree` 117 ms per 101 trees to 17 ms per 51
@@ -134,26 +157,59 @@ trees.
 `tools/identity_break.py`, the 22 `gbdt-*` lanes (the LANES default of
 `tools/gbdt_resident_body.sh`), fixtures base, ties, odd, dupes, wide, two
 repeats, on the pod. BEFORE is main `86d33fcdf` built on the pod; AFTER is
-the branch tip. Two runs: DEVIATION 3040 alone (`identity.3040-only/`), and
-both at the tip (`identity/`).
+the branch tip. Three runs: DEVIATION 3040 alone on pod 1
+(`final_pull_pause/leg_out/identity.3040-only/`), both at pod 1's tip
+`14ba7502d` (`final_pull_pause/leg_out/identity/`; its two CPU columns were
+cut off by the pause, `before-cpu.json` truncated and `after-cpu` never
+written, so they are not quoted), and both at the branch tip `09b08f89d` on
+pod 2 (`run2/leg_out/identity/`, all six columns complete).
 
-| diff | 3040 alone | tip (3040 + 3041) |
-|---|---|---|
-| before-cuda vs after-cuda | IDENTICAL=200 (infer/model), 105 (batch), N/A 20 and 5, DIVERGENT 0 | IDENTICAL=200, 105; N/A 20, 5; DIVERGENT 0 |
-| before-cpu vs after-cpu | IDENTICAL=150, 95; REFUSED 40 (gbdt-multiclass, gbdt-onevsall and the two CTR-table lanes, by name, expected) | TIP_CPU |
-| after-cuda vs after-cpu | IDENTICAL=150, 95; ONE-COLUMN 50, 10 (the refused lanes) | TIP_CROSS |
-| after-cuda vs sabotage-cuda (`-D MOJOLEARN_GBDT_YETI_SABOTAGE=1`, phase 2 before phase 1) | DIVERGENT=10 and 5: all five `gbdt-yeti-rank` fixtures, `predict` and `seeded_predict`; every other cell IDENTICAL | DIVERGENT=10 and 5, the same five `gbdt-yeti-rank` fixtures; every other cell IDENTICAL |
-| after-cuda vs sabotage2-cuda (`-D MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE=1`, a reusing task skips the `d_bins` fill) | not built yet | PARTIAL: the arm ran four lanes, DIVERGENT=30 (infer/model) and 15 (batch) against IDENTICAL=10 and 5, then ABORTED in `gbdt-ordered-rmse/base` with `CUDA_ERROR_ILLEGAL_ADDRESS` (stale bins index past a smaller leaf count). Seen divergent, but the arm must be made gentler before it can cover all 22 lanes (`diff.after-cuda.vs.sabotage2-cuda.PARTIAL.txt`) |
+| diff | 3040 alone (pod 1) | tip 14ba7502d (pod 1) | tip 09b08f89d (pod 2) |
+|---|---|---|---|
+| before-cuda vs after-cuda | IDENTICAL=200 (infer/model), 105 (batch), N/A 20 and 5, DIVERGENT 0 | IDENTICAL=200, 105; N/A 20, 5; DIVERGENT 0 | IDENTICAL=200, 105; N/A 20, 5; DIVERGENT 0 |
+| before-cpu vs after-cpu | IDENTICAL=150, 95; REFUSED 40 (gbdt-multiclass, gbdt-onevsall and the two CTR-table lanes, by name, expected) | not completed (paused) | IDENTICAL=150 (infer/model), 95 (batch); REFUSED 40, NOT-COMPARED 20 and 10, N/A 10 and 5 (the four refused lanes, the same as the 3040-alone run, whose NOT-COMPARED counts were left out of that column) |
+| after-cuda vs after-cpu | IDENTICAL=150, 95; ONE-COLUMN 50, 10 (the refused lanes) | not completed (paused) | IDENTICAL=150, 95; ONE-COLUMN 50, 10; N/A 20, 5 |
+| before-cuda vs before-cpu (control) | IDENTICAL=150, 95; ONE-COLUMN 50, 10 | not completed (paused) | IDENTICAL=150, 95; ONE-COLUMN 50, 10; N/A 20, 5 |
+| after-cuda vs sabotage-cuda (`-D MOJOLEARN_GBDT_YETI_SABOTAGE=1`, phase 2 before phase 1) | DIVERGENT=10 and 5: all five `gbdt-yeti-rank` fixtures, `predict` and `seeded_predict`; every other cell IDENTICAL | DIVERGENT=10 and 5, the same five `gbdt-yeti-rank` fixtures; every other cell IDENTICAL | DIVERGENT=10 and 5, the same five `gbdt-yeti-rank` fixtures; every other cell IDENTICAL |
+| after-cuda vs sabotage2-cuda (`-D MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE=1`) | not built yet | first form (skip the `d_bins` fill on reuse): ran four lanes, DIVERGENT=30 (infer/model) and 15 (batch) against IDENTICAL=10 and 5, then ABORTED in `gbdt-ordered-rmse/base` with `CUDA_ERROR_ILLEGAL_ADDRESS` (`diff.after-cuda.vs.sabotage2-cuda.PARTIAL.txt`) | gentler form (row 0 to the next leaf on reuse): all 22 lanes, 660 cells, no abort. DIVERGENT=95 (infer/model) and 50 (batch), IDENTICAL=105 and 55, N/A 20 and 5. Divergent on every fixture of 11 lanes and on 2 of 5 of one more; inert on 10 lanes (the table below) |
 
-The control ran first in both runs (before vs after, and before-cuda vs
+Where the DEVIATION 3041 control reaches, and why the inert lanes are inert
+(pod 2, `diff.after-cuda.vs.sabotage2-cuda.txt`):
+
+| verdict | lanes |
+|---|---|
+| DIVERGENT, 5 of 5 fixtures | gbdt-symmetric, gbdt-depthwise, gbdt-lossguide, gbdt-lossguide-newtoncosine, gbdt-pointwise-l2-bayesian-eval, gbdt-nan-modes, gbdt-parametric-losses, gbdt-categorical-ctr, gbdt-categorical-ctr-tables, gbdt-adapter-clf, gbdt-pair-logit |
+| DIVERGENT, 2 of 5 | gbdt-adapter-score-weighted (odd and wide). Its cells hash a weighted accuracy and R2 over 2,000 rows (`tools/identity_break.py:2678`), not predictions: the classifier is reached (Logloss), but a moved leaf value flips few labels and on base, ties and dupes the accuracy is the same number |
+| IDENTICAL, 5 of 5 | gbdt-rmse, gbdt-ordered-rmse, gbdt-adapter-reg, gbdt-feature-freq, gbdt-tensor-ctr-tables, gbdt-exact-mae, gbdt-query-rmse, gbdt-yeti-rank, gbdt-multiclass, gbdt-onevsall |
+
+The split is the loss's walker iteration count, read from the code, not a
+blind spot of the control. The only reader of `d_bins` is `move_to`
+(`pointwise_oracle.mojo:368`, `add_bin_model_value_kernel`: `cursor[row] +=
+shift[bins[row]]`). At one iteration the walker moves once, to the zero
+start point (`descent_helpers.mojo:221`, then the `iterations == 1` return
+at `:231`), so every leaf's shift is zero and no in-range bin value can
+change a cursor; a stale in-range `d_bins` could not move a bit there
+either. One iteration is the default for RMSE (which also skips estimation
+outright at one permutation, DEVIATION 64, `doc_parallel_boosting.mojo:1486`),
+QueryRMSE, YetiRank, MultiClass and OneVsAll, and Exact replaces the walker
+(`catboost_options.mojo:1273-1340`); Logloss and PairLogit default to ten
+Newton iterations and every later move carries a non-zero shift, which is
+where the control diverges. The other eleven pooled buffers are written
+before they are read in the same task by construction (`d_identity` by
+`launch_make_sequence`, `d_leaves` by its copy, the evaluation buffers by
+the evaluation that reads them); the control covers the one buffer a
+partition-dependent stale read could reach.
+
+The control ran first in every run (before vs after, and before-cuda vs
 before-cpu, IDENTICAL). The CPU column cannot reach either change (both are
 device code; the host oracle is `gbdt/host/`); it is recorded because the
 merge rule asks for it.
 
 Binding mtimes against the sources, read before any AFTER column
-(`after_mtimes.txt`): AFTER binding built 20:25:22 UTC, sabotage 20:27:26,
-sabotage2 20:29:20, BEFORE 19:44:06; no `gbdt/*.mojo` newer than the AFTER
-binding.
+(`after_mtimes.txt` in each pull): pod 1, AFTER binding built 20:25:22 UTC,
+sabotage 20:27:26, sabotage2 20:29:20, BEFORE 19:44:06; pod 2, AFTER
+01:46:00 UTC, sabotage 01:47:40, sabotage2 01:49:11, BEFORE 01:40:32; no
+`gbdt/*.mojo` newer than the AFTER binding in either.
 
 ## Speed: interleaved, three arms, one process per arm per round
 
@@ -182,12 +238,30 @@ promise and no digest is compared for it.
 | lossguide Istella-S | 100 | 3025 (2956..3101) 1.049 | 2913 (2833..2945) 1.039 | 1.038 | yes `eb0d9510ee08a16f` | 3815 (3729..3953) 1.060 | 1.261 |
 | same | 10 | 1615 (1533..1646) 1.074 | 1555 (1515..1630) 1.076 | 1.039 | yes `1af79aac126aa64e` | 1640 (1594..1719) 1.079 | 1.015 |
 
-Two cells have a side outside the gate (symmetric taxi's BEFORE arm, one slow
-round of five; symmetric Istella-S's AFTER arm at 100 trees). Their digests
-are equal and their medians moved the same way as every other cell, but no
-ratio is quoted from them; the rerun at 7 rounds was planned and NOT run (the
-lane was paused). An earlier same-box, single-process look at symmetric taxi
-(three repeats each, not interleaved) read 387.6 before and 277.5 after.
+Two cells above have a side outside the gate (symmetric taxi's BEFORE arm,
+one slow round of five; symmetric Istella-S's AFTER arm at 100 trees). No
+ratio is quoted from those rows. Both cells were RERUN on pod 2 at seven
+rounds, the same three arms interleaved, one process per arm per round
+(`run2/leg_out/ab_rerun/`, the two `*.summary.txt`), and every side is
+inside the gate:
+
+| cell (pod 2, 7 rounds) | trees | before ms | after ms | before / after | digests equal | fast ms | fast / before |
+|---|---:|---|---|---:|---|---|---:|
+| symmetric taxi 1M x 18 | 100 | 349.3 (343.6..353.1) 1.028 | 250.0 (246.1..252.5) 1.026 | **1.397** | yes `9d604972b94155d8` | 492.0 (486.1..510.1) 1.049 | 1.409 |
+| same | 10 | 114.1 (106.7..117.0) 1.097 | 103.3 (101.5..106.3) 1.048 | 1.105 | yes `0c31c08884daadda` | 130.2 (124.2..131.8) 1.061 | 1.141 |
+| symmetric Istella-S 1M x 220 | 100 | 1499 (1428..1534) 1.074 | 1333 (1316..1446) 1.099 | **1.125** | yes `d5571c2a35ea06c8` | 1534 (1517..1641) 1.082 | 1.023 |
+| same | 10 | 1117 (1108..1198) 1.082 | 1116 (1085..1125) 1.037 | 1.001 | yes `78c664534f58988e` | 1131 (1124..1138) 1.012 | 1.013 |
+
+The digests are the same four as pod 1's, so the two pods computed the same
+models. Per tree on pod 2 (slope of each round): symmetric taxi 2.62
+(2.52..2.70) before, 1.62 (1.59..1.66) after, 4.09 (3.95..4.21) fast;
+symmetric Istella-S 4.01 (2.56..4.70) before, 2.38 (2.14..3.56) after, 4.46
+(4.36..5.62) fast (the Istella-S slopes are again too wide to quote). With
+these two cells in, DEVIATION 3041's before / after at 100 trees over the
+six pointwise cells is 1.397, 1.253, 1.106, 1.125, 1.023, 1.038 (geometric
+mean 1.15, taxi 1.25, Istella-S 1.06); no cell regresses. An earlier
+pod 1 single-process look at symmetric taxi (three repeats each, not
+interleaved) read 387.6 before and 277.5 after.
 
 The Istella-S 1M cells move little because about 1.4 s of each fit is fixed
 cost (880 MB of features quantized and uploaded) and their trees spend more in
@@ -248,21 +322,28 @@ removed: every pinned seam at zero cost, nothing else changed.
 | cell | IDENTICAL 100 trees ms | FAST today ms | FAST / IDENTICAL | pinned seams, ms per tree (ledger) | share of the IDENTICAL fit loop | ceiling at zero pinning cost ms |
 |---|---:|---:|---:|---:|---:|---:|
 | YetiRank Istella-S LETOR | 10856 | 11490 | 1.058 | 0.30 | 0.5% (3.7% of this lane's 8.2 ms tree) | 10825 |
-| symmetric taxi | 404.8 u | 586.3 | not quoted (u) | 0.09 | 3.0% | 396 |
+| symmetric taxi (pod 2, 7 rounds) | 349.3 (1.028) | 492.0 (1.049) | 1.409 | 0.09 | 3.0% | 340 |
 | depthwise taxi | 523.8 | 1232.7 | 2.353 | 0.16 | 3.6% | 508 |
 | lossguide taxi | 995.0 | 1725.8 | 1.734 | 0.65 | 6.4% | 930 |
-| symmetric Istella-S | 1774 | 1965 | 1.107 | 0.18 | 3.7% | 1757 |
+| symmetric Istella-S (pod 2, 7 rounds) | 1499 (1.074) | 1534 (1.082) | 1.023 | 0.18 | 3.7% | 1481 |
 | depthwise Istella-S | 2440 | 3251 | 1.333 | 0.26 | 2.3% | 2414 |
 | lossguide Istella-S | 3025 | 3815 | 1.261 | 0.77 | 4.2% | 2948 |
 
 The share is the pinned milliseconds over the stage-timed fit loop's
 milliseconds per tree (3.13, 4.37, 10.22, 4.79, 11.14, 18.29 and about 64);
 against the whole 100-tree fit with its fixed cost it is smaller still. The
-ceiling is the IDENTICAL median minus 100 trees of pinned milliseconds.
+ceiling is the IDENTICAL median minus 100 trees of pinned milliseconds. The
+two symmetric rows take their IDENTICAL and FAST medians (and the spread in
+parentheses) from pod 2's seven-round rerun, because pod 1's five-round
+symmetric cells had a side outside the gate (pod 1 read 404.8 u / 586.3 and
+1774 / 1965, ratio 1.107); their pinned milliseconds per tree are pod 1's
+ledger, the only ledger taken, so those two ceilings mix the pods by at most
+18 ms of 1499. Every other row is pod 1 throughout.
 
 **The answer for the 25 / 10 percent rule: every cell is under 10 percent
 (0.5 to 6.4 percent). There is no FAST prize in relaxing the pins. FAST today
-is SLOWER than IDENTICAL on every cell on this box**, and not because of
+is SLOWER than IDENTICAL on every cell on both boxes (1.023 to 2.353 at 100
+trees)**, and not because of
 arithmetic: FAST's GPU kernel time is higher than IDENTICAL's in all seven
 cells (269 against 126 ms on symmetric taxi, 870 against 627 on lossguide
 Istella-S).
@@ -307,6 +388,16 @@ this lane, both of which are tier independent. No FAST kernel was built here.
       bash tools/gbdt_train_body.sh ab yeti --cell yeti --trees 10,100 --reps 1
     bash tools/gbdt_train_body.sh identity
 
+Pod 2 ran the same phases from one detached chain
+(`run2/logs/pod/chain.sh`): `rent` from a detached worktree at main
+`86d33fcdf` (so `setup` freezes main as BEFORE), the lane's `gbdt/` and
+`tools/` rsynced onto `/root/mojolearn` and `SHIPPED_COMMIT.txt` set to the
+lane tip, then `build-fast`, `build-after`, the two-cell rerun
+(`run2/logs/pod/ab_rerun.sh`: `AB_DIR=ab_rerun AB_ROUNDS=7`, three arms,
+`gbdt-symmetric` on taxi and istella at `--trees 10,100`), `identity`, and
+the group-sizes test (`run2/logs/pod/group_sizes_test.sh`, an errand for
+another branch, not this lane's evidence).
+
 ## Rejected, and why
 
 - A per-query rank sort for the YetiRank block kernel (count the same-query
@@ -346,6 +437,11 @@ this lane, both of which are tier independent. No FAST kernel was built here.
   default). Apple: the block kernel claims exactly the 32 KiB threadgroup
   limit.
 - The H100 board rows were not re-taken; this lane's numbers are RTX 4090.
+- Nothing else from this lane's merge rule: identity (cuda and cpu, tip),
+  both controls seen divergent, every A/B side inside the gate, and the
+  pinning table are complete as of pod 2 (2026-09-18). The 3041 control is
+  inert on the one-iteration losses for the arithmetic reason given under
+  Identity; it is not a further owed run.
 - Opponent row for `bench/OPPONENT_REFERENCE.md` (a shared file; the
   orchestrator adds it), under "NVIDIA RTX 4090":
 
