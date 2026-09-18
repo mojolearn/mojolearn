@@ -183,3 +183,22 @@ share timing. This is a new pipeline hypothesis, not a kernel-speed claim.
 R2 reconfirmed at Andrew's request during the run: enwik8 staged in 7s,
 Pile GitHub in 8s; both exact pinned sizes and SHA256 values, one linked key
 per training lease. The microbenchmarks generate inputs, so stage zero keys.
+
+## Final default gate registered before execution
+
+Pending the two AMD training comparisons, qualify the actual AMD default
+with both the gather transport fixtures (288 cases) and all 20 named GEMM
+plans (840 cases, 471240 words). First omit the actual tuned-loader flush
+and gather-loader flush in separate device builds; each must produce a
+bit mismatch against flat/oracle. All clean output digests must match.
+Read back STAGE_FTZ False/True from both builds, rejecting missing, duplicate
+and wrong read-backs before accepting them. Price sabotage must also fail.
+ABBA prices must retain >=3% lower weighted GEMM time on both pairs, with
+all 12 call digests identical across builds and to recorded NVIDIA values.
+This gate runs only after a training-supported AMD default change is committed
+and pushed. No Apple or RDNA default changes are proposed.
+
+H100 workspace training source 06dee7da6 stages both corpora in 10 seconds.
+Its stage.log verifies both exact sizes and SHA256 pins and links the data
+into the running checkout. MOJOLEARN_STAGE_STRICT=1; the training script
+uses only fetch_corpus_* --check.

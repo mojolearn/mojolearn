@@ -1581,7 +1581,7 @@ def _tuned_g2r[
                         out[s0 * VEC + e0] = src.unsafe_load(
                             oi0 * outer_stride + (p0 + cc0) * k_stride
                         )
-        comptime if TUNED_STAGE_FTZ:
+        comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
             comptime for f in range(SLOTS * VEC):
                 out[f] = ftz(out[f])
         return out
@@ -1604,7 +1604,7 @@ def _tuned_g2r[
                             out[s * VEC + e] = src.unsafe_load(
                                 oi * outer_stride + (p0 + cc + e) * k_stride
                             )
-    comptime if TUNED_STAGE_FTZ:
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
         comptime for f in range(SLOTS * VEC):
             out[f] = ftz(out[f])
     return out
