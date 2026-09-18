@@ -59,7 +59,7 @@ Completed:
   recheck; the original failure log is preserved. Its installed-qualification
   branch also now checks installed evidence rather than asking for build files.
 
-Packaging blocker found after the L40S fetch: every AMD host binding differs
+Resolved packaging blocker found after the L40S fetch: every original AMD host binding differs
 from its NVIDIA counterpart. The native source inventories match, but AMD's
 Ubuntu 24.04 GCC 13/linker startup differs from NVIDIA's Ubuntu 22.04 GCC 11.
 The packer's host byte-equality requirement correctly refuses this combination.
@@ -82,20 +82,29 @@ the exact release invocation. Pinning `patchelf==0.17.2.4` also applies when
 apt succeeds, so the ELF stager matches NVIDIA. Both short rentals are deleted
 (v5 `601581422`, v6 `601582110`, HTTP 404).
 
-AMD v7 is the active attempt: external `rebuild_amd_v7.py`, log
-`logs/amd-rebuild-v7-driver.log`, artifacts `linux-builds-v7/hip-gfx942`.
-It uses controller source `5814474ef` and unchanged native source `c9541a011`.
-Consult external state for its current rental/status before starting anything.
+AMD v7 completed successfully: all 61 fetched binary hashes verified, and all
+32 host bindings match both NVIDIA builds byte for byte. Rental `601583445`
+was deleted with HTTP 404 at 03:49:51 UTC. External `rebuild_amd_v7.py` and
+`logs/amd-rebuild-v7-driver.log` retain the checks; artifacts are under
+`linux-builds-v7/hip-gfx942`. Controller source was `5814474ef`, with unchanged
+native source `c9541a011`.
 Controller refusal/exit checks, Hopper admission and apt retries have seven
 focused tests with 18 subtests passing. A failed supplemental qualification
 marker or refused artifact now fails the controller process too.
 
 Unresolved release work:
 
-- Finish the reproducible AMD rebuild, require all 32 host binaries to match
-  both retained NVIDIA sets, assemble/audit the combined wheel, and qualify
-  those exact bytes on each actual device. No old or incompatible AMD build
-  may be silently substituted.
+- The combined wheel is assembled and repaired to manylinux_2_35_x86_64,
+  77,138,815 bytes, SHA-256
+  `faeaee79b8a95c5b643af705be8221fe46e588f83b80501712b10aa1833a9bcb`.
+  Auditwheel and twine passed; the initial tool-install failure is retained,
+  and `packed/audit/twine-retry.txt` records the successful metadata check.
+  Sequential installed qualification is running under external
+  `qualify_final_linux.py`, output `qualification-final-v1`, source `3261dccea`.
+  Consult the external state before starting any rental.
+- Publication metadata is staged on the release branch for final wheel bytes;
+  PyPI is NOT yet updated. Do not merge those publication claims into main
+  until the upload succeeds.
 - The Mamba poison capture is stable and agrees with the available clean
   cells, but the gate FAILED because its old reference record lacks current
   lane revisions. Bank current NVIDIA and AMD Mamba columns during installed
