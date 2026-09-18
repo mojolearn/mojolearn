@@ -209,9 +209,24 @@ counts it.
 that was queued to prove the own define left the gate alone is moot and was
 never needed.
 
-## The remaining piece of that same shape
+## The remaining piece of that same shape -- CLOSED 2026-09-17
 
-`par-scaler` is still `declared` for the identical reason
+**Done.** `par-scaler` and `par-scaler-minmax` now raise `NumericalMismatch`
+carrying their parts, and both move:
+`bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/`.
+The clean columns are byte-identical to the ones taken before the repair
+(IDENTICAL on train, infer/model and batch against `a-linear-neighbors`), so
+nothing committed is invalidated and no `LANE_REVISIONS` entry was needed. The
+matrix reads **192 seen(build), 4 declared, 33 none**. The 37 lanes still not
+seen are `kmeans-cosine` and 36 `par-*` multi-GPU drivers.
+
+The paragraph below is what the problem looked like before it was fixed, kept
+because `par-scaler-minmax/ties` shows how a lane of this shape can look
+healthy: there the two transforms still agreed with each other under the
+sabotage build, nothing raised, and the value moved anyway, so that ONE cell
+counted while the other three were refusals.
+
+`par-scaler` was `declared` for the identical reason
 `ordered-gradient-sum` was: under the preprocessing family's sabotage build the
 lane raises its own `ValueError: transform_scaler and plain transform differ:
 2847 bytes of 16384`, so the cell reads REFUSED while the clean cell reads
