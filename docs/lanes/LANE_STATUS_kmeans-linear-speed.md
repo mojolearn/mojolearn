@@ -140,6 +140,53 @@ KMeans or a SpectralClustering, were not in the list at all; no cpu column for t
 arm inside the spread gate. (c) OLS and PCA A/B on both datasets (no code change, a
 regression control). (d) This document.
 
-## Resumed 2026-09-17 evening (second pod)
+## Resumed 2026-09-17 evening (second pod 0knlkeg0ni0y08)
 
-See the sections appended below as each phase lands.
+RunPod secure RTX 4090 (driver 580.178.04, host 120 vCPU, two NUMA nodes; tcmalloc
+prints `Unable to mbind memory` in every process), $0.74/h, rented 01:37Z. The branch was
+first merged with `origin/main` at ac51feba4 (clean; main had moved only in
+`tools/identity_break.py`, a two-line `bindings/_mojolearn_estimators_host.mojo` change
+and three host oracles, nothing under `cluster/`, `glm/` or `decomposition/`), so `off`
+is now main plus the lane's files exactly. `base` was built from origin/main's own
+archive on the pod (`/root/mainsrc`); `diff -rq` of the two trees shows only the lane's
+files. The whole sequence is `tools/kmeans_linear_resume_chain.sh`, detached, phase
+markers under `/root/kls_out`; evidence pulled to
+`~/mojolearn-evidence/kmeans-linear-speed/pod2_pull*/kls_out`. Every arm's binaries
+postdate their sources (`arm-*/mtimes.txt`, `arm-*/source.txt`).
+
+### Identity, cuda column, second pod (the 16 lanes, five fixtures, two repeats)
+
+| diff | verdict |
+|---|---|
+| base vs off vs blk vs both | IDENTICAL x4 on all 80 fit cells; infer/model 150 IDENTICAL + 10 n/a; batch 75 + 5 n/a (`diff.cuda.base-off-blk-both.txt`) |
+| sabotage 3080 (both vs sabo80) | DIVERGENT 30 of 30 reached cells, 50 IDENTICAL, the same cells and hashes as the first pod |
+| sabotage 3081 (both vs sabo81) | DIVERGENT 26 of 30; the same four `ties` cells inert as on the first pod |
+
+The three checks pass again on this pod (`checks/checks.txt`): blocked (2112 + 64 cells,
+sabotage moved 99), scale (48 of 48 certified), privatized.
+
+### Interleaved A/B, second pod, 7 rounds, arms rotated (all output digests equal across arms)
+
+| lane / dataset | before arm | before ms med (min..max, spread) | after arm | after ms med (min..max, spread) | note |
+|---|---|---|---|---|---|
+| kmeans taxi | base | 3397.5 (3312.1..3543.4, 1.070) | both | 101.5 (93.2..104.8, 1.124) `u` | after arm spread over 1.10 |
+| kmeans Istella-S | base | 12416.6 (12202.6..12595.3, 1.032) | both | 414.3 (407.7..502.1, 1.232) `u` | first timed round 502, the rest 408..434 |
+| kmeans taxi | base | 1297.6 (1277.9..1303.6, 1.020) | blk | 390.4 (360.9..403.6, 1.118) `u` | 3080 alone |
+| kmeans Istella-S | base | 43778.2 (41709.6..43885.2, 1.052) | blk | 1011.5 (959.7..1040.0, 1.084) | 3080 alone, base 3.5x slower than 20 minutes earlier |
+| kmeans taxi | blk | 580.5 (563.0..604.5, 1.074) | both | 103.0 (94.1..176.0, 1.869) `u` | 3081 given 3080; one 176 ms round |
+| kmeans Istella-S | blk | 919.1 (888.9..1023.8, 1.152) `u` | both | 433.0 (417.8..442.9, 1.060) | 3081 given 3080 |
+| ols taxi | base | 475.5 (469.7..526.4, 1.121) `u` | both | 547.5 (528.2..560.1, 1.060) | no OLS code differs between the trees |
+| ols Istella-S | base | 1576.0 (1565.0..1617.3, 1.033) | both | 1585.5 (1563.7..1658.5, 1.061) | 0.99x, no code change |
+| pca taxi | base | 65.9 (31.0..66.3, 2.134) `u` | both | 51.9 (21.6..53.8, 2.487) `u` | both arms bimodal (21 or 53 ms; 31 or 66 ms) |
+| pca Istella-S | base | 291.9 (285.5..295.0, 1.033) | both | 267.6 (263.5..376.8, 1.430) `u` | rounds 1..4 at 264..268, then 377, 353, 310 |
+
+READ THIS BEFORE QUOTING A RATIO FROM THIS POD. The atomic (before) arm is not stable
+here: main's k-means read 12.4 s and then 43.8 s on Istella-S twenty minutes apart, 3.4 s
+and then 1.3 s on taxi, with the same bits every time and no throttle reason reported by
+`nvidia-smi` (P2, 2670 MHz, no active event reason; the cumulative SW power-capping
+counter on this 29-day-old host reads 61 hours). The row-block arm did not move in the
+same way (94..106 ms and 408..443 ms in every race on both pods). The OLS gap between two
+trees whose OLS code is byte-identical (475 vs 548 ms) is this pod's noise floor for a
+host-side-heavy fit. The first pod's A/B (both arms inside the 1.10 gate) remains the
+quoted number; this pod's races are consistent with it in direction and larger in
+magnitude. A k-means rerun on an idle GPU with more rounds follows the identity phases.
