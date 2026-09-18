@@ -265,9 +265,23 @@ the MI300X 1.3214x. rocm-smi on this droplet reports real usage: device
 33981 -> 18069 MiB late in the run (the MI300X VM reported a flat 183625 MiB
 reservation).
 
+## Merged
+
+Main a6751f04c (first merge dbc7bd4a3). `tools/lm_attention_replay_vendors_before.json`
+records the lane's own hunks against ede6f6243 and is valid only for the
+trees the recorded legs shipped; it refuses (by design) to apply to a later tree.
+
 ## Candidates (not opened)
 
-- Apple default arm word does not reach any replay kernel (finding 3).
+- Apple's default arm (`stash_tiled`) reaches no replay kernel, so the replay
+  row is INERT in Apple's default training. Moving Apple to a `_pf` arm (the
+  reduced witness under the NVIDIA schedule define already equals NVIDIA on
+  Metal) would make it act; that is a routing change with its own
+  qualification, not opened.
+- AMD's zdot kernel (zdot_stash_pf) has no replay; zero zdot corners occurred
+  in 8400 backward layer-steps per corpus on AMD, so nothing is lost today.
+- The 700-step witnesses compare step outputs, not d_q_rope/d_k/d_v buffers
+  (stages 22-24); carried over from lane/attention-corner-predicate.
 
 ## Pods (15:45Z)
 
