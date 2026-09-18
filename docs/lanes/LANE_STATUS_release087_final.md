@@ -49,7 +49,15 @@ Completed:
   source inventory verified; rental deleted (HTTP 404). R2 retention confirmed.
 - Fresh L40S sm_89 build at the same native freeze: all 61 hashes verified;
   rental `6wvflzh63uxvn5` deleted with HTTP 404. The sequential driver then
-  started H100 `3ax175bzvtp775`; consult its log for current status.
+  started H100 `3ax175bzvtp775`.
+- H100 completed all four build gates and all 61 fetched hashes verify;
+  all 32 CPU binaries match L40S exactly. Rental deletion verified HTTP 404.
+  The original local controller returned 1 because it compared CUDA's
+  `sm_90` capability literally with the compiled `sm_90a` target. The
+  controller now accepts exactly that existing Hopper pairing. A separate
+  corrected-admission receipt records the successful retained-artifact
+  recheck; the original failure log is preserved. Its installed-qualification
+  branch also now checks installed evidence rather than asking for build files.
 
 Packaging blocker found after the L40S fetch: every AMD host binding differs
 from its NVIDIA counterpart. The native source inventories match, but AMD's
@@ -65,8 +73,9 @@ source archive, so the build source remains `c9541a011`. Set
 `MOJOLEARN_EXPECT_CORE_HOST_SHA256` to the fetched NVIDIA core-host digest;
 an early real core-host compile/stage must match before the full build begins.
 This mode has shell syntax and surrounding release test coverage; the actual
-container build is still pending. Wait for the active H100 rental to finish
-and be deleted before starting it. The earlier AMD build remains evidence,
+container build is still pending. H100 is now deleted. The queued AMD driver
+stopped at the original controller failure and must be restarted using the
+corrected-admission receipt. The earlier AMD build remains evidence,
 but is not packable with these NVIDIA sets.
 
 Unresolved release work:

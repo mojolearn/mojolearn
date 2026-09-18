@@ -29,7 +29,7 @@ exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus 2 --memory 16g \
     --env MOJOLEARN_EXPECT_CORE_HOST_SHA256 \
     --env MOJOLEARN_BUILD_JOBS=1 \
     --env MOJOLEARN_PYTHON=/root/mojolearn/.pixi/envs/default/bin/python \
-    --env PATH=/root/release-tools/bin:/root/.pixi/bin:/root/mojolearn/.pixi/envs/default/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
+    --env PATH=/root/mojolearn/.pixi/envs/default/bin:/root/release-tools/bin:/root/.pixi/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     --entrypoint bash "$IMAGE" -c '
         set -euo pipefail
         . /etc/os-release

@@ -449,6 +449,9 @@ log "build exit ${BUILD_EXIT:-none}; $($SSH "tail -3 $REMOTE_LOG" 2>/dev/null | 
 
 log "fetch evidence"
 rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && log "fetched release-build/" || log "FETCH FAILED (release-build/)"
+if [ "$UBUNTU22" = 1 ]; then
+  rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/release-toolchain-probe/" "$OUT/toolchain-probe/" || log 'FETCH FAILED (toolchain-probe/)'
+fi
 for f in rel061-build.log pixi_install.log pixi_bootstrap.log apt.log rel061.exit; do
   rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/$f" "$OUT/$f" 2>/dev/null || true
 done
