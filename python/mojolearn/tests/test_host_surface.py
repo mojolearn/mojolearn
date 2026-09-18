@@ -221,10 +221,10 @@ def test_covered_lanes_are_identity_break_lanes():
 
 
 def test_inference_lanes_are_classical_gate_lanes():
-    text = _read("tools/classical_host_gate.py")
-    m = re.search(r"^LANES = \{(.*?)^\}", text, re.S | re.M)
-    assert m, "no LANES table in tools/classical_host_gate.py"
-    known = set(re.findall(r"^\s+'([a-z0-9-]+)': \(", m.group(1), re.M))
+    # Evaluate the binding-free registry so generated kernel families are
+    # counted too; a regex over literal keys silently misses those APIs.
+    import runpy
+    known = set(runpy.run_path(str(ROOT / "tools/classical_host_gate.py"))["LANES"])
     assert sorted(host_surface.inference_lanes()) == sorted(known), (
         f"manifest inference lanes {sorted(host_surface.inference_lanes())} and the classical gate's "
         f"LANES {sorted(known)} disagree"
@@ -572,19 +572,19 @@ def test_public_reference_candidates_meet_every_condition_to_be_promoted():
                 f"serves its route {f['routes']}; promoting it would grow the wheel")
 
 
-def test_saved_model_inference_owed_names_real_undeclared_lanes():
-    """Each owed entry is a real lane, is NOT a declared inference lane (or it
-    would be gated already), and names a saved-model format the classical host
-    door dispatches, or says why there is no format yet."""
+def test_saved_model_inference_owed_names_real_lanes_and_remaining_debt():
+    """Recording support and remaining vendor qualification are distinct.
+
+    A declared lane may retain a debt after its first GPU recording, provided
+    that real retained models exist and the outstanding qualification is named.
+    """
     owed = host_surface.saved_model_inference_owed()
-    # The list may be empty, and since lane/classical-host-recordings
-    # (2026-09-16) took the k-means recording it IS. It was asserted non-empty
-    # until then, which would have made emptying it a test failure rather than
-    # the closing of the gap. What must hold is the SHAPE of any entry that is
-    # there, checked below, and the invariant that no DECLARED lane is listed.
     declared = set(host_surface.inference_lanes())
-    assert not (set(owed) & declared), (
-        f"owed lanes that are already declared inference lanes: {sorted(set(owed) & declared)}")
+    for lane in set(owed) & declared:
+        assert "qualification remain owed" in owed[lane], lane
+        record = ROOT / "bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models" / lane / lane
+        assert len(list(record.glob("*/expected.json"))) == 9, lane
+        assert len(list(record.glob("*/model.npz"))) == 9, lane
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     defined |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
@@ -599,7 +599,6 @@ def test_saved_model_inference_owed_names_real_undeclared_lanes():
                         if p.name != "host_surface.py")
     for lane, why in owed.items():
         assert lane in defined, f"{lane}: not a lane tools/identity_break.py defines"
-        assert lane not in declared, f"{lane}: already a declared inference lane; drop it from the owed list"
         assert len(why) > 60, f"{lane}: the reason is too short: {why!r}"
         fmt = re.search(r"mojolearn-[a-z]+-\d", why)
         if fmt:
