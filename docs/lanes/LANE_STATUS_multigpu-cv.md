@@ -96,3 +96,26 @@ The outer controller must provision two devices and retain/delete them under
 its watchdog. This does not manufacture an execution trace from inventory.
 68 targeted software tests passed after integration. Hardware execution and
 trace qualification are still owed, and this branch remains outside main.
+
+## September 18 bounded NVIDIA physical leg preparation
+
+Integrated current main plus classical distribution through 8be53d360. The
+shared `_parallel_worker` merge retains CV inventory/folds and loaded-LM layer
+operations. `parallel_cv_remote_leg.sh` now runs CV first, then builds ARIMA,
+TSA, GP and IVF for a thirty-cell one/two/reversed-device capture. Completed
+stages remain checkpointed; optional Nsight Systems captures/export and per-PID
+nvidia-smi pmon samples retain execution evidence when available. Nine ordinary
+GP/GPC/IVF/GBDT holds reuse these builds only if time remains.
+
+Controller is unchanged `gemm_remote_leg.sh` with GPU_COUNT=2, a 55-minute armed
+lease, 180-second readiness cap, 2700-second work polling cap, and its original
+pre-create deadman, on-pod watchdog, source archive and verified deletion guards.
+Body cap2300s includes all extra builds/captures. Existing generic GEMM gates run
+before the extra body; their reused older Apple card does not qualify new GEMM
+source and is not used as classical/CV evidence. No GEMM source changes.
+
+Live inventory showed no two-4090 stock, and low two-L40S stock (~$1.58/h quoted,
+$2.18/h secure list); root approved L40S under a total ~$8 cap. Dry run at
+3805c5840 was GREEN. Evidence/logs are in
+`/Users/andrewhendel/mojolearn-evidence/classical-distributed/nvidia-two-gpu-*`.
+Actual rental/capture/deletion outcome will be appended after the guarded leg.

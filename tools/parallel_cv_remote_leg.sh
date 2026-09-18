@@ -23,6 +23,10 @@ if ! grep -q L40S "$OUT/devices.txt"; then
     echo 'This capsule expects the authorized L40S target' >&2; exit 2
 fi
 export MOJOLEARN_GPU_ARCHS=sm_89
+# Supplemental per-PID SM/memory utilization, not a substitute for kernel traces.
+nvidia-smi pmon -s um -d 1 > "$OUT/process-utilization.txt" 2>&1 &
+pmon_pid=$!
+trap 'kill "$pmon_pid" 2>/dev/null || true' EXIT
 started=$SECONDS
 budget=2300
 remaining() { echo $((budget - (SECONDS - started))); }
