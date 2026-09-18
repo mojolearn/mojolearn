@@ -18,8 +18,42 @@ arm, and so does this tree: `distance/fused_distance_nn/simt_kernel.mojo` is a
 implementation of their SIMT fused kernel
 (`src/distance/detail/fused_distance_nn/simt_kernel.cuh`) and it is what
 `min_cluster_and_distance_compute` launches. **This file is the OTHER arm.**
-It is kept reachable so the two can be differentially tested, and because it
-is the arm their dispatch takes for metrics this tree does not yet fit.
+It is kept reachable so the two can be differentially tested.
+
+IT IS NOT "the arm their dispatch takes for metrics this tree does not yet
+fit", which is what this paragraph claimed until 2026-09-18
+(lane/kmeans-cosine-capability). Their unfused arm calls
+`pairwise_distance_kmeans` (`kmeans_common.cuh:468`), which implements
+L2Expanded and L2SqrtExpanded and `RAFT_FAIL`s on everything else (`:320`).
+For k-means their dispatch reaches this arm only to abort. See the note at
+`cluster/impl/kmeans_params.mojo`'s metric codes.
+
+WHAT THE COSINE BRANCH BELOW IS, THEN. `min_cluster_and_distance_compute`
+never calls this driver (`is_fused` has no production caller at all; the
+fused arm runs unconditionally), so the branch is UNREACHABLE today and has
+never been recorded on any column. Three things are wrong with it, found by
+reading and not by running, and they are written here so the next lane does
+not step on them:
+
+1. THE ROOT. `min_cluster_and_distance_compute_unfused` passes
+   `metric_is_sqrt(metric)`, which is `metric != L2Expanded` and so TRUE for
+   cosine, and the epilog below would take `identical_sqrt` of a cosine
+   distance. Their unfused arm takes no root at all: the `sqrt` flag is an
+   argument of `fusedDistanceNNMinReduce` (`kmeans_common.cuh:444`) and the
+   unfused arm reduces with `raft::argmin_op` and `raft::identity_op`
+   (`:474-489`). The argmin would survive (a root is monotone) but every
+   distance, and so `inertia_`, would not.
+2. THE ROW NORMS. `KMeansParams.needs_row_norms()` is false for cosine, so
+   `kmeans_fit_main` would never fill `x_norm` and the divide below would
+   read an uninitialized buffer. Cosine needs `||x||`, rooted, which is what
+   `centroid_norms_take_sqrt` already says for the centroid side.
+3. THE TILE. `dist_buf` is sized `data_batch * centroid_batch` from
+   `params.n_clusters`, but k-means|| grows its candidate set well past
+   `n_clusters` (`detail/kmeans.mojo`, `cand_count += n_selected`), and the
+   unfused arm writes `ns x nc` floats for the CALL's own cluster count.
+   Theirs resizes for exactly this reason,
+   `L2NormBuf_OR_DistBuf.resize(dataBatchSize * centroidsBatchSize, stream)`
+   (`:394`). As written this overruns the buffer.
 
 (cuVS also has a CUTLASS specialization of the fused arm, under
 `src/distance/detail/fused_distance_nn/`, which is CUDA and has no Metal
@@ -181,7 +215,20 @@ def reduce_min_kernel(
 
         if metric == METRIC_COSINE_EXPANDED:
             # Guard against zero-norm vectors to avoid inf/NaN from division
-            # by zero. Theirs, `:84-86`.
+            # by zero.
+            #
+            # OURS, NOT THEIRS (corrected 2026-09-18,
+            # lane/kmeans-cosine-capability). This cited "Theirs, `:84-86`"
+            # until then. `kmeans_common.cuh:84-86` at the pinned commit is
+            # `KeyValueIndexOp::operator()`, which returns `a.key`; there is
+            # no zero-norm guard there or anywhere in that file. Their real
+            # cosine cell is `cosine_distance_op::epilog`
+            # (`src/distance/detail/distance_ops/cosine.cuh`) and it is
+            # unguarded:
+            #     acc[i][j] = 1.0 - (acc[i][j] / (regxn[i] * regyn[j]));
+            # so a zero-norm row gives NaN in the reference. Keeping the
+            # guard is deliberate (we do not reproduce a reference library's
+            # bug); what was wrong was the attribution.
             var denom = x_norm_row * y_norm.unsafe_load(col)
             if denom <= Float32(0.0):
                 denom = Float32(1.0)

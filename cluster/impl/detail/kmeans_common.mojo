@@ -43,6 +43,17 @@ def is_fused(metric: Int) -> Bool:
     It has one visible consequence their own code calls out: on the fused arm
     `dataBatchSize` is forced to `n_samples` (`:380`), so `batch_samples` is
     inert for the metrics k-means actually uses.
+
+    THIS FUNCTION HAS NO PRODUCTION CALLER (noted 2026-09-18,
+    lane/kmeans-cosine-capability). `min_cluster_and_distance_compute` takes
+    the fused arm unconditionally, without consulting it, and the only callers
+    of the unfused driver are the differential checks in
+    `cluster/checks/kmeans_check.mojo`. That is not currently a defect,
+    because the two metrics the tree admits are exactly the two this predicate
+    returns true for, so an unconsulted selector and a consulted one would
+    dispatch identically. It becomes the first thing to wire if a third metric
+    is ever admitted, and it is INERT until then. Reported as inert rather
+    than as coverage.
     """
     return metric == METRIC_L2_EXPANDED or metric == METRIC_L2_SQRT_EXPANDED
 
