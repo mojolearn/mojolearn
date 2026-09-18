@@ -289,7 +289,33 @@ and the backward one had the resident forest's exact misplaced
 `synchronize()`. Both now drain. Bitwise gated: `transformer` alone
 IDENTICAL=1, `transformer` + `transformer-bf16w` IDENTICAL=2.
 
-**BUT I COULD NOT REPRODUCE THE HANG, so that fix is NOT shown to cure it.**
+**REPRODUCED ON THE SIXTH ATTEMPT (09:16Z to 09:26Z).** The prefix that
+does it adds `mlp` and the three `byte-lm` lanes to the 29-lane list below,
+run in ONE process on `/root/ml-before`:
+
+```
+rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,
+gbdt-rmse,kmeans,knn,knn-clf,knn-reg,dbscan,pca,pca-whiten,tsvd,ols,ridge,
+logistic,kde,metrics,gbdt-ordered-rmse,gbdt-feature-freq,mlp,byte-lm,
+byte-lm-host-infer,byte-lm-host-train,mamba1,mamba2,mamba3,transformer,
+transformer-bf16w
+```
+
+279 cells completed, `transformer` finished all nine of its fixtures, and
+the run then stopped dead at `# START transformer-bf16w/base repeat=1/train`
+with **129 of 131 threads in `futex_wait_queue` and the GPU at 0 percent**
+-- the reference-regen signature, at the reference-regen lane, in the
+reference-regen order. (195 threads there against 131 here is the thread
+pool tracking the box: 96 vCPU against 64.)
+
+THE LANE LIST IS WHY THE FIRST FIVE ATTEMPTS PASSED, and it is a RACE, not
+a threshold: the same `transformer` teardown runs in all of them. That is
+what DEVIATION 2520's lane already said about the L40S ("its driver or
+kernel drains faster than the release, which is a race, not a fix"). A
+shorter prefix is not evidence of a cure, and no arm of this lane treats
+it as one.
+
+**WHETHER THE DRAIN CURES IT WAS STILL RUNNING when this was written.**
 Four attempts, all on `/root/ml-before` (origin/main byte for byte) on the
 RTX 4090 with driver 580.159.04, all PASSED:
 
