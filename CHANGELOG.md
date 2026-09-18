@@ -3,14 +3,16 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.7 (unreleased 2026-09-18)
+## 0.8.7 (published 2026-09-18)
 
-This candidate is built from the current integrated `main`, including the
+This release was built from integrated `main` at `4e1828f90`, including the
 tokenizer/corpus additions, expanded CPU model bundle and verifier, loaded
 language-model proof, and experimental distributed and cross-validation APIs.
 The explicit light release profile checks the exact installed Apple/NVIDIA
 wheels; it does not promote every exposed configuration to numerical
-certification. See `docs/lanes/RELEASE_087_LIGHT.md` for the release boundary.
+certification. Both macOS and Linux wheels are published on PyPI. See
+`docs/lanes/RELEASE_087_LIGHT.md` for the release evidence and boundary, and
+`docs/lanes/RELEASE_PROCESS_ALPHA.md` for the post-release simplification plan.
 
 - `GPT2Tokenizer` is renamed `BpeTokenizer` (2026-09-18). It ships no GPT-2
   vocabulary and `TrainedBpeVocabulary.tokenizer()` returns one over mojolearn's own

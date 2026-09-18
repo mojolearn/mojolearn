@@ -46,3 +46,39 @@ required of each published wheel.
 change after the freeze. It must match the SHA-bound receipt and embedded wheel
 witness. For 0.8.7 the native/Python inputs remain the frozen `4e1828f90` tree;
 publisher automation changes do not justify rebuilding those identical inputs.
+
+## Published 2026-09-18
+
+Version 0.8.7 is live on [PyPI](https://pypi.org/project/mojolearn/0.8.7/) and is
+the [latest GitHub release](https://github.com/mojolearn/mojolearn/releases/tag/v0.8.7).
+Both wheels contain frozen source `4e1828f90384c4b2bb3e4bdc025f4931b7553dfb`.
+Publisher-only commit `18b1f08720647ab57f9c56615fddd1ce8f902ad9` added independent
+platform scheduling without changing native or Python package inputs.
+
+Fresh builds completed on Apple Silicon, NVIDIA sm_89/sm_90a and AMD gfx942.
+The final installed macOS/Metal and Linux/CUDA wheels each passed all 13 light
+smoke stages. The Apple smoke took 31.37 seconds. All 32 Linux CPU-binding hashes
+matched across the three build hosts. This is the scoped alpha admission above;
+`release_qualified` remains false. No broader Apple identity claim is added.
+
+Published PyPI SHA-256 values, verified against the smoke-tested wheel bytes:
+
+- `mojolearn-0.8.7-py3-none-macosx_11_0_arm64.whl`: `25c728aa4321b011c14b801b123905aed04f48f6139aef8ea81c33abb50f1d97`
+- `mojolearn-0.8.7-py3-none-manylinux_2_35_x86_64.whl`: `5b1c2db8d4350aff672f155c804d309148311b0cc4a4e36efadef998ebbae470`
+
+Publication workflows: [macOS](https://github.com/mojolearn/mojolearn/actions/runs/35398595805)
+and [Linux](https://github.com/mojolearn/mojolearn/actions/runs/35402174014).
+The GitHub release attaches both wheel receipts, their manifest and
+`release-evidence.tar.gz` (SHA-256
+`4f3be04af5c1f816579bfaf1cb29eed95b128ad3cff0264da040776f159db4e2`).
+The archive includes the Linux build proofs and the actual orchestration copies
+used to give the successful sm_89 build a bounded 50-minute budget and three
+telemetry-query attempts; inventoried sources and compiler flags were unchanged.
+Failed/timeout builds were not used. Every owned build/smoke rental was terminated
+and deletion verified by the provider API.
+
+The full external run record is
+`~/mojolearn-evidence/release-087-light-2026-09-18`.
+The [post-release process review](RELEASE_PROCESS_ALPHA.md) separates the changes
+already made from the next implementation work. Do not restart this release to
+close the separate numerical-certification backlog.
