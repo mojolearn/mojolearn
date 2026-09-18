@@ -162,6 +162,7 @@ from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
+from . import lm_corpus
 from .tokenizer import BpeTokenizer
 # Public neural inference on the CPU from GPU-trained weights (2026-09-15),
 # host/_mojolearn_neural_host.so resolved on first use.
@@ -348,6 +349,7 @@ __all__ = [
     "OrderedRMSE",
     "ExponentialSmoothing",
     "BpeTokenizer",
+    "lm_corpus",
     "GPT2Tokenizer",
     "MLPInference",
     "TransformerBlockInference",
