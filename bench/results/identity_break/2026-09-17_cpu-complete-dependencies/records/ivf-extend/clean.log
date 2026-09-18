@@ -1,0 +1,171 @@
+3106 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192d80000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:54:53  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START ivf-extend/base repeat=1/train
+# DONE ivf-extend/base repeat=1/train 0.552s
+# START ivf-extend/base repeat=1/infer-save-reload
+# DONE ivf-extend/base repeat=1/infer-save-reload 0.050s
+# START ivf-extend/base repeat=1/batch
+# DONE ivf-extend/base repeat=1/batch 0.020s
+# START ivf-extend/base repeat=1/stepfull
+# DONE ivf-extend/base repeat=1/stepfull 0.000s
+# START ivf-extend/base repeat=2/train
+# DONE ivf-extend/base repeat=2/train 0.565s
+# START ivf-extend/base repeat=2/infer-save-reload
+# DONE ivf-extend/base repeat=2/infer-save-reload 0.049s
+# START ivf-extend/base repeat=2/batch
+# DONE ivf-extend/base repeat=2/batch 0.018s
+# START ivf-extend/base repeat=2/stepfull
+# DONE ivf-extend/base repeat=2/stepfull 0.000s
+# CELL ivf-extend/base STABLE 1.255s
+# START ivf-extend/ties repeat=1/train
+# DONE ivf-extend/ties repeat=1/train 1.073s
+# START ivf-extend/ties repeat=1/infer-save-reload
+# DONE ivf-extend/ties repeat=1/infer-save-reload 0.066s
+# START ivf-extend/ties repeat=1/batch
+# DONE ivf-extend/ties repeat=1/batch 0.021s
+# START ivf-extend/ties repeat=1/stepfull
+# DONE ivf-extend/ties repeat=1/stepfull 0.000s
+# START ivf-extend/ties repeat=2/train
+# DONE ivf-extend/ties repeat=2/train 1.065s
+# START ivf-extend/ties repeat=2/infer-save-reload
+# DONE ivf-extend/ties repeat=2/infer-save-reload 0.066s
+# START ivf-extend/ties repeat=2/batch
+# DONE ivf-extend/ties repeat=2/batch 0.020s
+# START ivf-extend/ties repeat=2/stepfull
+# DONE ivf-extend/ties repeat=2/stepfull 0.000s
+# CELL ivf-extend/ties STABLE 2.313s
+# START ivf-extend/hashed repeat=1/train
+# DONE ivf-extend/hashed repeat=1/train 0.574s
+# START ivf-extend/hashed repeat=1/infer-save-reload
+# DONE ivf-extend/hashed repeat=1/infer-save-reload 0.049s
+# START ivf-extend/hashed repeat=1/batch
+# DONE ivf-extend/hashed repeat=1/batch 0.019s
+# START ivf-extend/hashed repeat=1/stepfull
+# DONE ivf-extend/hashed repeat=1/stepfull 0.000s
+# START ivf-extend/hashed repeat=2/train
+# DONE ivf-extend/hashed repeat=2/train 0.571s
+# START ivf-extend/hashed repeat=2/infer-save-reload
+# DONE ivf-extend/hashed repeat=2/infer-save-reload 0.052s
+# START ivf-extend/hashed repeat=2/batch
+# DONE ivf-extend/hashed repeat=2/batch 0.020s
+# START ivf-extend/hashed repeat=2/stepfull
+# DONE ivf-extend/hashed repeat=2/stepfull 0.000s
+# CELL ivf-extend/hashed STABLE 1.287s
+# START ivf-extend/wide repeat=1/train
+# DONE ivf-extend/wide repeat=1/train 0.624s
+# START ivf-extend/wide repeat=1/infer-save-reload
+# DONE ivf-extend/wide repeat=1/infer-save-reload 0.055s
+# START ivf-extend/wide repeat=1/batch
+# DONE ivf-extend/wide repeat=1/batch 0.018s
+# START ivf-extend/wide repeat=1/stepfull
+# DONE ivf-extend/wide repeat=1/stepfull 0.000s
+# START ivf-extend/wide repeat=2/train
+# DONE ivf-extend/wide repeat=2/train 0.586s
+# START ivf-extend/wide repeat=2/infer-save-reload
+# DONE ivf-extend/wide repeat=2/infer-save-reload 0.062s
+# START ivf-extend/wide repeat=2/batch
+# DONE ivf-extend/wide repeat=2/batch 0.023s
+# START ivf-extend/wide repeat=2/stepfull
+# DONE ivf-extend/wide repeat=2/stepfull 0.000s
+# CELL ivf-extend/wide STABLE 1.369s
+# START ivf-extend/denormal repeat=1/train
+# DONE ivf-extend/denormal repeat=1/train 0.561s
+# START ivf-extend/denormal repeat=1/infer-save-reload
+# DONE ivf-extend/denormal repeat=1/infer-save-reload 0.052s
+# START ivf-extend/denormal repeat=1/batch
+# DONE ivf-extend/denormal repeat=1/batch 0.020s
+# START ivf-extend/denormal repeat=1/stepfull
+# DONE ivf-extend/denormal repeat=1/stepfull 0.000s
+# START ivf-extend/denormal repeat=2/train
+# DONE ivf-extend/denormal repeat=2/train 0.567s
+# START ivf-extend/denormal repeat=2/infer-save-reload
+# DONE ivf-extend/denormal repeat=2/infer-save-reload 0.050s
+# START ivf-extend/denormal repeat=2/batch
+# DONE ivf-extend/denormal repeat=2/batch 0.020s
+# START ivf-extend/denormal repeat=2/stepfull
+# DONE ivf-extend/denormal repeat=2/stepfull 0.000s
+# CELL ivf-extend/denormal STABLE 1.271s
+# START ivf-extend/denormal_ftz repeat=1/train
+# DONE ivf-extend/denormal_ftz repeat=1/train 0.536s
+# START ivf-extend/denormal_ftz repeat=1/infer-save-reload
+# DONE ivf-extend/denormal_ftz repeat=1/infer-save-reload 0.048s
+# START ivf-extend/denormal_ftz repeat=1/batch
+# DONE ivf-extend/denormal_ftz repeat=1/batch 0.020s
+# START ivf-extend/denormal_ftz repeat=1/stepfull
+# DONE ivf-extend/denormal_ftz repeat=1/stepfull 0.000s
+# START ivf-extend/denormal_ftz repeat=2/train
+# DONE ivf-extend/denormal_ftz repeat=2/train 0.548s
+# START ivf-extend/denormal_ftz repeat=2/infer-save-reload
+# DONE ivf-extend/denormal_ftz repeat=2/infer-save-reload 0.049s
+# START ivf-extend/denormal_ftz repeat=2/batch
+# DONE ivf-extend/denormal_ftz repeat=2/batch 0.020s
+# START ivf-extend/denormal_ftz repeat=2/stepfull
+# DONE ivf-extend/denormal_ftz repeat=2/stepfull 0.000s
+# CELL ivf-extend/denormal_ftz STABLE 1.223s
+# START ivf-extend/dupes repeat=1/train
+# DONE ivf-extend/dupes repeat=1/train 0.564s
+# START ivf-extend/dupes repeat=1/infer-save-reload
+# DONE ivf-extend/dupes repeat=1/infer-save-reload 0.048s
+# START ivf-extend/dupes repeat=1/batch
+# DONE ivf-extend/dupes repeat=1/batch 0.019s
+# START ivf-extend/dupes repeat=1/stepfull
+# DONE ivf-extend/dupes repeat=1/stepfull 0.000s
+# START ivf-extend/dupes repeat=2/train
+# DONE ivf-extend/dupes repeat=2/train 0.577s
+# START ivf-extend/dupes repeat=2/infer-save-reload
+# DONE ivf-extend/dupes repeat=2/infer-save-reload 0.049s
+# START ivf-extend/dupes repeat=2/batch
+# DONE ivf-extend/dupes repeat=2/batch 0.019s
+# START ivf-extend/dupes repeat=2/stepfull
+# DONE ivf-extend/dupes repeat=2/stepfull 0.000s
+# CELL ivf-extend/dupes STABLE 1.277s
+# START ivf-extend/odd repeat=1/train
+# DONE ivf-extend/odd repeat=1/train 0.605s
+# START ivf-extend/odd repeat=1/infer-save-reload
+# DONE ivf-extend/odd repeat=1/infer-save-reload 0.051s
+# START ivf-extend/odd repeat=1/batch
+# DONE ivf-extend/odd repeat=1/batch 0.021s
+# START ivf-extend/odd repeat=1/stepfull
+# DONE ivf-extend/odd repeat=1/stepfull 0.000s
+# START ivf-extend/odd repeat=2/train
+# DONE ivf-extend/odd repeat=2/train 0.617s
+# START ivf-extend/odd repeat=2/infer-save-reload
+# DONE ivf-extend/odd repeat=2/infer-save-reload 0.051s
+# START ivf-extend/odd repeat=2/batch
+# DONE ivf-extend/odd repeat=2/batch 0.019s
+# START ivf-extend/odd repeat=2/stepfull
+# DONE ivf-extend/odd repeat=2/stepfull 0.000s
+# CELL ivf-extend/odd STABLE 1.365s
+# START ivf-extend/negative repeat=1/train
+# DONE ivf-extend/negative repeat=1/train 0.565s
+# START ivf-extend/negative repeat=1/infer-save-reload
+# DONE ivf-extend/negative repeat=1/infer-save-reload 0.051s
+# START ivf-extend/negative repeat=1/batch
+# DONE ivf-extend/negative repeat=1/batch 0.020s
+# START ivf-extend/negative repeat=1/stepfull
+# DONE ivf-extend/negative repeat=1/stepfull 0.000s
+# START ivf-extend/negative repeat=2/train
+# DONE ivf-extend/negative repeat=2/train 0.576s
+# START ivf-extend/negative repeat=2/infer-save-reload
+# DONE ivf-extend/negative repeat=2/infer-save-reload 0.053s
+# START ivf-extend/negative repeat=2/batch
+# DONE ivf-extend/negative repeat=2/batch 0.022s
+# START ivf-extend/negative repeat=2/stepfull
+# DONE ivf-extend/negative repeat=2/stepfull 0.000s
+# CELL ivf-extend/negative STABLE 1.287s
+| ivf-extend             | ba53c112142a07c4 | 0da4a663917d249c | f669e9076c62ef24 | b215fd8f707cd94c | 60a84eeca95632ba | 5aadb50ae8c47074 | 1585900d93cb8c88 | 940ef92d230837ed | 38f0489facb80eaa |
+| ivf-extend infer       | 21a84397fed9cb7b | ee7fa6ee3ed98541 | 9d0f275ae985056d | c6fd06dc0c84cdd5 | 3da4f22de1f06f6e | 3da4f22de1f06f6e | 802c8f83c4e8dddd | a8b712ff1a5e3ef1 | d5badddd236f4f6f |
+| ivf-extend model       | 6814e84fcb72ca37 | 0d954140e0a9c674 | e96813401e1670f0 | c9793933012960e5 | 7a4a7782b32da3a0 | 4defe96aca4c8e11 | 667918778ad720e3 | 26b97c27cd22d526 | fd1e311bb478d024 |
+| ivf-extend batch       | f8873bb27104a23d | bf5209af86975a47 | a190e25ce473d410 | 15d08301b9a4107b | 42bb0c222dffe2b7 | 42bb0c222dffe2b7 | 08c451b2a76060be | ec78ed4aa6252665 | 39b741e505d5bbed |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: ivf-extend stepfull n/a:no-decode-state
+wrote /root/leg_out/records/ivf-extend/ivf-extend/cpu-clean.json

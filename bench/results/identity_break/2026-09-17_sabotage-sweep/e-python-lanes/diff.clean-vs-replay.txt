@@ -1,0 +1,29 @@
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| bpe-trainer/base             | IDENTICAL x2 | 6ed8b49585df3d85 | 6ed8b49585df3d85 |
+| bpe-trainer/ties             | IDENTICAL x2 | 6e31039662bb21c0 | 6e31039662bb21c0 |
+| cross-val-folds/base         | IDENTICAL x2 | ca4add859c436aa0 | ca4add859c436aa0 |
+| cross-val-folds/ties         | IDENTICAL x2 | 9d838dfccfb54c97 | 9d838dfccfb54c97 |
+
+summary: IDENTICAL=4
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| bpe-trainer/base             | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-trainer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-trainer/base             | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-trainer/ties             | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-trainer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-trainer/ties             | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| cross-val-folds/base         | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val-folds/base         | batch  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/ties         | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val-folds/ties         | batch  | N/A          | n/a:function     | n/a:function     |
+
+summary (infer/model): N/A=8
+summary (batch): N/A=4
+summary (rlpair): 

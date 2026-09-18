@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:31:33  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START elasticnet/base repeat=1/train
+# DONE elasticnet/base repeat=1/train 0.022s
+# START elasticnet/base repeat=1/infer-save-reload
+# DONE elasticnet/base repeat=1/infer-save-reload 0.003s
+# START elasticnet/base repeat=1/batch
+# DONE elasticnet/base repeat=1/batch 0.002s
+# START elasticnet/base repeat=1/stepfull
+# DONE elasticnet/base repeat=1/stepfull 0.000s
+# START elasticnet/base repeat=2/train
+# DONE elasticnet/base repeat=2/train 0.020s
+# START elasticnet/base repeat=2/infer-save-reload
+# DONE elasticnet/base repeat=2/infer-save-reload 0.002s
+# START elasticnet/base repeat=2/batch
+# DONE elasticnet/base repeat=2/batch 0.002s
+# START elasticnet/base repeat=2/stepfull
+# DONE elasticnet/base repeat=2/stepfull 0.000s
+# CELL elasticnet/base STABLE 0.051s
+# START elasticnet/ties repeat=1/train
+# DONE elasticnet/ties repeat=1/train 0.024s
+# START elasticnet/ties repeat=1/infer-save-reload
+# DONE elasticnet/ties repeat=1/infer-save-reload 0.001s
+# START elasticnet/ties repeat=1/batch
+# DONE elasticnet/ties repeat=1/batch 0.002s
+# START elasticnet/ties repeat=1/stepfull
+# DONE elasticnet/ties repeat=1/stepfull 0.000s
+# START elasticnet/ties repeat=2/train
+# DONE elasticnet/ties repeat=2/train 0.024s
+# START elasticnet/ties repeat=2/infer-save-reload
+# DONE elasticnet/ties repeat=2/infer-save-reload 0.001s
+# START elasticnet/ties repeat=2/batch
+# DONE elasticnet/ties repeat=2/batch 0.002s
+# START elasticnet/ties repeat=2/stepfull
+# DONE elasticnet/ties repeat=2/stepfull 0.000s
+# CELL elasticnet/ties STABLE 0.055s
+# START elasticnet/hashed repeat=1/train
+# DONE elasticnet/hashed repeat=1/train 0.020s
+# START elasticnet/hashed repeat=1/infer-save-reload
+# DONE elasticnet/hashed repeat=1/infer-save-reload 0.001s
+# START elasticnet/hashed repeat=1/batch
+# DONE elasticnet/hashed repeat=1/batch 0.002s
+# START elasticnet/hashed repeat=1/stepfull
+# DONE elasticnet/hashed repeat=1/stepfull 0.000s
+# START elasticnet/hashed repeat=2/train
+# DONE elasticnet/hashed repeat=2/train 0.020s
+# START elasticnet/hashed repeat=2/infer-save-reload
+# DONE elasticnet/hashed repeat=2/infer-save-reload 0.001s
+# START elasticnet/hashed repeat=2/batch
+# DONE elasticnet/hashed repeat=2/batch 0.002s
+# START elasticnet/hashed repeat=2/stepfull
+# DONE elasticnet/hashed repeat=2/stepfull 0.000s
+# CELL elasticnet/hashed STABLE 0.047s
+# START elasticnet/wide repeat=1/train
+# DONE elasticnet/wide repeat=1/train 0.032s
+# START elasticnet/wide repeat=1/infer-save-reload
+# DONE elasticnet/wide repeat=1/infer-save-reload 0.001s
+# START elasticnet/wide repeat=1/batch
+# DONE elasticnet/wide repeat=1/batch 0.002s
+# START elasticnet/wide repeat=1/stepfull
+# DONE elasticnet/wide repeat=1/stepfull 0.000s
+# START elasticnet/wide repeat=2/train
+# DONE elasticnet/wide repeat=2/train 0.032s
+# START elasticnet/wide repeat=2/infer-save-reload
+# DONE elasticnet/wide repeat=2/infer-save-reload 0.001s
+# START elasticnet/wide repeat=2/batch
+# DONE elasticnet/wide repeat=2/batch 0.002s
+# START elasticnet/wide repeat=2/stepfull
+# DONE elasticnet/wide repeat=2/stepfull 0.000s
+# CELL elasticnet/wide STABLE 0.072s
+# START elasticnet/denormal repeat=1/train
+# DONE elasticnet/denormal repeat=1/train 0.020s
+# START elasticnet/denormal repeat=1/infer-save-reload
+# DONE elasticnet/denormal repeat=1/infer-save-reload 0.001s
+# START elasticnet/denormal repeat=1/batch
+# DONE elasticnet/denormal repeat=1/batch 0.002s
+# START elasticnet/denormal repeat=1/stepfull
+# DONE elasticnet/denormal repeat=1/stepfull 0.000s
+# START elasticnet/denormal repeat=2/train
+# DONE elasticnet/denormal repeat=2/train 0.020s
+# START elasticnet/denormal repeat=2/infer-save-reload
+# DONE elasticnet/denormal repeat=2/infer-save-reload 0.001s
+# START elasticnet/denormal repeat=2/batch
+# DONE elasticnet/denormal repeat=2/batch 0.002s
+# START elasticnet/denormal repeat=2/stepfull
+# DONE elasticnet/denormal repeat=2/stepfull 0.000s
+# CELL elasticnet/denormal STABLE 0.047s
+# START elasticnet/denormal_ftz repeat=1/train
+# DONE elasticnet/denormal_ftz repeat=1/train 0.020s
+# START elasticnet/denormal_ftz repeat=1/infer-save-reload
+# DONE elasticnet/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START elasticnet/denormal_ftz repeat=1/batch
+# DONE elasticnet/denormal_ftz repeat=1/batch 0.002s
+# START elasticnet/denormal_ftz repeat=1/stepfull
+# DONE elasticnet/denormal_ftz repeat=1/stepfull 0.000s
+# START elasticnet/denormal_ftz repeat=2/train
+# DONE elasticnet/denormal_ftz repeat=2/train 0.020s
+# START elasticnet/denormal_ftz repeat=2/infer-save-reload
+# DONE elasticnet/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START elasticnet/denormal_ftz repeat=2/batch
+# DONE elasticnet/denormal_ftz repeat=2/batch 0.002s
+# START elasticnet/denormal_ftz repeat=2/stepfull
+# DONE elasticnet/denormal_ftz repeat=2/stepfull 0.000s
+# CELL elasticnet/denormal_ftz STABLE 0.047s
+# START elasticnet/dupes repeat=1/train
+# DONE elasticnet/dupes repeat=1/train 0.020s
+# START elasticnet/dupes repeat=1/infer-save-reload
+# DONE elasticnet/dupes repeat=1/infer-save-reload 0.001s
+# START elasticnet/dupes repeat=1/batch
+# DONE elasticnet/dupes repeat=1/batch 0.002s
+# START elasticnet/dupes repeat=1/stepfull
+# DONE elasticnet/dupes repeat=1/stepfull 0.000s
+# START elasticnet/dupes repeat=2/train
+# DONE elasticnet/dupes repeat=2/train 0.020s
+# START elasticnet/dupes repeat=2/infer-save-reload
+# DONE elasticnet/dupes repeat=2/infer-save-reload 0.001s
+# START elasticnet/dupes repeat=2/batch
+# DONE elasticnet/dupes repeat=2/batch 0.002s
+# START elasticnet/dupes repeat=2/stepfull
+# DONE elasticnet/dupes repeat=2/stepfull 0.000s
+# CELL elasticnet/dupes STABLE 0.047s
+# START elasticnet/odd repeat=1/train
+# DONE elasticnet/odd repeat=1/train 0.013s
+# START elasticnet/odd repeat=1/infer-save-reload
+# DONE elasticnet/odd repeat=1/infer-save-reload 0.001s
+# START elasticnet/odd repeat=1/batch
+# DONE elasticnet/odd repeat=1/batch 0.002s
+# START elasticnet/odd repeat=1/stepfull
+# DONE elasticnet/odd repeat=1/stepfull 0.000s
+# START elasticnet/odd repeat=2/train
+# DONE elasticnet/odd repeat=2/train 0.013s
+# START elasticnet/odd repeat=2/infer-save-reload
+# DONE elasticnet/odd repeat=2/infer-save-reload 0.001s
+# START elasticnet/odd repeat=2/batch
+# DONE elasticnet/odd repeat=2/batch 0.002s
+# START elasticnet/odd repeat=2/stepfull
+# DONE elasticnet/odd repeat=2/stepfull 0.000s
+# CELL elasticnet/odd STABLE 0.034s
+# START elasticnet/negative repeat=1/train
+# DONE elasticnet/negative repeat=1/train 0.021s
+# START elasticnet/negative repeat=1/infer-save-reload
+# DONE elasticnet/negative repeat=1/infer-save-reload 0.001s
+# START elasticnet/negative repeat=1/batch
+# DONE elasticnet/negative repeat=1/batch 0.002s
+# START elasticnet/negative repeat=1/stepfull
+# DONE elasticnet/negative repeat=1/stepfull 0.000s
+# START elasticnet/negative repeat=2/train
+# DONE elasticnet/negative repeat=2/train 0.020s
+# START elasticnet/negative repeat=2/infer-save-reload
+# DONE elasticnet/negative repeat=2/infer-save-reload 0.001s
+# START elasticnet/negative repeat=2/batch
+# DONE elasticnet/negative repeat=2/batch 0.002s
+# START elasticnet/negative repeat=2/stepfull
+# DONE elasticnet/negative repeat=2/stepfull 0.000s
+# CELL elasticnet/negative STABLE 0.048s
+| elasticnet             | 2cf742083831ee9d | 118eac19578010ab | 00b6923d62a41c0a | ef8800eaf0ca4f87 | 3add60ff69fd788c | 3add60ff69fd788c | 97d4c8c235d38bfe | 1a518e703b7dd1d9 | 7624315e7deffe10 |
+| elasticnet infer       | 483bce4b8cc1a137 | a767a79709358382 | db0926772dbaaff4 | e37614bc5b2ef0af | 0047832ca8c561a3 | 0047832ca8c561a3 | fc18f039274052f1 | 75a88217f1114867 | a21e833e3e925b89 |
+| elasticnet model       | 2e79bea4a0df84ff | 1a978679f1590988 | 201d9c05860739ce | 834bad42787a264a | 7f16adbc1a1fea7e | 7f16adbc1a1fea7e | 4c4bd6e9ae1567a9 | 14095ddb22139e58 | 1877315123c6622f |
+| elasticnet batch       | 956915d5c61aa604 | 81cfdf154152898d | 33e720c15cc1f77d | cff22b28b0b5e227 | 19772c145c4b0d34 | 19772c145c4b0d34 | ea2fea7d1c19311d | f140130bad4b7f18 | 57654a86835f557b |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: elasticnet stepfull n/a:no-decode-state
+wrote /root/leg_out/records/elasticnet/elasticnet/cpu-clean.json

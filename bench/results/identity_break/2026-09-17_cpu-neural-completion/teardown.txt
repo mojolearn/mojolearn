@@ -1,0 +1,5 @@
+pod=4018mzhxmp3prb
+name=mojolearn-cpu-verification-neural-20260917-193423
+terminated_verified=1
+exit=1
+at=2026-09-17T20:17:46Z

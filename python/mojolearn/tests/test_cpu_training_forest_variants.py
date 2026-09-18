@@ -83,9 +83,9 @@ def test_bindings_register_the_resident_and_weighted_names():
     assert "forest_predict_resident_host_binding[True](" in rf_src
     assert "forest_prepare_host_binding[False](" in et_src, "the trees binding must not flush the input"
     assert "forest_predict_resident_host_binding[False](" in et_src
-    for name in ("rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export"):
+    for name in ("rf_classifier_fit_weighted", "rf_classifier_fit_weighted_export", "rf_classifier_fit_shard"):
         assert f'("{name}")' in rf_src and name in host_surface.family("rf")["exports"], name
-    for absent in ("rf_classifier_fit_shard", "rf_predict_proba_gpu_parallel"):
+    for absent in ("rf_predict_proba_gpu_parallel",):
         assert f'("{absent}")' not in rf_src, f"{absent} must stay absent so it refuses by name"
     assert '("et_predict_gpu_parallel")' not in et_src
 

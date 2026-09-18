@@ -118,6 +118,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
+    ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
     TARGET_COLUMN,
     attn_default_arm_for,
@@ -409,10 +410,31 @@ holds the 64-float dctx vector in registers (arm-name token `_estash_dres`,
 which sets both bits; this bit alone names no arm)."""
 comptime ATTN_ARM_ESTASH_BITS = ATTN_ARM_BWD_ESTASH | ATTN_ARM_ESTASH_DRES
 """The DEVIATION 2650 / 2651 bits."""
+comptime ATTN_ARM_BSWZ = 8388608
+"""Bit: DEVIATION 2900, the causal block-index map of the four kernels the
+estash arm runs (arm-name token `_bswz`).
+
+The shipped decode makes the causal tile index the FASTEST-varying part of
+`block_idx.x` and counts it up, so a head's blocks are dispatched from the
+row tile with the fewest visible keys to the one with the most. At the
+target shape the heaviest block of the forward, dq and zdot kernels carries
+32 times the work of the lightest, the grid is one to three waves of
+resident blocks, and the hardware dispatches blocks in increasing
+`block_idx.x`, so the longest blocks are the LAST to get a slot and every
+one of those kernels ends in a tail where a handful of blocks run alone.
+Under this bit the tile index becomes the SLOWEST-varying part and is
+counted so that the first blocks dispatched are the ones with the most
+visible cells (down for the query-tiled forward, dq and zdot kernels; up
+for the key-tiled dk/dv kernel, whose work already falls with the key
+index). Nothing else changes: which cells a block owns, which thread holds
+which chain, every chain's terms and their order, and every staged operand
+are what they were, so no output element sees a different operation or a
+different order. Needs the estash arm (`_estash` with `_kvgrid`), which is
+the arm whose four kernels take the `SWZ` parameter."""
 comptime ATTN_ARM_BASE_BITS = ATTN_ARM_FWD_SSTASH | ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED
 comptime ATTN_ARM_NEW_BITS = (
     ATTN_ARM_BWD_ZTILED | ATTN_ARM_FWD_QRES | ATTN_ARM_FWD_GRID | ATTN_ARM_PREFLUSH
-    | ATTN_ARM_ZSCHED_BITS | ATTN_ARM_ESTASH_BITS
+    | ATTN_ARM_ZSCHED_BITS | ATTN_ARM_ESTASH_BITS | ATTN_ARM_BSWZ
 )
 """The second-round kernel bits; an arm carrying any of them proves reach
 with ATTN_ARM_SABOTAGE_NEW."""
@@ -439,7 +461,14 @@ comptime ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT = (
 """`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32`: DEVIATIONS 2650
 and 2651 (the backward reads the forward's kept exp stash, dctx rows in the
 shared page) on top of `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32`, flipped
-on NVIDIA by DEVIATION 2657 (brief section 20)."""
+on NVIDIA by DEVIATION 2657 (brief section 20) and still AMD's default."""
+comptime ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT = (
+    ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_DEFAULT | ATTN_ARM_BSWZ
+)
+"""`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz`: DEVIATION
+2900's causal block-index map on top of the word above, flipped on NVIDIA by
+the H100 leg bench/results/e1g/2026-09-17_201140-nvidia-h100-attention-bswz
+(FLIP geomean 0.9592, brief section 22)."""
 comptime ATTN_ARM_DEFAULT_REFUSED_BITS = (
     ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_ZTILED
     | ATTN_ARM_ZROWS32 | ATTN_ARM_ZROWS64 | ATTN_ARM_SABOTAGE_KV
@@ -575,6 +604,12 @@ def fused_attention_arm_parse(name: String) raises -> Int:
     if rest.endswith("+sabotage"):
         arm = arm | ATTN_ARM_SABOTAGE
         var trimmed = String(rest.removesuffix("+sabotage"))
+        rest = trimmed^
+    # DEVIATION 2900: the causal block-index map, the last token before the
+    # sabotages (the name function appends it after `_kvsplit`).
+    if rest.endswith("_bswz"):
+        arm = arm | ATTN_ARM_BSWZ
+        var trimmed = String(rest.removesuffix("_bswz"))
         rest = trimmed^
     if rest.endswith("_kvsplit"):
         arm = arm | ATTN_ARM_BWD_KVSPLIT
@@ -757,6 +792,14 @@ def fused_attention_arm_parse(name: String) raises -> Int:
                 + " compose with _ztiled, _zdefer, _zlag, _kvrecompute or"
                 + " _kvsplit"
             )
+    if (arm & ATTN_ARM_BSWZ) != 0:
+        comptime bswz_needs = ATTN_ARM_BWD_ESTASH | ATTN_ARM_BWD_KVGRID
+        if (arm & bswz_needs) != bswz_needs:
+            raise Error(
+                "attention arm '" + name + "': _bswz (DEVIATION 2900) is the"
+                + " block-index map of the four kernels the estash arm runs"
+                + " and needs _estash with _kvgrid"
+            )
     return arm
 
 
@@ -799,6 +842,13 @@ def fused_attention_arm_from_env() raises -> Int:
         " no longer spells this file's"
         " stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 bits (DEVIATION"
         " 2657); fix the literal there"
+    )
+    comptime assert ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ == ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT, (
+        "checks/kernel_matrix.mojo"
+        " ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ"
+        " no longer spells this file's"
+        " stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz bits"
+        " (DEVIATION 2900); fix the literal there"
     )
     comptime assert (ATTN_ARM_DEFAULT & ATTN_ARM_DEFAULT_REFUSED_BITS) == 0, (
         "attn_default_arm_for names a sabotage, a DEVIATION 2528 arm or"
@@ -877,7 +927,7 @@ def fused_attention_arm_name(arm: Int) -> String:
         | ATTN_ARM_SABOTAGE | ATTN_ARM_SABOTAGE_NEW | ATTN_ARM_BWD_KVGRID
         | ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64 | ATTN_ARM_BWD_KVSPLIT
         | ATTN_ARM_SABOTAGE_KV | ATTN_ARM_BWD_KVRECOMPUTE | ATTN_ARM_ZSCHED_BITS
-        | ATTN_ARM_ESTASH_BITS
+        | ATTN_ARM_ESTASH_BITS | ATTN_ARM_BSWZ
     )
     var other = arm - (arm & known)
     if (arm & ATTN_ARM_BWD_ZTILED) != 0:
@@ -922,6 +972,8 @@ def fused_attention_arm_name(arm: Int) -> String:
         other = other | (arm & (ATTN_ARM_KVROWS32 | ATTN_ARM_KVROWS64))
     if (arm & ATTN_ARM_BWD_KVSPLIT) != 0:
         name += "_kvsplit"
+    if (arm & ATTN_ARM_BSWZ) != 0:
+        name += "_bswz"
     if other != 0:
         name += "_bits" + String(other)
     if (arm & ATTN_ARM_SABOTAGE) != 0:
@@ -1180,6 +1232,47 @@ comptime ATTN_DEFAULT_ESTASH_DRES = (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_DRES) !=
 """Whether the column default carries DEVIATION 2651's `_dres` bit, so a
 shipped build instantiates that one estash backward and not both."""
 
+comptime ATTN_DEFAULT_BSWZ = (ATTN_ARM_DEFAULT & ATTN_ARM_BSWZ) != 0
+"""Whether the column default carries DEVIATION 2900's `_bswz` bit, so a
+shipped build instantiates the four estash-arm kernels with the causal
+block-index map and not both maps. The bit is a comptime parameter of
+kernels a shipped build already compiles, so it needs no branch of its own
+the way `ATTN_SHIPPED_BWD_ESTASH` did."""
+
+
+def fused_attention_arm_bswz(arm: Int) -> Bool:
+    """Whether `arm` carries DEVIATION 2900's `_bswz` token."""
+    return (arm & ATTN_ARM_BSWZ) != 0
+
+
+@always_inline
+def _blk_map[SWZ: Bool, REV: Bool](
+    raw: Int, ntb: Int, nh: Int, b: Int
+) -> Tuple[Int, Int, Int]:
+    """The `(tile, head, batch)` a block owns, from `block_idx.x`
+    (DEVIATION 2900).
+
+    `SWZ` False is the shipped decode: the tile index is the fastest-varying
+    part and counts up, then the head, then the batch. `SWZ` True makes the
+    tile index the SLOWEST-varying part and the (batch, head) pair the
+    fastest, and under `REV` counts the tile DOWN. The set of blocks and the
+    work each one owns are identical either way; only which `block_idx.x`
+    owns which tile changes, so the hardware, which dispatches blocks in
+    increasing `block_idx.x`, is handed the heaviest blocks first instead of
+    last. No chain, term, order or operand is touched."""
+    comptime if SWZ:
+        var nbh = b * nh
+        var ti = raw // nbh
+        var rest = raw - ti * nbh
+        var tile = ti
+        comptime if REV:
+            tile = ntb - 1 - ti
+        return (tile, rest % nh, rest // nh)
+    else:
+        var tile = raw % ntb
+        var rest = raw // ntb
+        return (tile, rest % nh, rest // nh)
+
 
 def fused_attention_arm_estash(arm: Int) -> Bool:
     """Whether `arm` carries DEVIATION 2650's `_estash` token."""
@@ -1218,6 +1311,28 @@ def fused_attention_arm_estash_runs(arm: Int) -> Bool:
     if (arm & ATTN_ARM_FWD_QRES) == 0 or (arm & ATTN_ARM_PREFLUSH) == 0:
         return False
     return fused_attention_kv_keys(arm) != 0
+
+
+def fused_attention_arm_bswz_runs(arm: Int) -> Bool:
+    """Whether THIS build runs DEVIATION 2900's causal block-index map for
+    `arm` at head_dim 64: the arm carries `_bswz`, this build runs the estash
+    kernels for it (those four kernels are the ones that take the `SWZ`
+    parameter), and on a shipped build the column default carries the same
+    bit, since the instantiation a shipped build compiles is the default's."""
+    if (arm & ATTN_ARM_BSWZ) == 0:
+        return False
+    if not fused_attention_arm_estash_runs(arm):
+        return False
+    comptime if ATTN_ARM_TRIAL:
+        return True
+    return ATTN_DEFAULT_BSWZ
+
+
+def fused_attention_bswz_name(arm: Int) -> String:
+    """`-` or `bswz`: DEVIATION 2900's token in `arm`, for a PATH line."""
+    if (arm & ATTN_ARM_BSWZ) == 0:
+        return String("-")
+    return String("bswz")
 
 
 def _attn_kv_ran_bits(arm: Int, keys: Int) -> Int:
@@ -1375,6 +1490,10 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
             var esw = 0
             if fused_attention_arm_estash_runs(arm):
                 esw = arm & ATTN_ARM_ESTASH_BITS
+            # DEVIATION 2900: the block-index map rides the word when this
+            # build runs it.
+            if fused_attention_arm_bswz_runs(arm):
+                esw = esw | ATTN_ARM_BSWZ
             if kvkeys != 0:
                 return tiled_stash | ATTN_ARM_PREFLUSH | zsw | esw | _attn_kv_ran_bits(arm, kvkeys)
             return tiled_stash | ATTN_ARM_PREFLUSH | zsw
@@ -1384,9 +1503,12 @@ def fused_attention_arm_backward_resolved(arm: Int) -> Int:
         # backward, for an arm this build runs it for (the launcher's own
         # condition, which also pins the dk/dv instantiation).
         if fused_attention_arm_estash_runs(arm):
+            var bsw = 0
+            if fused_attention_arm_bswz_runs(arm):
+                bsw = ATTN_ARM_BSWZ
             return (
                 tiled_stash | ATTN_ARM_PREFLUSH | (arm & ATTN_ARM_ESTASH_BITS)
-                | _attn_kv_ran_bits(arm, ATTN_DEFAULT_KV_KEYS)
+                | bsw | _attn_kv_ran_bits(arm, ATTN_DEFAULT_KV_KEYS)
             )
     comptime if ATTN_SHIPPED_BWD_KV:
         # Brief section 18: the column default's DEVIATION 2597 dk/dv
@@ -4220,7 +4342,7 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
             zdot.unsafe_store(row, zf)
 
 
-def fused_bwd_dq_tiled_pf_kernel[HD: Int](
+def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
     y_st: MutPointer[Float32, MutAnyOrigin],
@@ -4260,10 +4382,12 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int](
 
     var ntb = (l + TQ - 1) // TQ
     var raw = Int(block_idx.x)
-    var tb = raw % ntb
-    var rest = raw // ntb
-    var h = rest % nh
-    var bb = rest // nh
+    # DEVIATION 2900 under SWZ: the same set of (tile, head, batch)
+    # triples, handed out heaviest first.
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, b)
+    var tb = bm[0]
+    var h = bm[1]
+    var bb = bm[2]
     if bb >= b:
         return
     var kvh = h // n_rep
@@ -4546,7 +4670,7 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
 # ===========================================================================
 
 
-def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
+def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     dk: MutPointer[Float32, MutAnyOrigin],
     dv: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4586,10 +4710,13 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
 
     var njb = (s + BJ - 1) // BJ
     var raw = Int(block_idx.x)
-    var jb = raw % njb
-    var rest = raw // njb
-    var kvh = rest % nkv
-    var bb = rest // nkv
+    # DEVIATION 2900 under SWZ: the same set of (key tile, kv head,
+    # batch) triples, handed out heaviest first (a key tile's visible
+    # query count FALLS with the key index, so this one counts up).
+    var bm = _blk_map[SWZ, False](raw, njb, nkv, b)
+    var jb = bm[0]
+    var kvh = bm[1]
+    var bb = bm[2]
     if bb >= b:
         return
 
@@ -5128,7 +5255,7 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
 # ===========================================================================
 
 
-def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
+def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
     denom: MutPointer[Float32, MutAnyOrigin],
@@ -5167,9 +5294,12 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
     var window = Int(window_in)
     var ntb = (l + TQ - 1) // TQ
     var raw = Int(block_idx.x)
-    var t0 = (raw % ntb) * TQ
-    var h = (raw // ntb) % nh
-    var bb = raw // ntb // nh
+    # DEVIATION 2900 under SWZ: the same set of (tile, head, batch)
+    # triples, handed out heaviest first.
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, Int(b_in))
+    var t0 = bm[0] * TQ
+    var h = bm[1]
+    var bb = bm[2]
     var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
     var stbase = (bb * nh + h) * l * s
     var t1 = min(t0 + TQ - 1, l - 1)
@@ -5355,7 +5485,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 # ===========================================================================
 
 
-def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool](
+def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     zdot: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
     y_st: MutPointer[Float32, MutAnyOrigin],
@@ -5420,10 +5550,12 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool](
 
     var ntb = (l + TQ - 1) // TQ
     var raw = Int(block_idx.x)
-    var tb = raw % ntb
-    var rest = raw // ntb
-    var h = rest % nh
-    var bb = rest // nh
+    # DEVIATION 2900 under SWZ: the same set of (tile, head, batch)
+    # triples, handed out heaviest first.
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, b)
+    var tb = bm[0]
+    var h = bm[1]
+    var bb = bm[2]
     if bb >= b:
         return
     var kvh = h // n_rep
@@ -5968,7 +6100,7 @@ def _launch_bwd_shipped[HD: Int](
     _attn_tick(ctx, on, tk, "bwd_dkdv")
 
 
-def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
+def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
     mut tk: Int,
@@ -5992,7 +6124,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
-    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]
+    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
     step_count_launch()
     ctx.enqueue_function[kr](
         ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
@@ -6011,7 +6143,7 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     _ = sstash^
 
 
-def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
+def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
     mut tk: Int,
@@ -6034,7 +6166,7 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool](
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN]
+    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
     step_count_launch()
     ctx.enqueue_function[kr](
         ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
@@ -6552,7 +6684,7 @@ def _launch_bwd_stash_tiled_kv[HD: Int, BJ: Int, SPLIT: Bool](
     _ = dy_st^
 
 
-def _estash_dkdv_launch[HD: Int, BJ: Int](
+def _estash_dkdv_launch[HD: Int, BJ: Int, SWZ: Bool = False](
     ctx: DeviceContext,
     mut dk: DeviceBuffer[DType.float32],
     mut dv: DeviceBuffer[DType.float32],
@@ -6572,7 +6704,7 @@ def _estash_dkdv_launch[HD: Int, BJ: Int](
     estash bits (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`)."""
     var kv_blocks = b * nkv * ((s + BJ - 1) // BJ)
     if ksab:
-        comptime jks = fused_bwd_dkdv_r2_kernel[HD, BJ, True]
+        comptime jks = fused_bwd_dkdv_r2_kernel[HD, BJ, True, SWZ]
         step_count_launch()
         ctx.enqueue_function[jks](
             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
@@ -6582,7 +6714,7 @@ def _estash_dkdv_launch[HD: Int, BJ: Int](
             grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
         )
     else:
-        comptime jkc = fused_bwd_dkdv_r2_kernel[HD, BJ, False]
+        comptime jkc = fused_bwd_dkdv_r2_kernel[HD, BJ, False, SWZ]
         step_count_launch()
         ctx.enqueue_function[jkc](
             dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
@@ -6593,7 +6725,7 @@ def _estash_dkdv_launch[HD: Int, BJ: Int](
         )
 
 
-def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool](
+def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
     mut tk: Int,
@@ -6628,7 +6760,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool](
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
-    comptime zk = fused_bwd_zdot_estash_kernel[HD, ATTN_ES_TQ, DRES, SABN]
+    comptime zk = fused_bwd_zdot_estash_kernel[HD, ATTN_ES_TQ, DRES, SABN, SWZ]
     step_count_launch()
     ctx.enqueue_function[zk](
         zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
@@ -6646,7 +6778,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool](
     else:
         _attn_tick(ctx, on, tk, "bwd_zdot_estash_pf")
     var dq_blocks = b * nh * ((l + 63) // 64)
-    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD]
+    comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
     ctx.enqueue_function[qp](
         dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
@@ -6657,12 +6789,12 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool](
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
-        _estash_dkdv_launch[HD, 32](
+        _estash_dkdv_launch[HD, 32, SWZ](
             ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s,
             pos0, key_lo, window, ksab,
         )
     else:
-        _estash_dkdv_launch[HD, 64](
+        _estash_dkdv_launch[HD, 64, SWZ](
             ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s,
             pos0, key_lo, window, ksab,
         )
@@ -7307,23 +7439,52 @@ def fused_forward_launch_estash_ran(
                 ctx.synchronize()
                 _attn_tick(ctx, ton, tk, "fwd_estash_alloc")
             var nsab = (arm & ATTN_ARM_SABOTAGE_NEW) != 0
+            # DEVIATION 2900: the arm's causal block-index map. On a shipped
+            # build the bit is the column default's, resolved at build time,
+            # so exactly one instantiation is compiled.
+            var swz = fused_attention_arm_bswz_runs(arm)
             var ran_sab = False
             comptime if ATTN_ARM_TRIAL:
                 # The sabotage copy is a trial instantiation only (DEVIATION
                 # 2657): a shipped build compiles the clean one below alone.
                 if nsab:
-                    _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True](
+                    if swz:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, True](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
+                    else:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, True, False](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
+                    ran_sab = True
+            if not ran_sab:
+                comptime if ATTN_ARM_TRIAL:
+                    if swz:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, True](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
+                    else:
+                        _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, False](
+                            ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
+                            k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
+                            scale,
+                        )
+                else:
+                    _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False, ATTN_DEFAULT_BSWZ](
                         ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
                         k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
                         scale,
                     )
-                    ran_sab = True
-            if not ran_sab:
-                _launch_fwd_r2_keep[ATTN_STASH_HD, 32, True, True, False](
-                    ctx, ton, tk, ctxv, amax, denom, corner, kept, q_rope,
-                    k_cache, v_cache, b, l, nh, nkv, s, pos0, key_lo, window,
-                    scale,
-                )
+            # DEVIATION 2900 leaves the FORWARD's `ran` word alone: the
+            # word `fused_attention_arm_forward_resolved` predicts has no
+            # estash slot either, and the backward's word carries the bit
+            # for both directions (the map is one arm bit, not two).
             ran = _attn_fwd_r2_ran_word(arm, 32)
             step_count_sync()
             ctx.synchronize()
@@ -7405,42 +7566,75 @@ def fused_backward_launch_estash_ran(
             var ksab = (arm & ATTN_ARM_SABOTAGE_KV) != 0
             var nsab = (arm & ATTN_ARM_SABOTAGE_NEW) != 0
             var dres = (arm & ATTN_ARM_ESTASH_DRES) != 0
+            # DEVIATION 2900: the arm's causal block-index map. On a shipped
+            # build the bit is the column default's, resolved at build time,
+            # so exactly one instantiation is compiled.
+            var swz = fused_attention_arm_bswz_runs(arm)
             var ran_sab = False
             comptime if ATTN_ARM_TRIAL:
                 # The sabotage_new copies are trial instantiations only
                 # (DEVIATION 2657); a shipped build compiles neither.
                 if nsab:
                     if dres:
-                        _launch_bwd_estash[HD, True, True](
-                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, keys, ksab,
-                        )
+                        if swz:
+                            _launch_bwd_estash[HD, True, True, True](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
+                        else:
+                            _launch_bwd_estash[HD, True, True, False](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
                     else:
-                        _launch_bwd_estash[HD, False, True](
-                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, keys, ksab,
-                        )
+                        if swz:
+                            _launch_bwd_estash[HD, False, True, True](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
+                        else:
+                            _launch_bwd_estash[HD, False, True, False](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
                     ran_sab = True
             if not ran_sab:
                 comptime if ATTN_ARM_TRIAL:
                     if dres:
-                        _launch_bwd_estash[HD, True, False](
-                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, keys, ksab,
-                        )
+                        if swz:
+                            _launch_bwd_estash[HD, True, False, True](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
+                        else:
+                            _launch_bwd_estash[HD, True, False, False](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
                     else:
-                        _launch_bwd_estash[HD, False, False](
-                            ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
-                            k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
-                            key_lo, window, scale, keys, ksab,
-                        )
+                        if swz:
+                            _launch_bwd_estash[HD, False, False, True](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
+                        else:
+                            _launch_bwd_estash[HD, False, False, False](
+                                ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
+                                k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
+                                key_lo, window, scale, keys, ksab,
+                            )
                 else:
                     # DEVIATION 2657: the column default's one clean estash
-                    # backward, `_dres` resolved at build time.
-                    _launch_bwd_estash[HD, ATTN_DEFAULT_ESTASH_DRES, False](
+                    # backward, `_dres` resolved at build time; DEVIATION
+                    # 2900's `_bswz` likewise.
+                    _launch_bwd_estash[HD, ATTN_DEFAULT_ESTASH_DRES, False, ATTN_DEFAULT_BSWZ](
                         ctx, ton, tk, zdot, dq, dk, dv, corner, q_rope, dctx,
                         k_cache, v_cache, denom, kept, b, l, nh, nkv, s, pos0,
                         key_lo, window, scale, keys, ksab,
@@ -7449,6 +7643,8 @@ def fused_backward_launch_estash_ran(
                 ATTN_ARM_BWD_STASH | ATTN_ARM_BWD_TILED | ATTN_ARM_PREFLUSH
                 | (arm & ATTN_ARM_ESTASH_BITS) | _attn_kv_ran_bits(arm, keys)
             )
+            if swz:
+                ran = ran | ATTN_ARM_BSWZ
             step_count_sync()
             ctx.synchronize()
             var hit = _read_flag(ctx, corner)

@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "rf-clf-entropy-log2-noboot": {
+      "cells": [
+        {
+          "cell": "rf-clf-entropy-log2-noboot/base",
+          "context_matches": true,
+          "clean": "b72cd366dbf6d3d7",
+          "sabotage": "1647dca33748f3fe",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/denormal",
+          "context_matches": true,
+          "clean": "642b85d1f6197da1",
+          "sabotage": "787eb2eb530b8c62",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/denormal_ftz",
+          "context_matches": true,
+          "clean": "642b85d1f6197da1",
+          "sabotage": "787eb2eb530b8c62",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/dupes",
+          "context_matches": true,
+          "clean": "c8a6eb9c1511cf17",
+          "sabotage": "37cec4aece7c26fb",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/hashed",
+          "context_matches": true,
+          "clean": "ae0488544ce9e878",
+          "sabotage": "7917bab317195cd3",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/negative",
+          "context_matches": true,
+          "clean": "6d0f9cd2aa631362",
+          "sabotage": "c0bf8b53509c474a",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/odd",
+          "context_matches": true,
+          "clean": "93755d073fbb610b",
+          "sabotage": "6a2e789d0131a129",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/ties",
+          "context_matches": true,
+          "clean": "d16b985cc03e4c11",
+          "sabotage": "eefc693360e47443",
+          "detected": true
+        },
+        {
+          "cell": "rf-clf-entropy-log2-noboot/wide",
+          "context_matches": true,
+          "clean": "283d832e14dd2bfd",
+          "sabotage": "f9ed6e1438384bc3",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

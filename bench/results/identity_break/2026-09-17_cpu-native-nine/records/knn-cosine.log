@@ -1,0 +1,3 @@
+knn-cosine: clean
+knn-cosine: sabotage
+knn-cosine: 9/9 controls; passed=True

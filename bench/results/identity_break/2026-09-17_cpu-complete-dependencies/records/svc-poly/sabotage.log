@@ -1,0 +1,171 @@
+2921 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x39a980000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:53  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START svc-poly/base repeat=1/train
+# DONE svc-poly/base repeat=1/train 0.457s
+# START svc-poly/base repeat=1/infer-save-reload
+# DONE svc-poly/base repeat=1/infer-save-reload 0.068s
+# START svc-poly/base repeat=1/batch
+# DONE svc-poly/base repeat=1/batch 0.077s
+# START svc-poly/base repeat=1/stepfull
+# DONE svc-poly/base repeat=1/stepfull 0.000s
+# START svc-poly/base repeat=2/train
+# DONE svc-poly/base repeat=2/train 0.451s
+# START svc-poly/base repeat=2/infer-save-reload
+# DONE svc-poly/base repeat=2/infer-save-reload 0.052s
+# START svc-poly/base repeat=2/batch
+# DONE svc-poly/base repeat=2/batch 0.059s
+# START svc-poly/base repeat=2/stepfull
+# DONE svc-poly/base repeat=2/stepfull 0.000s
+# CELL svc-poly/base STABLE 1.164s
+# START svc-poly/ties repeat=1/train
+# DONE svc-poly/ties repeat=1/train 0.651s
+# START svc-poly/ties repeat=1/infer-save-reload
+# DONE svc-poly/ties repeat=1/infer-save-reload 0.078s
+# START svc-poly/ties repeat=1/batch
+# DONE svc-poly/ties repeat=1/batch 0.088s
+# START svc-poly/ties repeat=1/stepfull
+# DONE svc-poly/ties repeat=1/stepfull 0.000s
+# START svc-poly/ties repeat=2/train
+# DONE svc-poly/ties repeat=2/train 0.619s
+# START svc-poly/ties repeat=2/infer-save-reload
+# DONE svc-poly/ties repeat=2/infer-save-reload 0.074s
+# START svc-poly/ties repeat=2/batch
+# DONE svc-poly/ties repeat=2/batch 0.082s
+# START svc-poly/ties repeat=2/stepfull
+# DONE svc-poly/ties repeat=2/stepfull 0.000s
+# CELL svc-poly/ties STABLE 1.593s
+# START svc-poly/hashed repeat=1/train
+# DONE svc-poly/hashed repeat=1/train 0.457s
+# START svc-poly/hashed repeat=1/infer-save-reload
+# DONE svc-poly/hashed repeat=1/infer-save-reload 0.072s
+# START svc-poly/hashed repeat=1/batch
+# DONE svc-poly/hashed repeat=1/batch 0.081s
+# START svc-poly/hashed repeat=1/stepfull
+# DONE svc-poly/hashed repeat=1/stepfull 0.000s
+# START svc-poly/hashed repeat=2/train
+# DONE svc-poly/hashed repeat=2/train 0.496s
+# START svc-poly/hashed repeat=2/infer-save-reload
+# DONE svc-poly/hashed repeat=2/infer-save-reload 0.074s
+# START svc-poly/hashed repeat=2/batch
+# DONE svc-poly/hashed repeat=2/batch 0.083s
+# START svc-poly/hashed repeat=2/stepfull
+# DONE svc-poly/hashed repeat=2/stepfull 0.000s
+# CELL svc-poly/hashed STABLE 1.264s
+# START svc-poly/wide repeat=1/train
+# DONE svc-poly/wide repeat=1/train 0.313s
+# START svc-poly/wide repeat=1/infer-save-reload
+# DONE svc-poly/wide repeat=1/infer-save-reload 0.012s
+# START svc-poly/wide repeat=1/batch
+# DONE svc-poly/wide repeat=1/batch 0.019s
+# START svc-poly/wide repeat=1/stepfull
+# DONE svc-poly/wide repeat=1/stepfull 0.000s
+# START svc-poly/wide repeat=2/train
+# DONE svc-poly/wide repeat=2/train 0.309s
+# START svc-poly/wide repeat=2/infer-save-reload
+# DONE svc-poly/wide repeat=2/infer-save-reload 0.012s
+# START svc-poly/wide repeat=2/batch
+# DONE svc-poly/wide repeat=2/batch 0.019s
+# START svc-poly/wide repeat=2/stepfull
+# DONE svc-poly/wide repeat=2/stepfull 0.000s
+# CELL svc-poly/wide STABLE 0.685s
+# START svc-poly/denormal repeat=1/train
+# DONE svc-poly/denormal repeat=1/train 0.421s
+# START svc-poly/denormal repeat=1/infer-save-reload
+# DONE svc-poly/denormal repeat=1/infer-save-reload 0.058s
+# START svc-poly/denormal repeat=1/batch
+# DONE svc-poly/denormal repeat=1/batch 0.066s
+# START svc-poly/denormal repeat=1/stepfull
+# DONE svc-poly/denormal repeat=1/stepfull 0.000s
+# START svc-poly/denormal repeat=2/train
+# DONE svc-poly/denormal repeat=2/train 0.434s
+# START svc-poly/denormal repeat=2/infer-save-reload
+# DONE svc-poly/denormal repeat=2/infer-save-reload 0.055s
+# START svc-poly/denormal repeat=2/batch
+# DONE svc-poly/denormal repeat=2/batch 0.063s
+# START svc-poly/denormal repeat=2/stepfull
+# DONE svc-poly/denormal repeat=2/stepfull 0.000s
+# CELL svc-poly/denormal STABLE 1.099s
+# START svc-poly/denormal_ftz repeat=1/train
+# DONE svc-poly/denormal_ftz repeat=1/train 0.415s
+# START svc-poly/denormal_ftz repeat=1/infer-save-reload
+# DONE svc-poly/denormal_ftz repeat=1/infer-save-reload 0.067s
+# START svc-poly/denormal_ftz repeat=1/batch
+# DONE svc-poly/denormal_ftz repeat=1/batch 0.063s
+# START svc-poly/denormal_ftz repeat=1/stepfull
+# DONE svc-poly/denormal_ftz repeat=1/stepfull 0.000s
+# START svc-poly/denormal_ftz repeat=2/train
+# DONE svc-poly/denormal_ftz repeat=2/train 0.424s
+# START svc-poly/denormal_ftz repeat=2/infer-save-reload
+# DONE svc-poly/denormal_ftz repeat=2/infer-save-reload 0.054s
+# START svc-poly/denormal_ftz repeat=2/batch
+# DONE svc-poly/denormal_ftz repeat=2/batch 0.062s
+# START svc-poly/denormal_ftz repeat=2/stepfull
+# DONE svc-poly/denormal_ftz repeat=2/stepfull 0.000s
+# CELL svc-poly/denormal_ftz STABLE 1.085s
+# START svc-poly/dupes repeat=1/train
+# DONE svc-poly/dupes repeat=1/train 0.417s
+# START svc-poly/dupes repeat=1/infer-save-reload
+# DONE svc-poly/dupes repeat=1/infer-save-reload 0.046s
+# START svc-poly/dupes repeat=1/batch
+# DONE svc-poly/dupes repeat=1/batch 0.054s
+# START svc-poly/dupes repeat=1/stepfull
+# DONE svc-poly/dupes repeat=1/stepfull 0.000s
+# START svc-poly/dupes repeat=2/train
+# DONE svc-poly/dupes repeat=2/train 0.394s
+# START svc-poly/dupes repeat=2/infer-save-reload
+# DONE svc-poly/dupes repeat=2/infer-save-reload 0.046s
+# START svc-poly/dupes repeat=2/batch
+# DONE svc-poly/dupes repeat=2/batch 0.053s
+# START svc-poly/dupes repeat=2/stepfull
+# DONE svc-poly/dupes repeat=2/stepfull 0.000s
+# CELL svc-poly/dupes STABLE 1.012s
+# START svc-poly/odd repeat=1/train
+# DONE svc-poly/odd repeat=1/train 0.466s
+# START svc-poly/odd repeat=1/infer-save-reload
+# DONE svc-poly/odd repeat=1/infer-save-reload 0.071s
+# START svc-poly/odd repeat=1/batch
+# DONE svc-poly/odd repeat=1/batch 0.081s
+# START svc-poly/odd repeat=1/stepfull
+# DONE svc-poly/odd repeat=1/stepfull 0.000s
+# START svc-poly/odd repeat=2/train
+# DONE svc-poly/odd repeat=2/train 0.475s
+# START svc-poly/odd repeat=2/infer-save-reload
+# DONE svc-poly/odd repeat=2/infer-save-reload 0.078s
+# START svc-poly/odd repeat=2/batch
+# DONE svc-poly/odd repeat=2/batch 0.087s
+# START svc-poly/odd repeat=2/stepfull
+# DONE svc-poly/odd repeat=2/stepfull 0.000s
+# CELL svc-poly/odd STABLE 1.258s
+# START svc-poly/negative repeat=1/train
+# DONE svc-poly/negative repeat=1/train 0.380s
+# START svc-poly/negative repeat=1/infer-save-reload
+# DONE svc-poly/negative repeat=1/infer-save-reload 0.037s
+# START svc-poly/negative repeat=1/batch
+# DONE svc-poly/negative repeat=1/batch 0.043s
+# START svc-poly/negative repeat=1/stepfull
+# DONE svc-poly/negative repeat=1/stepfull 0.000s
+# START svc-poly/negative repeat=2/train
+# DONE svc-poly/negative repeat=2/train 0.368s
+# START svc-poly/negative repeat=2/infer-save-reload
+# DONE svc-poly/negative repeat=2/infer-save-reload 0.037s
+# START svc-poly/negative repeat=2/batch
+# DONE svc-poly/negative repeat=2/batch 0.043s
+# START svc-poly/negative repeat=2/stepfull
+# DONE svc-poly/negative repeat=2/stepfull 0.000s
+# CELL svc-poly/negative STABLE 0.909s
+| svc-poly               | 4b35e0bdbfd9df6f | c83c160c46682dcf | d833213124aba40d | a2d34bf7d02f695a | 9f97054cca8ac0e1 | 9f97054cca8ac0e1 | 06159aa12b574986 | afddf0f25e7cb94d | 37f47ac11f6cda44 |
+| svc-poly infer         | 7c7896df62b62bea | ba87ad07a973b8c4 | 254c48268847218c | 954d92ca8c95efde | a3227d0cdd3e8624 | a3227d0cdd3e8624 | a40407c8246c955f | 5389a8a6c0ef2326 | e41eb16bc6991ed8 |
+| svc-poly model         | 5da148c894d72ecf | e98c73db18ca644e | 534e0eebbdfaa3f8 | e2506862f35c6ea8 | 3b57e97d6d4a9325 | 00099f06c7b5d72a | e4628aa2feaeac45 | 877025ffd7fc6049 | 71a8570640dffb6c |
+| svc-poly batch         | 12ffab3b3244737e | c26441c940b07836 | 8d2778d74e2075f9 | ae375b517ed340fc | 67fef4a7794812c3 | 67fef4a7794812c3 | f462edaf464610cc | 9228908ce7de08e0 | 7f2f9b4bcede85e1 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: svc-poly stepfull n/a:no-decode-state
+wrote /root/leg_out/records/svc-poly/svc-poly/cpu-sabotage.json

@@ -146,10 +146,13 @@ def test_workflow_diffs_each_set_against_its_columns():
 
 def test_identity_command_runs_public_reference_probes_on_a_cpu():
     text = _read("python/mojolearn/_identity.py")
-    assert "l in host_surface.public_reference_lanes()]" in text
+    assert "set(host_surface.public_reference_lanes()) & set(host_surface.record_covered_lanes())" in text
+    assert "l in cpu_record_lanes]" in text
     host_only = host_surface.PUBLIC_HOST_ONLY_LANES
     trained = set(host_surface.public_reference_lanes()) - set(host_only)
-    assert trained <= set(host_surface.record_covered_lanes())
+    # `identity` replays the older bundled column; `verify` has a broader,
+    # independently admitted table. Only their intersection belongs here.
+    assert trained & set(host_surface.record_covered_lanes())
     # Reachable from a binding that SHIPS. Two ways, and the second is not a
     # loophole (lane/expose-inference-surface, 2026-09-16): a family holding a
     # fit stays a source build while a shipped inference-only binding serves

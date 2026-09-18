@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:45:58  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START knn-manhattan/base repeat=1/train
+# DONE knn-manhattan/base repeat=1/train 0.014s
+# START knn-manhattan/base repeat=1/infer-save-reload
+# DONE knn-manhattan/base repeat=1/infer-save-reload 0.030s
+# START knn-manhattan/base repeat=1/batch
+# DONE knn-manhattan/base repeat=1/batch 0.033s
+# START knn-manhattan/base repeat=1/stepfull
+# DONE knn-manhattan/base repeat=1/stepfull 0.000s
+# START knn-manhattan/base repeat=2/train
+# DONE knn-manhattan/base repeat=2/train 0.013s
+# START knn-manhattan/base repeat=2/infer-save-reload
+# DONE knn-manhattan/base repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/base repeat=2/batch
+# DONE knn-manhattan/base repeat=2/batch 0.033s
+# START knn-manhattan/base repeat=2/stepfull
+# DONE knn-manhattan/base repeat=2/stepfull 0.000s
+# CELL knn-manhattan/base STABLE 0.152s
+# START knn-manhattan/ties repeat=1/train
+# DONE knn-manhattan/ties repeat=1/train 0.041s
+# START knn-manhattan/ties repeat=1/infer-save-reload
+# DONE knn-manhattan/ties repeat=1/infer-save-reload 0.084s
+# START knn-manhattan/ties repeat=1/batch
+# DONE knn-manhattan/ties repeat=1/batch 0.095s
+# START knn-manhattan/ties repeat=1/stepfull
+# DONE knn-manhattan/ties repeat=1/stepfull 0.000s
+# START knn-manhattan/ties repeat=2/train
+# DONE knn-manhattan/ties repeat=2/train 0.041s
+# START knn-manhattan/ties repeat=2/infer-save-reload
+# DONE knn-manhattan/ties repeat=2/infer-save-reload 0.082s
+# START knn-manhattan/ties repeat=2/batch
+# DONE knn-manhattan/ties repeat=2/batch 0.094s
+# START knn-manhattan/ties repeat=2/stepfull
+# DONE knn-manhattan/ties repeat=2/stepfull 0.000s
+# CELL knn-manhattan/ties STABLE 0.437s
+# START knn-manhattan/hashed repeat=1/train
+# DONE knn-manhattan/hashed repeat=1/train 0.014s
+# START knn-manhattan/hashed repeat=1/infer-save-reload
+# DONE knn-manhattan/hashed repeat=1/infer-save-reload 0.029s
+# START knn-manhattan/hashed repeat=1/batch
+# DONE knn-manhattan/hashed repeat=1/batch 0.033s
+# START knn-manhattan/hashed repeat=1/stepfull
+# DONE knn-manhattan/hashed repeat=1/stepfull 0.000s
+# START knn-manhattan/hashed repeat=2/train
+# DONE knn-manhattan/hashed repeat=2/train 0.014s
+# START knn-manhattan/hashed repeat=2/infer-save-reload
+# DONE knn-manhattan/hashed repeat=2/infer-save-reload 0.028s
+# START knn-manhattan/hashed repeat=2/batch
+# DONE knn-manhattan/hashed repeat=2/batch 0.032s
+# START knn-manhattan/hashed repeat=2/stepfull
+# DONE knn-manhattan/hashed repeat=2/stepfull 0.000s
+# CELL knn-manhattan/hashed STABLE 0.151s
+# START knn-manhattan/wide repeat=1/train
+# DONE knn-manhattan/wide repeat=1/train 0.014s
+# START knn-manhattan/wide repeat=1/infer-save-reload
+# DONE knn-manhattan/wide repeat=1/infer-save-reload 0.029s
+# START knn-manhattan/wide repeat=1/batch
+# DONE knn-manhattan/wide repeat=1/batch 0.033s
+# START knn-manhattan/wide repeat=1/stepfull
+# DONE knn-manhattan/wide repeat=1/stepfull 0.000s
+# START knn-manhattan/wide repeat=2/train
+# DONE knn-manhattan/wide repeat=2/train 0.014s
+# START knn-manhattan/wide repeat=2/infer-save-reload
+# DONE knn-manhattan/wide repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/wide repeat=2/batch
+# DONE knn-manhattan/wide repeat=2/batch 0.032s
+# START knn-manhattan/wide repeat=2/stepfull
+# DONE knn-manhattan/wide repeat=2/stepfull 0.000s
+# CELL knn-manhattan/wide STABLE 0.151s
+# START knn-manhattan/denormal repeat=1/train
+# DONE knn-manhattan/denormal repeat=1/train 0.014s
+# START knn-manhattan/denormal repeat=1/infer-save-reload
+# DONE knn-manhattan/denormal repeat=1/infer-save-reload 0.028s
+# START knn-manhattan/denormal repeat=1/batch
+# DONE knn-manhattan/denormal repeat=1/batch 0.033s
+# START knn-manhattan/denormal repeat=1/stepfull
+# DONE knn-manhattan/denormal repeat=1/stepfull 0.000s
+# START knn-manhattan/denormal repeat=2/train
+# DONE knn-manhattan/denormal repeat=2/train 0.014s
+# START knn-manhattan/denormal repeat=2/infer-save-reload
+# DONE knn-manhattan/denormal repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/denormal repeat=2/batch
+# DONE knn-manhattan/denormal repeat=2/batch 0.033s
+# START knn-manhattan/denormal repeat=2/stepfull
+# DONE knn-manhattan/denormal repeat=2/stepfull 0.000s
+# CELL knn-manhattan/denormal STABLE 0.151s
+# START knn-manhattan/denormal_ftz repeat=1/train
+# DONE knn-manhattan/denormal_ftz repeat=1/train 0.014s
+# START knn-manhattan/denormal_ftz repeat=1/infer-save-reload
+# DONE knn-manhattan/denormal_ftz repeat=1/infer-save-reload 0.029s
+# START knn-manhattan/denormal_ftz repeat=1/batch
+# DONE knn-manhattan/denormal_ftz repeat=1/batch 0.033s
+# START knn-manhattan/denormal_ftz repeat=1/stepfull
+# DONE knn-manhattan/denormal_ftz repeat=1/stepfull 0.000s
+# START knn-manhattan/denormal_ftz repeat=2/train
+# DONE knn-manhattan/denormal_ftz repeat=2/train 0.014s
+# START knn-manhattan/denormal_ftz repeat=2/infer-save-reload
+# DONE knn-manhattan/denormal_ftz repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/denormal_ftz repeat=2/batch
+# DONE knn-manhattan/denormal_ftz repeat=2/batch 0.032s
+# START knn-manhattan/denormal_ftz repeat=2/stepfull
+# DONE knn-manhattan/denormal_ftz repeat=2/stepfull 0.000s
+# CELL knn-manhattan/denormal_ftz STABLE 0.151s
+# START knn-manhattan/dupes repeat=1/train
+# DONE knn-manhattan/dupes repeat=1/train 0.014s
+# START knn-manhattan/dupes repeat=1/infer-save-reload
+# DONE knn-manhattan/dupes repeat=1/infer-save-reload 0.030s
+# START knn-manhattan/dupes repeat=1/batch
+# DONE knn-manhattan/dupes repeat=1/batch 0.033s
+# START knn-manhattan/dupes repeat=1/stepfull
+# DONE knn-manhattan/dupes repeat=1/stepfull 0.000s
+# START knn-manhattan/dupes repeat=2/train
+# DONE knn-manhattan/dupes repeat=2/train 0.014s
+# START knn-manhattan/dupes repeat=2/infer-save-reload
+# DONE knn-manhattan/dupes repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/dupes repeat=2/batch
+# DONE knn-manhattan/dupes repeat=2/batch 0.033s
+# START knn-manhattan/dupes repeat=2/stepfull
+# DONE knn-manhattan/dupes repeat=2/stepfull 0.000s
+# CELL knn-manhattan/dupes STABLE 0.154s
+# START knn-manhattan/odd repeat=1/train
+# DONE knn-manhattan/odd repeat=1/train 0.015s
+# START knn-manhattan/odd repeat=1/infer-save-reload
+# DONE knn-manhattan/odd repeat=1/infer-save-reload 0.030s
+# START knn-manhattan/odd repeat=1/batch
+# DONE knn-manhattan/odd repeat=1/batch 0.035s
+# START knn-manhattan/odd repeat=1/stepfull
+# DONE knn-manhattan/odd repeat=1/stepfull 0.000s
+# START knn-manhattan/odd repeat=2/train
+# DONE knn-manhattan/odd repeat=2/train 0.015s
+# START knn-manhattan/odd repeat=2/infer-save-reload
+# DONE knn-manhattan/odd repeat=2/infer-save-reload 0.031s
+# START knn-manhattan/odd repeat=2/batch
+# DONE knn-manhattan/odd repeat=2/batch 0.035s
+# START knn-manhattan/odd repeat=2/stepfull
+# DONE knn-manhattan/odd repeat=2/stepfull 0.000s
+# CELL knn-manhattan/odd STABLE 0.160s
+# START knn-manhattan/negative repeat=1/train
+# DONE knn-manhattan/negative repeat=1/train 0.014s
+# START knn-manhattan/negative repeat=1/infer-save-reload
+# DONE knn-manhattan/negative repeat=1/infer-save-reload 0.029s
+# START knn-manhattan/negative repeat=1/batch
+# DONE knn-manhattan/negative repeat=1/batch 0.033s
+# START knn-manhattan/negative repeat=1/stepfull
+# DONE knn-manhattan/negative repeat=1/stepfull 0.000s
+# START knn-manhattan/negative repeat=2/train
+# DONE knn-manhattan/negative repeat=2/train 0.014s
+# START knn-manhattan/negative repeat=2/infer-save-reload
+# DONE knn-manhattan/negative repeat=2/infer-save-reload 0.029s
+# START knn-manhattan/negative repeat=2/batch
+# DONE knn-manhattan/negative repeat=2/batch 0.033s
+# START knn-manhattan/negative repeat=2/stepfull
+# DONE knn-manhattan/negative repeat=2/stepfull 0.000s
+# CELL knn-manhattan/negative STABLE 0.153s
+| knn-manhattan          | d78c77a92bcfcc9e | 60656152ccf51760 | 38e2bdb0e0efa39f | fce8e797e9c4baa4 | fb63f59a0ea23fcd | fb63f59a0ea23fcd | 76f78a1802cd426a | fcaf3e05388a922b | e25e6e85ebecb334 |
+| knn-manhattan infer    | 07a890a5c6e9078b | 6f3828f892d626df | 5ad4cfb3f5853c89 | 155909f5b55509a9 | 04d9d2ad39c26ac6 | 04d9d2ad39c26ac6 | c4b7f9983b39bcf8 | 6eaf1fe728cc48c8 | 08740db63a4c3865 |
+| knn-manhattan model    | cd79f58159bc6f62 | 1016d1125951292d | 260f67359fc2f243 | de0412f2090931f3 | 79c426f53bdfd96b | ff1324196230341b | 4236e13a4f7525bd | 85d5f1e623f86eb1 | e4d91ae9fa60afe6 |
+| knn-manhattan batch    | 2d80896b018d7989 | 8752b6ea819b3331 | d6d745a8564a2407 | 5e305a0755fcef8e | d026d32484ceb897 | d026d32484ceb897 | fbfa2d48c1a85801 | d8179144f5b2ec4a | 972af0f506eaecc8 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: knn-manhattan stepfull n/a:no-decode-state
+wrote /root/leg_out/records/knn-manhattan/knn-manhattan/cpu-sabotage.json

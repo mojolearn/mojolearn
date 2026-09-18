@@ -1,0 +1,3 @@
+rf-reg: clean
+rf-reg: sabotage
+rf-reg: 9/9 controls; passed=True

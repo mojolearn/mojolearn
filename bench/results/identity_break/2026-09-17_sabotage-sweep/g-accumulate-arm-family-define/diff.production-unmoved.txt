@@ -1,0 +1,54 @@
+NOTE: --lanes scopes this diff to 5 lane(s); 19 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_neural_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AMD EPYC 9965 192-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_training_host'] commit=475b3dbd633f85468054ceb9832e25164cb64d4c
+| lane/fixture                 | verdict    | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-9965-192-core-processor |
+|------------------------------|------------|------------------|------------------|
+| cross-entropy-arms/base      | IDENTICAL x2 | f470c4b3d4c6ffff | f470c4b3d4c6ffff |
+| cross-entropy-arms/ties      | IDENTICAL x2 | 2c784ce0dc69e248 | 2c784ce0dc69e248 |
+| mlp/base                     | IDENTICAL x2 | 3204ed07bdda3cc6 | 3204ed07bdda3cc6 |
+| mlp/ties                     | IDENTICAL x2 | 2f08d18719517d3b | 2f08d18719517d3b |
+| optim-adam-clip/base         | IDENTICAL x2 | fa1cc2cae1ae5b34 | fa1cc2cae1ae5b34 |
+| optim-adam-clip/ties         | IDENTICAL x2 | fa1cc2cae1ae5b34 | fa1cc2cae1ae5b34 |
+| optim-sgd/base               | IDENTICAL x2 | 6a3e4267566a2a03 | 6a3e4267566a2a03 |
+| optim-sgd/ties               | IDENTICAL x2 | 6a3e4267566a2a03 | 6a3e4267566a2a03 |
+| training-primitives/base     | IDENTICAL x2 | 18d750e2cd47d7ea | 18d750e2cd47d7ea |
+| training-primitives/ties     | IDENTICAL x2 | e01da50ed7b342d5 | e01da50ed7b342d5 |
+
+summary: IDENTICAL=10
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-9965-192-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| cross-entropy-arms/base      | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-entropy-arms/base      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-entropy-arms/base      | batch  | IDENTICAL x2 | baeb27de8f9d5d4e | baeb27de8f9d5d4e |
+| cross-entropy-arms/ties      | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-entropy-arms/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-entropy-arms/ties      | batch  | IDENTICAL x2 | 71e2174735fef8f2 | 71e2174735fef8f2 |
+| mlp/base                     | infer  | ONE-COLUMN   | 8579effb0c3bce0c | REFUSED          |
+| mlp/base                     | model  | ONE-COLUMN   | dc9325976836b5a7 | REFUSED          |
+| mlp/base                     | batch  | ONE-COLUMN   | 9cfded25366f6c85 | REFUSED          |
+| mlp/ties                     | infer  | ONE-COLUMN   | 24de7ab7c4fa8961 | REFUSED          |
+| mlp/ties                     | model  | ONE-COLUMN   | 59bc3962a0a7dff3 | REFUSED          |
+| mlp/ties                     | batch  | ONE-COLUMN   | fbee294ec77e1424 | REFUSED          |
+| optim-adam-clip/base         | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-adam-clip/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-adam-clip/base         | batch  | IDENTICAL x2 | aa5a11a285278688 | aa5a11a285278688 |
+| optim-adam-clip/ties         | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-adam-clip/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-adam-clip/ties         | batch  | IDENTICAL x2 | aa5a11a285278688 | aa5a11a285278688 |
+| optim-sgd/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-sgd/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-sgd/base               | batch  | IDENTICAL x2 | b5720e41044285cc | b5720e41044285cc |
+| optim-sgd/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-sgd/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-sgd/ties               | batch  | IDENTICAL x2 | b5720e41044285cc | b5720e41044285cc |
+| training-primitives/base     | infer  | IDENTICAL x2 | 6980d705b0918f94 | 6980d705b0918f94 |
+| training-primitives/base     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| training-primitives/base     | batch  | IDENTICAL x2 | 0885e6867f268221 | 0885e6867f268221 |
+| training-primitives/ties     | infer  | IDENTICAL x2 | 540263f57c3d33e0 | 540263f57c3d33e0 |
+| training-primitives/ties     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| training-primitives/ties     | batch  | IDENTICAL x2 | 037afef1c391f67d | 037afef1c391f67d |
+
+summary (infer/model): IDENTICAL=2, N/A=14, ONE-COLUMN=4
+summary (batch): IDENTICAL=8, ONE-COLUMN=2
+summary (rlpair): 

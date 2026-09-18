@@ -1,0 +1,265 @@
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_linalg_host', '_mojolearn_rf_host', '_mojolearn_svm_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_linalg_host', '_mojolearn_rf_host', '_mojolearn_svm_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| cross-val/base               | REFUSED    | REFUSED          | REFUSED          |
+| cross-val/ties               | REFUSED    | REFUSED          | REFUSED          |
+| et-clf-entropy-bestfirst/base | DIVERGENT  | parts differ: predict,proba; agree: - | cbb457b56790d09e |
+| et-clf-entropy-bestfirst/ties | DIVERGENT  | parts differ: predict,proba; agree: - | ecfa88ec47664056 |
+| et-reg-bootstrap-parallel/base | DIVERGENT  | parts differ: predict; agree: - | d36f76c5acb43904 |
+| et-reg-bootstrap-parallel/ties | DIVERGENT  | parts differ: predict; agree: - | dde4413335d98412 |
+| gbdt-adapter-clf/base        | DIVERGENT  | parts differ: predict,proba,decision; agree: - | 85dc8df293216b09 |
+| gbdt-adapter-clf/ties        | DIVERGENT  | parts differ: proba,decision; agree: predict | aac832141d2c18bd |
+| gbdt-adapter-reg/base        | DIVERGENT  | parts differ: predict; agree: - | f11cfd564af6d8cd |
+| gbdt-adapter-reg/ties        | DIVERGENT  | parts differ: predict; agree: - | ce1bab35600017ab |
+| gbdt-adapter-score-weighted/base | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-adapter-score-weighted/ties | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-categorical-ctr-tables/base | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-categorical-ctr-tables/ties | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-categorical-ctr/base    | DIVERGENT  | parts differ: predict; agree: - | 65e4dcb88548ff97 |
+| gbdt-categorical-ctr/ties    | DIVERGENT  | parts differ: predict; agree: - | 3b2291d7ff656085 |
+| gbdt-depthwise/base          | DIVERGENT  | parts differ: predict; agree: - | 12ed9e9549777d36 |
+| gbdt-depthwise/ties          | DIVERGENT  | parts differ: predict; agree: - | 642ef7dfbff9e0c1 |
+| gbdt-exact-mae/base          | DIVERGENT  | parts differ: predict; agree: - | 9cdd0c249f877694 |
+| gbdt-exact-mae/ties          | DIVERGENT  | parts differ: predict; agree: - | 6de05e0e480085eb |
+| gbdt-feature-freq/base       | DIVERGENT  | parts differ: predict; agree: - | 868fa55eeecf157f |
+| gbdt-feature-freq/ties       | DIVERGENT  | parts differ: predict; agree: - | a50ad032a9811627 |
+| gbdt-lossguide-newtoncosine/base | DIVERGENT  | parts differ: predict; agree: - | df3ed0329ef56740 |
+| gbdt-lossguide-newtoncosine/ties | DIVERGENT  | parts differ: predict; agree: - | 71f458f89a53568d |
+| gbdt-lossguide/base          | DIVERGENT  | parts differ: predict; agree: - | b50cc75476f2e021 |
+| gbdt-lossguide/ties          | DIVERGENT  | parts differ: predict; agree: - | 3b9fcc0b09e96181 |
+| gbdt-multiclass/base         | DIVERGENT  | parts differ: predict,proba; agree: - | ad76ce319563bfcb |
+| gbdt-multiclass/ties         | DIVERGENT  | parts differ: predict,proba; agree: - | 49e1219e7deabcff |
+| gbdt-nan-modes/base          | DIVERGENT  | parts differ: min,max; agree: - | 22a965e800fa9c82 |
+| gbdt-nan-modes/ties          | DIVERGENT  | parts differ: min,max; agree: - | 960357a744b228f2 |
+| gbdt-onevsall/base           | DIVERGENT  | parts differ: predict,proba; agree: - | 03494000960da52e |
+| gbdt-onevsall/ties           | DIVERGENT  | parts differ: predict,proba; agree: - | 3df0ec931f7349aa |
+| gbdt-ordered-rmse/base       | DIVERGENT  | parts differ: predict; agree: - | 9dd143f4e8d00735 |
+| gbdt-ordered-rmse/ties       | DIVERGENT  | parts differ: predict; agree: - | 316385faecdf3c5e |
+| gbdt-pair-logit/base         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | fcf5215984a4b51d |
+| gbdt-pair-logit/ties         | DIVERGENT  | parts differ: predict,loss_curve,explicit_predict,explicit_loss_curve; agree: - | 3f60f6d2b0185967 |
+| gbdt-parametric-losses/base  | DIVERGENT  | parts differ: Quantile,MAE,LogLinQuantile,MAPE,Poisson,Lq,Expectile,Tweedie,Huber,CrossEntropy; agree: - | 3191a1a2ce771cab |
+| gbdt-parametric-losses/ties  | DIVERGENT  | parts differ: Quantile,MAE,LogLinQuantile,MAPE,Poisson,Lq,Expectile,Tweedie,Huber,CrossEntropy; agree: - | c07cb0f66363385d |
+| gbdt-pointwise-l2-bayesian-eval/base | DIVERGENT  | parts differ: predict,proba; agree: - | 4cda79f91da4709a |
+| gbdt-pointwise-l2-bayesian-eval/ties | DIVERGENT  | parts differ: predict,proba; agree: - | e3934d1e3764dfc6 |
+| gbdt-query-rmse/base         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 90743a601c4ddf74 |
+| gbdt-query-rmse/ties         | DIVERGENT  | parts differ: predict,loss_curve; agree: - | 6106db7f212331c3 |
+| gbdt-rmse/base               | DIVERGENT  | parts differ: predict; agree: - | f11cfd564af6d8cd |
+| gbdt-rmse/ties               | DIVERGENT  | parts differ: predict; agree: - | ce1bab35600017ab |
+| gbdt-symmetric/base          | DIVERGENT  | parts differ: predict,proba; agree: - | 0c9691148c71de30 |
+| gbdt-symmetric/ties          | DIVERGENT  | parts differ: predict,proba; agree: - | 40285c593a3081c7 |
+| gbdt-tensor-ctr-tables/base  | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-tensor-ctr-tables/ties  | REFUSED    | REFUSED          | REFUSED          |
+| gbdt-yeti-rank/base          | DIVERGENT  | parts differ: predict,seeded_predict; agree: loss_curve | 056411a6d676707a |
+| gbdt-yeti-rank/ties          | DIVERGENT  | parts differ: predict,seeded_predict; agree: loss_curve | b44572e7b3a74173 |
+| iforest-tuned/base           | DIVERGENT  | parts differ: scores,predict; agree: - | 5d8271dbe55b72eb |
+| iforest-tuned/ties           | DIVERGENT  | parts differ: scores,predict; agree: - | 657f9f2aef495a10 |
+| par-forest-et/base           | DIVERGENT  | parts differ: predict; agree: - | ea112e2954936a35 |
+| par-forest-et/ties           | DIVERGENT  | parts differ: predict; agree: - | c0128f08f5de4143 |
+| par-forest/base              | DIVERGENT  | parts differ: predict,proba; agree: - | ed0bcfcef5b35833 |
+| par-forest/ties              | DIVERGENT  | parts differ: predict,proba; agree: - | 2428a6e7f31ac413 |
+| rf-clf-balanced-parallel/base | DIVERGENT  | parts differ: predict,proba; agree: - | cb54c54a0809c214 |
+| rf-clf-balanced-parallel/ties | DIVERGENT  | parts differ: predict,proba; agree: - | 7a190daa04703912 |
+| rf-clf-entropy-log2-noboot/base | DIVERGENT  | parts differ: predict,proba; agree: - | 7c32fd538a5387b9 |
+| rf-clf-entropy-log2-noboot/ties | DIVERGENT  | parts differ: predict,proba; agree: - | 9d74a4ad93903d92 |
+| rf-clf/base                  | DIVERGENT  | parts differ: predict,proba; agree: - | ed0bcfcef5b35833 |
+| rf-clf/ties                  | DIVERGENT  | parts differ: predict,proba; agree: - | 2428a6e7f31ac413 |
+| rf-reg-gamma-ig/base         | DIVERGENT  | parts differ: gamma,inverse_gaussian; agree: - | 7dcbe5d66d1152e3 |
+| rf-reg-gamma-ig/ties         | DIVERGENT  | parts differ: gamma,inverse_gaussian; agree: - | 2700b1eee7fbc643 |
+| rf-reg-poisson/base          | DIVERGENT  | parts differ: predict; agree: - | 307afd3ea3a617c0 |
+| rf-reg-poisson/ties          | DIVERGENT  | parts differ: predict; agree: - | 9b04e61df06ef4ea |
+| rf-reg/base                  | DIVERGENT  | parts differ: predict; agree: - | 51c47ab53a694b17 |
+| rf-reg/ties                  | DIVERGENT  | parts differ: predict; agree: - | f2a18ba74e754306 |
+| rf-score-weighted/base       | REFUSED    | REFUSED          | REFUSED          |
+| rf-score-weighted/ties       | REFUSED    | REFUSED          | REFUSED          |
+
+summary: DIVERGENT=60, REFUSED=10
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| et-clf-entropy-bestfirst/base | infer  | DIVERGENT    | d69955e260874141 | 46d7161a251b1189 |
+| et-clf-entropy-bestfirst/base | model  | DIVERGENT    | 8abd9a4f4d89302e | a25d8224a84d381d |
+| et-clf-entropy-bestfirst/base | batch  | DIVERGENT    | 3e9828d01a238a1c | 7577225ca6e97bef |
+| et-clf-entropy-bestfirst/ties | infer  | DIVERGENT    | c295cc43fab48c9c | a4fa69adb65e38e1 |
+| et-clf-entropy-bestfirst/ties | model  | DIVERGENT    | f024154fa88e1021 | fabb4d14be321c56 |
+| et-clf-entropy-bestfirst/ties | batch  | DIVERGENT    | 85f2c124dd086d66 | 9a8c1953a67a276f |
+| et-reg-bootstrap-parallel/base | infer  | DIVERGENT    | 4628f803fa16fc96 | 96f11ceaa00d658b |
+| et-reg-bootstrap-parallel/base | model  | DIVERGENT    | cbe2b16ab7f8500f | d6e32b615d438f18 |
+| et-reg-bootstrap-parallel/base | batch  | DIVERGENT    | 8f0d2ec1e7b966f7 | 228c353ae1bf5ecf |
+| et-reg-bootstrap-parallel/ties | infer  | DIVERGENT    | 69009e72583d36e1 | f5b924d37647ab05 |
+| et-reg-bootstrap-parallel/ties | model  | DIVERGENT    | dc8b0658ce886cf8 | 11b0ec3e374b6817 |
+| et-reg-bootstrap-parallel/ties | batch  | DIVERGENT    | 1b5250036fdc0f89 | f591468e07ee36cf |
+| gbdt-adapter-clf/base        | infer  | DIVERGENT    | 33875685be67febb | d82e7eff0a235101 |
+| gbdt-adapter-clf/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/base        | batch  | DIVERGENT    | 984baeb0cccbd21e | dac743c23a2b2091 |
+| gbdt-adapter-clf/ties        | infer  | DIVERGENT    | fe960ad1ad7c54e5 | 19b01a4e325e3a6b |
+| gbdt-adapter-clf/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-clf/ties        | batch  | DIVERGENT    | 14399e0cd5893cd4 | 6cb6920344451268 |
+| gbdt-adapter-reg/base        | infer  | DIVERGENT    | ba6284898fcd7adb | 9bc176da5c747a5a |
+| gbdt-adapter-reg/base        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/base        | batch  | DIVERGENT    | 3a53a53abfe321f6 | d67eaa0d63f82a23 |
+| gbdt-adapter-reg/ties        | infer  | DIVERGENT    | 4044415de3b73aee | 00cd048be4013705 |
+| gbdt-adapter-reg/ties        | model  | N/A          | n/a:save-not-implemented | n/a:save-not-implemented |
+| gbdt-adapter-reg/ties        | batch  | DIVERGENT    | 1681c6f968f338d2 | a8e18f6ab1d3f5b7 |
+| gbdt-categorical-ctr/base    | infer  | DIVERGENT    | 01fd6a33928b42a8 | 26e9d40e1f0b1d12 |
+| gbdt-categorical-ctr/base    | model  | DIVERGENT    | d1bc6890d23ce613 | d17c050fe185b12e |
+| gbdt-categorical-ctr/base    | batch  | DIVERGENT    | 8c08c90af3b9bafd | 0054d76351dad7b9 |
+| gbdt-categorical-ctr/ties    | infer  | DIVERGENT    | 7e2f6402af40601a | a649eb5c22991500 |
+| gbdt-categorical-ctr/ties    | model  | DIVERGENT    | e65f09cb2a1e7754 | 32defc5a92d11761 |
+| gbdt-categorical-ctr/ties    | batch  | DIVERGENT    | 2adbd46492fefdf1 | 28e704dbf6e9c920 |
+| gbdt-depthwise/base          | infer  | DIVERGENT    | 688bf9a8e927232e | 79366ba528d6c63a |
+| gbdt-depthwise/base          | model  | DIVERGENT    | 448c1bcf37ffdc97 | 648be9d8b70289d8 |
+| gbdt-depthwise/base          | batch  | DIVERGENT    | 25bf2754b853a026 | 06fb995c1595426e |
+| gbdt-depthwise/ties          | infer  | DIVERGENT    | e299a1457dfaedc7 | 2b7160bf29cc9e32 |
+| gbdt-depthwise/ties          | model  | DIVERGENT    | ef4323cc40bbfd0a | 49e244e7ab51a70e |
+| gbdt-depthwise/ties          | batch  | DIVERGENT    | 071de76e68c2fc1d | e7309749a4851c20 |
+| gbdt-exact-mae/base          | infer  | DIVERGENT    | 8be26ab7b3a20568 | b792c6037a019b1b |
+| gbdt-exact-mae/base          | model  | DIVERGENT    | 610f6e7030433d25 | 24f0b1657b97a920 |
+| gbdt-exact-mae/base          | batch  | DIVERGENT    | f90756faab4e2172 | ab0796277bd2cae8 |
+| gbdt-exact-mae/ties          | infer  | DIVERGENT    | a6a66eb2f734a4a0 | 09ea747d192cb5b0 |
+| gbdt-exact-mae/ties          | model  | DIVERGENT    | 3c059b5d2d1d5ba4 | 106d0a9e63d0893f |
+| gbdt-exact-mae/ties          | batch  | DIVERGENT    | e6f7c7d77ba8558c | 230777d8fec49b23 |
+| gbdt-feature-freq/base       | infer  | DIVERGENT    | 95b976d85efc7f2d | 7c1f1720c84f766d |
+| gbdt-feature-freq/base       | model  | DIVERGENT    | b2959e177eb6e088 | fa2d72847d7f354e |
+| gbdt-feature-freq/base       | batch  | DIVERGENT    | 272537bbe18b712b | d013c9ca97db69fa |
+| gbdt-feature-freq/ties       | infer  | DIVERGENT    | 41371bafcf6397a3 | 73e9b08f256bbe1b |
+| gbdt-feature-freq/ties       | model  | DIVERGENT    | a7417c31e1b422b4 | 392115e926fd789f |
+| gbdt-feature-freq/ties       | batch  | DIVERGENT    | 2de7d484a30cee05 | ab2e00f71a13a945 |
+| gbdt-lossguide-newtoncosine/base | infer  | DIVERGENT    | 8bf12d96090993c0 | b142908f95110a7a |
+| gbdt-lossguide-newtoncosine/base | model  | DIVERGENT    | aacf88b161050230 | 2dc21f218742df80 |
+| gbdt-lossguide-newtoncosine/base | batch  | DIVERGENT    | 7a46de20ca608a86 | ec1d4c87a74150d1 |
+| gbdt-lossguide-newtoncosine/ties | infer  | DIVERGENT    | 0bc7b024d6781e1e | 2c5328d115ec0d64 |
+| gbdt-lossguide-newtoncosine/ties | model  | DIVERGENT    | 7ce2f8e61394ebe2 | dc90ca6b801fa08c |
+| gbdt-lossguide-newtoncosine/ties | batch  | DIVERGENT    | 2bc45ac3e9038e64 | a916d97ef1e38b48 |
+| gbdt-lossguide/base          | infer  | DIVERGENT    | 38894a4992494eec | 1f2dcf8da28b48bc |
+| gbdt-lossguide/base          | model  | DIVERGENT    | 9e01e18241859f87 | 379f5dcbfbf1f595 |
+| gbdt-lossguide/base          | batch  | DIVERGENT    | e645c5854d89c482 | b849a013352bd124 |
+| gbdt-lossguide/ties          | infer  | DIVERGENT    | 37cf90363e2078cf | 1a57cad8e9cf8e61 |
+| gbdt-lossguide/ties          | model  | DIVERGENT    | 3653934f21f61d9d | 3772693a31aeff61 |
+| gbdt-lossguide/ties          | batch  | DIVERGENT    | e0ab456d446fcfe2 | 4544a4d99d7450cc |
+| gbdt-multiclass/base         | infer  | DIVERGENT    | eb9f3cbfed539fe0 | eb3df3d10160f212 |
+| gbdt-multiclass/base         | model  | DIVERGENT    | 33d956710bbf8d85 | a12a3044097add60 |
+| gbdt-multiclass/base         | batch  | DIVERGENT    | 3a70c328641a3a08 | df103e08f9204da6 |
+| gbdt-multiclass/ties         | infer  | DIVERGENT    | 36c62ed7e9da7402 | e36cf05d49377bc1 |
+| gbdt-multiclass/ties         | model  | DIVERGENT    | 333644e5d21d53f8 | f8fd0aed3c8d0eed |
+| gbdt-multiclass/ties         | batch  | DIVERGENT    | e8439a8a50bfbf51 | 80abed9b506d731a |
+| gbdt-nan-modes/base          | infer  | DIVERGENT    | 07bb5e7debc63359 | b0637e3bfd5a7cd5 |
+| gbdt-nan-modes/base          | model  | DIVERGENT    | 21e4e8ab2f27b32b | 977772bb91f03f58 |
+| gbdt-nan-modes/base          | batch  | DIVERGENT    | 534ddd7d50c9f4b2 | 1e4e3665fde87b57 |
+| gbdt-nan-modes/ties          | infer  | DIVERGENT    | dc93d7ad50635245 | 2b04cb8a52db4437 |
+| gbdt-nan-modes/ties          | model  | DIVERGENT    | dcc75fe82d85d709 | 0943f9afe2db8f13 |
+| gbdt-nan-modes/ties          | batch  | DIVERGENT    | 1ae697f9ec19d9e2 | df368ffef32c416f |
+| gbdt-onevsall/base           | infer  | DIVERGENT    | 9ebe038b917dc3d0 | 7c72ec45aa5c648b |
+| gbdt-onevsall/base           | model  | DIVERGENT    | 66c3cd878ec16470 | 2d7a4c75c609ab77 |
+| gbdt-onevsall/base           | batch  | DIVERGENT    | 795bf20d55943289 | 86fed93bd0d1f9dc |
+| gbdt-onevsall/ties           | infer  | DIVERGENT    | 597fa19abb40fb1d | 81c993a028f0deac |
+| gbdt-onevsall/ties           | model  | DIVERGENT    | ad927470625838f6 | 1b24b44409a0ed17 |
+| gbdt-onevsall/ties           | batch  | DIVERGENT    | 72bbd68979455f8c | c451002c6d692e9d |
+| gbdt-ordered-rmse/base       | infer  | DIVERGENT    | 3113f83d552f6e3e | eca7b2b0109cc61c |
+| gbdt-ordered-rmse/base       | model  | DIVERGENT    | 43540d21322226ab | 7cce1e66213e0fda |
+| gbdt-ordered-rmse/base       | batch  | DIVERGENT    | 5cd33ee932513206 | 360e72516040992d |
+| gbdt-ordered-rmse/ties       | infer  | DIVERGENT    | ca0189610e51bc17 | c32f0f269c4a0724 |
+| gbdt-ordered-rmse/ties       | model  | DIVERGENT    | f9192cb03ecc6ece | 3a95c066ae9855ec |
+| gbdt-ordered-rmse/ties       | batch  | DIVERGENT    | 7fa28c2d36832787 | 3efdfba01edee6ac |
+| gbdt-pair-logit/base         | infer  | DIVERGENT    | 4ed2a018d6297fa6 | 9f71f0ce153c936c |
+| gbdt-pair-logit/base         | model  | DIVERGENT    | 06b74b2eb513789c | acc0b51828736860 |
+| gbdt-pair-logit/base         | batch  | DIVERGENT    | 723d02c4bc67b31c | 50f79aaaaf5d1076 |
+| gbdt-pair-logit/ties         | infer  | DIVERGENT    | cd4a0bd3e385f63f | 152f8b28a1b3e662 |
+| gbdt-pair-logit/ties         | model  | DIVERGENT    | 1eaf64539af8fbda | 06aae01c667dd5e9 |
+| gbdt-pair-logit/ties         | batch  | DIVERGENT    | 042e19fb8b2eec05 | 2ae03e9d11a1ac69 |
+| gbdt-parametric-losses/base  | infer  | DIVERGENT    | 3d20640643af6d14 | fa7dbfad24464fa4 |
+| gbdt-parametric-losses/base  | model  | DIVERGENT    | 4a11bb8735629ef7 | a1d6df458fb48f56 |
+| gbdt-parametric-losses/base  | batch  | DIVERGENT    | f574fe005a5e6150 | 2e9ee2f6025aec26 |
+| gbdt-parametric-losses/ties  | infer  | DIVERGENT    | 0fef0f64519af806 | 7115f7231a8dc37f |
+| gbdt-parametric-losses/ties  | model  | DIVERGENT    | 13328c12765f101a | 333dacd096d5866c |
+| gbdt-parametric-losses/ties  | batch  | DIVERGENT    | 881ace5b44f7cac1 | f4b672dc263c5a1b |
+| gbdt-pointwise-l2-bayesian-eval/base | infer  | DIVERGENT    | 2754757c200872f3 | c290e115ce00383c |
+| gbdt-pointwise-l2-bayesian-eval/base | model  | DIVERGENT    | c29dddb945d072a8 | a29ed396f1ffcd5d |
+| gbdt-pointwise-l2-bayesian-eval/base | batch  | DIVERGENT    | 3fd0fe4443273a54 | ccbe236015fddeb5 |
+| gbdt-pointwise-l2-bayesian-eval/ties | infer  | DIVERGENT    | 92b20ebae1dabad7 | f479541317177f65 |
+| gbdt-pointwise-l2-bayesian-eval/ties | model  | DIVERGENT    | 293e124b96e008e4 | cb3db9ae329fa293 |
+| gbdt-pointwise-l2-bayesian-eval/ties | batch  | DIVERGENT    | 405d98bc60e93077 | 9ff5226a5b10fc79 |
+| gbdt-query-rmse/base         | infer  | DIVERGENT    | c5dd11cce5027431 | 3185dee88c2060e4 |
+| gbdt-query-rmse/base         | model  | DIVERGENT    | 773082ee900f4629 | e83083e0db84ceb1 |
+| gbdt-query-rmse/base         | batch  | DIVERGENT    | 2f9ae940636f0782 | 47efa1d9a17e9185 |
+| gbdt-query-rmse/ties         | infer  | DIVERGENT    | 82656b1f96479524 | a45bb66940742356 |
+| gbdt-query-rmse/ties         | model  | DIVERGENT    | a00477457a3f0913 | 80df406b70bd1dda |
+| gbdt-query-rmse/ties         | batch  | DIVERGENT    | 348dc9138ec69402 | 6196212c3a82e7ad |
+| gbdt-rmse/base               | infer  | DIVERGENT    | ba6284898fcd7adb | 9bc176da5c747a5a |
+| gbdt-rmse/base               | model  | DIVERGENT    | 6a7e0d174aadda21 | 38ec2e50d4a2469f |
+| gbdt-rmse/base               | batch  | DIVERGENT    | 3a53a53abfe321f6 | d67eaa0d63f82a23 |
+| gbdt-rmse/ties               | infer  | DIVERGENT    | 4044415de3b73aee | 00cd048be4013705 |
+| gbdt-rmse/ties               | model  | DIVERGENT    | b1eb77816b7f439a | 4483685433f0364a |
+| gbdt-rmse/ties               | batch  | DIVERGENT    | 1681c6f968f338d2 | a8e18f6ab1d3f5b7 |
+| gbdt-symmetric/base          | infer  | DIVERGENT    | e1db044dc82354ac | 12d2573c42bd5dc6 |
+| gbdt-symmetric/base          | model  | DIVERGENT    | ee776c33f052679a | 8d3acba782a49378 |
+| gbdt-symmetric/base          | batch  | DIVERGENT    | 9d36287df25eff95 | 38f26df0ee8e97b4 |
+| gbdt-symmetric/ties          | infer  | DIVERGENT    | e71542e71394acc3 | 4b4e4bfea19c4129 |
+| gbdt-symmetric/ties          | model  | DIVERGENT    | d01adab1226baf49 | ee9b1a4feb5e90b4 |
+| gbdt-symmetric/ties          | batch  | DIVERGENT    | 8146b2372b89188b | a7dc373e1e7c664d |
+| gbdt-yeti-rank/base          | infer  | DIVERGENT    | 09302e69a820d4d2 | 45011f15b0055861 |
+| gbdt-yeti-rank/base          | model  | DIVERGENT    | 61b246f4d443ada8 | c406ff93ed1d3e00 |
+| gbdt-yeti-rank/base          | batch  | DIVERGENT    | 1d4efc6c8dd79d17 | cf51ea6acad97605 |
+| gbdt-yeti-rank/ties          | infer  | DIVERGENT    | b9ffe828b9fbd29b | 227388ca5f47499f |
+| gbdt-yeti-rank/ties          | model  | DIVERGENT    | 829d963be374fd19 | 3974b48b761b6469 |
+| gbdt-yeti-rank/ties          | batch  | DIVERGENT    | eacc647f6bcc57aa | ab82108a7ed11fa1 |
+| iforest-tuned/base           | infer  | DIVERGENT    | bcbf71b247c3951c | 7a18291ac8d10b43 |
+| iforest-tuned/base           | model  | DIVERGENT    | b9c8ac0cfcb621b7 | a5a275f33983fdc6 |
+| iforest-tuned/base           | batch  | DIVERGENT    | 23c01febba0472d9 | 773d0ac502495740 |
+| iforest-tuned/ties           | infer  | DIVERGENT    | 9f8aee8ed2215f71 | 251c871d28d3c2dc |
+| iforest-tuned/ties           | model  | DIVERGENT    | d8e240e70ffb7034 | 9288f4ccad67c8ca |
+| iforest-tuned/ties           | batch  | DIVERGENT    | e2eb172cfc7af595 | d6ab4f7c489c2768 |
+| par-forest-et/base           | infer  | DIVERGENT    | f67822ca39ef408b | 9ffccb36ba58de65 |
+| par-forest-et/base           | model  | DIVERGENT    | 1c0c6b20cc9be5bd | 70dbb8d0960a79f5 |
+| par-forest-et/base           | batch  | DIVERGENT    | 42f0ba39adaa879d | 607c7f08285ac1b3 |
+| par-forest-et/ties           | infer  | DIVERGENT    | 25c3d08ea7aaac22 | 2f97b5e9235aac6a |
+| par-forest-et/ties           | model  | DIVERGENT    | 0ae34e3bcc2b7391 | 5db485a12ec63e08 |
+| par-forest-et/ties           | batch  | DIVERGENT    | c46241fb51ef3d87 | 1e58dcfec897732e |
+| par-forest/base              | infer  | DIVERGENT    | 3b30324dc0a909d3 | c60b3005a0f09b7f |
+| par-forest/base              | model  | DIVERGENT    | ed1592a2b0ab1658 | fd74a88c8e3d55bd |
+| par-forest/base              | batch  | DIVERGENT    | cec53714495b4d9c | 265f9178a02d08ed |
+| par-forest/ties              | infer  | DIVERGENT    | 122d0397afe9bc84 | ebecac489d7f4b1c |
+| par-forest/ties              | model  | DIVERGENT    | 2d8da1cf56084257 | e20748775d412e7d |
+| par-forest/ties              | batch  | DIVERGENT    | 7c24de838b13708e | 9f8141ec0e259364 |
+| rf-clf-balanced-parallel/base | infer  | DIVERGENT    | 6eb9a132c1c2ca81 | 96646ddfc021b64f |
+| rf-clf-balanced-parallel/base | model  | DIVERGENT    | a90bf75dddc42ff6 | dd97dd1244a9cc25 |
+| rf-clf-balanced-parallel/base | batch  | DIVERGENT    | bed580e05ed90678 | f9d4270d69c2ef7e |
+| rf-clf-balanced-parallel/ties | infer  | DIVERGENT    | f974c6df7af56a35 | 1c5b6ac59805cb1b |
+| rf-clf-balanced-parallel/ties | model  | DIVERGENT    | 8775093dd835ddff | d73b2aa32c40e5ee |
+| rf-clf-balanced-parallel/ties | batch  | DIVERGENT    | 53e97740f8434ba1 | 79d779320c38a0f5 |
+| rf-clf-entropy-log2-noboot/base | infer  | DIVERGENT    | b51ba2fdcb6b9948 | 9b19a89fdba40d19 |
+| rf-clf-entropy-log2-noboot/base | model  | DIVERGENT    | 3eeb9151dad69465 | 80614b2a6835d56c |
+| rf-clf-entropy-log2-noboot/base | batch  | DIVERGENT    | 54dd3e742f7c0948 | 668dcf154e8aee9b |
+| rf-clf-entropy-log2-noboot/ties | infer  | DIVERGENT    | d17c36baaa064aec | 9f794539919d92d1 |
+| rf-clf-entropy-log2-noboot/ties | model  | DIVERGENT    | acb31f363085b84e | 1f70d64880b9d684 |
+| rf-clf-entropy-log2-noboot/ties | batch  | DIVERGENT    | 155f46e0e1fcf8c9 | 996cb5e834b65a28 |
+| rf-clf/base                  | infer  | DIVERGENT    | 3b30324dc0a909d3 | c60b3005a0f09b7f |
+| rf-clf/base                  | model  | DIVERGENT    | ed1592a2b0ab1658 | fd74a88c8e3d55bd |
+| rf-clf/base                  | batch  | DIVERGENT    | cec53714495b4d9c | 265f9178a02d08ed |
+| rf-clf/ties                  | infer  | DIVERGENT    | 122d0397afe9bc84 | ebecac489d7f4b1c |
+| rf-clf/ties                  | model  | DIVERGENT    | 2d8da1cf56084257 | e20748775d412e7d |
+| rf-clf/ties                  | batch  | DIVERGENT    | 7c24de838b13708e | 9f8141ec0e259364 |
+| rf-reg-gamma-ig/base         | infer  | DIVERGENT    | 89c0c697394e3872 | 7b4182882b9694c2 |
+| rf-reg-gamma-ig/base         | model  | DIVERGENT    | d57ec8cc5f503491 | 81ea2b1f45ddc838 |
+| rf-reg-gamma-ig/base         | batch  | DIVERGENT    | 975e83a59bda50f4 | edd5679e925fd6c8 |
+| rf-reg-gamma-ig/ties         | infer  | DIVERGENT    | 68daa64efd867b1f | d6142e4ae63adb85 |
+| rf-reg-gamma-ig/ties         | model  | DIVERGENT    | 4f69080b9dcb987a | dcd99765c0580a85 |
+| rf-reg-gamma-ig/ties         | batch  | DIVERGENT    | 83b5aa983cd13243 | 5aa83477d3753d18 |
+| rf-reg-poisson/base          | infer  | DIVERGENT    | 353b28cbe8c8bb80 | a2bcb6c1df1e8529 |
+| rf-reg-poisson/base          | model  | DIVERGENT    | 019daca93141ba9b | 5fc098ecc00dd8e1 |
+| rf-reg-poisson/base          | batch  | DIVERGENT    | 07c79dce7bc12be8 | 0089b98ab147fc35 |
+| rf-reg-poisson/ties          | infer  | DIVERGENT    | bae7794cd9009935 | a6e6ade1814579b6 |
+| rf-reg-poisson/ties          | model  | DIVERGENT    | f32a797af704c82f | b1041e31f6d1de2b |
+| rf-reg-poisson/ties          | batch  | DIVERGENT    | 6300ff8b7d38acbd | 6d644da24636168f |
+| rf-reg/base                  | infer  | DIVERGENT    | 16465c479f279614 | 8b43c2c7049ce3fa |
+| rf-reg/base                  | model  | DIVERGENT    | ee1ec176625ae198 | f34a7fea573ff8cb |
+| rf-reg/base                  | batch  | DIVERGENT    | f01eff208024fbd2 | 61b884c17056b9b1 |
+| rf-reg/ties                  | infer  | DIVERGENT    | 9e088d6c6c1bf54b | a8869d0cf75822e0 |
+| rf-reg/ties                  | model  | DIVERGENT    | a35ee93f7a000cbd | da8c9d8446c71bbb |
+| rf-reg/ties                  | batch  | DIVERGENT    | cdda8ca2f47be0d0 | eb288fcf56a03cc9 |
+
+infer/model: 20 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): DIVERGENT=116, N/A=4, NOT-COMPARED=20
+batch: 10 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): DIVERGENT=60, NOT-COMPARED=10
+summary (rlpair): 

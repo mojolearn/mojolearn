@@ -1,0 +1,29 @@
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| bpe-trainer/base             | DIVERGENT  | parts differ: ranks,tokenizer_json,n_tokens,n_merges,n_ties_broken; agree: - | f5172d25e6499662 |
+| bpe-trainer/ties             | DIVERGENT  | parts differ: ranks,tokenizer_json,n_tokens,n_merges,n_ties_broken; agree: - | ee7212a28441acca |
+| cross-val-folds/base         | DIVERGENT  | parts differ: strat3,strat3content,strat5,strat5content,kfold3,kfold3content,kfold5,kfold5content,descriptor; agree: partition | 3509fc989915b148 |
+| cross-val-folds/ties         | DIVERGENT  | parts differ: strat3,strat3content,strat5,strat5content,kfold3,kfold3content,kfold5,kfold5content,descriptor; agree: partition | 500cfd3aceba5dfb |
+
+summary: DIVERGENT=4
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| bpe-trainer/base             | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-trainer/base             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-trainer/base             | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-trainer/ties             | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-trainer/ties             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-trainer/ties             | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| cross-val-folds/base         | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val-folds/base         | batch  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/ties         | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-val-folds/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-val-folds/ties         | batch  | N/A          | n/a:function     | n/a:function     |
+
+summary (infer/model): N/A=8
+summary (batch): N/A=4
+summary (rlpair): 

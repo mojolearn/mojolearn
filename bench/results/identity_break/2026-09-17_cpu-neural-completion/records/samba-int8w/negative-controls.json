@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "samba-int8w/base",
+      "context_matches": true,
+      "clean": "c113074d1dbd0d19",
+      "sabotage": "8ac882f1c0194c42",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/denormal",
+      "context_matches": true,
+      "clean": "98cddd279757a94e",
+      "sabotage": "2d6176be272799c4",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/denormal_ftz",
+      "context_matches": true,
+      "clean": "756b21b907ffd93e",
+      "sabotage": "7bc5ea32afae40a8",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/dupes",
+      "context_matches": true,
+      "clean": "c113074d1dbd0d19",
+      "sabotage": "8ac882f1c0194c42",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/hashed",
+      "context_matches": true,
+      "clean": "d74a6b5a978a5d02",
+      "sabotage": "c91c49956304b1c8",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/negative",
+      "context_matches": true,
+      "clean": "dd4035e7ed284097",
+      "sabotage": "6e1c17477e0b64e7",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/odd",
+      "context_matches": true,
+      "clean": "c113074d1dbd0d19",
+      "sabotage": "8ac882f1c0194c42",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/ties",
+      "context_matches": true,
+      "clean": "bbd9d7c78304ca85",
+      "sabotage": "0c59ec7e137a2d22",
+      "detected": true
+    },
+    {
+      "cell": "samba-int8w/wide",
+      "context_matches": true,
+      "clean": "735685c73abb2178",
+      "sabotage": "60b0eff138c94da2",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:44:41  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kmeans-random/base repeat=1/train
+# DONE kmeans-random/base repeat=1/train 3.909s
+# START kmeans-random/base repeat=1/infer-save-reload
+# DONE kmeans-random/base repeat=1/infer-save-reload 0.136s
+# START kmeans-random/base repeat=1/batch
+# DONE kmeans-random/base repeat=1/batch 0.196s
+# START kmeans-random/base repeat=1/stepfull
+# DONE kmeans-random/base repeat=1/stepfull 0.000s
+# START kmeans-random/base repeat=2/train
+# DONE kmeans-random/base repeat=2/train 3.932s
+# START kmeans-random/base repeat=2/infer-save-reload
+# DONE kmeans-random/base repeat=2/infer-save-reload 0.138s
+# START kmeans-random/base repeat=2/batch
+# DONE kmeans-random/base repeat=2/batch 0.189s
+# START kmeans-random/base repeat=2/stepfull
+# DONE kmeans-random/base repeat=2/stepfull 0.000s
+# CELL kmeans-random/base STABLE 8.501s
+# START kmeans-random/ties repeat=1/train
+# DONE kmeans-random/ties repeat=1/train 8.785s
+# START kmeans-random/ties repeat=1/infer-save-reload
+# DONE kmeans-random/ties repeat=1/infer-save-reload 0.173s
+# START kmeans-random/ties repeat=1/batch
+# DONE kmeans-random/ties repeat=1/batch 0.200s
+# START kmeans-random/ties repeat=1/stepfull
+# DONE kmeans-random/ties repeat=1/stepfull 0.000s
+# START kmeans-random/ties repeat=2/train
+# DONE kmeans-random/ties repeat=2/train 8.863s
+# START kmeans-random/ties repeat=2/infer-save-reload
+# DONE kmeans-random/ties repeat=2/infer-save-reload 0.183s
+# START kmeans-random/ties repeat=2/batch
+# DONE kmeans-random/ties repeat=2/batch 0.215s
+# START kmeans-random/ties repeat=2/stepfull
+# DONE kmeans-random/ties repeat=2/stepfull 0.000s
+# CELL kmeans-random/ties STABLE 18.420s
+# START kmeans-random/hashed repeat=1/train
+# DONE kmeans-random/hashed repeat=1/train 3.896s
+# START kmeans-random/hashed repeat=1/infer-save-reload
+# DONE kmeans-random/hashed repeat=1/infer-save-reload 0.142s
+# START kmeans-random/hashed repeat=1/batch
+# DONE kmeans-random/hashed repeat=1/batch 0.197s
+# START kmeans-random/hashed repeat=1/stepfull
+# DONE kmeans-random/hashed repeat=1/stepfull 0.000s
+# START kmeans-random/hashed repeat=2/train
+# DONE kmeans-random/hashed repeat=2/train 3.892s
+# START kmeans-random/hashed repeat=2/infer-save-reload
+# DONE kmeans-random/hashed repeat=2/infer-save-reload 0.139s
+# START kmeans-random/hashed repeat=2/batch
+# DONE kmeans-random/hashed repeat=2/batch 0.189s
+# START kmeans-random/hashed repeat=2/stepfull
+# DONE kmeans-random/hashed repeat=2/stepfull 0.000s
+# CELL kmeans-random/hashed STABLE 8.456s
+# START kmeans-random/wide repeat=1/train
+# DONE kmeans-random/wide repeat=1/train 2.094s
+# START kmeans-random/wide repeat=1/infer-save-reload
+# DONE kmeans-random/wide repeat=1/infer-save-reload 0.136s
+# START kmeans-random/wide repeat=1/batch
+# DONE kmeans-random/wide repeat=1/batch 0.186s
+# START kmeans-random/wide repeat=1/stepfull
+# DONE kmeans-random/wide repeat=1/stepfull 0.000s
+# START kmeans-random/wide repeat=2/train
+# DONE kmeans-random/wide repeat=2/train 2.106s
+# START kmeans-random/wide repeat=2/infer-save-reload
+# DONE kmeans-random/wide repeat=2/infer-save-reload 0.138s
+# START kmeans-random/wide repeat=2/batch
+# DONE kmeans-random/wide repeat=2/batch 0.186s
+# START kmeans-random/wide repeat=2/stepfull
+# DONE kmeans-random/wide repeat=2/stepfull 0.000s
+# CELL kmeans-random/wide STABLE 4.846s
+# START kmeans-random/denormal repeat=1/train
+# DONE kmeans-random/denormal repeat=1/train 2.960s
+# START kmeans-random/denormal repeat=1/infer-save-reload
+# DONE kmeans-random/denormal repeat=1/infer-save-reload 0.118s
+# START kmeans-random/denormal repeat=1/batch
+# DONE kmeans-random/denormal repeat=1/batch 0.203s
+# START kmeans-random/denormal repeat=1/stepfull
+# DONE kmeans-random/denormal repeat=1/stepfull 0.000s
+# START kmeans-random/denormal repeat=2/train
+# DONE kmeans-random/denormal repeat=2/train 2.772s
+# START kmeans-random/denormal repeat=2/infer-save-reload
+# DONE kmeans-random/denormal repeat=2/infer-save-reload 0.131s
+# START kmeans-random/denormal repeat=2/batch
+# DONE kmeans-random/denormal repeat=2/batch 0.182s
+# START kmeans-random/denormal repeat=2/stepfull
+# DONE kmeans-random/denormal repeat=2/stepfull 0.000s
+# CELL kmeans-random/denormal STABLE 6.367s
+# START kmeans-random/denormal_ftz repeat=1/train
+# DONE kmeans-random/denormal_ftz repeat=1/train 2.728s
+# START kmeans-random/denormal_ftz repeat=1/infer-save-reload
+# DONE kmeans-random/denormal_ftz repeat=1/infer-save-reload 0.133s
+# START kmeans-random/denormal_ftz repeat=1/batch
+# DONE kmeans-random/denormal_ftz repeat=1/batch 0.200s
+# START kmeans-random/denormal_ftz repeat=1/stepfull
+# DONE kmeans-random/denormal_ftz repeat=1/stepfull 0.000s
+# START kmeans-random/denormal_ftz repeat=2/train
+# DONE kmeans-random/denormal_ftz repeat=2/train 2.592s
+# START kmeans-random/denormal_ftz repeat=2/infer-save-reload
+# DONE kmeans-random/denormal_ftz repeat=2/infer-save-reload 0.133s
+# START kmeans-random/denormal_ftz repeat=2/batch
+# DONE kmeans-random/denormal_ftz repeat=2/batch 0.175s
+# START kmeans-random/denormal_ftz repeat=2/stepfull
+# DONE kmeans-random/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kmeans-random/denormal_ftz STABLE 5.961s
+# START kmeans-random/dupes repeat=1/train
+# DONE kmeans-random/dupes repeat=1/train 3.861s
+# START kmeans-random/dupes repeat=1/infer-save-reload
+# DONE kmeans-random/dupes repeat=1/infer-save-reload 0.146s
+# START kmeans-random/dupes repeat=1/batch
+# DONE kmeans-random/dupes repeat=1/batch 0.187s
+# START kmeans-random/dupes repeat=1/stepfull
+# DONE kmeans-random/dupes repeat=1/stepfull 0.000s
+# START kmeans-random/dupes repeat=2/train
+# DONE kmeans-random/dupes repeat=2/train 3.862s
+# START kmeans-random/dupes repeat=2/infer-save-reload
+# DONE kmeans-random/dupes repeat=2/infer-save-reload 0.142s
+# START kmeans-random/dupes repeat=2/batch
+# DONE kmeans-random/dupes repeat=2/batch 0.189s
+# START kmeans-random/dupes repeat=2/stepfull
+# DONE kmeans-random/dupes repeat=2/stepfull 0.000s
+# CELL kmeans-random/dupes STABLE 8.387s
+# START kmeans-random/odd repeat=1/train
+# DONE kmeans-random/odd repeat=1/train 1.531s
+# START kmeans-random/odd repeat=1/infer-save-reload
+# DONE kmeans-random/odd repeat=1/infer-save-reload 0.095s
+# START kmeans-random/odd repeat=1/batch
+# DONE kmeans-random/odd repeat=1/batch 0.115s
+# START kmeans-random/odd repeat=1/stepfull
+# DONE kmeans-random/odd repeat=1/stepfull 0.000s
+# START kmeans-random/odd repeat=2/train
+# DONE kmeans-random/odd repeat=2/train 1.505s
+# START kmeans-random/odd repeat=2/infer-save-reload
+# DONE kmeans-random/odd repeat=2/infer-save-reload 0.086s
+# START kmeans-random/odd repeat=2/batch
+# DONE kmeans-random/odd repeat=2/batch 0.120s
+# START kmeans-random/odd repeat=2/stepfull
+# DONE kmeans-random/odd repeat=2/stepfull 0.000s
+# CELL kmeans-random/odd STABLE 3.453s
+# START kmeans-random/negative repeat=1/train
+# DONE kmeans-random/negative repeat=1/train 0.976s
+# START kmeans-random/negative repeat=1/infer-save-reload
+# DONE kmeans-random/negative repeat=1/infer-save-reload 0.127s
+# START kmeans-random/negative repeat=1/batch
+# DONE kmeans-random/negative repeat=1/batch 0.184s
+# START kmeans-random/negative repeat=1/stepfull
+# DONE kmeans-random/negative repeat=1/stepfull 0.000s
+# START kmeans-random/negative repeat=2/train
+# DONE kmeans-random/negative repeat=2/train 1.036s
+# START kmeans-random/negative repeat=2/infer-save-reload
+# DONE kmeans-random/negative repeat=2/infer-save-reload 0.137s
+# START kmeans-random/negative repeat=2/batch
+# DONE kmeans-random/negative repeat=2/batch 0.187s
+# START kmeans-random/negative repeat=2/stepfull
+# DONE kmeans-random/negative repeat=2/stepfull 0.000s
+# CELL kmeans-random/negative STABLE 2.647s
+| kmeans-random          | a8cb6990c11eca35 | a9e116b2233a98c0 | 89fdc1b487a271f8 | b8020bac20b07796 | ce25e85f78f58fb1 | ce25e85f78f58fb1 | f789d19c3e693dcd | 4ac2949d882ae480 | 4d8bee0fcd237cb3 |
+| kmeans-random infer    | ca59306b18526aaf | bb1fab662dc95e93 | a15646cc37369790 | c38178e2a0b0c3e1 | c2469d5a6783ee3e | c2469d5a6783ee3e | 9fdca119f7f18325 | ca52244efb69c9e0 | 6a5ac73fb2487dc6 |
+| kmeans-random model    | 9e67f3decf17badf | 406d57829ffc94d4 | 1e8e4f7c723d5079 | f1babf5fce1e713e | 2aabc63df8ed247f | 2aabc63df8ed247f | d47b66018626dd88 | 43f6f233a584f8ee | e5a2b7211a85e012 |
+| kmeans-random batch    | 528deb5a1b6a910c | 07b646585177e582 | e565812ca36ff6a3 | 4afc8692f8bf7739 | c93dda2a1f5107de | c93dda2a1f5107de | 9d7df97095fdabba | bc836dfb45dd14e5 | a8abb80f013e044d |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kmeans-random stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kmeans-random/kmeans-random/cpu-sabotage.json

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:08  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START knn-minkowski-p3/base repeat=1/train
+# DONE knn-minkowski-p3/base repeat=1/train 0.124s
+# START knn-minkowski-p3/base repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/base repeat=1/infer-save-reload 0.245s
+# START knn-minkowski-p3/base repeat=1/batch
+# DONE knn-minkowski-p3/base repeat=1/batch 0.275s
+# START knn-minkowski-p3/base repeat=1/stepfull
+# DONE knn-minkowski-p3/base repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/base repeat=2/train
+# DONE knn-minkowski-p3/base repeat=2/train 0.121s
+# START knn-minkowski-p3/base repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/base repeat=2/infer-save-reload 0.220s
+# START knn-minkowski-p3/base repeat=2/batch
+# DONE knn-minkowski-p3/base repeat=2/batch 0.254s
+# START knn-minkowski-p3/base repeat=2/stepfull
+# DONE knn-minkowski-p3/base repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/base STABLE 1.240s
+# START knn-minkowski-p3/ties repeat=1/train
+# DONE knn-minkowski-p3/ties repeat=1/train 0.107s
+# START knn-minkowski-p3/ties repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/ties repeat=1/infer-save-reload 0.219s
+# START knn-minkowski-p3/ties repeat=1/batch
+# DONE knn-minkowski-p3/ties repeat=1/batch 0.239s
+# START knn-minkowski-p3/ties repeat=1/stepfull
+# DONE knn-minkowski-p3/ties repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/ties repeat=2/train
+# DONE knn-minkowski-p3/ties repeat=2/train 0.103s
+# START knn-minkowski-p3/ties repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/ties repeat=2/infer-save-reload 0.208s
+# START knn-minkowski-p3/ties repeat=2/batch
+# DONE knn-minkowski-p3/ties repeat=2/batch 0.246s
+# START knn-minkowski-p3/ties repeat=2/stepfull
+# DONE knn-minkowski-p3/ties repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/ties STABLE 1.122s
+# START knn-minkowski-p3/hashed repeat=1/train
+# DONE knn-minkowski-p3/hashed repeat=1/train 0.123s
+# START knn-minkowski-p3/hashed repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/hashed repeat=1/infer-save-reload 0.243s
+# START knn-minkowski-p3/hashed repeat=1/batch
+# DONE knn-minkowski-p3/hashed repeat=1/batch 0.274s
+# START knn-minkowski-p3/hashed repeat=1/stepfull
+# DONE knn-minkowski-p3/hashed repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/hashed repeat=2/train
+# DONE knn-minkowski-p3/hashed repeat=2/train 0.121s
+# START knn-minkowski-p3/hashed repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/hashed repeat=2/infer-save-reload 0.244s
+# START knn-minkowski-p3/hashed repeat=2/batch
+# DONE knn-minkowski-p3/hashed repeat=2/batch 0.279s
+# START knn-minkowski-p3/hashed repeat=2/stepfull
+# DONE knn-minkowski-p3/hashed repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/hashed STABLE 1.285s
+# START knn-minkowski-p3/wide repeat=1/train
+# DONE knn-minkowski-p3/wide repeat=1/train 0.121s
+# START knn-minkowski-p3/wide repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/wide repeat=1/infer-save-reload 0.206s
+# START knn-minkowski-p3/wide repeat=1/batch
+# DONE knn-minkowski-p3/wide repeat=1/batch 0.268s
+# START knn-minkowski-p3/wide repeat=1/stepfull
+# DONE knn-minkowski-p3/wide repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/wide repeat=2/train
+# DONE knn-minkowski-p3/wide repeat=2/train 0.121s
+# START knn-minkowski-p3/wide repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/wide repeat=2/infer-save-reload 0.234s
+# START knn-minkowski-p3/wide repeat=2/batch
+# DONE knn-minkowski-p3/wide repeat=2/batch 0.265s
+# START knn-minkowski-p3/wide repeat=2/stepfull
+# DONE knn-minkowski-p3/wide repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/wide STABLE 1.215s
+# START knn-minkowski-p3/denormal repeat=1/train
+# DONE knn-minkowski-p3/denormal repeat=1/train 0.101s
+# START knn-minkowski-p3/denormal repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/denormal repeat=1/infer-save-reload 0.212s
+# START knn-minkowski-p3/denormal repeat=1/batch
+# DONE knn-minkowski-p3/denormal repeat=1/batch 0.236s
+# START knn-minkowski-p3/denormal repeat=1/stepfull
+# DONE knn-minkowski-p3/denormal repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/denormal repeat=2/train
+# DONE knn-minkowski-p3/denormal repeat=2/train 0.103s
+# START knn-minkowski-p3/denormal repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/denormal repeat=2/infer-save-reload 0.209s
+# START knn-minkowski-p3/denormal repeat=2/batch
+# DONE knn-minkowski-p3/denormal repeat=2/batch 0.238s
+# START knn-minkowski-p3/denormal repeat=2/stepfull
+# DONE knn-minkowski-p3/denormal repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/denormal STABLE 1.099s
+# START knn-minkowski-p3/denormal_ftz repeat=1/train
+# DONE knn-minkowski-p3/denormal_ftz repeat=1/train 0.105s
+# START knn-minkowski-p3/denormal_ftz repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/denormal_ftz repeat=1/infer-save-reload 0.213s
+# START knn-minkowski-p3/denormal_ftz repeat=1/batch
+# DONE knn-minkowski-p3/denormal_ftz repeat=1/batch 0.238s
+# START knn-minkowski-p3/denormal_ftz repeat=1/stepfull
+# DONE knn-minkowski-p3/denormal_ftz repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/denormal_ftz repeat=2/train
+# DONE knn-minkowski-p3/denormal_ftz repeat=2/train 0.088s
+# START knn-minkowski-p3/denormal_ftz repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/denormal_ftz repeat=2/infer-save-reload 0.192s
+# START knn-minkowski-p3/denormal_ftz repeat=2/batch
+# DONE knn-minkowski-p3/denormal_ftz repeat=2/batch 0.220s
+# START knn-minkowski-p3/denormal_ftz repeat=2/stepfull
+# DONE knn-minkowski-p3/denormal_ftz repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/denormal_ftz STABLE 1.057s
+# START knn-minkowski-p3/dupes repeat=1/train
+# DONE knn-minkowski-p3/dupes repeat=1/train 0.116s
+# START knn-minkowski-p3/dupes repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/dupes repeat=1/infer-save-reload 0.220s
+# START knn-minkowski-p3/dupes repeat=1/batch
+# DONE knn-minkowski-p3/dupes repeat=1/batch 0.241s
+# START knn-minkowski-p3/dupes repeat=1/stepfull
+# DONE knn-minkowski-p3/dupes repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/dupes repeat=2/train
+# DONE knn-minkowski-p3/dupes repeat=2/train 0.105s
+# START knn-minkowski-p3/dupes repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/dupes repeat=2/infer-save-reload 0.223s
+# START knn-minkowski-p3/dupes repeat=2/batch
+# DONE knn-minkowski-p3/dupes repeat=2/batch 0.252s
+# START knn-minkowski-p3/dupes repeat=2/stepfull
+# DONE knn-minkowski-p3/dupes repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/dupes STABLE 1.157s
+# START knn-minkowski-p3/odd repeat=1/train
+# DONE knn-minkowski-p3/odd repeat=1/train 0.128s
+# START knn-minkowski-p3/odd repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/odd repeat=1/infer-save-reload 0.261s
+# START knn-minkowski-p3/odd repeat=1/batch
+# DONE knn-minkowski-p3/odd repeat=1/batch 0.297s
+# START knn-minkowski-p3/odd repeat=1/stepfull
+# DONE knn-minkowski-p3/odd repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/odd repeat=2/train
+# DONE knn-minkowski-p3/odd repeat=2/train 0.112s
+# START knn-minkowski-p3/odd repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/odd repeat=2/infer-save-reload 0.219s
+# START knn-minkowski-p3/odd repeat=2/batch
+# DONE knn-minkowski-p3/odd repeat=2/batch 0.289s
+# START knn-minkowski-p3/odd repeat=2/stepfull
+# DONE knn-minkowski-p3/odd repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/odd STABLE 1.306s
+# START knn-minkowski-p3/negative repeat=1/train
+# DONE knn-minkowski-p3/negative repeat=1/train 0.120s
+# START knn-minkowski-p3/negative repeat=1/infer-save-reload
+# DONE knn-minkowski-p3/negative repeat=1/infer-save-reload 0.231s
+# START knn-minkowski-p3/negative repeat=1/batch
+# DONE knn-minkowski-p3/negative repeat=1/batch 0.267s
+# START knn-minkowski-p3/negative repeat=1/stepfull
+# DONE knn-minkowski-p3/negative repeat=1/stepfull 0.000s
+# START knn-minkowski-p3/negative repeat=2/train
+# DONE knn-minkowski-p3/negative repeat=2/train 0.121s
+# START knn-minkowski-p3/negative repeat=2/infer-save-reload
+# DONE knn-minkowski-p3/negative repeat=2/infer-save-reload 0.242s
+# START knn-minkowski-p3/negative repeat=2/batch
+# DONE knn-minkowski-p3/negative repeat=2/batch 0.274s
+# START knn-minkowski-p3/negative repeat=2/stepfull
+# DONE knn-minkowski-p3/negative repeat=2/stepfull 0.000s
+# CELL knn-minkowski-p3/negative STABLE 1.256s
+| knn-minkowski-p3       | 6c3b0520d293c6bf | 440dbe64fa0dabc0 | 6495946fda4345da | 25d1e0273ead9af9 | bdac537f0cbc23bf | bdac537f0cbc23bf | 760ab50f72c4aa07 | 03d7de321718325f | fc3f89ab9448510b |
+| knn-minkowski-p3 infer | 3f061d64851a22a2 | efd1ee7c2ffdd66b | 0e0807389fc08d1d | 6b3cd15dba4bd7a7 | a3305e6250c72645 | a3305e6250c72645 | 88988c02a3aeb462 | 8d89d73de34e9483 | 73cd008601dbacd5 |
+| knn-minkowski-p3 model | 2e10324808b3d9d2 | ca7e170fd4dbb367 | 86f268788d10f4e4 | cafdbe43eeca7368 | eda94d85fdc805a8 | cd0481cdfbb1ff69 | 41955aa18f1ba955 | 9445d0f2e3fceb97 | c6d62b82aba926ab |
+| knn-minkowski-p3 batch | 41a326b77f1b04b5 | 2bdb471cfe46fde0 | 769109eb93e71600 | f10a9d877e9ae19e | 94d44019a4708781 | 94d44019a4708781 | 1a71f048e3b1e347 | ab95bac14f832cbe | 2ee3fc8d76267360 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: knn-minkowski-p3 stepfull n/a:no-decode-state
+wrote /root/leg_out/records/knn-minkowski-p3/knn-minkowski-p3/cpu-sabotage.json
