@@ -2523,43 +2523,16 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
 
-    # mamba2-dtlimit regained all-nine references at its corrected clamp;
-    # see the CPU verification completion records (2026-09-17).
-    # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
-    # two same-shape RMSNorm weights were both a vector of ones, so they were
-    # the SAME TENSOR and exchanging them on the way in was the identity
-    # function; `_block_weights(near_one=...)` gives each its own vector,
-    # which moves each cell once. The shipped table carries the all-ones
-    # bytes (63de4bf6b9f8262a, 295d4e62d4c78b14, 49ffb2316f238e6d on `base`),
-    # so leaving them public would have a user read DIVERGENT for something
-    # that is not their machine. They come back at the next release record.
-    # lane/reference-regen (2026-09-17): these four are no longer STALE. The
-    # regeneration this lane landed draws on CPU columns recorded at their
-    # current LANE_REVISIONS entry (`norms-near-one-1` for the three norm
-    # lanes, `steps-3-1` for samba-untied-dropout-accum), so the table
-    # describes the bytes this harness makes and a run would prove something.
-    # What it would prove rests on ONE device class, because the fixture
-    # change emptied their Apple, NVIDIA and AMD cells and only the CPU column
-    # has been retaken. That is `one column`, and the classes are read out of
-    # the table rather than asserted here.
-    "mamba3": "one column",
-    "transformer": "one column",
-    "transformer-window": "one column",
-    # lane/reference-regen (2026-09-17): `unwatched` said the only thing
-    # missing was a run. It was not. Every cell the shipped table carries for
-    # samba comes from the CPU column alone, so a run would have compared this
-    # lane against a number no second machine has ever produced. The reason is
-    # `one column`, and the check that reads the classes out of the table says
-    # so by name.
-    "samba": "one column",
-    # lane/shrink-floors (2026-09-16) put this lane in identity_break's
-    # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
-    # the shipped table carries and a run would prove nothing. The reason is
-    # "stale reference", not "unwatched", and the test that checks these
-    # reasons against the harness FAILED on main saying exactly that. Found
-    # by lane/classical-host-recordings merging main; it is not this lane's
-    # change and it leaves this dict at the next release record.
-    "samba-untied-dropout-accum": "one column",
+    # 2026-09-18: current all-nine, full-property AMD captures now agree
+    # with the CPU references for these five neural routes. The independent
+    # second column clears their former "one column" reason. Watched installed
+    # CPU replay is still owed; NVIDIA/current Apple completion and the exact
+    # expanded 0.8.7 release certificate are separately outstanding.
+    "mamba3": "unwatched",
+    "transformer": "unwatched",
+    "transformer-window": "unwatched",
+    "samba": "unwatched",
+    "samba-untied-dropout-accum": "unwatched",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.

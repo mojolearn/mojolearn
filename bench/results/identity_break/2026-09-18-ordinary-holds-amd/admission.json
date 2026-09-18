@@ -1,0 +1,236 @@
+{
+  "status": "AMD_REFERENCE_ADMITTED_NOT_DEFAULT_PROMOTED",
+  "lanes": [
+    "gbdt-query-rmse",
+    "gmm-random-init-sample",
+    "gmm-sample",
+    "gp-normalize-y",
+    "gp-optimize",
+    "gp-optimize-restarts",
+    "gp-sample-y",
+    "gp-sample-y-normalize",
+    "gpc",
+    "gpc-multiclass",
+    "ivf-extend",
+    "mamba3",
+    "samba",
+    "samba-untied-dropout-accum",
+    "svc-poly",
+    "transformer",
+    "transformer-window"
+  ],
+  "cells_changed": 153,
+  "numeric_parts": 774,
+  "historical_disagreements_preserved": [
+    {
+      "cell": "gmm-sample/base",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-sample/ties",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-sample/denormal",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-sample/odd",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-random-init-sample/base",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-random-init-sample/ties",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-random-init-sample/denormal",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gmm-random-init-sample/odd",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/base",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/ties",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/hashed",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/wide",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/denormal",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/denormal_ftz",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/dupes",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/odd",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y-normalize/negative",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/base",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/ties",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/hashed",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/wide",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/denormal",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/denormal_ftz",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/dupes",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/odd",
+      "part": "infer",
+      "device_class": "apple",
+      "value": "03750c611431c01d"
+    },
+    {
+      "cell": "gp-sample-y/odd",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    },
+    {
+      "cell": "gp-sample-y/odd",
+      "part": "train",
+      "device_class": "apple",
+      "value": "eaff6a93fa6bc01d"
+    },
+    {
+      "cell": "gp-sample-y/negative",
+      "part": "model",
+      "device_class": "apple",
+      "value": "n/a:no-save"
+    }
+  ],
+  "unchanged_other_cells": 1971,
+  "source_files": {
+    "bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-b58caf9fb/apple-m4.json": "4fbe9d455ab42368354eb97304f12207d60413fe1c79c08e3c415934fa081c99",
+    "bench/results/identity_break/2026-09-15_gmm-sample/apple-m4.json": "682cca9f403667a3d794214ef12c0f176343f86c919c649dcec10b52aca87b51",
+    "bench/results/identity_break/2026-09-15_gp-optimize/apple-m4.json": "b971be828c85c1c0d29f017fb1dbf15a2ce9006732ba20cdbc25bbea4a0012c9",
+    "bench/results/identity_break/2026-09-15_gp-sample-y/metal-transient/apple-m4.first-run.json": "efcc18b543d40e3ca0cc2b86f0ffe2cbb7395deec1f48d3fb6d872424d709495",
+    "bench/results/identity_break/2026-09-15_gp-sample-y/metal-transient/apple-m4.merged-rerun1.json": "2be77368406dc13eaaf2b15b0e1b7af0210a535aee9ce5e132d8a4a21201db61",
+    "bench/results/identity_break/2026-09-15_gpc/apple-m4.json": "85e5a766a375a76e8cc65868297089169707f206e46a185dadf2dc1a28f86f6e",
+    "bench/results/identity_break/2026-09-15_inference-svm/apple-m4-metal.json": "d59a08d5a1d16eb9ea19e5ff10e23d4d9877ea4a03946eaec3557093dcef8616",
+    "bench/results/identity_break/2026-09-15_ivf-extend/apple-m4.json": "495bb1876b2dcb84c674c652a8fd5a4ce88eb4d132282be963af0a99334c3799",
+    "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gp-normalize-y/gp-normalize-y/cpu-clean.json": "e3ae7683546200e2c523cc85b33b84a16b527ca4db50ad8f8214f2b340b897d2",
+    "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gp-sample-y-normalize/gp-sample-y-normalize/cpu-clean.json": "c55a15c4b355f71a00941004757c852ed176406e3cce332b10e8dc9d2915dd47",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-neural.json": "24ec3680878e949b40d11e597a35203257692e2b0087132d49c970880b0a7e67",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2",
+    "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gbdt/gbdt-query-rmse.json": "4dd355650f5f056ec1f70e587ef4051287664734352e19030ccaa8c5d8171523",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/samba.json": "1ff8fc77459648c6a908b32a5c89ab3b626604b9104257e66e68bf5ed94aa999",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/samba-untied-dropout-accum.json": "4ed4d1fc5eeecab819e0ab8717813b4aca8ffd9b32b37d1c06906e4a98003078",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/mamba3.json": "b62470e5e0d363ebea8c586850bdf21d08cde08b3a7579be1d8ababd96e65af3",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/transformer-window.json": "241bc41304f52bd8d6020bce7e7e22d817b77a11cd913653e7a8d24a410b4412",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/transformer.json": "2a6d972541b6929dab96094c4b7d7cd32345187da541d970135a5fccaf94cce1",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-ivf/ivf-extend.json": "4f566060d7b4da399498cad5145888224ab5cc22b3c8810e39a9e25866887e30",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gpc.json": "1718facaa091bc65f71fa1bdfb41e2e1f7cfd42f26a0d51457827bcc88668655",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gpc-multiclass.json": "c210826539f563cc9cb0099d0515ffee31754595b98b7512a8acea12e400da7a",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/recovery-gp/capture/gp-normalize-y.json": "86740ee1fde3c3b318bedeaad2428e1b34418805862e669919615f08e629427d",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-optimize.json": "698a8db6618b074b23f89fa35c723db2cdb868967db95b0868db9c2797f5700d",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-optimize-restarts.json": "bdd97333a53d9eb7a9b4a7b62b3801334309fd834ac888b606f8642664a0442f",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-sample-y.json": "de69804d57c704fb97d0de57554ea81e14fb4634542600dfaf02e81628eb63fa",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/recovery-gp/capture/gp-sample-y-normalize.json": "c07310c109d5af0ef8ee692acd91ef8feb4fb7d036c38973a4f9df368b955e75",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-svm/svc-poly.json": "903ed7998f0b10f52839a43b43d48ad9ffa21565d041b136db90f6a3863e199e",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-mixture/gmm-sample.json": "716ba991742cde3dcc5582b62adfbfb6db74d5763dc7e91e3ffa184f6cb0703a",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-mixture/gmm-random-init-sample.json": "f767f696c7622b047b7f1ad8544cebc21c32a07bc696d92630cfc8094ccac88d"
+  },
+  "remaining": [
+    "NVIDIA and complete Apple property qualification where absent",
+    "installed CPU verifier replay",
+    "final expanded wheel qualification"
+  ]
+}

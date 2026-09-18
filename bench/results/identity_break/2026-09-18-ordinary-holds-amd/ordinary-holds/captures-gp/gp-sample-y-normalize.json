@@ -1,0 +1,470 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+ "vendor": "amd-mi300x-gfx942",
+ "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gp-sample-y-normalize/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006078249989514006,
+    "stages": {
+     "repeat=1/train": 0.0005593169989879243
+    }
+   }
+  },
+  "gp-sample-y-normalize/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00041953299842134584,
+    "stages": {
+     "repeat=1/train": 0.00037629799953720067
+    }
+   }
+  },
+  "gp-sample-y-normalize/hashed": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00033241999881283846,
+    "stages": {
+     "repeat=1/train": 0.00029949700001452584
+    }
+   }
+  },
+  "gp-sample-y-normalize/wide": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0003436779988987837,
+    "stages": {
+     "repeat=1/train": 0.00031007400139060337
+    }
+   }
+  },
+  "gp-sample-y-normalize/denormal": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00031551800020679366,
+    "stages": {
+     "repeat=1/train": 0.00028341400138742756
+    }
+   }
+  },
+  "gp-sample-y-normalize/denormal_ftz": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00032280200139211956,
+    "stages": {
+     "repeat=1/train": 0.0002907130001403857
+    }
+   }
+  },
+  "gp-sample-y-normalize/dupes": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0003145730006508529,
+    "stages": {
+     "repeat=1/train": 0.00028274100077396724
+    }
+   }
+  },
+  "gp-sample-y-normalize/odd": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00026845899992622435,
+    "stages": {
+     "repeat=1/train": 0.0002390770005149534
+    }
+   }
+  },
+  "gp-sample-y-normalize/negative": {
+   "verdict": "REFUSED",
+   "error": "ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00032553900018683635,
+    "stages": {
+     "repeat=1/train": 0.0002913959997385973
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "1f9281b95f6376e91fe75432d37f4cd669ff22f8ffb6deb744ad34a263787222",
+    "size": 2922728
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "7c4441033405dac2d63bfd12cb25cad9c86ec0f9d77076df7151ce3aeaf9f894",
+    "size": 1954480
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "82671342eb8a64a5bdb60a7e0203ea0ddcddc3570dd0f0aee56d0e5e30c2a0f4",
+    "size": 1845632
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "6f36e0d3ce5ca683b4b9d4ee5d2dafb83a6f435fa43e33b39726382f1821cd09",
+  "options": {
+   "require_backend": "hip",
+   "require_cpu": false,
+   "fail_on_refused": true,
+   "lanes": "gp-sample-y-normalize",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "amd-mi300x-gfx942",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": true,
+   "batch_scale": true,
+   "ragged": true,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "215269f7f99ffed7eebd7b2e0b14205701f72deb5d22985d75c7309d6d45171f",
+  "provenance": {
+   "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+   "mode": "identical",
+   "vendor": "amd-mi300x-gfx942",
+   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

@@ -1,0 +1,426 @@
+{
+  "binaries": {
+    "_mojolearn": "/root/mojolearn/python/mojolearn/host/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/root/mojolearn/python/mojolearn/host/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/root/mojolearn/python/mojolearn/host/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/root/mojolearn/python/mojolearn/host/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/root/mojolearn/python/mojolearn/host/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/root/mojolearn/python/mojolearn/host/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/root/mojolearn/python/mojolearn/host/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/root/mojolearn/python/mojolearn/host/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so"
+  },
+  "binary": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-18T18:01:48+0000",
+  "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d2eed03184ef7946715ab6d2996966e8762faf804c7a68771aa0aca49ec89671",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d2eed03184ef7946715ab6d2996966e8762faf804c7a68771aa0aca49ec89671",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "2a148ea983b55939",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "2a148ea983b55939",
+        "want": "2a148ea983b55939"
+      },
+      "kind": "base",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "b606536588020728d6e2acf46226fed413cb6e70cd6c708f9c62c1f5cf5686d5",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000575
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f7af9de75390c7ce2dd72c634639cd8bbb00da1dd4e370e0cb582ccc748b1b71",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f7af9de75390c7ce2dd72c634639cd8bbb00da1dd4e370e0cb582ccc748b1b71",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "ef14e9d8f02afaab",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "ef14e9d8f02afaab",
+        "want": "ef14e9d8f02afaab"
+      },
+      "kind": "denormal",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "4bfa400514d0ecbff5e7ae0ec5e109f0bf2cff05f1cb64745fe7416da10b4ca0",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000284
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f7af9de75390c7ce2dd72c634639cd8bbb00da1dd4e370e0cb582ccc748b1b71",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f7af9de75390c7ce2dd72c634639cd8bbb00da1dd4e370e0cb582ccc748b1b71",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "ef14e9d8f02afaab",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "ef14e9d8f02afaab",
+        "want": "ef14e9d8f02afaab"
+      },
+      "kind": "denormal_ftz",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "9c9e1a298930db2dc3318294756d648a64e51ef643a5cc9b79f310bdff52428b",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000254
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d2eed03184ef7946715ab6d2996966e8762faf804c7a68771aa0aca49ec89671",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d2eed03184ef7946715ab6d2996966e8762faf804c7a68771aa0aca49ec89671",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "2a148ea983b55939",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "2a148ea983b55939",
+        "want": "2a148ea983b55939"
+      },
+      "kind": "dupes",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "b606536588020728d6e2acf46226fed413cb6e70cd6c708f9c62c1f5cf5686d5",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000219
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "06dd11c7dff8fdd03176145b7b7d6117469643e076920b540ad1a5211e9c6cc1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "06dd11c7dff8fdd03176145b7b7d6117469643e076920b540ad1a5211e9c6cc1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "553081ee6c8b7261",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "553081ee6c8b7261",
+        "want": "553081ee6c8b7261"
+      },
+      "kind": "hashed",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "020a40e03b55280959bd5d54c8054e878ebd7802df2a40d7eab31ca173e8e14a",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000234
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "94e0edcd62a5b65f391878295604d7080dcbe7ea532da1bdd5d252aee9c70eaa",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "94e0edcd62a5b65f391878295604d7080dcbe7ea532da1bdd5d252aee9c70eaa",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "0864cb88187f4e37",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "0864cb88187f4e37",
+        "want": "0864cb88187f4e37"
+      },
+      "kind": "negative",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "290324d689ccdd956052e508fc8549b2e719cdb0d458adfc7fdbb9c5e27501cb",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000233
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "889d6d2b543a40e5119f2fe3b19f0c520fd0fcb398b228523e1b5231776d64ea",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "889d6d2b543a40e5119f2fe3b19f0c520fd0fcb398b228523e1b5231776d64ea",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "bb5ef277699b5367",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "bb5ef277699b5367",
+        "want": "bb5ef277699b5367"
+      },
+      "kind": "odd",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "e21103395c9be9d13c5fcefd0d51e197325734b9209bf99d2777b948f98ea5d0",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000227
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "caa2edae098ded9ab6253a05fe0ea6349a3f0a1c0511b9812ee77a373e61dc9e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "caa2edae098ded9ab6253a05fe0ea6349a3f0a1c0511b9812ee77a373e61dc9e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "4a540b4f8de1b935",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "4a540b4f8de1b935",
+        "want": "4a540b4f8de1b935"
+      },
+      "kind": "ties",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "535f23122efa5fa9c15b0401f92f37fdeaaf6c0c4851cef542e8ec4bcc5b7b33",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000239
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "8f503aab2cbed52a77ffc7b3b4f1af38f138c36813e7b29ff6b2bd2822132667",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "8f503aab2cbed52a77ffc7b3b4f1af38f138c36813e7b29ff6b2bd2822132667",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "nystroem-sigmoid.json",
+          "equal": true,
+          "infer": "c26c367c36d6d76e",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "c26c367c36d6d76e",
+        "want": "c26c367c36d6d76e"
+      },
+      "kind": "wide",
+      "lane": "nystroem-sigmoid",
+      "model_sha256": "0f1765d6855a61a92166f6cf3878180855746998ef8ad57524761591b431e178",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000224
+    }
+  ],
+  "gpu_columns": [
+    "nystroem-sigmoid.json"
+  ],
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "unmoved": [
+    "nystroem-sigmoid/base",
+    "nystroem-sigmoid/denormal",
+    "nystroem-sigmoid/denormal_ftz",
+    "nystroem-sigmoid/dupes",
+    "nystroem-sigmoid/hashed",
+    "nystroem-sigmoid/negative",
+    "nystroem-sigmoid/odd",
+    "nystroem-sigmoid/ties",
+    "nystroem-sigmoid/wide"
+  ],
+  "vendor": "hip",
+  "verdict": "IDENTICAL"
+}

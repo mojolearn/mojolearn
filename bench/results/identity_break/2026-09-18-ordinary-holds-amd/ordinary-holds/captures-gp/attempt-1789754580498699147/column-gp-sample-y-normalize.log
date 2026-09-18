@@ -1,0 +1,68 @@
+# vendor=amd-mi300x-gfx942 commit=f771338c7ab68820606b66892e202a45d43c6dda (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-09-18 18:03:04  Linux-6.8.0-124-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gp-sample-y-normalize/base repeat=1/train
+# DONE gp-sample-y-normalize/base repeat=1/train 0.001s
+# CELL gp-sample-y-normalize/base REFUSED 0.001s
+# START gp-sample-y-normalize/ties repeat=1/train
+# DONE gp-sample-y-normalize/ties repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/ties REFUSED 0.000s
+# START gp-sample-y-normalize/hashed repeat=1/train
+# DONE gp-sample-y-normalize/hashed repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/hashed REFUSED 0.000s
+# START gp-sample-y-normalize/wide repeat=1/train
+# DONE gp-sample-y-normalize/wide repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/wide REFUSED 0.000s
+# START gp-sample-y-normalize/denormal repeat=1/train
+# DONE gp-sample-y-normalize/denormal repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/denormal REFUSED 0.000s
+# START gp-sample-y-normalize/denormal_ftz repeat=1/train
+# DONE gp-sample-y-normalize/denormal_ftz repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/denormal_ftz REFUSED 0.000s
+# START gp-sample-y-normalize/dupes repeat=1/train
+# DONE gp-sample-y-normalize/dupes repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/dupes REFUSED 0.000s
+# START gp-sample-y-normalize/odd repeat=1/train
+# DONE gp-sample-y-normalize/odd repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/odd REFUSED 0.000s
+# START gp-sample-y-normalize/negative repeat=1/train
+# DONE gp-sample-y-normalize/negative repeat=1/train 0.000s
+# CELL gp-sample-y-normalize/negative REFUSED 0.000s
+| gp-sample-y-normalize  | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize infer | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize model | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize batch | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize batchgrad | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize batchscale | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize ragged | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| gp-sample-y-normalize stepfull | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+
+cells=9 stable=0 moved=0 refused=9
+infer: 
+model: 
+batch: 
+batchgrad: 
+batchscale: 
+ragged: 
+stepfull: 
+REFUSED gp-sample-y-normalize/base: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/ties: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/hashed: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/wide: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/denormal: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/denormal_ftz: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/dupes: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/odd: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+REFUSED gp-sample-y-normalize/negative: ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_preprocessing.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_preprocessing.sh
+wrote /root/gemm_leg_out/ordinary-holds/captures-gp/gp-sample-y-normalize.json

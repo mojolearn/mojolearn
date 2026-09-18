@@ -1,0 +1,4 @@
+commit=f771338c7ab68820606b66892e202a45d43c6dda
+backend=hip
+arch=gfx942
+budget=2400
