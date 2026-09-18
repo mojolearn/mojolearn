@@ -1,0 +1,10 @@
+== cpu-x86 repeats 2
+  par-scaler-minmax/base       STABLE     ['646b46cf73ead58e', '646b46cf73ead58e'] None
+  par-scaler-minmax/ties       STABLE     ['fcaf2c976dae67d9', 'fcaf2c976dae67d9'] None
+  par-scaler/base              STABLE     ['c4cc661617a4b9a7', 'c4cc661617a4b9a7'] None
+  par-scaler/ties              STABLE     ['1ecadb87b13bb827', '1ecadb87b13bb827'] None
+== cpu-x86.sabotage repeats 2
+  par-scaler-minmax/base       DIVERGENT  ['b7c8442880f1de0a', 'b7c8442880f1de0a'] None
+  par-scaler-minmax/ties       STABLE     ['f1d79cc1bb919200', 'f1d79cc1bb919200'] None
+  par-scaler/base              DIVERGENT  ['20fb67a0e5b04ad2', '20fb67a0e5b04ad2'] None
+  par-scaler/ties              DIVERGENT  ['da4acec3c37a4c16', 'da4acec3c37a4c16'] None

@@ -28,7 +28,7 @@ The four kinds, for one lane:
 
 - Lanes: **229** (179 single-device, 50 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **224**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **161** of 224.
+- Source public API entries with ALL FOUR kinds on at least one lane: **163** of 224.
 - Source public API entries with NO IDENTITY LANE AT ALL: **19**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -39,7 +39,7 @@ Per kind, over the public API entries:
 |---|---|---|
 | gpu column | 197 | 27 |
 | cpu verifier | 167 | 57 |
-| sabotage seen to move a build | 167 | 57 |
+| sabotage seen to move a build | 169 | 55 |
 | batch part or named n/a | 203 | 21 |
 
 Per kind, over the lanes:
@@ -49,17 +49,17 @@ Per kind, over the lanes:
 | gpu column (any class) | 208 | 21 |
 | gpu column on all three classes | 171 | 58 |
 | cpu verifier declared | 194 | 35 |
-| sabotage seen to move a build | 190 | 39 |
+| sabotage seen to move a build | 192 | 37 |
 | batch part or named n/a | 229 | 0 |
-| ALL FOUR | 180 | 49 |
+| ALL FOUR | 181 | 48 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 190 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 192 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 6 | the family declares a define; no committed pair moves this lane |
+| declared | 4 | the family declares a define; no committed pair moves this lane |
 | none | 33 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -309,8 +309,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_graph.transform_umap` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_neighbors.ParallelQueries` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_neighbors_reference.ReferenceShardedNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `parallel_preprocessing.fit_scaler` | 2 | amd,apple,nvidia | training | declared | part | NO |
-| `parallel_preprocessing.transform_scaler` | 2 | amd,apple,nvidia | training | declared | part | NO |
+| `parallel_preprocessing.fit_scaler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `parallel_preprocessing.transform_scaler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_training.ParallelByteLanguageModelTrainer` | 3 | amd,apple,nvidia |  | none | n/a | NO |
 | `parallel_training.ParallelNeuralTrainer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_training.ordered_sum_gradients` | 1 |  | training | seen(build) | n/a | NO |
@@ -534,8 +534,8 @@ A blank cell means no lane of this algorithm has that kind.
 | par-resample | amd,nvidia | - | none | - | part | NO |
 | par-samba | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_cpu-par-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | par-samba-clip | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_cpu-par-samba/cpu-apple-m4.sabotage.json` | part | yes |
-| par-scaler | amd,apple,nvidia | training | declared | - | part | NO |
-| par-scaler-minmax | - | training | declared | - | part | NO |
+| par-scaler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.sabotage.json` | part | yes |
+| par-scaler-minmax | - | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.sabotage.json` | part | NO |
 | par-svm | amd,apple,nvidia | - | none | - | part | NO |
 | par-svm-svr | - | - | none | - | part | NO |
 | pca | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca/pca/cpu-sabotage.json` | part | yes |
@@ -594,9 +594,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-pool, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
-**Sabotage not seen to move a build: 39**
+**Sabotage not seen to move a build: 37**
 
-> kmeans-cosine, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-scaler, par-scaler-minmax, par-svm, par-svm-svr
+> kmeans-cosine, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
 **Batch undeclared: 0**
 
