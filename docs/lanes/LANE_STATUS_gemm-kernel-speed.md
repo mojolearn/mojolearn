@@ -268,3 +268,30 @@ FLIP decision on this branch: NVIDIA workspace reuse; geomean 0.9928856215,
 quality witnesses identical, with the explicit memory tradeoff above. AMD
 workspace default remains off. Full-tile bounds remains off (INERT for its
 registered >=2% hypothesis). Apple remains unmeasured and unchanged.
+
+## Final shipping decision (supersedes the proposed NVIDIA default above)
+
+Andrew requested advice, stopped further experiments, then authorized shipping
+the verified AMD work. The NVIDIA default proposal in f95ce5dc5 is withdrawn:
+workspace reuse remains opt-in. Its default/endurance scripts are removed;
+no such rental or 2000-step run was started, so none was cancelled. The
+measured 0.71% gain does not justify shipping the memory tradeoff here.
+NVIDIA and Apple production defaults remain unchanged by this work.
+
+AMD actual-default qualification at 8777fcbdf completed successfully:
+288 gather cases (2514240 words) and 840 cases across all 20 named plans
+(471240 words), both legacy and default. Omitting either actual loader's
+flush fails with got=654311424 versus flat=oracle=0. The priced device
+sabotage also fails. Read-back prints legacy STAGE_FTZ=False and default
+True, after missing/wrong/duplicate read-backs are rejected.
+
+ABBA weighted GEMM sums: legacy 488.486730 / 490.933474 ms; default
+379.378933 / 379.965076 ms. Both exceed the preregistered >=3% reduction.
+All 12 output digests match across settings and the recorded H100 outputs.
+Training evidence remains the two 700-step corpus comparisons above:
+14.6246% less step time, with exact loss/state witnesses.
+
+VM 66f2535a-1d64-49f2-a707-706a3e1b860b completed and was deleted,
+verified GET 404 and list absent at 14:26:13 UTC. Every rental owned by
+this lane has finished and been removed. No owed run was cancelled.
+Final default evidence: bench/results/gemm_kernel_speed_2026-09-18/amd-default.
