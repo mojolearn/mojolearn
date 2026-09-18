@@ -44,9 +44,10 @@ The release may contain:
 - one `py3-none-macosx_11_0_arm64` wheel, built by the workflow;
 - optionally one prebuilt Linux x86-64 wheel carrying CUDA and HIP sets.
 
-There is no sdist. Each wheel contains the requested numeric-mode sets; normal
-releases carry FAST, DETERMINISTIC, and IDENTICAL. The extension inventory is
-15 per mode and is checked mechanically by `packaging/check_ext_lists.py`.
+There is no sdist. Only the three tree bindings carry FAST and DETERMINISTIC;
+the complete GPU inventory is available in IDENTICAL. CPU bindings are also
+IDENTICAL-only. `packaging/check_ext_lists.py` checks the GPU lists against
+the backend and the host lists against `host_surface.py`.
 
 ## 1. Prepare the source state
 
@@ -76,9 +77,25 @@ Linux vendor sets must be built on their actual GPU vendors using
 repaired/audited with `packaging/linux/audit.sh`. Follow each script's help
 and fail-closed checks; architecture coverage must be explicit.
 
-Run installed-wheel smoke on supported NVIDIA and AMD targets. One successful
-build box does not certify another GPU architecture. Retain the resulting
-logs under `bench/results/wheels/`.
+For the three-architecture release profile, run the installed qualification
+wrapper on each actual architecture, with the exact repaired wheel:
+
+```sh
+bash tools/release_installed_checks.sh qualify-release-linux3 \
+  /absolute/wheel.whl SHA256 cuda /absolute/results /absolute/build-proofs sm_90a
+```
+
+Use `cuda sm_89` for L40S and `hip gfx942` for MI325X. The wrapper uses
+`release_linux_surface_qualification.sh` and `release_linux_smoke.py`; the
+older combined build script remains part of build provenance. The surface
+job names and per-mode binding inventories come from the admission module,
+not a copied count. Supplemental checks capture current properties and run
+the installed verifier. Preserve failures and OWED results as such.
+
+Stage the retained results under `qualification/cuda/sm_89`,
+`qualification/cuda/sm_90a`, and `qualification/hip/gfx942`, alongside
+`qualification/build-proofs`. One successful build box does not certify
+another architecture or a different wheel hash.
 
 Stage exactly one final Linux wheel and its matching `.sha256` sidecar in:
 

@@ -46,12 +46,13 @@ python3 packaging/check_ext_lists.py --host   # the host list is read from the m
 ```
 
 ```sh
-MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # 978 pytest tests, about 7 s
+MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # the current complete Python suite
 pixi run check-python-gates-release                              # explicit bounded release gates
 pixi run check-mamba-poison                                      # DEVIATIONS 2712/2713: the four Mamba lanes cold on a NaN-poisoned, guard-banded binding, about 3 min
 ```
 
-Both need the 17 IDENTICAL bindings built on this Mac (`bindings/build*.sh`).
+These need the complete current IDENTICAL binding set built on this Mac
+(`bindings/build*.sh`), including the host bindings declared by the manifest.
 They run here and not on a hosted runner because a GitHub macOS VM cannot
 compile Metal AOT (`.github/workflows/python-tests.yml` header); that workflow
 is dispatch-only on the same ephemeral runner as step 6.
@@ -77,6 +78,14 @@ manifest edit, never a packaging edit.
 `CITATION.cff` and the newest published CHANGELOG heading to it, so a
 half-finished bump goes red here rather than shipping in a README. Commit,
 push. Every build below runs from that commit.
+
+For the 0.8.7 final release, the active resource limit is one local worker and
+two cloud CPU workers: use `MOJOLEARN_BUILD_JOBS=1` and sequential rentals.
+The native freeze and current artifacts are recorded in
+`docs/lanes/LANE_STATUS_release087_final.md`. AMD uses the pinned Ubuntu 22.04
+build container to match NVIDIA's host toolchain; all host binary hashes must
+agree before packing. The historical parallel commands below do not override
+that release limit.
 
 ## 2. Build the three Linux sets (parallel legs, parallel compiles inside each)
 

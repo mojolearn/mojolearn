@@ -196,3 +196,17 @@ comparisons, but does not clear H100's compatibility failure. All v4 rentals
 are deleted (AMD 601625942 and H100 601626854, verified HTTP 404); L40S never
 started. Rebuild and requalify all artifacts from the repaired source; do not
 rewrite any old build proof to admit the Python change.
+
+The repaired native freeze is `d9185528e1ba78e61e091b37489b52daebde342d`.
+Python 3.10 radius diagnostics pass all 36 cells twice; all 144 compared
+train/infer/model/batch parts equal the previous Apple record. The broader
+Python run passed 1846 tests with 98 skips; two test-invocation/reference-wiring
+issues both passed targeted rechecks (all 1848 tests accounted for).
+
+Fresh sequential NVIDIA builds run under external `build_nvidia_v8.py`,
+`logs/nvidia-builds-v8-driver.log`, into `linux-builds-v8`. The queued
+`rebuild_amd_v8.py` waits for both NVIDIA completions and verified deletion
+before renting AMD. Read external state/logs for live rentals. After all
+three builds, use `pack_final_linux_v2.py` and `linux-wheel-final-v2`; do not
+reuse the superseded wheel or its qualification receipts. Prepared current
+reference wiring remains uncommitted until new measured columns pass.
