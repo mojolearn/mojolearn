@@ -3620,6 +3620,103 @@ def _(ml, X, yc, yr, Xh=None):
                      n_ties_broken=_h(np.int64(v.n_ties_broken))))
 
 
+@lane("bpe-vocabulary")
+def _(ml, X, yc, yr, Xh=None):
+    """TrainedBpeVocabulary (python/mojolearn/tokenizer.py), which had ZERO
+    lanes while the trainer that returns it and the tokenizer it builds each
+    had one (lane/tokenized-corpus, 2026-09-18). What a user does with a
+    trained vocabulary is WRITE it and USE it, so that is what is hashed:
+    the two files as written to disk (`write_ranks`, `write_tokenizer_json`),
+    whether each is byte-equal to its `render_*` text, the vocabulary's
+    identity (`identity`, the sha256 a model carries), and the ids and bytes
+    of Xh's first 4,096 bytes through `tokenizer()` and through the WRITTEN
+    rank file loaded back, which must agree.
+
+    The vocabulary is re-made through the public constructor from the
+    trainer's tokens, merges and stats, so the object hashed is one the lane
+    built itself and not only one the trainer returned.
+
+    SABOTAGE, two arms, both must move it: MOJOLEARN_BPE_TRAINER_SABOTAGE=1
+    (the trainer's reversed tie-break) moves every part but the flags, and
+    the tokenizer host build with -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1
+    (ids written in reverse) moves `ids`, `decoded` and `roundtrip` and
+    leaves the files alone."""
+    import tempfile
+    TV = ml.tokenizer.TrainedBpeVocabulary
+    raw = np.ascontiguousarray(X).tobytes()[:4096]
+    held = np.ascontiguousarray(Xh).tobytes()[:4096]
+    t = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
+    v = TV(list(t.tokens), list(t.merges), dict(t.stats))
+    with tempfile.TemporaryDirectory(prefix="ib-bpe-vocabulary-") as d:
+        rp, jp = os.path.join(d, "v.ranks.tsv"), os.path.join(d, "v.tokenizer.json")
+        v.write_ranks(rp)
+        v.write_tokenizer_json(jp)
+        with open(rp, "rb") as fh:
+            ranks = fh.read()
+        with open(jp, "rb") as fh:
+            tj = fh.read()
+        from_file = ml.tokenizer.BpeTokenizer.from_ranks_file(rp)
+        ids_file = np.asarray(from_file.encode_bytes(held), dtype=np.int32)
+    tok = v.tokenizer()
+    ids = np.asarray(tok.encode_bytes(held), dtype=np.int32)
+    back = tok.decode_bytes(ids.tolist())
+    ident = json.dumps(v.identity, sort_keys=True).encode("ascii")
+    flags = np.asarray([ranks == v.render_ranks().encode("ascii"), tj == v.render_tokenizer_json().encode("ascii"),
+                        tok.identity == v.identity, from_file.identity == v.identity,
+                        ids.tobytes() == ids_file.tobytes()], dtype=np.int64)
+    return _fit(dict(ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
+                     identity=_h(np.frombuffer(ident, dtype=np.uint8)), ids=_h(ids),
+                     decoded=_h(np.frombuffer(back, dtype=np.uint8)),
+                     roundtrip=_h(np.int64(1 if back == held else 0)), flags=_h(flags)))
+
+
+@lane("tokenized-corpus")
+def _(ml, X, yc, yr, Xh=None):
+    """mojolearn.lm_corpus (lane/tokenized-corpus, 2026-09-18): a corpus
+    tokenized ONCE with a vocabulary trained on it, cached, and read back as
+    training batches. The corpus is X's first 16,384 bytes as a file with no
+    manifest (one train range); `prepare` trains a 300-rank vocabulary on it
+    with `BpeVocabularyTrainer`, cuts 4,096-byte documents at the last 0x0A,
+    and writes the pinned id array. Hashed: the id array's bytes, the
+    vocabulary identity, the ids of TokenBatches(2, 64) at steps 0, 1 and 7,
+    the data schedule the trainer would carry, and flags: a second `prepare`
+    reads the SAME cache entry, `tokenizer_for` accepts the model's own
+    vocabulary and refuses the synthetic one by name, and the user-vocabulary
+    arm (the trained rank file passed back as `vocab=`) lands on the same
+    ids.
+
+    SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves the vocabulary and so
+    every id; the tokenizer host sabotage build moves the id array."""
+    import tempfile
+    LC = ml.lm_corpus
+    raw = np.ascontiguousarray(X).tobytes()[:16384]
+    with tempfile.TemporaryDirectory(prefix="ib-tokenized-corpus-") as d:
+        path = os.path.join(d, "corpus.txt")
+        with open(path, "wb") as fh:
+            fh.write(raw)
+        cache = os.path.join(d, "cache")
+        c = LC.prepare(path, cache_dir=cache, vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+        again = LC.prepare(path, cache_dir=cache, vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+        user = LC.prepare(path, cache_dir=cache, vocab=str(c.vocabulary_path), document_bytes=4096)
+        with open(os.path.join(c.tokens_dir, "tokens.i32"), "rb") as fh:
+            tokens = np.frombuffer(fh.read(), dtype="<i4")
+        b = c.batches(2, 64)
+        steps = np.concatenate([b.ids(k) for k in (0, 1, 7)])
+        schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
+        ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
+        try:
+            LC.tokenizer_for(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            refused = 0
+        except ValueError as exc:
+            refused = int("vocabulary mismatch" in str(exc))
+        flags = np.asarray([isinstance(c, LC.TokenizedCorpus), again.tokens_dir == c.tokens_dir,
+                            user.manifest["sha256"] == c.manifest["sha256"],
+                            ok.identity == c.vocabulary, refused, isinstance(b, LC.TokenBatches)], dtype=np.int64)
+        ident = json.dumps(c.vocabulary, sort_keys=True).encode("ascii")
+    return _fit(dict(tokens=_h(tokens), identity=_h(np.frombuffer(ident, dtype=np.uint8)), batches=_h(steps),
+                     schedule=_h(np.frombuffer(schedule, dtype=np.uint8)), flags=_h(flags)))
+
+
 @lane("cross-val")
 def _(ml, X, yc, yr, Xh=None):
     """cross_val_score, which had no lane: three unshuffled folds of the
@@ -5989,7 +6086,7 @@ _batch_decl(_batch_silhouette_chunks, "metrics-classification")
 _batch_decl("n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
             "metrics-homogeneity-completeness")
 _batch_decl("n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
-            "bpe-trainer")
+            "bpe-trainer", "bpe-vocabulary", "tokenized-corpus")
 _batch_decl(_batch_cross_val, "cross-val")
 # The fold PARTITION is metadata, not an inference call: the lane fits nothing
 # and asks nothing for a row's answer, so there is no batch axis to vary

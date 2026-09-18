@@ -55,9 +55,26 @@ skipped: no GPT-2 files present), `test_tokenizer_manifest.py` (with a new alias
 `test_host_surface.py` + `test_models_loader.py` (pytest, 215 passed / 4 skipped), and
 `tools/verification_matrix.py --check`. The sabotage build fails the surface test 11 of 23.
 
-## Item B and the original brief: IN PROGRESS
+## Item B and the original brief: IN PROGRESS (WIP, pushed)
 
-See the sections below as they land.
+- THE ENTRY POINT. There was none. `LanguageModelTrainer.train_step(ids)` takes one
+  materialized batch and fetches nothing; every corpus-reading loop was a probe in `tools/`
+  (`lm_step_memory_probe.py`, `lm_recycle_probe.py`, `lm_shards_probe.py`,
+  `lm_shakedown_resume.py`), all over `CorpusBatches` (raw bytes). Added:
+  `python/mojolearn/lm_corpus.py` (public, `mojolearn.lm_corpus`: `prepare`,
+  `TokenizedCorpus`, `TokenBatches`, `require_vocabulary`, `tokenizer_for`) and
+  `tools/lm_train.py` (corpus -> prepare -> trainer -> steps; default trains our
+  vocabulary, `--vocab` takes the user's, `--bytes` uses `CorpusBatches` unchanged).
+- `LanguageModelTrainer` now refuses a `data_schedule` whose `vocabulary.n_vocab` is not its
+  `vocab_size` (the one checked schedule field) and exposes `.data_schedule`.
+- `BpeTokenizer.identity` / `TrainedBpeVocabulary.identity`: sha256 of the CANONICAL rank
+  file + n_vocab; the same table from a rank file, encoder.json+vocab.bpe or a trained object
+  has one identity.
+- Smoke-tested locally (200 KB corpus, 512 ranks): prepare 3.8 s, rerun reuses the cache,
+  the user-vocabulary arm lands on the same id sha, a synthetic tokenizer is refused by name.
+  Evidence `~/mojolearn-evidence/tokenized-corpus-sep18/smoke/`.
+- Lanes written, NOT YET RUN: `bpe-vocabulary` (TrainedBpeVocabulary) and
+  `tokenized-corpus` (lm_corpus) in `tools/identity_break.py`.
 
 ## The vocabulary job (OWED, do not kill)
 
@@ -67,3 +84,15 @@ pile_github. Command: `~/mojolearn-evidence/tokenized-corpus-sep18/vocab/user_cm
 `train.log` there, output prefix `mojolearn-bpe-50257-v1` in that directory. Its binary is in
 a dead session's /private/tmp scratchpad; if the process dies, rebuild `train_main` into
 `~/mojolearn-evidence` and rerun.
+
+FINDING (2026-09-18 ~09:50): `tokenizer/train/bpe_train.mojo` allocates a DENSE
+`vocab_size x vocab_size` Int table (`counts`, line ~253): at 50,256 that is 20.2 GB, on a
+16 GB Mac. `top` showed train_main at 19 GB, 18 GB of it compressed (zero pages compress),
+swap 443 MB used, system memory free 58%. Not killed (owed). If it dies or thrashes, rerun on a
+RunPod CPU pod with >= 32 GB RAM. The dense table is a follow-up CANDIDATE (a hash map of
+touched keys is the same output by construction), not done in this lane.
+
+FINDING: `BpeVocabularyTrainer.train` is the PURE PYTHON trainer (`_bpe_trainer.py`), which
+recounts every pair of every pre-token group on every merge. 256 merges on 100 KB took about
+3.8 s including tokenizing. A 50,256-rank vocabulary on 10 MB through the built-in default is
+not practical in Python; measured rate and the question for Andrew go in the report.
