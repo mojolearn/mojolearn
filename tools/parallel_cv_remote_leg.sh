@@ -63,6 +63,7 @@ capture() {
     run_stage "$label" "$@"
 }
 failed=0
+run_stage build-base bash bindings/build.sh || exit 1
 if run_stage build-gbdt bash bindings/build_gbdt.sh; then
     capture cv "$PY" tools/parallel_cross_val_check.py --require-backend "$backend" --devices 0,1 --out "$OUT/capture" || failed=1
 else failed=1; fi
