@@ -12,7 +12,7 @@ ede6f6243.
 - WIP: both rows in `checks/kernel_matrix.mojo` now return True for NVIDIA,
   AMD and Apple. NOT QUALIFIED YET; do not merge until the sections below
   say PASS.
-- Pods out (14:10Z), all MINE, each self-deletes at its lease:
+- Pods out: see "Pods" at the end. Earlier (14:10Z), all MINE, each self-deletes at its lease:
   RunPod ur4bbe8u4pe9wr (H100, extra body mode gates -> nvidia_gates/),
   RunPod uywfr8o08f4qeh (H100, mode identity -> nvidia_identity/),
   RunPod rf1ruxuaac3q5i (CPU pod, identity before/after -> cpu_identity/).
@@ -210,3 +210,12 @@ gone (GET 404, not listed) 14:52:43Z. Host verdict
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
+
+## Pods (live list, 15:27Z)
+
+- Hot Aisle VM for amd_enwik8 (lane attn-replay-enwik8, created 14:53Z), running.
+- DigitalOcean droplet 601730505 (MI325X gfx942, amd_extra: gates, reduced
+  witness, identity_break before/after). Hot Aisle had no 13core stock for 30
+  min (refused_hotaisle_nostock/, nothing created).
+- Everything else rented by this lane is verified gone (ur4bbe8u4pe9wr,
+  uywfr8o08f4qeh, rf1ruxuaac3q5i: 404; Hot Aisle d89c0dc6: 404).
