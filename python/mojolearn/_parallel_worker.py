@@ -21,6 +21,9 @@ def execute(request):
         if _backend.vendor() not in ('cuda', 'hip'):
             raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
         return _fit_score_fold(state, *args)
+    if operation == 'causal_lm_layer':
+        from ._causal_lm_worker import execute as run_layer
+        return run_layer(state, args)
     if operation == 'cpu_reference':
         # The pool wraps a request this way only on a CPU-only install and
         # only while its caller is inside reference_training() (the internal
@@ -154,6 +157,14 @@ def execute(request):
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
+    if operation == 'gpc_class_fit':
+        from ._gpc_impl import _kernel_arrays
+        x, y01 = args
+        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
+    if operation == 'gpc_class_predict':
+        fit, q, want_proba = args
+        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)
+        return probability if want_proba else mean
     if operation == 'forecast_predict':
         method, positional = args
         if method != 'predict':

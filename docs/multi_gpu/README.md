@@ -18,6 +18,24 @@ qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 
+Loaded checkpoints have an explicit experimental layer-owner API:
+
+```python
+from mojolearn.models import ParallelCausalLM
+
+# Two-layer example: one device index for each checkpoint layer.
+with ParallelCausalLM.load(checkpoint_directory, layer_devices=(0, 1)) as model:
+    output_ids = model.generate(input_ids, 8)
+```
+
+Only assigned layers are constructed in each persistent worker. Activations
+cross devices through host memory; standard block caches remain host-backed.
+Loading currently materializes the checkpoint in parent RAM. This implements
+sequential layer distribution, not within-layer tensor parallelism, resident-KV
+capacity certification or a measured speedup. Physical two-GPU evidence is
+pending. Use `verify-causal-lm --device gpu --layer-devices 0 1 --output PATH`
+to capture the tiny two-layer proof through this route.
+
 The expanded 0.8.7 source also exposes fitted-model forecast scheduling:
 
 ```python
@@ -31,6 +49,23 @@ These partition independent series and preserve output order. ARIMA exogenous
 models and Holt-Winters in-sample prediction are explicitly outside this initial
 distributed API. Software partition/failure tests pass; physical NVIDIA/AMD
 qualification is pending. This does not inherit the older fit-path receipts.
+
+Independent GPC classes can also be scheduled explicitly:
+
+```python
+from mojolearn.parallel_gaussian_process import (
+    fit_gaussian_process_classifier, predict_gaussian_process_classifier,
+)
+
+fit_gaussian_process_classifier(gpc, X, y, devices=(0, 1))
+probabilities = predict_gaussian_process_classifier(gpc, queries, devices=(0, 1),
+                                                   method='predict_proba')
+```
+
+This preserves binary solves and class/probability order. It can distribute
+multiclass work, but a single binary covariance problem still must fit on one
+GPU. Physical vendor qualification is pending; software scheduling tests alone
+are not a throughput or capacity measurement.
 
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |

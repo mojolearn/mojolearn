@@ -51,6 +51,8 @@ docs/VERIFY.md is the human document for all of it.
 """
 
 import argparse
+import json
+from pathlib import Path
 import sys
 
 from . import _conformance
@@ -90,6 +92,26 @@ def _verify_dispatch(args):
     return _verify.cmd_verify(args)
 
 
+def _causal_lm_dispatch(args):
+    from . import _verify_causal_lm as proof
+    if args.compare:
+        left, right = (json.loads(Path(p).read_text()) for p in args.compare)
+        equal = proof.compare(left, right)
+        print(json.dumps({'status': 'NUMERICAL_MATCH_UNQUALIFIED' if equal else 'DIVERGENT',
+                          'release_qualified': False}))
+        return 0 if equal else 1
+    path = Path(args.output)
+    if path.exists():
+        raise ValueError('capture output already exists; choose a new path to preserve evidence')
+    options = {'layer_devices': args.layer_devices} if args.layer_devices is not None else {}
+    result = proof.capture(args.device, tuple(args.formats), **options)
+    with path.open('x') as stream:
+        json.dump(result, stream, indent=2)
+        stream.write('\n')
+    print(json.dumps({'status': result['status'], 'output': str(path), 'release_qualified': False}))
+    return 0 if result['status'] == 'CAPTURED_UNQUALIFIED' else 1
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m mojolearn",
@@ -104,6 +126,22 @@ def build_parser():
             "  4 cannot run 5 no reference\n"),
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
+
+    lm = sub.add_parser('verify-causal-lm',
+        help='capture tiny loaded-model inference properties or compare two captures',
+        description='End-to-end loaded-model logits, stateful decode, batch, reset and reload checks. '
+                    'A successful capture or numerical comparison is not release qualification.')
+    action = lm.add_mutually_exclusive_group(required=True)
+    action.add_argument('--output', metavar='PATH', help='write a fresh capture; never overwrite')
+    action.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'),
+                        help='compare matching captures without executing models')
+    lm.add_argument('--device', choices=('cpu', 'gpu'), default='cpu')
+    lm.add_argument('--formats', nargs='+', choices=('float32', 'bfloat16', 'int8'),
+                    default=['float32', 'bfloat16', 'int8'])
+    lm.add_argument('--cpu-threads', type=int, default=1)
+    lm.add_argument('--layer-devices', nargs='+', type=int,
+                    help='experimental GPU layer-owner map, one device index per fixture layer')
+    lm.set_defaults(func=_causal_lm_dispatch)
 
     v = sub.add_parser(
         "verify",

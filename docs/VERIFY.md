@@ -208,6 +208,27 @@ These can expose incorrect reductions or indexing that a large easy input
 misses. The planned small training profile needs independently recorded hashes;
 it is not implemented merely by lowering the old fixture size.
 
+## Whole loaded-language-model inference
+
+The expanded 0.8.7 source includes a small, separate composition check for
+loaded Llama and Mamba models, including tied/untied heads where applicable and
+FP32, BF16 and int8 weights:
+
+```sh
+python -m mojolearn verify-causal-lm --device cpu --output cpu-models.json
+python -m mojolearn verify-causal-lm --device gpu --output gpu-models.json
+python -m mojolearn verify-causal-lm --compare cpu-models.json gpu-models.json
+```
+
+This checks complete logits, prefill versus carried-state decoding, batch
+invariance, cache reset, reload and greedy outputs. Output paths must be new.
+CPU threads default to one. The comparison requires matching fixture/profile
+bytes; a successful capture reports `CAPTURED_UNQUALIFIED`, and matching
+captures report `NUMERICAL_MATCH_UNQUALIFIED`. These are numerical evidence,
+not automatic reference admission or a release certificate. Composition faults
+are distinct from faults injected into native arithmetic. Other loaded
+architectures and physical multi-GPU execution require their own records.
+
 ## What the CPU training bindings are for
 
 Every wheel since 2026-09-16 carries all thirty-two host (CPU) bindings, the

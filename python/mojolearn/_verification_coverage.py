@@ -6,6 +6,7 @@ from pathlib import Path
 
 from . import host_surface
 from . import _verify_reference as vref
+from . import _verify_small as small_profile
 from ._verification_catalog import ENTRIES, PROVENANCE
 from ._verification_ctr_models import MODEL_SHA256 as CTR_MODELS
 from ._verification_evidence_data import DATA as HISTORICAL_EVIDENCE
@@ -155,6 +156,13 @@ def inventory(harness, table, vendor_class):
                 reference_admission_policy=table.get('admission_policy',
                     dict(status='legacy', reason='predates repeated-value and protocol admission; regenerate before release')),
                 declared_ctr_model_sha256=CTR_MODELS,
+                supplemental_checks=[dict(command='verify-causal-lm',
+                    scope='tiny whole loaded-model inference composition',
+                    reference_admitted=False, release_qualified=False)],
+                experimental_profiles=[dict(profile=small_profile.PROFILE,
+                    lanes=list(small_profile.LANES), cases=len(small_profile.CASES),
+                    max_rows=small_profile.MAX_ROWS,
+                    default_reference_compatible=False, reference_admitted=False)],
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())

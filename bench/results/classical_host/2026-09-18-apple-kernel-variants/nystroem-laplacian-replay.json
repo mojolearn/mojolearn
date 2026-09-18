@@ -1,0 +1,417 @@
+{
+  "binaries": {
+    "_mojolearn": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_forecast_host.so"
+  },
+  "binary": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-kernel-identity/clean/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-18T13:46:12-0400",
+  "commit": "7861634088d8c00889c4aeb876ed75c542bd19e6",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d8599976b9369c1aac89e2e0122de1a75e96a46ccff3979bcc9478317f0d0966",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d8599976b9369c1aac89e2e0122de1a75e96a46ccff3979bcc9478317f0d0966",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "532f2327eba691f7",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "532f2327eba691f7",
+        "want": "532f2327eba691f7"
+      },
+      "kind": "base",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "28f4695cd4465bfd1f334970aebac5f0f8a5a9b52e7d3bd5acf27fa47fda63d5",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.001511
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "58345238bd1b757d85e63853198720781cc290429f74d93e551943c121946862",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "58345238bd1b757d85e63853198720781cc290429f74d93e551943c121946862",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "8cb55176f188dd64",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "8cb55176f188dd64",
+        "want": "8cb55176f188dd64"
+      },
+      "kind": "denormal",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "36e7097286c2bb978db81bae46c85dc82d7e535a50d8f91f337df9c0afd01143",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000171
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "58345238bd1b757d85e63853198720781cc290429f74d93e551943c121946862",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "58345238bd1b757d85e63853198720781cc290429f74d93e551943c121946862",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "8cb55176f188dd64",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "8cb55176f188dd64",
+        "want": "8cb55176f188dd64"
+      },
+      "kind": "denormal_ftz",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "837c24b153316e6f32c14722f2ed5a50364740dc776660d3133f7a9a5ed1f8ea",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000463
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "d8599976b9369c1aac89e2e0122de1a75e96a46ccff3979bcc9478317f0d0966",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "d8599976b9369c1aac89e2e0122de1a75e96a46ccff3979bcc9478317f0d0966",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "532f2327eba691f7",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "532f2327eba691f7",
+        "want": "532f2327eba691f7"
+      },
+      "kind": "dupes",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "28f4695cd4465bfd1f334970aebac5f0f8a5a9b52e7d3bd5acf27fa47fda63d5",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000205
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "f06d597e1d271c168e5ca25c0bc6294f8cf6871dbf5dda8bff7963697c3e4d06",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "f06d597e1d271c168e5ca25c0bc6294f8cf6871dbf5dda8bff7963697c3e4d06",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "cd4acc860bf2ba17",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "cd4acc860bf2ba17",
+        "want": "cd4acc860bf2ba17"
+      },
+      "kind": "hashed",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "539991c19e8790934c7beee16062a73949516131cef829efd32ba41e86fab642",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.00023
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "76bbf37927928fd3a90ab7a2e78a9b079ea22c480de50f0801d94e5ef3541ede",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "76bbf37927928fd3a90ab7a2e78a9b079ea22c480de50f0801d94e5ef3541ede",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "82f5f0b595f9250d",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "82f5f0b595f9250d",
+        "want": "82f5f0b595f9250d"
+      },
+      "kind": "negative",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "bded433ad62b94439abdbf990c412f5881f069b399871867b8eda5a486c2f0e6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.00019
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "8323b28f8ec662ec17a3c2619de0b00414db0247ce00d3f51fb26646766b3f42",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "8323b28f8ec662ec17a3c2619de0b00414db0247ce00d3f51fb26646766b3f42",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "cdc42963c429e4f0",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "cdc42963c429e4f0",
+        "want": "cdc42963c429e4f0"
+      },
+      "kind": "odd",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "96704e86af8cc3d6d3bdf6af524b8a3c2839332430a261f3095c13553d13996c",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000139
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "472af2bb9b9236906835dac9c7d81e45f4d0ce9c8527e5f8cb06f858b44ab4a5",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "472af2bb9b9236906835dac9c7d81e45f4d0ce9c8527e5f8cb06f858b44ab4a5",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "419926460a8fe6d7",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "419926460a8fe6d7",
+        "want": "419926460a8fe6d7"
+      },
+      "kind": "ties",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "bff3c6ddc9eb1bcb474a437d1e4fe16e5eb1d512f6e58e0eac57c22b261a6567",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000146
+    },
+    {
+      "cases": [
+        {
+          "case": "transform",
+          "equal": true,
+          "got": "0ab0588cb97c622b41a6cc8ef53613778d0defa5005df1be7420308247f93dce",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64,
+            8
+          ],
+          "want": "0ab0588cb97c622b41a6cc8ef53613778d0defa5005df1be7420308247f93dce",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64,
+            8
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "apple-nystroem-laplacian.json",
+          "equal": true,
+          "infer": "9f00f0d0e54ccf42",
+          "vendor": "apple-m4"
+        }
+      ],
+      "estimator": "Nystroem",
+      "identity_hash": {
+        "equal": true,
+        "got": "9f00f0d0e54ccf42",
+        "want": "9f00f0d0e54ccf42"
+      },
+      "kind": "wide",
+      "lane": "nystroem-laplacian",
+      "model_sha256": "dff8bbac56c9b8dba50c5d3fc75ce854faf8dd18c3d555c855769018cf8a6629",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "metal",
+      "seconds": 0.000181
+    }
+  ],
+  "gpu_columns": [
+    "apple-nystroem-laplacian.json"
+  ],
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "unmoved": [
+    "nystroem-laplacian/base",
+    "nystroem-laplacian/denormal",
+    "nystroem-laplacian/denormal_ftz",
+    "nystroem-laplacian/dupes",
+    "nystroem-laplacian/hashed",
+    "nystroem-laplacian/negative",
+    "nystroem-laplacian/odd",
+    "nystroem-laplacian/ties",
+    "nystroem-laplacian/wide"
+  ],
+  "vendor": "metal",
+  "verdict": "IDENTICAL"
+}
