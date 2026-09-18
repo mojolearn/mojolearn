@@ -62,6 +62,14 @@ class DistributedIVFIndex:
             raise ValueError('IVF original IDs must be a permutation of stored row IDs')
         if index.list_data_.shape != (index.n_rows_, index.n_features_in_):
             raise ValueError('IVF stored data shape differs from index metadata')
+        offsets = [int(v) for v in index.list_offsets_.tolist()]
+        # Partitioning clips offsets to local bounds. Validate BEFORE clipping:
+        # otherwise a corrupted saved index can be silently repaired differently
+        # from the ordinary native search, which rejects its original layout.
+        if (len(offsets) != index.n_lists_ + 1 or offsets[0] != 0
+                or offsets[-1] != index.n_rows_
+                or any(a > b for a, b in zip(offsets, offsets[1:]))):
+            raise ValueError('invalid global IVF list offsets')
         devices = tuple(devices)
         pool = DevicePool(devices)  # validates every requested device before slicing
         pool.close()
@@ -73,7 +81,6 @@ class DistributedIVFIndex:
         obj.metric_code_, obj.devices = index.metric_code_, devices
         obj.n_candidates_ = None
         obj._id_maps = []
-        offsets = [int(v) for v in index.list_offsets_.tolist()]
         requests = []
         for part in range(len(devices)):
             lo = part * index.n_rows_ // len(devices)

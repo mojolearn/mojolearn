@@ -199,3 +199,14 @@ def test_store_failure_closes_workers(pool):
     with pytest.raises(RuntimeError, match='worker failed'):
         pi.DistributedIVFIndex.from_index(index())
     assert StoragePool.closed
+
+
+@pytest.mark.parametrize('offsets', [[-1, 3, 3, 7], [0, 3, 3, 8], [0, 4, 3, 7], [0, 3, 7]])
+def test_corrupt_global_offsets_are_not_repaired_by_partition_clipping(pool, monkeypatch, offsets):
+    def unexpected(*args):
+        raise AssertionError('invalid layout started GPU workers')
+    monkeypatch.setattr(pi, 'DevicePool', unexpected)
+    m = index()
+    m.list_offsets_ = ar(offsets, '<i4')
+    with pytest.raises(ValueError, match='global IVF list offsets'):
+        pi.DistributedIVFIndex.from_index(m)

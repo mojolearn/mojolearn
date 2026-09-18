@@ -85,6 +85,13 @@ these do not claim two-device execution. Root exports DistributedIVFIndex and
 all new modules in the package/API inventory. Rebuilding IVF is mandatory for
 the new entry points; old binaries cannot supply them.
 
+Review follow-up: validate the original IVF offset sequence before clipping it
+into local shards. Otherwise a negative first offset or oversized final offset
+could be silently normalized by partitioning instead of rejected as in ordinary
+search. Twenty binding-free IVF checks pass, including four corrupt global
+layouts rejected before any GPU worker is created. Valid input arithmetic and
+native source are unchanged by this follow-up.
+
 Integrate each feature checkpoint, exercise real GPU paths with bounded guarded
 jobs, admit matching references only after their actual checks pass, build the
 expanded 0.8.7 candidate, run installed API/verifier gates and qualify exact wheel
