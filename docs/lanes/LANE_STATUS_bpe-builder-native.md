@@ -1,6 +1,6 @@
 # LANE STATUS: bpe-builder-native (lane/bpe-builder-native)
 
-**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes running; full-size pod run owed.**
+**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes DONE (IDENTICAL before vs after, both sabotage arms DIVERGENT); full-size pod run owed.**
 
 Worktree `~/mojolearn-wt/bpe-builder-native`, branch `lane/bpe-builder-native`, cut from
 origin/main 0e4715f7c. Evidence goes under `~/mojolearn-evidence/bpe-builder-native-sep18/`,
@@ -107,6 +107,27 @@ Also green: `pixi run check-bpe-trainer` PASS (284 tie-broken selections);
 (9 checks), `test_tokenizer_surface` (22 of 23, GPT-2 files skip), pytest
 `test_host_surface.py` + `test_models_loader.py` 206 passed / 4 skipped;
 `tools/verification_matrix.py --check` OK (236 lanes, 237 public API entries).
+
+### Step 4: identity lanes (bench/results/identity_break/2026-09-18_bpe-builder-native/)
+
+M4, one core, nice 19, `--repeats 2`, nine fixtures, lanes tokenizer, bpe-trainer,
+bpe-vocabulary, tokenized-corpus. Before = main 0e4715f7c (`git archive` into
+`~/mojolearn-evidence/bpe-builder-native-sep18/before_src`, its binding built from that
+source); after = b77a26e93 with its binding (`host/after_b77a26e93`).
+
+- before vs after: `summary: IDENTICAL=36`. base rows printed from `diff.after.txt`:
+  `bpe-trainer/base IDENTICAL x2 6ed8b49585df3d85 | 6ed8b49585df3d85`,
+  `bpe-vocabulary/base IDENTICAL x2 875b2b4bc2a4c302`, `tokenized-corpus/base IDENTICAL x2
+  2580bb7a34e5ae01`, `tokenizer/base IDENTICAL x2 08b10bbc6f4b565b`.
+- before vs binding built with -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1: `DIVERGENT=27,
+  IDENTICAL=9`; the 27 are every bpe-trainer / bpe-vocabulary / tokenized-corpus cell, e.g.
+  `bpe-trainer/base DIVERGENT parts differ: ranks,tokenizer_json,n_tokens,n_merges,n_ties_broken
+  | f5172d25e6499662`; the 9 IDENTICAL are the tokenizer lane (not reached, correct). Since
+  the Python code is the same in the after and sabotage arms, this is what shows the after arm
+  ran the MOJO trainer.
+- before vs env MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (clean binding): `DIVERGENT=27, IDENTICAL=9`,
+  same pattern.
+- `tools/verification_matrix.py --check` OK after the lane docstring edit.
 
 ## Candidates (not opened)
 
