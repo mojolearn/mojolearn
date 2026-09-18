@@ -43,6 +43,15 @@ def main():
             print('EXPECTED FAIL:', key)
         else:
             raise AssertionError('BLIND comparator: ' + key)
+    for name, left, right, reason in (('same legacy arm', a, a, 'guarded arm'),
+                                     ('same guarded arm', b, b, 'legacy arm')):
+        try:
+            compare(left, right, False)
+        except AssertionError as e:
+            assert str(e) == reason, str(e)
+            print('EXPECTED FAIL:', name)
+        else:
+            raise AssertionError('BLIND: ' + name)
     compare(a, b)
     for name, r in (('legacy', a), ('guarded', b)):
         counts = Counter(v for row in r['steps'] for v in row['attention']['backward_status'])

@@ -78,3 +78,64 @@ the trial. A remaining fallback is not proof this site accounts for it.
 Adversarial checks must retain real masked-tail refusals and detect deliberately
 canonicalizing a final negative-zero dk cell to positive zero. Any inert
 sabotage will be reported INERT and the fixture improved before trusting it.
+
+## Step 3 implementation prepared; measurements wait for step 2 result
+
+Trial MOJOLEARN_BYTE_LM_RELEASE_EAGER drops the nine eager-only buffers
+immediately after each layer's existing backward completion fence. Replaces
+only grown buffers with one-cell placeholders; keeps aexp and all dx/dw.
+Reports released_eager_bytes per gradient step plus runtime release_eager.
+attn_materialized becomes false after release (buffers no longer valid);
+forward/backward statuses still identify what actually ran during that step.
+
+Predictions registered before the release/endurance run: legacy vs release
+with the exact-tail guard OFF in both runs must match all 700 loss witnesses
+and the six hashes at steps0,699. Refusals must still occur (>0) and released
+bytes must be >0, otherwise the memory trial is INERT. At every completed
+release step eager_bytes must equal 432, aexp stays 2415919104. Predict tail
+device occupancy <20000 MiB (legacy ~31535); >=20000 falsifies the footprint
+prediction despite buffer-length success. No throughput gain is promised
+for release alone, which re-allocates on every real fallback.
+
+Then the combined trial at B4 must complete 2000 steps with finite losses;
+predict tail <0.85s/step and device memory <65000 MiB, eager_bytes=432 at every
+step, aexp=9663676416. OOM, missing steps, nonfinite loss or any failed identity
+gate rejects qualification. This establishes B4 survival, not the maximum
+possible batch; larger batches remain unmeasured.
+
+## Exact-tail guard result: performance prediction FALSIFIED
+
+Second H100 leg, commit305d6a116, podqlbxdtkpfegy6y deleted/verified gone.
+700 losses and all six hashes at steps0,699 MATCH. Native sabotage changed
+accepted dk from eager 0x80000000 to 0x00000000 and FAILED. Clean negative-zero
+fixtures and all 15 fused/eager cases passed. Counter intervention removed
+248/3697 refusals (6.7%), leaving3449. Legacy tail0.461326122s vs guarded
+0.460533116s, same final31537MiB and17314086912 eager bytes. This does NOT
+meet the registered370-refusal/0.26s prediction. Do not promote this guard
+for a speed claim. It remains a disabled experimental build option.
+
+## Revised step 2: pre-launch policy from the observed corner
+
+Trial MOJOLEARN_BYTE_LM_STICKY_EAGER: on a layer's first actual FUSED_CORNER,
+remember prefer_eager for that resident layer. Subsequent AUTO calls choose
+existing eager forward AND backward before either fused launch. Explicit
+`attention-path=fused` overrides the preference. No numerical kernel changes.
+This is a policy from observed history, NOT a prediction of a corner or an
+attribution to an unisolated kernel site. The first refusal still pays both;
+each layer pays it at most once per resident session under AUTO.
+
+Three 700-step target arms, same pinned corpus/seed, before B4 endurance:
+baseline (both flags off), sticky (release off), released (both flags on).
+Exact-tail-guard stays OFF. Predict all700 loss witnesses and six hashes at
+steps0,699 match; forward status counts for sticky/released 3012 RAN and
+5388 NOT_ATTEMPTED; backward 3000 RAN,12 CORNER,5388 NOT_ATTEMPTED, assuming
+all twelve first refusals retain their measured indices. Tail median target
+0.18–0.32s; >0.32 falsifies the speed prediction. Any unequal bit rejects.
+
+Release additionally drops dead scores/masked/sbh after the forward fence,
+keeping weights+aexp for backward. This avoids holding all layers' forward
+scratch when the policy chooses eager before forward. attn_materialized now
+means backward weights are valid; it becomes false after backward release.
+Predict release eager_bytes=432 after EVERY step, aexp=2415919104, positive
+released bytes on exercised steps, and device tail <21000MiB. Higher device
+memory falsifies the footprint prediction even if the buffer lengths shrink.

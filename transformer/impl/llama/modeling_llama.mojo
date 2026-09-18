@@ -1536,12 +1536,13 @@ struct LlamaDeviceStages(Movable):
     is `M * n_heads` floats and a conditional field is a second struct
     shape to get wrong."""
     var gemm_workspace: GemmWorkspace
+    var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
     var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
     var attn_materialized: Bool
-    """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
-    attention stages. The eager path sets it; the fused path (which never
-    writes them) clears it, and a backward that needs them recomputes
-    them first (`ensure_attention_materialized`)."""
+    """Whether the LAST call's eager softmax weights are valid for backward.
+    The eager path sets it; fused clears it. The byte trainer may release
+    dead scores/masked/sbh after forward while retaining weights and aexp.
+    `ensure_attention_materialized` recomputes when weights are absent."""
     var attn_estash_cells: Int
     """DEVIATION 2652 (trial builds only; brief
     docs/lanes/BRIEF_attention_step_2026-09-11.md section 20): the `[B,
@@ -1641,6 +1642,7 @@ struct LlamaDeviceStages(Movable):
         self.kbh = _zeros[False](ctx, sc * hd)
         self.sbh = _zeros[False](ctx, sbh_n)
         self.qk_sumsq = _zeros[False](ctx, m * nh)
+        self.attn_prefer_eager = False
         self.attn_forward_status = -1
         self.attn_materialized = False
         self.attn_estash_cells = 0
@@ -1719,6 +1721,7 @@ struct LlamaDeviceStages(Movable):
         self.sbh.enqueue_fill(Float32(0))
         step_count_launch()
         self.qk_sumsq.enqueue_fill(Float32(0))
+        self.attn_prefer_eager = False
         self.attn_forward_status = -1
         self.attn_materialized = False
         self.attn_estash_cells = 0
@@ -3549,6 +3552,8 @@ def eager_attention_forward(
     bits are the ones in `stages.ctxv`; -1 when the fused path was not
     attempted)."""
     var choice = attention_path_choice(plant_at)
+    if choice == ATTN_PATH_AUTO and stages.attn_prefer_eager:
+        choice = ATTN_PATH_EAGER
     if softcap != Float32(0.0):
         choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER

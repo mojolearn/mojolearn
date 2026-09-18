@@ -14,8 +14,8 @@ fail is not a check:
                          would mean the aliasing did not reach the allocator,
                          whatever the source says.
   eager_witness_moves    zero layers grown on the fused path, every layer
-                         grown under the forced eager path. Zero in both arms
-                         is a blind witness, not a clean run.
+                         grown or explicitly released under forced eager.
+                         Zero retained in both arms alone proves nothing.
   eager_hypothesis       the long run's THREE-WAY outcome, never a pass/fail
                          that could be read as a pass by default. CONFIRMED
                          needs the witness to grow AND the device memory to
@@ -124,6 +124,25 @@ def eager_hypothesis(long_run):
         ids=long_run.get('ids'), corpus=long_run.get('corpus'))
 
 
+def eager_witness_moves(g_off, g_on, shape):
+    layers = g_on.get('layers')
+    if not layers:
+        return False
+    fused_idle = (layers and g_off.get('layers_grown_forward') == 0
+                  and g_off.get('layers_grown_backward') == 0
+                  and g_off.get('released_eager_bytes', 0) == 0)
+    if g_on.get('release_eager') is True:
+        batch, length, _, heads = shape[:4]
+        expected = layers * (7 * batch * heads * length * length
+                             + 2 * length * length - 9) * 4
+        return bool(fused_idle and expected > 0
+                    and g_on.get('released_eager_bytes') == expected
+                    and g_on.get('forward_status') == [-1] * layers
+                    and g_on.get('backward_status') == [-1] * layers)
+    return bool(fused_idle and g_on.get('layers_grown_forward') == layers
+                and g_on.get('layers_grown_backward') == layers)
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', type=Path, required=True)
@@ -156,12 +175,7 @@ def main():
         g_off, g_on = grown(off), grown(on)
         notes['eager_report_fused'] = g_off
         notes['eager_report_eager'] = g_on
-        layers = g_on.get('layers')
-        checks['eager_witness_moves'] = bool(
-            layers and g_off.get('layers_grown_forward') == 0
-            and g_off.get('layers_grown_backward') == 0
-            and g_on.get('layers_grown_forward') == layers
-            and g_on.get('layers_grown_backward') == layers)
+        checks['eager_witness_moves'] = eager_witness_moves(g_off, g_on, on['shape'])
     else:
         notes['eager'] = 'one or both attention arms missing; nothing compared'
 

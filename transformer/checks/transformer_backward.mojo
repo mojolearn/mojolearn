@@ -59,6 +59,7 @@ from transformer.impl.llama.fused_attention import (
     fused_backward_launch_estash_ran,
 )
 from transformer.impl.llama.modeling_llama import (
+    ATTN_PATH_AUTO,
     ATTN_PATH_EAGER,
     timing_on,
     timing_tick,
@@ -3069,6 +3070,8 @@ def llama_decoder_layer_backward_device(
     timing_tick(ctx, ton, tk, "bwd.before_attention")
     bst.attn_backward_status = -1
     var choice = attention_path_choice(PLANT_AT_NONE)
+    if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:
+        choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     if need_eager:
         bwd_attention_eager_stages(

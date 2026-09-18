@@ -601,8 +601,13 @@ class SmallByteLanguageModelTrainer:
         allocated at ONE element for the fused path and GROW ON DEMAND the
         first time a layer takes the eager path -- a refused regime, or a
         `FUSED_CORNER` hit, both of which depend on the DATA and so on the
-        step. Once grown they are never released while the session lives.
-        A run therefore has no single device footprint: it can step up
+        step. With the legacy retention policy they stay for the session.
+        `release_eager` builds release dead forward scratch after forward
+        and remaining eager stages after each layer backward; the report's
+        `released_eager_bytes` witnesses that work separately from capacity.
+        `sticky_eager` and `layers_prefer_eager` report the policy which
+        chooses eager before launch after a layer's first corner refusal.
+        A legacy run therefore has no single device footprint: it can step up
         once, at a step nobody chose, and every capacity figure taken
         before that step is wrong afterwards. A three-step probe cannot
         see it. Read this between steps and the step where it moved is
@@ -646,6 +651,13 @@ class SmallByteLanguageModelTrainer:
                                              for layer in range(n)]
             if len(info) > 10 + 3 * n:
                 report['exact_tail_guard'] = bool(info[10 + 3 * n])
+            if len(info) > 12 + 3 * n:
+                report['release_eager'] = bool(info[11 + 3 * n])
+                report['released_eager_bytes'] = int(info[12 + 3 * n]) * 4
+            if len(info) >= 14 + 4 * n:
+                report['sticky_eager'] = bool(info[13 + 3 * n])
+                report['layers_prefer_eager'] = [bool(info[14 + 3 * n + layer])
+                                               for layer in range(n)]
             return report
 
     def _export_state_impl(self):
