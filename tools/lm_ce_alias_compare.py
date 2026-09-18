@@ -16,6 +16,13 @@ fail is not a check:
   eager_witness_moves    zero layers grown on the fused path, every layer
                          grown under the forced eager path. Zero in both arms
                          is a blind witness, not a clean run.
+  eager_hypothesis       the long run's THREE-WAY outcome, never a pass/fail
+                         that could be read as a pass by default. CONFIRMED
+                         needs the witness to grow AND the device memory to
+                         step; FALSIFIED is memory stepping while the witness
+                         stays at zero; INCONCLUSIVE is neither moving, which
+                         means the transition did not reproduce and says
+                         nothing either way.
   resume_matches         the resumed tail equals the uninterrupted tail, hash
                          for hash.
   resume_control_separates
@@ -62,6 +69,61 @@ def compare_steps(a, b, first=0):
     return rows
 
 
+def eager_hypothesis(long_run):
+    """Three outcomes, spelled out, over the long witness run.
+
+    lane/lm-training-shakedown measured device memory stepping 16.949 ->
+    34.397 GB and seconds 0.207 -> 0.44 between steps 210 and 480 at this
+    shape, cause NOT ESTABLISHED. The hypothesis under test is that the step
+    is the eager attention fallback growing the ten [B, n_heads, L, S]
+    arrays, one layer at a time, never released.
+
+    The strength here is a CONTRAST, not a raw number: the memory step is the
+    known event, and the witness either coincides with it or it does not.
+    """
+    steps = long_run['steps']
+    grown = [(s['step'], (s.get('attention') or {}).get('layers_grown_forward'),
+              (s.get('attention') or {}).get('layers_grown_backward'),
+              s.get('device_used_mb'), s['seconds'])
+             for s in steps]
+    layers = next((( s.get('attention') or {}).get('layers') for s in steps
+                   if s.get('attention')), None)
+    first_growth = next((g for g in grown if g[1]), None)
+    full_growth = next((g for g in grown if layers and g[1] == layers and g[2] == layers), None)
+    mb = [g[3] for g in grown if g[3]]
+    memory_stepped = bool(mb) and (max(mb) - min(mb)) > 2048   # > 2 GB
+    seconds = [g[4] for g in grown]
+    head = seconds[:min(50, len(seconds))]
+    tail = seconds[-min(50, len(seconds)):]
+    slowed = bool(head) and bool(tail) and (sum(tail) / len(tail)) > 1.5 * (sum(head) / len(head))
+    witness_grew = first_growth is not None
+
+    if witness_grew and memory_stepped:
+        verdict = 'CONFIRMED'
+    elif memory_stepped and not witness_grew:
+        verdict = 'FALSIFIED'
+    elif witness_grew and not memory_stepped:
+        verdict = 'WITNESS MOVED WITHOUT A MEMORY STEP; look again'
+    else:
+        verdict = 'INCONCLUSIVE: the transition did not reproduce in this run'
+
+    last = (steps[-1].get('attention') or {}) if steps else {}
+    return verdict, dict(
+        steps_run=len(steps), layers=layers,
+        first_growth_at=None if first_growth is None else first_growth[0],
+        all_layers_grown_at=None if full_growth is None else full_growth[0],
+        device_used_mb_min=min(mb) if mb else None,
+        device_used_mb_max=max(mb) if mb else None,
+        device_used_mb_delta=(max(mb) - min(mb)) if mb else None,
+        memory_stepped=memory_stepped, slowed=slowed,
+        seconds_head_mean=(sum(head) / len(head)) if head else None,
+        seconds_tail_mean=(sum(tail) / len(tail)) if tail else None,
+        final_attention_report=last,
+        eager_bytes_final=last.get('eager_bytes'),
+        eager_plus_aexp_bytes_final=last.get('total_bytes'),
+        ids=long_run.get('ids'), corpus=long_run.get('corpus'))
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--out', type=Path, required=True)
@@ -103,6 +165,17 @@ def main():
     else:
         notes['eager'] = 'one or both attention arms missing; nothing compared'
 
+    long_run = read(out, 'witness-long')
+    if long_run and long_run['steps']:
+        verdict, detail = eager_hypothesis(long_run)
+        notes['eager_hypothesis'] = dict(verdict=verdict, **detail)
+        # Only a FALSIFIED reading is a failure of this lane's claim; the
+        # inconclusive readings are recorded as what they are and must not
+        # be allowed to read as a pass, so they are not checks at all.
+        checks['eager_hypothesis_not_falsified'] = verdict != 'FALSIFIED'
+    else:
+        notes['eager_hypothesis'] = 'the long witness run is missing; nothing tested'
+
     base, resumed, control = (read(out, 'ckpt-save'), read(out, 'ckpt-resume'),
                               read(out, 'ckpt-control'))
     tail = read(out, 'aliased')
@@ -129,7 +202,10 @@ def main():
                    passed=bool(checks) and all(checks.values()))
     (out / 'verdict.json').write_text(json.dumps(verdict, indent=1))
     for name, value in sorted(checks.items()):
-        print('%-28s %s' % (name, 'PASS' if value else 'FAIL'))
+        print('%-34s %s' % (name, 'PASS' if value else 'FAIL'))
+    hypothesis = notes.get('eager_hypothesis')
+    if isinstance(hypothesis, dict):
+        print('EAGER HYPOTHESIS: %s' % hypothesis['verdict'])
     print(json.dumps(notes, indent=1))
     print('VERDICT', 'PASSED' if verdict['passed'] else 'NOT PASSED')
     return 0 if verdict['passed'] else 1

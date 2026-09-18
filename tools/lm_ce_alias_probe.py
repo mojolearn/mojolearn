@@ -11,13 +11,22 @@ seconds are reported so a run can be sized, and the claim is about BITS.
 
 Modes:
 
-  steps        run `--steps` complete steps and record, per step, the sha256
-               of loss, flat gradients, parameters, m, v and flags, plus
-               `attention_stage_report()` and the polled device peak. This is
-               one arm of the aliasing A/B; the caller runs it once against a
+  steps        run `--steps` complete steps and record, per step, the loss
+               value, the seconds, `attention_stage_report()` and (every
+               `--smi-every` steps) the polled device memory. With
+               `--witness-every 1` it also records the sha256 of loss, flat
+               gradients, parameters, m, v and flags, which is what the
+               aliasing A/B compares; the caller runs it once against a
                binding built clean and once against one built with
-               `-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1`, and the two `result.json`
-               files must agree hash for hash at every step.
+               `-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1`, and the two
+               `result.json` files must agree hash for hash at every step.
+
+               WITNESSES ARE OFF BY DEFAULT BECAUSE THEY ARE NOT FREE: at the
+               162,147,840-parameter shape `export_state()` downloads 1.95 GB
+               and `export_gradients()` another 0.65 GB, which is several
+               times the step itself. A long run that switched them on would
+               be measuring the export. `attention_stage_report()` costs
+               nothing: it is `len()` of buffers the trainer already owns.
 
   checkpoint   run `--steps` steps, write a BINARY checkpoint, then exit. A
                second process with `--resume` loads that file into a new
@@ -39,6 +48,12 @@ import subprocess
 import sys
 import time
 from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+#: ONE spelling of the pinned-corpus schedule, not a second one. This is the
+#: class lane/lm-training-shakedown's long run fed its steps from, so a run
+#: here sees the same bytes in the same order at the same step index.
+from lm_step_memory_probe import CorpusBatches
 
 
 def sha(data):
@@ -82,7 +97,17 @@ def build(args):
     return trainer, shape
 
 
-def ids_for(shape, seed, index):
+def ids_for(shape, seed, index, corpus=None):
+    """The pinned corpus when one was staged, else synthetic uniform ids.
+
+    THE CORPUS IS NOT A DETAIL FOR THE EAGER WITNESS. The fallback this run
+    is looking for is triggered by the DATA (a `FUSED_CORNER` hit, or a
+    refused regime), so a run on uniform random byte ids is not the same
+    experiment as a run on enwik8 and a null result on one says nothing
+    about the other. Every result records which it was.
+    """
+    if corpus is not None:
+        return corpus.ids(index)
     import numpy as np
     rng = np.random.default_rng(seed * 1000003 + index)
     return rng.integers(0, shape.vocab_size, (shape.batch, shape.length + 1), dtype=np.int32)
@@ -109,17 +134,22 @@ def aliasing_witness(trainer):
     return None if entry is None else bool(entry())
 
 
-def run_steps(trainer, shape, args, start_index, count, records):
+def run_steps(trainer, shape, args, start_index, count, records, corpus=None):
+    """One step, then the cheap witnesses; the expensive ones only if asked."""
     for offset in range(count):
         index = start_index + offset
         t0 = time.perf_counter()
-        result = trainer.train_step(ids_for(shape, args.seed, index))
+        result = trainer.train_step(ids_for(shape, args.seed, index, corpus))
         seconds = time.perf_counter() - t0
+        want_smi = args.smi_every > 0 and (offset % args.smi_every == 0 or offset == count - 1)
         record = dict(step=index, seconds=seconds,
-                      device_used_mb=device_peak_mb(args.gpu_index),
-                      rss_bytes=rss_bytes(),
+                      loss=float(result['loss']),
+                      completed_steps=int(result['completed_steps']),
+                      device_used_mb=device_peak_mb(args.gpu_index) if want_smi else None,
+                      rss_bytes=rss_bytes() if want_smi else None,
                       attention=trainer.attention_stage_report())
-        record.update(witness(trainer, float(result['loss'])))
+        if args.witness_every > 0 and (offset % args.witness_every == 0 or offset == count - 1):
+            record.update(witness(trainer, float(result['loss'])))
         records.append(record)
         print(json.dumps(record), flush=True)
 
@@ -135,6 +165,13 @@ def main():
     parser.add_argument('--tail', type=int, default=2)
     parser.add_argument('--seed', type=int, default=20260917)
     parser.add_argument('--gpu-index', type=int, default=0)
+    parser.add_argument('--corpus', type=Path, default=None,
+                        help='pinned corpus staged from R2; without it the ids are synthetic')
+    parser.add_argument('--witness-every', type=int, default=0,
+                        help='sha256 the state every N steps (1 for the A/B; 0 = never, the default, '
+                             'because an export at the target shape costs several times the step)')
+    parser.add_argument('--smi-every', type=int, default=1,
+                        help='poll nvidia-smi every N steps; 0 disables it')
     parser.add_argument('--attention-path', default=None,
                         help="'eager' forces the eager kernels; proves the eager witness moves")
     parser.add_argument('--checkpoint', type=Path, default=None)
@@ -150,6 +187,10 @@ def main():
 
     records = []
     started = time.time()
+    corpus = None
+    if args.corpus is not None:
+        shape_for_corpus = Shape(*args.shape)
+        corpus = CorpusBatches(args.corpus, shape_for_corpus.batch, shape_for_corpus.length)
     if args.resume:
         trainer = Trainer.from_checkpoint_binary(args.checkpoint, resident=True)
         shape = Shape(*args.shape)
@@ -162,10 +203,10 @@ def main():
                 raw[:] = b'\x00' * len(raw)
             trainer.load_state_dict(dict(state, m=zeros_m, v=zeros_v))
         resumed_at = trainer.state_dict()['completed_steps']
-        run_steps(trainer, shape, args, resumed_at, args.tail, records)
+        run_steps(trainer, shape, args, resumed_at, args.tail, records, corpus)
     else:
         trainer, shape = build(args)
-        run_steps(trainer, shape, args, 0, args.steps, records)
+        run_steps(trainer, shape, args, 0, args.steps, records, corpus)
         if args.mode == 'checkpoint':
             t0 = time.perf_counter()
             digest = trainer.export_checkpoint_binary(args.checkpoint)
@@ -174,13 +215,16 @@ def main():
                 sha256=digest, bytes=Path(args.checkpoint).stat().st_size,
                 save_seconds=save_seconds, saved_at_step=records[-1]['completed_steps']), indent=1))
         else:
-            run_steps(trainer, shape, args, args.steps, args.tail, records)
+            run_steps(trainer, shape, args, args.steps, args.tail, records, corpus)
 
     result = dict(schema='mojolearn.lm-ce-alias-probe.v1',
                   mode=args.mode, resume=bool(args.resume),
                   drop_moments=bool(args.drop_moments),
                   shape=list(args.shape), seed=args.seed,
                   attention_path=args.attention_path or 'auto',
+                  witness_every=args.witness_every, smi_every=args.smi_every,
+                  corpus=(corpus.describe() if corpus is not None else None),
+                  ids='pinned corpus' if corpus is not None else 'synthetic uniform token ids',
                   ce_aliased=aliasing_witness(trainer),
                   run_metadata=trainer.run_metadata(),
                   steps=records, started=started, finished=time.time())

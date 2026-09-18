@@ -10,7 +10,22 @@
 #   sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 75 \
 #       --gpu "NVIDIA H100 80GB HBM3"
 #
-# WHAT IT DECIDES, in order:
+# WHAT IT DECIDES. THE WITNESS RUN GOES FIRST, deliberately: it is the only
+# arm whose answer is worth more than a memory rank, and if the lease dies
+# early that is the one result worth having.
+#
+#  0. the EAGER HYPOTHESIS, at the target shape, on the pinned enwik8 the
+#     other lane ran, for MOJOLEARN_LM_WITNESS_STEPS steps (default 700, past
+#     their transition at 210 to 480). lane/lm-training-shakedown measured
+#     device memory stepping 16.949 -> 34.397 GB and seconds 0.207 -> 0.44
+#     over those steps and recorded the cause as NOT ESTABLISHED. This run
+#     reads attention_stage_report() every step, which costs nothing, and
+#     nvidia-smi every tenth. Three outcomes and all three are spelled in
+#     verdict.json: CONFIRMED (the witness grows AND the memory steps),
+#     FALSIFIED (the memory steps while the witness stays at zero), or
+#     INCONCLUSIVE (neither moves, so the transition did not reproduce and
+#     this says nothing either way). No witness hashes here: an export at
+#     this shape costs several times the step and would be what got measured.
 #
 #  A. the CE ALIASING A/B (DEVIATION 3011). The shipped build overlays
 #     `ce_shift` on `logits` and `ce_weights`/`ce_dlogits` on `ce_expo`,
@@ -53,6 +68,10 @@ export MOJOLEARN_TARGET_COLUMN="${MOJOLEARN_TARGET_COLUMN:-nvidia}"
 export PYTHONPATH="$ROOT/python:$ROOT"
 STEPS="${MOJOLEARN_LM_ALIAS_STEPS:-3}"
 TAIL="${MOJOLEARN_LM_ALIAS_TAIL:-2}"
+# 700 puts the run well past the 210-to-480 window the other lane's
+# transition lived in, at about 0.2 to 0.45 s a step: four minutes of GPU.
+WITNESS_STEPS="${MOJOLEARN_LM_WITNESS_STEPS:-700}"
+CORPUS=training/corpus/enwik8/input.txt
 TARGET="1 2048 768 12 12 64 2048 12 50257"
 CONTROL="1 2048 384 6 6 64 1024 8 8192"
 
@@ -76,6 +95,20 @@ if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
 fi
 export MOJOLEARN_GPU_ARCHS
 echo "gpu_archs=$MOJOLEARN_GPU_ARCHS column=$MOJOLEARN_TARGET_COLUMN" >> "$ST"
+
+# THE CORPUS, and a loud line when it is not there. The leg stages
+# corpus/enwik8/input.txt from R2 before this body runs; that call is wrapped
+# in `|| true` in tools/gemm_remote_leg.sh, so the FILE is the check, not the
+# staging exit code. Drive the leg with MOJOLEARN_STAGE_STRICT=1 so the
+# failure is at least legible in stage.log.
+if [ -f "$CORPUS" ]; then
+    CORPUS_ARG="--corpus $CORPUS"
+    echo "corpus=$CORPUS bytes=$(wc -c < "$CORPUS")" >> "$ST"
+else
+    CORPUS_ARG=""
+    echo "CORPUS MISSING at $CORPUS: every arm runs on SYNTHETIC ids and the" >> "$ST"
+    echo "  witness run is NOT the other lane's experiment. Recorded, not hidden." >> "$ST"
+fi
 
 # The NumPy-free Python layer needs the IDENTICAL base binding for its host
 # helpers; build it first. The byte LM build refuses to overwrite, so a stale
@@ -118,21 +151,34 @@ fi
 # ---- ARM A: the shipped, ALIASED build -----------------------------------
 build_byte_lm aliased "" || { echo "aliased build failed" >> "$ST"; exit 1; }
 
-# A1. the A/B arm at the target shape.
-probe aliased --shape $TARGET --steps "$STEPS" --tail "$TAIL"
-smi "$OUT/gpu_after_aliased.txt"
+# 0. THE WITNESS RUN, FIRST. The data matters: the fallback this is looking
+# for is triggered by the DATA (a FUSED_CORNER hit, or a refused regime), so
+# a null result on synthetic ids would say nothing about their enwik8 run.
+# The corpus is recorded either way and the verdict carries which it was.
+probe witness-long --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
+    --smi-every 10 --witness-every 0 $CORPUS_ARG
+smi "$OUT/gpu_after_witness.txt"
 
-# B. the eager-fallback witness, at the CONTROL shape so the eager arm's
-# quadratic arrays fit comfortably beside everything else. Fused first.
+# B. the witness's own falsifier, at the CONTROL shape so the eager arm's
+# quadratic arrays fit comfortably beside everything else. A report that
+# reads zero in BOTH arms is a blind witness, not a clean run. Fused first.
 probe eager-off --shape $CONTROL --steps 1 --tail 0 --attention-path fused
 probe eager-on  --shape $CONTROL --steps 1 --tail 0 --attention-path eager
 
+# A1. the aliasing A/B arm at the target shape. Witnesses every step here:
+# this is the arm whose hashes have to match, and five steps can afford it.
+probe aliased --shape $TARGET --steps "$STEPS" --tail "$TAIL" --witness-every 1 $CORPUS_ARG
+smi "$OUT/gpu_after_aliased.txt"
+
 # C. the binary checkpoint across a process boundary, at the target shape.
 CKPT="$OUT/target-162m.byte-lm.bin"
-probe ckpt-save --shape $TARGET --steps "$STEPS" --tail 0 --mode checkpoint --checkpoint "$CKPT"
+probe ckpt-save --shape $TARGET --steps "$STEPS" --tail 0 --mode checkpoint \
+    --checkpoint "$CKPT" --witness-every 1 $CORPUS_ARG
 if [ -f "$CKPT" ]; then
-    probe ckpt-resume  --shape $TARGET --tail "$TAIL" --mode checkpoint --checkpoint "$CKPT" --resume
-    probe ckpt-control --shape $TARGET --tail "$TAIL" --mode checkpoint --checkpoint "$CKPT" --resume --drop-moments
+    probe ckpt-resume  --shape $TARGET --tail "$TAIL" --mode checkpoint \
+        --checkpoint "$CKPT" --resume --witness-every 1 $CORPUS_ARG
+    probe ckpt-control --shape $TARGET --tail "$TAIL" --mode checkpoint \
+        --checkpoint "$CKPT" --resume --drop-moments --witness-every 1 $CORPUS_ARG
     ls -l "$CKPT" >> "$ST"
     # 1.95 GB of evidence does not come home; the digest and the result do.
     sha256sum "$CKPT" >> "$ST" 2>&1
@@ -142,7 +188,7 @@ fi
 # ---- ARM B: the UNALIASED build, five separate [M, V] buffers -------------
 build_byte_lm unaliased "-D MOJOLEARN_BYTE_LM_CE_UNALIASED=1" \
     || { echo "unaliased build failed" >> "$ST"; exit 1; }
-probe unaliased --shape $TARGET --steps "$STEPS" --tail "$TAIL"
+probe unaliased --shape $TARGET --steps "$STEPS" --tail "$TAIL" --witness-every 1 $CORPUS_ARG
 smi "$OUT/gpu_after_unaliased.txt"
 
 # ---- the verdict ---------------------------------------------------------
