@@ -131,6 +131,7 @@ from gbdt.targets.kernel.yeti_rank import (
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
+from std.gpu import block_idx, thread_idx
 
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
@@ -1078,9 +1079,22 @@ def oracle_scratch_pooled_for[column: Int]() -> Bool:
 
 comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()
 #: negative control for DEVIATION 3041 (default off): a task that REUSES the
-#: fit's buffers skips the fill of `d_bins`, so it reads the previous tree's
-#: bins, the stale read this DEVIATION must never cause
+#: fit's buffers gets ONE cell of `d_bins` moved to another leaf after the
+#: fill, in range. It stands in for the stale read this DEVIATION must never
+#: cause (a reusing task reading the previous tree's bins). The first form of
+#: this control skipped the fill outright; a previous tree's bins can index
+#: past a smaller leaf count, and the arm aborted a column with
+#: CUDA_ERROR_ILLEGAL_ADDRESS in gbdt-ordered-rmse (2026-09-17). A fit with
+#: one leaf has no other leaf to move to and the control is inert there.
 comptime ORACLE_POOL_SABOTAGE = is_defined["MOJOLEARN_GBDT_ORACLE_POOL_SABOTAGE"]()
+
+
+def oracle_pool_sabotage_kernel(
+    bins: MutPointer[UInt32, MutAnyOrigin], bin_count: Int32
+):
+    """The DEVIATION 3041 negative control: row 0 goes to the next leaf."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        bins.unsafe_store(0, (bins.unsafe_load(0) + 1) % UInt32(bin_count))
 
 
 struct OracleDeviceScratch(Movable):
@@ -1479,15 +1493,20 @@ def make_bin_optimized_oracle(
     var bins_gx = 2 * sm
     if bins_gx < 1:
         bins_gx = 1
-    var fill_bins = True
+    ctx.enqueue_function[fill_bins_from_partition_kernel](
+        d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
+        grid_dim=(bins_gx, bin_count, 1),
+        block_dim=(256, 1, 1),
+    )
     comptime if ORACLE_POOL_SABOTAGE:
-        fill_bins = not have_scratch
-    if fill_bins:
-        ctx.enqueue_function[fill_bins_from_partition_kernel](
-            d_p_off.unsafe_ptr(), d_p_sz.unsafe_ptr(), d_bins.unsafe_ptr(),
-            grid_dim=(bins_gx, bin_count, 1),
-            block_dim=(256, 1, 1),
-        )
+        # the negative control: a reusing task's row 0 moves to the next
+        # leaf, in range (see the comptime above)
+        if have_scratch:
+            ctx.enqueue_function[oracle_pool_sabotage_kernel](
+                d_bins.unsafe_ptr(), Int32(bin_count),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
 
     # `d_partials`, `d_multi_partials`, `d_part_stats`, `d_multi_der` and
     # `d_multi_stats` are sized by `make_oracle_device_scratch` (DEVIATION 3041)
