@@ -37,3 +37,37 @@ over 262,144 triples (pre-repair: `fbr` = `f269fc70e5625987`).
   origin/main files vs branch files, same path; NVIDIA/AMD must be byte-equal,
   Apple must differ = the check can fail).
 - Scope audit delegated read-only; results to be recorded below.
+
+## Scope (static, read-only audit, 2026-09-18; approximate, classified by script)
+
+Per-call table: ~/mojolearn-evidence/apple-seam-repair-2026-09-18/scope_audit_calls.tsv
+(family, class, file, line, function, source). 255 non-bench, non-archive
+files, ~1,148 call sites of `identical_mul_add`/`identical_mul` in code bodies.
+
+| class | calls | files | Apple differs from NVIDIA/AMD on |
+|---|---:|---:|---|
+| 1 rtf-spelled, device (`ftz(fma)`) | ~401 | 94 | the boundary window only (the 315-type triples) |
+| 2 no-flush, device | ~20 real (30 raw) | ~10 | the window AND every subnormal result (NVIDIA/AMD keep it) |
+| 3 host-only / CPU | ~652 | 110 | nothing (not Metal) |
+| undetermined | ~50 | 17 | mostly host scalar math, unconfirmed |
+| probes / sabotage | 15 | 3 | n/a |
+
+Plus a PLAIN-OP class not counted in the table: `ftz(x * y)` / `ftz(x / y)`
+appear ~230 times in 77 non-host files (glm 44, arima 37, holtwinters 34,
+gbdt 27, metrics 20, decomposition 16, core 10). Whether Metal's plain
+multiply/divide also flush before rounding is UNTESTED; if they do, each
+carries the class-1 window.
+
+Class 1 by family: mamba 104 (backward heavy), training 48 (optimizer
+kernels 38), arima 29, transformer 26, holtwinters 20, gaussian_process 19,
+decomposition 19, neighbors 16 (kNN already repaired), resample 16, hdbscan 10,
+umap 10, kernel_methods 11, cholesky 9, gbdt 8, glm 6, others small.
+
+Class 2 (window + every subnormal): core/gram_splitk.mojo:695,705,723,739;
+core/column_stats.mojo:235; glm/impl/qn/simple_mat/dense.mojo:129,149;
+glm/impl/qn/glm_softmax.mojo:241; gbdt/methods/dynamic_boosting.mojo:100-101;
+gbdt/methods/kernel_add_model_value.mojo:100; ensemble/decisiontree/
+batched_levelalgo/objectives.mojo:601,612,617,675,690; spectral/impl/
+spectral_predict.mojo:77; umap/optimizer_identical_device.mojo:165,210.
+Class 2 cannot be repaired by the zero-result repair: Apple would have to
+PRESERVE subnormals, which its FMA does not do natively.
