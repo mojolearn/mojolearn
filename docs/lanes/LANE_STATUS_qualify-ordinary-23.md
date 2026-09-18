@@ -127,3 +127,11 @@ all their numerical parts.
 
 Validation after scoped admission: 217 host-surface/reference/coverage tests
 passed. The separate 49 capture/gate orchestration tests also passed earlier.
+
+AMD continuation found a build-orchestration gap: normalized GP prediction and
+normalized posterior sampling need the preprocessing GPU binding. The initial
+minimal leg built GP only, so those two columns refused. Five other GP columns
+and both GMM columns captured successfully. The family body now builds
+preprocessing before GP capture, and its ordering regression checks that
+requirement. Initial refusal records remain retained; same-VM recovery is being
+prepared rather than relabeling them as passes.

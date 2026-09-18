@@ -93,7 +93,7 @@ group() {
 build_binding build || exit $?
 group kernels kernel-ridge-poly,kernel-ridge-sigmoid,kernel-ridge-laplacian,nystroem-poly,nystroem-sigmoid,nystroem-laplacian \
     build_kernel_methods build_estimators_host
-group gp gp-normalize-y,gp-sample-y,gp-sample-y-normalize,gp-optimize,gp-optimize-restarts,gpc,gpc-multiclass build_gp
+group gp gp-normalize-y,gp-sample-y,gp-sample-y-normalize,gp-optimize,gp-optimize-restarts,gpc,gpc-multiclass build_gp build_preprocessing
 group mixture gmm-sample,gmm-random-init-sample build_mixture
 group ivf ivf-extend build_ivf
 group svm svc-poly build_svm
