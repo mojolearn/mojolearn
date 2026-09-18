@@ -67,3 +67,12 @@ The frozen release has selective proof-orchestration repairs at 54fd2188c,
 not new algorithms. Its tool-source qualification must be refreshed before
 publication. Original-source CPU certification is still running; new rentals
 remain deferred until that matrix ends.
+
+The CV branch is now 5b452303c after integrating main. Its software suite
+reached 91 passing tests with the same 10 optional sklearn skips. The hardware
+runner is ready: tools/parallel_cross_val_check.py, with retained full models,
+prediction/curve/score hashes, save/reload checks, UUID/PCI worker identity,
+one/two/reversed device orders and repeated runs. It explicitly reports
+physical_execution_trace=OWED even if numerical/placement checks pass.
+No physical GPU run or new rental has occurred. Continue in multigpu-cv for
+qualification; do not delete that active worktree or promote its feature yet.
