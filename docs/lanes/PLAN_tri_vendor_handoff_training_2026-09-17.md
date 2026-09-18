@@ -171,6 +171,32 @@ So the table below has two rows, and the second is what this is worth fixing for
 
 Fixing it is worth **$3,200 to $4,300** on the two-route run.
 
+**AMD IS 3.32x THE NVIDIA STEP, MEASURED.** Every cost in this file assumed
+H100-equivalent throughput on all three legs and said so; that assumption is now
+falsified for AMD. `lane/gemm-next` took the FIRST AMD step itemization ever
+taken, same shape: NVIDIA real step **207.21 ms**, AMD real step **687.97 ms**.
+GEMM is 81.3 percent of AMD's step against 57.7 percent of NVIDIA's, at 2.72
+against 12.84 TFLOP/s.
+
+That matters more here than anywhere else, because the per-segment constraint in
+section 2 forces AMD to carry about HALF the segments. With only two rented
+vendors available for most segments, each segment needs one of each, so AMD's
+share cannot be scheduled away without giving those segments to the scarce and
+unpriced Apple column.
+
+At 25B tokens, three segments per route, AMD x3 and NVIDIA x2 and Apple x1:
+
+| | hours |
+|---|---:|
+| NVIDIA, per segment | 234 |
+| AMD, per segment | 778 |
+| **two routes, AMD x3 + NVIDIA x2** | **2,801 h, $5,602 to $7,535** |
+| what this file assumed (H100 everywhere) | 1,405 h |
+
+**A 1.99x understatement, and that is BEFORE the Apple segment**, which is still
+unmeasured. Whether AMD also suffers the eager attention fallback is UNKNOWN and
+would change this; do not assume either way.
+
 **THE TRIGGER IS DATA DEPENDENT, AND THAT IS ITSELF A FINDING.** The transition
 ran steps 69 to 309 on the witness leg and ~210 to 480 on the shakedown leg.
 Same mechanism, different step. **The step at which a run doubles its memory and
