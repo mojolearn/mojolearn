@@ -52,3 +52,10 @@ full forward, prefill/decode, exact state, reset, greedy, parameter mappings and
 reversed owner ordering. This validates orchestration, NOT physical GPU use.
 Physical two-device NVIDIA/AMD runs, vendor identity and execution traces remain
 owed; host transfer cost, memory capacity and resident cache are not certified.
+
+Native-fault followup COMPLETE for nine fixtures: paired clean/fault neural host
+bindings compiled from a2061f8af, readbackFalse/True; freshclean matches54/54
+Metal parts; faultmoves45/45 floating parts, greedyIDs unchanged9/9. Evidence in
+`bench/results/loaded_causal_lm/2026-09-18/native-fault-comparison.json` and paired
+captures/buildwitness. Earlier nativefault OWED statements are superseded for
+this exact scope. NVIDIA/AMD, installedwheel and physicalmultiGPU remain owed.
