@@ -349,3 +349,35 @@ corpus, 5 steps each.
   falling to the slow exact recompute, and/or the inline-repaired
   FLAT/TILE/leaf kernels on the step's small GEMMs. Component timing
   (timers build, 2 steps, both arms interleaved) queued: metal4.sh.
+
+## RESULT 12: where the step price comes from (component timing, enwik8, 4 runs)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-lm/timers-*`
+(timers build, `--component-timing --component-timing-steps 2`, runs
+norepair / repair / repair / norepair; all witnesses equal across the four).
+
+| ms per step | norepair 1 | repair 2 | repair 3 | norepair 4 |
+|---|---:|---:|---:|---:|
+| gemm.head_dA | 1,460 | 4,556 | 3,915 | 1,196 |
+| gemm.head_dB | 1,545 | 4,442 | 3,554 | 1,206 |
+| gemm.head_fwd | 1,295 | 1,212 | 1,019 | 999 |
+| all gemm.* | 13,740 | 19,606 | 17,221 | 11,038 |
+| envelope.native_call | 37,893 | 38,195 | 30,305 | 26,130 |
+
+- GEMM is **36 to 42% of the Apple LM step** here (11.0-13.7 s of a
+  26-38 s native call; the whole step drifts 1.45x run to run in the
+  norepair arm alone, so the step-level ratio is noisy).
+- The repair adds **+5.9 to +6.2 s of GEMM per step (+43% to +56% of the
+  GEMM time)**, almost all in the vocab-head BACKWARD GEMMs head_dA/head_dB
+  (about 3x each). head_fwd and the twelve fixed-size price calls with
+  synthetic data are NOT slower (RESULT 5: +4%), so the extra time is
+  data-dependent, and the only data-dependent path the repair adds to the
+  tuned kernel is the admission fallback: on real training data the head
+  backward tiles FAIL admission (some operand pair in the block has
+  |a||b| < 2^-103) and the block takes the slow exact recompute. Which
+  values trip it was not instrumented.
+- **The sentence the brief asked for: GEMM is ~36-42% of the Apple step,
+  and this repair costs about +6 s per step, roughly +16% to +23% of the
+  Apple LM step** (6 s over a 26-38 s step), against the kNN precedent's
+  39% on kNN (a different kernel; not a prediction for GEMM, and it was not
+  one). The fixed-size GEMM sum on synthetic data understated it (+4%).
