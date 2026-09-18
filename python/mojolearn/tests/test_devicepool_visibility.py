@@ -54,4 +54,3 @@ def test_visible_device_order_and_hip_filter_are_preserved(monkeypatch, vendor, 
             assert all(other not in env for env in started)
     finally:
         pool.close()
-

@@ -1,0 +1,86 @@
+NOTE: --lanes scopes this diff to 2 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=081e14fa9da0f5413aa557af52852f092a307eb4
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_tokenizer_host'] commit=081e14fa9da0f5413aa557af52852f092a307eb4
+| lane/fixture                 | verdict    | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| bpe-vocabulary/base          | IDENTICAL x2 | 875b2b4bc2a4c302 | 875b2b4bc2a4c302 |
+| bpe-vocabulary/denormal      | IDENTICAL x2 | 29ca89044830a85f | 29ca89044830a85f |
+| bpe-vocabulary/denormal_ftz  | IDENTICAL x2 | a785f5969fb257f2 | a785f5969fb257f2 |
+| bpe-vocabulary/dupes         | IDENTICAL x2 | 173e1bde0f84a4ec | 173e1bde0f84a4ec |
+| bpe-vocabulary/hashed        | IDENTICAL x2 | ceba105a1d56a94b | ceba105a1d56a94b |
+| bpe-vocabulary/negative      | IDENTICAL x2 | cc0f30dc6d3e929b | cc0f30dc6d3e929b |
+| bpe-vocabulary/odd           | IDENTICAL x2 | 875b2b4bc2a4c302 | 875b2b4bc2a4c302 |
+| bpe-vocabulary/ties          | IDENTICAL x2 | 377756b17a7d25ef | 377756b17a7d25ef |
+| bpe-vocabulary/wide          | IDENTICAL x2 | e5784e8510c4fc65 | e5784e8510c4fc65 |
+| tokenized-corpus/base        | IDENTICAL x2 | 2580bb7a34e5ae01 | 2580bb7a34e5ae01 |
+| tokenized-corpus/denormal    | IDENTICAL x2 | 79821375c8f5a221 | 79821375c8f5a221 |
+| tokenized-corpus/denormal_ftz | IDENTICAL x2 | cb4a54b07b2acfcb | cb4a54b07b2acfcb |
+| tokenized-corpus/dupes       | IDENTICAL x2 | 41542aee2d840085 | 41542aee2d840085 |
+| tokenized-corpus/hashed      | IDENTICAL x2 | 775ab845193498f0 | 775ab845193498f0 |
+| tokenized-corpus/negative    | IDENTICAL x2 | 9d903acaa22028ed | 9d903acaa22028ed |
+| tokenized-corpus/odd         | IDENTICAL x2 | 2580bb7a34e5ae01 | 2580bb7a34e5ae01 |
+| tokenized-corpus/ties        | IDENTICAL x2 | ae1f351ccc072ed4 | ae1f351ccc072ed4 |
+| tokenized-corpus/wide        | IDENTICAL x2 | 959cb78ae887b9c0 | 959cb78ae887b9c0 |
+
+summary: IDENTICAL=18
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| bpe-vocabulary/base          | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/base          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/base          | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/denormal      | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/denormal      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/denormal      | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/denormal_ftz  | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/denormal_ftz  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/denormal_ftz  | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/dupes         | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/dupes         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/dupes         | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/hashed        | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/hashed        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/hashed        | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/negative      | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/negative      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/negative      | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/odd           | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/odd           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/odd           | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/ties          | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/ties          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/ties          | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| bpe-vocabulary/wide          | infer  | N/A          | n/a:function     | n/a:function     |
+| bpe-vocabulary/wide          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| bpe-vocabulary/wide          | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/base        | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/base        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/base        | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/denormal    | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/denormal    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/denormal    | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/denormal_ftz | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/denormal_ftz | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/dupes       | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/dupes       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/dupes       | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/hashed      | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/hashed      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/hashed      | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/negative    | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/negative    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/negative    | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/odd         | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/odd         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/odd         | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/ties        | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/ties        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/ties        | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+| tokenized-corpus/wide        | infer  | N/A          | n/a:function     | n/a:function     |
+| tokenized-corpus/wide        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| tokenized-corpus/wide        | batch  | N/A          | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) |
+
+summary (infer/model): N/A=36
+summary (batch): N/A=18
+summary (rlpair): 

@@ -47,3 +47,23 @@ column checker accepted the recorded controls with zero failures. Raw records,
 logs, binding digests, recipe and receipt are committed. No full-fixture or
 Linux release recertification is claimed. Session 69681 finished successfully;
 all native artifacts remain externally retained after worktree cleanup.
+
+## Multi-GPU continuation checkpoint
+
+The finished CPU worktrees were removed; retained records and external native
+artifacts remain. A dedicated lane/multigpu-cv branch now implements bounded
+GPU fold scheduling and driver UUID/PCI worker inventory. It remains OFF main
+pending real NVIDIA/AMD validation. Simulated worker/driver tests pass (66),
+with 10 optional sklearn comparison tests skipped. No physical execution,
+capacity improvement or throughput improvement is claimed from those tests.
+
+One independently tested fix is landing on main: DevicePool rejects duplicate
+visible-device tokens and invalid later indices before its first child starts.
+Its 15 isolated mask/ordering/HIP-filter regression tests pass. This fixes
+logical device selection; physical UUID/PCI admission remains in the feature
+branch. Preserve that active worktree until GPU qualification is finished.
+
+The frozen release has selective proof-orchestration repairs at 54fd2188c,
+not new algorithms. Its tool-source qualification must be refreshed before
+publication. Original-source CPU certification is still running; new rentals
+remain deferred until that matrix ends.
