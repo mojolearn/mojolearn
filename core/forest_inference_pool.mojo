@@ -169,6 +169,15 @@ struct ForestGroveOwner(Movable):
         _ = self.thresholds^
         _ = self.columns^
         _ = self.offsets^
+        # DEVIATION 3010 (DEVIATION 2520's drain): the frees enqueued by the
+        # releases above must complete before the context is destroyed, or
+        # the runtime allocator's lock is left held and the next context's
+        # first allocation never returns. Host-side drain; no output bit.
+        if self.ctx:
+            try:
+                self.ctx.value().synchronize()
+            except:
+                pass
         _ = self.ctx^
 
     def contribution[RF_INPUT: Bool](mut self,

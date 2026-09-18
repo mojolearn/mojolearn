@@ -114,6 +114,14 @@ struct ResidentKdeFit(Movable):
         # The buffers before the context they were created on (DEVIATION 1946).
         _ = self.weights^
         _ = self.train^
+        # DEVIATION 3010 (DEVIATION 2520's drain): the frees enqueued by the
+        # releases above must complete before the context is destroyed, or
+        # the runtime allocator's lock is left held and the next context's
+        # first allocation never returns. Host-side drain; no output bit.
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
         _ = self.ctx^
 
 
