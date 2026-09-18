@@ -106,3 +106,29 @@ time, CPU binding directory from release-087-final. A skip does NOT establish
 numerical coverage. Check all six pass before reporting runtime validation.
 This is source execution, not an installed wheel qualification. Still needs
 full nine-fixture repeated CPU capture and fresh independent GPU qualification.
+
+
+## Andrew's clarified priority (2026-09-18)
+
+Public CPU inference coverage is wanted. Parallel CPU implementation is NOT a
+completion goal: Andrew cares about actual multi-GPU execution. Finish checking
+the already-merged RBF route, but do not spend further work chasing the 32
+GPU-required parallel routes' CPU equivalents. Prioritize actual GPU partitions,
+physical one-vs-two-device qualification, and meaningful capacity/scaling.
+
+Current source audit found a concrete public CPU inference gap:
+`_classical_host._HostKernelMethod._host_refusals` permits only linear/RBF for
+KernelRidge and Nystroem; polynomial/sigmoid/laplacian saved models are refused.
+An empty SAVED_MODEL_INFERENCE_OWED registry does not mean all configurations
+are supported. Loaded CausalLM CPU inference exists but needs whole-model
+verifier coverage; individual block witnesses do not establish that. UMAP's
+current saved-model gate has stale expectations, as recorded above.
+
+GPU priorities: finish current artifact qualification for existing drivers;
+IVF search/index partitioning and generic loaded-model multi-GPU inference;
+then GPC, distributed forecasting, and existing family configuration gaps
+(ARIMA exog, wide full PCA, laplacian kernel rows). Cross-validation fold
+scheduling is useful independent-job parallelism, not a distributed fit.
+Historical one-vs-two-device evidence exists for 31 parallel lanes in the
+166-lane record plus eight in 2026-09-15_par-lanes-new on NVIDIA and AMD; it
+must not be mistaken for certification of every current lane/artifact.

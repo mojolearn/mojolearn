@@ -295,3 +295,11 @@ VM 66f2535a-1d64-49f2-a707-706a3e1b860b completed and was deleted,
 verified GET 404 and list absent at 14:26:13 UTC. Every rental owned by
 this lane has finished and been removed. No owed run was cancelled.
 Final default evidence: bench/results/gemm_kernel_speed_2026-09-18/amd-default.
+
+Integration: main 50faa970b adds only a CPU coverage-priorities record since
+the prior merge; it merges without conflicts. Final production GEMM source
+and matrix are identical to the verified 8777fcbdf build. Shell syntax and
+source whitespace checks pass. The broad docs_facts check reported inherited
+CPU training-lane/host-module list drift after merging main 9479ee119; these
+generated lists are outside this change and were not edited. This is not
+a numerical verification failure or an all-repository-checks-pass claim.
