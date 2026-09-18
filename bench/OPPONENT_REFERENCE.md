@@ -1016,6 +1016,17 @@ its rows are here because the lane timed them. Source:
 | Covtype MultiClass 100 trees | 581,012 | refused | 174.8u | refused | 159.5u |
 | Covtype MultiClass 1000 trees | 581,012 | refused | 352.1u | refused | 352.1u |
 
+### RTX 4090 CatBoost YetiRank training, driver 580.159.04 (2026-09-17, lane gbdt-train-speed)
+
+Measured once on pod 2ofug65rltppi5 (RTX 4090, EPYC 7542), 5 rounds; the log is
+`~/mojolearn-evidence/gbdt-train-speed/final_pull_pause/leg_out/opponent/catboost-yeti.log`.
+Ours on the same box after DEVIATION 3040: 5,214 ms at 100 trees, 8.20 ms a tree
+(`docs/lanes/LANE_STATUS_gbdt-train-speed.md`).
+
+| library | version | dataset | rows x cols | parameters | inputs | 100 trees ms, median (min..max) | 10 trees ms | per tree ms | rounds |
+|---|---|---|---|---|---|---|---|---|---|
+| CatBoost GPU YetiRank | 1.2.10 | Istella-S LETOR, 19,245 queries | 2,043,304 x 220 | SymmetricTree, depth 6, lr 0.1, l2 1.0, border_count 254, bootstrap No, Plain, seed 7 | host arrays, Pool built inside the clock | 4176 (4133..4215) | 3029 (2934..3063) | 12.74 | 5 |
+
 ### L40S forest inference, cuML 26.08.00 FIL, measured 2026-09-17
 
 Pod oeb71n6q3y70sy, NVIDIA L40S, driver 580.159.03, treelite 4.7.2. `fil-ours`
