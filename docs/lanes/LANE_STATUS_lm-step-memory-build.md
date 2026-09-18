@@ -242,6 +242,65 @@ unreachable given the `fstat` size check; no sabotage of it fails a test. It
 is kept because the Samba codec keeps it, and it is named here rather than
 claimed as covered.
 
+### Rank 3 and the witness, MEASURED on the Apple column (M4, Metal, one core)
+
+Run 2026-09-18 under `mac_slot.py metal` at shape `2 32 256 4 2 64 64 2 256`
+(head_dim 64, so the FUSED path), five steps, witnessed every step.
+Evidence: `~/mojolearn-evidence/lm-step-memory-build/ab_sabotage.log` and
+`metal-smoke*/verdict.json`.
+
+**DEVIATION 3011, the CE aliasing A/B: PASSED, and watched failing.**
+
+| check | clean | sabotaged |
+|---|---|---|
+| `ce_arms_are_two_arms` (`ce_aliased` true vs false) | PASS | PASS |
+| `ce_bits_unmoved` (5 steps, six hashes each) | PASS, 0 differing | **FAIL, all 5 steps differ on `loss`** |
+
+The sabotage aliased `ce_shift` onto `ce_expo` instead of `logits`, so
+`ce_shift_exp_kernel`'s `expo` store lands on its own `shift` store at the
+same cell and L6/L7 reads `exp(s)` where it must read `s`. Loss moved at
+every step; the gradient did not, which is right: `expo` still ends up
+correct, so only the nll seam is wrong. That is a precise separation and it
+is the reason this arm is worth having.
+
+**DEVIATION 3010, the eager witness: it discriminates.**
+
+| arm | layers grown fwd/bwd | `eager_bytes` |
+|---|---|---|
+| `--attention-path fused` | 0 / 0 | 72 |
+| `--attention-path eager` | 2 / 2 | 475,136 |
+
+72 bytes is 18 one-element buffers: nine per layer, two layers, exactly lean.
+The two arms' losses are bit-identical, which is the IDENTICAL contract
+holding and also proves both arms really ran.
+
+**A SHAPE THAT MADE THE WITNESS BLIND, found here and not on a rented box.**
+At `head_dim = 8` the fused kernel is not instantiated at all
+(`fused_supported_head_dim` admits 16, 24, 64 and 128 only,
+`fused_attention.mojo:1542-1554`), so the "fused" arm falls back to eager and
+BOTH arms read every layer grown. A witness that reads the same in both arms
+is not a witness. The leg's control and target shapes both use head_dim 64.
+
+**The binary checkpoint, through the device this time.** `ckpt-save` (3
+steps) then a separate process `ckpt-resume` (+2): `resume_matches` PASS,
+both tail steps equal the uninterrupted run hash for hash. The
+`--drop-moments` control SEPARATES exactly where the arithmetic says it must:
+the first resumed step differs on `parameters`, `m` and `v` while `loss` and
+`gradients` still MATCH (the parameters were restored and the moments only
+enter the update), and by the second step `loss` and `gradients` differ too.
+
+**REPORTED INERT, not passed.** A second sabotage moved `ce_dlogits` to a
+view at offset V inside an oversized backing buffer, meaning to shift the
+gradient by one row. `ce_bits_unmoved` still passed. The arm is inert BY
+CONSTRUCTION: `byte_lm.mojo` hands the SAME `ce_dlogits` field to the writer
+kernel and to both reader GEMMs, so a constant offset on that one view is a
+relabelling both sides agree on. Moving the gradient needs two DIFFERENT
+views, which is a second field and a call-site edit, not a build flag. The
+gradient, parameter, `m` and `v` hashes are nonetheless live in the
+comparator, because the `ckpt-control` arm above was watched separating on
+exactly those names. `flags` has never been observed differing and is
+therefore NOT COVERED, which is said rather than counted.
+
 ### Mojo (compile only, M4, one core, nice 19, no GPU, no Metal lock taken)
 
 Both arms of DEVIATION 3011 COMPILE for the Apple column, from the shared
