@@ -99,6 +99,160 @@ Each check in `tools/lm_attention_fallback_verdict.py` is run against a
 deliberately corrupted copy of its own input first and must reject it BY
 NAME, printing the match rather than a count.
 
+---
+
+# MEASURED: H100 sm_90a, pod rhjqy941tjl5yw, commit 8a5212a78, 2026-09-18
+
+700 consecutive steps per arm, `B1 L2048 DM768 H12 KV12 HD64 FF2048
+layers12 V50257`, pinned R2 enwik8 (stage.log: 100,000,000 bytes, digest
+equal to the pin, linked into the tree), witness read EVERY step.
+Filed at `bench/results/e1g/2026-09-18_lm-attention-fallback-nvidia-h100/`.
+Pod terminated and VERIFIED gone (HTTP 404), dead-man cancelled.
+
+## 1. THE TRIGGER, NAMED
+
+    forward_status  over 8,400 observations:  FUSED_RAN 8,400
+    backward_status over 8,400 observations:  FUSED_RAN 4,703  FUSED_CORNER 3,697
+
+**`FUSED_CORNER`, in the BACKWARD, and ONLY in the backward.** Zero
+`FUSED_REFUSED_REGIME` anywhere, which retires the regime bound as a
+candidate by measurement rather than by argument. The FORWARD never refused
+once in 8,400 observations.
+
+Per layer, first refusal step and the refusal rate over the steps AFTER it:
+
+    L00 first 69   14.7%     L06 first 214  85.6%
+    L01 first 456  56.2%     L07 first 245  93.9%
+    L02 first 309  85.7%     L08 first 219  91.3%
+    L03 first 301  73.2%     L09 first 201  89.6%
+    L04 first 264  91.3%     L10 first 218  53.1%
+    L05 first 205  80.8%     L11 first 299  14.2%
+
+## 2. P2 IS FALSIFIED, AND P1 IS CONFIRMED MORE STRONGLY THAN IT WAS PUT
+
+P1 said the backward would refuse "before and more often" than the forward.
+The forward refuses NEVER. P2 said the refusal would be sticky at 95%; it runs
+from 14.2% to 93.9%. **The latch is therefore the wrong shape for this data**
+and the arm that was built to remove the double pay is a pessimization.
+
+## 3. THE BRIEF'S ITEM 2 IS WORTH 0.5%, NOT 2.13x
+
+                 head median    tail median
+    before        0.19791 s      0.45737 s     today's behavior
+    after         0.19785 s      0.47403 s     the latch
+    eager-ref     0.45504 s      0.45500 s     the fused kernels never run
+
+**THE DISCARDED FUSED LAUNCH IS WORTH 0.00237 s A STEP** -- the `before` tail
+minus the `eager-ref` tail, 0.5% of the step. The brief and
+`LANE_STATUS_lm-step-memory-build.md` both say the cost is 2.13x "rather than
+the eager path's own speed". IT IS THE EAGER PATH'S OWN SPEED. `eager-ref`
+reads 0.45504 s at the HEAD and 0.45500 s at the TAIL: the eager path costs
+0.455 s a step from step 0 and never changes, and the whole 0.198 -> 0.457
+transition is the fused path being replaced by it, term for term.
+
+The latch's tail is 0.47403 against 0.45737, **3.6% WORSE**, for the reason
+P2's falsification predicts: it forces the 0.257 s eager path onto steps that
+would have paid only the 0.0024 s launch. It is also slower than `eager-ref`
+because the forward never refuses, so the forward still runs FUSED and the
+latched eager backward then calls `ensure_attention_materialized`, which
+recomputes this layer's whole eager forward on top.
+
+**The latch is therefore OFF BY DEFAULT** (`-D MOJOLEARN_ATTN_STICKY=1` turns
+it on). It is kept because it is the arm that MEASURES the launch.
+
+## 4. P3 AND P5 CONFIRMED
+
+`after_vs_before`: 700 steps, 8 state anchors, **0 differing**. The latch
+moves no bit. `eager_vs_before`: 700 steps, 8 anchors, **0 differing** -- the
+fused and eager paths are bit-identical over a whole training run on real
+data, which is the strongest statement of the IDENTICAL contract this shape
+has. Device peak 31,537 MB against 31,281 MB, `eager_bytes` 17,314,086,912 in
+both, twelve layers grown in both: the latch removes a launch, not a buffer.
+
+Both arms told apart three ways: `byte_lm_attn_sticky_fallback()` read from
+inside each process (False / True), `FUSED_SKIPPED_STICKY` observed 5,388
+times in `after` and 0 times in `before` and `eager-ref`, and four head_dim-64
+controls reading -1 forced eager and 0 forced fused. Every coverage and
+comparison check was watched rejecting a corrupted copy of its own input.
+
+## 5. A DEFECT IN THE INSTRUMENTATION, FOUND BY THE BATCH ARM
+
+**batch 4 did NOT OOM and this leg does NOT answer the batch question.** It
+aborted at about step 320 with
+
+    ./training/byte_lm.mojo:796: index 11 is out of bounds, valid range is 0 to 10
+
+`byte_attention_eager_cells` read `n_layers` entries out of `tr.forward` /
+`tr.backward`, but the backward loop `pop`s each layer's stages out of those
+lists and reinserts them (`byte_lm.mojo:1169-1170`), so a step that raises
+inside a backward call leaves them SHORT and the report aborts the process
+instead of reporting. Fixed here by bounding the loop by the list length and
+reporting both lengths, so a short list is VISIBLE rather than fatal. It
+reached ~320 steps at batch 4 before dying, which is past the step 210 the
+brief gives for the batch-4 OOM, but the crash is the instrument's and no
+claim is made from it.
+
+---
+
+# DEVIATION 3111: the guard the backward `dk`/`dv` corner never had
+
+Section 1 says the guarded forward refused 0 times and the unguarded backward
+refused 3,697 times AT THE SAME SHAPE, ON THE SAME DATA, IN THE SAME STEPS.
+That is not a property of forward versus backward arithmetic. It is the
+predicates:
+
+    forward ctx   `... == NEG_ZERO_BITS and rr[1] < s - 1`      :2031
+    backward dq   `... == NEG_ZERO_BITS and j_hi < s - 1`       :2871
+    backward dk   `... == NEG_ZERO_BITS`                        (no guard)
+    backward dv   `... == NEG_ZERO_BITS`                        (no guard)
+
+A `-0.0` is a refusal only because the EAGER chain folds the masked cells too
+and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s sign bit is clear. That
+laundering needs a masked cell AFTER the last visible one. The `dk`/`dv`
+chains run over the QUERY axis, and `_key_query_range` (`:1782-1796`) returns
+`hi = l - 1` for EVERY key unless a sliding window is set. At this shape
+`window == 0` and `n_rep == 1`, so **there is no masked tail at all and every
+one of those 3,697 refusals is a false positive.**
+
+The change adds `hi[u] < l - 1 or (hh + 1 < n_rep and lo[u] > 0)` to the
+`dk`/`dv` test in `fused_bwd_dkdv_r2_kernel`, the kernel the column default
+resolves to (`native_attention_arm` on every `result.json` reads
+`stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz`).
+`-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1` restores the unguarded test and
+`byte_lm_attn_kv_corner_guard()` reads which build is loaded from inside the
+process. `fused_bwd_dkdv_tiled_kernel` and `fused_bwd_kvfold_r2_kernel` carry
+the same unguarded test and are NOT changed; they are trial arms, and that is
+said rather than counted.
+
+## Registered BEFORE the second run, with the falsifying outcome named
+
+**G0. THE CONTROL REPRODUCES.** The unguarded arm shows 3,697 backward
+corners within 15% and a tail within 10% of 0.45737 s. FALSIFIED BY anything
+else, and then NOTHING ELSE IN THE LEG IS COMPARABLE and it is reported that
+way rather than as a win.
+
+**G1. THE REFUSALS GO TO ZERO.** Guarded backward `FUSED_CORNER` = 0 out of
+8,400, matching the forward's 0 out of 8,400. FALSIFIED BY any refusal.
+
+**G2. NOTHING GROWS.** Guarded `eager_bytes` reads 432 at step 699 and
+`layers_grown` is 0 / 0. FALSIFIED BY growth.
+
+**G3. THE 2.13x IS GONE.** Guarded tail median equals its head median within
+5%, both in 0.19 to 0.21 s. FALSIFIED BY a tail above 0.25 s.
+
+**G4. NO BIT MOVES.** Guarded against unguarded: 0 differing over 700 steps
+and 8 state anchors. **FALSIFIED BY ANY DIFFERING STEP, AND THAT IS THE
+IMPORTANT OUTCOME**: it would mean those refusals were REAL, the guard is a
+DEFECT rather than an optimization, and it gets reverted. This is a change to
+a bit-equality TEST, so it is the one prediction that can turn the whole
+lane into a retraction, and it is written that way on purpose.
+
+**G5. THE MEMORY COMES BACK.** Guarded device peak stays near the 15,151 MB
+`before` starts at, rather than climbing to 31,537 MB.
+
+**G6. BATCH 4 SURVIVES 2,000 STEPS.** FALSIFIED BY an OOM, which under G2
+would mean the growth has a second source this lane has not found.
+
 ## What is NOT in this change: the forward corner is REPAIRABLE, exactly
 
 `A_e` survives the latch because the refusal is honest. But the divergence

@@ -322,7 +322,7 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_NO_STICKY,
+    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
@@ -3582,7 +3582,7 @@ def eager_attention_forward(
     # card is untouched by this commit and the measured path is the one that
     # was measured.
     if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
-            and not ATTN_NO_STICKY and not need_eager):
+            and ATTN_STICKY and not need_eager):
         status = FUSED_SKIPPED_STICKY
         if not need_eager:
             attention_eager_core(

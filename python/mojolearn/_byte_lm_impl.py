@@ -636,16 +636,19 @@ class SmallByteLanguageModelTrainer:
                         layers_full_aexp=int(info[9]),
                         layers=state_shape(self._state).n_layers)
             n = report['layers']
-            if len(info) >= 10 + 3 * n:
+            if len(info) >= 12:
+                report['stage_lists'] = (int(info[10]), int(info[11]))
+                n = min(n, int(info[10]), int(info[11]))
+            if len(info) >= 12 + 3 * n:
                 names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
                          1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER',
                          3: 'FUSED_SKIPPED_STICKY'}
                 for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
-                    values = [int(info[10 + 3 * layer + offset]) for layer in range(n)]
+                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
                     report[key] = values
                     report[key + '_counts'] = {name: values.count(code)
                                               for code, name in names.items()}
-                report['attn_materialized'] = [bool(info[12 + 3 * layer])
+                report['attn_materialized'] = [bool(info[14 + 3 * layer])
                                              for layer in range(n)]
             return report
 

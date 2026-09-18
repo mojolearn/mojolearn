@@ -78,7 +78,9 @@ from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
-from transformer.impl.llama.fused_attention import ATTN_NO_STICKY
+from transformer.impl.llama.fused_attention import (
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_STICKY,
+)
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
@@ -191,18 +193,32 @@ def byte_lm_ce_aliased() -> Bool:
 
 
 def byte_lm_attn_sticky_fallback() -> Bool:
-    """DEVIATION 3110: False in a build carrying
-    `-D MOJOLEARN_ATTN_NO_STICKY=1`, which relaunches the fused attention
-    kernels on every call even for a layer that has already refused, and then
-    throws that launch away and runs the eager path anyway.
+    """DEVIATION 3110: TRUE only in a build carrying
+    `-D MOJOLEARN_ATTN_STICKY=1`, which stops relaunching the fused attention
+    kernels for a layer that has already refused. The default is FALSE and
+    relaunches, because the latch measured 3.6% SLOWER.
 
     The A/B that claims the latch moves no bit reads this from INSIDE the
     process that loaded the binding. A `.so` digest cannot answer it: the
     define gates a single runtime branch on a comptime constant, so the two
     builds differ by about one byte and are the same size."""
-    comptime if ATTN_NO_STICKY:
+    comptime if not ATTN_STICKY:
         return False
     return True
+
+
+def byte_lm_attn_kv_corner_guard() -> Bool:
+    """DEVIATION 3111: False in a build carrying
+    `-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1`, whose `dk`/`dv` corner test
+    fires on any `-0.0` whether or not a masked cell follows it in the chain.
+
+    An A/B that cannot tell its two arms apart is not an A/B, and here the
+    dangerous failure is the one that LOOKS LIKE A WIN: if the define reached
+    neither build, both arms report zero refusals and the guard appears to
+    have removed them."""
+    comptime if ATTN_BWD_KV_CORNER_GUARD:
+        return True
+    return False
 
 
 def byte_lm_fault_inject_available() -> Bool:
@@ -792,7 +808,18 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     var grown_fwd = 0
     var grown_bwd = 0
     var grown_aexp = 0
-    for layer in range(tr.config.n_layers):
+    # DEVIATION 3110: BOUND BY THE LIST, NOT BY `n_layers`. The backward
+    # loop `pop`s each layer's stages out of `tr.forward` and `tr.backward`
+    # and reinserts them (`:1169-1170`), so a step that raises inside a
+    # backward call leaves the lists SHORT. Reading `n_layers` entries out of
+    # an 11-entry list then aborts the process with an out-of-bounds assert
+    # instead of reporting anything, which is how the batch-4 arm of the
+    # 2026-09-18 H100 leg died at step ~320: not an OOM, this. The counts are
+    # reported so a short list is VISIBLE rather than fatal.
+    var n_fwd = len(tr.forward)
+    var n_bwd = len(tr.backward)
+    var n = n_fwd if n_fwd < n_bwd else n_bwd
+    for layer in range(n):
         fwd_eager += len(tr.forward[layer].scores)
         fwd_eager += len(tr.forward[layer].masked)
         fwd_eager += len(tr.forward[layer].weights)
@@ -816,8 +843,12 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(grown_fwd)
     out.append(grown_bwd)
     out.append(grown_aexp)
+    # The two list lengths, so a reader can tell a complete report from one
+    # taken while the backward loop held a layer out.
+    out.append(n_fwd)
+    out.append(n_bwd)
     # Triples in layer order: actual launch statuses and current materialization.
-    for layer in range(tr.config.n_layers):
+    for layer in range(n):
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))

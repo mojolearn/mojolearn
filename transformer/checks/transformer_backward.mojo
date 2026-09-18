@@ -50,7 +50,7 @@ from checks.numerics import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
-    ATTN_NO_STICKY,
+    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
     FUSED_SKIPPED_STICKY,
@@ -3090,7 +3090,7 @@ def llama_decoder_layer_backward_device(
     # `eager_attention_forward`. Under `need_eager` this branch reduces to the
     # code that was here before, so the identity card is untouched.
     if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
-            and not ATTN_NO_STICKY and not need_eager):
+            and ATTN_STICKY and not need_eager):
         bst.attn_backward_status = FUSED_SKIPPED_STICKY
         if not need_eager:
             bwd_attention_eager_stages(
