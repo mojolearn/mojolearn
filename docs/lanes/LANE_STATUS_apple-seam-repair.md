@@ -158,3 +158,14 @@ exact block path is REACHED (its fast step alone is fbr). Fixtures draw2-4
 and `admitted` do not separate the arms (OK even unrepaired): they are
 coverage, not evidence. Device FNV hashes per case are printed for cross-column
 comparison (e.g. pairs `a62658ede5aff32e`, draw0 `941b9586f3f46787`).
+
+## RESULT 4 (UNDERPOWERED): price of the block admission on the Apple GEMM sum
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-price-admit/`,
+same harness as RESULT 2, runs admit / norepair / norepair / admit:
+admit 14,518 and 12,155 ms; norepair 13,116 and 11,910 ms (and 12,477 /
+13,042 in RESULT 2). Pairwise +10.7% (5 vs 6) and +2.1% (8 vs 7). The
+norepair arm alone spans 11.9 to 13.1 s across four runs (~10%), so these
+two pairs do NOT resolve the admission's price; no conclusion drawn. More
+alternations queued (price/run3.sh). What IS resolved: the admission is not
+the inline repair's 2.36x.
