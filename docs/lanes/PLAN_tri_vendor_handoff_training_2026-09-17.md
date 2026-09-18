@@ -149,7 +149,41 @@ change, not a leak. Ruled out by counters rather than assertion: clocks
 1980/1980 MHz, 42 C, 356 W of 700, PSI `full avg10=0.00`, host RSS identical to
 the byte at steps 1 and 2,000.
 
-**3. Session recycling does not fix it.** Rebuilding from `export_state()`
+**3. THE CAUSE IS NOW KNOWN AND IT IS A BUG, NOT A COST.** `lane/lm-step-memory-build`
+ran a 700-step witness at this shape on the same enwik8 and named it: the eager
+attention fallback, the ten `[B, n_heads, L, S]` arrays growing ONE LAYER AT A
+TIME and never released. It registered `eager_bytes = 17,314,086,912` BEFORE the
+leg and the witness read 17,314,086,912 — equal, not close. Every increment is
+1,442,840,540 B, exactly one layer, and the device agrees independently at
+1,376 MB per grown layer. The falsifier was watched on NVIDIA: fused 0/8 layers
+at 288 B, eager 8/8 at 5,905,580,032 B, identical losses.
+
+On a non-`FUSED_RAN` status the fused kernel has ALREADY run and been paid for
+before the eager core runs (`modeling_llama.mojo:3588-3592`), which is why it
+costs 2.13x rather than the eager path's own speed.
+
+So the table below has two rows, and the second is what this is worth fixing for:
+
+| 25B tokens | s/step | one route | two routes | cost at $2.00 to $2.69/h |
+|---|---:|---:|---:|---:|
+| with the fallback | 0.4406 | 1,494 h | 2,988 h | $5,976 to $8,038 |
+| **fallback fixed** | 0.2057 | 697 h | **1,395 h** | **$2,790 to $3,753** |
+
+Fixing it is worth **$3,200 to $4,300** on the two-route run.
+
+**THE TRIGGER IS DATA DEPENDENT, AND THAT IS ITSELF A FINDING.** The transition
+ran steps 69 to 309 on the witness leg and ~210 to 480 on the shakedown leg.
+Same mechanism, different step. **The step at which a run doubles its memory and
+halves its speed is NOT a property of the shape**, so no fixed step budget is
+safe and no three-step cell can see it.
+
+NOT MEASURED, and not guessed at: WHICH BRANCH asks for the eager path.
+`regime_product_ok` cannot be it. `FUSED_CORNER` (`fused_attention.mojo:1908-1910`)
+is the only candidate and this run does not show it; the witness says the arrays
+grew, not who asked. `stages.attn_materialized` on the report separates them and
+is owed.
+
+**4. Session recycling does not fix it.** Rebuilding from `export_state()`
 every 250 steps gives 0.440323 s against 0.440543 s straight, indistinguishable,
 plus 26 s per rebuild. So there is no optimistic column, and the cause survives
 a full session teardown inside the same process.
@@ -162,7 +196,7 @@ a full session teardown inside the same process.
 That is roughly DOUBLE this file's earlier 315 and 789 hour figures, which were
 extrapolated from a fast step that only holds for the first 480.
 
-**4. THE DATA PIPELINE DOES NOT EXIST, and it is the real blocker.** There is
+**5. THE DATA PIPELINE DOES NOT EXIST, and it is the real blocker.** There is
 no tokenizer on the training path at all. `CorpusBatches` casts raw bytes to
 ids, so with a 50257 vocabulary **77,194,752 parameters, 47.6 percent of the
 model** (the embedding and lm_head rows 256 to 50,256), would receive no
