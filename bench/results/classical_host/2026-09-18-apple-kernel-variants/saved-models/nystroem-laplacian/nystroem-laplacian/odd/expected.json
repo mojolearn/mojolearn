@@ -1,0 +1,33 @@
+{
+  "commit": "7861634088d8c00889c4aeb876ed75c542bd19e6",
+  "estimator": "Nystroem",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Apple M4",
+    "machine": "arm64",
+    "python": "3.14.7",
+    "release": "25.5.0",
+    "system": "Darwin"
+  },
+  "kind": "odd",
+  "lane": "nystroem-laplacian",
+  "model_sha256": "96704e86af8cc3d6d3bdf6af524b8a3c2839332430a261f3095c13553d13996c",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "cdc42963c429e4f0",
+    "seconds": 0.001921,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "8323b28f8ec662ec17a3c2619de0b00414db0247ce00d3f51fb26646766b3f42",
+      "shape": [
+        64,
+        8
+      ]
+    }
+  },
+  "recorded_at": "2026-09-18T13:46:12-0400",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "metal",
+  "x_sha256": "a000619abf2e78b511b82f4a2ba73ce0a68c0d919f5f66f0f49f3c1b00e9ad0a"
+}

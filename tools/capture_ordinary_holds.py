@@ -124,6 +124,11 @@ def main():
                OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='1',
                NUMEXPR_NUM_THREADS='1', VECLIB_MAXIMUM_THREADS='1',
                BLIS_NUM_THREADS='1', OMP_THREAD_LIMIT='1')
+    if args.wheel:
+        # Installed evidence must not quietly route to an external native tree.
+        for key in tuple(env):
+            if key.startswith('MOJOLEARN_') and key not in ('MOJOLEARN_NUMERIC_MODE', 'MOJOLEARN_CPU_THREADS'):
+                env.pop(key)
     if args.source:
         env['PYTHONPATH'] = str(ROOT / 'python')
     commit_file = ROOT / 'commit.txt'
