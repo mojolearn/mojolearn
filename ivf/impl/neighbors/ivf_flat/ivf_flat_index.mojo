@@ -397,6 +397,7 @@ def ivf_validate_index_arrays(
     offsets: List[Int32],
     list_indices: List[UInt32],
     list_data: List[Float32],
+    partial_storage: Bool = False,
 ) raises:
     """A BUILT index handed back from outside (a saved file, a caller's
     arrays), refused BY NAME unless it is a layout `ivf_flat_build` could
@@ -414,7 +415,7 @@ def ivf_validate_index_arrays(
             " got n_lists=" + String(n_lists) + " dim=" + String(dim)
             + " n_rows=" + String(n_rows)
         )
-    if n_rows < n_lists:
+    if n_rows < n_lists and not partial_storage:
         raise Error(
             "ivf_flat index: number of rows (" + String(n_rows)
             + ") can't be less than n_lists (" + String(n_lists) + ")"

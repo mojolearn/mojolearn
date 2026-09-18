@@ -6,10 +6,11 @@ import traceback
 
 
 _forest_snapshot = None
+_ivf_snapshot = None
 
 
 def execute(request):
-    global _forest_snapshot
+    global _forest_snapshot, _ivf_snapshot
     operation, state, args = request
     if operation == 'cpu_reference':
         # The pool wraps a request this way only on a CPU-only install and
@@ -144,6 +145,22 @@ def execute(request):
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
+    if operation == 'ivf_store':
+        state._entry(state._extension(), 'ivf_flat_partial_search')
+        _ivf_snapshot = state
+        return state.n_rows_
+    if operation == 'ivf_search_stored':
+        from .parallel_ivf import _partial_search
+        if _ivf_snapshot is None:
+            raise RuntimeError('IVF shard is not stored in this worker')
+        return _partial_search(_ivf_snapshot, args[0])
+    if operation == 'ivf_finalize':
+        from ._buffer import addr
+        if _ivf_snapshot is None:
+            raise RuntimeError('IVF shard is not stored in this worker')
+        native = _ivf_snapshot._extension()
+        native.ivf_finalize_distances(addr(state, name='distances'), state.size, args[0])
+        return state
     if operation == 'gpc_class_fit':
         from ._gpc_impl import _kernel_arrays
         x, y01 = args
