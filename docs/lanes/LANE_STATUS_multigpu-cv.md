@@ -51,3 +51,33 @@ fake driver C calls and fake worker fits. Actual NVIDIA/AMD driver loading and
 physical scheduling remain untested. Keep the feature off main. Next is the
 one-vs-two-device numerical/placement runner with retained per-fold model and
 prediction hashes; actual-execution tracing remains a separate admission gate.
+
+## Prepared numerical/placement hardware runner
+
+Added tools/parallel_cross_val_check.py and importable scorer
+ tools/parallel_cv_witness.py. Two GBDT adapter families, five uneven folds,
+one/two/reversed devices, two repeats. The scorer retains raw saved models,
+full model/prediction/curve hashes, save/reload comparisons, score bits,
+worker driver identity and native GBDT binding hashes. Dropped folds, changed
+models/predictions and device aliases are explicit comparator controls.
+These are comparator controls, not injected native computational faults.
+
+The runner has NOT executed on hardware yet. A passing run reports
+NUMERICS_AND_PLACEMENT_PASS with physical_execution_trace=OWED, never a full
+multi-GPU certificate. Run from a clean checkout with matching GPU bindings,
+inside the bounded rental/watchdog workflow, and use an output path outside
+the checkout, e.g. on a provisioned Linux GPU host:
+
+```
+MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$PWD/python"   timeout 1200s python tools/parallel_cross_val_check.py   --require-backend cuda --devices 0,1 --out /tmp/cv-cuda-unique-run
+```
+
+Repeat on HIP with --require-backend hip and a fresh output directory. Retain
+all receipts/models, account for tool/wheel source provenance, and verify rental
+deletion as usual. Do not start new rentals during the active CPU release matrix.
+No rented resource was started by this branch.
+
+Latest validation: 91 passed, 10 optional sklearn skips (software contracts).
+Logs committed under bench/results/parallel_cv/2026-09-18-software-contracts.
+The independent visibility-mask fix and its 15 tests landed on main 4e8ee54a1.
+The CV implementation and driver inventory remain only on this feature branch.

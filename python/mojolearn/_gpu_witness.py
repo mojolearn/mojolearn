@@ -73,6 +73,8 @@ def require_distinct_workers(records, vendor, count):
 
     This admits placement only. It cannot certify numerical work or throughput.
     """
+    if vendor not in ('cuda', 'hip') or type(count) is not int or count < 1:
+        raise RuntimeError('GPU placement requires CUDA/HIP and a positive worker count')
     if len(records) != count:
         raise RuntimeError('GPU worker inventory count differs from requested devices')
     uuids, buses, pids = set(), set(), set()
