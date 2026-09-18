@@ -154,6 +154,98 @@ struct PieceGroups(Copyable, Movable):
             self._grow(len(self.buckets) * 2)
 
 
+struct PairCounts(Movable):
+    """Adjacent-pair counts for ONE pass of the merge loop, keyed by
+    `left * V + right`, in an open-addressing table with linear probing.
+
+    THE MEMORY BOUND. Let N0 be the number of adjacent positions in the
+    initial pre-token groups (the sum over DISTINCT groups of `len - 1`,
+    at most the unique pre-token bytes). A pass sees P distinct pairs with
+    P <= the adjacent positions of that pass <= N0 (merges only shorten a
+    group), and P <= V * V. The table holds a power of two of slots, at most
+    4 * max(P, 256) because it doubles only when more than half full, each
+    slot two Ints, plus one Int per occupied slot in `touched`. Peak:
+    8 * (2 * 4P + P) = 72 * P bytes <= 72 * N0 bytes, and it never shrinks.
+    The dense table it replaced was 8 * V * V bytes whatever the corpus
+    (20.2 GB at V = 50,256).
+
+    ORDER. `touched` lists occupied slots in first-seen order. Nothing reads
+    that order into the result: the selection is a total order over
+    `(count, key)`, so any walk of the same set finds the same winner.
+    """
+
+    var keys: List[Int]
+    var vals: List[Int]
+    var touched: List[Int]
+    var mask: Int
+
+    def __init__(out self):
+        self.keys = List[Int]()
+        self.vals = List[Int]()
+        self.touched = List[Int]()
+        self.mask = 0
+        self._alloc(1024)
+
+    def _alloc(mut self, size: Int):
+        self.keys = List[Int](length=size, fill=-1)
+        self.vals = List[Int](length=size, fill=0)
+        self.mask = size - 1
+
+    @always_inline
+    def _slot(self, key: Int) -> Int:
+        # Fibonacci hashing: spreads the dense low keys (pairs of small ids)
+        # across the table. The hash reaches only WHERE a count sits.
+        var h = UInt64(key) * 11400714819323198485
+        return Int((h >> 32) ^ h) & self.mask
+
+    def n(self) -> Int:
+        return len(self.touched)
+
+    def clear(mut self):
+        """Empty the table, touching only the occupied slots."""
+        for t in range(len(self.touched)):
+            var s = self.touched[t]
+            self.keys[s] = -1
+            self.vals[s] = 0
+        self.touched.clear()
+
+    def _grow(mut self):
+        var size = (self.mask + 1) * 2
+        var old_keys = self.keys^
+        var old_vals = self.vals^
+        var old_touched = self.touched^
+        self.keys = List[Int](length=size, fill=-1)
+        self.vals = List[Int](length=size, fill=0)
+        self.mask = size - 1
+        self.touched = List[Int](capacity=len(old_touched))
+        for t in range(len(old_touched)):
+            var s = old_touched[t]
+            var key = old_keys[s]
+            var slot = self._slot(key)
+            while self.keys[slot] != -1:
+                slot = (slot + 1) & self.mask
+            self.keys[slot] = key
+            self.vals[slot] = old_vals[s]
+            self.touched.append(slot)
+
+    @always_inline
+    def add(mut self, key: Int, c: Int):
+        var slot = self._slot(key)
+        while True:
+            var k = self.keys[slot]
+            if k == key:
+                self.vals[slot] += c
+                return
+            if k == -1:
+                break
+            slot = (slot + 1) & self.mask
+        self.keys[slot] = key
+        self.vals[slot] = c
+        self.touched.append(slot)
+        if 2 * len(self.touched) > self.mask + 1:
+            self._grow()
+
+
 struct TrainedVocabulary(Copyable, Movable):
     """The trained table: token bytes in rank order (rank = id), the merges
     in the order they were made, and the counters that let a caller see the
@@ -197,6 +289,7 @@ def train_bpe(
     classes: UnicodeClasses,
     vocab_size: Int,
     min_frequency: Int,
+    break_ties_high: Bool = False,
 ) raises -> TrainedVocabulary:
     """Train a byte-level BPE vocabulary.
 
@@ -205,6 +298,11 @@ def train_bpe(
     the result. The vocabulary starts as the 256 single bytes (id = byte
     value) and grows to `vocab_size`, or stops early when no pair reaches
     `min_frequency`.
+
+    `break_ties_high=True` is the RUNTIME spelling of the sabotage define:
+    it reverses only the tie-break. It exists so the Python door's
+    MOJOLEARN_BPE_TRAINER_SABOTAGE environment arm reaches this code through
+    the host binding (lane/bpe-builder-native); nothing else passes it.
     """
     if vocab_size < 256:
         raise Error(
@@ -243,46 +341,44 @@ def train_bpe(
         vocab.length.append(1)
         vocab.arena.append(UInt8(b))
 
-    # 4.  The merge loop. `counts` is a dense table indexed by
+    # 4.  The merge loop. A pair is the single integer key
     #     `left * V + right`, so a key's ORDER is the pair's order and the
-    #     tie-break needs no separate comparison. Only the keys actually seen
-    #     are reset between iterations, so the dense table costs one
-    #     allocation rather than a scan per merge.
+    #     tie-break needs no separate comparison. The counts live in
+    #     `PairCounts`, an open-addressing table sized by the DISTINCT PAIRS
+    #     THAT OCCUR in one pass (lane/bpe-builder-native, 2026-09-18); it
+    #     replaced a dense `V * V` table that was 20.2 GB at V = 50,256.
+    #     Where a count is stored cannot reach the result: the selection
+    #     below reads only `(count, key)` over the set of keys seen.
     var V = vocab_size
-    var counts = List[Int]()
-    for _ in range(V * V):
-        counts.append(0)
-    var touched = List[Int]()
+    var counts = PairCounts()
+    var reverse = break_ties_high
+    comptime if BPE_TRAINER_SABOTAGE:
+        reverse = True
 
     while vocab.n_tokens() < vocab_size:
-        for t in range(len(touched)):
-            counts[touched[t]] = 0
-        touched = List[Int]()
+        counts.clear()
 
         for g in range(len(seqs)):
             var c = groups.count[g]
             var n = len(seqs[g])
             for k in range(n - 1):
-                var key = seqs[g][k] * V + seqs[g][k + 1]
-                if counts[key] == 0:
-                    touched.append(key)
-                counts[key] += c
+                counts.add(seqs[g][k] * V + seqs[g][k + 1], c)
 
         # THE SELECTION. Highest count, then the smallest key -- which is the
         # smallest `(left_id, right_id)`. Every comparison here is between
         # integers.
         var best_key = -1
         var best_count = 0
-        for t in range(len(touched)):
-            var key = touched[t]
-            var c = counts[key]
+        for t in range(counts.n()):
+            var key = counts.keys[counts.touched[t]]
+            var c = counts.vals[counts.touched[t]]
             if c < min_frequency:
                 continue
             if best_key < 0 or c > best_count:
                 best_key = key
                 best_count = c
             elif c == best_count:
-                comptime if BPE_TRAINER_SABOTAGE:
+                if reverse:
                     # THE SABOTAGE: the opposite end of the same total order.
                     if key > best_key:
                         best_key = key
@@ -293,8 +389,8 @@ def train_bpe(
             break
 
         var n_at_top = 0
-        for t in range(len(touched)):
-            if counts[touched[t]] == best_count:
+        for t in range(counts.n()):
+            if counts.vals[counts.touched[t]] == best_count:
                 n_at_top += 1
         if n_at_top > 1:
             vocab.n_ties_broken += 1
@@ -318,18 +414,23 @@ def train_bpe(
         vocab.merge_left.append(a)
         vocab.merge_right.append(b)
 
-        # Rewrite every sequence LEFT TO RIGHT, NON-OVERLAPPING.
+        # Rewrite every sequence LEFT TO RIGHT, NON-OVERLAPPING, in place:
+        # the write index never passes the read index, so reading `k` and
+        # writing `w <= k` in one buffer is the same rewrite as building a
+        # fresh list, without an allocation per group per merge.
         for g in range(len(seqs)):
             var n = len(seqs[g])
-            var out = List[Int]()
+            var w = 0
             var k = 0
             while k < n:
                 if k + 1 < n and seqs[g][k] == a and seqs[g][k + 1] == b:
-                    out.append(new)
+                    seqs[g][w] = new
                     k += 2
                 else:
-                    out.append(seqs[g][k])
+                    seqs[g][w] = seqs[g][k]
                     k += 1
-            seqs[g] = out^
+                w += 1
+            if w < n:
+                seqs[g].shrink(w)
 
     return vocab^

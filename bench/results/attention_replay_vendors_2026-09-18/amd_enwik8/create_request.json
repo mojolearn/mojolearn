@@ -1,0 +1,1 @@
+{"cpu_cores": 13, "ram_capacity": 240518168576, "disk_capacity": 13194139533312, "cpus": {"count": 1, "manufacturer": "Intel", "model": "Xeon Platinum 8470", "cores": 13, "frequency": 2000000000}, "gpus": [{"count": 1, "manufacturer": "AMD", "model": "MI300X"}]}

@@ -299,8 +299,10 @@ from ._samba_impl import SambaConfig, SambaStack
 from .parallel_training import ParallelByteLanguageModelTrainer, ParallelNeuralTrainer
 from .model_pool_training import PooledByteLanguageModelTrainer
 from .offload_training import OffloadedByteLanguageModelTrainer
+from . import parallel_forecasting
 
 __all__ = [
+    "parallel_forecasting",
     "ParallelByteLanguageModelTrainer",
     "ParallelNeuralTrainer",
     "PooledByteLanguageModelTrainer",

@@ -18,6 +18,20 @@ qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 
+The expanded 0.8.7 source also exposes fitted-model forecast scheduling:
+
+```python
+from mojolearn.parallel_forecasting import forecast_arima, forecast_exponential_smoothing
+
+predictions = forecast_arima(fitted_arima, 12, devices=(0, 1), series_per_shard=2)
+forecasts = forecast_exponential_smoothing(fitted_hw, 12, devices=(0, 1), series_per_shard=2)
+```
+
+These partition independent series and preserve output order. ARIMA exogenous
+models and Holt-Winters in-sample prediction are explicitly outside this initial
+distributed API. Software partition/failure tests pass; physical NVIDIA/AMD
+qualification is pending. This does not inherit the older fit-path receipts.
+
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
 | Pooled byte language model | Decoder layers and their model/optimizer state; embedding/head on the first device | Original layer kernels, ordered logical gradient sums and atomic owned AdamW updates |

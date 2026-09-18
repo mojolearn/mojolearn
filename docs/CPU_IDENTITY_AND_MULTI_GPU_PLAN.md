@@ -283,10 +283,16 @@ checkpoint architecture or input size has been verified.
   31 runtime checks passed, 216 applicable CPU/Apple properties matched, and
   54 training sabotage cells moved. Independent NVIDIA/AMD and installed-wheel
   qualification remain owed; these six routes are still pending by design.
-- Main now declares 234 harness routes: 161 default public CPU, 23 ordinary
+- The kernel integration snapshot declared 234 harness routes: 161 default public CPU, 23 ordinary
   pending (17 prior + six new kernels), and 50 parallel routes. This is route
   inventory, not a count of distinct algorithms or complete proofs. The 18
   logical CPU parallel routes are not 18 physical GPU certifications.
+- After the tokenized-corpus merge and host-only verifier admission, main has
+  236 routes: 163 default public CPU, 23 ordinary pending, and 50 parallel.
+  The two added default routes are bpe-vocabulary and tokenized-corpus, whose
+  recorded clean CPU replay and two fault controls cover all nine fixtures.
+  They have no GPU implementation to compare; this adds CPU-only verification,
+  not GPU/CPU identity proof. See LANE_STATUS_host-only-verifier.md.
 - ARM64 clean release sweep passed. Classical UMAP expectations and sabotage
   certification failed. The byte-LM sabotage loader opt-in and sharded-neighbor
   numerical mismatch reporting are repaired and confirmed by targeted native

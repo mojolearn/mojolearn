@@ -1097,12 +1097,18 @@ FAMILIES = (
             "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
             "tokenizer/impl/pretokenize.mojo", "tokenizer/impl/ranks.mojo",
             "tokenizer/impl/unicode_class.mojo", "tokenizer/impl/byte_unicode.mojo",
+            # lane/bpe-builder-native (2026-09-18): the vocabulary TRAINER is
+            # compiled in too (bpe_train, bpe_trained_sizes, bpe_trained_copy),
+            # the default backend of BpeVocabularyTrainer. Its own negative
+            # control is -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (reversed
+            # tie-break), which tokenizer_host_sabotage() also reads True for.
+            "tokenizer/train/bpe_train.mojo",
         ),
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
             "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
             "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
-            "bpe_decode",
+            "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -2616,10 +2622,18 @@ def public_reference_lanes():
 #: regression, which is why the derivation adds it back rather than deriving
 #: it: it is the one public lane a run selects without comparing.
 # BPE vocabulary training and fold construction are pure host operations.
-# Their fixtures run locally, but missing reference hashes must read OWED.
-# None means pure Python: no native host binding is required.
-PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
-                          "cross-val-folds": None}
+# Vocabulary serialization and corpus preparation also run on the host, but
+# use the shipped tokenizer binding to encode and decode. Their replay and
+# both negative controls are recorded in 2026-09-18_tokenized-corpus; this is
+# CPU-only evidence, not a claim of independent GPU implementation equality.
+# Missing reference hashes must still read OWED.
+# None means pure Python: no native host binding is required. bpe-trainer
+# names the tokenizer family since lane/bpe-builder-native (2026-09-18):
+# BpeVocabularyTrainer trains through that binding's bpe_train by default and
+# falls back to the pure Python reference only when the binding lacks it.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
+                          "cross-val-folds": None, "bpe-vocabulary": "tokenizer",
+                          "tokenized-corpus": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:

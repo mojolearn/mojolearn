@@ -78,10 +78,13 @@ def _wants_suite(args):
                 or getattr(args, "coverage", False)
                 or getattr(args, "include_pending", False)
                 or getattr(args, "models_only", False)
+                or getattr(args, "training_only", False)
                 or getattr(args, "batch_checks", False))
 
 
 def _verify_dispatch(args):
+    if getattr(args, "training_only", False):
+        args.no_models = True
     if _wants_suite(args):
         return _verify_all.cmd_verify_all(args)
     return _verify.cmd_verify(args)
@@ -129,8 +132,13 @@ def build_parser():
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
-    v.add_argument("--models-only", action="store_true",
+    scope = v.add_mutually_exclusive_group()
+    scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
+    scope.add_argument("--training", dest="training_only", action="store_true",
+                   help="run fit-based algorithm verification and learned-model properties, excluding the separate bundled-model suite; narrow with --lanes and --fixtures")
+    v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
+                   help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
                    help="implies --all: one lane per family on the base "
                         "fixture")
@@ -427,6 +435,13 @@ def main(argv=None):
         # asked for is how a green line ends up quoted out of context.
         parser.print_help()
         return _verify.EXIT_USAGE
+    from ._verify_resources import run_with_budget
+    try:
+        resource_exit = run_with_budget(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if resource_exit is not None:
+        return resource_exit
     return args.func(args)
 
 

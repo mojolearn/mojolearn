@@ -451,6 +451,8 @@ echo "identity payload: $(ls "$PKG/identity_columns/$RECORD" | wc -l | tr -d ' '
 cd "$here/python"
 rm -rf dist build ./*.egg-info
 pixi run -e pkg python -m build --wheel --no-isolation
+python3 "$here/tools/wheel_api_audit.py" --require-complete \
+    --output "$here/python/dist/API-macos.json" "$here/python/dist/"*.whl
 
 echo "wheel:"
 ls -la "$here/python/dist"/*.whl

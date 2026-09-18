@@ -67,3 +67,34 @@ The frozen release has selective proof-orchestration repairs at 54fd2188c,
 not new algorithms. Its tool-source qualification must be refreshed before
 publication. Original-source CPU certification is still running; new rentals
 remain deferred until that matrix ends.
+
+The CV branch is now 5b452303c after integrating main. Its software suite
+reached 91 passing tests with the same 10 optional sklearn skips. The hardware
+runner is ready: tools/parallel_cross_val_check.py, with retained full models,
+prediction/curve/score hashes, save/reload checks, UUID/PCI worker identity,
+one/two/reversed device orders and repeated runs. It explicitly reports
+physical_execution_trace=OWED even if numerical/placement checks pass.
+No physical GPU run or new rental has occurred. Continue in multigpu-cv for
+qualification; do not delete that active worktree or promote its feature yet.
+
+## Saved-model negative-control follow-up
+
+Main 434487ebf repairs a false-pass path in classical_host_gate.py: an optional
+GPU column mismatch alone could satisfy plain --expect-mismatch while the CPU
+prediction still matched the saved-model recording. The verdict now requires
+actual CPU output differences as well. Empty evidence fails; ordinary clean
+column comparisons and per-lane/per-fixture fault requirements stay enforced.
+The regression was reproduced before the repair with a full gate invocation
+using temporary fixture/reference files and mocked CPU inference.
+
+The gate/reporting suite passed 72 tests and six subtests. After making the new
+tests independent of package/native imports, the workflow's binding-free
+unittest command passed all 41 orchestration tests on main and on the frozen
+release backport (1a49e0e35; handoff 42e10fcb4). No new native execution is
+claimed. The release tools require fresh matching qualification witnesses.
+This tool-level repair does not resolve stale UMAP expectations or certify the
+wheel. Run 35350125464 still has Apple CPU work active and x86 CPU work queued.
+
+Separately, the host-only verifier admission is merged at 24885fbeb: current
+inventory is 236 routes, 163 default CPU, 23 pending and 50 parallel. See
+LANE_STATUS_host-only-verifier.md. Keep both active release and CV worktrees.

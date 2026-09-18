@@ -379,6 +379,7 @@ EXTRA_PUBLIC_MODULES = (
     "parallel_preprocessing", "parallel_classical", "parallel_ensemble",
     "parallel_graph", "parallel_neighbors", "parallel_neighbors_reference",
     "parallel_training", "model_pool_training", "offload_training",
+    "parallel_forecasting",
 )
 
 

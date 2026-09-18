@@ -168,6 +168,48 @@ class GateTests(unittest.TestCase):
             self.assertEqual(len(seen), 2)
             self.assertTrue(all(cmd[-2:] == ['--repeats', '1'] for cmd in seen))
 
+    def test_resume_preserves_parts_but_never_reuses_merged_success(self):
+        out = self.root / 'resume.json'
+        out.write_text('old merged success')
+        part = self.root / 'resume.part0.json'
+        part.write_text('checkpoint to validate')
+        log = self.root / 'resume.part0.log'
+        log.write_text('previous attempt\n')
+        seen = []
+
+        def worker(cmd, stdout, stderr):
+            path = Path(cmd[cmd.index('--json') + 1])
+            seen.append(cmd)
+            if path == part:
+                self.assertEqual(path.read_text(), 'checkpoint to validate')
+                self.assertIn('--resume', cmd)
+            else:
+                self.assertNotIn('--resume', cmd)
+            path.write_text(json.dumps(record(cmd[cmd.index('--lanes') + 1].split(','))))
+            stdout.write('new attempt\n')
+            return SimpleNamespace(poll=lambda: 0)
+
+        def merge(cmd):
+            self.assertFalse(out.exists())
+            out.write_text('{}')
+            return SimpleNamespace(returncode=0)
+
+        args = SimpleNamespace(lanes='gemm-pinned,kde', shards=2, jobs=1,
+            json=str(out), extra=['--repeats', '2'], heartbeat=120, resume=True)
+        with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+             patch.object(gate.subprocess, 'run', side_effect=merge), \
+             patch.object(gate.time, 'sleep'):
+            self.assertEqual(gate.do_run_column(args), 0)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(log.read_text(), 'previous attempt\nnew attempt\n')
+
+    def test_forwarded_resume_is_rejected_before_deleting_evidence(self):
+        out = self.root / 'preserve.json'
+        out.write_text('evidence')
+        args = SimpleNamespace(extra=['--resume'], json=str(out))
+        self.assertEqual(gate.do_run_column(args), 2)
+        self.assertEqual(out.read_text(), 'evidence')
+
     def test_merge_rejects_machine_build_fixture_and_commit_changes(self):
         spec = importlib.util.spec_from_file_location('identity_gate_test', Path(__file__).with_name('identity_break.py'))
         identity = importlib.util.module_from_spec(spec)
@@ -499,6 +541,71 @@ class SabotageVerdictTests(unittest.TestCase):
         verdict, code, _ = self.verdict(True, [], ['ivf/base'], every_fixture=True, lane_rule_only=['ivf'])
         self.assertEqual(code, 1)
         self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
+
+    def test_gpu_column_disagreement_alone_is_not_a_fault_catch(self):
+        # do_check also folds optional GPU column disagreements into
+        # verdict_ok. Those cannot prove that this CPU output moved.
+        for options in ({}, {'every_lane': True}, {'every_fixture': True}):
+            with self.subTest(options=options):
+                verdict, code, _ = self.verdict(False, [], ['ivf/base'], **options)
+                self.assertEqual(code, 1)
+                self.assertNotEqual(verdict, 'EXPECTED MISMATCH SEEN')
+
+    def test_empty_fault_evidence_cannot_pass(self):
+        for options in ({}, {'every_lane': True}, {'every_fixture': True}):
+            with self.subTest(options=options):
+                self.assertEqual(self.verdict(False, [], [], **options)[1], 1)
+
+
+class ClassicalColumnFaultTests(unittest.TestCase):
+    """Exercise the gate with real fixture/reference files and mocked inference."""
+
+    def check(self, *, expect_mismatch, cpu_hash):
+        # This suite also runs before any package/native binding is built.
+        mojolearn = SimpleNamespace(vendor=lambda: 'cpu')
+        host = SimpleNamespace(
+            host_model=lambda _: SimpleNamespace(estimator='LinearRegression'),
+            binary_path=lambda: 'mock', binary_paths=lambda: [])
+        gate = load_classical_gate()
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp) / 'ols' / 'base'
+            directory.mkdir(parents=True)
+            (directory / 'model.npz').write_bytes(b'saved model')
+            (directory / 'fixture.json').write_text(json.dumps(dict(
+                lane='ols', kind='base', probe_rows=256, x_sha256='input')))
+            prediction = dict(sha256='prediction', dtype='float32', shape=[256])
+            (directory / 'expected.json').write_text(json.dumps(dict(
+                status='RECORDED', estimator='LinearRegression', x_sha256='input',
+                model_sha256=gate.sha256_bytes(b'saved model'),
+                predictions=dict(identity_hash='a' * 16, predict=prediction))))
+            column = Path(tmp) / 'gpu.json'
+            column.write_text(json.dumps(dict(vendor='cuda', cells={
+                'ols/base': dict(infer=['b' * 16, 'b' * 16])})))
+            args = SimpleNamespace(package_root=None, fixture_dir=[directory],
+                gpu_column=[str(column)], expect_mismatch=expect_mismatch,
+                every_lane=False, every_fixture=False, lane_rule_only=[], report=None)
+            with contextlib.ExitStack() as stack:
+                stack.enter_context(contextlib.redirect_stdout(io.StringIO()))
+                stack.enter_context(patch.dict('sys.modules', {
+                    'mojolearn': mojolearn, 'mojolearn._classical_host': host}))
+                stack.enter_context(patch.object(gate, 'package_root'))
+                stack.enter_context(patch.object(gate, 'identity_tool',
+                    return_value=SimpleNamespace(FIXTURES=['base'])))
+                stack.enter_context(patch.object(gate, 'held_out', return_value=(None, 'input')))
+                stack.enter_context(patch.object(gate, 'digests_for', return_value=dict(
+                    identity_hash=cpu_hash, predict=prediction, seconds=0)))
+                stack.enter_context(patch.object(gate, 'host_info', return_value={}))
+                stack.enter_context(patch.object(gate, 'git_commit', return_value='test'))
+                return gate.do_check(args)
+
+    def test_column_disagreement_still_fails_clean_check(self):
+        self.assertEqual(self.check(expect_mismatch=False, cpu_hash='a' * 16), 1)
+
+    def test_column_disagreement_does_not_pass_fault_check(self):
+        self.assertEqual(self.check(expect_mismatch=True, cpu_hash='a' * 16), 1)
+
+    def test_changed_cpu_output_still_passes_fault_check(self):
+        self.assertEqual(self.check(expect_mismatch=True, cpu_hash='c' * 16), 0)
 
 
 if __name__ == '__main__':

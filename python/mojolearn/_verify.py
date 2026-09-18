@@ -524,7 +524,8 @@ def _git_commit(start):
     provenance."""
     base = start
     for _ in range(6):
-        if os.path.isdir(os.path.join(base, ".git")):
+        # Linked worktrees carry a .git FILE pointing at their metadata.
+        if os.path.exists(os.path.join(base, ".git")):
             rev = _cmd(["git", "-C", base, "rev-parse", "HEAD"])
             if rev:
                 dirty = _cmd(["git", "-C", base, "status", "--porcelain"])

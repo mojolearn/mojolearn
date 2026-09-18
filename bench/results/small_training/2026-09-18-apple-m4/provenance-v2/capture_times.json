@@ -1,0 +1,54 @@
+[
+  {
+    "name": "cpu",
+    "command": [
+      "/Users/andrewhendel/mojolearn-wt/release-087-final/.pixi/envs/test/bin/python",
+      "/Users/andrewhendel/mojolearn-wt/next-wheel-coverage/tools/capture_small_training.py",
+      "--require-backend",
+      "cpu",
+      "--out",
+      "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/small-training-v2/cpu"
+    ],
+    "seconds": 0.731022,
+    "exit_code": 0
+  },
+  {
+    "name": "cpu-replay",
+    "command": [
+      "/Users/andrewhendel/mojolearn-wt/release-087-final/.pixi/envs/test/bin/python",
+      "/Users/andrewhendel/mojolearn-wt/next-wheel-coverage/tools/capture_small_training.py",
+      "--require-backend",
+      "cpu",
+      "--out",
+      "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/small-training-v2/cpu-replay"
+    ],
+    "seconds": 0.686345,
+    "exit_code": 0
+  },
+  {
+    "name": "metal",
+    "command": [
+      "/Users/andrewhendel/mojolearn-wt/release-087-final/.pixi/envs/test/bin/python",
+      "/Users/andrewhendel/mojolearn-wt/next-wheel-coverage/tools/capture_small_training.py",
+      "--require-backend",
+      "metal",
+      "--out",
+      "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/small-training-v2/metal"
+    ],
+    "seconds": 2.414106,
+    "exit_code": 0
+  },
+  {
+    "name": "cpu-ridge-sabotage",
+    "command": [
+      "/Users/andrewhendel/mojolearn-wt/release-087-final/.pixi/envs/test/bin/python",
+      "/Users/andrewhendel/mojolearn-wt/next-wheel-coverage/tools/capture_small_training.py",
+      "--require-backend",
+      "cpu",
+      "--out",
+      "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/small-training-v2/cpu-ridge-sabotage"
+    ],
+    "seconds": 0.697105,
+    "exit_code": 0
+  }
+]

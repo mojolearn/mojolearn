@@ -154,6 +154,11 @@ def execute(request):
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
+    if operation == 'forecast_predict':
+        method, positional = args
+        if method != 'predict':
+            raise ValueError('invalid forecasting worker operation')
+        return state.predict(*positional)
     if operation == 'arima_fit':
         from ._arima_impl import ARIMA
         return ARIMA(**state).fit(*args)
