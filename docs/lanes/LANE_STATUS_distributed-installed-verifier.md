@@ -38,7 +38,11 @@ binding hashes/vendor, checkout commit, and separately validated guarded archive
 `MOJOLEARN_COMMIT` are retained. An installed wheel with no checkout does not
 invent a source commit. NumPy is required for these tiny verification fixtures.
 
-39 binding-free tests pass, including driver ABI failures/aliases, missing cells,
-unused workers, wrong operation, missing controls, digest drift, transport fault
+44 binding-free tests pass, including driver ABI failures/aliases, missing cells,
+unused workers, wrong operation, missing controls, digest drift, installed source/native RECORD mismatches, transport fault
 restoration and strict cross-capture comparison. Actual NVIDIA/AMD execution of
 this new shipped orchestration remains owed; no rentals started in this lane.
+
+Fixture input byte digests are required and compared independently of outputs.
+The profile requires the complete eight-module source manifest; truncated
+manifests cannot make two partial captures appear equivalent.

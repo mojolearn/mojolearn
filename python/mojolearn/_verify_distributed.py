@@ -20,6 +20,9 @@ from contextlib import contextmanager
 
 __all__ = ["main", "compare", "validate_receipt"]
 PROTOCOL = "distributed-classical-v2"
+PROFILE_FILES = frozenset(('__init__.py', 'parallel_forecasting.py', 'parallel_gaussian_process.py',
+                           'parallel_ivf.py', '_verify_distributed.py', '_parallel_pool.py',
+                           '_parallel_worker.py', '_gpu_witness.py'))
 CASES = ("arima", "holtwinters", "gpc", "ivf", "gpc_fit")
 NUMERICAL_OPERATIONS = frozenset(("forecast_predict", "gpc_class_fit", "gpc_class_predict", "ivf_search_stored"))
 
@@ -119,9 +122,15 @@ def validate_receipt(receipt):
             or any(c.get('kind') != 'transport' or c.get('triggered') is not True
                    or c.get('detected') is not True for c in controls)):
         raise ValueError('missing or unobserved transport controls')
+    if (set(receipt.get('inputs', {})) != {'arima', 'holtwinters', 'gpc_x', 'gpc_y', 'ivf'}
+            or not all(_valid_digests([v]) for v in receipt['inputs'].values())):
+        raise ValueError('missing or invalid fixture input witnesses')
     required_bindings = {'_mojolearn_arima', '_mojolearn_tsa', '_mojolearn_gp', '_mojolearn_ivf'}
-    if set(receipt.get('bindings', {})) != required_bindings or not receipt.get('source_files'):
+    if set(receipt.get('bindings', {})) != required_bindings or set(receipt.get('source_files', {})) != PROFILE_FILES:
         raise ValueError('missing package or native binding provenance')
+    if any(not isinstance(h, str) or not re.fullmatch('[0-9a-f]{64}', h)
+           for h in receipt['source_files'].values()):
+        raise ValueError('invalid source profile hashes')
     for binding in receipt['bindings'].values():
         if (binding.get('vendor') != receipt['vendor'] or
                 not re.fullmatch('[0-9a-f]{64}', binding.get('sha256', ''))):
@@ -133,11 +142,30 @@ def compare(left, right):
     """Compare complete captures from compatible source, including cross-vendor."""
     validate_receipt(left)
     validate_receipt(right)
+    if left.get('inputs') != right.get('inputs'):
+        raise ValueError('distributed fixture input bytes differ')
     if left['source_files'] != right['source_files']:
         raise ValueError('distributed source profiles differ')
     def parts(receipt):
         return {(c['case'], c['layout'], c['repeat']): c['actual'] for c in receipt['cells']}
     return parts(left) == parts(right)
+
+
+def verify_distribution_records(dist, package, source_files, bindings):
+    """Require actual source/native bytes to match this installed wheel RECORD."""
+    records = {str(path): path for path in (dist.files or ())}
+    def check(relative, sha):
+        record = records.get(relative)
+        expected = base64.urlsafe_b64encode(bytes.fromhex(sha)).decode().rstrip('=')
+        if record is None or record.hash is None or record.hash.mode != 'sha256' or record.hash.value != expected:
+            raise ValueError('installed file differs from wheel RECORD: ' + relative)
+    for filename, sha in source_files.items():
+        check('mojolearn/' + filename, sha)
+    for binding in bindings.values():
+        native_path = Path(binding['path'])
+        if not native_path.is_relative_to(package):
+            raise ValueError('native binding is outside installed package: ' + str(native_path))
+        check(str(native_path.relative_to(package.parent)), binding['sha256'])
 
 
 def main(argv=None):
@@ -172,6 +200,8 @@ def main(argv=None):
     from mojolearn._parallel_pool import DevicePool
     from mojolearn import parallel_forecasting as pf, parallel_gaussian_process as pg
     from mojolearn.parallel_ivf import DistributedIVFIndex
+    if _backend.numeric_mode() != 'identical':
+        ap.error('distributed capture requires identical numeric mode in a fresh process')
     vendor = _backend.vendor()
     if vendor not in ('cuda', 'hip'):
         ap.error('physical qualification capture requires CUDA or HIP')
@@ -213,22 +243,10 @@ def main(argv=None):
         ap.error('MOJOLEARN_COMMIT must be a full lowercase SHA when provided')
     receipt['guarded_source_commit'] = guarded
     if args.require_installed:
-        records = {str(path): path for path in (dist.files or ())}
-        for filename, sha in receipt['source_files'].items():
-            relative = 'mojolearn/' + filename
-            record = records.get(relative)
-            expected = base64.urlsafe_b64encode(bytes.fromhex(sha)).decode().rstrip('=')
-            if record is None or record.hash is None or record.hash.mode != 'sha256' or record.hash.value != expected:
-                ap.error('installed module differs from wheel RECORD: ' + relative)
-        for binding in receipt['bindings'].values():
-            native_path = Path(binding['path'])
-            if not native_path.is_relative_to(package):
-                ap.error('native binding is outside installed package: ' + str(native_path))
-            relative = str(native_path.relative_to(package.parent))
-            record = records.get(relative)
-            expected = base64.urlsafe_b64encode(bytes.fromhex(binding['sha256'])).decode().rstrip('=')
-            if record is None or record.hash is None or record.hash.mode != 'sha256' or record.hash.value != expected:
-                ap.error('native binding differs from wheel RECORD: ' + relative)
+        try:
+            verify_distribution_records(dist, package, receipt['source_files'], receipt['bindings'])
+        except ValueError as exc:
+            ap.error(str(exc))
         receipt['distribution']['source_record_hashes_match'] = True
         receipt['distribution']['native_record_hashes_match'] = True
     from mojolearn._gpu_witness import require_distinct_workers
@@ -267,6 +285,9 @@ def main(argv=None):
         ivf_x = np.random.default_rng(97).normal(size=(65, 17)).astype(np.float32)
         ivf_x[1] = ivf_x[0]
         ivf = ml.IVFIndex(4, 4, 5, kmeans_n_iters=3, metric='euclidean', numeric_mode='identical').fit(ivf_x)
+        receipt['inputs'] = {name: digest(value) for name, value in
+                             [('arima', y), ('holtwinters', hw_y), ('gpc_x', x),
+                              ('gpc_y', np.asarray(labels, dtype=np.int32)), ('ivf', ivf_x)]}
         expected = {'arima': [digest(arima.predict(0, 36))],
                     'holtwinters': [digest(hw.predict(26, 31))],
                     'gpc': [digest(gpc.predict_proba(x[:5])), digest(gpc.predict(x[:5]))],

@@ -7,7 +7,7 @@ from mojolearn import _verify_distributed as v
 def receipt():
     value = dict(protocol=v.PROTOCOL, status='NUMERICAL_MATCH_EXECUTION_TRACE_OWED',
                  vendor='cuda', repeats=2, devices=[0,1], cells=[], controls=[],
-                 worker_calls=[], worker_groups=[], source_files={'profile.py':'a'*64},
+                 worker_calls=[], worker_groups=[], source_files=dict.fromkeys(v.PROFILE_FILES,'a'*64),
                  bindings={name:dict(vendor='cuda',sha256='b'*64) for name in
                     ('_mojolearn_arima','_mojolearn_tsa','_mojolearn_gp','_mojolearn_ivf')})
     parts=[dict(shape=[2,3],dtype='<f4',sha256='c'*64)]
@@ -24,6 +24,7 @@ def receipt():
                 value['worker_groups'].append(dict(group=group,devices=list(devices),inventory=inventory))
                 value['cells'].append(dict(case=case,layout=layout,devices=list(devices),repeat=repeat,
                     worker_groups=[group],actual=copy.deepcopy(parts),expected=copy.deepcopy(parts),match=True))
+    value['inputs']={name:copy.deepcopy(parts[0]) for name in ('arima','holtwinters','gpc_x','gpc_y','ivf')}
     value['controls']=[dict(case=case,fault=fault,kind='transport',triggered=True,detected=True)
                       for case in v.CASES for fault in ('drop_result','reverse_results')]
     return value
@@ -60,7 +61,7 @@ def test_incomplete_or_false_pass_evidence_rejected(fault):
     if fault=='mismatch': b['cells'][0]['match']=False
     if fault=='wrong_devices': b['cells'][0]['devices']=[1]
     if fault=='wrong_operation': b['worker_calls'][0]['operation']='device_inventory'
-    if fault=='source': b['source_files']['profile.py']='different'
+    if fault=='source': b['source_files']['_verify_distributed.py']='d'*64
     with pytest.raises((ValueError,RuntimeError)):
         v.compare(a,b)
 
@@ -92,3 +93,26 @@ def test_invalid_device_arguments_do_not_start_workers(tmp_path):
     with pytest.raises(SystemExit):
         v.main(['--devices','bad,1','--out',str(tmp_path/'out.json')])
     assert not (tmp_path/'out.json').exists()
+
+
+@pytest.mark.parametrize('fault',[None,'changed_python','changed_native','external_native','missing_record'])
+def test_wheel_record_verifies_python_and_native_origin(tmp_path,fault):
+    import base64
+    from types import SimpleNamespace
+    class Record:
+        def __init__(self,name,sha):
+            self.name=name
+            self.hash=SimpleNamespace(mode='sha256',value=base64.urlsafe_b64encode(bytes.fromhex(sha)).decode().rstrip('='))
+        def __str__(self): return self.name
+    package=tmp_path/'mojolearn'
+    source={'_verify_distributed.py':'a'*64}
+    native={'binding':dict(path=str(package/'cuda'/'native.so'),sha256='b'*64)}
+    dist=SimpleNamespace(files=[Record('mojolearn/_verify_distributed.py','a'*64),Record('mojolearn/cuda/native.so','b'*64)])
+    if fault=='changed_python': source['_verify_distributed.py']='c'*64
+    if fault=='changed_native': native['binding']['sha256']='c'*64
+    if fault=='external_native': native['binding']['path']=str(tmp_path/'external.so')
+    if fault=='missing_record': dist.files=[]
+    if fault:
+        with pytest.raises(ValueError): v.verify_distribution_records(dist,package,source,native)
+    else:
+        v.verify_distribution_records(dist,package,source,native)
