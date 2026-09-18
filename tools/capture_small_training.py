@@ -50,6 +50,9 @@ def main():
         contract=profile.contract(harness), inputs={}, cells={},
         device=suite._device_block(ml, harness), package_dir=str(Path(ml.__file__).parent),
         capture_tool_sha256=__import__('hashlib').sha256(Path(__file__).read_bytes()).hexdigest())
+    if ml.vendor() == 'cpu':
+        # Include native column/fault-define readback, not just file labels.
+        record['host'] = harness.host_record(ml)
     save(path, record)
     try:
         with reference_training():
