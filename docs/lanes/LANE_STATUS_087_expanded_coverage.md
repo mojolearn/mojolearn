@@ -151,3 +151,9 @@ integration. Follow `EXPANDED_087_BUILD_AND_PROOF.md` for the deferred fresh
 source-pinned build. Outstanding: NVIDIA records, exact rebuilt-wheel replay,
 physical two-GPU execution evidence and release qualification. No wheel was
 published by this work.
+
+AMD whole-loaded-model closure (`c4abc7a56`): all 24 v2 cases passed and all
+144 parts match both CPU and Apple. The exact supplemental source-file hashes,
+original remote source attribution, raw capture and comparisons are retained;
+this is source-capsule evidence, not an installed-wheel or two-GPU certificate.
+Final wheel import inventory includes 106 reachable package modules.
