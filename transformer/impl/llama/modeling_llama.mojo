@@ -1536,6 +1536,7 @@ struct LlamaDeviceStages(Movable):
     is `M * n_heads` floats and a conditional field is a second struct
     shape to get wrong."""
     var gemm_workspace: GemmWorkspace
+    var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
     var attn_materialized: Bool
     """Whether `scores`, `masked`, `aexp` and `weights` hold the LAST call's
     attention stages. The eager path sets it; the fused path (which never
@@ -1640,6 +1641,7 @@ struct LlamaDeviceStages(Movable):
         self.kbh = _zeros[False](ctx, sc * hd)
         self.sbh = _zeros[False](ctx, sbh_n)
         self.qk_sumsq = _zeros[False](ctx, m * nh)
+        self.attn_forward_status = -1
         self.attn_materialized = False
         self.attn_estash_cells = 0
 
@@ -1717,6 +1719,7 @@ struct LlamaDeviceStages(Movable):
         self.sbh.enqueue_fill(Float32(0))
         step_count_launch()
         self.qk_sumsq.enqueue_fill(Float32(0))
+        self.attn_forward_status = -1
         self.attn_materialized = False
         self.attn_estash_cells = 0
         step_count_sync()
@@ -3598,6 +3601,7 @@ def eager_attention_forward(
         stages.ctxv,
         b * l * dims.n_heads * dims.head_dim,
     )
+    stages.attn_forward_status = status
     return status
 
 
