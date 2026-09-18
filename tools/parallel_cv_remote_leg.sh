@@ -70,6 +70,20 @@ for family in arima tsa gp ivf; do
     run_stage "build-$family" bash "bindings/build_$family.sh" || failed=1
 done
 capture classical "$PY" tools/distributed_classical_check.py --devices 0,1 --out "$OUT/classical.json" || failed=1
+# Six independent NVIDIA kernel references reuse the fitted estimator binding.
+# Complete them before the older GP/IVF/GBDT holds when the lease permits.
+left=$(remaining)
+if (( left > 420 )); then
+    kernel_ready=1
+    run_stage build-kernel-methods bash bindings/build_kernel_methods.sh || kernel_ready=0
+    run_stage build-estimators-host env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu bash bindings/build_estimators_host.sh || kernel_ready=0
+    left=$(remaining)
+    if (( kernel_ready && left > 180 )); then
+        run_stage ordinary-kernels "$PY" tools/capture_ordinary_holds.py --source --python "$PY" \
+            --backend cuda --vendor nvidia-L40S --output "$OUT/ordinary-kernels" --budget-seconds "$((left-20))" \
+            --lanes kernel-ridge-poly,kernel-ridge-sigmoid,kernel-ridge-laplacian,nystroem-poly,nystroem-sigmoid,nystroem-laplacian || failed=1
+    fi
+fi
 # Existing freshly built GP/IVF/GBDT bindings can also pay down ordinary holds.
 left=$(remaining)
 if (( left > 180 )); then
