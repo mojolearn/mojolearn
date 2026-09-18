@@ -41,7 +41,7 @@ setup)
     step pixi_install-"$(basename "$PWD")" pixi install || exit 1
     # the base extension carries encode_labels_i32, which every classifier fit
     # reaches before it ever touches a forest kernel
-    for b in "" rf trees gbdt; do
+    for b in "" rf trees gbdt estimators; do
         _s="bindings/build${b:+_$b}.sh"
         step build_"${b:-base}"-"$(basename "$PWD")" pixi run sh "$_s" || exit 1
     done
@@ -82,7 +82,7 @@ gate)
     # The two -parallel lanes are LEFT OUT here on purpose: the BEFORE tree
     # cannot finish them in one process, so a column that contained them
     # could not be compared. They get their own before/after arms.
-    LANES=${LANES:-rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,rf-score-weighted,gbdt-symmetric,gbdt-depthwise,gbdt-rmse}
+    LANES=${LANES:-rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,rf-score-weighted,gbdt-symmetric,gbdt-depthwise,gbdt-rmse,kde,kde-weighted}
     say "identity_break gate ($L): $LANES"
     pixi run python3 tools/identity_break.py --lanes "$LANES" \
         --fixtures base,ties,odd,dupes,wide --repeats 2 --vendor cuda-4090 \
