@@ -41,7 +41,7 @@ from core.step_phase import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
-from gemm.checks.gemm_identical import TUNED_STAGE_FTZ
+from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import download_f32
 from training.byte_lm_config import ByteConfig
@@ -728,6 +728,11 @@ def _stage_download(ctx: DeviceContext, mut host: HostBuffer[DType.float32],
 def byte_lm_fault_inject_available_binding() raises -> PythonObject:
     """True only in a gate build compiled with -D MOJOLEARN_BYTE_LM_FAULT_INJECT=1."""
     return PythonObject(byte_lm_fault_inject_available())
+
+
+def byte_lm_gemm_reuse_group_ws_binding() raises -> PythonObject:
+    """Read grouped-scratch reuse from the loaded training binary."""
+    return PythonObject(GEMM_REUSE_GROUP_WS)
 
 
 def byte_lm_gemm_stage_ftz_binding() raises -> PythonObject:
@@ -1673,6 +1678,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
+        module.def_function[byte_lm_gemm_reuse_group_ws_binding]("byte_lm_gemm_reuse_group_ws")
         module.def_function[byte_lm_gemm_stage_ftz_binding]("byte_lm_gemm_stage_ftz")
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")

@@ -3,8 +3,10 @@
 set -eu
 CORPUS=${1:?enwik8 or pile_github}
 case "$CORPUS" in enwik8|pile_github) ;; *) exit 9 ;; esac
+KIND=${2:-stage}
+case "$KIND" in stage|workspace) ;; *) exit 9 ;; esac
 ROOT=${MOJOLEARN_GEMM_STEP_ROOT:-/root/mojolearn}
-OUT=/root/gemm_leg_out/gemm-stage-training
+OUT=/root/gemm_leg_out/gemm-$KIND-training
 mkdir -p "$OUT/$CORPUS"
 cd "$ROOT"
 export PATH="$HOME/.pixi/bin:$PATH"
@@ -25,10 +27,16 @@ run() {
 }
 # Check-only: a missing or unpinned corpus fails, never origin-downloads.
 run corpus sh "tools/fetch_corpus_$CORPUS.sh" --check
-run build-base env MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh
+if [ ! -f python/mojolearn/identical/_mojolearn.so ]; then
+    run build-core env MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh
+fi
 for arm in base stage; do
     EXTRA='-D MOJOLEARN_GEMM_LEGACY_STAGE_FTZ=1'
     [ "$arm" = base ] || EXTRA='-D MOJOLEARN_GEMM_STAGE_FTZ=1'
+    if [ "$KIND" = workspace ]; then
+        EXTRA='-D MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS=1'
+        [ "$arm" = base ] || EXTRA='-D MOJOLEARN_GEMM_REUSE_GROUP_WS=1'
+    fi
     run "build-$arm" env MOJOLEARN_BUILD_EXTRA_DEFINES="$EXTRA" \
         MOJOLEARN_BYTE_LM_OUTDIR="/root/gemm-stage-binaries/$CORPUS/$arm" sh bindings/build_byte_lm.sh
     cp "/root/gemm-stage-binaries/$CORPUS/$arm/_mojolearn_byte_lm.so" python/mojolearn/identical/_mojolearn_byte_lm.so
@@ -36,5 +44,5 @@ for arm in base stage; do
         --out "$OUT/$CORPUS/$arm" --steps 700 --tail 0 --seed 20260917 \
         --corpus "training/corpus/$CORPUS/input.txt" --smi-every 10 --witness-every 699
 done
-run compare python3 tools/gemm_training_compare.py "$OUT" "$CORPUS"
+run compare python3 tools/gemm_training_compare.py "$OUT" "$CORPUS" --kind "$KIND"
 echo "COMPLETE $CORPUS 700 steps per arm"

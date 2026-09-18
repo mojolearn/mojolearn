@@ -3710,7 +3710,10 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
-comptime GEMM_REUSE_GROUP_WS = is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
+comptime GEMM_REUSE_GROUP_WS = (
+    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
+)
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20

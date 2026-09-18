@@ -136,10 +136,10 @@ def aliasing_witness(trainer):
     return None if entry is None else bool(entry())
 
 
-def gemm_stage_witness():
+def gemm_stage_witness(entry_name='byte_lm_gemm_stage_ftz'):
     from mojolearn import _backend
     binding = _backend.binding('_mojolearn_byte_lm', 'identical')
-    entry = getattr(binding, 'byte_lm_gemm_stage_ftz', None)
+    entry = getattr(binding, entry_name, None)
     return None if entry is None else bool(entry())
 
 
@@ -264,6 +264,7 @@ def main():
                   ids='pinned corpus' if corpus is not None else 'synthetic uniform token ids',
                   ce_aliased=aliasing_witness(trainer),
                   gemm_stage_ftz=gemm_stage_witness(),
+                  gemm_reuse_group_ws=gemm_stage_witness('byte_lm_gemm_reuse_group_ws'),
                   attn_sticky_fallback=sticky_witness(),
                   attn_kv_corner_guard=kv_guard_witness(),
                   attn_bwd_corner_refuses=bwd_corner_witness(),
