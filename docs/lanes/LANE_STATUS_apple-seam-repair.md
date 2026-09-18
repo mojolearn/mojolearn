@@ -448,3 +448,5 @@ Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-postmerge/`.
   gemm_step_price_main: byte-identical to the new origin/main (xcheck3_cmp.txt).
 - Apple, merged code: seam probe shipped `62a6b5621e27c707` (rtf), nativefix
   rtf; whole-GEMM boundary check 35/35 OK, fails=0.
+
+## STATUS: MERGED to main at f67bd1953 (2026-09-18). Worktree ~/mojolearn-wt/apple-seam may be removed; evidence outside the repo stays in ~/mojolearn-evidence/apple-seam-repair-2026-09-18/ (binaries, corpora, packages).
