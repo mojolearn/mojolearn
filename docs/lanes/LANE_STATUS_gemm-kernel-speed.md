@@ -155,3 +155,31 @@ Deliberately omit the candidate fold and require poisoned/mismatched outputs;
 also sabotage the priced old arm and require price-comparator rejection.
 Print required and retained workspace sizes; a non-grouped shape is refused
 by the dedicated gate. Registered before launch, not measured yet.
+
+## Experiment 4 result and registered pipeline qualification
+
+H100 per-call synchronized sums: base 121.600850 / 121.724870 ms,
+reuse 120.570859 / 120.573541 ms. In the same reuse-build process,
+legacy/reuse ratios 1.009656 / 1.010550. The predicted >=5% reduction is
+falsified: INERT for that magnitude hypothesis; no default flip justified by
+this result. All cross-build output digests match. Nine dedicated queued,
+growth/reuse and undersized-buffer matches pass; omitting the actual fold
+leaves 262144 poisoned cells and is rejected. Price sabotage also rejects.
+Required scratch 1835008 -> 5128461 -> 786432 floats; retained capacity grows
+1835008 -> 5128461 -> 5128461 as intended. Exact same device kernels.
+
+The per-call harness synchronizes after every GEMM, so it cannot determine
+the proposed benefit of enqueueing consecutive training operations without
+the former internal fences. Before the distinct full-step experiment:
+H100 80GB HBM3, both pinned R2 corpora, 700 steps per arm each, target shape
+and seed20260917 as above. Predict >=3% lower last-200 median on BOTH corpora
+and <=1024 MiB extra sampled device memory. Less falsifies the speed magnitude
+prediction; no significant full-step gain means keep this path off. All 700
+loss words, all 6 endpoint witnesses and complete per-step attention reports
+must match. The loaded binaries must read reuse False/True and have different
+hashes. Builds reused between corpora, no repeat compilation and no component
+share timing. This is a new pipeline hypothesis, not a kernel-speed claim.
+
+R2 reconfirmed at Andrew's request during the run: enwik8 staged in 7s,
+Pile GitHub in 8s; both exact pinned sizes and SHA256 values, one linked key
+per training lease. The microbenchmarks generate inputs, so stage zero keys.

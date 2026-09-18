@@ -37,9 +37,14 @@ for arm in base stage; do
         EXTRA='-D MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS=1'
         [ "$arm" = base ] || EXTRA='-D MOJOLEARN_GEMM_REUSE_GROUP_WS=1'
     fi
-    run "build-$arm" env MOJOLEARN_BUILD_EXTRA_DEFINES="$EXTRA" \
-        MOJOLEARN_BYTE_LM_OUTDIR="/root/gemm-stage-binaries/$CORPUS/$arm" sh bindings/build_byte_lm.sh
-    cp "/root/gemm-stage-binaries/$CORPUS/$arm/_mojolearn_byte_lm.so" python/mojolearn/identical/_mojolearn_byte_lm.so
+    BINROOT=/root/gemm-$KIND-binaries/$arm
+    if [ ! -f "$BINROOT/_mojolearn_byte_lm.so" ]; then
+        run "build-$arm" env MOJOLEARN_BUILD_EXTRA_DEFINES="$EXTRA" \
+            MOJOLEARN_BYTE_LM_OUTDIR="$BINROOT" sh bindings/build_byte_lm.sh
+    else
+        printf 'reuse-build-%s\t0\n' "$arm" >> "$OUT/$CORPUS/status.tsv"
+    fi
+    cp "$BINROOT/_mojolearn_byte_lm.so" python/mojolearn/identical/_mojolearn_byte_lm.so
     run "$arm" pixi run python tools/lm_ce_alias_probe.py \
         --out "$OUT/$CORPUS/$arm" --steps 700 --tail 0 --seed 20260917 \
         --corpus "training/corpus/$CORPUS/input.txt" --smi-every 10 --witness-every 699
