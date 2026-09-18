@@ -1,0 +1,438 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""Current Linux release smoke: every estimator family, one tier, one vendor.
+
+Qualification-only successor to packaging/linux/smoke.py, whose frozen bytes
+remain part of native build provenance. Preserve full exception messages until
+refusal classification; presentation truncation must never decide a verdict.
+
+    MOJOLEARN_NUMERIC_MODE=<tier> python3 tools/release_linux_smoke.py \\
+        --vendor cuda|hip --json <out.json>
+
+`packaging/macos/smoke.py` fits nine families and asserts the tier read
+back from the binary. This does the same on Linux and adds the vendor
+axis, and it takes its fits from `tools/repeat_run_stability.py`'s lane
+registry rather than re-typing them: that registry already covers every
+public estimator (both forests, the three boosting policies, k-means,
+k-NN x3, DBSCAN, PCA, tSVD, OLS, ridge, logistic, isolation forest, lasso,
+elastic net, SVC, KDE, agglomerative, spectral, Holt-Winters, the metrics
+and the GEMM), it has run on all three vendors, and a fit that works there
+and not here is a packaging defect, which is the only kind this smoke is
+looking for.
+
+THREE ASSERTIONS PER RUN, and a lane that refuses is a FAILURE here, not a
+row: this is a release gate, not a measurement.
+
+ONE EXCEPTION, AND IT IS AN ASSERTION RATHER THAN AN EXEMPTION. `gemm-pinned`
+asks `linalg.matmul(..., identical=True)`, and under `fast` and
+`deterministic` the library REFUSES it by name, because those tiers make no
+cross-vendor claim and returning a product anyway would be the library
+asserting something it cannot honour. `repeat_run_stability.py`'s own lane
+says so: "REFUSED under fast, which is the correct answer and is reported
+rather than skipped."
+
+The first NVIDIA wheel leg (2026-08-30) failed the fast and deterministic
+smokes on exactly this, 28 of 29 lanes green, and the one red one was the
+library behaving correctly. So `designed_refusals()` below inverts the test
+for those pairs instead of skipping them (since DEVIATION 2490 that is every
+non-tree lane under fast and deterministic, not only gemm-pinned): the lane must RAISE, and a lane that
+SUCCEEDS is the failure. A skip would have hidden a library that quietly
+started honouring an identity request under a tier that cannot keep it.
+
+  1. `mojolearn.numeric_mode()` reads back the tier that was asked for.
+  2. `mojolearn.vendor()` reads back the vendor the box is (`--vendor`),
+     and `_backend.vendor_how()` says how it was decided.
+  3. `vendor_used()` on one estimator per binding agrees with (2). This
+     touches every binding through the parameter path, not only the
+     canonical import path.
+
+Exit 0 only when every lane fitted and every read-back agreed.
+"""
+
+import argparse
+import importlib.util
+import json
+import os
+import pathlib
+import sys
+import time
+import traceback
+
+
+#: THE LANES THAT RUN IN EVERY TIER: the ones whose only binding is a tree
+#: lane (`_mojolearn_gbdt`, `_mojolearn_rf`, `_mojolearn_trees`). Since
+#: DEVIATION 2490 (2026-09-10) those three are the ONLY bindings with a fast
+#: or deterministic tier; every other binding is identical only, so every
+#: other lane must REFUSE under the two lower tiers, and a lane that answers
+#: there is the failure (a lower-tier binary got back into the wheel). This
+#: is an allowlist on purpose: a lane added tomorrow is expected to refuse
+#: until someone puts it here, which is the safe direction to be wrong in.
+TREE_LANES = frozenset({
+    "rf-clf", "rf-reg", "et-clf", "et-reg",
+    "gbdt-depthwise", "gbdt-lossguide", "gbdt-symmetric", "gbdt-rmse",
+})
+LOWER_TIERS = ("fast", "deterministic")
+
+
+def designed_refusals(lane_names):
+    """(lane, tier) pairs where the library is REQUIRED to refuse. See the
+    module docstring: the lane must RAISE, naming the identical tier, and a
+    lane that SUCCEEDS is the failure. `gemm-pinned` was the first such pair
+    (matmul(identical=True) under a tier that makes no identity claim); as
+    of DEVIATION 2490 every non-tree lane joins it."""
+    return {(lane, tier) for lane in lane_names if lane not in TREE_LANES
+            for tier in LOWER_TIERS}
+
+
+def load_lanes(repo):
+    p = pathlib.Path(repo) / "tools" / "repeat_run_stability.py"
+    spec = importlib.util.spec_from_file_location("repeat_run_stability", p)
+    m = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(m)
+    return m.LANES
+
+
+# One class per binding THAT CARRIES NumericModeMixin, constructed only (no
+# fit): `vendor_used()` resolves the binding through `_bind()` and reads the
+# constant out of it. The solver, metrics, tsa and linalg bindings have no
+# mixin class (their impl modules carry private loaders), so those four are
+# read through `_backend.binding(name)` in the loop below, which is the same
+# read on the same tier.
+PER_BINDING = {
+    "_mojolearn": lambda ml: ml.KMeans(n_clusters=2),
+    "_mojolearn_gbdt": lambda ml: ml.GradientBoosting(n_estimators=1),
+    "_mojolearn_estimators": lambda ml: ml.PCA(n_components=1),
+    "_mojolearn_rf": lambda ml: ml.RandomForestClassifier(n_estimators=1),
+    "_mojolearn_trees": lambda ml: ml.ExtraTreesRegressor(n_estimators=1),
+    "_mojolearn_svm": lambda ml: ml.SVC(),
+    "_mojolearn_gp": lambda ml: ml.GaussianProcessRegressor(),
+    # Workstream D, 2026-09-14. `KernelRidge`, `GaussianMixture` and
+    # `HDBSCAN` take trivial constructors; the resample binding exports
+    # functions, so it is read through `_backend.binding` like solver's.
+    "_mojolearn_kernel_methods": lambda ml: ml.KernelRidge(),
+    "_mojolearn_mixture": lambda ml: ml.GaussianMixture(),
+    "_mojolearn_hdbscan": lambda ml: ml.HDBSCAN(),
+    # 2026-09-14: IVFIndex takes a trivial constructor; Embedding needs its
+    # table, and a 1 x 1 one is enough to resolve the binding.
+    "_mojolearn_ivf": lambda ml: ml.IVFIndex(n_lists=1, n_probes=1),
+    "_mojolearn_embedding": lambda ml: ml.Embedding(1, 1, weight=[[0.0]]),
+}
+# THIS LIST SHIPPED SHORT, THE SAME WAY pack_wheel.py's DID.
+#
+# It carried thirteen of the fifteen bindings: `_mojolearn_mamba` and
+# `_mojolearn_transformer` were absent, so the release smoke never LOADED
+# either one. That is the same two names, and the same class of miss, that
+# left the 0.4.0 Linux wheel shipping `_mamba_impl.py` and
+# `_transformer_impl.py` with no `.so` behind them -- and this file is the
+# gate that should have caught that and could not, because a name absent
+# from the list is never looked for and never missed.
+#
+# Neither takes a trivial constructor -- `Mamba1Block` and `TransformerBlock`
+# both require real weight arrays -- so they get the treatment solver,
+# metrics, tsa and linalg already get: loaded through `_backend.binding(name)`
+# and asked for their vendor and tier constants. That does not exercise the
+# math, and it does prove the extension is PRESENT, LOADS, and reports the
+# tier it was filed under, which is what a release smoke is for.
+ALL_BINDINGS = (
+    "_mojolearn", "_mojolearn_gbdt", "_mojolearn_estimators", "_mojolearn_rf",
+    "_mojolearn_trees", "_mojolearn_svm", "_mojolearn_solver",
+    "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa", "_mojolearn_linalg",
+    "_mojolearn_arima", "_mojolearn_training", "_mojolearn_gp",
+    "_mojolearn_mamba", "_mojolearn_transformer",
+    # Workstream D, 2026-09-14: the four door-less families given a binding.
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample", "_mojolearn_ivf", "_mojolearn_embedding",
+)
+
+#: EVERY BINDING BUT THE THREE TREE LANES BUILDS IDENTICAL ONLY (DEVIATION
+#: 2490, 2026-09-10). They stay in `ALL_BINDINGS` above ON PURPOSE. Deleting
+#: a name from that tuple is exactly the miss this file's header is about: a
+#: name absent from the list is never looked for and never missed, which is
+#: how the 0.4.0 Linux wheel shipped `_mamba_impl.py` with no `.so` behind it.
+#:
+#: So the test is INVERTED for these names below rather than skipped, the way
+#: `designed_refusals()` inverts it for lanes. Under `identical` they must
+#: load and read back the vendor. Under `fast` and `deterministic` they must
+#: RAISE, and one that LOADS is the failure -- that would mean a lower-tier
+#: binary got back into the wheel, which is the whole thing this rule
+#: removed. `main()` checks this set against the installed package's own
+#: `_backend._IDENTICAL_ONLY`, so the two cannot drift apart unnoticed.
+IDENTICAL_ONLY_BINDINGS = frozenset({
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm",
+    "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
+    "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
+    "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
+    "_mojolearn_byte_lm",
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample", "_mojolearn_ivf", "_mojolearn_embedding",
+})
+
+
+#: Lines MAX appends to a message that carry no cause. A message made only
+#: of these is a message with its cause thrown away.
+_NOISE = (
+    "To get more accurate error information",
+    "set MODULAR_DEBUG",
+)
+
+
+def _cause(exc, full):
+    """The most informative single line of a raised message.
+
+    Walks the exception's own `str()` first and falls back to the traceback,
+    taking the FIRST line that is not blank, not a traceback frame and not
+    one of MAX's trailing hints. If every line is noise the whole trimmed
+    message is returned rather than a hint, because a gate that reports only
+    "set MODULAR_DEBUG" has reported nothing."""
+    for text in (str(exc), full):
+        for ln in text.splitlines():
+            s = ln.strip()
+            if not s or s.startswith(("File \"", "Traceback", "^", "~", "|")):
+                continue
+            if any(n in s for n in _NOISE):
+                continue
+            return s
+    return _trim(full)
+
+
+def _trim(text, head=24, tail=8):
+    """The whole message when it is small, otherwise its head AND its tail.
+    Never the tail alone."""
+    lines = text.strip().splitlines()
+    if len(lines) <= head + tail:
+        return "\n".join(lines)
+    return "\n".join(lines[:head] + [f"    ... {len(lines) - head - tail} lines elided ..."] + lines[-tail:])
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--vendor", required=True, choices=("cuda", "hip", "metal"))
+    ap.add_argument("--arch", default="", help="the architecture the set was "
+                    "built for (sm_90a, gfx942, ...); asserted against "
+                    "gpu_arch() when given")
+    ap.add_argument("--json", default="")
+    ap.add_argument("--repo", default=os.environ.get(
+        "MOJOLEARN_REPO", str(pathlib.Path(__file__).resolve().parents[1])))
+    ap.add_argument("--lanes", default="", help="comma list; default all")
+    a = ap.parse_args()
+
+    want_mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower() or "fast"
+    report = {"vendor_wanted": a.vendor, "mode_wanted": want_mode,
+              "python": sys.version.split()[0], "lanes": {}, "ok": False}
+    failures = []
+
+    import mojolearn as ml
+    from mojolearn import _backend
+    # A foreign library's argtypes on the shared ctypes.pythonapi buffer
+    # pointers (treelite.model's spelling, as cuML imports it), armed after
+    # the import and before any lane, so every fit below also proves our
+    # conversions no longer share them (the 0.8.0 bug; the tool says why the
+    # order matters).
+    spec = importlib.util.spec_from_file_location(
+        "check_buffer_foreign_argtypes",
+        pathlib.Path(a.repo) / "tools" / "check_buffer_foreign_argtypes.py")
+    foreign = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(foreign)
+    report["foreign_argtypes"] = foreign.poison_pythonapi()
+    if report["foreign_argtypes"] is None:
+        failures.append("foreign argtypes did not land on ctypes.pythonapi.PyObject_GetBuffer")
+    report["mojolearn_file"] = ml.__file__
+    report["version"] = ml.__version__
+
+    mode = ml.numeric_mode()
+    report["mode_loaded"] = mode
+    if mode != want_mode:
+        failures.append(f"numeric_mode() read back {mode!r}, asked for {want_mode!r}")
+
+    vendor = ml.vendor()
+    report["vendor_loaded"] = vendor
+    report["vendor_how"] = _backend.vendor_how()
+    if vendor != a.vendor:
+        failures.append(f"vendor() read back {vendor!r}, the box is {a.vendor!r}")
+
+    # THE ARCHITECTURE AXIS (2026-08-30): the selector must have opened the
+    # architecture directory this leg built, chosen from the DEVICE, not
+    # from the directory being the only one there.
+    report["arch_loaded"] = _backend.gpu_arch()
+    report["arch_how"] = _backend.gpu_arch_how()
+    if a.arch and _backend.gpu_arch() != a.arch:
+        failures.append(
+            f"gpu_arch() read back {_backend.gpu_arch()!r} "
+            f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
+
+    if frozenset(_backend._IDENTICAL_ONLY) != IDENTICAL_ONLY_BINDINGS:
+        failures.append(
+            "IDENTICAL_ONLY_BINDINGS in this smoke != _backend._IDENTICAL_ONLY "
+            f"in the installed package: smoke-only {sorted(IDENTICAL_ONLY_BINDINGS - set(_backend._IDENTICAL_ONLY))}, "
+            f"package-only {sorted(set(_backend._IDENTICAL_ONLY) - IDENTICAL_ONLY_BINDINGS)}")
+
+    per = {}
+    names_to_load = ALL_BINDINGS
+    if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
+        names_to_load += ("_mojolearn_byte_lm",)
+    for name in names_to_load:
+        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
+        try:
+            per[name] = _backend.read_vendor(_backend.binding(name))
+        except Exception as exc:
+            per[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+        if must_refuse:
+            # A LOADED binary here is the failure. It would mean a lower-tier
+            # .so of an identical-only lane is back in the wheel.
+            if not per[name].startswith("REFUSED"):
+                failures.append(
+                    f"{name}: LOADED under mode={mode}, where it must refuse; "
+                    f"this lane builds identical only and a {mode} binary "
+                    f"must not exist (read-back {per[name]!r})")
+            continue
+        if per[name] != a.vendor:
+            failures.append(f"{name}: read-back = {per[name]!r}")
+    report["vendor_per_binding"] = per
+    # THE CPU TRAINING BINDING (DEVIATION 2680). Reached through its own path
+    # helper and NEVER _backend.binding(), because that selector refuses a
+    # binary whose vendor read-back is not a GPU API and this one reads back
+    # 'cpu' by design. Nothing in the loop above would notice its absence, and
+    # an inference-only binding loads perfectly while having no train step --
+    # which is exactly what shipping the export without the entry produces.
+    if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
+        try:
+            from mojolearn import _byte_lm_host
+            host_path = pathlib.Path(_byte_lm_host.binary_path()).resolve()
+            host_module = _byte_lm_host._load()
+            host = {"path": str(host_path),
+                    "numeric_mode": int(host_module.byte_lm_host_numeric_mode()),
+                    "vendor": str(host_module.byte_lm_host_vendor()),
+                    "train_step": callable(getattr(host_module, "byte_lm_host_train_step", None))}
+            report["host_binding"] = host
+            if host["numeric_mode"] != 1:
+                failures.append(f"_mojolearn_byte_lm_host: numeric mode read back "
+                                f"{host['numeric_mode']}, must be identical (1)")
+            if host["vendor"] != "cpu":
+                failures.append(f"_mojolearn_byte_lm_host: vendor read back "
+                                f"{host['vendor']!r}, must be 'cpu'")
+            if not host["train_step"]:
+                failures.append("_mojolearn_byte_lm_host: no byte_lm_host_train_step; "
+                                "the wheel carries an inference-only binding")
+        except Exception as exc:
+            report["host_binding"] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+            failures.append(f"_mojolearn_byte_lm_host: {report['host_binding']}")
+        # EVERY HOST BINDING THE MANIFEST SHIPS (the packaging lane,
+        # 2026-09-14), through the package's own host loader, which refuses a
+        # binding that does not read back vendor cpu, IDENTICAL and the CPU
+        # kernel-matrix column. The list is the manifest's, never a copy here:
+        # a family added to host_surface.py is looked for on the next smoke
+        # without an edit to this file, and one missing from the wheel fails.
+        from mojolearn import _backend, host_surface
+        hosts = {}
+        host_exports = {family['binding']: family['exports'] for family in host_surface.FAMILIES}
+        for name in host_surface.wheel_bindings():
+            prefix = name[len("_mojolearn_"):]
+            try:
+                module = _backend.load_host_module(name)
+                missing = [export for export in host_exports[name]
+                           if not callable(getattr(module, export, None))]
+                if missing:
+                    raise ImportError(f'missing callable host exports: {missing}')
+                hosts[name] = {"vendor": str(getattr(module, prefix + "_vendor")()),
+                               "numeric_mode": int(getattr(module, prefix + "_numeric_mode")()),
+                               "column": str(getattr(module, prefix + "_column")())}
+            except Exception as exc:
+                hosts[name] = f"REFUSED {type(exc).__name__}: {exc}"[:200]
+                failures.append(f"{name}: {hosts[name]}")
+        report["host_bindings"] = hosts
+    used = {}
+    for name, ctor in PER_BINDING.items():
+        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
+        try:
+            used[name] = ctor(ml).vendor_used()
+        except Exception as exc:
+            used[name] = f"REFUSED {type(exc).__name__}: {exc}"
+        if must_refuse:
+            # The estimator path must refuse the same way the import path
+            # did, and it must say WHY: a refusal that does not name the
+            # identical tier is a different fault being passed as this one.
+            if not used[name].startswith("REFUSED") or "identical" not in used[name].lower():
+                failures.append(
+                    f"{name}: estimator ANSWERED or failed for another reason "
+                    f"under mode={mode}, where it must refuse by name "
+                    f"(vendor_used() = {used[name]!r})")
+            continue
+        if used[name] != a.vendor:
+            failures.append(f"{name}: vendor_used() = {used[name]!r}")
+    report["vendor_used_per_estimator"] = used
+
+    lanes = load_lanes(a.repo)
+    names = [n for n in sorted(lanes) if not a.lanes or n in a.lanes.split(",")]
+    refusals = designed_refusals(lanes)
+    for name in names:
+        t0 = time.time()
+        must_refuse = (name, mode) in refusals
+        try:
+            h = lanes[name](ml)
+            if must_refuse:
+                # The library answered a question this tier is not allowed
+                # to answer. That is worse than a lane failing.
+                msg = (f"lane {name} RETURNED a result under mode={mode}, "
+                       f"where it must refuse: only the tree lanes ship "
+                       f"this tier (DEVIATION 2490), so a lower-tier binary "
+                       f"of an identical-only lane is back in the wheel")
+                report["lanes"][name] = {"ok": False, "error": msg,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(msg)
+                print(f"  {name:<16} FAIL {msg[:120]}")
+            else:
+                report["lanes"][name] = {"ok": True, "hash": h,
+                                         "seconds": round(time.time() - t0, 2)}
+                print(f"  {name:<16} ok   {h}  {time.time()-t0:6.1f}s")
+        except Exception as exc:
+            # NEVER `splitlines()[-1]`. MAX raises a multi-line message whose
+            # CAUSE is on the first line and which then repeats
+            # "To get more accurate error information, set MODULAR_DEBUG=..."
+            # one to three times at the end. Taking the last line recorded
+            # that hint for all 27 failing lanes of the 2026-08-30 A40 leg
+            # and threw the actual reason away, so the board said only that
+            # something went wrong and not one word about what. This is the
+            # third time today a gate has been caught reading a tail: see
+            # sabotage.py's six-line window and audit.sh's grep -c.
+            full = traceback.format_exc()
+            report_err = _trim(full)
+            short = _cause(exc, full)
+            if must_refuse and "identical" not in full.lower():
+                # It raised, but not the refusal this tier owes. A bare
+                # "it failed" would pass any fault under the lower tiers.
+                report["lanes"][name] = {"ok": False, "error": short,
+                                         "error_full": report_err,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(f"lane {name}: raised under {mode} but not the "
+                                f"identical-only refusal: {short}")
+                print(f"  {name:<16} FAIL raised, not the designed refusal: {short[:120]}")
+            elif must_refuse:
+                report["lanes"][name] = {"ok": True, "refused": short,
+                                         "refused_full": report_err,
+                                         "designed_refusal": True,
+                                         "seconds": round(time.time() - t0, 2)}
+                print(f"  {name:<16} ok   REFUSED as designed under {mode}")
+            else:
+                report["lanes"][name] = {"ok": False, "error": short,
+                                         "error_full": report_err,
+                                         "seconds": round(time.time() - t0, 2)}
+                failures.append(f"lane {name}: {short}")
+                print(f"  {name:<16} FAIL {short[:160]}")
+
+    report["failures"] = failures
+    report["ok"] = not failures
+    if a.json:
+        pathlib.Path(a.json).write_text(json.dumps(report, indent=2, sort_keys=True))
+    print(f"smoke v{ml.__version__} mode={mode} vendor={vendor} "
+          f"({report['vendor_how']}) lanes={len(names)} "
+          f"{'PASS' if not failures else 'FAIL'}")
+    for f in failures:
+        print("  ", f)
+    return 0 if not failures else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())

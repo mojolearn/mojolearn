@@ -157,3 +157,14 @@ readback block: 3/3/23 binding inventories, missing/modified modules and wrong
 compiled mode. Together with admission/end-to-end tests: 29 passed, 33 subtests.
 The external qualification driver also derives the expected job names from
 `expected_jobs` (11), instead of a stale literal 25.
+
+Qualification v2 loaded the correct 3/3/23 inventories, then exposed a second
+legacy smoke bug: `vendor_used()` exception messages were truncated to 200
+characters before looking for `identical`. Long, correct tier refusals were
+therefore marked wrong. All actual tree fits passed; all IDENTICAL jobs passed.
+Rental `601624657` was deleted HTTP 404. `tools/release_linux_smoke.py` preserves
+the full exception before classification and retains the same fits/refusal
+requirements; the qualification-only successor is hashed with all tools.
+The original smoke stays unchanged in native build provenance. The focused
+regression includes a long valid refusal and a long unrelated failure;
+combined qualification tests now pass 30 tests and 35 subtests.

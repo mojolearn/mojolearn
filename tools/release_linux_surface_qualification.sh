@@ -220,7 +220,7 @@ PYJOBS
         export MOJOLEARN_INSTALLED_RECORD="$DEST/$surface-$mode.installed.json"
         args=()
         if [[ "$surface" = smoke ]]; then
-            test="$ROOT/packaging/linux/smoke.py"
+            test="$ROOT/tools/release_linux_smoke.py"
             args=(--vendor "$VENDOR" --json "$DEST/smoke-$mode.json")
         elif [[ "$surface" = byte-lm ]]; then
             test="$ROOT/tools/byte_lm_installed_step.py"

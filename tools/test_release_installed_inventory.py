@@ -66,6 +66,23 @@ class InstalledInventoryTests(unittest.TestCase):
         with self.assertRaisesRegex(AssertionError, 'Installed binary differs'):
             self.readback('identical', changed='_mojolearn_preprocessing')
 
+    def test_refusal_classification_uses_complete_exception(self):
+        source = (ROOT / 'tools/release_linux_smoke.py').read_text()
+        block = '    used = {}' + source.split('    used = {}', 1)[1].split('    lanes = load_lanes', 1)[0]
+        import textwrap
+        for message, should_fail in [('x' * 240 + ' IDENTICAL only', False),
+                                     ('x' * 240 + ' runtime loader failed', True)]:
+            with self.subTest(message=message[-30:]):
+                def ctor(ml):
+                    raise ValueError(message)
+                failures = []
+                context = dict(PER_BINDING={'new_binding': ctor}, IDENTICAL_ONLY_BINDINGS={'new_binding'},
+                               mode='fast', ml=None, a=types.SimpleNamespace(vendor='hip'),
+                               failures=failures, report={})
+                exec(compile(textwrap.dedent(block), 'smoke-refusal', 'exec'), context)
+                self.assertEqual(bool(failures), should_fail)
+                self.assertIn(message, context['used']['new_binding'])
+
     def test_wrong_compiled_mode_fails(self):
         with self.assertRaises(AssertionError):
             self.readback('fast', wrong_mode=True)
