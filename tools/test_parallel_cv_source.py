@@ -5,16 +5,15 @@ from pathlib import Path
 from unittest.mock import patch
 
 from parallel_cross_val_check import source_identity
+from mojolearn._verify_parallel_cv import PROFILE_FILES
 
 
 class SourceIdentityTests(unittest.TestCase):
     def test_archive_requires_full_commit_and_hashes_actual_payload(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            for name in ('tools/parallel_cross_val_check.py', 'tools/parallel_cv_witness.py',
-                         'python/mojolearn/parallel_model_selection.py',
-                         'python/mojolearn/_gpu_witness.py', 'python/mojolearn/_parallel_worker.py'):
-                path = root / name
+            for name in PROFILE_FILES:
+                path = root / 'python/mojolearn' / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text('actual source')
             with patch.dict(os.environ, {'MOJOLEARN_COMMIT': 'a' * 40}):
