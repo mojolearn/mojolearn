@@ -120,6 +120,8 @@ NOT_ALGORITHMS = frozenset({
     "gpu_arch_how", "Array",
     "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
     "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
+    "linalg.PROFILE_BF16", "linalg.PROFILE_INT8", "lowbit.FORMATS",
+    "lowbit.BF16Weight", "lowbit.Int8Weight", "tokenizer.TrainedBpeVocabulary",
     "training.numeric_mode_used", "training.vendor_used",
     "resample.BootstrapResult", "resample.PermutationTestResult",
     "resample.MonteCarloResult", "resample.STATISTICS", "resample.METHODS",
@@ -131,6 +133,15 @@ NOT_ALGORITHMS = frozenset({
     "Mamba1State", "Mamba2State", "Mamba3State", "TransformerState",
     "mamba.Mamba1State", "mamba.Mamba2State", "mamba.Mamba3State",
     "transformer.TransformerState",
+    "models.CausalLMState", "models.HFConfig", "models.ModelPlan",
+    "models.UnsupportedModel", "models.FAMILIES", "models.PATTERNS",
+    "models.causal_lm.CausalLMState", "models.config.HFConfig",
+    "models.config.ModelPlan", "models.config.UnsupportedModel",
+    "models.config.FAMILIES", "models.config.INTERFACE_DEFAULTS",
+    "models.config.FIXED_TODAY", "models.config.POSITION_CEILING",
+    "models.tokenizer.PATTERNS", "models.safetensors.TensorInfo",
+    "models.safetensors.DTYPES", "models.safetensors.INDEX_NAME",
+    "models.safetensors.SINGLE_NAME",
 })
 
 
@@ -355,6 +366,38 @@ EXTRA_PUBLIC_MODULES = (
 )
 
 
+def package_export(path, export, seen=None):
+    """Resolve a nested package export without importing or executing it.
+
+    Resolution stays in its defining module: models.Tokenizer must never be
+    assigned the implementation or verification of a same-named root symbol.
+    """
+    path = Path(path)
+    seen = set() if seen is None else seen
+    key = (path, export)
+    fallback = ("name", os.path.relpath(path, ROOT), export)
+    if key in seen or not path.is_file():
+        return fallback
+    seen.add(key)
+    for node in ast.parse(path.read_text()).body:
+        if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == export:
+            kind = "class" if isinstance(node, ast.ClassDef) else "function"
+            return kind, os.path.relpath(path, ROOT), export
+        if isinstance(node, ast.ImportFrom) and node.level and node.module:
+            for alias in node.names:
+                if (alias.asname or alias.name) == export:
+                    parent = path.parent
+                    for _ in range(node.level - 1):
+                        parent = parent.parent
+                    target = parent.joinpath(*node.module.split("."))
+                    target = target / "__init__.py" if target.is_dir() else target.with_suffix(".py")
+                    return package_export(target, alias.name, seen)
+        if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == export for t in node.targets):
+            if isinstance(node.value, ast.Name):
+                return package_export(path, node.value.id, seen)
+    return fallback
+
+
 def public_surface():
     """The shipped surface as {name: (kind, where, target)}, name being a
     top-level export or `<submodule>.<export>`, and `target` the real class
@@ -370,6 +413,23 @@ def public_surface():
         return kind, where, target
 
     for name in top:
+        package = Path(ROOT) / "python/mojolearn" / name
+        if (package / "__init__.py").is_file():
+            # Public packages have their own export lists and public child
+            # modules. Previously `models` was one unresolved name, hiding
+            # every loader, tokenizer and whole-model API beneath it.
+            for path in sorted(package.rglob("*.py")):
+                relative = path.relative_to(package)
+                if any(p.startswith("_") for p in relative.parts[:-1]):
+                    continue
+                if path.name.startswith("_") and path.name != "__init__.py":
+                    continue
+                parts = relative.parts[:-1] if path.name == "__init__.py" else (*relative.parts[:-1], path.stem)
+                module = ".".join((name, *parts))
+                modules.append(module)
+                for export in module_all(path):
+                    surface[f"{module}.{export}"] = package_export(path, export)
+            continue
         sub = os.path.join(ROOT, f"python/mojolearn/{name}.py")
         if os.path.exists(sub) and name not in index:
             modules.append(name)
@@ -388,6 +448,10 @@ def public_surface():
                     "function", "python/mojolearn/_metrics_impl.py", node.name)
     for module in EXTRA_PUBLIC_MODULES:
         path = os.path.join(ROOT, f"python/mojolearn/{module}.py")
+        if not Path(path).is_file():
+            # Older published wheels legitimately predate these modules.
+            # Absence belongs in the comparison, not an invented API entry.
+            continue
         tree = ast.parse(Path(path).read_text())
         declared = module_all(path)
         modules.append(module)
@@ -603,7 +667,8 @@ def algorithm_rows(harness, lanes, surface, harness_refs, family_of):
         if name in NOT_ALGORITHMS or kind == "module":
             continue
         short = name.split(".")[-1]
-        want = {name} if name.split(".")[0] in EXTRA_PUBLIC_MODULES else {name, short, target}
+        qualified = name.split(".")[0] in EXTRA_PUBLIC_MODULES or name.startswith("models.")
+        want = {name} if qualified else {name, short, target}
         mine = sorted(l for l, r in refs.items() if want & r)
         rowset = [lanes[l] for l in mine]
         algos[name] = dict(
@@ -854,7 +919,7 @@ def main():
     if args.write:
         with open(path, "w") as fh:
             fh.write(text)
-        print(f"wrote {DOC}: {len(data['lanes'])} lanes, {len(data['algorithms'])} algorithms, "
+        print(f"wrote {DOC}: {len(data['lanes'])} lanes, {len(data['algorithms'])} public API entries, "
               f"{data['columns']} columns read")
         return 0
     if args.check:
@@ -867,7 +932,7 @@ def main():
             print(f"verification_matrix: {DOC} is STALE; run --write", file=sys.stderr)
             return 1
         print(f"verification_matrix OK: {DOC} matches the tree "
-              f"({len(data['lanes'])} lanes, {len(data['algorithms'])} algorithms)")
+              f"({len(data['lanes'])} lanes, {len(data['algorithms'])} public API entries)")
         return 0
     sys.stdout.write(text)
     return 0

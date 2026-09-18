@@ -1,6 +1,7 @@
 """Installed-package verification scope; inspection never executes a lane."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from . import host_surface
@@ -16,6 +17,38 @@ def declaration(spec):
     if isinstance(spec, str) and spec.startswith("n/a:"):
         return dict(kind="not_applicable", reason=spec)
     return dict(kind="undeclared", reason="no explicit verification contract")
+
+
+def reference_support(table, lane, fixtures, parts, stale=False):
+    """Expose which current numerical answers each device class supports.
+
+    An old, conflicting or N/A entry is not a numerical witness. These are
+    reference-table counts, not executions of the installed wheel.
+    """
+    result = {}
+    for part in parts:
+        row = dict(numerical_fixtures=0, not_applicable_fixtures=0,
+                   missing_or_conflicted_fixtures=0, stale_fixtures=0,
+                   agreeing_device_classes={c: 0 for c in ('cpu', 'apple', 'nvidia', 'amd')})
+        for fixture in fixtures:
+            ent = vref.entry(table, lane, fixture, part)
+            if stale:
+                row['stale_fixtures'] += 1
+                continue
+            ref = ent.get('ref') if ent else None
+            if not ent or ent.get('conflict') or not isinstance(ref, str):
+                row['missing_or_conflicted_fixtures'] += 1
+            elif ref.startswith('n/a:'):
+                row['not_applicable_fixtures'] += 1
+            elif re.fullmatch('[0-9a-f]{16}', ref):
+                row['numerical_fixtures'] += 1
+                for cls, column in vref.columns_of(table, ent).items():
+                    if cls in row['agreeing_device_classes'] and column['agrees']:
+                        row['agreeing_device_classes'][cls] += 1
+            else:
+                row['missing_or_conflicted_fixtures'] += 1
+        result[part] = row
+    return result
 
 
 def inventory(harness, table, vendor_class):
@@ -63,6 +96,8 @@ def inventory(harness, table, vendor_class):
                                requires_gpu_for_execution=name not in covered,
                                physical_multi_gpu_measured_by_cpu=False),
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES),
+                           reference_support=reference_support(table, name, harness.FIXTURES,
+                                                               refs, stale=name in stale),
                            reference_admission=table.get('lane_admission', {}).get(name,
                                dict(policy=table.get('admission_policy', dict(status='legacy')))))
     for name, lane in lanes.items():
