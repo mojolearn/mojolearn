@@ -1,5 +1,56 @@
 # LANE STATUS: lane/attention-fallback-fix
 
+**FOR A READER WITH NO CONTEXT. READ THIS BOX FIRST.**
+
+- **THE TRIGGER IS NAMED AND REPRODUCED ON TWO BOXES.** `FUSED_CORNER`
+  (status 2), in the BACKWARD ONLY. Over 8,400 observations (12 layers x 700
+  steps) per direction: forward `FUSED_RAN` 8,400 and nothing else; backward
+  `FUSED_RAN` 4,703, `FUSED_CORNER` 3,697. **Zero `FUSED_REFUSED_REGIME`
+  anywhere**, which retires the regime bound by measurement. The second leg,
+  a different pod and a different commit, read **3,697 again**.
+- **EVERY RUN HERE IS 700 STEPS.** Nothing in this document comes from a
+  short run. A 100 or 200 step run cannot see this fallback.
+- **THE BRIEF'S ITEM 2 IS WORTH 0.5%, NOT 2.13x.** The discarded fused launch
+  is 0.00237 s a step. The 2.13x IS the eager path's own speed: a forced-eager
+  arm reads 0.45504 s at the HEAD and 0.45500 at the TAIL, i.e. it costs
+  0.455 s from step 0 and never changes.
+- **STEP TIME** (median, step 0 excluded): today's behavior head 0.19791 s,
+  tail 0.45737 s. Device 15,151 -> 31,537 MB, `eager_bytes` 432 ->
+  17,314,086,912, twelve layers grown. **The latch (3110) and the guard
+  (3111) each move NO BIT and each leave those numbers where they are.**
+- **BATCH 4 OOMs FOR REAL at step ~361** (`CUDA_ERROR_OUT_OF_MEMORY` out of
+  `byte_lm_session_step`), not the brief's step 210. It does not reach 2,000.
+- **`attn_materialized` PLUMBING IS DONE AND RUNNING.** Per layer, per step,
+  per direction: `forward_status`, `backward_status`, their named `*_counts`,
+  and `attn_materialized`, out through `byte_lm_session_info` into
+  `attention_stage_report()`. Statuses 0/1/2 plus 3 `FUSED_SKIPPED_STICKY`.
+- **EVIDENCE**: `bench/results/e1g/2026-09-18_lm-attention-fallback-nvidia-h100/`
+  and `bench/results/e1g/2026-09-18_lm-attention-guard-nvidia-h100/`, both
+  committed. Local logs `~/mojolearn-evidence/attention-fallback-fix/`.
+- **PODS**: `rhjqy941tjl5yw` (leg 1) and `h6o7o98tid619l` (leg 2) are both
+  TERMINATED and VERIFIED gone (HTTP 404). **`5guu23hvyqj7tg` IS STILL OUT**
+  as of this writing, running leg 3 (`-p 11076 root@103.207.149.101`), armed
+  with a 60-minute pod-side dead-man, launched 05:01:38 ET 2026-09-18.
+- **THE EXACT NEXT COMMAND**, if leg 3 was lost:
+
+      cd ~/mojolearn-wt/attention-fallback-fix
+      MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
+      MOJOLEARN_GPU_ARCHS=sm_90a MOJOLEARN_STAGE_STRICT=1 \
+      MOJOLEARN_STAGE_KEYS="corpus/enwik8/input.txt" \
+      MOJOLEARN_GEMM_LEG_EXTRA=tools/lm_attention_norefuse_body.sh \
+      sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent \
+          --allow-concurrent --minutes 60 --gpu "NVIDIA H100 80GB HBM3"
+
+  then read `<leg out>/remote/lm-attention-norefuse/verdict.log`. It answers
+  THE remaining question: with `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1` the
+  backward keeps its own output on a corner instead of falling back, and the
+  bit comparison against the refusing arm says whether those 3,449 remaining
+  refusals are REAL. Equal means the 2.13x is recoverable; different means the
+  fallback is earning its cost and only the signed-zero repair at the end of
+  this document can remove it. Either answer is the result.
+
+---
+
 Branch `lane/attention-fallback-fix`, off `origin/main` at `1863520e9`.
 Brief: `docs/lanes/PROMPT_1_eager_attention_fallback.txt`.
 Worktree `~/mojolearn-wt/attention-fallback-fix`. Evidence
@@ -191,6 +242,38 @@ reporting both lengths, so a short list is VISIBLE rather than fatal. It
 reached ~320 steps at batch 4 before dying, which is past the step 210 the
 brief gives for the batch-4 OOM, but the crash is the instrument's and no
 claim is made from it.
+
+## 6. LEG 2: DEVIATION 3111 IS BIT-SAFE AND INSUFFICIENT
+
+H100 sm_90a, pod h6o7o98tid619l, 2026-09-18, 700 steps per arm.
+`bench/results/e1g/2026-09-18_lm-attention-guard-nvidia-h100/`.
+
+THE CONTROL REPRODUCED TO THE OBSERVATION: 3,697 backward corners against the
+first leg's 3,697; tail 0.45734 s against 0.45737; head 0.19814 against
+0.19791; forward 8,400 `FUSED_RAN` against 8,400. Two boxes, two commits, the
+same numbers. G0 CONFIRMED.
+
+    G1 backward corners -> 0            FALSIFIED: 3,697 -> 3,449 (6.7% removed)
+    G2 nothing grows                    FALSIFIED: still 17,314,086,912
+    G3 tail == head                     FALSIFIED: tail 0.45707, 1.0006x
+    G4 no bit moves                     CONFIRMED: 0 differing, 700 steps, 8 anchors
+    G5 memory comes back                FALSIFIED: 31,537 MB both ways
+    G6 batch 4 survives 2,000 steps     FALSIFIED: OOM at step ~361
+
+**REPORTED INERT, not passed.** The guard is a correct, bit-safe tightening of
+an over-conservative predicate and it buys NO time and NO memory. Four of six
+predictions falsified, which is what registering them was for.
+
+The remaining 3,449 are NOT dk/dv: after the guard, dk/dv cannot fire at
+`window == 0` and `n_rep == 1`. They are the `zdot` or `dq` chains. `dq` is
+nominally guarded (`j_hi < s - 1`, `:2871`) but at a causal mask `j_hi` is the
+query row, so that guard is true for every row but the last and buys almost
+nothing. The forward carries a structurally identical guard and still refuses
+ZERO times, so the difference is arithmetic, not predicate: the backward's
+gradients are the smallest magnitudes in the step and `ftz` of a negative
+subnormal is `-0.0` with its sign kept. That is why leg 3 asks whether the
+refusals are real rather than tightening another predicate.
+
 
 ---
 
