@@ -47,6 +47,27 @@ Completed:
   capture matches Apple on all 162 compared train/infer/model parts.
 - Fresh AMD gfx942 build at the native freeze: all 61 binding hashes and the
   source inventory verified; rental deleted (HTTP 404). R2 retention confirmed.
+- Fresh L40S sm_89 build at the same native freeze: all 61 hashes verified;
+  rental `6wvflzh63uxvn5` deleted with HTTP 404. The sequential driver then
+  started H100 `3ax175bzvtp775`; consult its log for current status.
+
+Packaging blocker found after the L40S fetch: every AMD host binding differs
+from its NVIDIA counterpart. The native source inventories match, but AMD's
+Ubuntu 24.04 GCC 13/linker startup differs from NVIDIA's Ubuntu 22.04 GCC 11.
+The packer's host byte-equality requirement correctly refuses this combination.
+`amd-l40s-host-elf-comparison.json` in the external evidence records the ELF
+comparison. Do not replace bytes in a build set or rewrite a proof to hide it.
+
+The optional `MOJOLEARN_RELEASE_UBUNTU22=1` mode in `do_release061_leg.sh`
+prepares a digest-pinned ROCm 6.4.1 Ubuntu 22.04 container for a complete AMD
+rebuild. It retains and hashes the controller-owned helper outside the frozen
+source archive, so the build source remains `c9541a011`. Set
+`MOJOLEARN_EXPECT_CORE_HOST_SHA256` to the fetched NVIDIA core-host digest;
+an early real core-host compile/stage must match before the full build begins.
+This mode has shell syntax and surrounding release test coverage; the actual
+container build is still pending. Wait for the active H100 rental to finish
+and be deleted before starting it. The earlier AMD build remains evidence,
+but is not packable with these NVIDIA sets.
 
 Unresolved release work:
 
