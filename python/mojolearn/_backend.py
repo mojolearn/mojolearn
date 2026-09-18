@@ -913,8 +913,8 @@ def host_families_built():
 #: bindings loaded by path, `_mojolearn_byte_lm_host`,
 #: `_mojolearn_forest_host` and `_mojolearn_tokenizer_host`, export their
 #: own names (`byte_lm_host_*`, `forest_host_*`, `tokenizer_host_*` and
-#: `gpt2_*`) for surfaces of their own (LanguageModelInference,
-#: LanguageModelHostTrainer, HostForest, HostGBDT, GPT2Tokenizer), are
+#: `bpe_*`) for surfaces of their own (LanguageModelInference,
+#: LanguageModelHostTrainer, HostForest, HostGBDT, BpeTokenizer), are
 #: loaded in `_byte_lm_host.py`, `_forest_host.py`, `_gbdt_host.py` and
 #: `tokenizer.py` (the last through `load_host_module` below), and are
 #: deliberately NOT routed: mapping `_mojolearn_rf` to the forest host

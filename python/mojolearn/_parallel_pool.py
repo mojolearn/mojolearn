@@ -43,10 +43,14 @@ from concurrent.futures import ThreadPoolExecutor
 #: Since lane/cpu-training-samba (2026-09-15) the training, mamba and
 #: transformer host bindings serve every call SambaStack makes, so both
 #: requests run the same host arithmetic the covered `samba` lane does.
+#: Random Fourier feature transforms also shard whole rows in Python. Each
+#: worker receives identical fitted weights/offsets and uses the kernel_methods
+#: host transform; ordered assembly in transform_rbf_sampler is unchanged.
+#: This is a logical-shard CPU route, not physical multi-GPU qualification.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
-    'forest_fit', 'mlp_gradient', 'samba_gradient',
+    'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
 ))
 
 #: The cooperative operations the CPU route admits, and only from a

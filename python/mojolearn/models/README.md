@@ -78,7 +78,7 @@ and runs its fp32 path (`lowbit.py`'s contract).
 
 | pattern | families | where it runs |
 | --- | --- | --- |
-| `gpt2` | GPT-2, GPT-NeoX, Pythia, the Mamba checkpoints | the compiled binding (`tokenizer/impl/pretokenize.mojo`) through `GPT2Tokenizer` |
+| `gpt2` | GPT-2, GPT-NeoX, Pythia, the Mamba checkpoints | the compiled binding (`tokenizer/impl/pretokenize.mojo`) through `BpeTokenizer` |
 | `llama3` | Llama 3.x, SmolLM2 | Python, `models/tokenizer.py::_pretoken_end_llama` over the byte codes, then the existing Python BPE merge `_tokenizer_synthetic._bpe` (the second implementation `check-tokenizer` holds the Mojo merge to) |
 | `qwen2` | Qwen 2, 2.5, 3 | as `llama3` with one digit per pre-token |
 

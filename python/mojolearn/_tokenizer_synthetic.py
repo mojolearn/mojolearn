@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """A small synthetic byte-level BPE vocabulary that mojolearn generates itself,
-and a second, pure Python encoder to hold `GPT2Tokenizer` to.
+and a second, pure Python encoder to hold `BpeTokenizer` to.
 
 WHY IT EXISTS. mojolearn ships no third-party vocabulary (2026-09-15). The
 tokenizer's gates (`pixi run check-tokenizer`,
@@ -309,7 +309,7 @@ def fixture():
 
 
 def write_ranks(tokens, path):
-    """`rank<TAB>hex` lines, the rank file `GPT2Tokenizer` loads."""
+    """`rank<TAB>hex` lines, the rank file `BpeTokenizer` loads."""
     with open(path, "w", encoding="ascii") as fh:
         for i, t in enumerate(tokens):
             fh.write(f"{i}\t{t.hex()}\n")

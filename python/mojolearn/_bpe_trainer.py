@@ -73,7 +73,7 @@ same thing rather than the other reading.
 ## TWO OUTPUT FORMATS
 
 `write_ranks` writes OUR format, `rank<TAB>hex_of_token_bytes` -- the file
-`tokenizer/impl/ranks.mojo` loads and `GPT2Tokenizer.from_ranks_file` reads.
+`tokenizer/impl/ranks.mojo` loads and `BpeTokenizer.from_ranks_file` reads.
 
 `write_tokenizer_json` writes a `tokenizer.json` Hugging Face `tokenizers`
 loads, so a model published with one of our vocabularies is usable by people

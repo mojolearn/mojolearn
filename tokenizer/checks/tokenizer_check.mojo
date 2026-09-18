@@ -50,8 +50,8 @@ from tokenizer.checks.json_lite import JsonFixture, load_fixture
 from tokenizer.encoding import (
     GPT2_ENDOFTEXT,
     GPT2_PAT_STR,
-    Gpt2Tokenizer,
-    load_gpt2_tokenizer_from,
+    BpeTokenizer,
+    load_bpe_tokenizer_from,
     string_bytes,
 )
 from tokenizer.impl.byte_unicode import (
@@ -86,7 +86,7 @@ def _bytes_hex(data: List[UInt8]) -> String:
 
 
 def _split_string(
-    tok: Gpt2Tokenizer, data: List[UInt8]
+    tok: BpeTokenizer, data: List[UInt8]
 ) raises -> String:
     """The pre-token split, each piece in the format's printable spelling between
     pipes. This is the first thing to read when ids disagree."""
@@ -115,7 +115,7 @@ def check_pattern_matches_fixture(fx: JsonFixture) raises -> Int:
     return 0
 
 
-def check_tables(tok: Gpt2Tokenizer, fx: JsonFixture) raises -> Int:
+def check_tables(tok: BpeTokenizer, fx: JsonFixture) raises -> Int:
     var bad = 0
     if tok.ranks.n_tokens() != fx.n_vocab - 1:
         print(
@@ -231,7 +231,7 @@ def check_byte_unicode_bijection() raises -> Int:
     return bad
 
 
-def check_pattern_reach(tok: Gpt2Tokenizer) raises -> Int:
+def check_pattern_reach(tok: BpeTokenizer) raises -> Int:
     """The alternatives whose absence would still pass a careless test.
 
     Each pair below differs ONLY in the alternative named, so a
@@ -319,7 +319,7 @@ def check_pattern_reach(tok: Gpt2Tokenizer) raises -> Int:
 
 def main() raises:
     print("tokenizer_check: byte-level BPE against " + String(FIXTURE))
-    var tok = load_gpt2_tokenizer_from(String(RANKS))
+    var tok = load_bpe_tokenizer_from(String(RANKS))
     var fx = load_fixture(String(FIXTURE))
 
     var bad = 0
