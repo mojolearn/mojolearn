@@ -154,6 +154,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_postround_class_flush_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -1196,8 +1197,8 @@ def identical_gemm_emit_kernel(
 # THE TUNED PLANS: register-blocked tiles, the same arithmetic
 # ===========================================================================
 
-#: The per-step seam as ONE hardware instruction where the kernel matrix
-#: says the column has it (`lib_hardware_ftz_fma_for`). Software seam
+#: NVIDIA RN FMA followed by the post-round hardware FTZ multiply, where
+#: the matrix exposes those intrinsics (`lib_hardware_ftz_fma_for`). Software seam
 #: everywhere else and in every non-IDENTICAL build.
 comptime TUNED_HW_FTZ_FMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
@@ -1222,6 +1223,25 @@ def _tuned_loaded_operand(v: Float32) -> Float32:
     return ftz(v)
 
 
+comptime TUNED_CLASS_FLUSH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and lib_postround_class_flush_for[TARGET_COLUMN]()
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_CLASS_FLUSH"]()
+)
+
+
+@always_inline
+def _ftz_class(x: Float32) -> Float32:
+    # Class 0x90 selects negative/positive subnormals, after FMA rounding.
+    comptime if lib_postround_class_flush_for[TARGET_COLUMN]():
+        var subnormal = llvm_intrinsic[
+            "llvm.amdgcn.class.f32", Bool, has_side_effect=False
+        ](x, Int32(0x90))
+        var zero = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
+        return zero if subnormal else x
+    return ftz(x)
+
+
 @always_inline
 def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     """Contract sections 4 and 5c for one `p`: `ftz(fma(a, b, acc))`, with
@@ -1232,7 +1252,9 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     value with hardware multiply-by-one. A single hardware FTZ FMA can
     flush before rounding at the smallest-normal boundary, unlike this
     two-instruction sequence. Inputs here are already flushed by callers.
-    This matches the NVIDIA software seam; other columns' underlying FMA
+    AMD classifies the rounded FMA result and flushes only subnormals,
+    preserving their sign. This matches the software post-round flush.
+    Other columns' underlying FMA
     rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:
@@ -1242,6 +1264,8 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         return llvm_intrinsic[
             "llvm.nvvm.mul.rn.ftz.f", Float32, has_side_effect=False
         ](rounded, Float32(1.0))
+    comptime if TUNED_CLASS_FLUSH:
+        return _ftz_class(identical_mul_add(a, b, acc))
     return ftz(identical_mul_add(a, b, acc))
 
 
