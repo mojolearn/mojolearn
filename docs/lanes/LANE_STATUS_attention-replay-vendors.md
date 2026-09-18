@@ -7,27 +7,17 @@ has them (docs/lanes/LANE_STATUS_lm-attention-fallback.md). Worktree
 `~/mojolearn-wt/attention-replay-vendors`, branch cut from origin/main
 ede6f6243.
 
-## State
+## State (15:50Z): BOTH FLIPS QUALIFIED AND MERGED TO MAIN
 
-- WIP: both rows in `checks/kernel_matrix.mojo` now return True for NVIDIA,
-  AMD and Apple. NOT QUALIFIED YET; do not merge until the sections below
-  say PASS.
-- Pods out: see "Pods" at the end. Earlier (14:10Z), all MINE, each self-deletes at its lease:
-  RunPod ur4bbe8u4pe9wr (H100, extra body mode gates -> nvidia_gates/),
-  RunPod uywfr8o08f4qeh (H100, mode identity -> nvidia_identity/),
-  RunPod rf1ruxuaac3q5i (CPU pod, identity before/after -> cpu_identity/).
-  NOT MINE, never touch: 8dqkcbscpgbqu2 (another session's GEMM pod).
-  Hot Aisle: two legs queued/waiting for stock (amd_enwik8, amd_pile_github);
-  slot 1 taken by attn-replay-enwik8 at 14:06Z, VM not yet created.
-  RunPod MI300X create returned "no instances currently available" twice
-  (failed_runpod_no_stock/, nothing rented). A first Hot Aisle launch was
-  refused locally for a dirty tree (refused_dirty_tree/, nothing rented).
-- Apple: native gate binaries built (one worker; ~/mojolearn-evidence/
-  attention-replay-vendors/apple-native/bin), bswz/legacy bindings BUILT (exit 0),
-  then ONE Metal job queued through mac_slot.sh metal behind the release
-  runner and two apple-seam tickets (scripts in apple_scripts/).
-- Local: Apple byte-LM binding with the flip + plumbing compiled, one worker,
-  nice 19 (local/apple_compile_default.log, 212 s). Compile only.
+- `attn_masked_tail_replay_for` and `byte_lm_release_eager_for` answer True
+  for NVIDIA, AMD and Apple (checks/kernel_matrix.mojo, docstrings carry the
+  numbers). AMD: two-corpus 700-step pairs equal NVIDIA bit for bit and per
+  layer, refusals 3697/1768 -> 0, late step 1.3214x / 1.2268x (geomean
+  1.2733x). Apple: Metal corner fixtures and reduced HD64 witness equal
+  NVIDIA; the replay row is INERT in Apple's DEFAULT training (its arm reaches
+  no replay kernel), the release row is active. identity_break before/after
+  on NVIDIA, AMD and CPU: nothing moved.
+- Pods out: none (see "Pods" at the end).
 
 ## Findings before any run (from source, not prose)
 
