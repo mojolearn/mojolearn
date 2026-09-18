@@ -186,7 +186,7 @@ Per product step on gfx942, one compile, all kernels launched:
 
 | arm | issue slots | body |
 |---|---:|---|
-| SHIPPED `ftz(fma)` | **8** | `v_fmac_f32`, `v_and`, `v_and`, `v_cmp_ne`, `v_cmp_eq`, `s_and`, `v_and`, `v_cndmask` |
+| Legacy `ftz(fma)` (shipped on 2026-09-17) | **8** | `v_fmac_f32`, `v_and`, `v_and`, `v_cmp_ne`, `v_cmp_eq`, `s_and`, `v_and`, `v_cndmask` |
 | CLASS spelling | **5** | `v_fmac_f32`, `v_and`, `v_cmp_class_f32`, `s_nop 1`, `v_cndmask` |
 | BARE `fma` (control) | 1 | `v_fmac_f32` |
 
@@ -198,9 +198,9 @@ left alone as `ftz` leaves them), **not a measurement at that date**. The device
 subsequently completed on 2026-09-18; see the measured follow-up above.
 The historical proof requirement was a
 device run of this spelling as a probe lane on an MI300X hashing to
-`62a6b5621e27c707` with mismatch count 0 against `shipped`. Until that exists it
-is a candidate and no arm is built on it. It would live as a kernel-matrix
-capability row beside `lib_hardware_ftz_fma_for`, never an inline vendor branch.
+`62a6b5621e27c707` with mismatch count 0 against `shipped`. That proof now
+exists and the arm has been priced. Its capability row is
+`lib_postround_class_flush_for`, beside `lib_hardware_ftz_fma_for`.
 
 ## 6. WHAT IS OWED, AND THE EXACT NEXT COMMANDS
 

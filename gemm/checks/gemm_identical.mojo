@@ -1254,7 +1254,7 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     two-instruction sequence. Inputs here are already flushed by callers.
     AMD classifies the rounded FMA result and flushes only subnormals,
     preserving their sign. This matches the software post-round flush.
-    This matches the NVIDIA software seam; other columns' underlying FMA
+    Other columns' underlying FMA
     rounding at underflow boundaries remains a separate numerical audit.
     """
     comptime if TUNED_HW_FTZ_FMA:

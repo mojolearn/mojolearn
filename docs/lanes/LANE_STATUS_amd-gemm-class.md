@@ -12,13 +12,13 @@ spelling for controlled comparisons; the measured candidate previously used
 the opt-in `MOJOLEARN_GEMM_CLASS_FLUSH`. The column capability lives in the kernel matrix.
 Gather staging is already shipped on AMD; its fold retains software FTZ.
 No scheduling or P=1 fold change. Production-default device qualification
-is required before merging this flip to main.
+passed before merging this flip to main.
 
 `tools/gemm_class_probe_price_leg.sh` first builds a deliberately corrupted
 probe and requires its gate to fail, then requires the clean probe's class,
 shipped and software lanes to hash to `62a6b5621e27c707`, with zero class
 mismatches and the normal boundary word. Only after that device proof does
-it build the opt-in production path and bracket fixed-size prices.
+it build the production path and bracket fixed-size prices.
 It does not execute the closed wave-mode experiment.
 
 Local evidence: one-worker nice-19 gfx942 ISA compilation, target and class
@@ -98,7 +98,7 @@ stale opponent ratio was computed.
 R2 staging was strict, with both pinned corpus hashes and destination links
 verified in the stage logs. The H100 leases completed and were verified gone.
 Both AMD instrumented runs completed with all gates passing and both leases
-were deleted and verified absent. Production-default qualification is next.
+were deleted and verified absent. Production-default qualification also passed, as recorded below.
 
 ## GEMM breakdown at the same measurement commit
 
@@ -121,3 +121,34 @@ corrupted in turn and rejected before accepting those matches. Apple source
 and dispatch are unchanged, and no full Apple column was run. The historical
 Apple adversarial-boundary discrepancy documented in `LANE_STATUS_gemm-next.md`
 is not repaired or redefined by this change.
+
+## Production default qualification and integration
+
+Commit `cb4dcd1ddedae39485b351ae5b1107d3d6395e1c` enabled the AMD default
+and was pushed before its final Hot Aisle MI300X qualification. The clean
+probe explicitly reports `class_shipped=True`, the required hash, zero
+mismatches and boundary `00800000`. The deliberately corrupted class lane
+hashes `989754abc7bbcbfe` and is rejected; triple 400 prints `00800001`.
+General device gates and the identity card pass. The new card matches the
+retained Apple card, with every row's corruption rejected first.
+
+The final ABBA fixed-size prices are legacy 557.190 / 560.477 ms and default
+488.442 / 490.109 ms: **12.447% less GEMM time**. Dispatch headers prove
+legacy=False/default=True. All twelve digests match the legacy and retained
+H100 outputs, and altered digest/dispatch controls fail before the real
+matches are admitted. This is a qualification microbenchmark, not a new
+step-level figure; the two-corpus 700-step results remain at `283577480`.
+
+Evidence: `bench/results/e1g/2026-09-18-amd-mi300x-class-default/`, plus
+`bench/results/gemm_class_flush/default-cross-column-price-gate.log` and
+`default-vs-apple-card.log`. All phases exited zero. Deployment
+`88880316-ba05-485f-9d79-c5fab53b47d8` was deleted and verified absent
+(GET 404 and no list entry) at 2026-09-18 08:48:08 UTC. Every lease rented by
+this task is now gone; no owed run was cancelled.
+
+Upstream main was integrated twice; its intervening kNN/k-means and derived
+documentation changes do not touch this GEMM path. Documentation facts and
+shell syntax checks pass. Source whitespace checks pass; raw compiler/device
+logs are retained unaltered. No opponents, full Apple run, contract changes,
+scheduling arms, cross-device copy changes or separate P=1 fold work were
+introduced.
