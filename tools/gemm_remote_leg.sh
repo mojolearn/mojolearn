@@ -2652,7 +2652,9 @@ leg_create_pod() {
     if [ "${MOJOLEARN_GEMM_LEG_REHEARSAL:-}" = "1" ]; then
         leg_die "INTERLOCK: a rehearsal child reached leg_create_pod. Nothing was created. This is the interlock working; if you meant to rent, run the leg directly rather than from inside a dry run."
     fi
-    POD_NAME="mojolearn-gemm-${VENDOR}-${STAMP}"
+    # A failed create adopts by name. Second-resolution names can collide
+    # between simultaneous corpus legs and adopt the OTHER leg's pod.
+    POD_NAME="mojolearn-gemm-${VENDOR}-${STAMP}-$$"
     # THE DEAD-MAN IS ARMED HERE: after the interlock (so no rehearsal child
     # can reach it) and BEFORE the POST that starts the bill. Arming it after
     # the create would leave uncovered the one instant it exists for -- the
