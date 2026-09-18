@@ -143,3 +143,19 @@ outputs under the retained compiled estimators sabotage binding. Strict
 slot. Binding digest and raw report are committed beside AMD evidence. This
 covers native CPU training (prior 54/54) and saved-model inference (new 54/54);
 it is not an AMD GPU native-fault claim or a final-wheel fault certificate.
+
+## Shipped inference coverage expanded
+
+The portable model bundle now includes the exact 54 AMD-recorded kernel model
+files (all six variants, all nine fixtures) in addition to its prior four base
+models. Every file matches the admitted model reference and has a real batch
+reference, which is the existing `_cmd_emit_models` admission policy. The
+manifest records actual CPU/Apple/AMD agreement and source-record hashes; it
+does not invent NVIDIA agreement. This makes all six variants useful in the
+installed `verify --inference`/`--models-only` path independently of their
+training holds. Both wheel builders already include this tracked directory.
+
+Source CPU validation with two repeats: **116/116 numerical model/batch parts
+IDENTICAL**, zero divergent, owed, refused or N/A, in 1.4 seconds (slot1.74s).
+The total 58-model bundle is 342,951 bytes. Installed development-wheel replay
+is next; final expanded 0.8.7 native artifact qualification remains separate.
