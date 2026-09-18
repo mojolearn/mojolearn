@@ -173,13 +173,27 @@ exists on NVIDIA and AMD and computes the same bits on both; what stands between
 it and a doubled ceiling is Apple and those 315 triples. **That is a contract
 observation for Andrew. No contract change is proposed by this lane.**
 
-**The live AMD lever, unbuilt and uncosted.** The eight instructions can still
-be reduced without leaving the contract, because a cheaper SOFTWARE spelling
-computes the same function: `v_cmp_class_f32` tests the subnormal class in one
-instruction where the current spelling uses two `v_and` and two `v_cmp`. That
-would take the seam from 8 to about 4, is contract-preserving BY CONSTRUCTION
-(same function, same post-round flush), and **can be checked for free on the Mac
-with the method in section 6, no rental.** This is the next AMD item.
+**The live AMD lever, now COMPILED and counted (2026-09-17, free, no rental).**
+`bench/results/e1g/2026-09-17_171500-apple-m4-amd-ftz-class-spelling/`. The
+eight instructions CAN be reduced without leaving the contract, because the
+flush stays POST-ROUND on the rounded FMA result and only the spelling changes.
+Per product step on gfx942, one compile, all kernels launched:
+
+| arm | issue slots | body |
+|---|---:|---|
+| SHIPPED `ftz(fma)` | **8** | `v_fmac_f32`, `v_and`, `v_and`, `v_cmp_ne`, `v_cmp_eq`, `s_and`, `v_and`, `v_cndmask` |
+| CLASS spelling | **5** | `v_fmac_f32`, `v_and`, `v_cmp_class_f32`, `s_nop 1`, `v_cndmask` |
+| BARE `fma` (control) | 1 | `v_fmac_f32` |
+
+Four instructions plus a gfx9 hazard `s_nop` the scheduler can usually fill from
+another cell's chain. NVIDIA's seam is 2, so this closes a little over half the
+seam gap. The sameness is an ISA reading (class mask `0x90` is exactly "exponent
+0, mantissa non-zero"; signed zero, NaN and infinity are separate classes and are
+left alone as `ftz` leaves them), **not a measurement**. THE PROOF OWED is a
+device run of this spelling as a probe lane on an MI300X hashing to
+`62a6b5621e27c707` with mismatch count 0 against `shipped`. Until that exists it
+is a candidate and no arm is built on it. It would live as a kernel-matrix
+capability row beside `lib_hardware_ftz_fma_for`, never an inline vendor branch.
 
 ## 6. WHAT IS OWED, AND THE EXACT NEXT COMMANDS
 
@@ -204,10 +218,16 @@ sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
 Then read `remote/gemm-kernel/price_tables.txt`, the `PHASE` lines for
 `proj_fwd`, `proj_dA`, `proj_dB`.
 
-**(b) The cheap AMD `ftz` spelling (section 5). FREE, on the Mac, one core.**
-Same method that produced the eight-instruction count. Write three kernels over
-one accumulation into a scratch `.mojo`, LAUNCH all three (an unlaunched kernel
-is dead-stripped and "passes"), then:
+**(b) DONE 2026-09-17: the cheap AMD `ftz` spelling is 5 slots against 8**
+(section 5, commit 19b6a9c7f). What is now owed on it is the DEVICE PROOF: add
+the `_ftz_class` spelling as a lane of `gemm/checks/gemm_seam_probe.mojo` (the
+harness already takes extra lanes, the `modeftz` lane was added the same day)
+and run it on an MI300X; it must hash `62a6b5621e27c707` and read mismatch 0
+against `shipped`. That rides along with (c) in ONE lease, so do not buy a box
+for it alone.
+
+The compile method, for reuse: write the kernels into a scratch `.mojo`, LAUNCH
+all of them (an unlaunched kernel is dead-stripped and its check "passes"), then
 ```sh
 mojo build --emit asm --target-accelerator gfx942 -I . \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 <file>.mojo -o /tmp/x.s
