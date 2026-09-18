@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 import copy
 import pytest
-from mojolearn._verify_causal_lm import CHECKS, PARTS, PROFILE, compare
+from mojolearn._verify_causal_lm import ARCHITECTURES, CHECKS, PARTS, PROFILE, compare
 from mojolearn.models.causal_lm import CausalLM, CausalLMState
 
 
@@ -9,7 +9,7 @@ def record():
     return dict(profile=PROFILE, formats=['float32'], repeats=2, source_sha256='source', status='CAPTURED_UNQUALIFIED', cases=[
         dict(architecture=arch, tied=tied, weight_format='float32',
              checks=dict.fromkeys(CHECKS, True), parts=dict.fromkeys(PARTS, 'a'*64),
-             checkpoint_sha256={'model': 'b'*64}) for arch,tied in [('llama',False),('llama',True),('mamba',True)]])
+             checkpoint_sha256={'model': 'b'*64}) for arch,tied in ARCHITECTURES])
 
 
 def test_comparator_compares_logits_and_input_bytes():
@@ -42,3 +42,16 @@ def test_reset_refuses_foreign_state_before_native_work():
 def test_both_truncated_records_are_not_a_pass():
     a=record(); a['cases'].pop()
     with pytest.raises(ValueError, match='missing requested'): compare(a,a)
+
+
+@pytest.mark.parametrize('architecture,tied', ARCHITECTURES)
+def test_fixture_names_exactly_cover_supported_family(architecture,tied):
+    from mojolearn._causal_lm_fixtures import family_fixture
+    from mojolearn.models import HFConfig,plan_for
+    cfg,tensors=family_fixture(architecture,tied)
+    plan=plan_for(HFConfig(cfg))
+    assert set(tensors)==set(plan.checkpoint_names())
+    if architecture=='mistral': assert plan.block_options['window']==3
+    if architecture=='qwen2': assert plan.block_options['qkv_bias']
+    if architecture=='qwen3': assert plan.block_options['qk_norm']
+    if architecture=='phi3': assert any(rows is not None for _,_,rows in plan.layer_weights(0))
