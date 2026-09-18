@@ -48,6 +48,15 @@ DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
 #                            hip-gfx942.json  (the packer's three, unchanged)
 LEG_MODE="${MOJOLEARN_LEG_MODE:-build}"
 case "$LEG_MODE" in build|qualify) ;; *) echo "MOJOLEARN_LEG_MODE must be build or qualify" >&2; exit 2 ;; esac
+UBUNTU22=${MOJOLEARN_RELEASE_UBUNTU22:-0}
+case "$UBUNTU22" in 0|1) ;; *) echo 'MOJOLEARN_RELEASE_UBUNTU22 must be 0 or 1' >&2; exit 2 ;; esac
+if [ "$UBUNTU22" = 1 ] && { [ "$LEG_MODE" != build ] || [ "${MOJOLEARN_LEG_GPU:-mi325x}" != mi325x ]; }; then
+  echo 'Ubuntu 22.04 container mode applies only to the AMD build' >&2; exit 2
+fi
+CORE_HOST_SHA=${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-}
+if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+  echo 'Ubuntu 22.04 rebuild requires the NVIDIA core-host SHA256' >&2; exit 2
+fi
 if [ "$LEG_MODE" = qualify ]; then
   QUAL_WHEEL="${MOJOLEARN_QUALIFY_WHEEL:?qualify mode needs the repaired wheel}"
   QUAL_PROOFS="${MOJOLEARN_QUALIFY_PROOFS:?qualify mode needs the proof directory}"
@@ -361,6 +370,7 @@ PREP_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE - 600
 [ "$PREP_SECONDS" -ge 120 ] || { log "only ${PREP_SECONDS}s for host prep; skipping"; exit 7; }
 $SSH "set -u; export DEBIAN_FRONTEND=noninteractive
 need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
+[ '$UBUNTU22' != 1 ] || command -v docker >/dev/null || need=\"\$need docker.io\"
 { command -v objdump && command -v strings; } >/dev/null || need=\"\$need binutils\"
 # DEVIATION 2294: the INSTALLED qualification builds a venv and pip-installs
 # the wheel into it. This image's python has no ensurepip, so python3 -m venv
@@ -390,6 +400,21 @@ test -x .pixi/envs/default/bin/mojo && test -x .pixi/envs/default/bin/python && 
 if ! grep -q '^PIXI_INSTALL_EXIT=0$' "$OUT/prep-console.log" || grep -q 'MISSING_\|PIXI_ENV_MISSING' "$OUT/prep-console.log"; then
   echo "build_exit=NOT_STARTED_HOST_PREP_FAILED" >> "$STATE"; log "host prep failed"; exit 8
 fi
+BUILD_ENTRY='tools/release061_remote_build.sh'
+if [ "$UBUNTU22" = 1 ]; then
+  # Environment setup is controller-owned, outside the frozen source archive.
+  # Retain its exact bytes beside the build evidence and pin the transferred copy.
+  cp "$REPO/tools/release_ubuntu22_build.sh" "$OUT/release_ubuntu22_build.sh" || exit 8
+  HELPER_SHA=$(sha256_of "$OUT/release_ubuntu22_build.sh")
+  rsync -az -e "ssh $SSH_OPTS" "$OUT/release_ubuntu22_build.sh" "root@$IP:/root/release_ubuntu22_build.sh" || exit 8
+  [ "$($SSH 'sha256sum /root/release_ubuntu22_build.sh' | cut -d' ' -f1)" = "$HELPER_SHA" ] || exit 8
+  echo "container_helper_sha256=$HELPER_SHA" >> "$STATE"
+  $SSH 'bash /root/release_ubuntu22_build.sh prepare' > "$OUT/container-prepare.log" 2>&1 || {
+    log 'Ubuntu 22.04 build image preparation failed'; exit 8;
+  }
+  BUILD_ENTRY='/root/release_ubuntu22_build.sh run'
+  echo 'build_environment=ROCm 6.4.1 Ubuntu 22.04 pinned container' >> "$STATE"
+fi
 
 # THE BUILD, DETACHED AND POLLED, so a dropped ssh cannot kill a 30-minute compile.
 WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE ))
@@ -408,8 +433,9 @@ if [ "$LEG_MODE" = qualify ]; then
 else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
+  MOJOLEARN_EXPECT_CORE_HOST_SHA256=$CORE_HOST_SHA \
   MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
-  timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
+  timeout -k 20 $((WORK_SECONDS + 40)) bash $BUILD_ENTRY $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
 BUILD_EXIT=""
