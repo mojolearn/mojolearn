@@ -1,0 +1,4 @@
+arming a 170-minute self-kill on pod 2x1owmqj5e6zge ...
+ARMED. Pod 2x1owmqj5e6zge is TERMINATED through the API in 170 minutes.
+  lease: /Users/andrewhendel/mojolearn-wt/reference-regen/bench/results/runpod_cpu/2026-09-17_202225-refregen-l2/lease/2x1owmqj5e6zge.lease
+  extend with: tools/runpod_guard.sh extend 2x1owmqj5e6zge '-p 36544 root@157.157.221.29' <minutes>

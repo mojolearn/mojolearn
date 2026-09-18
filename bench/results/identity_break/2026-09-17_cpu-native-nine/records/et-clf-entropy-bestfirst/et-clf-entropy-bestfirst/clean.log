@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:31:43  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START et-clf-entropy-bestfirst/base repeat=1/train
+# DONE et-clf-entropy-bestfirst/base repeat=1/train 0.100s
+# START et-clf-entropy-bestfirst/base repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/base repeat=1/infer-save-reload 0.051s
+# START et-clf-entropy-bestfirst/base repeat=1/batch
+# DONE et-clf-entropy-bestfirst/base repeat=1/batch 0.181s
+# START et-clf-entropy-bestfirst/base repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/base repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/base repeat=2/train
+# DONE et-clf-entropy-bestfirst/base repeat=2/train 0.099s
+# START et-clf-entropy-bestfirst/base repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/base repeat=2/infer-save-reload 0.050s
+# START et-clf-entropy-bestfirst/base repeat=2/batch
+# DONE et-clf-entropy-bestfirst/base repeat=2/batch 0.164s
+# START et-clf-entropy-bestfirst/base repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/base repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/base STABLE 0.646s
+# START et-clf-entropy-bestfirst/ties repeat=1/train
+# DONE et-clf-entropy-bestfirst/ties repeat=1/train 0.092s
+# START et-clf-entropy-bestfirst/ties repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/ties repeat=1/infer-save-reload 0.043s
+# START et-clf-entropy-bestfirst/ties repeat=1/batch
+# DONE et-clf-entropy-bestfirst/ties repeat=1/batch 0.165s
+# START et-clf-entropy-bestfirst/ties repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/ties repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/ties repeat=2/train
+# DONE et-clf-entropy-bestfirst/ties repeat=2/train 0.093s
+# START et-clf-entropy-bestfirst/ties repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/ties repeat=2/infer-save-reload 0.043s
+# START et-clf-entropy-bestfirst/ties repeat=2/batch
+# DONE et-clf-entropy-bestfirst/ties repeat=2/batch 0.165s
+# START et-clf-entropy-bestfirst/ties repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/ties repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/ties STABLE 0.601s
+# START et-clf-entropy-bestfirst/hashed repeat=1/train
+# DONE et-clf-entropy-bestfirst/hashed repeat=1/train 0.094s
+# START et-clf-entropy-bestfirst/hashed repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/hashed repeat=1/infer-save-reload 0.044s
+# START et-clf-entropy-bestfirst/hashed repeat=1/batch
+# DONE et-clf-entropy-bestfirst/hashed repeat=1/batch 0.166s
+# START et-clf-entropy-bestfirst/hashed repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/hashed repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/hashed repeat=2/train
+# DONE et-clf-entropy-bestfirst/hashed repeat=2/train 0.094s
+# START et-clf-entropy-bestfirst/hashed repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/hashed repeat=2/infer-save-reload 0.045s
+# START et-clf-entropy-bestfirst/hashed repeat=2/batch
+# DONE et-clf-entropy-bestfirst/hashed repeat=2/batch 0.168s
+# START et-clf-entropy-bestfirst/hashed repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/hashed repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/hashed STABLE 0.611s
+# START et-clf-entropy-bestfirst/wide repeat=1/train
+# DONE et-clf-entropy-bestfirst/wide repeat=1/train 0.106s
+# START et-clf-entropy-bestfirst/wide repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/wide repeat=1/infer-save-reload 0.053s
+# START et-clf-entropy-bestfirst/wide repeat=1/batch
+# DONE et-clf-entropy-bestfirst/wide repeat=1/batch 0.174s
+# START et-clf-entropy-bestfirst/wide repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/wide repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/wide repeat=2/train
+# DONE et-clf-entropy-bestfirst/wide repeat=2/train 0.105s
+# START et-clf-entropy-bestfirst/wide repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/wide repeat=2/infer-save-reload 0.053s
+# START et-clf-entropy-bestfirst/wide repeat=2/batch
+# DONE et-clf-entropy-bestfirst/wide repeat=2/batch 0.176s
+# START et-clf-entropy-bestfirst/wide repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/wide repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/wide STABLE 0.668s
+# START et-clf-entropy-bestfirst/denormal repeat=1/train
+# DONE et-clf-entropy-bestfirst/denormal repeat=1/train 0.100s
+# START et-clf-entropy-bestfirst/denormal repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/denormal repeat=1/infer-save-reload 0.051s
+# START et-clf-entropy-bestfirst/denormal repeat=1/batch
+# DONE et-clf-entropy-bestfirst/denormal repeat=1/batch 0.173s
+# START et-clf-entropy-bestfirst/denormal repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/denormal repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/denormal repeat=2/train
+# DONE et-clf-entropy-bestfirst/denormal repeat=2/train 0.100s
+# START et-clf-entropy-bestfirst/denormal repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/denormal repeat=2/infer-save-reload 0.051s
+# START et-clf-entropy-bestfirst/denormal repeat=2/batch
+# DONE et-clf-entropy-bestfirst/denormal repeat=2/batch 0.163s
+# START et-clf-entropy-bestfirst/denormal repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/denormal repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/denormal STABLE 0.638s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=1/train
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=1/train 0.100s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=1/infer-save-reload 0.051s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=1/batch
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=1/batch 0.173s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=2/train
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=2/train 0.100s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=2/infer-save-reload 0.051s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=2/batch
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=2/batch 0.173s
+# START et-clf-entropy-bestfirst/denormal_ftz repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/denormal_ftz repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/denormal_ftz STABLE 0.648s
+# START et-clf-entropy-bestfirst/dupes repeat=1/train
+# DONE et-clf-entropy-bestfirst/dupes repeat=1/train 0.095s
+# START et-clf-entropy-bestfirst/dupes repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/dupes repeat=1/infer-save-reload 0.050s
+# START et-clf-entropy-bestfirst/dupes repeat=1/batch
+# DONE et-clf-entropy-bestfirst/dupes repeat=1/batch 0.169s
+# START et-clf-entropy-bestfirst/dupes repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/dupes repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/dupes repeat=2/train
+# DONE et-clf-entropy-bestfirst/dupes repeat=2/train 0.095s
+# START et-clf-entropy-bestfirst/dupes repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/dupes repeat=2/infer-save-reload 0.050s
+# START et-clf-entropy-bestfirst/dupes repeat=2/batch
+# DONE et-clf-entropy-bestfirst/dupes repeat=2/batch 0.169s
+# START et-clf-entropy-bestfirst/dupes repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/dupes repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/dupes STABLE 0.628s
+# START et-clf-entropy-bestfirst/odd repeat=1/train
+# DONE et-clf-entropy-bestfirst/odd repeat=1/train 0.062s
+# START et-clf-entropy-bestfirst/odd repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/odd repeat=1/infer-save-reload 0.031s
+# START et-clf-entropy-bestfirst/odd repeat=1/batch
+# DONE et-clf-entropy-bestfirst/odd repeat=1/batch 0.099s
+# START et-clf-entropy-bestfirst/odd repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/odd repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/odd repeat=2/train
+# DONE et-clf-entropy-bestfirst/odd repeat=2/train 0.062s
+# START et-clf-entropy-bestfirst/odd repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/odd repeat=2/infer-save-reload 0.031s
+# START et-clf-entropy-bestfirst/odd repeat=2/batch
+# DONE et-clf-entropy-bestfirst/odd repeat=2/batch 0.109s
+# START et-clf-entropy-bestfirst/odd repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/odd repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/odd STABLE 0.395s
+# START et-clf-entropy-bestfirst/negative repeat=1/train
+# DONE et-clf-entropy-bestfirst/negative repeat=1/train 0.099s
+# START et-clf-entropy-bestfirst/negative repeat=1/infer-save-reload
+# DONE et-clf-entropy-bestfirst/negative repeat=1/infer-save-reload 0.049s
+# START et-clf-entropy-bestfirst/negative repeat=1/batch
+# DONE et-clf-entropy-bestfirst/negative repeat=1/batch 0.171s
+# START et-clf-entropy-bestfirst/negative repeat=1/stepfull
+# DONE et-clf-entropy-bestfirst/negative repeat=1/stepfull 0.000s
+# START et-clf-entropy-bestfirst/negative repeat=2/train
+# DONE et-clf-entropy-bestfirst/negative repeat=2/train 0.099s
+# START et-clf-entropy-bestfirst/negative repeat=2/infer-save-reload
+# DONE et-clf-entropy-bestfirst/negative repeat=2/infer-save-reload 0.049s
+# START et-clf-entropy-bestfirst/negative repeat=2/batch
+# DONE et-clf-entropy-bestfirst/negative repeat=2/batch 0.173s
+# START et-clf-entropy-bestfirst/negative repeat=2/stepfull
+# DONE et-clf-entropy-bestfirst/negative repeat=2/stepfull 0.000s
+# CELL et-clf-entropy-bestfirst/negative STABLE 0.640s
+| et-clf-entropy-bestfirst | 6a5ef5ab78ae5228 | a0d605cf6f4074fe | 15d850c979726dfb | c22aba892dd97c04 | f0837d67f8dc07eb | f0837d67f8dc07eb | 4c48027f6644d462 | 461aec12b620cdb4 | 5a8b5c053a1e3483 |
+| et-clf-entropy-bestfirst infer | d69955e260874141 | c295cc43fab48c9c | fae4dd769cc48ae5 | 6426768feb023b45 | dfb1ee26847933ba | dfb1ee26847933ba | 9f9f75f5796f3cbf | e355d9ea3e95bc7c | f7e15b9d8db2ac46 |
+| et-clf-entropy-bestfirst model | 8abd9a4f4d89302e | f024154fa88e1021 | 21afe5fafea2ebff | 6115c63b373591c4 | a0b2e02831a7d804 | a0b2e02831a7d804 | f15414f1d464e73a | 857335ff35a349c8 | c236839052c9b594 |
+| et-clf-entropy-bestfirst batch | 3e9828d01a238a1c | 85f2c124dd086d66 | 51ab4c01f05678d6 | f61b87bbba4c3449 | 74877a87428a024d | 74877a87428a024d | 286ff4631eb07120 | 8fcb52aa1791fee5 | fdaecd58282fb477 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: et-clf-entropy-bestfirst stepfull n/a:no-decode-state
+wrote /root/leg_out/records/et-clf-entropy-bestfirst/et-clf-entropy-bestfirst/cpu-clean.json

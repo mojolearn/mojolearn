@@ -1,0 +1,3 @@
+logistic-unpenalized-no-intercept: clean
+logistic-unpenalized-no-intercept: sabotage
+logistic-unpenalized-no-intercept: 9/9 controls; passed=True

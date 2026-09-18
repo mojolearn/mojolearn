@@ -107,7 +107,16 @@ def test_every_entry_samba_reaches_is_on_the_host():
             called |= set(re.findall(r"\.(\w+)\(", _read(rel))) & gpu
         missing = sorted(called - host)
         # the multi-GPU availability probes are refused by name on purpose
-        missing = [m for m in missing if not m.endswith("_available")]
+        # Device-resident sessions are optional GPU APIs. CPU forward uses
+        # ordinary block entries, guarded by export checks in the wrappers.
+        resident = {
+            "mamba": {"mamba1_session_" + name for name in
+                      ("create", "open", "step", "export_state", "load_state", "info", "close")},
+            "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
+                | {"transformer_decode_session_" + name for name in
+                   ("create", "open", "step", "forward", "export_state", "load_state", "close")},
+        }.get(fam, set())
+        missing = [m for m in missing if not m.endswith("_available") and m not in resident]
         assert not missing, f"{fam}: SambaStack's modules call {missing}, absent from the host binding"
 
 

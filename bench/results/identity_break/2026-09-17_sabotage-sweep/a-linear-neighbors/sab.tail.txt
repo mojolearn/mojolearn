@@ -1,0 +1,25 @@
+# START par-reference-knn-reg/base repeat=2/train
+# DONE par-reference-knn-reg/base repeat=2/train 0.190s
+# START par-reference-knn-reg/base repeat=2/infer-save-reload
+# DONE par-reference-knn-reg/base repeat=2/infer-save-reload 0.345s
+# START par-reference-knn-reg/base repeat=2/batch
+# DONE par-reference-knn-reg/base repeat=2/batch 0.364s
+# CELL par-reference-knn-reg/base STABLE 1.776s
+# START par-reference-knn-reg/ties repeat=1/train
+# DONE par-reference-knn-reg/ties repeat=1/train 0.196s
+# CELL par-reference-knn-reg/ties REFUSED 0.196s
+| par-reference-knn-reg  | 53d84188655fabc4 | REFUSED          |
+| par-reference-knn-reg infer | 985c78c21a289278 | REFUSED          |
+| par-reference-knn-reg model | 7404b5d0a3a97d83 | REFUSED          |
+| par-reference-knn-reg batch | 2820fbd5ace22495 | REFUSED          |
+
+cells=104 stable=100 moved=0 refused=4
+infer: stable=98 n/a=2
+model: stable=98 n/a=2
+batch: stable=98 n/a=2
+n/a: kmeans-cosine batch n/a:fit-refused, kmeans-cosine infer n/a:function, kmeans-cosine model n/a:no-save
+REFUSED par-scaler/base: ValueError: transform_scaler and plain transform differ: 2847 bytes of 16384
+REFUSED par-scaler/ties: ValueError: transform_scaler and plain transform differ: 2845 bytes of 16384
+REFUSED par-reference-knn/ties: ValueError: ReferenceShardedNeighbors indices and plain indices differ: 106 bytes of 4096
+REFUSED par-reference-knn-reg/ties: ValueError: ReferenceShardedNeighbors predict and plain predict differ: 103 bytes of 256
+wrote /root/leg_out/cpu-x86.sabotage.json

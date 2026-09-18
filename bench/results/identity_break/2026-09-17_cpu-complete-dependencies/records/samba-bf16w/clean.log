@@ -1,0 +1,170 @@
+2841 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1b6c40000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:27  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START samba-bf16w/base repeat=1/train
+# DONE samba-bf16w/base repeat=1/train 0.064s
+# START samba-bf16w/base repeat=1/infer-save-reload
+# DONE samba-bf16w/base repeat=1/infer-save-reload 0.133s
+# START samba-bf16w/base repeat=1/batch
+# DONE samba-bf16w/base repeat=1/batch 0.000s
+# START samba-bf16w/base repeat=1/stepfull
+# DONE samba-bf16w/base repeat=1/stepfull 0.000s
+# START samba-bf16w/base repeat=2/train
+# DONE samba-bf16w/base repeat=2/train 0.066s
+# START samba-bf16w/base repeat=2/infer-save-reload
+# DONE samba-bf16w/base repeat=2/infer-save-reload 0.122s
+# START samba-bf16w/base repeat=2/batch
+# DONE samba-bf16w/base repeat=2/batch 0.000s
+# START samba-bf16w/base repeat=2/stepfull
+# DONE samba-bf16w/base repeat=2/stepfull 0.000s
+# CELL samba-bf16w/base STABLE 0.387s
+# START samba-bf16w/ties repeat=1/train
+# DONE samba-bf16w/ties repeat=1/train 0.060s
+# START samba-bf16w/ties repeat=1/infer-save-reload
+# DONE samba-bf16w/ties repeat=1/infer-save-reload 0.123s
+# START samba-bf16w/ties repeat=1/batch
+# DONE samba-bf16w/ties repeat=1/batch 0.000s
+# START samba-bf16w/ties repeat=1/stepfull
+# DONE samba-bf16w/ties repeat=1/stepfull 0.000s
+# START samba-bf16w/ties repeat=2/train
+# DONE samba-bf16w/ties repeat=2/train 0.060s
+# START samba-bf16w/ties repeat=2/infer-save-reload
+# DONE samba-bf16w/ties repeat=2/infer-save-reload 0.121s
+# START samba-bf16w/ties repeat=2/batch
+# DONE samba-bf16w/ties repeat=2/batch 0.000s
+# START samba-bf16w/ties repeat=2/stepfull
+# DONE samba-bf16w/ties repeat=2/stepfull 0.000s
+# CELL samba-bf16w/ties STABLE 0.367s
+# START samba-bf16w/hashed repeat=1/train
+# DONE samba-bf16w/hashed repeat=1/train 0.059s
+# START samba-bf16w/hashed repeat=1/infer-save-reload
+# DONE samba-bf16w/hashed repeat=1/infer-save-reload 0.121s
+# START samba-bf16w/hashed repeat=1/batch
+# DONE samba-bf16w/hashed repeat=1/batch 0.000s
+# START samba-bf16w/hashed repeat=1/stepfull
+# DONE samba-bf16w/hashed repeat=1/stepfull 0.000s
+# START samba-bf16w/hashed repeat=2/train
+# DONE samba-bf16w/hashed repeat=2/train 0.059s
+# START samba-bf16w/hashed repeat=2/infer-save-reload
+# DONE samba-bf16w/hashed repeat=2/infer-save-reload 0.123s
+# START samba-bf16w/hashed repeat=2/batch
+# DONE samba-bf16w/hashed repeat=2/batch 0.000s
+# START samba-bf16w/hashed repeat=2/stepfull
+# DONE samba-bf16w/hashed repeat=2/stepfull 0.000s
+# CELL samba-bf16w/hashed STABLE 0.364s
+# START samba-bf16w/wide repeat=1/train
+# DONE samba-bf16w/wide repeat=1/train 0.059s
+# START samba-bf16w/wide repeat=1/infer-save-reload
+# DONE samba-bf16w/wide repeat=1/infer-save-reload 0.129s
+# START samba-bf16w/wide repeat=1/batch
+# DONE samba-bf16w/wide repeat=1/batch 0.002s
+# START samba-bf16w/wide repeat=1/stepfull
+# DONE samba-bf16w/wide repeat=1/stepfull 0.000s
+# START samba-bf16w/wide repeat=2/train
+# DONE samba-bf16w/wide repeat=2/train 0.063s
+# START samba-bf16w/wide repeat=2/infer-save-reload
+# DONE samba-bf16w/wide repeat=2/infer-save-reload 0.121s
+# START samba-bf16w/wide repeat=2/batch
+# DONE samba-bf16w/wide repeat=2/batch 0.001s
+# START samba-bf16w/wide repeat=2/stepfull
+# DONE samba-bf16w/wide repeat=2/stepfull 0.000s
+# CELL samba-bf16w/wide STABLE 0.376s
+# START samba-bf16w/denormal repeat=1/train
+# DONE samba-bf16w/denormal repeat=1/train 0.061s
+# START samba-bf16w/denormal repeat=1/infer-save-reload
+# DONE samba-bf16w/denormal repeat=1/infer-save-reload 0.122s
+# START samba-bf16w/denormal repeat=1/batch
+# DONE samba-bf16w/denormal repeat=1/batch 0.000s
+# START samba-bf16w/denormal repeat=1/stepfull
+# DONE samba-bf16w/denormal repeat=1/stepfull 0.000s
+# START samba-bf16w/denormal repeat=2/train
+# DONE samba-bf16w/denormal repeat=2/train 0.060s
+# START samba-bf16w/denormal repeat=2/infer-save-reload
+# DONE samba-bf16w/denormal repeat=2/infer-save-reload 0.121s
+# START samba-bf16w/denormal repeat=2/batch
+# DONE samba-bf16w/denormal repeat=2/batch 0.000s
+# START samba-bf16w/denormal repeat=2/stepfull
+# DONE samba-bf16w/denormal repeat=2/stepfull 0.000s
+# CELL samba-bf16w/denormal STABLE 0.364s
+# START samba-bf16w/denormal_ftz repeat=1/train
+# DONE samba-bf16w/denormal_ftz repeat=1/train 0.061s
+# START samba-bf16w/denormal_ftz repeat=1/infer-save-reload
+# DONE samba-bf16w/denormal_ftz repeat=1/infer-save-reload 0.121s
+# START samba-bf16w/denormal_ftz repeat=1/batch
+# DONE samba-bf16w/denormal_ftz repeat=1/batch 0.000s
+# START samba-bf16w/denormal_ftz repeat=1/stepfull
+# DONE samba-bf16w/denormal_ftz repeat=1/stepfull 0.000s
+# START samba-bf16w/denormal_ftz repeat=2/train
+# DONE samba-bf16w/denormal_ftz repeat=2/train 0.059s
+# START samba-bf16w/denormal_ftz repeat=2/infer-save-reload
+# DONE samba-bf16w/denormal_ftz repeat=2/infer-save-reload 0.121s
+# START samba-bf16w/denormal_ftz repeat=2/batch
+# DONE samba-bf16w/denormal_ftz repeat=2/batch 0.000s
+# START samba-bf16w/denormal_ftz repeat=2/stepfull
+# DONE samba-bf16w/denormal_ftz repeat=2/stepfull 0.000s
+# CELL samba-bf16w/denormal_ftz STABLE 0.364s
+# START samba-bf16w/dupes repeat=1/train
+# DONE samba-bf16w/dupes repeat=1/train 0.060s
+# START samba-bf16w/dupes repeat=1/infer-save-reload
+# DONE samba-bf16w/dupes repeat=1/infer-save-reload 0.122s
+# START samba-bf16w/dupes repeat=1/batch
+# DONE samba-bf16w/dupes repeat=1/batch 0.000s
+# START samba-bf16w/dupes repeat=1/stepfull
+# DONE samba-bf16w/dupes repeat=1/stepfull 0.000s
+# START samba-bf16w/dupes repeat=2/train
+# DONE samba-bf16w/dupes repeat=2/train 0.059s
+# START samba-bf16w/dupes repeat=2/infer-save-reload
+# DONE samba-bf16w/dupes repeat=2/infer-save-reload 0.122s
+# START samba-bf16w/dupes repeat=2/batch
+# DONE samba-bf16w/dupes repeat=2/batch 0.000s
+# START samba-bf16w/dupes repeat=2/stepfull
+# DONE samba-bf16w/dupes repeat=2/stepfull 0.000s
+# CELL samba-bf16w/dupes STABLE 0.364s
+# START samba-bf16w/odd repeat=1/train
+# DONE samba-bf16w/odd repeat=1/train 0.061s
+# START samba-bf16w/odd repeat=1/infer-save-reload
+# DONE samba-bf16w/odd repeat=1/infer-save-reload 0.122s
+# START samba-bf16w/odd repeat=1/batch
+# DONE samba-bf16w/odd repeat=1/batch 0.000s
+# START samba-bf16w/odd repeat=1/stepfull
+# DONE samba-bf16w/odd repeat=1/stepfull 0.000s
+# START samba-bf16w/odd repeat=2/train
+# DONE samba-bf16w/odd repeat=2/train 0.057s
+# START samba-bf16w/odd repeat=2/infer-save-reload
+# DONE samba-bf16w/odd repeat=2/infer-save-reload 0.122s
+# START samba-bf16w/odd repeat=2/batch
+# DONE samba-bf16w/odd repeat=2/batch 0.000s
+# START samba-bf16w/odd repeat=2/stepfull
+# DONE samba-bf16w/odd repeat=2/stepfull 0.000s
+# CELL samba-bf16w/odd STABLE 0.363s
+# START samba-bf16w/negative repeat=1/train
+# DONE samba-bf16w/negative repeat=1/train 0.061s
+# START samba-bf16w/negative repeat=1/infer-save-reload
+# DONE samba-bf16w/negative repeat=1/infer-save-reload 0.121s
+# START samba-bf16w/negative repeat=1/batch
+# DONE samba-bf16w/negative repeat=1/batch 0.000s
+# START samba-bf16w/negative repeat=1/stepfull
+# DONE samba-bf16w/negative repeat=1/stepfull 0.000s
+# START samba-bf16w/negative repeat=2/train
+# DONE samba-bf16w/negative repeat=2/train 0.059s
+# START samba-bf16w/negative repeat=2/infer-save-reload
+# DONE samba-bf16w/negative repeat=2/infer-save-reload 0.123s
+# START samba-bf16w/negative repeat=2/batch
+# DONE samba-bf16w/negative repeat=2/batch 0.000s
+# START samba-bf16w/negative repeat=2/stepfull
+# DONE samba-bf16w/negative repeat=2/stepfull 0.000s
+# CELL samba-bf16w/negative STABLE 0.365s
+| samba-bf16w            | 501528c4887bd54b | 4aac3696d9334aac | 950979811d965c3e | 4e15d620003335cd | ea34cb72985f6924 | 74b5ea29a2d304cc | 501528c4887bd54b | 501528c4887bd54b | c82167f7f39ef800 |
+| samba-bf16w infer      | e7f99e1388ad7a50 | 4b2990b4b8d74d01 | 62e5360e5dd3ecf8 | a6e6f1e042287cdc | 9cf5976b90926770 | 17ace88847aaac79 | e7f99e1388ad7a50 | e7f99e1388ad7a50 | c940554aae2e2ec2 |
+| samba-bf16w model      | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 | 4c577f4f184b9549 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: samba-bf16w batch n/a:weight-format lane; the batch part is measured on its base lane, samba-bf16w stepfull n/a:no-decode-state
+wrote /root/leg_out/records/samba-bf16w/samba-bf16w/cpu-clean.json

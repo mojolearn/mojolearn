@@ -1,0 +1,62 @@
+== runpod_cpu_leg: lane sabsweep-i, RENT ==
+  worktree /Users/andrewhendel/mojolearn-wt/sabotage-sweep  commit 4f7c54c7da21  dirty tracked files: 0
+  pod mojolearn-cpu-sabsweep-i-20260918-013228  image runpod/base:1.3.1-ubuntu2204  flavors cpu3c,cpu5c  vCPU 8  disk 40GB  lease 60m
+  envs default  build [core,estimators,linalg,preprocessing]  sabotage-build [core,estimators,linalg,preprocessing]  jobs 8  bincache=1 envcache=0
+  source: 3046 files, 19778397 bytes gz, sha256 89fc71723d1d7d74
+  box script OK (bash -n, no placeholder, commit baked in); create request: {"name":"mojolearn-cpu-sabsweep-i-20260918-013228","imageName":"runpod/base:1.3.1-ubuntu2204","computeType":"CPU","cpuFlavorIds":["cpu3c","cpu5c"],"vcpuCount":8,"containerDiskInGb":40,"volumeInGb":0,"ports":["22/tcp"],"supportPublicIp":true,"cloudType":"SECURE"}
+  cache key: pixi	pixi	0.77.0	runpod-cpu/v1/pixi-bin/0.77.0/linux-64/pixi
+  cache key: env	default	74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90	runpod-cpu/v1/pixi-env/linux-64/default/74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90
+  dead-man composes (sh -n)
+[21:32:29 cpu-leg] pre-flight: pods on this account
+[21:32:31 cpu-leg] dead-man ARMED before the create: pid 62048, fires in 4800s, keyed by mojolearn-cpu-sabsweep-i-20260918-013228
+[21:32:31 cpu-leg] creating mojolearn-cpu-sabsweep-i-20260918-013228. THE BILL STARTS HERE.
+[21:32:33 cpu-leg] pod sjhgyo5ybrzqzy created. COST $0.24/hr
+[21:33:28 cpu-leg] ssh up (-p 12718 root@213.173.105.97) after 57s; cost $0.24/hr
+[21:33:28 cpu-leg] arming the ON-POD watchdog (60 minutes)
+    WATCHDOG_ALIVE pid=93
+    sleep 3600
+    1
+    TOKEN_GET_200
+[21:33:35 cpu-leg] staging the source (19778397 bytes)
+[21:33:57 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit
+[21:34:03 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260918T013400Z-fbf3a08a entries=297
+[21:34:07 cpu-leg] starting the box pipeline (env, build, command, cache upload)
+[21:34:30 cpu-leg]   box: env_start
+[21:34:30 cpu-leg]   box: env_end
+[21:34:30 cpu-leg]   box: build_start
+[21:35:35 cpu-leg]   box: build_end
+[21:35:35 cpu-leg]   box: run_start
+[21:35:35 cpu-leg]   box: run_end
+[21:35:35 cpu-leg]   box: upload_start
+[21:35:35 cpu-leg]   box: upload_end
+[21:35:35 cpu-leg] fetching $LEG_OUT
+[21:35:41 cpu-leg] BINCACHE PROMOTED 8 refused_or_failed=0
+    cache: pixi	restored	version=0.77.0
+    cache: env:default	miss	install_rc=0	restore_s=0	pixi_install_s=3
+    cache: toolchain	ok	Mojo 1.0.0 (ed45d567)
+    bincache: bindings/build_core_host.sh	miss+built-uploaded	10.5
+    bincache: bindings/build_estimators_host.sh	miss+built-uploaded	11.0
+    bincache: bindings/build_linalg_host.sh	miss+built-uploaded	6.2
+    bincache: bindings/build_preprocessing_host.sh	miss+built-uploaded	5.1
+    bincache: bindings/build_core_host.sh	negative-miss+built-uploaded	10.2
+    bincache: bindings/build_estimators_host.sh	negative-miss+built-uploaded	11.1
+    bincache: bindings/build_linalg_host.sh	negative-miss+built-uploaded	6.0
+    bincache: bindings/build_preprocessing_host.sh	negative-miss+built-uploaded	5.2
+[21:35:41 cpu-leg] command exit: 0   results: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6395396a-b2ac-4b53-ad72-e273c7024073/scratchpad/out-i
+
+== teardown (exit 0) ==
+  DELETE https://rest.runpod.io/v1/pods/sjhgyo5ybrzqzy -> HTTP 204
+  VERIFIED: sjhgyo5ybrzqzy is gone (GET pod HTTP 404; not in the pod listing)
+  create (POST to ssh up)                          57 s
+  arm (on-pod watchdog)                            7 s
+  stage (source + R2 URL maps)                     32 s
+  env (pixi binary + envs)                         5 s
+  build (host bindings)                            66 s
+  run (command)                                    5 s
+  create to first result (POST to command end)     173 s
+  cache upload (misses only)                       0 s
+  fetch                                            2 s
+  teardown (DELETE to verified gone)               2 s
+  billed (POST to verified gone)                   194 s
+  spend $0.0129 at $0.24/hr
+  dead-man cancelled (pid 62048)

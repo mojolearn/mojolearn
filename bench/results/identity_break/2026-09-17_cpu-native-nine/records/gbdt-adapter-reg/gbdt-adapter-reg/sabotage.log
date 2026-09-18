@@ -1,0 +1,169 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:33:24  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-adapter-reg/base repeat=1/train
+# DONE gbdt-adapter-reg/base repeat=1/train 0.647s
+# START gbdt-adapter-reg/base repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/base repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/base repeat=1/batch
+# DONE gbdt-adapter-reg/base repeat=1/batch 0.117s
+# START gbdt-adapter-reg/base repeat=1/stepfull
+# DONE gbdt-adapter-reg/base repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/base repeat=2/train
+# DONE gbdt-adapter-reg/base repeat=2/train 0.583s
+# START gbdt-adapter-reg/base repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/base repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/base repeat=2/batch
+# DONE gbdt-adapter-reg/base repeat=2/batch 0.126s
+# START gbdt-adapter-reg/base repeat=2/stepfull
+# DONE gbdt-adapter-reg/base repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/base STABLE 1.504s
+# START gbdt-adapter-reg/ties repeat=1/train
+# DONE gbdt-adapter-reg/ties repeat=1/train 0.797s
+# START gbdt-adapter-reg/ties repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/ties repeat=1/infer-save-reload 0.009s
+# START gbdt-adapter-reg/ties repeat=1/batch
+# DONE gbdt-adapter-reg/ties repeat=1/batch 0.094s
+# START gbdt-adapter-reg/ties repeat=1/stepfull
+# DONE gbdt-adapter-reg/ties repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/ties repeat=2/train
+# DONE gbdt-adapter-reg/ties repeat=2/train 0.804s
+# START gbdt-adapter-reg/ties repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/ties repeat=2/infer-save-reload 0.009s
+# START gbdt-adapter-reg/ties repeat=2/batch
+# DONE gbdt-adapter-reg/ties repeat=2/batch 0.093s
+# START gbdt-adapter-reg/ties repeat=2/stepfull
+# DONE gbdt-adapter-reg/ties repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/ties STABLE 1.807s
+# START gbdt-adapter-reg/hashed repeat=1/train
+# DONE gbdt-adapter-reg/hashed repeat=1/train 0.621s
+# START gbdt-adapter-reg/hashed repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/hashed repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/hashed repeat=1/batch
+# DONE gbdt-adapter-reg/hashed repeat=1/batch 0.130s
+# START gbdt-adapter-reg/hashed repeat=1/stepfull
+# DONE gbdt-adapter-reg/hashed repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/hashed repeat=2/train
+# DONE gbdt-adapter-reg/hashed repeat=2/train 0.645s
+# START gbdt-adapter-reg/hashed repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/hashed repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/hashed repeat=2/batch
+# DONE gbdt-adapter-reg/hashed repeat=2/batch 0.111s
+# START gbdt-adapter-reg/hashed repeat=2/stepfull
+# DONE gbdt-adapter-reg/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/hashed STABLE 1.537s
+# START gbdt-adapter-reg/wide repeat=1/train
+# DONE gbdt-adapter-reg/wide repeat=1/train 0.624s
+# START gbdt-adapter-reg/wide repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/wide repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/wide repeat=1/batch
+# DONE gbdt-adapter-reg/wide repeat=1/batch 0.120s
+# START gbdt-adapter-reg/wide repeat=1/stepfull
+# DONE gbdt-adapter-reg/wide repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/wide repeat=2/train
+# DONE gbdt-adapter-reg/wide repeat=2/train 0.624s
+# START gbdt-adapter-reg/wide repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/wide repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/wide repeat=2/batch
+# DONE gbdt-adapter-reg/wide repeat=2/batch 0.108s
+# START gbdt-adapter-reg/wide repeat=2/stepfull
+# DONE gbdt-adapter-reg/wide repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/wide STABLE 1.506s
+# START gbdt-adapter-reg/denormal repeat=1/train
+# DONE gbdt-adapter-reg/denormal repeat=1/train 0.593s
+# START gbdt-adapter-reg/denormal repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/denormal repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/denormal repeat=1/batch
+# DONE gbdt-adapter-reg/denormal repeat=1/batch 0.126s
+# START gbdt-adapter-reg/denormal repeat=1/stepfull
+# DONE gbdt-adapter-reg/denormal repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/denormal repeat=2/train
+# DONE gbdt-adapter-reg/denormal repeat=2/train 0.644s
+# START gbdt-adapter-reg/denormal repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/denormal repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/denormal repeat=2/batch
+# DONE gbdt-adapter-reg/denormal repeat=2/batch 0.110s
+# START gbdt-adapter-reg/denormal repeat=2/stepfull
+# DONE gbdt-adapter-reg/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/denormal STABLE 1.503s
+# START gbdt-adapter-reg/denormal_ftz repeat=1/train
+# DONE gbdt-adapter-reg/denormal_ftz repeat=1/train 0.643s
+# START gbdt-adapter-reg/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/denormal_ftz repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/denormal_ftz repeat=1/batch
+# DONE gbdt-adapter-reg/denormal_ftz repeat=1/batch 0.110s
+# START gbdt-adapter-reg/denormal_ftz repeat=1/stepfull
+# DONE gbdt-adapter-reg/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/denormal_ftz repeat=2/train
+# DONE gbdt-adapter-reg/denormal_ftz repeat=2/train 0.643s
+# START gbdt-adapter-reg/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/denormal_ftz repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/denormal_ftz repeat=2/batch
+# DONE gbdt-adapter-reg/denormal_ftz repeat=2/batch 0.119s
+# START gbdt-adapter-reg/denormal_ftz repeat=2/stepfull
+# DONE gbdt-adapter-reg/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/denormal_ftz STABLE 1.545s
+# START gbdt-adapter-reg/dupes repeat=1/train
+# DONE gbdt-adapter-reg/dupes repeat=1/train 0.553s
+# START gbdt-adapter-reg/dupes repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/dupes repeat=1/infer-save-reload 0.014s
+# START gbdt-adapter-reg/dupes repeat=1/batch
+# DONE gbdt-adapter-reg/dupes repeat=1/batch 0.106s
+# START gbdt-adapter-reg/dupes repeat=1/stepfull
+# DONE gbdt-adapter-reg/dupes repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/dupes repeat=2/train
+# DONE gbdt-adapter-reg/dupes repeat=2/train 0.617s
+# START gbdt-adapter-reg/dupes repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/dupes repeat=2/infer-save-reload 0.014s
+# START gbdt-adapter-reg/dupes repeat=2/batch
+# DONE gbdt-adapter-reg/dupes repeat=2/batch 0.118s
+# START gbdt-adapter-reg/dupes repeat=2/stepfull
+# DONE gbdt-adapter-reg/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/dupes STABLE 1.421s
+# START gbdt-adapter-reg/odd repeat=1/train
+# DONE gbdt-adapter-reg/odd repeat=1/train 0.580s
+# START gbdt-adapter-reg/odd repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/odd repeat=1/infer-save-reload 0.010s
+# START gbdt-adapter-reg/odd repeat=1/batch
+# DONE gbdt-adapter-reg/odd repeat=1/batch 0.081s
+# START gbdt-adapter-reg/odd repeat=1/stepfull
+# DONE gbdt-adapter-reg/odd repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/odd repeat=2/train
+# DONE gbdt-adapter-reg/odd repeat=2/train 0.579s
+# START gbdt-adapter-reg/odd repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/odd repeat=2/infer-save-reload 0.010s
+# START gbdt-adapter-reg/odd repeat=2/batch
+# DONE gbdt-adapter-reg/odd repeat=2/batch 0.079s
+# START gbdt-adapter-reg/odd repeat=2/stepfull
+# DONE gbdt-adapter-reg/odd repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/odd STABLE 1.341s
+# START gbdt-adapter-reg/negative repeat=1/train
+# DONE gbdt-adapter-reg/negative repeat=1/train 0.585s
+# START gbdt-adapter-reg/negative repeat=1/infer-save-reload
+# DONE gbdt-adapter-reg/negative repeat=1/infer-save-reload 0.015s
+# START gbdt-adapter-reg/negative repeat=1/batch
+# DONE gbdt-adapter-reg/negative repeat=1/batch 0.124s
+# START gbdt-adapter-reg/negative repeat=1/stepfull
+# DONE gbdt-adapter-reg/negative repeat=1/stepfull 0.000s
+# START gbdt-adapter-reg/negative repeat=2/train
+# DONE gbdt-adapter-reg/negative repeat=2/train 0.645s
+# START gbdt-adapter-reg/negative repeat=2/infer-save-reload
+# DONE gbdt-adapter-reg/negative repeat=2/infer-save-reload 0.015s
+# START gbdt-adapter-reg/negative repeat=2/batch
+# DONE gbdt-adapter-reg/negative repeat=2/batch 0.110s
+# START gbdt-adapter-reg/negative repeat=2/stepfull
+# DONE gbdt-adapter-reg/negative repeat=2/stepfull 0.000s
+# CELL gbdt-adapter-reg/negative STABLE 1.494s
+| gbdt-adapter-reg       | 9f161e093a60a885 | 2e3a7a14b4b08f7e | 3fe65d31926dea9d | db5bbbe4c8160f24 | 62b7e86fd7ae0fc8 | 62b7e86fd7ae0fc8 | fa0d6e7c0f1ab5d6 | 34f963ae8eff11ec | de0c6cf48ff818d4 |
+| gbdt-adapter-reg infer | 3aa3834b41de4288 | ca891cff5d197707 | 01cc51881139d37d | aa9d15377c2ce710 | 4af1a3511e7808ea | 4af1a3511e7808ea | 9b97c2120d2ed65e | 1fa46d13ccf497e2 | b7813b9b21670208 |
+| gbdt-adapter-reg batch | 19bd70f2e2d1d6a1 | f0e98a81cb9918f6 | 5f7f9d428241f46e | ef83dcbd7e59e138 | 93ec477574a88be0 | 93ec477574a88be0 | 413a4c4f12a2889b | 59621986c5c4f031 | fac42e4caa2c6311 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-adapter-reg model n/a:save-not-implemented, gbdt-adapter-reg stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-adapter-reg/gbdt-adapter-reg/cpu-sabotage.json

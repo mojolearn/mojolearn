@@ -186,13 +186,11 @@ def test_cpu_only_selector_stubs_raise_by_name(monkeypatch):
         assert _backend._select_cpu_only(pkg, 'identical', 'NO SUPPORTED GPU FOUND (test)') == 'identical'
         assert _backend.vendor() == 'cpu'
         assert _backend.gpu_arch() is None
-        # Mamba has no host binding (the Mamba blocks, host_surface.NO_CPU_PATH);
-        # gbdt stood here until workstream E batch 3 gave it one and ARIMA
-        # until 030d4e3b2 did, and a family routed on a box where its binding
-        # is built is not a stub.
-        stub = sys.modules['fakepkg._mojolearn_mamba']
+        # Byte LM's host trainer has its own loader; the GPU session binding
+        # remains a named refusal. Mamba now has a routed CPU binding.
+        stub = sys.modules['fakepkg._mojolearn_byte_lm']
         with pytest.raises(ImportError, match='NO GPU binary set') as info:
-            stub.mamba_fit
+            stub.byte_lm_session_open
         assert 'NO SUPPORTED GPU FOUND (test)' in str(info.value)
         # A family whose host binding is BUILT on this box is routed to it, not
         # stubbed (phase 1 routing); the classical host lane's estimators
@@ -200,7 +198,7 @@ def test_cpu_only_selector_stubs_raise_by_name(monkeypatch):
         routed = {name for name, basename in _backend._HOST_MODULES.items()
                   if os.path.exists(_backend.host_module_path(basename))}
         assert set(_backend._MISSING) == set(_backend._MODULES) - routed
-        assert '_mojolearn_mamba' in _backend._MISSING
+        assert '_mojolearn_byte_lm' in _backend._MISSING
     finally:
         for key in [k for k in sys.modules if k.startswith('fakepkg.')]:
             del sys.modules[key]

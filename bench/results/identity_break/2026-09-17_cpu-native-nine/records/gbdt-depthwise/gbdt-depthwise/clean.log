@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:34:00  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-depthwise/base repeat=1/train
+# DONE gbdt-depthwise/base repeat=1/train 2.822s
+# START gbdt-depthwise/base repeat=1/infer-save-reload
+# DONE gbdt-depthwise/base repeat=1/infer-save-reload 0.049s
+# START gbdt-depthwise/base repeat=1/batch
+# DONE gbdt-depthwise/base repeat=1/batch 0.163s
+# START gbdt-depthwise/base repeat=1/stepfull
+# DONE gbdt-depthwise/base repeat=1/stepfull 0.000s
+# START gbdt-depthwise/base repeat=2/train
+# DONE gbdt-depthwise/base repeat=2/train 2.844s
+# START gbdt-depthwise/base repeat=2/infer-save-reload
+# DONE gbdt-depthwise/base repeat=2/infer-save-reload 0.049s
+# START gbdt-depthwise/base repeat=2/batch
+# DONE gbdt-depthwise/base repeat=2/batch 0.172s
+# START gbdt-depthwise/base repeat=2/stepfull
+# DONE gbdt-depthwise/base repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/base STABLE 6.099s
+# START gbdt-depthwise/ties repeat=1/train
+# DONE gbdt-depthwise/ties repeat=1/train 2.403s
+# START gbdt-depthwise/ties repeat=1/infer-save-reload
+# DONE gbdt-depthwise/ties repeat=1/infer-save-reload 0.037s
+# START gbdt-depthwise/ties repeat=1/batch
+# DONE gbdt-depthwise/ties repeat=1/batch 0.128s
+# START gbdt-depthwise/ties repeat=1/stepfull
+# DONE gbdt-depthwise/ties repeat=1/stepfull 0.000s
+# START gbdt-depthwise/ties repeat=2/train
+# DONE gbdt-depthwise/ties repeat=2/train 2.390s
+# START gbdt-depthwise/ties repeat=2/infer-save-reload
+# DONE gbdt-depthwise/ties repeat=2/infer-save-reload 0.036s
+# START gbdt-depthwise/ties repeat=2/batch
+# DONE gbdt-depthwise/ties repeat=2/batch 0.127s
+# START gbdt-depthwise/ties repeat=2/stepfull
+# DONE gbdt-depthwise/ties repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/ties STABLE 5.122s
+# START gbdt-depthwise/hashed repeat=1/train
+# DONE gbdt-depthwise/hashed repeat=1/train 2.826s
+# START gbdt-depthwise/hashed repeat=1/infer-save-reload
+# DONE gbdt-depthwise/hashed repeat=1/infer-save-reload 0.049s
+# START gbdt-depthwise/hashed repeat=1/batch
+# DONE gbdt-depthwise/hashed repeat=1/batch 0.169s
+# START gbdt-depthwise/hashed repeat=1/stepfull
+# DONE gbdt-depthwise/hashed repeat=1/stepfull 0.000s
+# START gbdt-depthwise/hashed repeat=2/train
+# DONE gbdt-depthwise/hashed repeat=2/train 2.861s
+# START gbdt-depthwise/hashed repeat=2/infer-save-reload
+# DONE gbdt-depthwise/hashed repeat=2/infer-save-reload 0.049s
+# START gbdt-depthwise/hashed repeat=2/batch
+# DONE gbdt-depthwise/hashed repeat=2/batch 0.158s
+# START gbdt-depthwise/hashed repeat=2/stepfull
+# DONE gbdt-depthwise/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/hashed STABLE 6.113s
+# START gbdt-depthwise/wide repeat=1/train
+# DONE gbdt-depthwise/wide repeat=1/train 2.856s
+# START gbdt-depthwise/wide repeat=1/infer-save-reload
+# DONE gbdt-depthwise/wide repeat=1/infer-save-reload 0.048s
+# START gbdt-depthwise/wide repeat=1/batch
+# DONE gbdt-depthwise/wide repeat=1/batch 0.167s
+# START gbdt-depthwise/wide repeat=1/stepfull
+# DONE gbdt-depthwise/wide repeat=1/stepfull 0.000s
+# START gbdt-depthwise/wide repeat=2/train
+# DONE gbdt-depthwise/wide repeat=2/train 2.829s
+# START gbdt-depthwise/wide repeat=2/infer-save-reload
+# DONE gbdt-depthwise/wide repeat=2/infer-save-reload 0.048s
+# START gbdt-depthwise/wide repeat=2/batch
+# DONE gbdt-depthwise/wide repeat=2/batch 0.157s
+# START gbdt-depthwise/wide repeat=2/stepfull
+# DONE gbdt-depthwise/wide repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/wide STABLE 6.106s
+# START gbdt-depthwise/denormal repeat=1/train
+# DONE gbdt-depthwise/denormal repeat=1/train 2.667s
+# START gbdt-depthwise/denormal repeat=1/infer-save-reload
+# DONE gbdt-depthwise/denormal repeat=1/infer-save-reload 0.048s
+# START gbdt-depthwise/denormal repeat=1/batch
+# DONE gbdt-depthwise/denormal repeat=1/batch 0.168s
+# START gbdt-depthwise/denormal repeat=1/stepfull
+# DONE gbdt-depthwise/denormal repeat=1/stepfull 0.000s
+# START gbdt-depthwise/denormal repeat=2/train
+# DONE gbdt-depthwise/denormal repeat=2/train 2.826s
+# START gbdt-depthwise/denormal repeat=2/infer-save-reload
+# DONE gbdt-depthwise/denormal repeat=2/infer-save-reload 0.048s
+# START gbdt-depthwise/denormal repeat=2/batch
+# DONE gbdt-depthwise/denormal repeat=2/batch 0.156s
+# START gbdt-depthwise/denormal repeat=2/stepfull
+# DONE gbdt-depthwise/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/denormal STABLE 5.913s
+# START gbdt-depthwise/denormal_ftz repeat=1/train
+# DONE gbdt-depthwise/denormal_ftz repeat=1/train 2.802s
+# START gbdt-depthwise/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-depthwise/denormal_ftz repeat=1/infer-save-reload 0.048s
+# START gbdt-depthwise/denormal_ftz repeat=1/batch
+# DONE gbdt-depthwise/denormal_ftz repeat=1/batch 0.156s
+# START gbdt-depthwise/denormal_ftz repeat=1/stepfull
+# DONE gbdt-depthwise/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-depthwise/denormal_ftz repeat=2/train
+# DONE gbdt-depthwise/denormal_ftz repeat=2/train 2.812s
+# START gbdt-depthwise/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-depthwise/denormal_ftz repeat=2/infer-save-reload 0.049s
+# START gbdt-depthwise/denormal_ftz repeat=2/batch
+# DONE gbdt-depthwise/denormal_ftz repeat=2/batch 0.166s
+# START gbdt-depthwise/denormal_ftz repeat=2/stepfull
+# DONE gbdt-depthwise/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/denormal_ftz STABLE 6.034s
+# START gbdt-depthwise/dupes repeat=1/train
+# DONE gbdt-depthwise/dupes repeat=1/train 2.733s
+# START gbdt-depthwise/dupes repeat=1/infer-save-reload
+# DONE gbdt-depthwise/dupes repeat=1/infer-save-reload 0.044s
+# START gbdt-depthwise/dupes repeat=1/batch
+# DONE gbdt-depthwise/dupes repeat=1/batch 0.149s
+# START gbdt-depthwise/dupes repeat=1/stepfull
+# DONE gbdt-depthwise/dupes repeat=1/stepfull 0.000s
+# START gbdt-depthwise/dupes repeat=2/train
+# DONE gbdt-depthwise/dupes repeat=2/train 2.736s
+# START gbdt-depthwise/dupes repeat=2/infer-save-reload
+# DONE gbdt-depthwise/dupes repeat=2/infer-save-reload 0.044s
+# START gbdt-depthwise/dupes repeat=2/batch
+# DONE gbdt-depthwise/dupes repeat=2/batch 0.160s
+# START gbdt-depthwise/dupes repeat=2/stepfull
+# DONE gbdt-depthwise/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/dupes STABLE 5.868s
+# START gbdt-depthwise/odd repeat=1/train
+# DONE gbdt-depthwise/odd repeat=1/train 2.710s
+# START gbdt-depthwise/odd repeat=1/infer-save-reload
+# DONE gbdt-depthwise/odd repeat=1/infer-save-reload 0.036s
+# START gbdt-depthwise/odd repeat=1/batch
+# DONE gbdt-depthwise/odd repeat=1/batch 0.122s
+# START gbdt-depthwise/odd repeat=1/stepfull
+# DONE gbdt-depthwise/odd repeat=1/stepfull 0.000s
+# START gbdt-depthwise/odd repeat=2/train
+# DONE gbdt-depthwise/odd repeat=2/train 2.716s
+# START gbdt-depthwise/odd repeat=2/infer-save-reload
+# DONE gbdt-depthwise/odd repeat=2/infer-save-reload 0.035s
+# START gbdt-depthwise/odd repeat=2/batch
+# DONE gbdt-depthwise/odd repeat=2/batch 0.121s
+# START gbdt-depthwise/odd repeat=2/stepfull
+# DONE gbdt-depthwise/odd repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/odd STABLE 5.740s
+# START gbdt-depthwise/negative repeat=1/train
+# DONE gbdt-depthwise/negative repeat=1/train 2.825s
+# START gbdt-depthwise/negative repeat=1/infer-save-reload
+# DONE gbdt-depthwise/negative repeat=1/infer-save-reload 0.048s
+# START gbdt-depthwise/negative repeat=1/batch
+# DONE gbdt-depthwise/negative repeat=1/batch 0.169s
+# START gbdt-depthwise/negative repeat=1/stepfull
+# DONE gbdt-depthwise/negative repeat=1/stepfull 0.000s
+# START gbdt-depthwise/negative repeat=2/train
+# DONE gbdt-depthwise/negative repeat=2/train 2.824s
+# START gbdt-depthwise/negative repeat=2/infer-save-reload
+# DONE gbdt-depthwise/negative repeat=2/infer-save-reload 0.048s
+# START gbdt-depthwise/negative repeat=2/batch
+# DONE gbdt-depthwise/negative repeat=2/batch 0.156s
+# START gbdt-depthwise/negative repeat=2/stepfull
+# DONE gbdt-depthwise/negative repeat=2/stepfull 0.000s
+# CELL gbdt-depthwise/negative STABLE 6.071s
+| gbdt-depthwise         | 38726fc0c93c0bff | 465cb10f303e005a | 9455870882645f48 | 2a77ec865e62539a | 64ba350c759ff2e9 | 64ba350c759ff2e9 | e521424a96e216cb | fb9e5c03088814f6 | d77fc9f6a3eee0a2 |
+| gbdt-depthwise infer   | 688bf9a8e927232e | e299a1457dfaedc7 | d11cf64a629bd4fb | 65e906e50a54735e | 7b73dadeb43db4cf | 7b73dadeb43db4cf | fc255cbff38ea320 | 4ee637393df9aff7 | ddaa5cebdc9c1484 |
+| gbdt-depthwise model   | 448c1bcf37ffdc97 | ef4323cc40bbfd0a | 80b172e1332f9dd9 | 38d9c484d12b1f01 | a5f5c6eac0c3732c | a5f5c6eac0c3732c | ca399349c402761a | e4f63fb009a0a7b5 | 9c2f348d3bf8e73c |
+| gbdt-depthwise batch   | 25bf2754b853a026 | 071de76e68c2fc1d | 5f52a35c82337b02 | e3852cc5e1042eb0 | c75b24565da79e80 | c75b24565da79e80 | 72dbff12dd6a21a5 | 992386f8f1c7c126 | fcc3087fb2cb9d5c |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-depthwise stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-depthwise/gbdt-depthwise/cpu-clean.json

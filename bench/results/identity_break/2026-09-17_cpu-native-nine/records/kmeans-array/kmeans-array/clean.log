@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:42:33  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kmeans-array/base repeat=1/train
+# DONE kmeans-array/base repeat=1/train 1.214s
+# START kmeans-array/base repeat=1/infer-save-reload
+# DONE kmeans-array/base repeat=1/infer-save-reload 0.137s
+# START kmeans-array/base repeat=1/batch
+# DONE kmeans-array/base repeat=1/batch 0.197s
+# START kmeans-array/base repeat=1/stepfull
+# DONE kmeans-array/base repeat=1/stepfull 0.000s
+# START kmeans-array/base repeat=2/train
+# DONE kmeans-array/base repeat=2/train 1.223s
+# START kmeans-array/base repeat=2/infer-save-reload
+# DONE kmeans-array/base repeat=2/infer-save-reload 0.136s
+# START kmeans-array/base repeat=2/batch
+# DONE kmeans-array/base repeat=2/batch 0.178s
+# START kmeans-array/base repeat=2/stepfull
+# DONE kmeans-array/base repeat=2/stepfull 0.000s
+# CELL kmeans-array/base STABLE 3.086s
+# START kmeans-array/ties repeat=1/train
+# DONE kmeans-array/ties repeat=1/train 2.664s
+# START kmeans-array/ties repeat=1/infer-save-reload
+# DONE kmeans-array/ties repeat=1/infer-save-reload 0.180s
+# START kmeans-array/ties repeat=1/batch
+# DONE kmeans-array/ties repeat=1/batch 0.211s
+# START kmeans-array/ties repeat=1/stepfull
+# DONE kmeans-array/ties repeat=1/stepfull 0.000s
+# START kmeans-array/ties repeat=2/train
+# DONE kmeans-array/ties repeat=2/train 2.730s
+# START kmeans-array/ties repeat=2/infer-save-reload
+# DONE kmeans-array/ties repeat=2/infer-save-reload 0.188s
+# START kmeans-array/ties repeat=2/batch
+# DONE kmeans-array/ties repeat=2/batch 0.223s
+# START kmeans-array/ties repeat=2/stepfull
+# DONE kmeans-array/ties repeat=2/stepfull 0.000s
+# CELL kmeans-array/ties STABLE 6.197s
+# START kmeans-array/hashed repeat=1/train
+# DONE kmeans-array/hashed repeat=1/train 1.023s
+# START kmeans-array/hashed repeat=1/infer-save-reload
+# DONE kmeans-array/hashed repeat=1/infer-save-reload 0.160s
+# START kmeans-array/hashed repeat=1/batch
+# DONE kmeans-array/hashed repeat=1/batch 0.207s
+# START kmeans-array/hashed repeat=1/stepfull
+# DONE kmeans-array/hashed repeat=1/stepfull 0.000s
+# START kmeans-array/hashed repeat=2/train
+# DONE kmeans-array/hashed repeat=2/train 0.984s
+# START kmeans-array/hashed repeat=2/infer-save-reload
+# DONE kmeans-array/hashed repeat=2/infer-save-reload 0.141s
+# START kmeans-array/hashed repeat=2/batch
+# DONE kmeans-array/hashed repeat=2/batch 0.187s
+# START kmeans-array/hashed repeat=2/stepfull
+# DONE kmeans-array/hashed repeat=2/stepfull 0.000s
+# CELL kmeans-array/hashed STABLE 2.702s
+# START kmeans-array/wide repeat=1/train
+# DONE kmeans-array/wide repeat=1/train 1.787s
+# START kmeans-array/wide repeat=1/infer-save-reload
+# DONE kmeans-array/wide repeat=1/infer-save-reload 0.137s
+# START kmeans-array/wide repeat=1/batch
+# DONE kmeans-array/wide repeat=1/batch 0.186s
+# START kmeans-array/wide repeat=1/stepfull
+# DONE kmeans-array/wide repeat=1/stepfull 0.000s
+# START kmeans-array/wide repeat=2/train
+# DONE kmeans-array/wide repeat=2/train 1.780s
+# START kmeans-array/wide repeat=2/infer-save-reload
+# DONE kmeans-array/wide repeat=2/infer-save-reload 0.122s
+# START kmeans-array/wide repeat=2/batch
+# DONE kmeans-array/wide repeat=2/batch 0.178s
+# START kmeans-array/wide repeat=2/stepfull
+# DONE kmeans-array/wide repeat=2/stepfull 0.000s
+# CELL kmeans-array/wide STABLE 4.191s
+# START kmeans-array/denormal repeat=1/train
+# DONE kmeans-array/denormal repeat=1/train 1.068s
+# START kmeans-array/denormal repeat=1/infer-save-reload
+# DONE kmeans-array/denormal repeat=1/infer-save-reload 0.132s
+# START kmeans-array/denormal repeat=1/batch
+# DONE kmeans-array/denormal repeat=1/batch 0.187s
+# START kmeans-array/denormal repeat=1/stepfull
+# DONE kmeans-array/denormal repeat=1/stepfull 0.000s
+# START kmeans-array/denormal repeat=2/train
+# DONE kmeans-array/denormal repeat=2/train 1.077s
+# START kmeans-array/denormal repeat=2/infer-save-reload
+# DONE kmeans-array/denormal repeat=2/infer-save-reload 0.139s
+# START kmeans-array/denormal repeat=2/batch
+# DONE kmeans-array/denormal repeat=2/batch 0.175s
+# START kmeans-array/denormal repeat=2/stepfull
+# DONE kmeans-array/denormal repeat=2/stepfull 0.000s
+# CELL kmeans-array/denormal STABLE 2.779s
+# START kmeans-array/denormal_ftz repeat=1/train
+# DONE kmeans-array/denormal_ftz repeat=1/train 0.970s
+# START kmeans-array/denormal_ftz repeat=1/infer-save-reload
+# DONE kmeans-array/denormal_ftz repeat=1/infer-save-reload 0.134s
+# START kmeans-array/denormal_ftz repeat=1/batch
+# DONE kmeans-array/denormal_ftz repeat=1/batch 0.187s
+# START kmeans-array/denormal_ftz repeat=1/stepfull
+# DONE kmeans-array/denormal_ftz repeat=1/stepfull 0.000s
+# START kmeans-array/denormal_ftz repeat=2/train
+# DONE kmeans-array/denormal_ftz repeat=2/train 0.981s
+# START kmeans-array/denormal_ftz repeat=2/infer-save-reload
+# DONE kmeans-array/denormal_ftz repeat=2/infer-save-reload 0.129s
+# START kmeans-array/denormal_ftz repeat=2/batch
+# DONE kmeans-array/denormal_ftz repeat=2/batch 0.182s
+# START kmeans-array/denormal_ftz repeat=2/stepfull
+# DONE kmeans-array/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kmeans-array/denormal_ftz STABLE 2.584s
+# START kmeans-array/dupes repeat=1/train
+# DONE kmeans-array/dupes repeat=1/train 1.165s
+# START kmeans-array/dupes repeat=1/infer-save-reload
+# DONE kmeans-array/dupes repeat=1/infer-save-reload 0.128s
+# START kmeans-array/dupes repeat=1/batch
+# DONE kmeans-array/dupes repeat=1/batch 0.182s
+# START kmeans-array/dupes repeat=1/stepfull
+# DONE kmeans-array/dupes repeat=1/stepfull 0.000s
+# START kmeans-array/dupes repeat=2/train
+# DONE kmeans-array/dupes repeat=2/train 1.172s
+# START kmeans-array/dupes repeat=2/infer-save-reload
+# DONE kmeans-array/dupes repeat=2/infer-save-reload 0.132s
+# START kmeans-array/dupes repeat=2/batch
+# DONE kmeans-array/dupes repeat=2/batch 0.184s
+# START kmeans-array/dupes repeat=2/stepfull
+# DONE kmeans-array/dupes repeat=2/stepfull 0.000s
+# CELL kmeans-array/dupes STABLE 2.963s
+# START kmeans-array/odd repeat=1/train
+# DONE kmeans-array/odd repeat=1/train 1.261s
+# START kmeans-array/odd repeat=1/infer-save-reload
+# DONE kmeans-array/odd repeat=1/infer-save-reload 0.084s
+# START kmeans-array/odd repeat=1/batch
+# DONE kmeans-array/odd repeat=1/batch 0.107s
+# START kmeans-array/odd repeat=1/stepfull
+# DONE kmeans-array/odd repeat=1/stepfull 0.000s
+# START kmeans-array/odd repeat=2/train
+# DONE kmeans-array/odd repeat=2/train 1.282s
+# START kmeans-array/odd repeat=2/infer-save-reload
+# DONE kmeans-array/odd repeat=2/infer-save-reload 0.088s
+# START kmeans-array/odd repeat=2/batch
+# DONE kmeans-array/odd repeat=2/batch 0.120s
+# START kmeans-array/odd repeat=2/stepfull
+# DONE kmeans-array/odd repeat=2/stepfull 0.000s
+# CELL kmeans-array/odd STABLE 2.942s
+# START kmeans-array/negative repeat=1/train
+# DONE kmeans-array/negative repeat=1/train 0.243s
+# START kmeans-array/negative repeat=1/infer-save-reload
+# DONE kmeans-array/negative repeat=1/infer-save-reload 0.143s
+# START kmeans-array/negative repeat=1/batch
+# DONE kmeans-array/negative repeat=1/batch 0.192s
+# START kmeans-array/negative repeat=1/stepfull
+# DONE kmeans-array/negative repeat=1/stepfull 0.000s
+# START kmeans-array/negative repeat=2/train
+# DONE kmeans-array/negative repeat=2/train 0.241s
+# START kmeans-array/negative repeat=2/infer-save-reload
+# DONE kmeans-array/negative repeat=2/infer-save-reload 0.148s
+# START kmeans-array/negative repeat=2/batch
+# DONE kmeans-array/negative repeat=2/batch 0.202s
+# START kmeans-array/negative repeat=2/stepfull
+# DONE kmeans-array/negative repeat=2/stepfull 0.000s
+# CELL kmeans-array/negative STABLE 1.169s
+| kmeans-array           | 37ab2f0355ef716a | f7e7677d5ae7597f | a960d6d68f5c8665 | ac99cd5354363ce1 | 92a2b78d865ad9b0 | 92a2b78d865ad9b0 | a71e34a5786a472e | 5b347e0f29ddb844 | 64223107950d714a |
+| kmeans-array infer     | ae9509c50c75d2bc | 5f64992d5da78b8f | 5b19e2ea451673e1 | df4998fb3e12110e | c7e58f1805e93798 | c7e58f1805e93798 | 08f7bb492ea1e9b0 | cb0a1ae7215c27aa | d50bab746221d061 |
+| kmeans-array model     | ce0dcf87ec776455 | cdc008a193fd7e57 | 9c877fbb3fe99c28 | 06692d227986f0bf | 625710908540a7ff | 625710908540a7ff | b1776833ecc1def9 | b6861440bb007c37 | 8f24f57baf792d57 |
+| kmeans-array batch     | 4b1022a4b98908d1 | 3d1ce5fa3f9e09c4 | 694188ed807486c0 | 3acceb1e255e2796 | 8aaa92c6db31897f | 8aaa92c6db31897f | 7a59fb6deea2d1f2 | 21e79ca2282ddc5f | c1a2aad03330b9d3 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kmeans-array stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kmeans-array/kmeans-array/cpu-clean.json

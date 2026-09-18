@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:36  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START ridge-no-intercept/base repeat=1/train
+# DONE ridge-no-intercept/base repeat=1/train 0.021s
+# START ridge-no-intercept/base repeat=1/infer-save-reload
+# DONE ridge-no-intercept/base repeat=1/infer-save-reload 0.003s
+# START ridge-no-intercept/base repeat=1/batch
+# DONE ridge-no-intercept/base repeat=1/batch 0.002s
+# START ridge-no-intercept/base repeat=1/stepfull
+# DONE ridge-no-intercept/base repeat=1/stepfull 0.000s
+# START ridge-no-intercept/base repeat=2/train
+# DONE ridge-no-intercept/base repeat=2/train 0.021s
+# START ridge-no-intercept/base repeat=2/infer-save-reload
+# DONE ridge-no-intercept/base repeat=2/infer-save-reload 0.002s
+# START ridge-no-intercept/base repeat=2/batch
+# DONE ridge-no-intercept/base repeat=2/batch 0.002s
+# START ridge-no-intercept/base repeat=2/stepfull
+# DONE ridge-no-intercept/base repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/base STABLE 0.050s
+# START ridge-no-intercept/ties repeat=1/train
+# DONE ridge-no-intercept/ties repeat=1/train 0.023s
+# START ridge-no-intercept/ties repeat=1/infer-save-reload
+# DONE ridge-no-intercept/ties repeat=1/infer-save-reload 0.002s
+# START ridge-no-intercept/ties repeat=1/batch
+# DONE ridge-no-intercept/ties repeat=1/batch 0.002s
+# START ridge-no-intercept/ties repeat=1/stepfull
+# DONE ridge-no-intercept/ties repeat=1/stepfull 0.000s
+# START ridge-no-intercept/ties repeat=2/train
+# DONE ridge-no-intercept/ties repeat=2/train 0.023s
+# START ridge-no-intercept/ties repeat=2/infer-save-reload
+# DONE ridge-no-intercept/ties repeat=2/infer-save-reload 0.002s
+# START ridge-no-intercept/ties repeat=2/batch
+# DONE ridge-no-intercept/ties repeat=2/batch 0.002s
+# START ridge-no-intercept/ties repeat=2/stepfull
+# DONE ridge-no-intercept/ties repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/ties STABLE 0.053s
+# START ridge-no-intercept/hashed repeat=1/train
+# DONE ridge-no-intercept/hashed repeat=1/train 0.020s
+# START ridge-no-intercept/hashed repeat=1/infer-save-reload
+# DONE ridge-no-intercept/hashed repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/hashed repeat=1/batch
+# DONE ridge-no-intercept/hashed repeat=1/batch 0.002s
+# START ridge-no-intercept/hashed repeat=1/stepfull
+# DONE ridge-no-intercept/hashed repeat=1/stepfull 0.000s
+# START ridge-no-intercept/hashed repeat=2/train
+# DONE ridge-no-intercept/hashed repeat=2/train 0.021s
+# START ridge-no-intercept/hashed repeat=2/infer-save-reload
+# DONE ridge-no-intercept/hashed repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/hashed repeat=2/batch
+# DONE ridge-no-intercept/hashed repeat=2/batch 0.002s
+# START ridge-no-intercept/hashed repeat=2/stepfull
+# DONE ridge-no-intercept/hashed repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/hashed STABLE 0.047s
+# START ridge-no-intercept/wide repeat=1/train
+# DONE ridge-no-intercept/wide repeat=1/train 0.020s
+# START ridge-no-intercept/wide repeat=1/infer-save-reload
+# DONE ridge-no-intercept/wide repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/wide repeat=1/batch
+# DONE ridge-no-intercept/wide repeat=1/batch 0.002s
+# START ridge-no-intercept/wide repeat=1/stepfull
+# DONE ridge-no-intercept/wide repeat=1/stepfull 0.000s
+# START ridge-no-intercept/wide repeat=2/train
+# DONE ridge-no-intercept/wide repeat=2/train 0.020s
+# START ridge-no-intercept/wide repeat=2/infer-save-reload
+# DONE ridge-no-intercept/wide repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/wide repeat=2/batch
+# DONE ridge-no-intercept/wide repeat=2/batch 0.002s
+# START ridge-no-intercept/wide repeat=2/stepfull
+# DONE ridge-no-intercept/wide repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/wide STABLE 0.047s
+# START ridge-no-intercept/denormal repeat=1/train
+# DONE ridge-no-intercept/denormal repeat=1/train 0.020s
+# START ridge-no-intercept/denormal repeat=1/infer-save-reload
+# DONE ridge-no-intercept/denormal repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/denormal repeat=1/batch
+# DONE ridge-no-intercept/denormal repeat=1/batch 0.002s
+# START ridge-no-intercept/denormal repeat=1/stepfull
+# DONE ridge-no-intercept/denormal repeat=1/stepfull 0.000s
+# START ridge-no-intercept/denormal repeat=2/train
+# DONE ridge-no-intercept/denormal repeat=2/train 0.020s
+# START ridge-no-intercept/denormal repeat=2/infer-save-reload
+# DONE ridge-no-intercept/denormal repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/denormal repeat=2/batch
+# DONE ridge-no-intercept/denormal repeat=2/batch 0.002s
+# START ridge-no-intercept/denormal repeat=2/stepfull
+# DONE ridge-no-intercept/denormal repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/denormal STABLE 0.047s
+# START ridge-no-intercept/denormal_ftz repeat=1/train
+# DONE ridge-no-intercept/denormal_ftz repeat=1/train 0.020s
+# START ridge-no-intercept/denormal_ftz repeat=1/infer-save-reload
+# DONE ridge-no-intercept/denormal_ftz repeat=1/infer-save-reload 0.002s
+# START ridge-no-intercept/denormal_ftz repeat=1/batch
+# DONE ridge-no-intercept/denormal_ftz repeat=1/batch 0.002s
+# START ridge-no-intercept/denormal_ftz repeat=1/stepfull
+# DONE ridge-no-intercept/denormal_ftz repeat=1/stepfull 0.000s
+# START ridge-no-intercept/denormal_ftz repeat=2/train
+# DONE ridge-no-intercept/denormal_ftz repeat=2/train 0.020s
+# START ridge-no-intercept/denormal_ftz repeat=2/infer-save-reload
+# DONE ridge-no-intercept/denormal_ftz repeat=2/infer-save-reload 0.002s
+# START ridge-no-intercept/denormal_ftz repeat=2/batch
+# DONE ridge-no-intercept/denormal_ftz repeat=2/batch 0.002s
+# START ridge-no-intercept/denormal_ftz repeat=2/stepfull
+# DONE ridge-no-intercept/denormal_ftz repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/denormal_ftz STABLE 0.047s
+# START ridge-no-intercept/dupes repeat=1/train
+# DONE ridge-no-intercept/dupes repeat=1/train 0.020s
+# START ridge-no-intercept/dupes repeat=1/infer-save-reload
+# DONE ridge-no-intercept/dupes repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/dupes repeat=1/batch
+# DONE ridge-no-intercept/dupes repeat=1/batch 0.002s
+# START ridge-no-intercept/dupes repeat=1/stepfull
+# DONE ridge-no-intercept/dupes repeat=1/stepfull 0.000s
+# START ridge-no-intercept/dupes repeat=2/train
+# DONE ridge-no-intercept/dupes repeat=2/train 0.020s
+# START ridge-no-intercept/dupes repeat=2/infer-save-reload
+# DONE ridge-no-intercept/dupes repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/dupes repeat=2/batch
+# DONE ridge-no-intercept/dupes repeat=2/batch 0.002s
+# START ridge-no-intercept/dupes repeat=2/stepfull
+# DONE ridge-no-intercept/dupes repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/dupes STABLE 0.046s
+# START ridge-no-intercept/odd repeat=1/train
+# DONE ridge-no-intercept/odd repeat=1/train 0.014s
+# START ridge-no-intercept/odd repeat=1/infer-save-reload
+# DONE ridge-no-intercept/odd repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/odd repeat=1/batch
+# DONE ridge-no-intercept/odd repeat=1/batch 0.002s
+# START ridge-no-intercept/odd repeat=1/stepfull
+# DONE ridge-no-intercept/odd repeat=1/stepfull 0.000s
+# START ridge-no-intercept/odd repeat=2/train
+# DONE ridge-no-intercept/odd repeat=2/train 0.013s
+# START ridge-no-intercept/odd repeat=2/infer-save-reload
+# DONE ridge-no-intercept/odd repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/odd repeat=2/batch
+# DONE ridge-no-intercept/odd repeat=2/batch 0.002s
+# START ridge-no-intercept/odd repeat=2/stepfull
+# DONE ridge-no-intercept/odd repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/odd STABLE 0.034s
+# START ridge-no-intercept/negative repeat=1/train
+# DONE ridge-no-intercept/negative repeat=1/train 0.021s
+# START ridge-no-intercept/negative repeat=1/infer-save-reload
+# DONE ridge-no-intercept/negative repeat=1/infer-save-reload 0.001s
+# START ridge-no-intercept/negative repeat=1/batch
+# DONE ridge-no-intercept/negative repeat=1/batch 0.002s
+# START ridge-no-intercept/negative repeat=1/stepfull
+# DONE ridge-no-intercept/negative repeat=1/stepfull 0.000s
+# START ridge-no-intercept/negative repeat=2/train
+# DONE ridge-no-intercept/negative repeat=2/train 0.020s
+# START ridge-no-intercept/negative repeat=2/infer-save-reload
+# DONE ridge-no-intercept/negative repeat=2/infer-save-reload 0.001s
+# START ridge-no-intercept/negative repeat=2/batch
+# DONE ridge-no-intercept/negative repeat=2/batch 0.002s
+# START ridge-no-intercept/negative repeat=2/stepfull
+# DONE ridge-no-intercept/negative repeat=2/stepfull 0.000s
+# CELL ridge-no-intercept/negative STABLE 0.048s
+| ridge-no-intercept     | e204dda9123f12e3 | ac42fbd677f38d8b | 17fff2c49b98a03b | 691ad64b7c390264 | 101be89305e8c33e | 101be89305e8c33e | b7455db0e7ae2c52 | eeebbe52e0973b96 | 5d8fc2f6282a45ea |
+| ridge-no-intercept infer | a1aec56946aacec1 | 3ef35e1aacbc1704 | d1d208799a2f915b | 503c2148921fb258 | 1d9a11562cffb87d | 1d9a11562cffb87d | 01a0ee6178b6a2dc | c580e4c2f68421b0 | 378b27ca87bad474 |
+| ridge-no-intercept model | b13493e0f2d2b5ca | 1ad2be758451ab66 | baab4d073e60e15b | 60855f54e66d9ee3 | eab80fdddd89fb17 | eab80fdddd89fb17 | e3cc79f2ce833de4 | ce5d4778031d22a3 | a5f759e64b716f04 |
+| ridge-no-intercept batch | c4bab8147236e2b8 | 68659b12d57e860b | d02e23db68662842 | 63cea81ce12b37d8 | 4a31bce934d35894 | 4a31bce934d35894 | d9ac452612b5e4fb | 4fee353e54da8592 | 71ff297bc29d5897 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: ridge-no-intercept stepfull n/a:no-decode-state
+wrote /root/leg_out/records/ridge-no-intercept/ridge-no-intercept/cpu-sabotage.json

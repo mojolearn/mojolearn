@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:29:27  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START arima-seasonal-c/base repeat=1/train
+# DONE arima-seasonal-c/base repeat=1/train 0.092s
+# START arima-seasonal-c/base repeat=1/infer-save-reload
+# DONE arima-seasonal-c/base repeat=1/infer-save-reload 0.010s
+# START arima-seasonal-c/base repeat=1/batch
+# DONE arima-seasonal-c/base repeat=1/batch 0.007s
+# START arima-seasonal-c/base repeat=1/stepfull
+# DONE arima-seasonal-c/base repeat=1/stepfull 0.000s
+# START arima-seasonal-c/base repeat=2/train
+# DONE arima-seasonal-c/base repeat=2/train 0.092s
+# START arima-seasonal-c/base repeat=2/infer-save-reload
+# DONE arima-seasonal-c/base repeat=2/infer-save-reload 0.009s
+# START arima-seasonal-c/base repeat=2/batch
+# DONE arima-seasonal-c/base repeat=2/batch 0.007s
+# START arima-seasonal-c/base repeat=2/stepfull
+# DONE arima-seasonal-c/base repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/base STABLE 0.217s
+# START arima-seasonal-c/ties repeat=1/train
+# DONE arima-seasonal-c/ties repeat=1/train 0.125s
+# START arima-seasonal-c/ties repeat=1/infer-save-reload
+# DONE arima-seasonal-c/ties repeat=1/infer-save-reload 0.009s
+# START arima-seasonal-c/ties repeat=1/batch
+# DONE arima-seasonal-c/ties repeat=1/batch 0.007s
+# START arima-seasonal-c/ties repeat=1/stepfull
+# DONE arima-seasonal-c/ties repeat=1/stepfull 0.000s
+# START arima-seasonal-c/ties repeat=2/train
+# DONE arima-seasonal-c/ties repeat=2/train 0.124s
+# START arima-seasonal-c/ties repeat=2/infer-save-reload
+# DONE arima-seasonal-c/ties repeat=2/infer-save-reload 0.009s
+# START arima-seasonal-c/ties repeat=2/batch
+# DONE arima-seasonal-c/ties repeat=2/batch 0.007s
+# START arima-seasonal-c/ties repeat=2/stepfull
+# DONE arima-seasonal-c/ties repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/ties STABLE 0.281s
+# START arima-seasonal-c/hashed repeat=1/train
+# DONE arima-seasonal-c/hashed repeat=1/train 0.080s
+# START arima-seasonal-c/hashed repeat=1/infer-save-reload
+# DONE arima-seasonal-c/hashed repeat=1/infer-save-reload 0.009s
+# START arima-seasonal-c/hashed repeat=1/batch
+# DONE arima-seasonal-c/hashed repeat=1/batch 0.007s
+# START arima-seasonal-c/hashed repeat=1/stepfull
+# DONE arima-seasonal-c/hashed repeat=1/stepfull 0.000s
+# START arima-seasonal-c/hashed repeat=2/train
+# DONE arima-seasonal-c/hashed repeat=2/train 0.080s
+# START arima-seasonal-c/hashed repeat=2/infer-save-reload
+# DONE arima-seasonal-c/hashed repeat=2/infer-save-reload 0.008s
+# START arima-seasonal-c/hashed repeat=2/batch
+# DONE arima-seasonal-c/hashed repeat=2/batch 0.007s
+# START arima-seasonal-c/hashed repeat=2/stepfull
+# DONE arima-seasonal-c/hashed repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/hashed STABLE 0.191s
+# START arima-seasonal-c/wide repeat=1/train
+# DONE arima-seasonal-c/wide repeat=1/train 0.160s
+# START arima-seasonal-c/wide repeat=1/infer-save-reload
+# DONE arima-seasonal-c/wide repeat=1/infer-save-reload 0.009s
+# START arima-seasonal-c/wide repeat=1/batch
+# DONE arima-seasonal-c/wide repeat=1/batch 0.007s
+# START arima-seasonal-c/wide repeat=1/stepfull
+# DONE arima-seasonal-c/wide repeat=1/stepfull 0.000s
+# START arima-seasonal-c/wide repeat=2/train
+# DONE arima-seasonal-c/wide repeat=2/train 0.163s
+# START arima-seasonal-c/wide repeat=2/infer-save-reload
+# DONE arima-seasonal-c/wide repeat=2/infer-save-reload 0.009s
+# START arima-seasonal-c/wide repeat=2/batch
+# DONE arima-seasonal-c/wide repeat=2/batch 0.007s
+# START arima-seasonal-c/wide repeat=2/stepfull
+# DONE arima-seasonal-c/wide repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/wide STABLE 0.355s
+# START arima-seasonal-c/denormal repeat=1/train
+# DONE arima-seasonal-c/denormal repeat=1/train 0.220s
+# START arima-seasonal-c/denormal repeat=1/infer-save-reload
+# DONE arima-seasonal-c/denormal repeat=1/infer-save-reload 0.008s
+# START arima-seasonal-c/denormal repeat=1/batch
+# DONE arima-seasonal-c/denormal repeat=1/batch 0.006s
+# START arima-seasonal-c/denormal repeat=1/stepfull
+# DONE arima-seasonal-c/denormal repeat=1/stepfull 0.000s
+# START arima-seasonal-c/denormal repeat=2/train
+# DONE arima-seasonal-c/denormal repeat=2/train 0.219s
+# START arima-seasonal-c/denormal repeat=2/infer-save-reload
+# DONE arima-seasonal-c/denormal repeat=2/infer-save-reload 0.008s
+# START arima-seasonal-c/denormal repeat=2/batch
+# DONE arima-seasonal-c/denormal repeat=2/batch 0.006s
+# START arima-seasonal-c/denormal repeat=2/stepfull
+# DONE arima-seasonal-c/denormal repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/denormal STABLE 0.469s
+# START arima-seasonal-c/denormal_ftz repeat=1/train
+# DONE arima-seasonal-c/denormal_ftz repeat=1/train 0.219s
+# START arima-seasonal-c/denormal_ftz repeat=1/infer-save-reload
+# DONE arima-seasonal-c/denormal_ftz repeat=1/infer-save-reload 0.008s
+# START arima-seasonal-c/denormal_ftz repeat=1/batch
+# DONE arima-seasonal-c/denormal_ftz repeat=1/batch 0.006s
+# START arima-seasonal-c/denormal_ftz repeat=1/stepfull
+# DONE arima-seasonal-c/denormal_ftz repeat=1/stepfull 0.000s
+# START arima-seasonal-c/denormal_ftz repeat=2/train
+# DONE arima-seasonal-c/denormal_ftz repeat=2/train 0.218s
+# START arima-seasonal-c/denormal_ftz repeat=2/infer-save-reload
+# DONE arima-seasonal-c/denormal_ftz repeat=2/infer-save-reload 0.008s
+# START arima-seasonal-c/denormal_ftz repeat=2/batch
+# DONE arima-seasonal-c/denormal_ftz repeat=2/batch 0.006s
+# START arima-seasonal-c/denormal_ftz repeat=2/stepfull
+# DONE arima-seasonal-c/denormal_ftz repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/denormal_ftz STABLE 0.467s
+# START arima-seasonal-c/dupes repeat=1/train
+# DONE arima-seasonal-c/dupes repeat=1/train 0.092s
+# START arima-seasonal-c/dupes repeat=1/infer-save-reload
+# DONE arima-seasonal-c/dupes repeat=1/infer-save-reload 0.008s
+# START arima-seasonal-c/dupes repeat=1/batch
+# DONE arima-seasonal-c/dupes repeat=1/batch 0.007s
+# START arima-seasonal-c/dupes repeat=1/stepfull
+# DONE arima-seasonal-c/dupes repeat=1/stepfull 0.000s
+# START arima-seasonal-c/dupes repeat=2/train
+# DONE arima-seasonal-c/dupes repeat=2/train 0.092s
+# START arima-seasonal-c/dupes repeat=2/infer-save-reload
+# DONE arima-seasonal-c/dupes repeat=2/infer-save-reload 0.008s
+# START arima-seasonal-c/dupes repeat=2/batch
+# DONE arima-seasonal-c/dupes repeat=2/batch 0.007s
+# START arima-seasonal-c/dupes repeat=2/stepfull
+# DONE arima-seasonal-c/dupes repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/dupes STABLE 0.214s
+# START arima-seasonal-c/odd repeat=1/train
+# DONE arima-seasonal-c/odd repeat=1/train 0.109s
+# START arima-seasonal-c/odd repeat=1/infer-save-reload
+# DONE arima-seasonal-c/odd repeat=1/infer-save-reload 0.009s
+# START arima-seasonal-c/odd repeat=1/batch
+# DONE arima-seasonal-c/odd repeat=1/batch 0.007s
+# START arima-seasonal-c/odd repeat=1/stepfull
+# DONE arima-seasonal-c/odd repeat=1/stepfull 0.000s
+# START arima-seasonal-c/odd repeat=2/train
+# DONE arima-seasonal-c/odd repeat=2/train 0.111s
+# START arima-seasonal-c/odd repeat=2/infer-save-reload
+# DONE arima-seasonal-c/odd repeat=2/infer-save-reload 0.009s
+# START arima-seasonal-c/odd repeat=2/batch
+# DONE arima-seasonal-c/odd repeat=2/batch 0.007s
+# START arima-seasonal-c/odd repeat=2/stepfull
+# DONE arima-seasonal-c/odd repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/odd STABLE 0.252s
+# START arima-seasonal-c/negative repeat=1/train
+# DONE arima-seasonal-c/negative repeat=1/train 2.481s
+# START arima-seasonal-c/negative repeat=1/infer-save-reload
+# DONE arima-seasonal-c/negative repeat=1/infer-save-reload 0.008s
+# START arima-seasonal-c/negative repeat=1/batch
+# DONE arima-seasonal-c/negative repeat=1/batch 0.007s
+# START arima-seasonal-c/negative repeat=1/stepfull
+# DONE arima-seasonal-c/negative repeat=1/stepfull 0.000s
+# START arima-seasonal-c/negative repeat=2/train
+# DONE arima-seasonal-c/negative repeat=2/train 2.461s
+# START arima-seasonal-c/negative repeat=2/infer-save-reload
+# DONE arima-seasonal-c/negative repeat=2/infer-save-reload 0.008s
+# START arima-seasonal-c/negative repeat=2/batch
+# DONE arima-seasonal-c/negative repeat=2/batch 0.007s
+# START arima-seasonal-c/negative repeat=2/stepfull
+# DONE arima-seasonal-c/negative repeat=2/stepfull 0.000s
+# CELL arima-seasonal-c/negative STABLE 4.972s
+| arima-seasonal-c       | 42be56eb08618d06 | 3f4310ed2ca1916c | 7ae4ecfec9e44629 | 19ff67a69ef4bde5 | 1463a682faf73788 | 1463a682faf73788 | 42be56eb08618d06 | bbb1934530f8d29f | ba4b9b3e3f974781 |
+| arima-seasonal-c infer | 1371409bb3b2a902 | 8416822759ed1958 | 0f6ecca2a794c9c2 | 4e8d7d152e657d21 | 66fffa4b9871796c | 66fffa4b9871796c | 1371409bb3b2a902 | 7b490940a1a68a86 | 7ac3c9d00c5290ec |
+| arima-seasonal-c model | eb42b659f6dd72a3 | 1a755972346e0056 | ed2b07a0a64ced2a | b20ba8deedd6fc2d | c45c99d6a68d9c8b | 00d243102ad6d999 | eb42b659f6dd72a3 | 9efe622f0df5e791 | 8566ec4fe40c094e |
+| arima-seasonal-c batch | 63bdb26d3454553c | 920c2f772d238774 | a0059c0d857f9ff8 | c9fbda1ea057894e | b717ce314d706831 | b717ce314d706831 | 63bdb26d3454553c | 02c3af6c2e3442a4 | 40747a3341e09c01 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: arima-seasonal-c stepfull n/a:no-decode-state
+wrote /root/leg_out/records/arima-seasonal-c/arima-seasonal-c/cpu-sabotage.json

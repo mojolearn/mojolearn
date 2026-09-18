@@ -57,10 +57,56 @@ def _sabotage_fold_order(tests):
     return rotated
 
 
+def _sabotage_requested():
+    return (os.environ.get(_FOLD_ORDER_SABOTAGE) == '1'
+            and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
+
+
+#: DEVIATION 3104 (lane/python-hotpath, 2026-09-17). Below this many rows the
+#: Python routines below are the only path; above it the fold bookkeeping
+#: runs in the core helpers of bindings/hotpath_helpers.mojo when the binary
+#: has them. Measured on the M4 at 1,000,000 rows, five folds: the ten
+#: `_indices` calls and five overlap tests cost 1867 ms and the default folds
+#: 195 to 416 ms, every one of them integer bookkeeping.
+_NATIVE_MIN_ROWS = 256
+
+
+def _native_indices(value, n):
+    """`_indices`' three tests through `check_indices_i64`: 0 accepted, 1 out
+    of range, 2 duplicate, tested in that order as below; None when the
+    helper is not available."""
+    if value.size < _NATIVE_MIN_ROWS:
+        return None
+    from ._buffer import _native_optional
+    check = _native_optional('check_indices_i64')
+    if check is None:
+        return None
+    as_i64 = value if value.dtype == '<i8' else value.astype('<i8')
+    return as_i64, int(check(_addr_ro(as_i64), as_i64.size, int(n)))
+
+
+def _overlap(train, test, n):
+    """Whether two accepted index Arrays share a row."""
+    if min(train.size, test.size) >= _NATIVE_MIN_ROWS and n > 0:
+        from ._buffer import _native_optional
+        overlap = _native_optional('indices_overlap_i64')
+        if overlap is not None:
+            return bool(overlap(_addr_ro(train), train.size, _addr_ro(test),
+                                test.size, int(n)))
+    return bool(set(train.tolist()).intersection(test.tolist()))
+
+
 def _indices(value, n, name):
     value = _materialize(value, name)[0]
     if value.ndim != 1 or value.dtype[1:2] not in 'iu' or not value.size:
         raise ValueError(f'{name} must be a nonempty 1-D integer index array')
+    fast = _native_indices(value, n)
+    if fast is not None:
+        if fast[1] == 1:
+            raise ValueError(f'{name} contains an out-of-range index')
+        if fast[1] == 2:
+            raise ValueError(f'{name} contains duplicate indices')
+        return fast[0]
     indices = value.tolist()
     if min(indices) < 0 or max(indices) >= n:
         raise ValueError(f'{name} contains an out-of-range index')
@@ -194,6 +240,89 @@ def _default_folds(y, n_splits, classifier):
         yield [i for i in range(n) if i not in heldout], test
 
 
+def _default_fold_arrays(y, n_splits, classifier):
+    """`_default_folds` as int64 index Arrays (DEVIATION 3104).
+
+    `_default_folds` above is the DEFINITION and stays what
+    `tools/identity_break.py`'s cross-val-folds lane and the fold tests call;
+    it yields Python lists, one int object per row per fold. This yields the
+    same indices in the same order as Arrays, computed by the core helpers
+    `fold_ids` and `select_fold_i64`, and hands the work back to
+    `_default_folds` whenever the helpers cannot answer exactly as it does:
+    the binary lacks them, the sabotage control is armed, labels arrive as
+    Python objects, or there are more classes than the native encoder holds.
+    `tests/test_hotpath_native.py` holds the two equal."""
+    fast = None
+    if not _sabotage_requested():
+        fast = _native_default_folds(y, n_splits, classifier)
+    if fast is None:
+        yield from _default_folds(y, n_splits, classifier)
+        return
+    yield from fast
+
+
+def _native_default_folds(y, n_splits, classifier):
+    from ._array import _REDUCE_INTEGRAL
+    from ._buffer import _native_optional, _output_store
+    from ._labels import _NATIVE_ENCODE, _encode_labels_native
+
+    n = len(y)
+    if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral) or n_splits < 2:
+        return None  # `_default_folds` raises
+    if n_splits > n or n < _NATIVE_MIN_ROWS:
+        return None
+    n_splits = int(n_splits)
+    fold_ids = _native_optional('fold_ids')
+    select = _native_optional('select_fold_i64')
+    if fold_ids is None or select is None:
+        return None
+    codes = None
+    classes = ()
+    if classifier:
+        # `discrete` above: every label a str, or every label an integer
+        # valued finite real. Only a numeric buffer is answered here.
+        if not isinstance(y, Array) or y.ndim != 1 or y.dtype not in _NATIVE_ENCODE:
+            return None
+        discrete = True
+        if y.dtype in ('<f4', '<f8'):
+            integral = _native_optional('reduce_stat')
+            if integral is None:
+                return None
+            from ._array import _NATIVE_CODE
+            discrete = bool(integral(_addr_ro(y), _NATIVE_CODE[y.dtype], n, _REDUCE_INTEGRAL))
+        if discrete:
+            encoded = _encode_labels_native(y)
+            if encoded is None:
+                return None
+            classes, codes = encoded
+    fold_store = _output_store('i', n)
+    fold_counts = _output_store('q', n_splits)
+    class_counts = _output_store('q', max(len(classes), 1))
+    fold_ids(0 if codes is None else _addr_ro(codes), n, len(classes), n_splits,
+             class_counts.buffer_info()[0], fold_store.buffer_info()[0],
+             fold_counts.buffer_info()[0])
+    if codes is not None:
+        counts = [int(class_counts[i]) for i in range(len(classes))]
+        if max(counts) < n_splits:
+            raise ValueError('cv cannot exceed the number of members in every class')
+        if min(counts) < n_splits:
+            warnings.warn('The least populated class has fewer members than cv folds',
+                          UserWarning, stacklevel=4)
+    out = []
+    for fold in range(n_splits):
+        size = int(fold_counts[fold])
+        test = empty((size,), '<i8')
+        train = empty((n - size,), '<i8')
+        # neither side is empty: every fold holds a row (n_splits <= n, and a
+        # stratified fold draws from the largest class, which has n_splits
+        # members or the call was refused above) and n >= _NATIVE_MIN_ROWS
+        got = int(select(fold_store.buffer_info()[0], n, fold, _addr(test), _addr(train)))
+        if got != size:
+            raise RuntimeError('mojolearn: select_fold_i64 disagrees with fold_ids')
+        out.append((train, test))
+    return out
+
+
 def _folds(cv, estimator, X, y, groups):
     if cv is None or isinstance(cv, numbers.Integral):
         if groups is not None:
@@ -206,7 +335,7 @@ def _folds(cv, estimator, X, y, groups):
                 'passed as cv; the default unshuffled folds would ignore it, '
                 'so it is refused (pass cv=<splitter with .split(X, y, groups)>)'
             )
-        return _default_folds(y, 5 if cv is None else cv, _classifier(estimator))
+        return _default_fold_arrays(y, 5 if cv is None else cv, _classifier(estimator))
     if callable(getattr(cv, 'split', None)):
         return cv.split(X, y, groups)
     if isinstance(cv, str):
@@ -381,7 +510,7 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     for train, test in _folds(cv, estimator, X, y, groups):
         train = _indices(train, len(X), 'train')
         test = _indices(test, len(X), 'test')
-        if set(train.tolist()).intersection(test.tolist()):
+        if _overlap(train, test, len(X)):
             raise ValueError('train and test indices overlap')
         folds.append((train, test))
     if not folds:

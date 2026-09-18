@@ -1,0 +1,171 @@
+2929 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x383b40000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:55  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-query-rmse/base repeat=1/train
+# DONE gbdt-query-rmse/base repeat=1/train 1.298s
+# START gbdt-query-rmse/base repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/base repeat=1/infer-save-reload 0.068s
+# START gbdt-query-rmse/base repeat=1/batch
+# DONE gbdt-query-rmse/base repeat=1/batch 0.252s
+# START gbdt-query-rmse/base repeat=1/stepfull
+# DONE gbdt-query-rmse/base repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/base repeat=2/train
+# DONE gbdt-query-rmse/base repeat=2/train 1.308s
+# START gbdt-query-rmse/base repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/base repeat=2/infer-save-reload 0.055s
+# START gbdt-query-rmse/base repeat=2/batch
+# DONE gbdt-query-rmse/base repeat=2/batch 0.259s
+# START gbdt-query-rmse/base repeat=2/stepfull
+# DONE gbdt-query-rmse/base repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/base STABLE 3.242s
+# START gbdt-query-rmse/ties repeat=1/train
+# DONE gbdt-query-rmse/ties repeat=1/train 1.660s
+# START gbdt-query-rmse/ties repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/ties repeat=1/infer-save-reload 0.041s
+# START gbdt-query-rmse/ties repeat=1/batch
+# DONE gbdt-query-rmse/ties repeat=1/batch 0.206s
+# START gbdt-query-rmse/ties repeat=1/stepfull
+# DONE gbdt-query-rmse/ties repeat=1/stepfull 0.001s
+# START gbdt-query-rmse/ties repeat=2/train
+# DONE gbdt-query-rmse/ties repeat=2/train 1.619s
+# START gbdt-query-rmse/ties repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/ties repeat=2/infer-save-reload 0.041s
+# START gbdt-query-rmse/ties repeat=2/batch
+# DONE gbdt-query-rmse/ties repeat=2/batch 0.210s
+# START gbdt-query-rmse/ties repeat=2/stepfull
+# DONE gbdt-query-rmse/ties repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/ties STABLE 3.778s
+# START gbdt-query-rmse/hashed repeat=1/train
+# DONE gbdt-query-rmse/hashed repeat=1/train 1.288s
+# START gbdt-query-rmse/hashed repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/hashed repeat=1/infer-save-reload 0.053s
+# START gbdt-query-rmse/hashed repeat=1/batch
+# DONE gbdt-query-rmse/hashed repeat=1/batch 0.260s
+# START gbdt-query-rmse/hashed repeat=1/stepfull
+# DONE gbdt-query-rmse/hashed repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/hashed repeat=2/train
+# DONE gbdt-query-rmse/hashed repeat=2/train 1.311s
+# START gbdt-query-rmse/hashed repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/hashed repeat=2/infer-save-reload 0.054s
+# START gbdt-query-rmse/hashed repeat=2/batch
+# DONE gbdt-query-rmse/hashed repeat=2/batch 0.227s
+# START gbdt-query-rmse/hashed repeat=2/stepfull
+# DONE gbdt-query-rmse/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/hashed STABLE 3.195s
+# START gbdt-query-rmse/wide repeat=1/train
+# DONE gbdt-query-rmse/wide repeat=1/train 1.188s
+# START gbdt-query-rmse/wide repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/wide repeat=1/infer-save-reload 0.053s
+# START gbdt-query-rmse/wide repeat=1/batch
+# DONE gbdt-query-rmse/wide repeat=1/batch 0.241s
+# START gbdt-query-rmse/wide repeat=1/stepfull
+# DONE gbdt-query-rmse/wide repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/wide repeat=2/train
+# DONE gbdt-query-rmse/wide repeat=2/train 1.244s
+# START gbdt-query-rmse/wide repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/wide repeat=2/infer-save-reload 0.055s
+# START gbdt-query-rmse/wide repeat=2/batch
+# DONE gbdt-query-rmse/wide repeat=2/batch 0.227s
+# START gbdt-query-rmse/wide repeat=2/stepfull
+# DONE gbdt-query-rmse/wide repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/wide STABLE 3.009s
+# START gbdt-query-rmse/denormal repeat=1/train
+# DONE gbdt-query-rmse/denormal repeat=1/train 1.193s
+# START gbdt-query-rmse/denormal repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/denormal repeat=1/infer-save-reload 0.053s
+# START gbdt-query-rmse/denormal repeat=1/batch
+# DONE gbdt-query-rmse/denormal repeat=1/batch 0.239s
+# START gbdt-query-rmse/denormal repeat=1/stepfull
+# DONE gbdt-query-rmse/denormal repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/denormal repeat=2/train
+# DONE gbdt-query-rmse/denormal repeat=2/train 1.242s
+# START gbdt-query-rmse/denormal repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/denormal repeat=2/infer-save-reload 0.055s
+# START gbdt-query-rmse/denormal repeat=2/batch
+# DONE gbdt-query-rmse/denormal repeat=2/batch 0.234s
+# START gbdt-query-rmse/denormal repeat=2/stepfull
+# DONE gbdt-query-rmse/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/denormal STABLE 3.017s
+# START gbdt-query-rmse/denormal_ftz repeat=1/train
+# DONE gbdt-query-rmse/denormal_ftz repeat=1/train 1.290s
+# START gbdt-query-rmse/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/denormal_ftz repeat=1/infer-save-reload 0.056s
+# START gbdt-query-rmse/denormal_ftz repeat=1/batch
+# DONE gbdt-query-rmse/denormal_ftz repeat=1/batch 0.228s
+# START gbdt-query-rmse/denormal_ftz repeat=1/stepfull
+# DONE gbdt-query-rmse/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/denormal_ftz repeat=2/train
+# DONE gbdt-query-rmse/denormal_ftz repeat=2/train 1.267s
+# START gbdt-query-rmse/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/denormal_ftz repeat=2/infer-save-reload 0.055s
+# START gbdt-query-rmse/denormal_ftz repeat=2/batch
+# DONE gbdt-query-rmse/denormal_ftz repeat=2/batch 0.235s
+# START gbdt-query-rmse/denormal_ftz repeat=2/stepfull
+# DONE gbdt-query-rmse/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/denormal_ftz STABLE 3.133s
+# START gbdt-query-rmse/dupes repeat=1/train
+# DONE gbdt-query-rmse/dupes repeat=1/train 1.243s
+# START gbdt-query-rmse/dupes repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/dupes repeat=1/infer-save-reload 0.052s
+# START gbdt-query-rmse/dupes repeat=1/batch
+# DONE gbdt-query-rmse/dupes repeat=1/batch 0.224s
+# START gbdt-query-rmse/dupes repeat=1/stepfull
+# DONE gbdt-query-rmse/dupes repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/dupes repeat=2/train
+# DONE gbdt-query-rmse/dupes repeat=2/train 1.182s
+# START gbdt-query-rmse/dupes repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/dupes repeat=2/infer-save-reload 0.051s
+# START gbdt-query-rmse/dupes repeat=2/batch
+# DONE gbdt-query-rmse/dupes repeat=2/batch 0.229s
+# START gbdt-query-rmse/dupes repeat=2/stepfull
+# DONE gbdt-query-rmse/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/dupes STABLE 2.981s
+# START gbdt-query-rmse/odd repeat=1/train
+# DONE gbdt-query-rmse/odd repeat=1/train 1.089s
+# START gbdt-query-rmse/odd repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/odd repeat=1/infer-save-reload 0.038s
+# START gbdt-query-rmse/odd repeat=1/batch
+# DONE gbdt-query-rmse/odd repeat=1/batch 0.162s
+# START gbdt-query-rmse/odd repeat=1/stepfull
+# DONE gbdt-query-rmse/odd repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/odd repeat=2/train
+# DONE gbdt-query-rmse/odd repeat=2/train 1.107s
+# START gbdt-query-rmse/odd repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/odd repeat=2/infer-save-reload 0.039s
+# START gbdt-query-rmse/odd repeat=2/batch
+# DONE gbdt-query-rmse/odd repeat=2/batch 0.163s
+# START gbdt-query-rmse/odd repeat=2/stepfull
+# DONE gbdt-query-rmse/odd repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/odd STABLE 2.599s
+# START gbdt-query-rmse/negative repeat=1/train
+# DONE gbdt-query-rmse/negative repeat=1/train 1.219s
+# START gbdt-query-rmse/negative repeat=1/infer-save-reload
+# DONE gbdt-query-rmse/negative repeat=1/infer-save-reload 0.055s
+# START gbdt-query-rmse/negative repeat=1/batch
+# DONE gbdt-query-rmse/negative repeat=1/batch 0.235s
+# START gbdt-query-rmse/negative repeat=1/stepfull
+# DONE gbdt-query-rmse/negative repeat=1/stepfull 0.000s
+# START gbdt-query-rmse/negative repeat=2/train
+# DONE gbdt-query-rmse/negative repeat=2/train 1.203s
+# START gbdt-query-rmse/negative repeat=2/infer-save-reload
+# DONE gbdt-query-rmse/negative repeat=2/infer-save-reload 0.056s
+# START gbdt-query-rmse/negative repeat=2/batch
+# DONE gbdt-query-rmse/negative repeat=2/batch 0.224s
+# START gbdt-query-rmse/negative repeat=2/stepfull
+# DONE gbdt-query-rmse/negative repeat=2/stepfull 0.000s
+# CELL gbdt-query-rmse/negative STABLE 2.992s
+| gbdt-query-rmse        | b3f448427d6e764f | 40a5b5333f0a32ef | 037180a4e77a2e38 | 3a9e00eef4767797 | 9eafe04d1d3fd94a | 9eafe04d1d3fd94a | 35d5b70dfdfdae27 | 13b70161e523142f | 894ae264ede88d81 |
+| gbdt-query-rmse infer  | c5dd11cce5027431 | 82656b1f96479524 | 0566f24903ce0674 | 447a819e524fcccc | 1e4eeb0927efece5 | 1e4eeb0927efece5 | 879fc00ccba61a0f | 66a562a9f1518dd7 | 849398cb245e871b |
+| gbdt-query-rmse model  | 773082ee900f4629 | a00477457a3f0913 | 16caced3a09772bb | b65722533c4ae205 | cddf4fcffcb48d08 | cddf4fcffcb48d08 | f1943ba73c5aaae2 | 850fcd0f8a7c5a1a | f29206320346ca65 |
+| gbdt-query-rmse batch  | 2f9ae940636f0782 | 348dc9138ec69402 | b3e4df171a60cb9c | e002bc430d55377e | d70b4e8b04069113 | d70b4e8b04069113 | 27944dc03ad39674 | 8990d2af358d0692 | e30a96f6219299fa |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-query-rmse stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-query-rmse/gbdt-query-rmse/cpu-clean.json

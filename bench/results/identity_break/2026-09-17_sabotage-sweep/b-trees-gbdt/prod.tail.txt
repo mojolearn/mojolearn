@@ -1,0 +1,25 @@
+# DONE iforest-tuned/ties repeat=2/infer-save-reload 0.526s
+# START iforest-tuned/ties repeat=2/batch
+# DONE iforest-tuned/ties repeat=2/batch 4.955s
+# CELL iforest-tuned/ties STABLE 11.796s
+| iforest-tuned          | 0a149db6290bacd6 | 8f43ab374b0ab900 |
+| iforest-tuned infer    | bcbf71b247c3951c | 9f8aee8ed2215f71 |
+| iforest-tuned model    | b9c8ac0cfcb621b7 | d8e240e70ffb7034 |
+| iforest-tuned batch    | 23c01febba0472d9 | e2eb172cfc7af595 |
+
+cells=70 stable=60 moved=0 refused=10
+infer: stable=60
+model: stable=56 n/a=4
+batch: stable=60
+n/a: gbdt-adapter-clf model n/a:save-not-implemented, gbdt-adapter-reg model n/a:save-not-implemented
+REFUSED gbdt-categorical-ctr-tables/base: RuntimeError: missing verification CTR model: /root/mojolearn/python/mojolearn/verify_reference/ctr_models/gbdt-categorical-ctr-tables.base.npz
+REFUSED gbdt-categorical-ctr-tables/ties: RuntimeError: missing verification CTR model: /root/mojolearn/python/mojolearn/verify_reference/ctr_models/gbdt-categorical-ctr-tables.ties.npz
+REFUSED gbdt-tensor-ctr-tables/base: RuntimeError: missing verification CTR model: /root/mojolearn/python/mojolearn/verify_reference/ctr_models/gbdt-tensor-ctr-tables.base.npz
+REFUSED gbdt-tensor-ctr-tables/ties: RuntimeError: missing verification CTR model: /root/mojolearn/python/mojolearn/verify_reference/ctr_models/gbdt-tensor-ctr-tables.ties.npz
+REFUSED gbdt-adapter-score-weighted/base: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+REFUSED gbdt-adapter-score-weighted/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+REFUSED rf-score-weighted/base: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+REFUSED rf-score-weighted/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+REFUSED cross-val/base: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+REFUSED cross-val/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_forest_host, _mojolearn_gbd
+wrote /root/leg_out/cpu-x86.json

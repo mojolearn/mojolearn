@@ -1,0 +1,151 @@
+{
+  "source_commit": "544605965a721d4ffa1f426ee20ed21e603fa85b",
+  "arms": {
+    "clean": {
+      "families": {
+        "estimators": {
+          "command": [
+            "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+            "build",
+            "-j",
+            "1",
+            "--emit",
+            "shared-lib",
+            "--target-cpu",
+            "apple-m1",
+            "-Xlinker",
+            "-platform_version",
+            "-Xlinker",
+            "macos",
+            "-Xlinker",
+            "11.0",
+            "-Xlinker",
+            "26.5",
+            "-D",
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "-D",
+            "MOJOLEARN_COLUMN_CPU",
+            "-I",
+            ".",
+            "-I",
+            "bindings",
+            "bindings/_mojolearn_estimators_host.mojo",
+            "-o",
+            "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/native-control-repairs/clean/_mojolearn_estimators_host.so"
+          ],
+          "seconds": 9.347806499999933,
+          "sha256": "c3e2a39d440d19be1d79f0be6b4e10036a18253845bbebd4917dbfd85413a80f"
+        },
+        "preprocessing": {
+          "command": [
+            "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+            "build",
+            "-j",
+            "1",
+            "--emit",
+            "shared-lib",
+            "--target-cpu",
+            "apple-m1",
+            "-Xlinker",
+            "-platform_version",
+            "-Xlinker",
+            "macos",
+            "-Xlinker",
+            "11.0",
+            "-Xlinker",
+            "26.5",
+            "-D",
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "-D",
+            "MOJOLEARN_COLUMN_CPU",
+            "-I",
+            ".",
+            "-I",
+            "bindings",
+            "bindings/_mojolearn_preprocessing_host.mojo",
+            "-o",
+            "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/native-control-repairs/clean/_mojolearn_preprocessing_host.so"
+          ],
+          "seconds": 3.8482551670003886,
+          "sha256": "d8a08d5b2ce871b365d08d0c893554989d09359122e6c5b3852e525e7b1cf1b8"
+        }
+      },
+      "exit_code": 0
+    },
+    "sabotage": {
+      "families": {
+        "estimators": {
+          "command": [
+            "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+            "build",
+            "-j",
+            "1",
+            "--emit",
+            "shared-lib",
+            "--target-cpu",
+            "apple-m1",
+            "-Xlinker",
+            "-platform_version",
+            "-Xlinker",
+            "macos",
+            "-Xlinker",
+            "11.0",
+            "-Xlinker",
+            "26.5",
+            "-D",
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "-D",
+            "MOJOLEARN_COLUMN_CPU",
+            "-I",
+            ".",
+            "-I",
+            "bindings",
+            "-D",
+            "MOJOLEARN_HOST_SABOTAGE=1",
+            "bindings/_mojolearn_estimators_host.mojo",
+            "-o",
+            "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/native-control-repairs/sabotage/_mojolearn_estimators_host.so"
+          ],
+          "seconds": 9.043902250001338,
+          "sha256": "1a4650cbd792c975751a27a1df9f8adf7ac4286fb1747b9b28f335d65d3dea2c"
+        },
+        "preprocessing": {
+          "command": [
+            "/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/default/bin/mojo",
+            "build",
+            "-j",
+            "1",
+            "--emit",
+            "shared-lib",
+            "--target-cpu",
+            "apple-m1",
+            "-Xlinker",
+            "-platform_version",
+            "-Xlinker",
+            "macos",
+            "-Xlinker",
+            "11.0",
+            "-Xlinker",
+            "26.5",
+            "-D",
+            "MOJOLEARN_NUMERIC_IDENTICAL=1",
+            "-D",
+            "MOJOLEARN_COLUMN_CPU",
+            "-I",
+            ".",
+            "-I",
+            "bindings",
+            "-D",
+            "MOJOLEARN_HOST_SABOTAGE=1",
+            "bindings/_mojolearn_preprocessing_host.mojo",
+            "-o",
+            "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/native-control-repairs/sabotage/_mojolearn_preprocessing_host.so"
+          ],
+          "seconds": 3.7391275000009045,
+          "sha256": "addb5eef35efd11306f55aad07225be49b916d3af900720b84df03c23f7a2f4f"
+        }
+      },
+      "exit_code": 0
+    }
+  }
+}

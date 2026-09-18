@@ -1,0 +1,209 @@
+1411 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7901c0000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:24:59  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START transformer-bf16w/base repeat=1/train
+# DONE transformer-bf16w/base repeat=1/train 0.032s
+# START transformer-bf16w/base repeat=1/infer-save-reload
+# DONE transformer-bf16w/base repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/base repeat=1/batch
+# DONE transformer-bf16w/base repeat=1/batch 0.112s
+# START transformer-bf16w/base repeat=1/stepfull
+# DONE transformer-bf16w/base repeat=1/stepfull 0.016s
+# START transformer-bf16w/base repeat=1/rlpair
+# DONE transformer-bf16w/base repeat=1/rlpair 0.201s
+# START transformer-bf16w/base repeat=2/train
+# DONE transformer-bf16w/base repeat=2/train 0.031s
+# START transformer-bf16w/base repeat=2/infer-save-reload
+# DONE transformer-bf16w/base repeat=2/infer-save-reload 0.006s
+# START transformer-bf16w/base repeat=2/batch
+# DONE transformer-bf16w/base repeat=2/batch 0.108s
+# START transformer-bf16w/base repeat=2/stepfull
+# DONE transformer-bf16w/base repeat=2/stepfull 0.016s
+# START transformer-bf16w/base repeat=2/rlpair
+# DONE transformer-bf16w/base repeat=2/rlpair 0.199s
+# CELL transformer-bf16w/base STABLE 0.727s
+# START transformer-bf16w/ties repeat=1/train
+# DONE transformer-bf16w/ties repeat=1/train 0.038s
+# START transformer-bf16w/ties repeat=1/infer-save-reload
+# DONE transformer-bf16w/ties repeat=1/infer-save-reload 0.011s
+# START transformer-bf16w/ties repeat=1/batch
+# DONE transformer-bf16w/ties repeat=1/batch 0.112s
+# START transformer-bf16w/ties repeat=1/stepfull
+# DONE transformer-bf16w/ties repeat=1/stepfull 0.016s
+# START transformer-bf16w/ties repeat=1/rlpair
+# DONE transformer-bf16w/ties repeat=1/rlpair 0.203s
+# START transformer-bf16w/ties repeat=2/train
+# DONE transformer-bf16w/ties repeat=2/train 0.032s
+# START transformer-bf16w/ties repeat=2/infer-save-reload
+# DONE transformer-bf16w/ties repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/ties repeat=2/batch
+# DONE transformer-bf16w/ties repeat=2/batch 0.113s
+# START transformer-bf16w/ties repeat=2/stepfull
+# DONE transformer-bf16w/ties repeat=2/stepfull 0.022s
+# START transformer-bf16w/ties repeat=2/rlpair
+# DONE transformer-bf16w/ties repeat=2/rlpair 0.225s
+# CELL transformer-bf16w/ties STABLE 0.779s
+# START transformer-bf16w/hashed repeat=1/train
+# DONE transformer-bf16w/hashed repeat=1/train 0.033s
+# START transformer-bf16w/hashed repeat=1/infer-save-reload
+# DONE transformer-bf16w/hashed repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/hashed repeat=1/batch
+# DONE transformer-bf16w/hashed repeat=1/batch 0.113s
+# START transformer-bf16w/hashed repeat=1/stepfull
+# DONE transformer-bf16w/hashed repeat=1/stepfull 0.015s
+# START transformer-bf16w/hashed repeat=1/rlpair
+# DONE transformer-bf16w/hashed repeat=1/rlpair 0.207s
+# START transformer-bf16w/hashed repeat=2/train
+# DONE transformer-bf16w/hashed repeat=2/train 0.032s
+# START transformer-bf16w/hashed repeat=2/infer-save-reload
+# DONE transformer-bf16w/hashed repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/hashed repeat=2/batch
+# DONE transformer-bf16w/hashed repeat=2/batch 0.106s
+# START transformer-bf16w/hashed repeat=2/stepfull
+# DONE transformer-bf16w/hashed repeat=2/stepfull 0.016s
+# START transformer-bf16w/hashed repeat=2/rlpair
+# DONE transformer-bf16w/hashed repeat=2/rlpair 0.202s
+# CELL transformer-bf16w/hashed STABLE 0.735s
+# START transformer-bf16w/wide repeat=1/train
+# DONE transformer-bf16w/wide repeat=1/train 0.033s
+# START transformer-bf16w/wide repeat=1/infer-save-reload
+# DONE transformer-bf16w/wide repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/wide repeat=1/batch
+# DONE transformer-bf16w/wide repeat=1/batch 0.107s
+# START transformer-bf16w/wide repeat=1/stepfull
+# DONE transformer-bf16w/wide repeat=1/stepfull 0.015s
+# START transformer-bf16w/wide repeat=1/rlpair
+# DONE transformer-bf16w/wide repeat=1/rlpair 0.200s
+# START transformer-bf16w/wide repeat=2/train
+# DONE transformer-bf16w/wide repeat=2/train 0.032s
+# START transformer-bf16w/wide repeat=2/infer-save-reload
+# DONE transformer-bf16w/wide repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/wide repeat=2/batch
+# DONE transformer-bf16w/wide repeat=2/batch 0.107s
+# START transformer-bf16w/wide repeat=2/stepfull
+# DONE transformer-bf16w/wide repeat=2/stepfull 0.015s
+# START transformer-bf16w/wide repeat=2/rlpair
+# DONE transformer-bf16w/wide repeat=2/rlpair 0.200s
+# CELL transformer-bf16w/wide STABLE 0.721s
+# START transformer-bf16w/denormal repeat=1/train
+# DONE transformer-bf16w/denormal repeat=1/train 0.032s
+# START transformer-bf16w/denormal repeat=1/infer-save-reload
+# DONE transformer-bf16w/denormal repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/denormal repeat=1/batch
+# DONE transformer-bf16w/denormal repeat=1/batch 0.107s
+# START transformer-bf16w/denormal repeat=1/stepfull
+# DONE transformer-bf16w/denormal repeat=1/stepfull 0.015s
+# START transformer-bf16w/denormal repeat=1/rlpair
+# DONE transformer-bf16w/denormal repeat=1/rlpair 0.199s
+# START transformer-bf16w/denormal repeat=2/train
+# DONE transformer-bf16w/denormal repeat=2/train 0.032s
+# START transformer-bf16w/denormal repeat=2/infer-save-reload
+# DONE transformer-bf16w/denormal repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/denormal repeat=2/batch
+# DONE transformer-bf16w/denormal repeat=2/batch 0.113s
+# START transformer-bf16w/denormal repeat=2/stepfull
+# DONE transformer-bf16w/denormal repeat=2/stepfull 0.017s
+# START transformer-bf16w/denormal repeat=2/rlpair
+# DONE transformer-bf16w/denormal repeat=2/rlpair 0.201s
+# CELL transformer-bf16w/denormal STABLE 0.729s
+# START transformer-bf16w/denormal_ftz repeat=1/train
+# DONE transformer-bf16w/denormal_ftz repeat=1/train 0.033s
+# START transformer-bf16w/denormal_ftz repeat=1/infer-save-reload
+# DONE transformer-bf16w/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/denormal_ftz repeat=1/batch
+# DONE transformer-bf16w/denormal_ftz repeat=1/batch 0.107s
+# START transformer-bf16w/denormal_ftz repeat=1/stepfull
+# DONE transformer-bf16w/denormal_ftz repeat=1/stepfull 0.016s
+# START transformer-bf16w/denormal_ftz repeat=1/rlpair
+# DONE transformer-bf16w/denormal_ftz repeat=1/rlpair 0.198s
+# START transformer-bf16w/denormal_ftz repeat=2/train
+# DONE transformer-bf16w/denormal_ftz repeat=2/train 0.031s
+# START transformer-bf16w/denormal_ftz repeat=2/infer-save-reload
+# DONE transformer-bf16w/denormal_ftz repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/denormal_ftz repeat=2/batch
+# DONE transformer-bf16w/denormal_ftz repeat=2/batch 0.109s
+# START transformer-bf16w/denormal_ftz repeat=2/stepfull
+# DONE transformer-bf16w/denormal_ftz repeat=2/stepfull 0.016s
+# START transformer-bf16w/denormal_ftz repeat=2/rlpair
+# DONE transformer-bf16w/denormal_ftz repeat=2/rlpair 0.199s
+# CELL transformer-bf16w/denormal_ftz STABLE 0.719s
+# START transformer-bf16w/dupes repeat=1/train
+# DONE transformer-bf16w/dupes repeat=1/train 0.031s
+# START transformer-bf16w/dupes repeat=1/infer-save-reload
+# DONE transformer-bf16w/dupes repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/dupes repeat=1/batch
+# DONE transformer-bf16w/dupes repeat=1/batch 0.107s
+# START transformer-bf16w/dupes repeat=1/stepfull
+# DONE transformer-bf16w/dupes repeat=1/stepfull 0.016s
+# START transformer-bf16w/dupes repeat=1/rlpair
+# DONE transformer-bf16w/dupes repeat=1/rlpair 0.198s
+# START transformer-bf16w/dupes repeat=2/train
+# DONE transformer-bf16w/dupes repeat=2/train 0.030s
+# START transformer-bf16w/dupes repeat=2/infer-save-reload
+# DONE transformer-bf16w/dupes repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/dupes repeat=2/batch
+# DONE transformer-bf16w/dupes repeat=2/batch 0.109s
+# START transformer-bf16w/dupes repeat=2/stepfull
+# DONE transformer-bf16w/dupes repeat=2/stepfull 0.015s
+# START transformer-bf16w/dupes repeat=2/rlpair
+# DONE transformer-bf16w/dupes repeat=2/rlpair 0.197s
+# CELL transformer-bf16w/dupes STABLE 0.715s
+# START transformer-bf16w/odd repeat=1/train
+# DONE transformer-bf16w/odd repeat=1/train 0.031s
+# START transformer-bf16w/odd repeat=1/infer-save-reload
+# DONE transformer-bf16w/odd repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/odd repeat=1/batch
+# DONE transformer-bf16w/odd repeat=1/batch 0.108s
+# START transformer-bf16w/odd repeat=1/stepfull
+# DONE transformer-bf16w/odd repeat=1/stepfull 0.016s
+# START transformer-bf16w/odd repeat=1/rlpair
+# DONE transformer-bf16w/odd repeat=1/rlpair 0.196s
+# START transformer-bf16w/odd repeat=2/train
+# DONE transformer-bf16w/odd repeat=2/train 0.030s
+# START transformer-bf16w/odd repeat=2/infer-save-reload
+# DONE transformer-bf16w/odd repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/odd repeat=2/batch
+# DONE transformer-bf16w/odd repeat=2/batch 0.110s
+# START transformer-bf16w/odd repeat=2/stepfull
+# DONE transformer-bf16w/odd repeat=2/stepfull 0.016s
+# START transformer-bf16w/odd repeat=2/rlpair
+# DONE transformer-bf16w/odd repeat=2/rlpair 0.195s
+# CELL transformer-bf16w/odd STABLE 0.713s
+# START transformer-bf16w/negative repeat=1/train
+# DONE transformer-bf16w/negative repeat=1/train 0.031s
+# START transformer-bf16w/negative repeat=1/infer-save-reload
+# DONE transformer-bf16w/negative repeat=1/infer-save-reload 0.005s
+# START transformer-bf16w/negative repeat=1/batch
+# DONE transformer-bf16w/negative repeat=1/batch 0.111s
+# START transformer-bf16w/negative repeat=1/stepfull
+# DONE transformer-bf16w/negative repeat=1/stepfull 0.016s
+# START transformer-bf16w/negative repeat=1/rlpair
+# DONE transformer-bf16w/negative repeat=1/rlpair 0.201s
+# START transformer-bf16w/negative repeat=2/train
+# DONE transformer-bf16w/negative repeat=2/train 0.032s
+# START transformer-bf16w/negative repeat=2/infer-save-reload
+# DONE transformer-bf16w/negative repeat=2/infer-save-reload 0.005s
+# START transformer-bf16w/negative repeat=2/batch
+# DONE transformer-bf16w/negative repeat=2/batch 0.111s
+# START transformer-bf16w/negative repeat=2/stepfull
+# DONE transformer-bf16w/negative repeat=2/stepfull 0.017s
+# START transformer-bf16w/negative repeat=2/rlpair
+# DONE transformer-bf16w/negative repeat=2/rlpair 0.197s
+# CELL transformer-bf16w/negative STABLE 0.726s
+| transformer-bf16w      | 06d974dee6ff6793 | 8695a54cba4f307f | a0d56f8768e10772 | f8d6b9cf2660cd58 | f7e2fce90e213dd8 | f7e2fce90e213dd8 | 6f8f2b528549d197 | 06d974dee6ff6793 | d3bfc1416cd8a378 |
+| transformer-bf16w infer | 169fecc965a95ab1 | dbeda049dcf8f274 | a1a97857c9173bed | 36d16fc2218e478c | dc6cba57b1d01fa0 | dc6cba57b1d01fa0 | 3d6bd9c26904ae7f | 169fecc965a95ab1 | 8bf385eb1147d24f |
+| transformer-bf16w batch | 58af5131650b4464 | bf2b70547fd226a0 | 215d2bc3058273fc | a341cd9c336a9c0a | a9fc938d7e1b0ab8 | a9fc938d7e1b0ab8 | 6aa8e75deda7dbfb | 58af5131650b4464 | 46ade2f05b09580c |
+| transformer-bf16w rlpair | ab50d89237a8fb20 | 546040d29a923b96 | a4b4f7da40228b53 | 9a36df2884972760 | ab5ffe43dde4ad87 | 94b961e3eec4d63a | ab50d89237a8fb20 | ab50d89237a8fb20 | 2b9a9e8d8e75620f |
+| transformer-bf16w stepfull | 5a383e41977f4eb2 | 5cfb0139160557d8 | e0c9599862ddf91d | c522a3e7b26dbe4b | 337f0c29f8317502 | 337f0c29f8317502 | 616834275a40644a | 5a383e41977f4eb2 | 17f90e7af068fd2f |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+rlpair: stable=9
+stepfull: stable=9
+n/a: transformer-bf16w model n/a:no-save
+wrote /root/leg_out/records/transformer-bf16w/transformer-bf16w/cpu-sabotage.json

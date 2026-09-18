@@ -1,0 +1,49 @@
+NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AMD EPYC 9965 192-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_training_host'] commit=475b3dbd633f85468054ceb9832e25164cb64d4c
+NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AMD EPYC 9965 192-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_training_host'] commit=475b3dbd633f85468054ceb9832e25164cb64d4c
+| lane/fixture                 | verdict    | cpu-amd-epyc-9965-192-core-processor | cpu-amd-epyc-9965-192-core-processor |
+|------------------------------|------------|------------------|------------------|
+| ordered-gradient-sum/base    | ONE-COLUMN | a742b6c812b94347 | REFUSED          |
+| ordered-gradient-sum/denormal | ONE-COLUMN | a742b6c812b94347 | REFUSED          |
+| ordered-gradient-sum/denormal_ftz | ONE-COLUMN | f177e887cf2c4061 | REFUSED          |
+| ordered-gradient-sum/dupes   | ONE-COLUMN | a742b6c812b94347 | REFUSED          |
+| ordered-gradient-sum/hashed  | ONE-COLUMN | 46ae184b0eb32ecd | REFUSED          |
+| ordered-gradient-sum/negative | ONE-COLUMN | 868313e90eef7ea7 | REFUSED          |
+| ordered-gradient-sum/odd     | ONE-COLUMN | 415e287d325868c6 | REFUSED          |
+| ordered-gradient-sum/ties    | ONE-COLUMN | e625f92c8f010b8b | REFUSED          |
+| ordered-gradient-sum/wide    | ONE-COLUMN | a742b6c812b94347 | REFUSED          |
+
+summary: ONE-COLUMN=9
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9965-192-core-processor | cpu-amd-epyc-9965-192-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| ordered-gradient-sum/base    | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/base    | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/base    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/denormal | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/denormal | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/denormal | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/denormal_ftz | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/denormal_ftz | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/denormal_ftz | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/dupes   | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/dupes   | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/dupes   | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/hashed  | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/hashed  | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/hashed  | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/negative | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/negative | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/negative | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/odd     | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/odd     | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/odd     | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/ties    | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/ties    | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/ties    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+| ordered-gradient-sum/wide    | infer  | N/A          | n/a:function     | REFUSED          |
+| ordered-gradient-sum/wide    | model  | N/A          | n/a:no-save      | REFUSED          |
+| ordered-gradient-sum/wide    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | REFUSED          |
+
+summary (infer/model): N/A=18
+summary (batch): N/A=9
+summary (rlpair): 

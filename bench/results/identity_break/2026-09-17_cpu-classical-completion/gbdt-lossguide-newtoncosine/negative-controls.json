@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "gbdt-lossguide-newtoncosine/base",
+      "context_matches": true,
+      "clean": "b9a66e78b1e9dd1d",
+      "sabotage": "df3ed0329ef56740",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/denormal",
+      "context_matches": true,
+      "clean": "6e1370724c044744",
+      "sabotage": "00b9a3e41f2c493a",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/denormal_ftz",
+      "context_matches": true,
+      "clean": "6e1370724c044744",
+      "sabotage": "00b9a3e41f2c493a",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/dupes",
+      "context_matches": true,
+      "clean": "e3bb40e42372b082",
+      "sabotage": "307e872bcf7fb615",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/hashed",
+      "context_matches": true,
+      "clean": "4f66908a915dd7f1",
+      "sabotage": "2c12e50dfd655e08",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/negative",
+      "context_matches": true,
+      "clean": "5fe92956c5744649",
+      "sabotage": "22045c191a0de1bf",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/odd",
+      "context_matches": true,
+      "clean": "3f2758d421e0a9a6",
+      "sabotage": "7715fb982a03dcbc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/ties",
+      "context_matches": true,
+      "clean": "ffd8cb51686ba5e4",
+      "sabotage": "71f458f89a53568d",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-lossguide-newtoncosine/wide",
+      "context_matches": true,
+      "clean": "a6038f9c277f01d3",
+      "sabotage": "097d1427a9e94ced",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

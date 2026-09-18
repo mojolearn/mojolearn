@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:05  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START minmax-scaler/base repeat=1/train
+# DONE minmax-scaler/base repeat=1/train 0.002s
+# START minmax-scaler/base repeat=1/infer-save-reload
+# DONE minmax-scaler/base repeat=1/infer-save-reload 0.003s
+# START minmax-scaler/base repeat=1/batch
+# DONE minmax-scaler/base repeat=1/batch 0.002s
+# START minmax-scaler/base repeat=1/stepfull
+# DONE minmax-scaler/base repeat=1/stepfull 0.000s
+# START minmax-scaler/base repeat=2/train
+# DONE minmax-scaler/base repeat=2/train 0.001s
+# START minmax-scaler/base repeat=2/infer-save-reload
+# DONE minmax-scaler/base repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/base repeat=2/batch
+# DONE minmax-scaler/base repeat=2/batch 0.002s
+# START minmax-scaler/base repeat=2/stepfull
+# DONE minmax-scaler/base repeat=2/stepfull 0.000s
+# CELL minmax-scaler/base STABLE 0.012s
+# START minmax-scaler/ties repeat=1/train
+# DONE minmax-scaler/ties repeat=1/train 0.001s
+# START minmax-scaler/ties repeat=1/infer-save-reload
+# DONE minmax-scaler/ties repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/ties repeat=1/batch
+# DONE minmax-scaler/ties repeat=1/batch 0.002s
+# START minmax-scaler/ties repeat=1/stepfull
+# DONE minmax-scaler/ties repeat=1/stepfull 0.000s
+# START minmax-scaler/ties repeat=2/train
+# DONE minmax-scaler/ties repeat=2/train 0.001s
+# START minmax-scaler/ties repeat=2/infer-save-reload
+# DONE minmax-scaler/ties repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/ties repeat=2/batch
+# DONE minmax-scaler/ties repeat=2/batch 0.002s
+# START minmax-scaler/ties repeat=2/stepfull
+# DONE minmax-scaler/ties repeat=2/stepfull 0.000s
+# CELL minmax-scaler/ties STABLE 0.009s
+# START minmax-scaler/hashed repeat=1/train
+# DONE minmax-scaler/hashed repeat=1/train 0.001s
+# START minmax-scaler/hashed repeat=1/infer-save-reload
+# DONE minmax-scaler/hashed repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/hashed repeat=1/batch
+# DONE minmax-scaler/hashed repeat=1/batch 0.002s
+# START minmax-scaler/hashed repeat=1/stepfull
+# DONE minmax-scaler/hashed repeat=1/stepfull 0.000s
+# START minmax-scaler/hashed repeat=2/train
+# DONE minmax-scaler/hashed repeat=2/train 0.001s
+# START minmax-scaler/hashed repeat=2/infer-save-reload
+# DONE minmax-scaler/hashed repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/hashed repeat=2/batch
+# DONE minmax-scaler/hashed repeat=2/batch 0.002s
+# START minmax-scaler/hashed repeat=2/stepfull
+# DONE minmax-scaler/hashed repeat=2/stepfull 0.000s
+# CELL minmax-scaler/hashed STABLE 0.009s
+# START minmax-scaler/wide repeat=1/train
+# DONE minmax-scaler/wide repeat=1/train 0.001s
+# START minmax-scaler/wide repeat=1/infer-save-reload
+# DONE minmax-scaler/wide repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/wide repeat=1/batch
+# DONE minmax-scaler/wide repeat=1/batch 0.002s
+# START minmax-scaler/wide repeat=1/stepfull
+# DONE minmax-scaler/wide repeat=1/stepfull 0.000s
+# START minmax-scaler/wide repeat=2/train
+# DONE minmax-scaler/wide repeat=2/train 0.001s
+# START minmax-scaler/wide repeat=2/infer-save-reload
+# DONE minmax-scaler/wide repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/wide repeat=2/batch
+# DONE minmax-scaler/wide repeat=2/batch 0.002s
+# START minmax-scaler/wide repeat=2/stepfull
+# DONE minmax-scaler/wide repeat=2/stepfull 0.000s
+# CELL minmax-scaler/wide STABLE 0.009s
+# START minmax-scaler/denormal repeat=1/train
+# DONE minmax-scaler/denormal repeat=1/train 0.002s
+# START minmax-scaler/denormal repeat=1/infer-save-reload
+# DONE minmax-scaler/denormal repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/denormal repeat=1/batch
+# DONE minmax-scaler/denormal repeat=1/batch 0.002s
+# START minmax-scaler/denormal repeat=1/stepfull
+# DONE minmax-scaler/denormal repeat=1/stepfull 0.000s
+# START minmax-scaler/denormal repeat=2/train
+# DONE minmax-scaler/denormal repeat=2/train 0.001s
+# START minmax-scaler/denormal repeat=2/infer-save-reload
+# DONE minmax-scaler/denormal repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/denormal repeat=2/batch
+# DONE minmax-scaler/denormal repeat=2/batch 0.002s
+# START minmax-scaler/denormal repeat=2/stepfull
+# DONE minmax-scaler/denormal repeat=2/stepfull 0.000s
+# CELL minmax-scaler/denormal STABLE 0.009s
+# START minmax-scaler/denormal_ftz repeat=1/train
+# DONE minmax-scaler/denormal_ftz repeat=1/train 0.001s
+# START minmax-scaler/denormal_ftz repeat=1/infer-save-reload
+# DONE minmax-scaler/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/denormal_ftz repeat=1/batch
+# DONE minmax-scaler/denormal_ftz repeat=1/batch 0.002s
+# START minmax-scaler/denormal_ftz repeat=1/stepfull
+# DONE minmax-scaler/denormal_ftz repeat=1/stepfull 0.000s
+# START minmax-scaler/denormal_ftz repeat=2/train
+# DONE minmax-scaler/denormal_ftz repeat=2/train 0.001s
+# START minmax-scaler/denormal_ftz repeat=2/infer-save-reload
+# DONE minmax-scaler/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/denormal_ftz repeat=2/batch
+# DONE minmax-scaler/denormal_ftz repeat=2/batch 0.002s
+# START minmax-scaler/denormal_ftz repeat=2/stepfull
+# DONE minmax-scaler/denormal_ftz repeat=2/stepfull 0.000s
+# CELL minmax-scaler/denormal_ftz STABLE 0.009s
+# START minmax-scaler/dupes repeat=1/train
+# DONE minmax-scaler/dupes repeat=1/train 0.001s
+# START minmax-scaler/dupes repeat=1/infer-save-reload
+# DONE minmax-scaler/dupes repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/dupes repeat=1/batch
+# DONE minmax-scaler/dupes repeat=1/batch 0.002s
+# START minmax-scaler/dupes repeat=1/stepfull
+# DONE minmax-scaler/dupes repeat=1/stepfull 0.000s
+# START minmax-scaler/dupes repeat=2/train
+# DONE minmax-scaler/dupes repeat=2/train 0.001s
+# START minmax-scaler/dupes repeat=2/infer-save-reload
+# DONE minmax-scaler/dupes repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/dupes repeat=2/batch
+# DONE minmax-scaler/dupes repeat=2/batch 0.002s
+# START minmax-scaler/dupes repeat=2/stepfull
+# DONE minmax-scaler/dupes repeat=2/stepfull 0.000s
+# CELL minmax-scaler/dupes STABLE 0.009s
+# START minmax-scaler/odd repeat=1/train
+# DONE minmax-scaler/odd repeat=1/train 0.001s
+# START minmax-scaler/odd repeat=1/infer-save-reload
+# DONE minmax-scaler/odd repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/odd repeat=1/batch
+# DONE minmax-scaler/odd repeat=1/batch 0.002s
+# START minmax-scaler/odd repeat=1/stepfull
+# DONE minmax-scaler/odd repeat=1/stepfull 0.000s
+# START minmax-scaler/odd repeat=2/train
+# DONE minmax-scaler/odd repeat=2/train 0.001s
+# START minmax-scaler/odd repeat=2/infer-save-reload
+# DONE minmax-scaler/odd repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/odd repeat=2/batch
+# DONE minmax-scaler/odd repeat=2/batch 0.002s
+# START minmax-scaler/odd repeat=2/stepfull
+# DONE minmax-scaler/odd repeat=2/stepfull 0.000s
+# CELL minmax-scaler/odd STABLE 0.008s
+# START minmax-scaler/negative repeat=1/train
+# DONE minmax-scaler/negative repeat=1/train 0.001s
+# START minmax-scaler/negative repeat=1/infer-save-reload
+# DONE minmax-scaler/negative repeat=1/infer-save-reload 0.001s
+# START minmax-scaler/negative repeat=1/batch
+# DONE minmax-scaler/negative repeat=1/batch 0.002s
+# START minmax-scaler/negative repeat=1/stepfull
+# DONE minmax-scaler/negative repeat=1/stepfull 0.000s
+# START minmax-scaler/negative repeat=2/train
+# DONE minmax-scaler/negative repeat=2/train 0.001s
+# START minmax-scaler/negative repeat=2/infer-save-reload
+# DONE minmax-scaler/negative repeat=2/infer-save-reload 0.001s
+# START minmax-scaler/negative repeat=2/batch
+# DONE minmax-scaler/negative repeat=2/batch 0.002s
+# START minmax-scaler/negative repeat=2/stepfull
+# DONE minmax-scaler/negative repeat=2/stepfull 0.000s
+# CELL minmax-scaler/negative STABLE 0.009s
+| minmax-scaler          | 646b46cf73ead58e | fcaf2c976dae67d9 | 4260fe8f43ec10b2 | 77b3a6c235e5a346 | 760381e656d7edc6 | 760381e656d7edc6 | 768f7054da806434 | 803149932ba8b2da | b1d799cf9b13f224 |
+| minmax-scaler infer    | 5b934842e164f80f | 6717b6636f5595fc | b97dad3c566f105a | 6577f1b08a4a0b8d | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | cb07d5eb86d27807 | c170795fb6119629 | b386904f1b2473e2 |
+| minmax-scaler model    | 24956a7dff42ccef | 6c83436d35af2540 | 0399ca7b1cb036ad | d32f2d26c235a8ff | 1f70dcfa4e160e3e | 1f70dcfa4e160e3e | a12a63eb85664923 | be72f1cc9a133351 | 4e293888067f4c42 |
+| minmax-scaler batch    | bdcf978b59eaee06 | af35d3cfeccf029b | d39557bdc9e10862 | c85af33e17ebc9f1 | e470cfca3c51904a | e470cfca3c51904a | 92acfd69d9b04106 | 380e2675e1096b8e | b11bf2396e39a72a |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: minmax-scaler stepfull n/a:no-decode-state
+wrote /root/leg_out/records/minmax-scaler/minmax-scaler/cpu-clean.json

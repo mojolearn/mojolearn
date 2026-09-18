@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "lasso": {
+      "cells": [
+        {
+          "cell": "lasso/base",
+          "context_matches": true,
+          "clean": "2fa3301e45a46091",
+          "sabotage": "b255dedbef18ac88",
+          "detected": true
+        },
+        {
+          "cell": "lasso/denormal",
+          "context_matches": true,
+          "clean": "5374b434a96382d6",
+          "sabotage": "360c43783ae25f6d",
+          "detected": true
+        },
+        {
+          "cell": "lasso/denormal_ftz",
+          "context_matches": true,
+          "clean": "5374b434a96382d6",
+          "sabotage": "360c43783ae25f6d",
+          "detected": true
+        },
+        {
+          "cell": "lasso/dupes",
+          "context_matches": true,
+          "clean": "beafb1d480c34cf4",
+          "sabotage": "bdf02922d6956332",
+          "detected": true
+        },
+        {
+          "cell": "lasso/hashed",
+          "context_matches": true,
+          "clean": "0446105edc307f9c",
+          "sabotage": "04b8f8475c5efbc4",
+          "detected": true
+        },
+        {
+          "cell": "lasso/negative",
+          "context_matches": true,
+          "clean": "c332c713694ff28d",
+          "sabotage": "86d7c6ac10b92e33",
+          "detected": true
+        },
+        {
+          "cell": "lasso/odd",
+          "context_matches": true,
+          "clean": "5593579edd6113d6",
+          "sabotage": "7ee89732e10df6c4",
+          "detected": true
+        },
+        {
+          "cell": "lasso/ties",
+          "context_matches": true,
+          "clean": "1e207f82f555270b",
+          "sabotage": "28f369f3bea8386a",
+          "detected": true
+        },
+        {
+          "cell": "lasso/wide",
+          "context_matches": true,
+          "clean": "d0df889b0ede05a7",
+          "sabotage": "dcf12bd4341a1976",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}
