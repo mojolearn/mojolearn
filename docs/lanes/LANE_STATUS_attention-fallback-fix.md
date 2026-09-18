@@ -27,10 +27,20 @@
 - **EVIDENCE**: `bench/results/e1g/2026-09-18_lm-attention-fallback-nvidia-h100/`
   and `bench/results/e1g/2026-09-18_lm-attention-guard-nvidia-h100/`, both
   committed. Local logs `~/mojolearn-evidence/attention-fallback-fix/`.
-- **PODS**: `rhjqy941tjl5yw` (leg 1) and `h6o7o98tid619l` (leg 2) are both
-  TERMINATED and VERIFIED gone (HTTP 404). **`5guu23hvyqj7tg` IS STILL OUT**
-  as of this writing, running leg 3 (`-p 11076 root@103.207.149.101`), armed
-  with a 60-minute pod-side dead-man, launched 05:01:38 ET 2026-09-18.
+- **PODS. THIS LANE HAS RENTED EXACTLY THREE, EVER.** The
+  `mojolearn-gemm-nvidia-` prefix is shared by every lane that calls
+  `tools/gemm_remote_leg.sh`, so the stamp is the only way to tell them apart:
+
+      rhjqy941tjl5yw  stamp 035439  leg 1  TERMINATED, VERIFIED gone (404)
+      h6o7o98tid619l  stamp 043438  leg 2  TERMINATED, VERIFIED gone (404)
+      5guu23hvyqj7tg  stamp 050110  leg 3  OUT AND WORKING, do not reap
+
+  Never more than one at a time. `5guu23hvyqj7tg`
+  (`-p 11076 root@103.207.149.101`, lease armed 09:02:01Z, 60 minutes,
+  pod-side dead-man) is mid-run on the batch-4 arm at 98% GPU and 38,959 MiB.
+  **Any other `mojolearn-gemm-nvidia-` pod is NOT this lane's** and must not
+  be reaped on its account; this lane's ids are the three above and they are
+  in `pod_id.txt` in each filed leg directory.
 - **LEG 3 ANSWERED IT. THE FALLBACK IS REMOVABLE AND IT IS WORTH 2.298x AND
   16,384 MB.** With the backward's corner refusal removed
   (`-D MOJOLEARN_ATTN_NO_BWD_CORNER=1`), 700 steps of real training on the
