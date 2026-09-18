@@ -1,0 +1,19 @@
+{
+  "backend": "hip",
+  "gate_sha256": "1d5d79c42f7e6aa9dca5f3c71b67ef4d3865d32d71c88f0f2240842a6a459aca",
+  "harness_sha256": "64b557064b40f724f5e19ea457dfd2fd2c40fb80cdcaf6f1feca3a2c6fca4861",
+  "lanes": [
+    "gbdt-query-rmse"
+  ],
+  "promotion": "NOT_PERFORMED",
+  "properties": [
+    "--batch-grad",
+    "--batch-scale",
+    "--ragged",
+    "--step-full"
+  ],
+  "repeats": 2,
+  "source_capture": true,
+  "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "vendor": "amd-mi300x-gfx942"
+}

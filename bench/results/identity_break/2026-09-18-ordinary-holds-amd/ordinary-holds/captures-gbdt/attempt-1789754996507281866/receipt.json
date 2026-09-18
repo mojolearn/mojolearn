@@ -1,0 +1,46 @@
+{
+  "backend": "hip",
+  "gate_sha256": "1d5d79c42f7e6aa9dca5f3c71b67ef4d3865d32d71c88f0f2240842a6a459aca",
+  "harness_sha256": "64b557064b40f724f5e19ea457dfd2fd2c40fb80cdcaf6f1feca3a2c6fca4861",
+  "lanes": [
+    "gbdt-query-rmse"
+  ],
+  "promotion": "NOT_PERFORMED",
+  "properties": [
+    "--batch-grad",
+    "--batch-scale",
+    "--ragged",
+    "--step-full"
+  ],
+  "repeats": 2,
+  "seconds": 3.873386446999575,
+  "source_capture": true,
+  "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "stages": [
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "gbdt-query-rmse",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-gbdt/gbdt-query-rmse.json"
+      ],
+      "exit_code": 0,
+      "name": "column-gbdt-query-rmse"
+    }
+  ],
+  "status": "CAPTURED_UNQUALIFIED",
+  "vendor": "amd-mi300x-gfx942"
+}

@@ -1,0 +1,408 @@
+{
+  "binaries": {
+    "_mojolearn": "/root/mojolearn/python/mojolearn/host/_mojolearn_core_host.so",
+    "_mojolearn_arima": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so",
+    "_mojolearn_embedding": "/root/mojolearn/python/mojolearn/host/_mojolearn_embedding_infer_host.so",
+    "_mojolearn_estimators": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_gp": "/root/mojolearn/python/mojolearn/host/_mojolearn_gp_infer_host.so",
+    "_mojolearn_hdbscan": "/root/mojolearn/python/mojolearn/host/_mojolearn_hdbscan_infer_host.so",
+    "_mojolearn_ivf": "/root/mojolearn/python/mojolearn/host/_mojolearn_ivf_search_host.so",
+    "_mojolearn_kernel_methods": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_metrics": "/root/mojolearn/python/mojolearn/host/_mojolearn_metrics_host.so",
+    "_mojolearn_mixture": "/root/mojolearn/python/mojolearn/host/_mojolearn_mixture_infer_host.so",
+    "_mojolearn_preprocessing": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_solver": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+    "_mojolearn_svm": "/root/mojolearn/python/mojolearn/host/_mojolearn_svm_host.so",
+    "_mojolearn_tsa": "/root/mojolearn/python/mojolearn/host/_mojolearn_forecast_host.so"
+  },
+  "binary": "/root/mojolearn/python/mojolearn/host/_mojolearn_estimators_host.so",
+  "checked_at": "2026-09-18T18:01:23+0000",
+  "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "exit": 0,
+  "expect_mismatch": false,
+  "fixtures": [
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "d6de82206b56c0f1311b38f2d81870dc95cee88c6d666f3ac1223ccd71dc9994",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "d6de82206b56c0f1311b38f2d81870dc95cee88c6d666f3ac1223ccd71dc9994",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "8856f24aa6d8fc1e",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "8856f24aa6d8fc1e",
+        "want": "8856f24aa6d8fc1e"
+      },
+      "kind": "base",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "8c222a5b89d0f520cf90f5e6a04c8821b56d5ce2f7e4e63f7b258cb19ea68792",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000497
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "2712beaec46cf40d9ed54d4787586629ce0ce95572c477f08e6878b6d544c845",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "2712beaec46cf40d9ed54d4787586629ce0ce95572c477f08e6878b6d544c845",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "83b863a48b439e58",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "83b863a48b439e58",
+        "want": "83b863a48b439e58"
+      },
+      "kind": "denormal",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "047872cc9d57b9790e82525516c633a3fc4f9d9fa8e249924fdd3b5656763334",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000245
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "2712beaec46cf40d9ed54d4787586629ce0ce95572c477f08e6878b6d544c845",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "2712beaec46cf40d9ed54d4787586629ce0ce95572c477f08e6878b6d544c845",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "83b863a48b439e58",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "83b863a48b439e58",
+        "want": "83b863a48b439e58"
+      },
+      "kind": "denormal_ftz",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "6638b7e5a05a1f08b1328ad77ebe7a6ddf02cf748f6afa9d6b2b043751f7edd6",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000205
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "4e38dd46563e8d3085b3e481223c8dac988a893b030932e7d85f5d8a27a92257",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "4e38dd46563e8d3085b3e481223c8dac988a893b030932e7d85f5d8a27a92257",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "6b5711639cd42ad4",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "6b5711639cd42ad4",
+        "want": "6b5711639cd42ad4"
+      },
+      "kind": "dupes",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "a0632a87ef34d73732543e16a98e60d7efde4c3660b457812e9caf334588ba5e",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000204
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "1a6fce59257183d17e61a0c0328830035c8b1008f496a2d229bd5ecec6410aee",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "1a6fce59257183d17e61a0c0328830035c8b1008f496a2d229bd5ecec6410aee",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "22a7eb0eaca45657",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "22a7eb0eaca45657",
+        "want": "22a7eb0eaca45657"
+      },
+      "kind": "hashed",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "ecdd20a18fddcfac123298142ebfbda40ea00fb311df296b0d5b284da6ddab94",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000195
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "9f7b9b61a0e333ef2d533d0ed3273449e48230203b313e4425bf7eb5f8c266d1",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "9f7b9b61a0e333ef2d533d0ed3273449e48230203b313e4425bf7eb5f8c266d1",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "9084d21fbd04acd2",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "9084d21fbd04acd2",
+        "want": "9084d21fbd04acd2"
+      },
+      "kind": "negative",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "6a51f60e14cbc0dd04f6ca36436b056b67ed8cdac503463aa4d48f09f2fc106f",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000202
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "fe82e664271955c9bd5110fdc663aacbd20bd475ca5a8cafa0e1268a68e34a4b",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "fe82e664271955c9bd5110fdc663aacbd20bd475ca5a8cafa0e1268a68e34a4b",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "3ef4b630864aa956",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "3ef4b630864aa956",
+        "want": "3ef4b630864aa956"
+      },
+      "kind": "odd",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "242d6365ce89e18583cb1b00268a1cc54b879edd6db4af20c1f1becc7a39e517",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000201
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "5d4546d418d33f2dcaad21418a2d9d6f95404b4733ec5b7381c0fdbebbdfa143",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "5d4546d418d33f2dcaad21418a2d9d6f95404b4733ec5b7381c0fdbebbdfa143",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "342d39a74aca2759",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "342d39a74aca2759",
+        "want": "342d39a74aca2759"
+      },
+      "kind": "ties",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "857ab7ff0c67b9cade527de3cc6f38740a1f71c70925e65671b6bbd57ac9cb48",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000287
+    },
+    {
+      "cases": [
+        {
+          "case": "predict",
+          "equal": true,
+          "got": "c2b9bf67875c2f911daa82cbf82ab10f55fca06710aae077e8478906c6ade07e",
+          "got_dtype": "<f4",
+          "got_shape": [
+            64
+          ],
+          "want": "c2b9bf67875c2f911daa82cbf82ab10f55fca06710aae077e8478906c6ade07e",
+          "want_dtype": "<f4",
+          "want_shape": [
+            64
+          ]
+        }
+      ],
+      "columns": [
+        {
+          "column": "kernel-ridge-laplacian.json",
+          "equal": true,
+          "infer": "0f1e39c547858a0c",
+          "vendor": "amd-mi300x-gfx942"
+        }
+      ],
+      "estimator": "KernelRidge",
+      "identity_hash": {
+        "equal": true,
+        "got": "0f1e39c547858a0c",
+        "want": "0f1e39c547858a0c"
+      },
+      "kind": "wide",
+      "lane": "kernel-ridge-laplacian",
+      "model_sha256": "95b734acb147fe053456b72989653989e5231134c1a8b662fb80fbf57c5c1578",
+      "recorded_gpu_arch": null,
+      "recorded_numeric_mode": "identical",
+      "recorded_vendor": "hip",
+      "seconds": 0.000191
+    }
+  ],
+  "gpu_columns": [
+    "kernel-ridge-laplacian.json"
+  ],
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "unmoved": [
+    "kernel-ridge-laplacian/base",
+    "kernel-ridge-laplacian/denormal",
+    "kernel-ridge-laplacian/denormal_ftz",
+    "kernel-ridge-laplacian/dupes",
+    "kernel-ridge-laplacian/hashed",
+    "kernel-ridge-laplacian/negative",
+    "kernel-ridge-laplacian/odd",
+    "kernel-ridge-laplacian/ties",
+    "kernel-ridge-laplacian/wide"
+  ],
+  "vendor": "hip",
+  "verdict": "IDENTICAL"
+}
