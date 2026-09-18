@@ -157,3 +157,13 @@ AMD whole-loaded-model closure (`c4abc7a56`): all 24 v2 cases passed and all
 original remote source attribution, raw capture and comparisons are retained;
 this is source-capsule evidence, not an installed-wheel or two-GPU certificate.
 Final wheel import inventory includes 106 reachable package modules.
+
+Final ordinary evidence/reference checkpoint `e692f14b0` merged. Root reran the
+post-admission host-surface, reference-admission and coverage tests with the known
+host binding directory: 217 passed in 1.93 seconds. The owning lane's earlier
+collection failure was an environment-path issue. Five neural holds now correctly
+say unwatched; 18 classical/kernel candidates still await NVIDIA/installed work.
+Two historical Apple `gp-sample-y` / `odd` train/infer disagreements are retained
+and unresolved. The separate loaded-model CPU/Apple/AMD agreement does not resolve
+those Gaussian-process records. All lane work is committed and pushed; further
+builds and rentals are deferred under the user's latest instruction.
