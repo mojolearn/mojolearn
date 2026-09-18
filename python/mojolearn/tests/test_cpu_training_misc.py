@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU training for the misc lanes (lane/cpu-training-misc, 2026-09-15):
-kmeans-sqrt, kmeans-classic-pp, kmeans-cosine, cross-val, bootstrap,
+kmeans-sqrt, kmeans-classic-pp, cross-val, bootstrap,
 permutation-test, monte-carlo, optim-sgd, optim-adam-clip,
 cross-entropy-arms and training-primitives, checked from
 SOURCE so it runs on a box with nothing built, plus runtime checks that run
@@ -19,7 +19,7 @@ and the fix columns from the manifest and diffs each against its own columns
 in the covered step and in the sabotage step; `python -m mojolearn identity`
 runs only the record set on a CPU-only install; the core host binding
 registers `gather_rows_bytes` (cross_val_score's fold rows) under the base
-binding's name, and the oracle refuses the cosine metric in the device's
+binding's name, and the oracle refuses an unsupported metric in the device's
 words; the resample family routes `_mojolearn_resample` to its own host
 binding, which registers the GPU binding's three entries and read-backs and
 not the multi-GPU range probe, and whose oracle imports no GPU module, calls
@@ -30,8 +30,9 @@ no GPU module, and the no-CPU-path sentence names the blocks that still have
 none rather than "the neural blocks".
 
 The runtime checks (skipped, and SAID to be skipped, when a binding is
-absent or a GPU set loaded): `KMeans(metric='cosine')` refuses with the
-device's sentence; the fold-row gather returns the rows a Python index
+absent or a GPU set loaded): an unsupported metric refuses with the
+device's sentence, by its name on the Python side and by its code on the
+Mojo side; the fold-row gather returns the rows a Python index
 returns, byte for byte, and refuses an out-of-range index before writing;
 a bootstrap run twice returns the same bytes and its `r_first` slice equals
 the whole run's, and the range probe refuses by name; the host embedding
@@ -55,7 +56,7 @@ from mojolearn import _backend, host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 
-KMEANS_LANES = ("kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine")
+KMEANS_LANES = ("kmeans-sqrt", "kmeans-classic-pp")
 KMEANS_ORACLE = "cluster/host/kmeans_oracle.mojo"
 RESAMPLE_ORACLE = "resample/host/resample_host.mojo"
 RESAMPLE_LANES = ("bootstrap", "permutation-test", "monte-carlo")
@@ -65,7 +66,11 @@ NEURAL_EXPORTS = ("clip_grad_norm", "accumulate", "accumulation_is_aligned", "em
                   "embedding_backward", "rms_norm_forward", "rms_norm_backward", "linear_forward",
                   "linear_backward")
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
-COSINE_REFUSAL = "kmeans only supports L2Expanded or L2SqrtExpanded distance metrics."
+#: The device's refusal of a metric it does not implement. The cosine metric
+#: was DELETED on 2026-09-18 (lane/kmeans-cosine-capability); what must
+#: survive is the property the routed refusal existed to give, which is that
+#: an unsupported metric is refused BY NAME rather than accepted and ignored.
+METRIC_REFUSAL = "kmeans supports only the L2Expanded (0) and L2SqrtExpanded (1) distance metrics"
 FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
 
 
@@ -185,12 +190,26 @@ def test_core_host_binding_registers_the_fold_gather():
     assert '_native("gather_rows_bytes")' in _read("python/mojolearn/model_selection.py")
 
 
-def test_oracle_refuses_cosine_in_the_device_words():
+def test_oracle_refuses_an_unknown_metric_in_the_device_words():
     text = _read(KMEANS_ORACLE)
     flat = re.sub(r'"\s*\n\s*"', "", text)
-    assert COSINE_REFUSAL in flat
+    assert METRIC_REFUSAL in flat
     params = re.sub(r'"\s*\n\s*"', "", _read("cluster/impl/kmeans_params.mojo"))
-    assert COSINE_REFUSAL in params, "the device's refusal sentence moved; the oracle must follow it"
+    assert METRIC_REFUSAL in params, "the device's refusal sentence moved; the oracle must follow it"
+
+
+def test_the_cosine_metric_is_gone_from_every_kmeans_source():
+    """lane/kmeans-cosine-capability, 2026-09-18. The metric was deleted, not
+    refused: cuVS refuses cosine k-means too (`kmeans_common.cuh:320`), and
+    the arithmetic mean does not minimize cosine distance, so the fit did not
+    descend. A reappearing constant here means someone revived the dead arm
+    without the update step that would make it correct."""
+    for path in (KMEANS_ORACLE, "cluster/impl/kmeans_params.mojo",
+                 "cluster/impl/detail/kmeans_common.mojo",
+                 "cluster/impl/distance/unfused_distance_nn.mojo",
+                 "python/mojolearn/cluster.py"):
+        text = _read(path)
+        assert "METRIC_COSINE_EXPANDED" not in text, f"{path} still declares or uses METRIC_COSINE_EXPANDED"
 
 
 def test_manifest_covers_the_resample_lanes():
@@ -259,17 +278,32 @@ def _cpu_only_with(basename):
 
 
 @reference_training()
-def test_cosine_refuses_on_the_host_when_built():
+def test_an_unsupported_metric_refuses_on_the_host_when_built():
+    """Both halves of the refusal, because they live in different languages.
+
+    A NAME the table does not carry is refused in Python by `_metric_code`; a
+    CODE the kernel does not implement is refused in Mojo by
+    `KMeansParams.validate` / `host_validate_params`. `metric=2` is the code
+    the deleted cosine metric used, and it must not be accepted and ignored.
+    """
     if not _cpu_only_with("_mojolearn_core_host"):
         return
     import numpy as np
     x = np.random.default_rng(0).standard_normal((64, 3)).astype(np.float32)
+
     try:
         mojolearn.KMeans(n_clusters=4, random_state=3, metric="cosine").fit(x)
     except Exception as exc:
-        assert COSINE_REFUSAL in str(exc), str(exc)
+        assert "metric must be one of" in str(exc), str(exc)
+    else:
+        raise AssertionError("KMeans(metric='cosine') fit; an unknown name was accepted")
+
+    try:
+        mojolearn.KMeans(n_clusters=4, random_state=3, metric=2).fit(x)
+    except Exception as exc:
+        assert METRIC_REFUSAL in str(exc), str(exc)
         return
-    raise AssertionError("KMeans(metric='cosine') fit on the host; the refusal was lifted")
+    raise AssertionError("KMeans(metric=2) fit on the host; an unknown code was accepted")
 
 
 @reference_training()

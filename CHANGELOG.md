@@ -80,7 +80,7 @@ source; the earlier 0.8.7 packaging freeze does not qualify these changes.
   gap the four predict lanes had. `kmeans`, `kmeans-random`, `kmeans-array`, `kmeans-weighted`,
   `kmeans-sqrt` and `kmeans-classic-pp` are recorded on nine fixtures each at
   `bench/results/classical_host/2026-09-16-nvidia-kmeans`, taken on an NVIDIA A100-SXM4-80GB
-  (sm_80). `kmeans-cosine` is not among them and must not be: its fit is refused by name, so
+  (sm_80). `kmeans-cosine` is not among them and must not be: its fit was refused by name, so
   there is no model to save. The saved models are re-predicted from the CPU host bindings on
   both architectures, x86-64 and arm64, each reading `gate verdict IDENTICAL (54 fixtures,
   exit 0)`. Beside the identity pair each recorded fixture carries `labels` and

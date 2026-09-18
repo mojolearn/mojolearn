@@ -42,7 +42,7 @@ step() {
     note "$_n=$_rc"
     return $_rc
 }
-LANES="kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-classic-pp,kmeans-cosine,pca,pca-whiten,pca-full-whiten,tsvd,ols,ridge,ols-no-intercept,ols-weighted,ridge-no-intercept"
+LANES="kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-classic-pp,pca,pca-whiten,pca-full-whiten,tsvd,ols,ridge,ols-no-intercept,ols-weighted,ridge-no-intercept"
 FIX5="base,ties,odd,dupes,wide"
 # The other families whose fits run `kmeans_fit_main_traced` or `kmeans_fit`
 # (spectral in the core binding; GaussianMixture's k-means init; the IVF

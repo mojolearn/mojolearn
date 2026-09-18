@@ -139,7 +139,6 @@ comptime INDEX_MAX = UInt32(0xFFFFFFFF)
 # `DistanceType` codes, matching `cluster/kmeans_params.mojo`.
 comptime METRIC_L2_EXPANDED = 0
 comptime METRIC_L2_SQRT_EXPANDED = 1
-comptime METRIC_COSINE_EXPANDED = 2
 
 
 def reduce_min_kernel(
@@ -149,7 +148,6 @@ def reduce_min_kernel(
     x_norm: MutPointer[Float32, MutAnyOrigin],
     y_norm: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
-    metric_in: Int32,
     is_sqrt_in: Int32,
     init_out_buffer_in: Int32,
     key_base_in: Int32,
@@ -200,7 +198,6 @@ def reduce_min_kernel(
     added to every key in the tile.
     """
     var n = Int(n_in)
-    var metric = Int(metric_in)
     var row = Int(block_idx.x)
     var tid = Int(thread_idx.x)
 
@@ -211,47 +208,24 @@ def reduce_min_kernel(
 
     var col = tid
     while col < n:
-        var dist = Float32(0.0)
-
-        if metric == METRIC_COSINE_EXPANDED:
-            # Guard against zero-norm vectors to avoid inf/NaN from division
-            # by zero.
-            #
-            # OURS, NOT THEIRS (corrected 2026-09-18,
-            # lane/kmeans-cosine-capability). This cited "Theirs, `:84-86`"
-            # until then. `kmeans_common.cuh:84-86` at the pinned commit is
-            # `KeyValueIndexOp::operator()`, which returns `a.key`; there is
-            # no zero-norm guard there or anywhere in that file. Their real
-            # cosine cell is `cosine_distance_op::epilog`
-            # (`src/distance/detail/distance_ops/cosine.cuh`) and it is
-            # unguarded:
-            #     acc[i][j] = 1.0 - (acc[i][j] / (regxn[i] * regyn[j]));
-            # so a zero-norm row gives NaN in the reference. Keeping the
-            # guard is deliberate (we do not reproduce a reference library's
-            # bug); what was wrong was the attribution.
-            var denom = x_norm_row * y_norm.unsafe_load(col)
-            if denom <= Float32(0.0):
-                denom = Float32(1.0)
-            dist = Float32(1.0) - (z.unsafe_load(row * n + col) / denom)
-        else:
-            # The same pinned multiply-add the FUSED twin's epilog uses
-            # (IDENTITY_PATHS row 9), so the two arms differ only where
-            # their inputs do -- this one's `z` is a VENDOR MATMUL, which
-            # is why the unfused arm is refused under IDENTICAL and kept
-            # for differential testing. See the module docstring.
-            dist = ftz(
-                identical_mul_add(
-                    Float32(-2.0),
-                    ftz(z.unsafe_load(row * n + col)),
-                    ftz(ftz(x_norm_row) + ftz(y_norm.unsafe_load(col))),
-                )
+        # The same pinned multiply-add the FUSED twin's epilog uses
+        # (IDENTITY_PATHS row 9), so the two arms differ only where their
+        # inputs do -- this one's `z` is a VENDOR MATMUL under FAST, which is
+        # why the unfused arm is refused under IDENTICAL and kept for
+        # differential testing. See the module docstring.
+        var dist = ftz(
+            identical_mul_add(
+                Float32(-2.0),
+                ftz(z.unsafe_load(row * n + col)),
+                ftz(ftz(x_norm_row) + ftz(y_norm.unsafe_load(col))),
             )
-            # GEMM round-off can produce slightly negative expanded
-            # distances; clamp to zero. Theirs,
-            # `src/distance/detail/distance_ops/l2_exp.cuh:132`, minus the
-            # self-neighbor factor -- see the module docstring.
-            if dist <= Float32(0.0):
-                dist = Float32(0.0)
+        )
+        # GEMM round-off can produce slightly negative expanded distances;
+        # clamp to zero. Theirs,
+        # `src/distance/detail/distance_ops/l2_exp.cuh:132`, minus the
+        # self-neighbor factor -- see the module docstring.
+        if dist <= Float32(0.0):
+            dist = Float32(0.0)
 
         # Strict `<`, so within a thread the LOWEST column wins a tie. Half
         # of their `Reducer`'s total order lives here.

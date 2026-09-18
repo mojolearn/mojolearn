@@ -101,9 +101,11 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   Python surface routes `metric` since 2026-09-14 (workstream D):
   `METRIC_L2_SQRT_EXPANDED` is the `kmeans-sqrt` identity lane and
   `python/mojolearn/tests/test_kmeans_metric_surface.py` (labels against the
-  argmin to the returned centers, DEVIATION 2716); `METRIC_COSINE_EXPANDED`
-  is refused by name in `kmeans_params.mojo::validate`. This sentence used to
-  say the surface did not expose `metric` at all.
+  argmin to the returned centers, DEVIATION 2716). Those two are now the
+  WHOLE set: the cosine metric was deleted on 2026-09-18
+  (lane/kmeans-cosine-capability), and an unsupported metric is refused by
+  name. This sentence used to say the surface did not expose `metric` at
+  all.
 - The CPython extension EXISTS (`bindings/_mojolearn.mojo::kmeans_fit_binding`,
   `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
@@ -536,14 +538,20 @@ def kmeans_fit(
     # the tie went to the lowest key. Measured on the M4 at 1eea14f80:
     # 9,675 of 20,000 `labels_` on the `wide` fixture and 4 on `base` were
     # not the argmin to the returned centers (0 under L2Expanded), on every
-    # column alike, so the record read IDENTICAL on a wrong answer. cuVS
-    # takes `raft::linalg::norm<L2Norm>` (squared) for L2Expanded AND
+    # column alike, so the record read IDENTICAL on a wrong answer. NO
+    # IDENTITY CHECK CAN CATCH THAT; only an argmin check can. cuVS takes
+    # `raft::linalg::norm<L2Norm>` (squared) for L2Expanded AND
     # L2SqrtExpanded (`detail/kmeans.cuh:141-144`, `:1082-1085`), and so
     # does the fit's own norm (`detail/kmeans.mojo`, `Int32(0)`); the root
-    # belongs to the reduction's output alone (`metric_is_sqrt`). Only
-    # cosine divides by the norms and wants them rooted, the same rule the
-    # centroid side uses. `inertia_` never read this buffer (it is the
-    # fit's own final pass), so only `labels_` moves.
+    # belongs to the reduction's output alone (`metric_is_sqrt`).
+    # `inertia_` never read this buffer (it is the fit's own final pass), so
+    # only `labels_` moves.
+    #
+    # `centroid_norms_take_sqrt` now returns False for EVERY metric, because
+    # the one metric that divided by the norms (cosine) was deleted on
+    # 2026-09-18 (lane/kmeans-cosine-capability). The call is kept rather
+    # than folded to `Int32(0)` so that this measurement stays on the path
+    # of anyone who goes looking for the flag. Do not simplify it away.
     var take_sqrt = Int32(0)
     if centroid_norms_take_sqrt(metric):
         take_sqrt = Int32(1)
@@ -613,13 +621,13 @@ def kmeans_predict(
 
     THE SAME PASS AS `kmeans_fit`'s FINAL ASSIGNMENT, statement for
     statement: the row norms from `row_norm_kernel` with the same
-    `centroid_norms_take_sqrt` flag (squared for both L2 metrics, DEVIATION
+    `centroid_norms_take_sqrt` flag (squared for both metrics, DEVIATION
     2716), then `cluster/impl/kmeans.mojo::predict`, the call `fit_predict`
     makes. So on the training rows and the fitted centroids the labels are
     `labels_` by construction, and the tie rule (the lowest centroid index
-    on an equal distance) is the fused kernel's. The metric is refused by
-    name exactly as the fit refuses it (`KMeansParams.validate`), so cosine
-    predict refuses because cosine fit does. `x_ptr` is `n_samples x
+    on an equal distance) is the fused kernel's. An unsupported metric is
+    refused by name exactly as the fit refuses it
+    (`KMeansParams.validate`). `x_ptr` is `n_samples x
     n_features` row-major float32, `centroids_ptr` `n_clusters x
     n_features`; `out_labels_ptr` is written.
     """
@@ -694,8 +702,8 @@ def kmeans_transform(
     `centroid_norms_take_sqrt` flag, then `compute_centroid_norms`), and the
     cell is the fused kernel's epilog
     (`cluster/impl/detail/kmeans_transform.mojo`), so the cell at
-    `kmeans_predict`'s label is the row minimum. The metric is refused by
-    name as the fit refuses it (`KMeansParams.validate`).
+    `kmeans_predict`'s label is the row minimum. An unsupported metric is
+    refused by name as the fit refuses it (`KMeansParams.validate`).
     """
     if n_samples < 1 or n_features < 1 or n_clusters < 1:
         raise Error(

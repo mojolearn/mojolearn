@@ -104,7 +104,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             IDENTICAL column moved) and `--require-columns` counts batch
             hashes as it counts infer and model hashes. A JSON that predates
             the part carries no `batch_verdict` and reads NOT-COMPARED.
-            The n/a reasons are transductive as for infer, fit-refused (kmeans-cosine, no fitted model), function
+            The n/a reasons are transductive as for infer, function
             (metrics, resampling, cross-validation), no-batch-axis
             (the tokenizer in records before 2026-09-15, when
             GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
@@ -342,7 +342,8 @@ sampler, a solver, a metric, a reduction).
       cholesky kernel-ridge nystroem rbf-sampler gmm gmm-random-init hdbscan
                hdbscan-leaf bootstrap permutation-test monte-carlo
                training-primitives kmeans-sqrt kmeans-classic-pp
-               kmeans-cosine (the refusal sentence is its cell)
+      2026-09-18 (lane/kmeans-cosine-capability) kmeans-cosine REMOVED with
+               the cosine metric itself; cuVS refuses cosine k-means too
     2026-09-14 evening (docs/multi_gpu/README.md, run with devices=(0,))
       par-forest par-forest-et par-boosting par-kmeans par-gram par-logistic
                par-cd par-svm par-gp par-dbscan par-scaler par-arima par-mlp
@@ -4177,24 +4178,6 @@ def _(ml, X, yc, yr, Xh=None):
                 m, _km_probe(X, Xh))
 
 
-@lane("kmeans-cosine")
-def _(ml, X, yc, yr, Xh=None):
-    """metric='cosine' is routed and REFUSED BY NAME on the Mojo host
-    (cluster/impl/kmeans_params.mojo::validate): the expected cell is the
-    refusal sentence on every column, never a hash. A column that hashes
-    here means the refusal was lifted without a fused cosine arm."""
-    try:
-        m = ml.KMeans(n_clusters=8, random_state=3, metric="cosine").fit(X)
-    except Exception as exc:
-        # the expected outcome: the cell is the hash of the refusal sentence
-        # (harness owner, 2026-09-14), so a record carries it STABLE and a
-        # lifted refusal reads DIVERGENT against it instead of vanishing
-        # into a permanent REFUSED count
-        text = f"{type(exc).__name__}: {exc}"
-        return _fit(dict(refusal=_h(np.frombuffer(text.encode(), dtype=np.uint8))))
-    return _fit(dict(centers=_h(m.cluster_centers_)), m, _km_probe(X, Xh))
-
-
 # ---------------------------------------------------------------- lanes (2026-09-14 evening, the multi-GPU drivers on ONE device)
 # The ordered multi-GPU drivers (docs/multi_gpu/README.md) promise that a fit
 # split into K logical shards or tree ranges reduces, in a fixed order, to
@@ -5577,8 +5560,6 @@ _batch_decl(_batch_iforest, "iforest", "iforest-tuned", "par-iforest")
 
 _batch_decl(_rows_calls("predict", "transform"), "kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
             "kmeans-sqrt", "kmeans-classic-pp", "par-kmeans")
-# cosine fit is refused by name, so there is no fitted model to ask
-_batch_decl("n/a:fit-refused", "kmeans-cosine")
 # The transductive clustering lanes (read 2026-09-15 against the Python
 # estimator, the GPU binding, the CPU host binding and cuML v26.08.00).
 #   DBSCAN and AgglomerativeClustering are NOT transductive since

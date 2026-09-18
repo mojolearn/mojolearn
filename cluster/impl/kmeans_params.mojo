@@ -86,7 +86,6 @@ comptime INIT_ARRAY = 2
 # the refusal needs a decision about the UPDATE step, not another column.
 comptime METRIC_L2_EXPANDED = 0
 comptime METRIC_L2_SQRT_EXPANDED = 1
-comptime METRIC_COSINE_EXPANDED = 2
 
 
 def init_method_name(init: Int) -> String:
@@ -179,8 +178,9 @@ struct KMeansParams(Copyable, ImplicitlyCopyable, Movable):
             and self.metric != METRIC_L2_SQRT_EXPANDED
         ):
             raise Error(
-                "kmeans only supports L2Expanded or L2SqrtExpanded distance"
-                " metrics."
+                "kmeans supports only the L2Expanded (0) and L2SqrtExpanded"
+                " (1) distance metrics; got metric="
+                + String(self.metric)
             )
         if self.n_clusters <= 0:
             raise Error("invalid parameter (n_clusters<=0)")
