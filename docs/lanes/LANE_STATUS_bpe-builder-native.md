@@ -1,6 +1,6 @@
 # LANE STATUS: bpe-builder-native (lane/bpe-builder-native)
 
-**STATE 2026-09-18: WIP, step 1 done locally (sparse pair counts, small + medium proofs); binding next; full-size pod run owed.**
+**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes running; full-size pod run owed.**
 
 Worktree `~/mojolearn-wt/bpe-builder-native`, branch `lane/bpe-builder-native`, cut from
 origin/main 0e4715f7c. Evidence goes under `~/mojolearn-evidence/bpe-builder-native-sep18/`,
@@ -79,6 +79,34 @@ surrogate encodings, 0xFF, all 256 bytes): train_main REFUSES it old and new ali
 the CLI reads each file as a Mojo String; it goes through the binding in step 2 instead.
 Prediction P1 held (small); P4 held; P5 was too pessimistic: the new one is 5.0x / 5.8x FASTER
 (the dense table's misses and the per-group allocations were the cost).
+
+### Step 2: the trainer through the tokenizer host binding
+
+`bindings/_mojolearn_tokenizer_host.mojo`: `bpe_train(text_addr, offsets_addr, [n_docs, n_bytes,
+vocab_size, min_frequency, break_ties_high])` -> `_BpeTrainedHandle`; `bpe_trained_sizes`,
+`bpe_trained_copy`. `tokenizer_host_sabotage()` also reads True for
+-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1. `python/mojolearn/tokenizer.py`:
+`BpeVocabularyTrainer(..., backend="auto" | "mojo" | "python")`; auto = Mojo when the binding
+exports `bpe_train`, else the Python reference; `stats["backend"]` records which ran;
+`MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reaches both backends. `lm_corpus` records the backend in
+the vocabulary recipe. `host_surface.py`: the three exports, `tokenizer/train/bpe_train.mojo`
+added to the family's host modules.
+
+Through the PUBLIC door (`small/door_compare.py`, binding `host/after`), each corpus trained by
+backend "mojo" and "python", written files compared with each other and with `py_ref.py`'s:
+all ten SAME (`door_compare_clean.txt`), including `invalid_utf8` (ranks 629a768ceeb357e1),
+which the CLI cannot read. Negative controls, both SEEN TO FAIL on all ten:
+`MOJOLEARN_BPE_TRAINER_SABOTAGE=1` (both backends move together, and each reproduces the
+CLI sabotage build's sha, e.g. synthetic 648ee0ad88acf262; `door_compare_envsabotage.txt`);
+the binding built with -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (`host/after_trainer_sabotage`):
+refused by `load_host_module` without MOJOLEARN_HOST_ALLOW_SABOTAGE=1, and with it the Mojo
+backend DIFFERS from Python on every corpus (`door_compare_buildsabotage.txt`).
+
+Also green: `pixi run check-bpe-trainer` PASS (284 tie-broken selections);
+`check-bpe-trainer-sabotage` SABOTAGE SEEN TO FAIL (6 failures); `test_tokenizer_manifest`
+(9 checks), `test_tokenizer_surface` (22 of 23, GPT-2 files skip), pytest
+`test_host_surface.py` + `test_models_loader.py` 206 passed / 4 skipped;
+`tools/verification_matrix.py --check` OK (236 lanes, 237 public API entries).
 
 ## Candidates (not opened)
 
