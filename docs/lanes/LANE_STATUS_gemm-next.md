@@ -3,10 +3,10 @@
 Written for a reader with NO context. Branch `lane/gemm-next`, worktree
 `~/mojolearn-wt/gemm-next`, branched from `origin/main` at 712eedd16.
 
-**NO PODS ARE OUT.** Both legs this lane ran finished, and both boxes were
-terminated and verified gone by their own runners (RunPod pod `e8rs6eq63pwejl`
-HTTP 404 confirmed; Hot Aisle VM `7a1b7c34` HTTP 404 confirmed 1 s after the
-delete). Nothing is billing.
+**NO PODS ARE OUT.** All four legs this lane ran finished, and every box was
+terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
+`20usq9mvqsq2u5`, Hot Aisle VMs `7a1b7c34` and `7c0350cd`, all HTTP 404
+confirmed). Nothing is billing.
 
 The lane owns `gemm/` and `core/gemm.mojo`. It does NOT own
 `transformer/impl/llama/` or the fused attention (`lane/attention-speed`),
@@ -199,10 +199,23 @@ capability row beside `lib_hardware_ftz_fma_for`, never an inline vendor branch.
 
 In priority order.
 
-**(a) Settle the `proj_*` rate gap (section 4). One H100 hour, no new code.**
-The price harness already prints `PHASE` lines with `alloc_ms`, `group_ms` and
-`fold_ms` per call, which is exactly what distinguishes "a fold launch on a
-one-leaf group" from "576 blocks in five ragged rounds".
+**(a) DONE 2026-09-18, and it is now the top BUILD item (brief 22.1, commit
+437f01fcc).** The `PHASE` lines isolated it: the fold is a constant 0.05 to 0.07
+ms per call from one leaf to sixty-four, so it is a fixed LAUNCH cost. Every
+`proj` call has `group_leaves = 1`, and contract section 7.3 is titled "`P == 1`
+performs NO fold addition". At 144 proj calls that fold is **8.3 ms, 4.0 percent
+of the step, performing no arithmetic.**
+
+THE CHANGE, stated precisely: the `P == 1` fold is not a no-op, it applies seam
+5g and copies (`c.unsafe_store(cell, ftz(v))`). So it is NOT "skip the launch";
+it is "when `leaves == 1`, have the GROUP kernel apply 5g and write `c` directly
+instead of writing a partial to the workspace for a second kernel to flush and
+copy". Bit-preserving because `ftz` lands on the same binary32 word, same order,
+same address. NOT a scheduling arm: no plan, geometry, group rule or leaf
+boundary moves. **Unbuilt. This is where to start.**
+
+The superseded command, kept because it is how any future PHASE question is
+asked:
 
 ```sh
 cd ~/mojolearn-wt/gemm-next
@@ -237,12 +250,19 @@ retarget `mojo build`** -- it silently emits `air64-apple-macosx` and would
 "prove" the result on Apple's backend. Check the
 `.amdgcn_target "amdgcn-amd-amdhsa-unknown-gfx942"` line first, every time.
 
-**(c) The AMD step itemization. Nobody has ever taken one.** The instrument in
-section 2 is vendor-agnostic and derives its own column. AMD's step was 1.198 s
-against the H100's 0.232 and its GEMM sum 559 ms, but the itemization is a
-guess. `tools/step_breakdown_leg.sh` on an MI300X, with
-`MOJOLEARN_STAGE_STRICT=1` because `hotaisle_leg.sh:2502` and
-`do_extra_leg.sh:1175` end in `|| true` and SWALLOW a staging failure.
+**(c) DONE 2026-09-18 (brief 22.2, commit 437f01fcc): AMD's step is 81 percent
+GEMM.** Real step 687.97 ms, instrumentation 1.01 percent, GEMM 559.22 ms =
+81.3 percent against 57.7 on the H100, attention 91.57 ms = 13.3 percent against
+29.0. Same 1.5180 TFLOP per step at **2.72 TFLOP/s where the H100 does 12.84**,
+a 4.7x gap on the same kernel at the same shapes. The 33.5 TFLOP/s ceiling is an
+H100 figure and MUST NOT be applied to AMD; no AMD ceiling has been derived.
+
+The discriminating fact is FLATNESS: all twelve AMD kinds sit in 2.51 to 2.85
+TFLOP/s (1.13x spread) where NVIDIA's twelve span 9.80 to 15.79 (1.61x). A
+shape-independent rate is what a fixed cost PER PRODUCT STEP looks like, and
+AMD's seam is 8 instructions where NVIDIA's is 2. **That is a contrast, not an
+isolation** -- clocks, occupancy and memory are not excluded, and no speedup is
+claimed from it.
 
 **(d) The NVIDIA leftovers, LAST and smallest.** The barrier skew and the
 staging head's scalar global loads. Brief 15.5 says neither can be sized from
