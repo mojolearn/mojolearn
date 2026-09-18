@@ -317,12 +317,15 @@ class CausalLM:
             raise ValueError(f"mojolearn.models.CausalLM: {len(layers)} layer dicts for num_hidden_layers={self.n_layers}")
         self._block_class = cls
         self._block_kwargs = kwargs
-        self._blocks = [cls(w, **kwargs) for w in layers]
+        self._blocks = self._make_blocks(cls, layers, kwargs)
         for i, blk in enumerate(self._blocks):
             if blk.weight_format != weight_format:
                 raise RuntimeError(
                     f"mojolearn.models.CausalLM: layer {i} reports weight_format {blk.weight_format!r}, asked {weight_format!r}")
         self._prims = _GpuPrimitives() if self.device == "gpu" else _CpuPrimitives()
+
+    def _make_blocks(self, cls, layers, kwargs):
+        return [cls(w, **kwargs) for w in layers]
 
     # ------------------------------------------------------------ loading
     @classmethod
