@@ -93,6 +93,7 @@ rotated by one.
 | M4, one core, 826e7836b sources (`host-a`, `host-sab`) | sha256 51345093 (clean) | 230 passed (`test_clean.txt`) | 111 failed, 119 passed (`test_sabotage_strict.txt`) | 230 passed (`test_sabotage_expect.txt`) |
 | x86 EPYC 7713 pod c3zry4j7ttc7jy, tip 59307e477 | sha256 fb520851 (clean), 3f95c277 (sabotage) | 230 passed, and 230 passed under MOJOLEARN_CPU_THREADS=1 | 111 failed, 119 passed | 230 passed |
 | M4, one core, tip 59307e477 rebuilt 2026-09-17 21:32 (`host-tip`, this session) | sha256 9397d56e, read from inside the process, `core_host_sabotage()` False | 230 passed in 2.35 s (`test_clean_tip.txt`) | not rerun (sources unchanged since the pod's run) | not rerun |
+| M4, one core, f2c196dc3 (this doc's commit; its only Mojo change is the header comment) rebuilt 21:48 (`host-tip`) | sha256 57d655a7 | 230 passed in 3.55 s (`test_clean_tip.txt`) | not rerun | not rerun |
 
 Under the strict sabotage run 18 of the 25 test functions fail (111 of 230
 parametrized cases: 30 `test_astype_matches_the_item_setter`, 25
