@@ -52,3 +52,55 @@ entry must preserve global probe selection, admit disjoint candidate storage,
 return an explicit valid count for empty/short candidate shards, and merge on
 squared-distance/original-ID keys before Euclidean rooting. Independently built
 indexes or replicated full indexes would not meet the requested capacity scope.
+
+## Disjoint IVF storage/search implemented
+
+The constraint above is now addressed by a new native `ivf_flat_partial_search`
+entry. It preserves full global coarse centers/probe selection but admits a
+smaller local candidate store. Short and empty local candidate results carry
+explicit counts; padding is ignored. The default full-index entry retains its
+existing short-result refusal. Global result merge compares squared distances
+and original row IDs, then applies the original native identical square root.
+
+`from mojolearn.parallel_ivf import DistributedIVFIndex`; use
+`with DistributedIVFIndex.from_index(index, devices=(0, 1)) as distributed:`
+and `distributed.search(queries)`. Disjoint index rows persist in workers' host
+memory and only that shard is uploaded to its GPU for each search. Coarse centers
+and query rows are replicated. This is actual partitioned candidate storage,
+not a full-index replica per GPU. Persistent device residency, distributed
+initial quantizer building, distributed extension, and beyond-host-memory
+loading are not implemented. Each shard and global coarse centers must fit on
+one GPU; no throughput improvement is asserted without measurements.
+
+A new IVF binding was compiled on Apple under the shared slot in 21.8 seconds.
+61 combined checks passed: 36 binding-free tests, 11 CPU-native logical
+forecast/GPC partition tests, and 14 Apple-GPU native IVF partition checks.
+The latter compare full vs disjoint storage bytes for both metrics, empty/short
+local probe hits, ties, repeated calls, and uneven 33x3 and 65x17 fitted indexes.
+These logical shard tests execute sequentially on one physical GPU and do not
+constitute physical multi-GPU qualification.
+
+Retained local evidence: `/Users/andrewhendel/mojolearn-evidence/classical-distributed/`
+contains `native-partitions.xml` and `_mojolearn_ivf_partial.so`.
+Native build source changes and tests are committed alongside this checkpoint.
+
+## Two-GPU capture preparation
+
+`python tools/distributed_classical_check.py --devices 0,1 --out NEW.json`
+checks one-device, two-device and reversed-device schedules, twice each, for
+ARIMA, Holt-Winters, GPC inference/fit state and IVF. Inputs are small and include
+uneven series/storage partitions. It checkpoints each case, retains source and
+native binding hashes/vendor readbacks, package/distribution provenance and
+worker PID/operation receipts. `--require-installed` requires imports to match
+an installed distribution; launch from outside the checkout without PYTHONPATH
+for a wheel gate. It never equates process placement with actual GPU execution.
+Success remains `NUMERICAL_MATCH_EXECUTION_TRACE_OWED`; native fault controls and
+NVIDIA/AMD physical kernel traces remain owed. No GPU rental was provisioned by
+this lane. The capture runner has been syntax/CLI checked but not run on two GPUs.
+
+Post-checkpoint hardening: seven additional binding-free checks reject missing
+shards, malformed output shapes, negative/excess candidate counts, invalid local
+IDs, duplicate global IDs, and failed initial storage. The current lightweight
+suite passes 43 checks with 14 native IVF checks skipped unless explicitly
+requested. These deliberate transport-corruption tests do not substitute for
+the still-owed native arithmetic sabotage controls.
