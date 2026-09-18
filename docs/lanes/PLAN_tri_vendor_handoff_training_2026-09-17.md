@@ -128,52 +128,65 @@ AWS EC2 Mac dedicated hosts bill with a 24-hour minimum allocation, which
 materially changes the arithmetic. Price before committing. Holding Apple to
 one segment (section 3) is partly a response to exactly this.
 
-## 6. Cost, from measured cells
+## 6. Cost, MEASURED, and the verdict is NOT READY
 
-REVISED AGAIN the same evening: `lane/attention-speed` then landed DEVIATION
-2900 (`_bswz`, a causal block-index swizzle, no arithmetic touched), geomean
-0.9592, and the lean step is now **0.1979 s** measured on one H100 in one heat
-window. THE STEP HAS MOVED THREE TIMES IN ONE DAY; treat any figure here as
-perishable and re-read the lane records before quoting one.
+SUPERSEDES every earlier figure in this file. `lane/lm-training-shakedown` ran
+two H100 legs at this exact shape and the answer is **NOT READY**, with four
+numbers that decide it.
 
-REVISED 2026-09-17 evening, after `lane/attention-speed` measured the current
-default. The earlier figures in this file used 0.2326 s from
-`bench/OPPONENT_REFERENCE.md` (2026-09-12 13:45Z, commit bb679f19). **Four
-flips have landed since** (DEVIATIONS 2597, 2650, 2651, 2657, plus the GEMM
-`_hg` flip), and the untimed lean step at commit 07707794 is **0.2106 s**, 9.5
-percent faster. That is 9,725 tokens/s on an H100 at batch 1, length 2048.
+**1. Only batch 1 survives a long run.** Batch 4 died with
+`CUDA_ERROR_OUT_OF_MEMORY` at EXACTLY 210 completed steps, at 71.49 GB. The
+three-step sweep (16.95 / 26.61 / 45.94 / 84.33 GB, throughput saturating at
+batch 4) describes the FIRST 210 STEPS AND NOTHING LONGER. The onset does not
+move with batch; only the consequence does. Batch 2 is the one untested batch
+that arithmetic says should fit.
 
-AMD and Apple per-step costs at this shape are **NOT MEASURED**. The figures
-below assume H100-equivalent throughput on all legs, which is certainly wrong
-for Apple. Treat as a floor, and see section 4 on wall clock.
+**2. A batch-1 run costs 2.1x after about step 480**, replicated on two
+different physical H100s (0.440630 s against 0.440543 s median). Three phases:
+flat at 0.207 s and 16.95 GB to step ~210, climbing to ~480, then a PLATEAU at
+0.44 s and 34.40 GB that holds through step 2,000. It is a one-time regime
+change, not a leak. Ruled out by counters rather than assertion: clocks
+1980/1980 MHz, 42 C, 356 W of 700, PSI `full avg10=0.00`, host RSS identical to
+the byte at steps 1 and 2,000.
+
+**3. Session recycling does not fix it.** Rebuilding from `export_state()`
+every 250 steps gives 0.440323 s against 0.440543 s straight, indistinguishable,
+plus 26 s per rebuild. So there is no optimistic column, and the cause survives
+a full session teardown inside the same process.
 
 | token budget | one route | two routes | cost at $2.00 to $2.69/h |
 |---|---:|---:|---:|
-| 25B, one twelfth of GPT-3 Small's 300B | 672 h | 1,343 h | $2,686 to $3,613 |
+| FineWeb-Edu 10BT | 597.5 h | 1,195 h | $2,390 to $3,215 |
+| 25B tokens | **1,493.7 h** | **2,987 h** | **$5,975 to $8,036** |
 
-**THE ATTENTION UPSIDE IS MUCH SMALLER THAN THIS FILE FIRST CLAIMED.** An
-earlier draft said attention was 61 percent of the step and that a 4x to 8x
-there would take the two-route run toward $1,500. Measured at the current
-default, attention is **61.9 ms of a 231.5 ms timed envelope, 26.7 percent**.
-That is a ceiling on what the attention lane can ever return:
+That is roughly DOUBLE this file's earlier 315 and 789 hour figures, which were
+extrapolated from a fast step that only holds for the first 480.
 
-| attention gets | step | one route | two routes | saved |
-|---|---:|---:|---:|---:|
-| 2x faster | 0.1824 s | 619 h | $2,475 to $3,328 | 13.4% |
-| 4x faster | 0.1684 s | 571 h | $2,284 to $3,071 | 20.1% |
-| 8x faster | 0.1613 s | 547 h | $2,188 to $2,943 | 23.4% |
-| **free** | 0.1543 s | 523 h | $2,093 to $2,815 | **26.7%** |
+**4. THE DATA PIPELINE DOES NOT EXIST, and it is the real blocker.** There is
+no tokenizer on the training path at all. `CorpusBatches` casts raw bytes to
+ids, so with a 50257 vocabulary **77,194,752 parameters, 47.6 percent of the
+model** (the embedding and lm_head rows 256 to 50,256), would receive no
+gradient and train on nothing. A real run needs a vocabulary, and mojolearn
+deliberately ships none (the GPT-2 table was removed under the no-third-party-
+data rule). **That is a policy decision, not an engineering task, and it gates
+everything else in this file.**
 
-Even a free attention saves 26.7 percent. **The other 169.6 ms, 73.3 percent
-of the envelope, is where the remaining money is and it is not itemized.** The
-share is measured against the timed envelope, where every tick waits, so it is
-a breakdown and not a price; the untimed step is 210.6 ms, and the 21 ms
-difference is instrumentation. Before any further kernel work is scheduled,
-that 73.3 percent needs the same treatment attention got.
+### What DOES work at 162M
 
-Batch is 1 in every figure. If `lane/lm-training-shakedown` finds a larger
-batch fits, both the hours and the wall clock fall, and that is a larger lever
-than anything in the table above.
+- **Resume is still bit-exact**, every witness, every step, in a fresh process,
+  with the missing-moments control separating exactly where the arithmetic
+  requires. All 8 checks printed by name.
+- **`logical_shards` runs at 162M**, K up to 64, no refusal, flat throughput.
+  At K=64 a 25B run is 190,735 optimizer steps against the 999,999 cap, so the
+  step-cap blocker is solvable without touching any of its fourteen guards.
+
+### Premises of this file that were WRONG
+
+- Batch 8 DOES fit, at 84.33 GB, against the capacity json's 161.75 GiB.
+- The 21.9 GB host RSS was the stateless path; the resident trainer holds 8.3 GB
+  flat.
+- The prior record at 162M was **4 steps**, not 128. The 128-step campaign was
+  at 34,944 parameters.
 
 ## 7. Phase order
 
