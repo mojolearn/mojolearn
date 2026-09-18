@@ -28,7 +28,7 @@ def compare(a, b, verbose=True, dispatch_key='gemm_stage_ftz'):
         else:
             assert struct.pack('<f', x['loss']) == struct.pack('<f', y['loss']), 'loss'
         assert x['attention'] == y['attention'], 'attention'
-        assert x['seconds'] > 0 and y['seconds'] > 0, 'timing'
+        assert all(math.isfinite(t) and t > 0 for t in (x['seconds'], y['seconds'])), 'timing'
         if verbose:
             print('MATCH step', index, 'loss', x['loss'], y['loss'])
         if index in (0, 699):
@@ -44,6 +44,11 @@ def verify(a, b, dispatch_key='gemm_stage_ftz'):
     # Each intentional defect must fail for its own reason, not an unrelated one.
     mutations = [(key, lambda d, k=key: d['steps'][-1].__setitem__(k, 'broken')) for key in HASHES]
     mutations += [
+        ('shape', lambda d: d['shape'].__setitem__(0, 4)),
+        ('seed', lambda d: d.__setitem__('seed', 123)),
+        ('completed', lambda d: d['steps'][399].__setitem__('completed_steps', 7)),
+        ('timing', lambda d: d['steps'][399].__setitem__('seconds', -1.0)),
+        ('timing', lambda d: d['steps'][399].__setitem__('seconds', float('inf'))),
         ('loss', lambda d: d['steps'][399].__setitem__('loss', 12345.0)),
         ('dispatch', lambda d: d.__setitem__(dispatch_key, False)),
         ('coverage', lambda d: d['steps'].pop()),
@@ -62,6 +67,16 @@ def verify(a, b, dispatch_key='gemm_stage_ftz'):
             print('EXPECTED FAIL', reason)
         else:
             raise AssertionError('BLIND comparator: '+reason)
+    bad_a, bad_b = copy.deepcopy(a), copy.deepcopy(b)
+    for d in (bad_a, bad_b):
+        d['steps'][399]['loss'] = float('nan')
+    try:
+        compare(bad_a, bad_b, False, dispatch_key)
+    except AssertionError as exc:
+        assert str(exc) == 'finite', ('unrelated failure', str(exc))
+        print('EXPECTED FAIL finite')
+    else:
+        raise AssertionError('BLIND comparator: finite')
     compare(a, b, dispatch_key=dispatch_key)
 
 

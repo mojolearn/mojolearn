@@ -202,3 +202,32 @@ H100 workspace training source 06dee7da6 stages both corpora in 10 seconds.
 Its stage.log verifies both exact sizes and SHA256 pins and links the data
 into the running checkout. MOJOLEARN_STAGE_STRICT=1; the training script
 uses only fetch_corpus_* --check.
+
+## AMD training result and default decision
+
+Source 8bd54f134, 700 steps per arm on both pinned corpora, completed.
+Last-200 medians: enwik8 0.8319991125 -> 0.7159650970 seconds (ratio
+0.8605358903); Pile GitHub 0.7372150485 -> 0.6244404975 (0.8470262494).
+Geomean 0.8537543485: **14.6246% lower whole-step time**. The >=10%
+prediction is supported on both. All 700 losses, 6 endpoint hashes and
+every per-step attention report match. Nineteen intentional comparator
+defects fail for their expected reasons before clean matches are printed.
+AMD device footprint was not sampled by this probe (null), so no measured
+AMD memory-change claim is made. These runs keep AMD's existing attention
+path; the separate attention repair remains NVIDIA-only.
+
+Direct enwik8 NVIDIA (workspace baseline source 06dee7da6) versus AMD
+staged training also matches all 700 losses and all endpoint hashes. The
+cross-vendor comparator rejects 15 deliberate defects first. Pile cross-
+vendor comparison awaits the H100 run. This covers these training routes
+and the 12 GEMM price outputs, not arbitrary-input universal identity.
+
+AMD training VMs 7cef1b85-ef7e-43a1-b943-b0f84f913daa and
+e7d39c7f-acb5-4f9b-b7bd-66d175841f2a both completed and were deleted,
+verified GET 404 and absent from the VM list. No owed work was cancelled.
+
+FLIP AMD operand staging ON through lib_gemm_stage_ftz_for. NVIDIA retains
+its existing enabled path; Apple/RDNA/other columns stay unchanged. The
+actual default is now subject to the preregistered all-plan/gather device
+gates and ABBA prices before integration. Evidence: amd-training/ under
+bench/results/gemm_kernel_speed_2026-09-18.

@@ -154,6 +154,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
@@ -1206,13 +1207,13 @@ comptime TUNED_HW_FTZ_FMA = (
 )
 
 
-# Apply operand seams before shared staging on the measured NVIDIA path.
+# Apply operand seams before shared staging on qualified NVIDIA/AMD paths.
 # Consumers read the same flushed words without repeating their tests.
 # Explicit opt-in qualifies other columns; the legacy flag supplies A/B control.
 comptime TUNED_STAGE_FTZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_GEMM_LEGACY_STAGE_FTZ"]()
-    and (TUNED_HW_FTZ_FMA or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
+    and (lib_gemm_stage_ftz_for[TARGET_COLUMN]() or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
 )
 
 
@@ -4254,8 +4255,9 @@ def _shipped_body_kpack_hg[
     `identical_gemm_kpack_kernel` as the `kpack_hg` arm ran it (padded
     aligned page, gather staging, hardware fold flush): the group launch plus
     the fold at the ksplit row's group size where the rule takes the call
-    (`_kpack_run` allocates the node workspace and SYNCHRONIZES, `ws`
-    unused), all leaves in one asynchronous launch otherwise. Every other
+    (the reusable-workspace arm uses sufficiently sized caller scratch;
+    otherwise `_kpack_run` allocates the nodes and synchronizes), all leaves
+    in one asynchronous launch otherwise. Every other
     call keeps `choose_gemm_plan`'s plan. `SAB = True` is the trial hook's
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
     if m <= 0 or n <= 0:
@@ -6587,9 +6589,11 @@ def identical_gemm[allow_vendor: Bool = True](
 
 
 def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
-    """The workspace `identical_gemm` may need at this shape: what
-    `choose_gemm_plan`'s answer costs. Phase 3 and Phase 4 allocate with
-    this. Never less than 1, so the buffer is always constructible."""
+    """Scratch for the actual dispatcher, including enabled grouped reuse.
+
+    Phase 3 and Phase 4 allocate with this. Never less than 1, so the buffer
+    is always constructible. Older smaller buffers take the allocating path.
+    """
     var w = identical_gemm_workspace_floats(
         m, n, k, choose_gemm_plan(m, n, k)
     )
