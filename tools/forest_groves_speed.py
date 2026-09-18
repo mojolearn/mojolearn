@@ -62,8 +62,13 @@ MODELS = {
     # models have ONE output and so take the scalar grove kernel, which the
     # classifiers above never reach. Prediction rows are every row.
     "rf-taxi-100x16": ("rf", "taxi", 100, 16),
-    "et-taxireg-100x16": ("et", "taxireg", 100, 16),
+    "rf-taxireg-100x16": ("rf", "taxireg", 100, 16),
     "rf-istella-100x16": ("rf", "istella", 100, 16),
+    "rf-istellareg-100x16": ("rf", "istellareg", 100, 16),
+    # The ET regressors are kept as names but an ET REGRESSOR fit took 377.8 s
+    # on taxireg (an RF classifier on the same rows takes 5 s; reported to
+    # lane/forest-train-speed), so they are not in the default prepare list.
+    "et-taxireg-100x16": ("et", "taxireg", 100, 16),
     "et-istellareg-100x16": ("et", "istellareg", 100, 16),
 }
 
