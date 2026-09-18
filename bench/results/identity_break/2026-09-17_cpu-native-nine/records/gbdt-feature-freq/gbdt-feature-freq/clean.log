@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:35:39  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-feature-freq/base repeat=1/train
+# DONE gbdt-feature-freq/base repeat=1/train 0.048s
+# START gbdt-feature-freq/base repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/base repeat=1/infer-save-reload 0.007s
+# START gbdt-feature-freq/base repeat=1/batch
+# DONE gbdt-feature-freq/base repeat=1/batch 0.074s
+# START gbdt-feature-freq/base repeat=1/stepfull
+# DONE gbdt-feature-freq/base repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/base repeat=2/train
+# DONE gbdt-feature-freq/base repeat=2/train 0.047s
+# START gbdt-feature-freq/base repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/base repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/base repeat=2/batch
+# DONE gbdt-feature-freq/base repeat=2/batch 0.080s
+# START gbdt-feature-freq/base repeat=2/stepfull
+# DONE gbdt-feature-freq/base repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/base STABLE 0.263s
+# START gbdt-feature-freq/ties repeat=1/train
+# DONE gbdt-feature-freq/ties repeat=1/train 0.026s
+# START gbdt-feature-freq/ties repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/ties repeat=1/infer-save-reload 0.006s
+# START gbdt-feature-freq/ties repeat=1/batch
+# DONE gbdt-feature-freq/ties repeat=1/batch 0.065s
+# START gbdt-feature-freq/ties repeat=1/stepfull
+# DONE gbdt-feature-freq/ties repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/ties repeat=2/train
+# DONE gbdt-feature-freq/ties repeat=2/train 0.025s
+# START gbdt-feature-freq/ties repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/ties repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/ties repeat=2/batch
+# DONE gbdt-feature-freq/ties repeat=2/batch 0.065s
+# START gbdt-feature-freq/ties repeat=2/stepfull
+# DONE gbdt-feature-freq/ties repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/ties STABLE 0.193s
+# START gbdt-feature-freq/hashed repeat=1/train
+# DONE gbdt-feature-freq/hashed repeat=1/train 0.045s
+# START gbdt-feature-freq/hashed repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/hashed repeat=1/infer-save-reload 0.006s
+# START gbdt-feature-freq/hashed repeat=1/batch
+# DONE gbdt-feature-freq/hashed repeat=1/batch 0.074s
+# START gbdt-feature-freq/hashed repeat=1/stepfull
+# DONE gbdt-feature-freq/hashed repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/hashed repeat=2/train
+# DONE gbdt-feature-freq/hashed repeat=2/train 0.045s
+# START gbdt-feature-freq/hashed repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/hashed repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/hashed repeat=2/batch
+# DONE gbdt-feature-freq/hashed repeat=2/batch 0.066s
+# START gbdt-feature-freq/hashed repeat=2/stepfull
+# DONE gbdt-feature-freq/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/hashed STABLE 0.243s
+# START gbdt-feature-freq/wide repeat=1/train
+# DONE gbdt-feature-freq/wide repeat=1/train 0.043s
+# START gbdt-feature-freq/wide repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/wide repeat=1/infer-save-reload 0.005s
+# START gbdt-feature-freq/wide repeat=1/batch
+# DONE gbdt-feature-freq/wide repeat=1/batch 0.076s
+# START gbdt-feature-freq/wide repeat=1/stepfull
+# DONE gbdt-feature-freq/wide repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/wide repeat=2/train
+# DONE gbdt-feature-freq/wide repeat=2/train 0.042s
+# START gbdt-feature-freq/wide repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/wide repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/wide repeat=2/batch
+# DONE gbdt-feature-freq/wide repeat=2/batch 0.065s
+# START gbdt-feature-freq/wide repeat=2/stepfull
+# DONE gbdt-feature-freq/wide repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/wide STABLE 0.237s
+# START gbdt-feature-freq/denormal repeat=1/train
+# DONE gbdt-feature-freq/denormal repeat=1/train 0.045s
+# START gbdt-feature-freq/denormal repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/denormal repeat=1/infer-save-reload 0.005s
+# START gbdt-feature-freq/denormal repeat=1/batch
+# DONE gbdt-feature-freq/denormal repeat=1/batch 0.077s
+# START gbdt-feature-freq/denormal repeat=1/stepfull
+# DONE gbdt-feature-freq/denormal repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/denormal repeat=2/train
+# DONE gbdt-feature-freq/denormal repeat=2/train 0.045s
+# START gbdt-feature-freq/denormal repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/denormal repeat=2/infer-save-reload 0.005s
+# START gbdt-feature-freq/denormal repeat=2/batch
+# DONE gbdt-feature-freq/denormal repeat=2/batch 0.063s
+# START gbdt-feature-freq/denormal repeat=2/stepfull
+# DONE gbdt-feature-freq/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/denormal STABLE 0.240s
+# START gbdt-feature-freq/denormal_ftz repeat=1/train
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/train 0.042s
+# START gbdt-feature-freq/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START gbdt-feature-freq/denormal_ftz repeat=1/batch
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/batch 0.077s
+# START gbdt-feature-freq/denormal_ftz repeat=1/stepfull
+# DONE gbdt-feature-freq/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/denormal_ftz repeat=2/train
+# DONE gbdt-feature-freq/denormal_ftz repeat=2/train 0.041s
+# START gbdt-feature-freq/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/denormal_ftz repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/denormal_ftz repeat=2/batch
+# DONE gbdt-feature-freq/denormal_ftz repeat=2/batch 0.064s
+# START gbdt-feature-freq/denormal_ftz repeat=2/stepfull
+# DONE gbdt-feature-freq/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/denormal_ftz STABLE 0.236s
+# START gbdt-feature-freq/dupes repeat=1/train
+# DONE gbdt-feature-freq/dupes repeat=1/train 0.038s
+# START gbdt-feature-freq/dupes repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/dupes repeat=1/infer-save-reload 0.006s
+# START gbdt-feature-freq/dupes repeat=1/batch
+# DONE gbdt-feature-freq/dupes repeat=1/batch 0.064s
+# START gbdt-feature-freq/dupes repeat=1/stepfull
+# DONE gbdt-feature-freq/dupes repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/dupes repeat=2/train
+# DONE gbdt-feature-freq/dupes repeat=2/train 0.038s
+# START gbdt-feature-freq/dupes repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/dupes repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/dupes repeat=2/batch
+# DONE gbdt-feature-freq/dupes repeat=2/batch 0.075s
+# START gbdt-feature-freq/dupes repeat=2/stepfull
+# DONE gbdt-feature-freq/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/dupes STABLE 0.228s
+# START gbdt-feature-freq/odd repeat=1/train
+# DONE gbdt-feature-freq/odd repeat=1/train 0.026s
+# START gbdt-feature-freq/odd repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/odd repeat=1/infer-save-reload 0.004s
+# START gbdt-feature-freq/odd repeat=1/batch
+# DONE gbdt-feature-freq/odd repeat=1/batch 0.041s
+# START gbdt-feature-freq/odd repeat=1/stepfull
+# DONE gbdt-feature-freq/odd repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/odd repeat=2/train
+# DONE gbdt-feature-freq/odd repeat=2/train 0.026s
+# START gbdt-feature-freq/odd repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/odd repeat=2/infer-save-reload 0.004s
+# START gbdt-feature-freq/odd repeat=2/batch
+# DONE gbdt-feature-freq/odd repeat=2/batch 0.041s
+# START gbdt-feature-freq/odd repeat=2/stepfull
+# DONE gbdt-feature-freq/odd repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/odd STABLE 0.143s
+# START gbdt-feature-freq/negative repeat=1/train
+# DONE gbdt-feature-freq/negative repeat=1/train 0.045s
+# START gbdt-feature-freq/negative repeat=1/infer-save-reload
+# DONE gbdt-feature-freq/negative repeat=1/infer-save-reload 0.006s
+# START gbdt-feature-freq/negative repeat=1/batch
+# DONE gbdt-feature-freq/negative repeat=1/batch 0.076s
+# START gbdt-feature-freq/negative repeat=1/stepfull
+# DONE gbdt-feature-freq/negative repeat=1/stepfull 0.000s
+# START gbdt-feature-freq/negative repeat=2/train
+# DONE gbdt-feature-freq/negative repeat=2/train 0.044s
+# START gbdt-feature-freq/negative repeat=2/infer-save-reload
+# DONE gbdt-feature-freq/negative repeat=2/infer-save-reload 0.006s
+# START gbdt-feature-freq/negative repeat=2/batch
+# DONE gbdt-feature-freq/negative repeat=2/batch 0.064s
+# START gbdt-feature-freq/negative repeat=2/stepfull
+# DONE gbdt-feature-freq/negative repeat=2/stepfull 0.000s
+# CELL gbdt-feature-freq/negative STABLE 0.241s
+| gbdt-feature-freq      | 7d9c56b51213cb42 | 57ff9964d1af1d4a | 9d97a55431b6f8e0 | c6d7fccba2483372 | e7f1da14d1a9794b | e7f1da14d1a9794b | e8c61a9407503755 | c481331145bfb998 | 75028913a14bb938 |
+| gbdt-feature-freq infer | 95b976d85efc7f2d | 41371bafcf6397a3 | cf308a4c656bfbdc | 2a4274996f907f13 | 973775798c10da25 | 973775798c10da25 | 3a9423e4f0d23cad | 711887d930537c47 | 5a5944c8b884be8c |
+| gbdt-feature-freq model | b2959e177eb6e088 | a7417c31e1b422b4 | bf3222bbcdf1f476 | 6b7d9eddfa4b79b6 | d6c30648533bdf45 | d6c30648533bdf45 | 531909ad2026b783 | 53a4160101e38573 | 0794be87633fd36b |
+| gbdt-feature-freq batch | 272537bbe18b712b | 2de7d484a30cee05 | 77ce3ccc6c9f7e94 | 367ed0852797c66b | ba9644901c99745d | ba9644901c99745d | 47618d01ef0a41e1 | bfe39e4c9f5bacc7 | d92c8eb873f86399 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-feature-freq stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-feature-freq/gbdt-feature-freq/cpu-clean.json

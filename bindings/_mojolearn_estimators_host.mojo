@@ -158,7 +158,7 @@ def estimators_host_column_binding() raises -> PythonObject:
 def estimators_host_sabotage_binding() raises -> PythonObject:
     """Whether this binary sums every logsumexp row, walks every dot
     product descending, folds the split-K Gram's chunks descending and
-    asks one neighbor more of a DBSCAN core point on purpose
+    increments the first final DBSCAN label on purpose
     (-D MOJOLEARN_HOST_SABOTAGE=1, the gate's negative control; one define,
     every arithmetic this binding carries)."""
     return PythonObject(

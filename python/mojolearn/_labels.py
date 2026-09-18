@@ -97,6 +97,10 @@ def flatten_labels(y):
         y = y.tolist()
     if isinstance(y, (str, bytes)):
         raise ValueError("mojolearn: y must be a sequence of labels")
+    if type(y) in (list, tuple) and _plain_labels(y) is not None:
+        # DEVIATION 3103: nothing to flatten; the walk below would visit every
+        # label to find that out (50 ns a label against 12 for the type set)
+        return list(y)
     out = []
     stack = [y]
     while stack:
@@ -108,12 +112,58 @@ def flatten_labels(y):
     return out
 
 
+_PLAIN_NUMBERS = frozenset((int, float, bool))
+_PLAIN_STR = frozenset((str,))
+
+
+def _plain_labels(labels):
+    """'number' or 'str' when EVERY label is exactly a Python int, float or
+    bool, or exactly a str (the type set, read in C); None for anything
+    else, an empty sequence included, and when MOJOLEARN_HOTPATH=python."""
+    from ._buffer import hotpath_enabled
+
+    if not labels or not hotpath_enabled():
+        return None
+    kinds = set(map(type, labels))
+    if kinds <= _PLAIN_NUMBERS:
+        return "number"
+    if kinds == _PLAIN_STR:
+        return "str"
+    return None
+
+
+def _sorted_plain_classes(labels, kind):
+    """DEVIATION 3103: `sorted_classes` for labels `_plain_labels` vouched
+    for. The loop below it does three things per label: a type test (the
+    type set already answered it, and one kind means no mixing), the NaN
+    test (only a float can fail it), and `first[v] = v` for an unseen `v`,
+    which is `dict.fromkeys`: the FIRST of equal keys is the one kept. The
+    code list is the same dict lookup per label, driven by `map`."""
+    if kind == "number":
+        try:
+            nan = any(map(math.isnan, labels))
+        except OverflowError:
+            return None  # an int beyond float range: the loop below compares it
+        if nan:
+            raise ValueError(
+                "mojolearn: y contains a NaN label; NaN is not a class"
+            )
+    classes = sorted(dict.fromkeys(labels))
+    code = {c: i for i, c in enumerate(classes)}
+    return classes, list(map(code.__getitem__, labels))
+
+
 def sorted_classes(labels):
     """`(classes, codes)`: the class list under the ORDER RULE above, and
     one dense code per label, `classes[codes[i]] == labels[i]` under
     Python equality."""
     if not labels:
         raise ValueError("mojolearn: y is empty")
+    if type(labels) is list:
+        kind = _plain_labels(labels)
+        fast = _sorted_plain_classes(labels, kind) if kind is not None else None
+        if fast is not None:
+            return fast
     first = {}
     numeric = strings = 0
     for v in labels:
@@ -168,10 +218,52 @@ def encode_labels(y):
     with one dense code per label. The native arm for a numeric buffer,
     `sorted_classes(flatten_labels(y))` for everything else."""
     fast = _encode_labels_native(y)
+    if fast is None:
+        fast = _encode_label_list_native(y)
     if fast is not None:
         return fast
     classes, codes = sorted_classes(flatten_labels(y))
     return classes, Array.from_list(codes, "<i4")
+
+
+def _encode_label_list_native(y):
+    """DEVIATION 3103: a FLAT Python list or tuple whose every label is
+    EXACTLY an `int`, or exactly a `float`, through the native encoder.
+
+    `sorted_classes` keeps the first-seen OBJECT of each class, which only
+    matters when equal labels can be different objects (`1`, `1.0`, `True`).
+    With one exact type they cannot: equal ints are indistinguishable, and
+    for floats the one distinguishable pair, `0.0` and `-0.0`, is kept
+    first-seen by the native encoder too (DEVIATION 2500). So the type set,
+    read in C, decides; a bool, a subclass, a str, a mix or a nested list
+    takes the Python routine, as does an int outside int64 and anything
+    over `_NATIVE_ENCODE_MAX_CLASSES`. NaN raises the same ValueError."""
+    import array
+    from ._buffer import hotpath_enabled
+
+    if type(y) not in (list, tuple) or len(y) < _NATIVE_LIST_MIN or not hotpath_enabled():
+        return None
+    kinds = set(map(type, y))
+    if kinds == {int}:
+        code, dtype = "q", "<i8"
+    elif kinds == {float}:
+        code, dtype = "d", "<f8"
+    else:
+        return None
+    try:
+        store = array.array(code, y)
+    except OverflowError:
+        return None  # an int outside int64: a class only Python can hold
+    try:
+        return _encode_labels_native(Array._owned(store, (len(store),), dtype, "C"))
+    except ImportError:
+        # a GPU install whose base binding predates DEVIATION 2500 raises
+        # here by design for a BUFFER; a list has its Python routine
+        return None
+
+
+#: Below this many labels the Python routine is as fast as the detour.
+_NATIVE_LIST_MIN = 256
 
 
 def _encode_labels_native(y):
@@ -275,6 +367,21 @@ def _decode_labels_native(classes, codes, kind):
 
     if kind not in ("int", "float") or not isinstance(codes, Array):
         return None
+    if codes.dtype == "<i4" and codes.ndim == 1 and classes:
+        # DEVIATION 3103: int32 codes (`GradientBoostingClassifier.predict`
+        # hands these over) used to take the Python arm, four passes over
+        # the rows. Widened by `Array.astype` they take the gather. A code
+        # the gather refuses (negative: Python indexes from the END, so the
+        # Python arm ANSWERS it) sends the call back to the Python arm.
+        from ._buffer import hotpath_enabled
+        if not hotpath_enabled():
+            return None
+        try:
+            return _decode_labels_native(classes, codes.astype("<i8"), kind)
+        except ImportError:
+            raise
+        except Exception:
+            return None
     if codes.dtype != "<i8" or codes.ndim != 1 or not classes:
         return None
     try:

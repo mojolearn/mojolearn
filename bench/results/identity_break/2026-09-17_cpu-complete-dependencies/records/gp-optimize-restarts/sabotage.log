@@ -1,0 +1,171 @@
+2914 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x790dc0000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:46  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gp-optimize-restarts/base repeat=1/train
+# DONE gp-optimize-restarts/base repeat=1/train 0.449s
+# START gp-optimize-restarts/base repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/base repeat=1/infer-save-reload 0.008s
+# START gp-optimize-restarts/base repeat=1/batch
+# DONE gp-optimize-restarts/base repeat=1/batch 0.010s
+# START gp-optimize-restarts/base repeat=1/stepfull
+# DONE gp-optimize-restarts/base repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/base repeat=2/train
+# DONE gp-optimize-restarts/base repeat=2/train 0.448s
+# START gp-optimize-restarts/base repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/base repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/base repeat=2/batch
+# DONE gp-optimize-restarts/base repeat=2/batch 0.009s
+# START gp-optimize-restarts/base repeat=2/stepfull
+# DONE gp-optimize-restarts/base repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/base STABLE 0.930s
+# START gp-optimize-restarts/ties repeat=1/train
+# DONE gp-optimize-restarts/ties repeat=1/train 0.661s
+# START gp-optimize-restarts/ties repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/ties repeat=1/infer-save-reload 0.007s
+# START gp-optimize-restarts/ties repeat=1/batch
+# DONE gp-optimize-restarts/ties repeat=1/batch 0.011s
+# START gp-optimize-restarts/ties repeat=1/stepfull
+# DONE gp-optimize-restarts/ties repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/ties repeat=2/train
+# DONE gp-optimize-restarts/ties repeat=2/train 0.653s
+# START gp-optimize-restarts/ties repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/ties repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/ties repeat=2/batch
+# DONE gp-optimize-restarts/ties repeat=2/batch 0.009s
+# START gp-optimize-restarts/ties repeat=2/stepfull
+# DONE gp-optimize-restarts/ties repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/ties STABLE 1.349s
+# START gp-optimize-restarts/hashed repeat=1/train
+# DONE gp-optimize-restarts/hashed repeat=1/train 0.400s
+# START gp-optimize-restarts/hashed repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/hashed repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/hashed repeat=1/batch
+# DONE gp-optimize-restarts/hashed repeat=1/batch 0.009s
+# START gp-optimize-restarts/hashed repeat=1/stepfull
+# DONE gp-optimize-restarts/hashed repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/hashed repeat=2/train
+# DONE gp-optimize-restarts/hashed repeat=2/train 0.399s
+# START gp-optimize-restarts/hashed repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/hashed repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/hashed repeat=2/batch
+# DONE gp-optimize-restarts/hashed repeat=2/batch 0.009s
+# START gp-optimize-restarts/hashed repeat=2/stepfull
+# DONE gp-optimize-restarts/hashed repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/hashed STABLE 0.830s
+# START gp-optimize-restarts/wide repeat=1/train
+# DONE gp-optimize-restarts/wide repeat=1/train 0.311s
+# START gp-optimize-restarts/wide repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/wide repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/wide repeat=1/batch
+# DONE gp-optimize-restarts/wide repeat=1/batch 0.008s
+# START gp-optimize-restarts/wide repeat=1/stepfull
+# DONE gp-optimize-restarts/wide repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/wide repeat=2/train
+# DONE gp-optimize-restarts/wide repeat=2/train 0.315s
+# START gp-optimize-restarts/wide repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/wide repeat=2/infer-save-reload 0.007s
+# START gp-optimize-restarts/wide repeat=2/batch
+# DONE gp-optimize-restarts/wide repeat=2/batch 0.010s
+# START gp-optimize-restarts/wide repeat=2/stepfull
+# DONE gp-optimize-restarts/wide repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/wide STABLE 0.658s
+# START gp-optimize-restarts/denormal repeat=1/train
+# DONE gp-optimize-restarts/denormal repeat=1/train 0.422s
+# START gp-optimize-restarts/denormal repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/denormal repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/denormal repeat=1/batch
+# DONE gp-optimize-restarts/denormal repeat=1/batch 0.010s
+# START gp-optimize-restarts/denormal repeat=1/stepfull
+# DONE gp-optimize-restarts/denormal repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/denormal repeat=2/train
+# DONE gp-optimize-restarts/denormal repeat=2/train 0.422s
+# START gp-optimize-restarts/denormal repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/denormal repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/denormal repeat=2/batch
+# DONE gp-optimize-restarts/denormal repeat=2/batch 0.008s
+# START gp-optimize-restarts/denormal repeat=2/stepfull
+# DONE gp-optimize-restarts/denormal repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/denormal STABLE 0.875s
+# START gp-optimize-restarts/denormal_ftz repeat=1/train
+# DONE gp-optimize-restarts/denormal_ftz repeat=1/train 0.424s
+# START gp-optimize-restarts/denormal_ftz repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/denormal_ftz repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/denormal_ftz repeat=1/batch
+# DONE gp-optimize-restarts/denormal_ftz repeat=1/batch 0.008s
+# START gp-optimize-restarts/denormal_ftz repeat=1/stepfull
+# DONE gp-optimize-restarts/denormal_ftz repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/denormal_ftz repeat=2/train
+# DONE gp-optimize-restarts/denormal_ftz repeat=2/train 0.422s
+# START gp-optimize-restarts/denormal_ftz repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/denormal_ftz repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/denormal_ftz repeat=2/batch
+# DONE gp-optimize-restarts/denormal_ftz repeat=2/batch 0.009s
+# START gp-optimize-restarts/denormal_ftz repeat=2/stepfull
+# DONE gp-optimize-restarts/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/denormal_ftz STABLE 0.877s
+# START gp-optimize-restarts/dupes repeat=1/train
+# DONE gp-optimize-restarts/dupes repeat=1/train 0.400s
+# START gp-optimize-restarts/dupes repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/dupes repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/dupes repeat=1/batch
+# DONE gp-optimize-restarts/dupes repeat=1/batch 0.009s
+# START gp-optimize-restarts/dupes repeat=1/stepfull
+# DONE gp-optimize-restarts/dupes repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/dupes repeat=2/train
+# DONE gp-optimize-restarts/dupes repeat=2/train 0.403s
+# START gp-optimize-restarts/dupes repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/dupes repeat=2/infer-save-reload 0.007s
+# START gp-optimize-restarts/dupes repeat=2/batch
+# DONE gp-optimize-restarts/dupes repeat=2/batch 0.011s
+# START gp-optimize-restarts/dupes repeat=2/stepfull
+# DONE gp-optimize-restarts/dupes repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/dupes STABLE 0.838s
+# START gp-optimize-restarts/odd repeat=1/train
+# DONE gp-optimize-restarts/odd repeat=1/train 0.462s
+# START gp-optimize-restarts/odd repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/odd repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/odd repeat=1/batch
+# DONE gp-optimize-restarts/odd repeat=1/batch 0.010s
+# START gp-optimize-restarts/odd repeat=1/stepfull
+# DONE gp-optimize-restarts/odd repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/odd repeat=2/train
+# DONE gp-optimize-restarts/odd repeat=2/train 0.475s
+# START gp-optimize-restarts/odd repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/odd repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/odd repeat=2/batch
+# DONE gp-optimize-restarts/odd repeat=2/batch 0.008s
+# START gp-optimize-restarts/odd repeat=2/stepfull
+# DONE gp-optimize-restarts/odd repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/odd STABLE 0.968s
+# START gp-optimize-restarts/negative repeat=1/train
+# DONE gp-optimize-restarts/negative repeat=1/train 0.463s
+# START gp-optimize-restarts/negative repeat=1/infer-save-reload
+# DONE gp-optimize-restarts/negative repeat=1/infer-save-reload 0.006s
+# START gp-optimize-restarts/negative repeat=1/batch
+# DONE gp-optimize-restarts/negative repeat=1/batch 0.010s
+# START gp-optimize-restarts/negative repeat=1/stepfull
+# DONE gp-optimize-restarts/negative repeat=1/stepfull 0.000s
+# START gp-optimize-restarts/negative repeat=2/train
+# DONE gp-optimize-restarts/negative repeat=2/train 0.462s
+# START gp-optimize-restarts/negative repeat=2/infer-save-reload
+# DONE gp-optimize-restarts/negative repeat=2/infer-save-reload 0.006s
+# START gp-optimize-restarts/negative repeat=2/batch
+# DONE gp-optimize-restarts/negative repeat=2/batch 0.008s
+# START gp-optimize-restarts/negative repeat=2/stepfull
+# DONE gp-optimize-restarts/negative repeat=2/stepfull 0.000s
+# CELL gp-optimize-restarts/negative STABLE 0.957s
+| gp-optimize-restarts   | f38d29a90471b8f5 | 136e39a72adb9477 | 01788ff86261be1d | 681e9eeb517fca4c | f7717d9ea1fb9805 | f7717d9ea1fb9805 | 2ecd2b98580ef0f4 | 971aaa8734685cbc | f8f54adaee9e9a9e |
+| gp-optimize-restarts infer | e331cf95f1dd94b4 | 21f6b6be34587ff4 | f78ebce3236599fb | 34e2d57529afb210 | 938935ca298e23f2 | 938935ca298e23f2 | a466ef62e9237d46 | 9b157284bace8467 | 043d8a00b494f2a9 |
+| gp-optimize-restarts model | 4e88759fbd32cac5 | 1c31b247ccda5b76 | f892d94e4c22efaf | c66c6c541d254440 | bd73b6c5f56bb3d9 | a97f00ffe45aa7a9 | ab6bff5469d5b807 | a20d676cb85e0889 | 08a34f4d95e7750c |
+| gp-optimize-restarts batch | 6c94375bed8b10b0 | 0cdccbec9b171bfa | 9afc2c99b680c717 | 9bbba861d98a3e5a | 1305aaaf51f0d88b | 1305aaaf51f0d88b | ff9842b79c4c4681 | b4d1f80ea57b8c2a | f8bee6e368edf011 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gp-optimize-restarts stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gp-optimize-restarts/gp-optimize-restarts/cpu-sabotage.json

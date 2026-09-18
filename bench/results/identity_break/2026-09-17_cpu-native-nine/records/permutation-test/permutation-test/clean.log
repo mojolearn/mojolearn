@@ -1,0 +1,168 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:21  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START permutation-test/base repeat=1/train
+# DONE permutation-test/base repeat=1/train 0.886s
+# START permutation-test/base repeat=1/infer-save-reload
+# DONE permutation-test/base repeat=1/infer-save-reload 0.000s
+# START permutation-test/base repeat=1/batch
+# DONE permutation-test/base repeat=1/batch 0.024s
+# START permutation-test/base repeat=1/stepfull
+# DONE permutation-test/base repeat=1/stepfull 0.000s
+# START permutation-test/base repeat=2/train
+# DONE permutation-test/base repeat=2/train 0.930s
+# START permutation-test/base repeat=2/infer-save-reload
+# DONE permutation-test/base repeat=2/infer-save-reload 0.000s
+# START permutation-test/base repeat=2/batch
+# DONE permutation-test/base repeat=2/batch 0.025s
+# START permutation-test/base repeat=2/stepfull
+# DONE permutation-test/base repeat=2/stepfull 0.000s
+# CELL permutation-test/base STABLE 1.866s
+# START permutation-test/ties repeat=1/train
+# DONE permutation-test/ties repeat=1/train 0.937s
+# START permutation-test/ties repeat=1/infer-save-reload
+# DONE permutation-test/ties repeat=1/infer-save-reload 0.000s
+# START permutation-test/ties repeat=1/batch
+# DONE permutation-test/ties repeat=1/batch 0.025s
+# START permutation-test/ties repeat=1/stepfull
+# DONE permutation-test/ties repeat=1/stepfull 0.000s
+# START permutation-test/ties repeat=2/train
+# DONE permutation-test/ties repeat=2/train 0.936s
+# START permutation-test/ties repeat=2/infer-save-reload
+# DONE permutation-test/ties repeat=2/infer-save-reload 0.000s
+# START permutation-test/ties repeat=2/batch
+# DONE permutation-test/ties repeat=2/batch 0.026s
+# START permutation-test/ties repeat=2/stepfull
+# DONE permutation-test/ties repeat=2/stepfull 0.000s
+# CELL permutation-test/ties STABLE 1.925s
+# START permutation-test/hashed repeat=1/train
+# DONE permutation-test/hashed repeat=1/train 0.939s
+# START permutation-test/hashed repeat=1/infer-save-reload
+# DONE permutation-test/hashed repeat=1/infer-save-reload 0.000s
+# START permutation-test/hashed repeat=1/batch
+# DONE permutation-test/hashed repeat=1/batch 0.026s
+# START permutation-test/hashed repeat=1/stepfull
+# DONE permutation-test/hashed repeat=1/stepfull 0.000s
+# START permutation-test/hashed repeat=2/train
+# DONE permutation-test/hashed repeat=2/train 0.917s
+# START permutation-test/hashed repeat=2/infer-save-reload
+# DONE permutation-test/hashed repeat=2/infer-save-reload 0.000s
+# START permutation-test/hashed repeat=2/batch
+# DONE permutation-test/hashed repeat=2/batch 0.027s
+# START permutation-test/hashed repeat=2/stepfull
+# DONE permutation-test/hashed repeat=2/stepfull 0.000s
+# CELL permutation-test/hashed STABLE 1.909s
+# START permutation-test/wide repeat=1/train
+# DONE permutation-test/wide repeat=1/train 0.916s
+# START permutation-test/wide repeat=1/infer-save-reload
+# DONE permutation-test/wide repeat=1/infer-save-reload 0.000s
+# START permutation-test/wide repeat=1/batch
+# DONE permutation-test/wide repeat=1/batch 0.026s
+# START permutation-test/wide repeat=1/stepfull
+# DONE permutation-test/wide repeat=1/stepfull 0.000s
+# START permutation-test/wide repeat=2/train
+# DONE permutation-test/wide repeat=2/train 0.928s
+# START permutation-test/wide repeat=2/infer-save-reload
+# DONE permutation-test/wide repeat=2/infer-save-reload 0.000s
+# START permutation-test/wide repeat=2/batch
+# DONE permutation-test/wide repeat=2/batch 0.025s
+# START permutation-test/wide repeat=2/stepfull
+# DONE permutation-test/wide repeat=2/stepfull 0.000s
+# CELL permutation-test/wide STABLE 1.895s
+# START permutation-test/denormal repeat=1/train
+# DONE permutation-test/denormal repeat=1/train 0.935s
+# START permutation-test/denormal repeat=1/infer-save-reload
+# DONE permutation-test/denormal repeat=1/infer-save-reload 0.000s
+# START permutation-test/denormal repeat=1/batch
+# DONE permutation-test/denormal repeat=1/batch 0.026s
+# START permutation-test/denormal repeat=1/stepfull
+# DONE permutation-test/denormal repeat=1/stepfull 0.000s
+# START permutation-test/denormal repeat=2/train
+# DONE permutation-test/denormal repeat=2/train 0.927s
+# START permutation-test/denormal repeat=2/infer-save-reload
+# DONE permutation-test/denormal repeat=2/infer-save-reload 0.000s
+# START permutation-test/denormal repeat=2/batch
+# DONE permutation-test/denormal repeat=2/batch 0.025s
+# START permutation-test/denormal repeat=2/stepfull
+# DONE permutation-test/denormal repeat=2/stepfull 0.000s
+# CELL permutation-test/denormal STABLE 1.914s
+# START permutation-test/denormal_ftz repeat=1/train
+# DONE permutation-test/denormal_ftz repeat=1/train 0.901s
+# START permutation-test/denormal_ftz repeat=1/infer-save-reload
+# DONE permutation-test/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START permutation-test/denormal_ftz repeat=1/batch
+# DONE permutation-test/denormal_ftz repeat=1/batch 0.025s
+# START permutation-test/denormal_ftz repeat=1/stepfull
+# DONE permutation-test/denormal_ftz repeat=1/stepfull 0.000s
+# START permutation-test/denormal_ftz repeat=2/train
+# DONE permutation-test/denormal_ftz repeat=2/train 0.915s
+# START permutation-test/denormal_ftz repeat=2/infer-save-reload
+# DONE permutation-test/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START permutation-test/denormal_ftz repeat=2/batch
+# DONE permutation-test/denormal_ftz repeat=2/batch 0.025s
+# START permutation-test/denormal_ftz repeat=2/stepfull
+# DONE permutation-test/denormal_ftz repeat=2/stepfull 0.000s
+# CELL permutation-test/denormal_ftz STABLE 1.867s
+# START permutation-test/dupes repeat=1/train
+# DONE permutation-test/dupes repeat=1/train 0.923s
+# START permutation-test/dupes repeat=1/infer-save-reload
+# DONE permutation-test/dupes repeat=1/infer-save-reload 0.000s
+# START permutation-test/dupes repeat=1/batch
+# DONE permutation-test/dupes repeat=1/batch 0.025s
+# START permutation-test/dupes repeat=1/stepfull
+# DONE permutation-test/dupes repeat=1/stepfull 0.000s
+# START permutation-test/dupes repeat=2/train
+# DONE permutation-test/dupes repeat=2/train 0.922s
+# START permutation-test/dupes repeat=2/infer-save-reload
+# DONE permutation-test/dupes repeat=2/infer-save-reload 0.000s
+# START permutation-test/dupes repeat=2/batch
+# DONE permutation-test/dupes repeat=2/batch 0.025s
+# START permutation-test/dupes repeat=2/stepfull
+# DONE permutation-test/dupes repeat=2/stepfull 0.000s
+# CELL permutation-test/dupes STABLE 1.896s
+# START permutation-test/odd repeat=1/train
+# DONE permutation-test/odd repeat=1/train 0.886s
+# START permutation-test/odd repeat=1/infer-save-reload
+# DONE permutation-test/odd repeat=1/infer-save-reload 0.000s
+# START permutation-test/odd repeat=1/batch
+# DONE permutation-test/odd repeat=1/batch 0.024s
+# START permutation-test/odd repeat=1/stepfull
+# DONE permutation-test/odd repeat=1/stepfull 0.000s
+# START permutation-test/odd repeat=2/train
+# DONE permutation-test/odd repeat=2/train 0.913s
+# START permutation-test/odd repeat=2/infer-save-reload
+# DONE permutation-test/odd repeat=2/infer-save-reload 0.000s
+# START permutation-test/odd repeat=2/batch
+# DONE permutation-test/odd repeat=2/batch 0.024s
+# START permutation-test/odd repeat=2/stepfull
+# DONE permutation-test/odd repeat=2/stepfull 0.000s
+# CELL permutation-test/odd STABLE 1.848s
+# START permutation-test/negative repeat=1/train
+# DONE permutation-test/negative repeat=1/train 0.928s
+# START permutation-test/negative repeat=1/infer-save-reload
+# DONE permutation-test/negative repeat=1/infer-save-reload 0.000s
+# START permutation-test/negative repeat=1/batch
+# DONE permutation-test/negative repeat=1/batch 0.026s
+# START permutation-test/negative repeat=1/stepfull
+# DONE permutation-test/negative repeat=1/stepfull 0.000s
+# START permutation-test/negative repeat=2/train
+# DONE permutation-test/negative repeat=2/train 0.923s
+# START permutation-test/negative repeat=2/infer-save-reload
+# DONE permutation-test/negative repeat=2/infer-save-reload 0.000s
+# START permutation-test/negative repeat=2/batch
+# DONE permutation-test/negative repeat=2/batch 0.026s
+# START permutation-test/negative repeat=2/stepfull
+# DONE permutation-test/negative repeat=2/stepfull 0.000s
+# CELL permutation-test/negative STABLE 1.903s
+| permutation-test       | 408ab7719820a671 | 82777b8257df6db9 | 8284bf64c2fa7c20 | 0a0cc802ced8598e | 0de28bbd113dc304 | 0de28bbd113dc304 | 6da89345115f2379 | 0a0a9b553bbf2e4e | 8cf696e8358b5ff8 |
+| permutation-test batch | b7e7c03b9f400ef8 | bec37fa614e5f274 | cd623b1ce96fc4ec | 2dc337164e9b0230 | 46e390cfaa7dbeea | 46e390cfaa7dbeea | eb4789141a883b8e | 8e7ef2954a524c26 | 3a8d2aee0fe8cab1 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: permutation-test infer n/a:function, permutation-test model n/a:no-save, permutation-test stepfull n/a:no-decode-state
+wrote /root/leg_out/records/permutation-test/permutation-test/cpu-clean.json

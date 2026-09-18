@@ -42,6 +42,7 @@ name list of its own. It prints what it matched, file by file, and runs
 without a built binary (`--host` runs only this part; the manifest imports
 nothing from the package).
 """
+import ast
 import importlib.util
 import pathlib
 import re
@@ -131,16 +132,31 @@ def _read_tree(rel):
     return p.read_text() if p.exists() else None
 
 
+def _backend_names(name):
+    """Read the declared inventory before native binaries have been built."""
+    tree = ast.parse((ROOT / "python/mojolearn/_backend.py").read_text())
+    values = [node.value for node in tree.body if isinstance(node, ast.Assign)
+              and any(isinstance(target, ast.Name) and target.id == name
+                      for target in node.targets)]
+    if len(values) != 1:
+        raise ValueError(f"Expected one literal declaration of {name}")
+    value = values[0]
+    if (isinstance(value, ast.Call) and isinstance(value.func, ast.Name)
+            and value.func.id == "frozenset" and len(value.args) == 1
+            and not value.keywords):
+        value = value.args[0]
+    names = ast.literal_eval(value)
+    if not isinstance(names, (tuple, list, set)) or not all(isinstance(n, str) for n in names):
+        raise ValueError(f"Expected a literal string inventory for {name}")
+    return set(names)
+
+
 def truth():
-    sys.path.insert(0, str(ROOT / "python"))
-    from mojolearn import _backend
-    return set(_backend._MODULES)
+    return _backend_names("_MODULES")
 
 
 def _backend_tiered():
-    sys.path.insert(0, str(ROOT / "python"))
-    from mojolearn import _backend
-    return set(_backend._TIERED)
+    return _backend_names("_TIERED")
 
 
 def from_python_tuple(path, varname):

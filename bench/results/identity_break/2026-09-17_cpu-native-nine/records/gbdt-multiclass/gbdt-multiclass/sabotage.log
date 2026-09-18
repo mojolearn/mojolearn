@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:36:04  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-multiclass/base repeat=1/train
+# DONE gbdt-multiclass/base repeat=1/train 0.818s
+# START gbdt-multiclass/base repeat=1/infer-save-reload
+# DONE gbdt-multiclass/base repeat=1/infer-save-reload 0.057s
+# START gbdt-multiclass/base repeat=1/batch
+# DONE gbdt-multiclass/base repeat=1/batch 0.203s
+# START gbdt-multiclass/base repeat=1/stepfull
+# DONE gbdt-multiclass/base repeat=1/stepfull 0.000s
+# START gbdt-multiclass/base repeat=2/train
+# DONE gbdt-multiclass/base repeat=2/train 0.790s
+# START gbdt-multiclass/base repeat=2/infer-save-reload
+# DONE gbdt-multiclass/base repeat=2/infer-save-reload 0.056s
+# START gbdt-multiclass/base repeat=2/batch
+# DONE gbdt-multiclass/base repeat=2/batch 0.183s
+# START gbdt-multiclass/base repeat=2/stepfull
+# DONE gbdt-multiclass/base repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/base STABLE 2.108s
+# START gbdt-multiclass/ties repeat=1/train
+# DONE gbdt-multiclass/ties repeat=1/train 0.754s
+# START gbdt-multiclass/ties repeat=1/infer-save-reload
+# DONE gbdt-multiclass/ties repeat=1/infer-save-reload 0.032s
+# START gbdt-multiclass/ties repeat=1/batch
+# DONE gbdt-multiclass/ties repeat=1/batch 0.151s
+# START gbdt-multiclass/ties repeat=1/stepfull
+# DONE gbdt-multiclass/ties repeat=1/stepfull 0.000s
+# START gbdt-multiclass/ties repeat=2/train
+# DONE gbdt-multiclass/ties repeat=2/train 0.754s
+# START gbdt-multiclass/ties repeat=2/infer-save-reload
+# DONE gbdt-multiclass/ties repeat=2/infer-save-reload 0.032s
+# START gbdt-multiclass/ties repeat=2/batch
+# DONE gbdt-multiclass/ties repeat=2/batch 0.149s
+# START gbdt-multiclass/ties repeat=2/stepfull
+# DONE gbdt-multiclass/ties repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/ties STABLE 1.873s
+# START gbdt-multiclass/hashed repeat=1/train
+# DONE gbdt-multiclass/hashed repeat=1/train 0.819s
+# START gbdt-multiclass/hashed repeat=1/infer-save-reload
+# DONE gbdt-multiclass/hashed repeat=1/infer-save-reload 0.056s
+# START gbdt-multiclass/hashed repeat=1/batch
+# DONE gbdt-multiclass/hashed repeat=1/batch 0.194s
+# START gbdt-multiclass/hashed repeat=1/stepfull
+# DONE gbdt-multiclass/hashed repeat=1/stepfull 0.000s
+# START gbdt-multiclass/hashed repeat=2/train
+# DONE gbdt-multiclass/hashed repeat=2/train 0.835s
+# START gbdt-multiclass/hashed repeat=2/infer-save-reload
+# DONE gbdt-multiclass/hashed repeat=2/infer-save-reload 0.056s
+# START gbdt-multiclass/hashed repeat=2/batch
+# DONE gbdt-multiclass/hashed repeat=2/batch 0.192s
+# START gbdt-multiclass/hashed repeat=2/stepfull
+# DONE gbdt-multiclass/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/hashed STABLE 2.152s
+# START gbdt-multiclass/wide repeat=1/train
+# DONE gbdt-multiclass/wide repeat=1/train 0.780s
+# START gbdt-multiclass/wide repeat=1/infer-save-reload
+# DONE gbdt-multiclass/wide repeat=1/infer-save-reload 0.056s
+# START gbdt-multiclass/wide repeat=1/batch
+# DONE gbdt-multiclass/wide repeat=1/batch 0.198s
+# START gbdt-multiclass/wide repeat=1/stepfull
+# DONE gbdt-multiclass/wide repeat=1/stepfull 0.000s
+# START gbdt-multiclass/wide repeat=2/train
+# DONE gbdt-multiclass/wide repeat=2/train 0.817s
+# START gbdt-multiclass/wide repeat=2/infer-save-reload
+# DONE gbdt-multiclass/wide repeat=2/infer-save-reload 0.055s
+# START gbdt-multiclass/wide repeat=2/batch
+# DONE gbdt-multiclass/wide repeat=2/batch 0.193s
+# START gbdt-multiclass/wide repeat=2/stepfull
+# DONE gbdt-multiclass/wide repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/wide STABLE 2.099s
+# START gbdt-multiclass/denormal repeat=1/train
+# DONE gbdt-multiclass/denormal repeat=1/train 0.750s
+# START gbdt-multiclass/denormal repeat=1/infer-save-reload
+# DONE gbdt-multiclass/denormal repeat=1/infer-save-reload 0.055s
+# START gbdt-multiclass/denormal repeat=1/batch
+# DONE gbdt-multiclass/denormal repeat=1/batch 0.192s
+# START gbdt-multiclass/denormal repeat=1/stepfull
+# DONE gbdt-multiclass/denormal repeat=1/stepfull 0.000s
+# START gbdt-multiclass/denormal repeat=2/train
+# DONE gbdt-multiclass/denormal repeat=2/train 0.783s
+# START gbdt-multiclass/denormal repeat=2/infer-save-reload
+# DONE gbdt-multiclass/denormal repeat=2/infer-save-reload 0.055s
+# START gbdt-multiclass/denormal repeat=2/batch
+# DONE gbdt-multiclass/denormal repeat=2/batch 0.179s
+# START gbdt-multiclass/denormal repeat=2/stepfull
+# DONE gbdt-multiclass/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/denormal STABLE 2.015s
+# START gbdt-multiclass/denormal_ftz repeat=1/train
+# DONE gbdt-multiclass/denormal_ftz repeat=1/train 0.746s
+# START gbdt-multiclass/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-multiclass/denormal_ftz repeat=1/infer-save-reload 0.055s
+# START gbdt-multiclass/denormal_ftz repeat=1/batch
+# DONE gbdt-multiclass/denormal_ftz repeat=1/batch 0.190s
+# START gbdt-multiclass/denormal_ftz repeat=1/stepfull
+# DONE gbdt-multiclass/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-multiclass/denormal_ftz repeat=2/train
+# DONE gbdt-multiclass/denormal_ftz repeat=2/train 0.787s
+# START gbdt-multiclass/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-multiclass/denormal_ftz repeat=2/infer-save-reload 0.055s
+# START gbdt-multiclass/denormal_ftz repeat=2/batch
+# DONE gbdt-multiclass/denormal_ftz repeat=2/batch 0.192s
+# START gbdt-multiclass/denormal_ftz repeat=2/stepfull
+# DONE gbdt-multiclass/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/denormal_ftz STABLE 2.026s
+# START gbdt-multiclass/dupes repeat=1/train
+# DONE gbdt-multiclass/dupes repeat=1/train 0.690s
+# START gbdt-multiclass/dupes repeat=1/infer-save-reload
+# DONE gbdt-multiclass/dupes repeat=1/infer-save-reload 0.049s
+# START gbdt-multiclass/dupes repeat=1/batch
+# DONE gbdt-multiclass/dupes repeat=1/batch 0.183s
+# START gbdt-multiclass/dupes repeat=1/stepfull
+# DONE gbdt-multiclass/dupes repeat=1/stepfull 0.000s
+# START gbdt-multiclass/dupes repeat=2/train
+# DONE gbdt-multiclass/dupes repeat=2/train 0.716s
+# START gbdt-multiclass/dupes repeat=2/infer-save-reload
+# DONE gbdt-multiclass/dupes repeat=2/infer-save-reload 0.050s
+# START gbdt-multiclass/dupes repeat=2/batch
+# DONE gbdt-multiclass/dupes repeat=2/batch 0.182s
+# START gbdt-multiclass/dupes repeat=2/stepfull
+# DONE gbdt-multiclass/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/dupes STABLE 1.870s
+# START gbdt-multiclass/odd repeat=1/train
+# DONE gbdt-multiclass/odd repeat=1/train 0.868s
+# START gbdt-multiclass/odd repeat=1/infer-save-reload
+# DONE gbdt-multiclass/odd repeat=1/infer-save-reload 0.041s
+# START gbdt-multiclass/odd repeat=1/batch
+# DONE gbdt-multiclass/odd repeat=1/batch 0.143s
+# START gbdt-multiclass/odd repeat=1/stepfull
+# DONE gbdt-multiclass/odd repeat=1/stepfull 0.000s
+# START gbdt-multiclass/odd repeat=2/train
+# DONE gbdt-multiclass/odd repeat=2/train 0.901s
+# START gbdt-multiclass/odd repeat=2/infer-save-reload
+# DONE gbdt-multiclass/odd repeat=2/infer-save-reload 0.041s
+# START gbdt-multiclass/odd repeat=2/batch
+# DONE gbdt-multiclass/odd repeat=2/batch 0.154s
+# START gbdt-multiclass/odd repeat=2/stepfull
+# DONE gbdt-multiclass/odd repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/odd STABLE 2.149s
+# START gbdt-multiclass/negative repeat=1/train
+# DONE gbdt-multiclass/negative repeat=1/train 0.759s
+# START gbdt-multiclass/negative repeat=1/infer-save-reload
+# DONE gbdt-multiclass/negative repeat=1/infer-save-reload 0.055s
+# START gbdt-multiclass/negative repeat=1/batch
+# DONE gbdt-multiclass/negative repeat=1/batch 0.197s
+# START gbdt-multiclass/negative repeat=1/stepfull
+# DONE gbdt-multiclass/negative repeat=1/stepfull 0.000s
+# START gbdt-multiclass/negative repeat=2/train
+# DONE gbdt-multiclass/negative repeat=2/train 0.754s
+# START gbdt-multiclass/negative repeat=2/infer-save-reload
+# DONE gbdt-multiclass/negative repeat=2/infer-save-reload 0.054s
+# START gbdt-multiclass/negative repeat=2/batch
+# DONE gbdt-multiclass/negative repeat=2/batch 0.188s
+# START gbdt-multiclass/negative repeat=2/stepfull
+# DONE gbdt-multiclass/negative repeat=2/stepfull 0.000s
+# CELL gbdt-multiclass/negative STABLE 2.007s
+| gbdt-multiclass        | f1856e0898910000 | 23685588dbe187af | 30bb3823d849c1ac | f1856e0898910000 | 5b14cc7d1d615c68 | 5b14cc7d1d615c68 | ce10065702ede70c | 494aa0478e545d1d | c2e4cd84372cdbe4 |
+| gbdt-multiclass infer  | fe77498340ada26f | 181e202a57db15cc | 6484208e11a132d8 | fe77498340ada26f | a3ec18b089cefb1d | a3ec18b089cefb1d | b467283b674e565a | 18c2ba956fccae39 | f8eaacd77067222a |
+| gbdt-multiclass model  | a12a3044097add60 | f8fd0aed3c8d0eed | 5ba0ad9d3ed721e3 | 5c48b4372e7d34b2 | 80453d4bcc8659a0 | 80453d4bcc8659a0 | e84e83990cc9b546 | 64495819c176d2cb | b830b9d36e383129 |
+| gbdt-multiclass batch  | f17846a77d41197c | 745752c0a6198cf9 | 1171ef5843d53d34 | f17846a77d41197c | 72aef0fe82ab8385 | 72aef0fe82ab8385 | 052e718021b7a323 | 13ceb72436a0b61a | cb5c4c9228ed4666 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-multiclass stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-multiclass/gbdt-multiclass/cpu-sabotage.json

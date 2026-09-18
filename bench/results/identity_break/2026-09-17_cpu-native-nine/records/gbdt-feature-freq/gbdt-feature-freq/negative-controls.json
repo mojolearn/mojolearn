@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "gbdt-feature-freq/base",
+      "context_matches": true,
+      "clean": "7d9c56b51213cb42",
+      "sabotage": "88eb037976cbd15c",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/denormal",
+      "context_matches": true,
+      "clean": "e7f1da14d1a9794b",
+      "sabotage": "3210fb05b9334f19",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/denormal_ftz",
+      "context_matches": true,
+      "clean": "e7f1da14d1a9794b",
+      "sabotage": "3210fb05b9334f19",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/dupes",
+      "context_matches": true,
+      "clean": "e8c61a9407503755",
+      "sabotage": "53894c6171b8f749",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/hashed",
+      "context_matches": true,
+      "clean": "9d97a55431b6f8e0",
+      "sabotage": "0acbd036df788bb1",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/negative",
+      "context_matches": true,
+      "clean": "75028913a14bb938",
+      "sabotage": "df09ce6d674c0805",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/odd",
+      "context_matches": true,
+      "clean": "c481331145bfb998",
+      "sabotage": "f96f933244a5e4fc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/ties",
+      "context_matches": true,
+      "clean": "57ff9964d1af1d4a",
+      "sabotage": "7acb900b08223e54",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-feature-freq/wide",
+      "context_matches": true,
+      "clean": "c6d7fccba2483372",
+      "sabotage": "088e1f9332ec0b1a",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

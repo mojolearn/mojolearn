@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:35  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START radius-chebyshev/base repeat=1/train
+# DONE radius-chebyshev/base repeat=1/train 0.027s
+# START radius-chebyshev/base repeat=1/infer-save-reload
+# DONE radius-chebyshev/base repeat=1/infer-save-reload 0.056s
+# START radius-chebyshev/base repeat=1/batch
+# DONE radius-chebyshev/base repeat=1/batch 0.063s
+# START radius-chebyshev/base repeat=1/stepfull
+# DONE radius-chebyshev/base repeat=1/stepfull 0.000s
+# START radius-chebyshev/base repeat=2/train
+# DONE radius-chebyshev/base repeat=2/train 0.026s
+# START radius-chebyshev/base repeat=2/infer-save-reload
+# DONE radius-chebyshev/base repeat=2/infer-save-reload 0.054s
+# START radius-chebyshev/base repeat=2/batch
+# DONE radius-chebyshev/base repeat=2/batch 0.061s
+# START radius-chebyshev/base repeat=2/stepfull
+# DONE radius-chebyshev/base repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/base STABLE 0.287s
+# START radius-chebyshev/ties repeat=1/train
+# DONE radius-chebyshev/ties repeat=1/train 0.059s
+# START radius-chebyshev/ties repeat=1/infer-save-reload
+# DONE radius-chebyshev/ties repeat=1/infer-save-reload 0.119s
+# START radius-chebyshev/ties repeat=1/batch
+# DONE radius-chebyshev/ties repeat=1/batch 0.136s
+# START radius-chebyshev/ties repeat=1/stepfull
+# DONE radius-chebyshev/ties repeat=1/stepfull 0.000s
+# START radius-chebyshev/ties repeat=2/train
+# DONE radius-chebyshev/ties repeat=2/train 0.058s
+# START radius-chebyshev/ties repeat=2/infer-save-reload
+# DONE radius-chebyshev/ties repeat=2/infer-save-reload 0.118s
+# START radius-chebyshev/ties repeat=2/batch
+# DONE radius-chebyshev/ties repeat=2/batch 0.133s
+# START radius-chebyshev/ties repeat=2/stepfull
+# DONE radius-chebyshev/ties repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/ties STABLE 0.625s
+# START radius-chebyshev/hashed repeat=1/train
+# DONE radius-chebyshev/hashed repeat=1/train 0.026s
+# START radius-chebyshev/hashed repeat=1/infer-save-reload
+# DONE radius-chebyshev/hashed repeat=1/infer-save-reload 0.053s
+# START radius-chebyshev/hashed repeat=1/batch
+# DONE radius-chebyshev/hashed repeat=1/batch 0.061s
+# START radius-chebyshev/hashed repeat=1/stepfull
+# DONE radius-chebyshev/hashed repeat=1/stepfull 0.000s
+# START radius-chebyshev/hashed repeat=2/train
+# DONE radius-chebyshev/hashed repeat=2/train 0.026s
+# START radius-chebyshev/hashed repeat=2/infer-save-reload
+# DONE radius-chebyshev/hashed repeat=2/infer-save-reload 0.054s
+# START radius-chebyshev/hashed repeat=2/batch
+# DONE radius-chebyshev/hashed repeat=2/batch 0.060s
+# START radius-chebyshev/hashed repeat=2/stepfull
+# DONE radius-chebyshev/hashed repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/hashed STABLE 0.281s
+# START radius-chebyshev/wide repeat=1/train
+# DONE radius-chebyshev/wide repeat=1/train 0.082s
+# START radius-chebyshev/wide repeat=1/infer-save-reload
+# DONE radius-chebyshev/wide repeat=1/infer-save-reload 0.162s
+# START radius-chebyshev/wide repeat=1/batch
+# DONE radius-chebyshev/wide repeat=1/batch 0.181s
+# START radius-chebyshev/wide repeat=1/stepfull
+# DONE radius-chebyshev/wide repeat=1/stepfull 0.000s
+# START radius-chebyshev/wide repeat=2/train
+# DONE radius-chebyshev/wide repeat=2/train 0.084s
+# START radius-chebyshev/wide repeat=2/infer-save-reload
+# DONE radius-chebyshev/wide repeat=2/infer-save-reload 0.163s
+# START radius-chebyshev/wide repeat=2/batch
+# DONE radius-chebyshev/wide repeat=2/batch 0.180s
+# START radius-chebyshev/wide repeat=2/stepfull
+# DONE radius-chebyshev/wide repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/wide STABLE 0.852s
+# START radius-chebyshev/denormal repeat=1/train
+# DONE radius-chebyshev/denormal repeat=1/train 0.028s
+# START radius-chebyshev/denormal repeat=1/infer-save-reload
+# DONE radius-chebyshev/denormal repeat=1/infer-save-reload 0.058s
+# START radius-chebyshev/denormal repeat=1/batch
+# DONE radius-chebyshev/denormal repeat=1/batch 0.066s
+# START radius-chebyshev/denormal repeat=1/stepfull
+# DONE radius-chebyshev/denormal repeat=1/stepfull 0.000s
+# START radius-chebyshev/denormal repeat=2/train
+# DONE radius-chebyshev/denormal repeat=2/train 0.028s
+# START radius-chebyshev/denormal repeat=2/infer-save-reload
+# DONE radius-chebyshev/denormal repeat=2/infer-save-reload 0.059s
+# START radius-chebyshev/denormal repeat=2/batch
+# DONE radius-chebyshev/denormal repeat=2/batch 0.066s
+# START radius-chebyshev/denormal repeat=2/stepfull
+# DONE radius-chebyshev/denormal repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/denormal STABLE 0.307s
+# START radius-chebyshev/denormal_ftz repeat=1/train
+# DONE radius-chebyshev/denormal_ftz repeat=1/train 0.028s
+# START radius-chebyshev/denormal_ftz repeat=1/infer-save-reload
+# DONE radius-chebyshev/denormal_ftz repeat=1/infer-save-reload 0.058s
+# START radius-chebyshev/denormal_ftz repeat=1/batch
+# DONE radius-chebyshev/denormal_ftz repeat=1/batch 0.067s
+# START radius-chebyshev/denormal_ftz repeat=1/stepfull
+# DONE radius-chebyshev/denormal_ftz repeat=1/stepfull 0.000s
+# START radius-chebyshev/denormal_ftz repeat=2/train
+# DONE radius-chebyshev/denormal_ftz repeat=2/train 0.029s
+# START radius-chebyshev/denormal_ftz repeat=2/infer-save-reload
+# DONE radius-chebyshev/denormal_ftz repeat=2/infer-save-reload 0.058s
+# START radius-chebyshev/denormal_ftz repeat=2/batch
+# DONE radius-chebyshev/denormal_ftz repeat=2/batch 0.068s
+# START radius-chebyshev/denormal_ftz repeat=2/stepfull
+# DONE radius-chebyshev/denormal_ftz repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/denormal_ftz STABLE 0.308s
+# START radius-chebyshev/dupes repeat=1/train
+# DONE radius-chebyshev/dupes repeat=1/train 0.028s
+# START radius-chebyshev/dupes repeat=1/infer-save-reload
+# DONE radius-chebyshev/dupes repeat=1/infer-save-reload 0.056s
+# START radius-chebyshev/dupes repeat=1/batch
+# DONE radius-chebyshev/dupes repeat=1/batch 0.064s
+# START radius-chebyshev/dupes repeat=1/stepfull
+# DONE radius-chebyshev/dupes repeat=1/stepfull 0.000s
+# START radius-chebyshev/dupes repeat=2/train
+# DONE radius-chebyshev/dupes repeat=2/train 0.027s
+# START radius-chebyshev/dupes repeat=2/infer-save-reload
+# DONE radius-chebyshev/dupes repeat=2/infer-save-reload 0.059s
+# START radius-chebyshev/dupes repeat=2/batch
+# DONE radius-chebyshev/dupes repeat=2/batch 0.066s
+# START radius-chebyshev/dupes repeat=2/stepfull
+# DONE radius-chebyshev/dupes repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/dupes STABLE 0.301s
+# START radius-chebyshev/odd repeat=1/train
+# DONE radius-chebyshev/odd repeat=1/train 0.029s
+# START radius-chebyshev/odd repeat=1/infer-save-reload
+# DONE radius-chebyshev/odd repeat=1/infer-save-reload 0.060s
+# START radius-chebyshev/odd repeat=1/batch
+# DONE radius-chebyshev/odd repeat=1/batch 0.072s
+# START radius-chebyshev/odd repeat=1/stepfull
+# DONE radius-chebyshev/odd repeat=1/stepfull 0.000s
+# START radius-chebyshev/odd repeat=2/train
+# DONE radius-chebyshev/odd repeat=2/train 0.030s
+# START radius-chebyshev/odd repeat=2/infer-save-reload
+# DONE radius-chebyshev/odd repeat=2/infer-save-reload 0.064s
+# START radius-chebyshev/odd repeat=2/batch
+# DONE radius-chebyshev/odd repeat=2/batch 0.070s
+# START radius-chebyshev/odd repeat=2/stepfull
+# DONE radius-chebyshev/odd repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/odd STABLE 0.325s
+# START radius-chebyshev/negative repeat=1/train
+# DONE radius-chebyshev/negative repeat=1/train 0.031s
+# START radius-chebyshev/negative repeat=1/infer-save-reload
+# DONE radius-chebyshev/negative repeat=1/infer-save-reload 0.063s
+# START radius-chebyshev/negative repeat=1/batch
+# DONE radius-chebyshev/negative repeat=1/batch 0.071s
+# START radius-chebyshev/negative repeat=1/stepfull
+# DONE radius-chebyshev/negative repeat=1/stepfull 0.000s
+# START radius-chebyshev/negative repeat=2/train
+# DONE radius-chebyshev/negative repeat=2/train 0.031s
+# START radius-chebyshev/negative repeat=2/infer-save-reload
+# DONE radius-chebyshev/negative repeat=2/infer-save-reload 0.063s
+# START radius-chebyshev/negative repeat=2/batch
+# DONE radius-chebyshev/negative repeat=2/batch 0.071s
+# START radius-chebyshev/negative repeat=2/stepfull
+# DONE radius-chebyshev/negative repeat=2/stepfull 0.000s
+# CELL radius-chebyshev/negative STABLE 0.330s
+| radius-chebyshev       | 1fbe08fe9f8226a8 | 808aaffe351c0313 | bcebbf030dcc86b8 | 412eb62454f1f321 | 7c8e79c48dcf7e6d | 7c8e79c48dcf7e6d | 775d14beef8c12cb | 32e16f3410f5e0bc | d8fa94297f46d792 |
+| radius-chebyshev infer | 0cbeb498a7a36ec9 | dea6f72b9b28200d | 21ca7acc03fce9b9 | d6c13b2faf0037d3 | e446ad2a8537df91 | e446ad2a8537df91 | 2cbbf827d607b2a5 | 2b7389002cfd507f | 8cc7ee645bbfe0df |
+| radius-chebyshev model | 8574229ff00211a8 | bf872c24d7a8d1fe | 0aace3ef999bbb6e | aec9f7d9470bfb08 | 05714d9a99844882 | ff352d0646ae192f | 368e386bc9afc1ce | fe3eb2f5e2415c40 | 12fa5e85b29c9861 |
+| radius-chebyshev batch | aca04cf06d7cfa7c | 2d5bbdc2b117260f | 34c6409d58702387 | 434fb6d5ec1b7df4 | 4f0dd410e1cb3d69 | 4f0dd410e1cb3d69 | 557b74a0b8421516 | de462a7abc06cdc4 | d69e9957d2867161 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: radius-chebyshev stepfull n/a:no-decode-state
+wrote /root/leg_out/records/radius-chebyshev/radius-chebyshev/cpu-sabotage.json

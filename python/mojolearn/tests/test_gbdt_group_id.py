@@ -94,3 +94,73 @@ def test_subgroup_id_and_pairs_are_refused_by_name():
 def test_a_fit_without_group_id_packs_the_old_layout():
     params = GradientBoosting()._params(32, 4, 0)
     assert len(params) == 35
+
+
+# --- the run-based grouping (lane/gbdt-group-sizes, 2026-09-17) -------------
+# `_group_sizes_by_runs` keys one id per run; `_group_sizes_rowwise` is the
+# definition. The first two tests pin WHICH path answers, so the differential
+# below cannot pass by always deferring to the row walk.
+
+def _outcome(fn, *args):
+    try:
+        return ("ok", fn(*args))
+    except Exception as exc:  # the type and the words are both the contract
+        return (type(exc).__name__, str(exc))
+
+
+def test_run_path_answers_plain_ids():
+    from mojolearn.ensemble import _group_sizes_by_runs
+    assert _group_sizes_by_runs([4, 4, 4, 2, 2, 9]) == [3, 2, 1]
+    assert _group_sizes_by_runs(["a", "a", "b"]) == [2, 1]
+    assert _group_sizes_by_runs([b"q", b"q"]) == [2]
+    # adjacent runs that spell one key merge, as the row walk merges them
+    assert _group_sizes_by_runs([7, 7, "7", b"7", 8]) == [4, 1]
+    assert _group_sizes_by_runs([]) == []
+
+
+@pytest.mark.parametrize("ids", [
+    [5, 5.0],            # equal under ==, and the float is refused
+    [1, True],           # equal under ==, and the bool is refused
+    [True, True],        # a bool is not an int here
+    [1.5],
+    [None],
+    [3, 3, 4, 3],        # a repeated group: the row walk words the refusal
+    [np.int64(3), 3],    # a list holding a NumPy scalar: not exactly int
+    [np.array([1, 2]), 1],  # == returns an array; its truth value raises
+])
+def test_run_path_defers(ids):
+    from mojolearn.ensemble import _group_sizes_by_runs
+    assert _group_sizes_by_runs(ids) is None
+
+
+def test_runs_equal_the_row_walk_on_random_ids():
+    import random
+    from mojolearn.ensemble import _group_sizes_rowwise
+    rng = random.Random(20260917)
+    spell = [lambda v: v, lambda v: str(v), lambda v: str(v).encode("ascii")]
+    odd = [5.0, True, None, (1,), 2.5]
+    deferred = answered = 0
+    for case in range(400):
+        ids = []
+        for group in rng.sample(range(40), rng.randint(1, 12)):
+            mixed = rng.random() < 0.3
+            one = rng.choice(spell)
+            for _ in range(rng.randint(1, 6)):
+                ids.append((rng.choice(spell) if mixed else one)(group))
+        if rng.random() < 0.25:     # a refused id somewhere
+            ids.insert(rng.randrange(len(ids) + 1), rng.choice(odd))
+        if rng.random() < 0.25:     # a group split into two runs
+            ids.append(ids[0])
+        want = _outcome(_group_sizes_rowwise, ids)
+        assert _outcome(_group_sizes, ids, len(ids)) == want, ids
+        if want[0] == "ok":
+            answered += 1
+        else:
+            deferred += 1
+    assert answered > 100 and deferred > 100, (answered, deferred)
+
+
+def test_a_two_million_id_pool_is_grouped_by_runs():
+    from mojolearn.ensemble import _group_sizes_by_runs
+    ids = [q for q in range(20000) for _ in range(100)]
+    assert _group_sizes_by_runs(ids) == [100] * 20000

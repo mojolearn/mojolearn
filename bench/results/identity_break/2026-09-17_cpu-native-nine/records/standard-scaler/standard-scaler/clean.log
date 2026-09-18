@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:47  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START standard-scaler/base repeat=1/train
+# DONE standard-scaler/base repeat=1/train 0.006s
+# START standard-scaler/base repeat=1/infer-save-reload
+# DONE standard-scaler/base repeat=1/infer-save-reload 0.002s
+# START standard-scaler/base repeat=1/batch
+# DONE standard-scaler/base repeat=1/batch 0.002s
+# START standard-scaler/base repeat=1/stepfull
+# DONE standard-scaler/base repeat=1/stepfull 0.000s
+# START standard-scaler/base repeat=2/train
+# DONE standard-scaler/base repeat=2/train 0.005s
+# START standard-scaler/base repeat=2/infer-save-reload
+# DONE standard-scaler/base repeat=2/infer-save-reload 0.001s
+# START standard-scaler/base repeat=2/batch
+# DONE standard-scaler/base repeat=2/batch 0.002s
+# START standard-scaler/base repeat=2/stepfull
+# DONE standard-scaler/base repeat=2/stepfull 0.000s
+# CELL standard-scaler/base STABLE 0.018s
+# START standard-scaler/ties repeat=1/train
+# DONE standard-scaler/ties repeat=1/train 0.009s
+# START standard-scaler/ties repeat=1/infer-save-reload
+# DONE standard-scaler/ties repeat=1/infer-save-reload 0.001s
+# START standard-scaler/ties repeat=1/batch
+# DONE standard-scaler/ties repeat=1/batch 0.002s
+# START standard-scaler/ties repeat=1/stepfull
+# DONE standard-scaler/ties repeat=1/stepfull 0.000s
+# START standard-scaler/ties repeat=2/train
+# DONE standard-scaler/ties repeat=2/train 0.009s
+# START standard-scaler/ties repeat=2/infer-save-reload
+# DONE standard-scaler/ties repeat=2/infer-save-reload 0.001s
+# START standard-scaler/ties repeat=2/batch
+# DONE standard-scaler/ties repeat=2/batch 0.002s
+# START standard-scaler/ties repeat=2/stepfull
+# DONE standard-scaler/ties repeat=2/stepfull 0.000s
+# CELL standard-scaler/ties STABLE 0.025s
+# START standard-scaler/hashed repeat=1/train
+# DONE standard-scaler/hashed repeat=1/train 0.005s
+# START standard-scaler/hashed repeat=1/infer-save-reload
+# DONE standard-scaler/hashed repeat=1/infer-save-reload 0.001s
+# START standard-scaler/hashed repeat=1/batch
+# DONE standard-scaler/hashed repeat=1/batch 0.002s
+# START standard-scaler/hashed repeat=1/stepfull
+# DONE standard-scaler/hashed repeat=1/stepfull 0.000s
+# START standard-scaler/hashed repeat=2/train
+# DONE standard-scaler/hashed repeat=2/train 0.005s
+# START standard-scaler/hashed repeat=2/infer-save-reload
+# DONE standard-scaler/hashed repeat=2/infer-save-reload 0.001s
+# START standard-scaler/hashed repeat=2/batch
+# DONE standard-scaler/hashed repeat=2/batch 0.002s
+# START standard-scaler/hashed repeat=2/stepfull
+# DONE standard-scaler/hashed repeat=2/stepfull 0.000s
+# CELL standard-scaler/hashed STABLE 0.016s
+# START standard-scaler/wide repeat=1/train
+# DONE standard-scaler/wide repeat=1/train 0.005s
+# START standard-scaler/wide repeat=1/infer-save-reload
+# DONE standard-scaler/wide repeat=1/infer-save-reload 0.001s
+# START standard-scaler/wide repeat=1/batch
+# DONE standard-scaler/wide repeat=1/batch 0.002s
+# START standard-scaler/wide repeat=1/stepfull
+# DONE standard-scaler/wide repeat=1/stepfull 0.000s
+# START standard-scaler/wide repeat=2/train
+# DONE standard-scaler/wide repeat=2/train 0.005s
+# START standard-scaler/wide repeat=2/infer-save-reload
+# DONE standard-scaler/wide repeat=2/infer-save-reload 0.001s
+# START standard-scaler/wide repeat=2/batch
+# DONE standard-scaler/wide repeat=2/batch 0.002s
+# START standard-scaler/wide repeat=2/stepfull
+# DONE standard-scaler/wide repeat=2/stepfull 0.000s
+# CELL standard-scaler/wide STABLE 0.016s
+# START standard-scaler/denormal repeat=1/train
+# DONE standard-scaler/denormal repeat=1/train 0.005s
+# START standard-scaler/denormal repeat=1/infer-save-reload
+# DONE standard-scaler/denormal repeat=1/infer-save-reload 0.001s
+# START standard-scaler/denormal repeat=1/batch
+# DONE standard-scaler/denormal repeat=1/batch 0.002s
+# START standard-scaler/denormal repeat=1/stepfull
+# DONE standard-scaler/denormal repeat=1/stepfull 0.000s
+# START standard-scaler/denormal repeat=2/train
+# DONE standard-scaler/denormal repeat=2/train 0.005s
+# START standard-scaler/denormal repeat=2/infer-save-reload
+# DONE standard-scaler/denormal repeat=2/infer-save-reload 0.001s
+# START standard-scaler/denormal repeat=2/batch
+# DONE standard-scaler/denormal repeat=2/batch 0.002s
+# START standard-scaler/denormal repeat=2/stepfull
+# DONE standard-scaler/denormal repeat=2/stepfull 0.000s
+# CELL standard-scaler/denormal STABLE 0.016s
+# START standard-scaler/denormal_ftz repeat=1/train
+# DONE standard-scaler/denormal_ftz repeat=1/train 0.005s
+# START standard-scaler/denormal_ftz repeat=1/infer-save-reload
+# DONE standard-scaler/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START standard-scaler/denormal_ftz repeat=1/batch
+# DONE standard-scaler/denormal_ftz repeat=1/batch 0.002s
+# START standard-scaler/denormal_ftz repeat=1/stepfull
+# DONE standard-scaler/denormal_ftz repeat=1/stepfull 0.000s
+# START standard-scaler/denormal_ftz repeat=2/train
+# DONE standard-scaler/denormal_ftz repeat=2/train 0.005s
+# START standard-scaler/denormal_ftz repeat=2/infer-save-reload
+# DONE standard-scaler/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START standard-scaler/denormal_ftz repeat=2/batch
+# DONE standard-scaler/denormal_ftz repeat=2/batch 0.002s
+# START standard-scaler/denormal_ftz repeat=2/stepfull
+# DONE standard-scaler/denormal_ftz repeat=2/stepfull 0.000s
+# CELL standard-scaler/denormal_ftz STABLE 0.016s
+# START standard-scaler/dupes repeat=1/train
+# DONE standard-scaler/dupes repeat=1/train 0.005s
+# START standard-scaler/dupes repeat=1/infer-save-reload
+# DONE standard-scaler/dupes repeat=1/infer-save-reload 0.001s
+# START standard-scaler/dupes repeat=1/batch
+# DONE standard-scaler/dupes repeat=1/batch 0.002s
+# START standard-scaler/dupes repeat=1/stepfull
+# DONE standard-scaler/dupes repeat=1/stepfull 0.000s
+# START standard-scaler/dupes repeat=2/train
+# DONE standard-scaler/dupes repeat=2/train 0.005s
+# START standard-scaler/dupes repeat=2/infer-save-reload
+# DONE standard-scaler/dupes repeat=2/infer-save-reload 0.001s
+# START standard-scaler/dupes repeat=2/batch
+# DONE standard-scaler/dupes repeat=2/batch 0.002s
+# START standard-scaler/dupes repeat=2/stepfull
+# DONE standard-scaler/dupes repeat=2/stepfull 0.000s
+# CELL standard-scaler/dupes STABLE 0.016s
+# START standard-scaler/odd repeat=1/train
+# DONE standard-scaler/odd repeat=1/train 0.003s
+# START standard-scaler/odd repeat=1/infer-save-reload
+# DONE standard-scaler/odd repeat=1/infer-save-reload 0.001s
+# START standard-scaler/odd repeat=1/batch
+# DONE standard-scaler/odd repeat=1/batch 0.002s
+# START standard-scaler/odd repeat=1/stepfull
+# DONE standard-scaler/odd repeat=1/stepfull 0.000s
+# START standard-scaler/odd repeat=2/train
+# DONE standard-scaler/odd repeat=2/train 0.003s
+# START standard-scaler/odd repeat=2/infer-save-reload
+# DONE standard-scaler/odd repeat=2/infer-save-reload 0.001s
+# START standard-scaler/odd repeat=2/batch
+# DONE standard-scaler/odd repeat=2/batch 0.002s
+# START standard-scaler/odd repeat=2/stepfull
+# DONE standard-scaler/odd repeat=2/stepfull 0.000s
+# CELL standard-scaler/odd STABLE 0.012s
+# START standard-scaler/negative repeat=1/train
+# DONE standard-scaler/negative repeat=1/train 0.005s
+# START standard-scaler/negative repeat=1/infer-save-reload
+# DONE standard-scaler/negative repeat=1/infer-save-reload 0.001s
+# START standard-scaler/negative repeat=1/batch
+# DONE standard-scaler/negative repeat=1/batch 0.002s
+# START standard-scaler/negative repeat=1/stepfull
+# DONE standard-scaler/negative repeat=1/stepfull 0.000s
+# START standard-scaler/negative repeat=2/train
+# DONE standard-scaler/negative repeat=2/train 0.005s
+# START standard-scaler/negative repeat=2/infer-save-reload
+# DONE standard-scaler/negative repeat=2/infer-save-reload 0.001s
+# START standard-scaler/negative repeat=2/batch
+# DONE standard-scaler/negative repeat=2/batch 0.002s
+# START standard-scaler/negative repeat=2/stepfull
+# DONE standard-scaler/negative repeat=2/stepfull 0.000s
+# CELL standard-scaler/negative STABLE 0.016s
+| standard-scaler        | 9954d8aba9fdfba3 | dc97bf1ab9890a0f | e9675c57b4a95c8f | 20a74ee4504bf472 | 87862ff4b450f03a | 87862ff4b450f03a | 70e05276ca28159d | 24632a63d5c0debd | 252a531100f1ae68 |
+| standard-scaler infer  | fa0fbdef7ccae250 | 4c66195589867f60 | fc7e9239e772ec64 | 3e17d9ac3db242ba | d0a324ba42db1e9c | d0a324ba42db1e9c | 89d88a83a11d2485 | 6a7a884532f89e93 | bd2b7e506db725c8 |
+| standard-scaler model  | 3adc4c98c02a61b6 | b10d8fc2c81e61e7 | 56f8f885e1f14002 | a5b9d7c55d36b98e | 68df93d8ec0c437b | 68df93d8ec0c437b | 05c29b3ea7e5d0fd | 05cf9a316c018eea | d35ffb14a4d2873d |
+| standard-scaler batch  | 917ae37b02618ab5 | 789ad47ddd5c18b0 | f929bcdbb2293a30 | e0463d8bf2244791 | adc8b864c7fd6591 | adc8b864c7fd6591 | 303de898d7f06932 | 76422b3deb83eac1 | 28349e692d1c6f69 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: standard-scaler stepfull n/a:no-decode-state
+wrote /root/leg_out/records/standard-scaler/standard-scaler/cpu-clean.json

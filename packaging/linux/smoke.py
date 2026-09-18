@@ -321,10 +321,15 @@ def main():
         # without an edit to this file, and one missing from the wheel fails.
         from mojolearn import _backend, host_surface
         hosts = {}
+        host_exports = {family['binding']: family['exports'] for family in host_surface.FAMILIES}
         for name in host_surface.wheel_bindings():
             prefix = name[len("_mojolearn_"):]
             try:
                 module = _backend.load_host_module(name)
+                missing = [export for export in host_exports[name]
+                           if not callable(getattr(module, export, None))]
+                if missing:
+                    raise ImportError(f'missing callable host exports: {missing}')
                 hosts[name] = {"vendor": str(getattr(module, prefix + "_vendor")()),
                                "numeric_mode": int(getattr(module, prefix + "_numeric_mode")()),
                                "column": str(getattr(module, prefix + "_column")())}

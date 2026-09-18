@@ -1,0 +1,1200 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-7713-64-core-processor",
+ "commit": "dcddb834572fd3b93cd9d26b943161921016b52b",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "mamba3-bf16w/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "420f9a4b19317b2a",
+    "420f9a4b19317b2a"
+   ],
+   "parts": [
+    {
+     "forward": "de6860fdd83a3ed1",
+     "prefill": "de6860fdd83a3ed1",
+     "step": "5640a44e6d2b245c",
+     "backward": "038d405083bb535b"
+    },
+    {
+     "forward": "de6860fdd83a3ed1",
+     "prefill": "de6860fdd83a3ed1",
+     "step": "5640a44e6d2b245c",
+     "backward": "038d405083bb535b"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "59d1771ff80a816a",
+    "59d1771ff80a816a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.750972928479314,
+    "stages": {
+     "repeat=1/train": 0.12837523501366377,
+     "repeat=1/infer-save-reload": 0.00028816796839237213,
+     "repeat=1/batch": 0.0010935282334685326,
+     "repeat=1/stepfull": 0.00025655608624219894,
+     "repeat=1/rlpair": 1.745024180971086,
+     "repeat=2/train": 0.1280323164537549,
+     "repeat=2/infer-save-reload": 0.00036168936640024185,
+     "repeat=2/batch": 0.0010480275377631187,
+     "repeat=2/stepfull": 0.000543573871254921,
+     "repeat=2/rlpair": 1.7452861974015832
+    }
+   }
+  },
+  "mamba3-bf16w/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "82b8d76284bb2ba6",
+    "82b8d76284bb2ba6"
+   ],
+   "parts": [
+    {
+     "forward": "505a07161b4ede4e",
+     "prefill": "505a07161b4ede4e",
+     "step": "4db3f8d751f2d737",
+     "backward": "ea36ad710be31275"
+    },
+    {
+     "forward": "505a07161b4ede4e",
+     "prefill": "505a07161b4ede4e",
+     "step": "4db3f8d751f2d737",
+     "backward": "ea36ad710be31275"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "dcb84817a5576408",
+    "dcb84817a5576408"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.7787993447855115,
+    "stages": {
+     "repeat=1/train": 0.127851870842278,
+     "repeat=1/infer-save-reload": 0.00033727847039699554,
+     "repeat=1/batch": 0.0010172268375754356,
+     "repeat=1/stepfull": 0.0005155839025974274,
+     "repeat=1/rlpair": 1.7484301775693893,
+     "repeat=2/train": 0.12835202272981405,
+     "repeat=2/infer-save-reload": 0.00036183837801218033,
+     "repeat=2/batch": 0.0008164402097463608,
+     "repeat=2/stepfull": 0.0002894168719649315,
+     "repeat=2/rlpair": 1.7701210295781493
+    }
+   }
+  },
+  "mamba3-bf16w/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4d6ceb333b1a178d",
+    "4d6ceb333b1a178d"
+   ],
+   "parts": [
+    {
+     "forward": "f8e97d92b57f3e57",
+     "prefill": "f8e97d92b57f3e57",
+     "step": "7e938991585852fc",
+     "backward": "78e34036e23ffba6"
+    },
+    {
+     "forward": "f8e97d92b57f3e57",
+     "prefill": "f8e97d92b57f3e57",
+     "step": "7e938991585852fc",
+     "backward": "78e34036e23ffba6"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "28413b942734e4ca",
+    "28413b942734e4ca"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.7345294188708067,
+    "stages": {
+     "repeat=1/train": 0.12701226025819778,
+     "repeat=1/infer-save-reload": 0.0003184480592608452,
+     "repeat=1/batch": 0.0007632989436388016,
+     "repeat=1/stepfull": 0.0002831369638442993,
+     "repeat=1/rlpair": 1.7394768605008721,
+     "repeat=2/train": 0.12673560343682766,
+     "repeat=2/infer-save-reload": 0.0002577761188149452,
+     "repeat=2/batch": 0.0005109133198857307,
+     "repeat=2/stepfull": 0.000505201518535614,
+     "repeat=2/rlpair": 1.7380899460986257
+    }
+   }
+  },
+  "mamba3-bf16w/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bebe0d228e48b3ac",
+    "bebe0d228e48b3ac"
+   ],
+   "parts": [
+    {
+     "forward": "0c7d13eaf9796d30",
+     "prefill": "0c7d13eaf9796d30",
+     "step": "402187d49d1de4ea",
+     "backward": "d8e7f1579bdbf63a"
+    },
+    {
+     "forward": "0c7d13eaf9796d30",
+     "prefill": "0c7d13eaf9796d30",
+     "step": "402187d49d1de4ea",
+     "backward": "d8e7f1579bdbf63a"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "8c98fab1ddf1ecc5",
+    "8c98fab1ddf1ecc5"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.721305242739618,
+    "stages": {
+     "repeat=1/train": 0.12713436223566532,
+     "repeat=1/infer-save-reload": 0.0003169076517224312,
+     "repeat=1/batch": 0.0008074399083852768,
+     "repeat=1/stepfull": 0.0002587269991636276,
+     "repeat=1/rlpair": 1.7327636796981096,
+     "repeat=2/train": 0.12611056677997112,
+     "repeat=2/infer-save-reload": 0.0006104344502091408,
+     "repeat=2/batch": 0.0004724022001028061,
+     "repeat=2/stepfull": 0.000490901991724968,
+     "repeat=2/rlpair": 1.731909547932446
+    }
+   }
+  },
+  "mamba3-bf16w/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb2d8dfd53268614",
+    "fb2d8dfd53268614"
+   ],
+   "parts": [
+    {
+     "forward": "ec9a6b3c0a272d71",
+     "prefill": "ec9a6b3c0a272d71",
+     "step": "1c31ccec786766e6",
+     "backward": "f51c122b41a4fc8b"
+    },
+    {
+     "forward": "ec9a6b3c0a272d71",
+     "prefill": "ec9a6b3c0a272d71",
+     "step": "1c31ccec786766e6",
+     "backward": "f51c122b41a4fc8b"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "7a9d303025f2fbf1",
+    "7a9d303025f2fbf1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.7204061625525355,
+    "stages": {
+     "repeat=1/train": 0.12550105061382055,
+     "repeat=1/infer-save-reload": 0.00026400666683912277,
+     "repeat=1/batch": 0.0005038231611251831,
+     "repeat=1/stepfull": 0.0005156435072422028,
+     "repeat=1/rlpair": 1.7362075978890061,
+     "repeat=2/train": 0.1267728041857481,
+     "repeat=2/infer-save-reload": 0.0003423895686864853,
+     "repeat=2/batch": 0.0008036009967327118,
+     "repeat=2/stepfull": 0.0003109686076641083,
+     "repeat=2/rlpair": 1.7286275448277593
+    }
+   }
+  },
+  "mamba3-bf16w/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb2d8dfd53268614",
+    "fb2d8dfd53268614"
+   ],
+   "parts": [
+    {
+     "forward": "ec9a6b3c0a272d71",
+     "prefill": "ec9a6b3c0a272d71",
+     "step": "1c31ccec786766e6",
+     "backward": "f51c122b41a4fc8b"
+    },
+    {
+     "forward": "ec9a6b3c0a272d71",
+     "prefill": "ec9a6b3c0a272d71",
+     "step": "1c31ccec786766e6",
+     "backward": "f51c122b41a4fc8b"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "e0295d44bdd19523",
+    "e0295d44bdd19523"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.71569237858057,
+    "stages": {
+     "repeat=1/train": 0.12592640239745378,
+     "repeat=1/infer-save-reload": 0.0002512764185667038,
+     "repeat=1/batch": 0.00029540807008743286,
+     "repeat=1/stepfull": 0.00024767592549324036,
+     "repeat=1/rlpair": 1.7306470107287169,
+     "repeat=2/train": 0.12533449940383434,
+     "repeat=2/infer-save-reload": 0.00025528762489557266,
+     "repeat=2/batch": 0.0004998138174414635,
+     "repeat=2/stepfull": 0.0005071535706520081,
+     "repeat=2/rlpair": 1.731339872814715
+    }
+   }
+  },
+  "mamba3-bf16w/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "95e1bf57fead28ee",
+    "95e1bf57fead28ee"
+   ],
+   "parts": [
+    {
+     "forward": "0699746d68d7e698",
+     "prefill": "0699746d68d7e698",
+     "step": "946b6ce007942b1c",
+     "backward": "92cdba3e837d2d08"
+    },
+    {
+     "forward": "0699746d68d7e698",
+     "prefill": "0699746d68d7e698",
+     "step": "946b6ce007942b1c",
+     "backward": "92cdba3e837d2d08"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "59d1771ff80a816a",
+    "59d1771ff80a816a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.7276096334680915,
+    "stages": {
+     "repeat=1/train": 0.12572328001260757,
+     "repeat=1/infer-save-reload": 0.0002457061782479286,
+     "repeat=1/batch": 0.0004397621378302574,
+     "repeat=1/stepfull": 0.0004397807642817497,
+     "repeat=1/rlpair": 1.7323076780885458,
+     "repeat=2/train": 0.1263811569660902,
+     "repeat=2/infer-save-reload": 0.0003348980098962784,
+     "repeat=2/batch": 0.0008505415171384811,
+     "repeat=2/stepfull": 0.00028063729405403137,
+     "repeat=2/rlpair": 1.7400441272184253
+    }
+   }
+  },
+  "mamba3-bf16w/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "420f9a4b19317b2a",
+    "420f9a4b19317b2a"
+   ],
+   "parts": [
+    {
+     "forward": "de6860fdd83a3ed1",
+     "prefill": "de6860fdd83a3ed1",
+     "step": "5640a44e6d2b245c",
+     "backward": "038d405083bb535b"
+    },
+    {
+     "forward": "de6860fdd83a3ed1",
+     "prefill": "de6860fdd83a3ed1",
+     "step": "5640a44e6d2b245c",
+     "backward": "038d405083bb535b"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "59d1771ff80a816a",
+    "59d1771ff80a816a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.756531797349453,
+    "stages": {
+     "repeat=1/train": 0.12650309037417173,
+     "repeat=1/infer-save-reload": 0.00025185663253068924,
+     "repeat=1/batch": 0.0006335871294140816,
+     "repeat=1/stepfull": 0.00037445034831762314,
+     "repeat=1/rlpair": 1.7669383501634002,
+     "repeat=2/train": 0.13033421896398067,
+     "repeat=2/infer-save-reload": 0.0002921968698501587,
+     "repeat=2/batch": 0.00028078630566596985,
+     "repeat=2/stepfull": 0.0002459455281496048,
+     "repeat=2/rlpair": 1.730268226005137
+    }
+   }
+  },
+  "mamba3-bf16w/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "00dc16fa15da3368",
+    "00dc16fa15da3368"
+   ],
+   "parts": [
+    {
+     "forward": "3214abe0ccfcfbed",
+     "prefill": "3214abe0ccfcfbed",
+     "step": "db31dd576926cd2b",
+     "backward": "53cb422cb5547907"
+    },
+    {
+     "forward": "3214abe0ccfcfbed",
+     "prefill": "3214abe0ccfcfbed",
+     "step": "db31dd576926cd2b",
+     "backward": "53cb422cb5547907"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "batch": [
+    null,
+    null
+   ],
+   "batch_verdict": "REFUSED",
+   "batch_error": "batch: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "rlpair": [
+    "7a267da3f7f189ff",
+    "7a267da3f7f189ff"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "stepfull": [
+    null,
+    null
+   ],
+   "stepfull_verdict": "REFUSED",
+   "stepfull_error": "stepfull: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_neural_host.so is not built. Build it with bindings/build_neural_host.sh",
+   "timing": {
+    "total_seconds": 3.7631760695949197,
+    "stages": {
+     "repeat=1/train": 0.1326583782210946,
+     "repeat=1/infer-save-reload": 0.0002583470195531845,
+     "repeat=1/batch": 0.00047292187809944153,
+     "repeat=1/stepfull": 0.00047389138489961624,
+     "repeat=1/rlpair": 1.7476491341367364,
+     "repeat=2/train": 0.12589556351304054,
+     "repeat=2/infer-save-reload": 0.00025723595172166824,
+     "repeat=2/batch": 0.000469711609184742,
+     "repeat=2/stepfull": 0.00023231655359268188,
+     "repeat=2/rlpair": 1.7544218581169844
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 7713 64-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w"
+  ],
+  "families": {
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "37ed4ea0d581227420870caaf4dafc71cbff65b997604258456425f80f7fbb51",
+    "size": 569688,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "be7428da7d16cdb056d63b2f0567d9d1208cd3b6145f7929b42c0d9a386977aa",
+    "size": 618960,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "cc86acdaabcfb6151c7955d2de2af57c4dd7f21a25a2273c6634734a8f933f8c",
+    "size": 687000,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "ac938f548130d70436602ccd4e15a6ef2c5cdb82ed921ffb3e59f59cf8d839d3",
+    "size": 456760,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "732cd59ef68e8e0a254f9603d096a8972210ef0078b3b42b0e67fbe0435707de",
+    "size": 272688,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "db5e48248023afc52aa4eff31534082eb260ecc3b5bfca1388a55e0fb4694064",
+    "size": 285224,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "74832d62284023f7ab23426039c8016450451778cb70a5dc36aaa097c2647426",
+    "size": 1256872,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "a88929c733fc7bb3436a879853721b45943bc1e66805518bbf127bd27bf01836",
+    "size": 827144,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "8d2867eabb7b3cf8d9cbb535e1ff595ad1d23933d95a8437bb95b6ae841ce15f",
+    "size": 420416,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "b9dada6c7579af317ee235558959178c395316400de3beb4c6b3059f1f278823",
+    "size": 443456,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "ec020af12559f5451a49b8a132541eae940d1ef28b44c733b360d21c6e9f54ce",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "lanes": "mamba3-bf16w",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "07be5ada479f37da4f4d86c39a8a80d880157348047e194a86d4e598f7fcb8fd",
+  "provenance": {
+   "commit": "dcddb834572fd3b93cd9d26b943161921016b52b",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-7713-64-core-processor",
+   "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

@@ -83,7 +83,8 @@ def test_score_captured_mode_and_equivalent_spelling(cls, monkeypatch, boundary)
     boundary[0][0] = 'fast'
     monkeypatch.setattr(model, 'predict', lambda X: np.array([0, 1]))
     modes = []
-    def metric(*args, numeric_mode):
+    def metric(*args, numeric_mode, sample_weight=None):
+        assert sample_weight is None
         modes.append(numeric_mode)
         return 1.0
     monkeypatch.setattr(_metrics_impl, 'accuracy_score', metric)

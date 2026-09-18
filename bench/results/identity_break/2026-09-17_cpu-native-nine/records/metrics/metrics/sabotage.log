@@ -1,0 +1,167 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:52  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START metrics/base repeat=1/train
+# DONE metrics/base repeat=1/train 0.723s
+# START metrics/base repeat=1/infer-save-reload
+# DONE metrics/base repeat=1/infer-save-reload 0.000s
+# START metrics/base repeat=1/batch
+# DONE metrics/base repeat=1/batch 0.000s
+# START metrics/base repeat=1/stepfull
+# DONE metrics/base repeat=1/stepfull 0.000s
+# START metrics/base repeat=2/train
+# DONE metrics/base repeat=2/train 0.716s
+# START metrics/base repeat=2/infer-save-reload
+# DONE metrics/base repeat=2/infer-save-reload 0.000s
+# START metrics/base repeat=2/batch
+# DONE metrics/base repeat=2/batch 0.000s
+# START metrics/base repeat=2/stepfull
+# DONE metrics/base repeat=2/stepfull 0.000s
+# CELL metrics/base STABLE 1.440s
+# START metrics/ties repeat=1/train
+# DONE metrics/ties repeat=1/train 0.928s
+# START metrics/ties repeat=1/infer-save-reload
+# DONE metrics/ties repeat=1/infer-save-reload 0.000s
+# START metrics/ties repeat=1/batch
+# DONE metrics/ties repeat=1/batch 0.000s
+# START metrics/ties repeat=1/stepfull
+# DONE metrics/ties repeat=1/stepfull 0.000s
+# START metrics/ties repeat=2/train
+# DONE metrics/ties repeat=2/train 0.954s
+# START metrics/ties repeat=2/infer-save-reload
+# DONE metrics/ties repeat=2/infer-save-reload 0.000s
+# START metrics/ties repeat=2/batch
+# DONE metrics/ties repeat=2/batch 0.000s
+# START metrics/ties repeat=2/stepfull
+# DONE metrics/ties repeat=2/stepfull 0.000s
+# CELL metrics/ties STABLE 1.882s
+# START metrics/hashed repeat=1/train
+# DONE metrics/hashed repeat=1/train 0.705s
+# START metrics/hashed repeat=1/infer-save-reload
+# DONE metrics/hashed repeat=1/infer-save-reload 0.000s
+# START metrics/hashed repeat=1/batch
+# DONE metrics/hashed repeat=1/batch 0.000s
+# START metrics/hashed repeat=1/stepfull
+# DONE metrics/hashed repeat=1/stepfull 0.000s
+# START metrics/hashed repeat=2/train
+# DONE metrics/hashed repeat=2/train 0.707s
+# START metrics/hashed repeat=2/infer-save-reload
+# DONE metrics/hashed repeat=2/infer-save-reload 0.000s
+# START metrics/hashed repeat=2/batch
+# DONE metrics/hashed repeat=2/batch 0.000s
+# START metrics/hashed repeat=2/stepfull
+# DONE metrics/hashed repeat=2/stepfull 0.000s
+# CELL metrics/hashed STABLE 1.413s
+# START metrics/wide repeat=1/train
+# DONE metrics/wide repeat=1/train 0.655s
+# START metrics/wide repeat=1/infer-save-reload
+# DONE metrics/wide repeat=1/infer-save-reload 0.000s
+# START metrics/wide repeat=1/batch
+# DONE metrics/wide repeat=1/batch 0.000s
+# START metrics/wide repeat=1/stepfull
+# DONE metrics/wide repeat=1/stepfull 0.000s
+# START metrics/wide repeat=2/train
+# DONE metrics/wide repeat=2/train 0.619s
+# START metrics/wide repeat=2/infer-save-reload
+# DONE metrics/wide repeat=2/infer-save-reload 0.000s
+# START metrics/wide repeat=2/batch
+# DONE metrics/wide repeat=2/batch 0.000s
+# START metrics/wide repeat=2/stepfull
+# DONE metrics/wide repeat=2/stepfull 0.000s
+# CELL metrics/wide STABLE 1.275s
+# START metrics/denormal repeat=1/train
+# DONE metrics/denormal repeat=1/train 0.717s
+# START metrics/denormal repeat=1/infer-save-reload
+# DONE metrics/denormal repeat=1/infer-save-reload 0.000s
+# START metrics/denormal repeat=1/batch
+# DONE metrics/denormal repeat=1/batch 0.000s
+# START metrics/denormal repeat=1/stepfull
+# DONE metrics/denormal repeat=1/stepfull 0.000s
+# START metrics/denormal repeat=2/train
+# DONE metrics/denormal repeat=2/train 0.652s
+# START metrics/denormal repeat=2/infer-save-reload
+# DONE metrics/denormal repeat=2/infer-save-reload 0.000s
+# START metrics/denormal repeat=2/batch
+# DONE metrics/denormal repeat=2/batch 0.000s
+# START metrics/denormal repeat=2/stepfull
+# DONE metrics/denormal repeat=2/stepfull 0.000s
+# CELL metrics/denormal STABLE 1.369s
+# START metrics/denormal_ftz repeat=1/train
+# DONE metrics/denormal_ftz repeat=1/train 0.675s
+# START metrics/denormal_ftz repeat=1/infer-save-reload
+# DONE metrics/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START metrics/denormal_ftz repeat=1/batch
+# DONE metrics/denormal_ftz repeat=1/batch 0.000s
+# START metrics/denormal_ftz repeat=1/stepfull
+# DONE metrics/denormal_ftz repeat=1/stepfull 0.000s
+# START metrics/denormal_ftz repeat=2/train
+# DONE metrics/denormal_ftz repeat=2/train 0.688s
+# START metrics/denormal_ftz repeat=2/infer-save-reload
+# DONE metrics/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START metrics/denormal_ftz repeat=2/batch
+# DONE metrics/denormal_ftz repeat=2/batch 0.000s
+# START metrics/denormal_ftz repeat=2/stepfull
+# DONE metrics/denormal_ftz repeat=2/stepfull 0.000s
+# CELL metrics/denormal_ftz STABLE 1.364s
+# START metrics/dupes repeat=1/train
+# DONE metrics/dupes repeat=1/train 0.697s
+# START metrics/dupes repeat=1/infer-save-reload
+# DONE metrics/dupes repeat=1/infer-save-reload 0.000s
+# START metrics/dupes repeat=1/batch
+# DONE metrics/dupes repeat=1/batch 0.000s
+# START metrics/dupes repeat=1/stepfull
+# DONE metrics/dupes repeat=1/stepfull 0.000s
+# START metrics/dupes repeat=2/train
+# DONE metrics/dupes repeat=2/train 0.695s
+# START metrics/dupes repeat=2/infer-save-reload
+# DONE metrics/dupes repeat=2/infer-save-reload 0.000s
+# START metrics/dupes repeat=2/batch
+# DONE metrics/dupes repeat=2/batch 0.000s
+# START metrics/dupes repeat=2/stepfull
+# DONE metrics/dupes repeat=2/stepfull 0.000s
+# CELL metrics/dupes STABLE 1.392s
+# START metrics/odd repeat=1/train
+# DONE metrics/odd repeat=1/train 0.669s
+# START metrics/odd repeat=1/infer-save-reload
+# DONE metrics/odd repeat=1/infer-save-reload 0.000s
+# START metrics/odd repeat=1/batch
+# DONE metrics/odd repeat=1/batch 0.000s
+# START metrics/odd repeat=1/stepfull
+# DONE metrics/odd repeat=1/stepfull 0.000s
+# START metrics/odd repeat=2/train
+# DONE metrics/odd repeat=2/train 0.673s
+# START metrics/odd repeat=2/infer-save-reload
+# DONE metrics/odd repeat=2/infer-save-reload 0.000s
+# START metrics/odd repeat=2/batch
+# DONE metrics/odd repeat=2/batch 0.000s
+# START metrics/odd repeat=2/stepfull
+# DONE metrics/odd repeat=2/stepfull 0.000s
+# CELL metrics/odd STABLE 1.342s
+# START metrics/negative repeat=1/train
+# DONE metrics/negative repeat=1/train 0.703s
+# START metrics/negative repeat=1/infer-save-reload
+# DONE metrics/negative repeat=1/infer-save-reload 0.000s
+# START metrics/negative repeat=1/batch
+# DONE metrics/negative repeat=1/batch 0.000s
+# START metrics/negative repeat=1/stepfull
+# DONE metrics/negative repeat=1/stepfull 0.000s
+# START metrics/negative repeat=2/train
+# DONE metrics/negative repeat=2/train 0.734s
+# START metrics/negative repeat=2/infer-save-reload
+# DONE metrics/negative repeat=2/infer-save-reload 0.000s
+# START metrics/negative repeat=2/batch
+# DONE metrics/negative repeat=2/batch 0.000s
+# START metrics/negative repeat=2/stepfull
+# DONE metrics/negative repeat=2/stepfull 0.000s
+# CELL metrics/negative STABLE 1.438s
+| metrics                | 83336f906e9a5ddc | 24061004a7e18289 | 06cf16720d65ab44 | ef2a4e8f8c386372 | a4074d99402fe246 | a4074d99402fe246 | 39c7dfa22c7c9096 | 6ca5a71c5863040b | 0b6e78b99ee7c2bd |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: metrics batch n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification), metrics infer n/a:function, metrics model n/a:no-save, metrics stepfull n/a:no-decode-state
+wrote /root/leg_out/records/metrics/metrics/cpu-sabotage.json

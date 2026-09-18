@@ -492,6 +492,22 @@ SPEED_FAMILY="${MOJOLEARN_SPEED_FAMILY:-gemmseq}"
 # whose lanes are symmetric boosting and forests, where LightGBM is a
 # secondary opponent and the build would cost half the rungs.
 SPEED_LGBM_CUDA="${MOJOLEARN_SPEED_LGBM_CUDA:-1}"
+# OPPONENTS ARE MEASURED ONCE PER TUPLE AND READ FROM A TABLE, SO THEY ARE OFF
+# BY DEFAULT (2026-09-17). bench/OPPONENT_REFERENCE.md holds one row per
+# (GPU model, driver, library version, dataset or shape, parameters); a round
+# measures OUR arm and quotes the row. Installing CatBoost, XGBoost, LightGBM
+# and RAPIDS on a box that is going to read a number out of a file spends
+# several minutes of a sixty-minute lease on nothing, and the LightGBM CUDA
+# source build alone has been measured at fifteen to thirty of them.
+#
+# `--opponents` turns them back on, and it is what a leg that OWES A MISSING
+# ROW passes. It is not a refresh switch: re-running an opponent that already
+# has a row is the violation this default exists to stop.
+SPEED_OPPONENTS="${MOJOLEARN_SPEED_OPPONENTS:-0}"
+# The opponent wheels come from R2, pinned by size and sha256, not from PyPI.
+# 1 lets the box resolve from PyPI instead, which reintroduces the dependency
+# on PyPI being up and on a resolver picking the same version twice.
+SPEED_PYPI_OPPONENTS="${MOJOLEARN_SPEED_PYPI_OPPONENTS:-0}"
 # Concurrent legs on one account. The pre-flight normally REFUSES to rent
 # while any mojolearn-gemm-* pod is up, and that refusal is the orphan guard:
 # a leg that finds someone else's pod cannot know whether it is a live run or
@@ -781,6 +797,8 @@ while [ $# -gt 0 ]; do
         --dataset)       shift; SPEED_DATASET="${1:-}" ;;
         --rows)          shift; SPEED_ROWS="${1:-}" ;;
         --no-lgbm-cuda)  SPEED_LGBM_CUDA=0 ;;
+        --opponents)     SPEED_OPPONENTS=1 ;;
+        --allow-pypi-opponents) SPEED_PYPI_OPPONENTS=1 ;;
         --allow-concurrent) LEG_ALLOW_CONCURRENT=1 ;;
         --smoke)         SPEED_SIZE="smoke" ;;
         --large)         SPEED_SIZE="large" ;;
@@ -1338,6 +1356,11 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # pinned commit; do not replace it with a working-tree tar.
 LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
+# Campaign 7 carries the complete release sources and verifier assets, not
+# only a Mamba certificate. Keep that payload bounded separately.
+if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then
+    LEG_MAMBA_ARCHIVE_MAX_BYTES=16777216
+fi
 if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     _layout_paths="bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_layout_paths"
@@ -1856,6 +1879,21 @@ leg_mamba_artifacts() {
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         grep -q '^release_build_exit=0$' "$OUT/remote/leg.txt" || return 1
         grep -q '^release_tools_setup_exit=0$' "$OUT/remote/leg.txt" || return 1
+        if [ "$LEG_QUALIFY" = 1 ]; then
+            python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$QUAL_SHA" <<'RELEASE_QUALIFY_ADMIT'
+import json, pathlib, sys
+sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
+from verify_linux_surface_qualification import retained
+out=pathlib.Path(sys.argv[1]); arch, digest=sys.argv[2:]
+record, _ = retained(out)
+audit=json.loads((out / 'wheel-audit.json').read_text())
+if (record['vendor'] != 'cuda' or record['wheel_sha256'] != digest
+        or audit.get('sha256') != digest or audit.get('runtime_architecture') != arch):
+    raise SystemExit('Installed wheel/device witness mismatch')
+print('QUALIFIED_NOT_PUBLISHED: cuda/' + arch + ' wheel ' + digest)
+RELEASE_QUALIFY_ADMIT
+            return $?
+        fi
         python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$COMMIT" "$OUT/source_inventory_local.json" <<'RELEASE_ADMIT'
 import hashlib, json, pathlib, sys
 out=pathlib.Path(sys.argv[1]); arch, commit, inventory_path=sys.argv[2:]
@@ -1865,7 +1903,11 @@ if rows != [[n, '0'] for n in ('resource-prefix-tests','physical-source-prefligh
 proof=json.loads((out / 'build/build-provenance.json').read_text())
 before=json.loads((out / 'preflight.json').read_text())
 if proof.get('complete') is not True or proof.get('build_exit') != 0 or proof.get('source_commit') != commit: raise SystemExit('Invalid build proof')
-if before.get('device_architecture') != arch or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
+witness=before.get('device_architecture')
+# CUDA reports compute capability sm_90 for H100; its compiled target is
+# sm_90a. Match the remote build's existing Hopper rule, not an arbitrary suffix.
+architecture_matches = witness == arch or (witness, arch) == ('sm_90', 'sm_90a')
+if not architecture_matches or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
 if proof.get('source_inventory') != json.loads(pathlib.Path(inventory_path).read_text()): raise SystemExit('Local/archive/build source inventories differ')
 extensions=proof['extensions']
 sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
@@ -2983,7 +3025,7 @@ RELEASE_TOOLS_SETUP
             # THIS device. The driver refuses an architecture override and
             # records the device it actually found.
             MOJOLEARN_EXPECT_VENDOR=cuda \
-              timeout -k 20 "$work_remaining" bash tools/linux_surface_qualification.sh \
+              timeout -k 20 "$work_remaining" bash tools/release_installed_checks.sh \
                 qualify-release-linux3 "/root/@QUALWHEEL@" '@QUALSHA@' cuda \
                 "$OUT/release-build" /root/proofs '@GPUARCHS@' \
                 > "$OUT/release-build-console.log" 2>&1
@@ -2998,7 +3040,11 @@ RELEASE_TOOLS_SETUP
         fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
-    echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
+    if [ '@QUALIFY@' = 1 ]; then
+        echo 'scope=one actual CUDA architecture installed-wheel qualification; final combined admission still required' >> "$OUT/leg.txt"
+    else
+        echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
+    fi
     : > /root/gemm_leg.done
     echo REMOTE_BODY_DONE
     exit "$release_rc"
@@ -3541,6 +3587,7 @@ cd "$ROOT" || exit 9
   echo "rounds=@SPEEDROUNDS@"
   echo "size=@SPEEDSIZE@"
   echo "dataset=@SPEEDDATASET@"
+  echo "opponents=@OPPONENTS@"
   echo "rows_ladder=@SPEEDROWS@"
   echo "arm_budget=@ARMBUDGET@"
   echo "work_timeout=@WORKTIMEOUT@"
@@ -3684,6 +3731,84 @@ pipget() {
     return 0
 }
 
+# THE OPPONENT INSTALLER, WHICH IS NOT `pipget`.
+#
+# `pipget` exists for things OUR arms need (einops for the sequence corpus
+# generator). This one is for the opponent libraries, and it has two rules
+# `pipget` does not:
+#
+#   1. IT ONLY RUNS WHEN THE LEG IS ACTUALLY MEASURING AN OPPONENT. Every
+#      caller is already inside an `opponents_wanted` guard; this is the
+#      belt to that brace, so a future caller added outside the guard still
+#      cannot spend a lease installing RAPIDS for a number that is going to
+#      be read out of bench/OPPONENT_REFERENCE.md.
+#
+#   2. IT INSTALLS FROM THE STAGED, PINNED WHEELS AND NOT FROM PyPI.
+#      /root/opponent-wheels/<set>/ arrives from R2 (DEVIATION 2704) with
+#      every wheel checked against its size and sha256 in
+#      bench/results/dataset_store/manifest.tsv, so the install is the same
+#      bytes every lease. `--no-index` is the point: without it pip would
+#      still reach pypi.org for anything the set happens not to hold, and a
+#      row is only valid for the library version it was measured at.
+#
+# --allow-pypi-opponents (@PYPIOPPONENTS@) restores the old behaviour and says
+# so in leg.txt and console.log, the same shape the model leg's
+# --allow-hf-download uses. It is an opt-in, never a silent fallback.
+OPPONENT_WHEEL_ROOT=/root/opponent-wheels
+
+opponents_wanted() { [ "@OPPONENTS@" = "1" ]; }
+
+opponent_find_links() {
+    _ofl=""
+    for _od in "$OPPONENT_WHEEL_ROOT"/*/; do
+        [ -d "$_od" ] || continue
+        if ls "$_od" 2> /dev/null | grep -q '\.whl$'; then
+            _ofl="$_ofl --find-links $_od"
+        fi
+    done
+    printf '%s' "$_ofl"
+}
+
+opponentget() {
+    if ! opponents_wanted; then
+        echo "opponent_install SKIPPED (opponents=0, the row is read from" \
+             "bench/OPPONENT_REFERENCE.md): $*" >> "$OUT/leg.txt"
+        return 0
+    fi
+    _ofl=$(opponent_find_links)
+    if [ -n "$_ofl" ]; then
+        printf '\n=== opponent install (staged wheels) %s ===\n' "$*" >> "$OUT/pip.log"
+        # shellcheck disable=SC2086
+        if command -v timeout > /dev/null 2>&1; then
+            timeout -k 30 @PIPBUDGET@ python3 -m pip install --no-input \
+                --disable-pip-version-check --no-index $_ofl "$@" >> "$OUT/pip.log" 2>&1
+        else
+            python3 -m pip install --no-input --disable-pip-version-check \
+                --no-index $_ofl "$@" >> "$OUT/pip.log" 2>&1
+        fi
+        _orc=$?
+        echo "opponent_install_exit $*=$_orc (staged wheels)" >> "$OUT/leg.txt"
+        [ "$_orc" = "0" ] && return 0
+        echo "  STAGED OPPONENT WHEELS DID NOT SATISFY: $*" >> "$OUT/console.log"
+    else
+        echo "opponent_wheels MISSING under $OPPONENT_WHEEL_ROOT" >> "$OUT/leg.txt"
+    fi
+    if [ "@PYPIOPPONENTS@" != "1" ]; then
+        echo "opponent_install REFUSED (no staged wheel set and" \
+             "--allow-pypi-opponents was not given; DEVIATION 2704 says the" \
+             "bytes come from R2): $*" >> "$OUT/leg.txt"
+        echo "  OPPONENT INSTALL REFUSED, arms will refuse by name: $*" >> "$OUT/console.log"
+        return 0
+    fi
+    echo "  WARNING: --allow-pypi-opponents is set; resolving $* from PyPI." \
+         "DEVIATION 2704 (2026-09-13) says opponent bytes come from the R2" \
+         "store, pinned by size and sha256. A version resolved here is NOT" \
+         "the version any row in bench/OPPONENT_REFERENCE.md was measured at" \
+         "unless it is checked by hand." >> "$OUT/console.log"
+    echo "opponent_install_pypi_fallback=1 ($*)" >> "$OUT/leg.txt"
+    pipget "$@"
+}
+
 case "@FAMILY@" in
 gemmseq)
     # torch is already in the image, so this family installs almost nothing.
@@ -3771,7 +3896,13 @@ for repo in ("state-spaces/mamba", "Dao-AILab/causal-conv1d"):
         sys.stderr.write("%s: NO asset matches %s / %s\n" % (repo, want, py))
 MMTAG
     echo "mamba_wheel_urls=$(tr '\n' ' ' < /root/mamba_urls.txt)" >> "$OUT/leg.txt"
-    if [ -s /root/mamba_urls.txt ] && command -v timeout > /dev/null 2>&1; then
+    if ! opponents_wanted; then
+        # The mamba-ssm and causal-conv1d wheels are an OPPONENT, fetched from
+        # a GitHub release. At opponents=0 the mamba row for this
+        # (GPU, driver, version, shape) is read from
+        # bench/OPPONENT_REFERENCE.md and nothing is downloaded or installed.
+        echo "mamba_ssm_install=SKIPPED at opponents=0 (read the row)" >> "$OUT/leg.txt"
+    elif [ -s /root/mamba_urls.txt ] && command -v timeout > /dev/null 2>&1; then
         while read -r _w; do
             [ -n "$_w" ] || continue
             timeout -k 15 420 python3 -m pip install --no-input \
@@ -3850,17 +3981,33 @@ MMPROBE
     runarm "verify.mamba_block.identical.log" \
         sh tools/with_identical_mode.sh pixi run mojo run -I . \
             mamba/checks/mamba_check.mojo
-    runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
-    for L in @SPEEDLANES@; do
-        [ "$L" = "gemm" ] && continue
-        runarm "seq.$L.torch.log" python3 tools/speed_torch_seq.py \
-            --lane "$L" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP"
-    done
+    # THE OPPONENT ARMS OF THIS FAMILY: cuBLAS and the torch sequence scans.
+    # Both are measured once per (GPU model, driver, torch version, shape) and
+    # read from bench/OPPONENT_REFERENCE.md afterwards, so at opponents=0 they
+    # do not run and the skip is recorded rather than looking like a failure.
+    # OUR arms and the two correctness gates above are untouched by this.
+    if opponents_wanted; then
+        runarm "gemm.gemm.cublas.log" python3 tools/speed_gemm_arm.py --rounds "@SPEEDROUNDS@"
+        for L in @SPEEDLANES@; do
+            [ "$L" = "gemm" ] && continue
+            runarm "seq.$L.torch.log" python3 tools/speed_torch_seq.py \
+                --lane "$L" --rounds "@SPEEDROUNDS@" --dump-dir "$MOJOLEARN_SPEED_DUMP"
+        done
+    else
+        echo "vendor_arm_skipped gemmseq=opponents-0-read-the-table" >> "$OUT/leg.txt"
+    fi
     ;;
 classical)
     # RAPIDS is the install that can eat the lease. It runs FIRST so that a
     # failure is known before any Mojo time is spent, and it is bounded.
-    pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12" "cuvs-cu12"
+    #
+    # IT ALSO DOES NOT RUN AT ALL UNLESS THIS LEG OWES A MISSING ROW. cuML and
+    # cuVS are measured once per (GPU model, driver, version, shape) and read
+    # from bench/OPPONENT_REFERENCE.md thereafter; `opponentget` is a no-op at
+    # opponents=0, which is the default. The version pin is explicit for the
+    # same reason: `cuml-cu12` with no `==` is a different library every few
+    # weeks and a row measured against one is not a row about the other.
+    opponentget "cuml-cu12==26.8.0" "cuvs-cu12==26.8.1"
     pipget scikit-learn scipy
     buildone classicalspeed bench/speed/classical_speed_main.mojo
     for L in @SPEEDLANES@; do
@@ -3870,8 +4017,18 @@ classical)
         # MOJOLEARN_SPEED_LANE, which is already exported above, and has no
         # argparse at all. Passing a flag it does not know would abort the
         # arm on every lane.
-        runarm "classical.$L.vendor.log" \
-            python3 tools/speed_cuml_arm.py
+        #
+        # AND IT ONLY RUNS WHEN A ROW IS OWED. At opponents=0 the cuML number
+        # for this (GPU, driver, version, shape) is already in
+        # bench/OPPONENT_REFERENCE.md and re-measuring it is the thing the
+        # standing rule forbids. The skip is recorded so the leg's reader can
+        # see that the missing vendor log is a decision and not a failure.
+        if opponents_wanted; then
+            runarm "classical.$L.vendor.log" \
+                python3 tools/speed_cuml_arm.py
+        else
+            echo "vendor_arm_skipped $L=opponents-0-read-the-table" >> "$OUT/leg.txt"
+        fi
     done
     ;;
 forest)
@@ -4014,7 +4171,18 @@ forest)
     ls -la python/mojolearn/*.so > "$OUT/bindings_listing.txt" 2>&1 \
         || echo "NO .so BUILT AT ALL" > "$OUT/bindings_listing.txt"
 
-    pipget catboost xgboost lightgbm scikit-learn
+    # THE OPPONENT WHEELS, ONLY WHEN A ROW IS OWED, AND FROM R2 WHEN THEY ARE.
+    # Measured cold start of this one step: 16-26 s across six legs
+    # (bench/results/trees_identical/*/logs/setup.txt, istella_ranking_2026-09-15
+    # `pip_opponents 0 22`). It is the cheap part; `opponentget "cuml-cu12..."`
+    # below and the LightGBM CUDA build are the expensive ones.
+    #
+    # THE VERSIONS ARE PINNED. Every CatBoost, XGBoost and LightGBM row in
+    # bench/OPPONENT_REFERENCE.md names 1.2.10 / 3.2.0 / 4.7.0; an unpinned
+    # install resolves to whatever shipped this week and quietly rebinds those
+    # rows to bytes they were never measured against.
+    opponentget "catboost==1.2.10" "xgboost==3.2.0" "lightgbm==4.7.0"
+    pipget scikit-learn
     # THE DATASETS ARE FETCHED AS THEIR OWN NAMED STEP, ONCE, BEFORE ANY ARM.
     #
     # `year` is a 211 MB zip plus a decode to a ~170 MB npz, and `covtype`
@@ -4046,7 +4214,7 @@ forest)
             echo "download_exit higgs=$?" >> "$OUT/leg.txt"
         fi
     fi
-    pipget --extra-index-url=https://pypi.nvidia.com "cuml-cu12"
+    opponentget "cuml-cu12==26.8.0"
     # LightGBM's CUDA learner is NOT in the wheel and has to be built. It is
     # attempted LAST of the installs and bounded, because it has been
     # measured at fifteen to thirty minutes and this lease is sixty.
@@ -4071,7 +4239,18 @@ forest)
         #                    backend that drops --config-settings still
         #                    gets it.
         rm -rf /root/.cache/pip/wheels 2>/dev/null || true
-        if [ "@LGBMCUDA@" != "1" ]; then
+        if ! opponents_wanted; then
+            # THE MOST EXPENSIVE STEP IN THE FAMILY, AND AT opponents=0 IT BUYS
+            # A NUMBER THAT IS ALREADY IN A FILE. Measured: 268 s on an H100
+            # (bench/results/istella_ranking_2026-09-15/status.tsv
+            # `lgbm_cuda_build 0 268`), ~344 s on another H100 and ~255 s on an
+            # L40S (bench/results/trees_identical/*/logs/setup.txt), and once
+            # exit 143 -- killed by its own budget, leaving a CPU-only wheel
+            # that reported success (bench/results/nvidia_identical_trees_2026-09-10).
+            echo "lightgbm_cuda_build=SKIPPED at opponents=0; the LightGBM CUDA" \
+                 "row is read from bench/OPPONENT_REFERENCE.md. Pass --opponents" \
+                 "only when this (GPU, driver, version, dataset) has no row." >> "$OUT/leg.txt"
+        elif [ "@LGBMCUDA@" != "1" ]; then
             echo "lightgbm_cuda_build=SKIPPED by --no-lgbm-cuda; the wheel's" \
                  "CPU learner still runs and every lightgbm-cuda arm will" \
                  "refuse by name" >> "$OUT/leg.txt"
@@ -4164,14 +4343,22 @@ LGBMPROBE
         if [ -n "@SPEEDDATASET@" ] && [ "$L" != "iforest" ]; then
             _dsflag="--dataset @SPEEDDATASET@"
         fi
+        # AT opponents=0 THE ARM RUNS OURS ONLY. forest_speed_arm.py already
+        # has the switch; without it the arm interleaves CatBoost, XGBoost,
+        # LightGBM and cuML into its rotation, which is a re-measurement of
+        # four tuples that bench/OPPONENT_REFERENCE.md already holds rows for.
+        # With --opponents the interleaving comes back, because a row that is
+        # genuinely missing has to be measured in the same process as ours.
+        _oursflag="--ours-only"
+        opponents_wanted && _oursflag=""
         if [ -z "@SPEEDROWS@" ]; then
             runarm "forest.$L.log" \
-                "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag
+                "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" $_dsflag $_oursflag
         else
             for R in @SPEEDROWS@; do
                 runarm "forest.$L.r$R.log" \
                     "$FOREST_PY" bench/speed/forest_speed_arm.py --lane "$L" \
-                        $_dsflag --rows "$R"
+                        $_dsflag $_oursflag --rows "$R"
             done
         fi
     done
@@ -4242,6 +4429,8 @@ leg_check_remote_body() {
         -e "s|@SPEEDDATASET@|$SPEED_DATASET|g" \
         -e "s|@SPEEDROWS@|$SPEED_ROWS|g" \
         -e "s|@LGBMCUDA@|$SPEED_LGBM_CUDA|g" \
+        -e "s|@OPPONENTS@|$SPEED_OPPONENTS|g" \
+        -e "s|@PYPIOPPONENTS@|$SPEED_PYPI_OPPONENTS|g" \
         -e "s|@SPEEDSIZE@|$SPEED_SIZE|g" \
         -e "s|@ARMBUDGET@|$ARM_BUDGET|g" \
         -e "s|@BUILDBUDGET@|$BUILD_BUDGET|g" \
@@ -4439,7 +4628,38 @@ RELEASE_SOURCE
     # runs; a raw download on the box is a fallback that stage.log makes
     # visible. Default keys: the neural corpora (this runner's payloads);
     # MOJOLEARN_STAGE_KEYS overrides, "" turns it off.
-    MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-corpus/enwik8/input.txt corpus/pile_github/input.txt}" \
+    #
+    # WHAT THIS LEG STAGES DEPENDS ON THE FAMILY, because the default keys used
+    # to be the neural corpora only and the forest family then spent its lease
+    # downloading `year` (a 211 MB zip plus a decode) and `covtype` (sklearn's
+    # fetcher) and, on a higgs ladder, a 2.6 GB gzip and its parse -- all three
+    # of which are pinned npz keys in the store that land exactly where
+    # tools/speed_gbdt_arm.py looks, so it returns early and fetches nothing.
+    #
+    # AND THE OPPONENT WHEELS RIDE THE SAME PATH WHEN THE LEG IS MEASURING AN
+    # OPPONENT. DEVIATION 2704 put the corpora in R2 and left the opponents on
+    # PyPI; `opponents/<set>` closes that. R2 charges no egress and a pod pulls
+    # at datacenter speed, so 2.4 GB of pinned wheels arrives in the time pip
+    # used to spend resolving 1.2 GB of RAPIDS metadata -- and it arrives as
+    # THE SAME BYTES every lease, which is what makes a row in
+    # bench/OPPONENT_REFERENCE.md mean anything.
+    _stage_default="corpus/enwik8/input.txt corpus/pile_github/input.txt"
+    case "$SPEED_FAMILY" in
+        forest)
+            _stage_default="gbm-bench/taxi/taxi_speed.npz gbm-bench/year/year_speed.npz gbm-bench/covtype/covtype_speed.npz"
+            [ "$SPEED_DATASET" = "higgs" ] && _stage_default="$_stage_default gbm-bench/higgs/higgs_speed.npz"
+            [ "$SPEED_DATASET" = "istella" ] || [ "$SPEED_DATASET" = "istellareg" ] \
+                && _stage_default="$_stage_default gbm-bench/istella/istella_speed.npz"
+            if [ "$SPEED_OPPONENTS" = 1 ]; then
+                _stage_default="$_stage_default opponents/trees-linux-x86_64-cp311 opponents/rapids-linux-x86_64-cp311"
+            fi
+            ;;
+        classical)
+            [ "$SPEED_OPPONENTS" = 1 ] \
+                && _stage_default="$_stage_default opponents/rapids-linux-x86_64-cp311"
+            ;;
+    esac
+    MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-$_stage_default}" \
         sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || true
     leg_say "$(tail -1 "$OUT/stage.log")"
     # lane/r2-binding-cache (2026-09-15), DEFAULT OFF. MOJOLEARN_BINCACHE=1
@@ -6054,9 +6274,15 @@ echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
 elif [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+if [ "$LEG_QUALIFY" = 1 ]; then
+echo '== step 9: one-architecture installed qualification =='
+echo "  Retained evidence: $OUT/remote/release-build"
+echo '  All three architecture records must still pass final wheel admission.'
+else
 echo '== step 9: one-architecture release build =='
 echo "  Retained sets/proofs: $OUT/remote/release-build/build"
 echo '  BUILT_NOT_INSTALLED; no wheel or numerical admission.'
+fi
 elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
 echo "== step 9: compact $VENDOR resume diagnostic =="
 echo "  Raw results: $OUT/remote/byte-lm-resume; final local all-raw comparison mandatory."

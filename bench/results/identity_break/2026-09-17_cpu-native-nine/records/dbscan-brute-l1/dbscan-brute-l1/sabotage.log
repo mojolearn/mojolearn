@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:31:17  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START dbscan-brute-l1/base repeat=1/train
+# DONE dbscan-brute-l1/base repeat=1/train 0.580s
+# START dbscan-brute-l1/base repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/base repeat=1/infer-save-reload 0.032s
+# START dbscan-brute-l1/base repeat=1/batch
+# DONE dbscan-brute-l1/base repeat=1/batch 0.011s
+# START dbscan-brute-l1/base repeat=1/stepfull
+# DONE dbscan-brute-l1/base repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/base repeat=2/train
+# DONE dbscan-brute-l1/base repeat=2/train 0.576s
+# START dbscan-brute-l1/base repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/base repeat=2/infer-save-reload 0.031s
+# START dbscan-brute-l1/base repeat=2/batch
+# DONE dbscan-brute-l1/base repeat=2/batch 0.010s
+# START dbscan-brute-l1/base repeat=2/stepfull
+# DONE dbscan-brute-l1/base repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/base STABLE 1.240s
+# START dbscan-brute-l1/ties repeat=1/train
+# DONE dbscan-brute-l1/ties repeat=1/train 1.805s
+# START dbscan-brute-l1/ties repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/ties repeat=1/infer-save-reload 0.075s
+# START dbscan-brute-l1/ties repeat=1/batch
+# DONE dbscan-brute-l1/ties repeat=1/batch 0.022s
+# START dbscan-brute-l1/ties repeat=1/stepfull
+# DONE dbscan-brute-l1/ties repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/ties repeat=2/train
+# DONE dbscan-brute-l1/ties repeat=2/train 1.804s
+# START dbscan-brute-l1/ties repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/ties repeat=2/infer-save-reload 0.074s
+# START dbscan-brute-l1/ties repeat=2/batch
+# DONE dbscan-brute-l1/ties repeat=2/batch 0.022s
+# START dbscan-brute-l1/ties repeat=2/stepfull
+# DONE dbscan-brute-l1/ties repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/ties STABLE 3.803s
+# START dbscan-brute-l1/hashed repeat=1/train
+# DONE dbscan-brute-l1/hashed repeat=1/train 0.572s
+# START dbscan-brute-l1/hashed repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/hashed repeat=1/infer-save-reload 0.036s
+# START dbscan-brute-l1/hashed repeat=1/batch
+# DONE dbscan-brute-l1/hashed repeat=1/batch 0.011s
+# START dbscan-brute-l1/hashed repeat=1/stepfull
+# DONE dbscan-brute-l1/hashed repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/hashed repeat=2/train
+# DONE dbscan-brute-l1/hashed repeat=2/train 0.571s
+# START dbscan-brute-l1/hashed repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/hashed repeat=2/infer-save-reload 0.036s
+# START dbscan-brute-l1/hashed repeat=2/batch
+# DONE dbscan-brute-l1/hashed repeat=2/batch 0.011s
+# START dbscan-brute-l1/hashed repeat=2/stepfull
+# DONE dbscan-brute-l1/hashed repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/hashed STABLE 1.239s
+# START dbscan-brute-l1/wide repeat=1/train
+# DONE dbscan-brute-l1/wide repeat=1/train 0.954s
+# START dbscan-brute-l1/wide repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/wide repeat=1/infer-save-reload 0.048s
+# START dbscan-brute-l1/wide repeat=1/batch
+# DONE dbscan-brute-l1/wide repeat=1/batch 0.015s
+# START dbscan-brute-l1/wide repeat=1/stepfull
+# DONE dbscan-brute-l1/wide repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/wide repeat=2/train
+# DONE dbscan-brute-l1/wide repeat=2/train 0.927s
+# START dbscan-brute-l1/wide repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/wide repeat=2/infer-save-reload 0.048s
+# START dbscan-brute-l1/wide repeat=2/batch
+# DONE dbscan-brute-l1/wide repeat=2/batch 0.014s
+# START dbscan-brute-l1/wide repeat=2/stepfull
+# DONE dbscan-brute-l1/wide repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/wide STABLE 2.008s
+# START dbscan-brute-l1/denormal repeat=1/train
+# DONE dbscan-brute-l1/denormal repeat=1/train 0.782s
+# START dbscan-brute-l1/denormal repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/denormal repeat=1/infer-save-reload 0.047s
+# START dbscan-brute-l1/denormal repeat=1/batch
+# DONE dbscan-brute-l1/denormal repeat=1/batch 0.015s
+# START dbscan-brute-l1/denormal repeat=1/stepfull
+# DONE dbscan-brute-l1/denormal repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/denormal repeat=2/train
+# DONE dbscan-brute-l1/denormal repeat=2/train 0.791s
+# START dbscan-brute-l1/denormal repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/denormal repeat=2/infer-save-reload 0.048s
+# START dbscan-brute-l1/denormal repeat=2/batch
+# DONE dbscan-brute-l1/denormal repeat=2/batch 0.015s
+# START dbscan-brute-l1/denormal repeat=2/stepfull
+# DONE dbscan-brute-l1/denormal repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/denormal STABLE 1.698s
+# START dbscan-brute-l1/denormal_ftz repeat=1/train
+# DONE dbscan-brute-l1/denormal_ftz repeat=1/train 0.767s
+# START dbscan-brute-l1/denormal_ftz repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/denormal_ftz repeat=1/infer-save-reload 0.045s
+# START dbscan-brute-l1/denormal_ftz repeat=1/batch
+# DONE dbscan-brute-l1/denormal_ftz repeat=1/batch 0.014s
+# START dbscan-brute-l1/denormal_ftz repeat=1/stepfull
+# DONE dbscan-brute-l1/denormal_ftz repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/denormal_ftz repeat=2/train
+# DONE dbscan-brute-l1/denormal_ftz repeat=2/train 0.737s
+# START dbscan-brute-l1/denormal_ftz repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/denormal_ftz repeat=2/infer-save-reload 0.045s
+# START dbscan-brute-l1/denormal_ftz repeat=2/batch
+# DONE dbscan-brute-l1/denormal_ftz repeat=2/batch 0.014s
+# START dbscan-brute-l1/denormal_ftz repeat=2/stepfull
+# DONE dbscan-brute-l1/denormal_ftz repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/denormal_ftz STABLE 1.622s
+# START dbscan-brute-l1/dupes repeat=1/train
+# DONE dbscan-brute-l1/dupes repeat=1/train 0.589s
+# START dbscan-brute-l1/dupes repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/dupes repeat=1/infer-save-reload 0.031s
+# START dbscan-brute-l1/dupes repeat=1/batch
+# DONE dbscan-brute-l1/dupes repeat=1/batch 0.010s
+# START dbscan-brute-l1/dupes repeat=1/stepfull
+# DONE dbscan-brute-l1/dupes repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/dupes repeat=2/train
+# DONE dbscan-brute-l1/dupes repeat=2/train 0.576s
+# START dbscan-brute-l1/dupes repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/dupes repeat=2/infer-save-reload 0.031s
+# START dbscan-brute-l1/dupes repeat=2/batch
+# DONE dbscan-brute-l1/dupes repeat=2/batch 0.010s
+# START dbscan-brute-l1/dupes repeat=2/stepfull
+# DONE dbscan-brute-l1/dupes repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/dupes STABLE 1.247s
+# START dbscan-brute-l1/odd repeat=1/train
+# DONE dbscan-brute-l1/odd repeat=1/train 0.569s
+# START dbscan-brute-l1/odd repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/odd repeat=1/infer-save-reload 0.031s
+# START dbscan-brute-l1/odd repeat=1/batch
+# DONE dbscan-brute-l1/odd repeat=1/batch 0.010s
+# START dbscan-brute-l1/odd repeat=1/stepfull
+# DONE dbscan-brute-l1/odd repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/odd repeat=2/train
+# DONE dbscan-brute-l1/odd repeat=2/train 0.570s
+# START dbscan-brute-l1/odd repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/odd repeat=2/infer-save-reload 0.031s
+# START dbscan-brute-l1/odd repeat=2/batch
+# DONE dbscan-brute-l1/odd repeat=2/batch 0.010s
+# START dbscan-brute-l1/odd repeat=2/stepfull
+# DONE dbscan-brute-l1/odd repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/odd STABLE 1.221s
+# START dbscan-brute-l1/negative repeat=1/train
+# DONE dbscan-brute-l1/negative repeat=1/train 0.606s
+# START dbscan-brute-l1/negative repeat=1/infer-save-reload
+# DONE dbscan-brute-l1/negative repeat=1/infer-save-reload 0.041s
+# START dbscan-brute-l1/negative repeat=1/batch
+# DONE dbscan-brute-l1/negative repeat=1/batch 0.013s
+# START dbscan-brute-l1/negative repeat=1/stepfull
+# DONE dbscan-brute-l1/negative repeat=1/stepfull 0.000s
+# START dbscan-brute-l1/negative repeat=2/train
+# DONE dbscan-brute-l1/negative repeat=2/train 0.601s
+# START dbscan-brute-l1/negative repeat=2/infer-save-reload
+# DONE dbscan-brute-l1/negative repeat=2/infer-save-reload 0.040s
+# START dbscan-brute-l1/negative repeat=2/batch
+# DONE dbscan-brute-l1/negative repeat=2/batch 0.013s
+# START dbscan-brute-l1/negative repeat=2/stepfull
+# DONE dbscan-brute-l1/negative repeat=2/stepfull 0.000s
+# CELL dbscan-brute-l1/negative STABLE 1.315s
+| dbscan-brute-l1        | ab9befd4e9917252 | ec2438017a859bb8 | 34c44474c5c0b432 | d17808b4b9261d5d | 01bac8caa068bbf3 | 01bac8caa068bbf3 | ab9befd4e9917252 | c654b25004add2dc | bbd82fdef954c9bd |
+| dbscan-brute-l1 infer  | 421e5ed24baa05d1 | d100f8d65d4858c8 | 724b0421fb9783b5 | dab6c104519fb920 | dab6c104519fb920 | dab6c104519fb920 | 421e5ed24baa05d1 | 7e7ebf04d1f7cb74 | b1bc390dd5da6f51 |
+| dbscan-brute-l1 model  | da03906006047e71 | a5375a0edd10411e | fd22163d9732ecff | 0a40d6dc52184ff0 | 2998d5603c4af027 | ec2ecb6564b9f277 | da03906006047e71 | 1989a5c4956bc00e | 1814e9b98016b337 |
+| dbscan-brute-l1 batch  | f787650f26e159e9 | e6653b9d575c68ce | 20f6781053c9976e | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 | f787650f26e159e9 | bfae2f3c825a4fd2 | eaf8c25b605ec157 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: dbscan-brute-l1 stepfull n/a:no-decode-state
+wrote /root/leg_out/records/dbscan-brute-l1/dbscan-brute-l1/cpu-sabotage.json

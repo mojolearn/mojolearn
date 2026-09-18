@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:35:14  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-exact-mae/base repeat=1/train
+# DONE gbdt-exact-mae/base repeat=1/train 0.479s
+# START gbdt-exact-mae/base repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/base repeat=1/infer-save-reload 0.033s
+# START gbdt-exact-mae/base repeat=1/batch
+# DONE gbdt-exact-mae/base repeat=1/batch 0.117s
+# START gbdt-exact-mae/base repeat=1/stepfull
+# DONE gbdt-exact-mae/base repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/base repeat=2/train
+# DONE gbdt-exact-mae/base repeat=2/train 0.515s
+# START gbdt-exact-mae/base repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/base repeat=2/infer-save-reload 0.033s
+# START gbdt-exact-mae/base repeat=2/batch
+# DONE gbdt-exact-mae/base repeat=2/batch 0.125s
+# START gbdt-exact-mae/base repeat=2/stepfull
+# DONE gbdt-exact-mae/base repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/base STABLE 1.303s
+# START gbdt-exact-mae/ties repeat=1/train
+# DONE gbdt-exact-mae/ties repeat=1/train 0.807s
+# START gbdt-exact-mae/ties repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/ties repeat=1/infer-save-reload 0.020s
+# START gbdt-exact-mae/ties repeat=1/batch
+# DONE gbdt-exact-mae/ties repeat=1/batch 0.093s
+# START gbdt-exact-mae/ties repeat=1/stepfull
+# DONE gbdt-exact-mae/ties repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/ties repeat=2/train
+# DONE gbdt-exact-mae/ties repeat=2/train 0.793s
+# START gbdt-exact-mae/ties repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/ties repeat=2/infer-save-reload 0.022s
+# START gbdt-exact-mae/ties repeat=2/batch
+# DONE gbdt-exact-mae/ties repeat=2/batch 0.092s
+# START gbdt-exact-mae/ties repeat=2/stepfull
+# DONE gbdt-exact-mae/ties repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/ties STABLE 1.828s
+# START gbdt-exact-mae/hashed repeat=1/train
+# DONE gbdt-exact-mae/hashed repeat=1/train 0.519s
+# START gbdt-exact-mae/hashed repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/hashed repeat=1/infer-save-reload 0.032s
+# START gbdt-exact-mae/hashed repeat=1/batch
+# DONE gbdt-exact-mae/hashed repeat=1/batch 0.123s
+# START gbdt-exact-mae/hashed repeat=1/stepfull
+# DONE gbdt-exact-mae/hashed repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/hashed repeat=2/train
+# DONE gbdt-exact-mae/hashed repeat=2/train 0.520s
+# START gbdt-exact-mae/hashed repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/hashed repeat=2/infer-save-reload 0.032s
+# START gbdt-exact-mae/hashed repeat=2/batch
+# DONE gbdt-exact-mae/hashed repeat=2/batch 0.111s
+# START gbdt-exact-mae/hashed repeat=2/stepfull
+# DONE gbdt-exact-mae/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/hashed STABLE 1.338s
+# START gbdt-exact-mae/wide repeat=1/train
+# DONE gbdt-exact-mae/wide repeat=1/train 0.483s
+# START gbdt-exact-mae/wide repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/wide repeat=1/infer-save-reload 0.031s
+# START gbdt-exact-mae/wide repeat=1/batch
+# DONE gbdt-exact-mae/wide repeat=1/batch 0.123s
+# START gbdt-exact-mae/wide repeat=1/stepfull
+# DONE gbdt-exact-mae/wide repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/wide repeat=2/train
+# DONE gbdt-exact-mae/wide repeat=2/train 0.485s
+# START gbdt-exact-mae/wide repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/wide repeat=2/infer-save-reload 0.031s
+# START gbdt-exact-mae/wide repeat=2/batch
+# DONE gbdt-exact-mae/wide repeat=2/batch 0.108s
+# START gbdt-exact-mae/wide repeat=2/stepfull
+# DONE gbdt-exact-mae/wide repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/wide STABLE 1.263s
+# START gbdt-exact-mae/denormal repeat=1/train
+# DONE gbdt-exact-mae/denormal repeat=1/train 0.492s
+# START gbdt-exact-mae/denormal repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/denormal repeat=1/infer-save-reload 0.032s
+# START gbdt-exact-mae/denormal repeat=1/batch
+# DONE gbdt-exact-mae/denormal repeat=1/batch 0.122s
+# START gbdt-exact-mae/denormal repeat=1/stepfull
+# DONE gbdt-exact-mae/denormal repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/denormal repeat=2/train
+# DONE gbdt-exact-mae/denormal repeat=2/train 0.510s
+# START gbdt-exact-mae/denormal repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/denormal repeat=2/infer-save-reload 0.031s
+# START gbdt-exact-mae/denormal repeat=2/batch
+# DONE gbdt-exact-mae/denormal repeat=2/batch 0.111s
+# START gbdt-exact-mae/denormal repeat=2/stepfull
+# DONE gbdt-exact-mae/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/denormal STABLE 1.299s
+# START gbdt-exact-mae/denormal_ftz repeat=1/train
+# DONE gbdt-exact-mae/denormal_ftz repeat=1/train 0.511s
+# START gbdt-exact-mae/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/denormal_ftz repeat=1/infer-save-reload 0.032s
+# START gbdt-exact-mae/denormal_ftz repeat=1/batch
+# DONE gbdt-exact-mae/denormal_ftz repeat=1/batch 0.111s
+# START gbdt-exact-mae/denormal_ftz repeat=1/stepfull
+# DONE gbdt-exact-mae/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/denormal_ftz repeat=2/train
+# DONE gbdt-exact-mae/denormal_ftz repeat=2/train 0.511s
+# START gbdt-exact-mae/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/denormal_ftz repeat=2/infer-save-reload 0.032s
+# START gbdt-exact-mae/denormal_ftz repeat=2/batch
+# DONE gbdt-exact-mae/denormal_ftz repeat=2/batch 0.121s
+# START gbdt-exact-mae/denormal_ftz repeat=2/stepfull
+# DONE gbdt-exact-mae/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/denormal_ftz STABLE 1.318s
+# START gbdt-exact-mae/dupes repeat=1/train
+# DONE gbdt-exact-mae/dupes repeat=1/train 0.443s
+# START gbdt-exact-mae/dupes repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/dupes repeat=1/infer-save-reload 0.029s
+# START gbdt-exact-mae/dupes repeat=1/batch
+# DONE gbdt-exact-mae/dupes repeat=1/batch 0.107s
+# START gbdt-exact-mae/dupes repeat=1/stepfull
+# DONE gbdt-exact-mae/dupes repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/dupes repeat=2/train
+# DONE gbdt-exact-mae/dupes repeat=2/train 0.479s
+# START gbdt-exact-mae/dupes repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/dupes repeat=2/infer-save-reload 0.030s
+# START gbdt-exact-mae/dupes repeat=2/batch
+# DONE gbdt-exact-mae/dupes repeat=2/batch 0.120s
+# START gbdt-exact-mae/dupes repeat=2/stepfull
+# DONE gbdt-exact-mae/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/dupes STABLE 1.210s
+# START gbdt-exact-mae/odd repeat=1/train
+# DONE gbdt-exact-mae/odd repeat=1/train 0.426s
+# START gbdt-exact-mae/odd repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/odd repeat=1/infer-save-reload 0.023s
+# START gbdt-exact-mae/odd repeat=1/batch
+# DONE gbdt-exact-mae/odd repeat=1/batch 0.080s
+# START gbdt-exact-mae/odd repeat=1/stepfull
+# DONE gbdt-exact-mae/odd repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/odd repeat=2/train
+# DONE gbdt-exact-mae/odd repeat=2/train 0.426s
+# START gbdt-exact-mae/odd repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/odd repeat=2/infer-save-reload 0.022s
+# START gbdt-exact-mae/odd repeat=2/batch
+# DONE gbdt-exact-mae/odd repeat=2/batch 0.079s
+# START gbdt-exact-mae/odd repeat=2/stepfull
+# DONE gbdt-exact-mae/odd repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/odd STABLE 1.057s
+# START gbdt-exact-mae/negative repeat=1/train
+# DONE gbdt-exact-mae/negative repeat=1/train 0.470s
+# START gbdt-exact-mae/negative repeat=1/infer-save-reload
+# DONE gbdt-exact-mae/negative repeat=1/infer-save-reload 0.030s
+# START gbdt-exact-mae/negative repeat=1/batch
+# DONE gbdt-exact-mae/negative repeat=1/batch 0.115s
+# START gbdt-exact-mae/negative repeat=1/stepfull
+# DONE gbdt-exact-mae/negative repeat=1/stepfull 0.000s
+# START gbdt-exact-mae/negative repeat=2/train
+# DONE gbdt-exact-mae/negative repeat=2/train 0.428s
+# START gbdt-exact-mae/negative repeat=2/infer-save-reload
+# DONE gbdt-exact-mae/negative repeat=2/infer-save-reload 0.030s
+# START gbdt-exact-mae/negative repeat=2/batch
+# DONE gbdt-exact-mae/negative repeat=2/batch 0.105s
+# START gbdt-exact-mae/negative repeat=2/stepfull
+# DONE gbdt-exact-mae/negative repeat=2/stepfull 0.000s
+# CELL gbdt-exact-mae/negative STABLE 1.178s
+| gbdt-exact-mae         | 2c8a23ac5ef0b570 | 65948ea43ed2efdd | 87e677565b7d6752 | ceccde877271335e | 8aadaf501b445bb2 | 8aadaf501b445bb2 | dd7a34caa5d0e601 | 62e0e9af15af59e8 | 35479cfde1dd0d69 |
+| gbdt-exact-mae infer   | 8be26ab7b3a20568 | a6a66eb2f734a4a0 | 932a42c0a74312f1 | 44c0704a2af40efb | c2284f225593a1fe | c2284f225593a1fe | 6bdb462abd6f18ed | 803b69f78691fd97 | 5297076a892fce2a |
+| gbdt-exact-mae model   | 610f6e7030433d25 | 3c059b5d2d1d5ba4 | 96d3202c8895bfac | 3834ba6ef4d9c8bb | be2ac3ddb7f396d2 | be2ac3ddb7f396d2 | 8d42efc265c62e0c | a7acaed4e232dca0 | 34018c1599e804b2 |
+| gbdt-exact-mae batch   | f90756faab4e2172 | e6f7c7d77ba8558c | 6b639459cb18f2a6 | b3e9e1aa91502fb6 | 5c12c874301934fb | 5c12c874301934fb | 41441f7974409377 | 1f55cf8d09089aa2 | d18e6ca3dd26bf2a |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-exact-mae stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-exact-mae/gbdt-exact-mae/cpu-clean.json

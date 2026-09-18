@@ -1,0 +1,20 @@
+# DONE ordered-gradient-sum/negative repeat=1/train 0.001s
+# START ordered-gradient-sum/negative repeat=1/infer-save-reload
+# DONE ordered-gradient-sum/negative repeat=1/infer-save-reload 0.000s
+# START ordered-gradient-sum/negative repeat=1/batch
+# DONE ordered-gradient-sum/negative repeat=1/batch 0.000s
+# START ordered-gradient-sum/negative repeat=2/train
+# DONE ordered-gradient-sum/negative repeat=2/train 0.001s
+# START ordered-gradient-sum/negative repeat=2/infer-save-reload
+# DONE ordered-gradient-sum/negative repeat=2/infer-save-reload 0.000s
+# START ordered-gradient-sum/negative repeat=2/batch
+# DONE ordered-gradient-sum/negative repeat=2/batch 0.000s
+# CELL ordered-gradient-sum/negative STABLE 0.002s
+| ordered-gradient-sum   | a742b6c812b94347 | e625f92c8f010b8b | 46ae184b0eb32ecd | a742b6c812b94347 | a742b6c812b94347 | f177e887cf2c4061 | a742b6c812b94347 | 415e287d325868c6 | 868313e90eef7ea7 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: n/a=9
+n/a: ordered-gradient-sum batch n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction), ordered-gradient-sum infer n/a:function, ordered-gradient-sum model n/a:no-save
+wrote /root/leg_out/cpu-x86.json

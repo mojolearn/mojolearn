@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:41:28  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-epanechnikov-l1/base repeat=1/train
+# DONE kde-epanechnikov-l1/base repeat=1/train 0.022s
+# START kde-epanechnikov-l1/base repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/base repeat=1/infer-save-reload 0.047s
+# START kde-epanechnikov-l1/base repeat=1/batch
+# DONE kde-epanechnikov-l1/base repeat=1/batch 0.046s
+# START kde-epanechnikov-l1/base repeat=1/stepfull
+# DONE kde-epanechnikov-l1/base repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/base repeat=2/train
+# DONE kde-epanechnikov-l1/base repeat=2/train 0.022s
+# START kde-epanechnikov-l1/base repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/base repeat=2/infer-save-reload 0.043s
+# START kde-epanechnikov-l1/base repeat=2/batch
+# DONE kde-epanechnikov-l1/base repeat=2/batch 0.048s
+# START kde-epanechnikov-l1/base repeat=2/stepfull
+# DONE kde-epanechnikov-l1/base repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/base STABLE 0.229s
+# START kde-epanechnikov-l1/ties repeat=1/train
+# DONE kde-epanechnikov-l1/ties repeat=1/train 0.045s
+# START kde-epanechnikov-l1/ties repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/ties repeat=1/infer-save-reload 0.092s
+# START kde-epanechnikov-l1/ties repeat=1/batch
+# DONE kde-epanechnikov-l1/ties repeat=1/batch 0.095s
+# START kde-epanechnikov-l1/ties repeat=1/stepfull
+# DONE kde-epanechnikov-l1/ties repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/ties repeat=2/train
+# DONE kde-epanechnikov-l1/ties repeat=2/train 0.045s
+# START kde-epanechnikov-l1/ties repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/ties repeat=2/infer-save-reload 0.091s
+# START kde-epanechnikov-l1/ties repeat=2/batch
+# DONE kde-epanechnikov-l1/ties repeat=2/batch 0.094s
+# START kde-epanechnikov-l1/ties repeat=2/stepfull
+# DONE kde-epanechnikov-l1/ties repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/ties STABLE 0.462s
+# START kde-epanechnikov-l1/hashed repeat=1/train
+# DONE kde-epanechnikov-l1/hashed repeat=1/train 0.021s
+# START kde-epanechnikov-l1/hashed repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/hashed repeat=1/infer-save-reload 0.044s
+# START kde-epanechnikov-l1/hashed repeat=1/batch
+# DONE kde-epanechnikov-l1/hashed repeat=1/batch 0.045s
+# START kde-epanechnikov-l1/hashed repeat=1/stepfull
+# DONE kde-epanechnikov-l1/hashed repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/hashed repeat=2/train
+# DONE kde-epanechnikov-l1/hashed repeat=2/train 0.022s
+# START kde-epanechnikov-l1/hashed repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/hashed repeat=2/infer-save-reload 0.043s
+# START kde-epanechnikov-l1/hashed repeat=2/batch
+# DONE kde-epanechnikov-l1/hashed repeat=2/batch 0.047s
+# START kde-epanechnikov-l1/hashed repeat=2/stepfull
+# DONE kde-epanechnikov-l1/hashed repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/hashed STABLE 0.223s
+# START kde-epanechnikov-l1/wide repeat=1/train
+# DONE kde-epanechnikov-l1/wide repeat=1/train 0.030s
+# START kde-epanechnikov-l1/wide repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/wide repeat=1/infer-save-reload 0.061s
+# START kde-epanechnikov-l1/wide repeat=1/batch
+# DONE kde-epanechnikov-l1/wide repeat=1/batch 0.063s
+# START kde-epanechnikov-l1/wide repeat=1/stepfull
+# DONE kde-epanechnikov-l1/wide repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/wide repeat=2/train
+# DONE kde-epanechnikov-l1/wide repeat=2/train 0.030s
+# START kde-epanechnikov-l1/wide repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/wide repeat=2/infer-save-reload 0.061s
+# START kde-epanechnikov-l1/wide repeat=2/batch
+# DONE kde-epanechnikov-l1/wide repeat=2/batch 0.064s
+# START kde-epanechnikov-l1/wide repeat=2/stepfull
+# DONE kde-epanechnikov-l1/wide repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/wide STABLE 0.309s
+# START kde-epanechnikov-l1/denormal repeat=1/train
+# DONE kde-epanechnikov-l1/denormal repeat=1/train 0.036s
+# START kde-epanechnikov-l1/denormal repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/denormal repeat=1/infer-save-reload 0.070s
+# START kde-epanechnikov-l1/denormal repeat=1/batch
+# DONE kde-epanechnikov-l1/denormal repeat=1/batch 0.074s
+# START kde-epanechnikov-l1/denormal repeat=1/stepfull
+# DONE kde-epanechnikov-l1/denormal repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/denormal repeat=2/train
+# DONE kde-epanechnikov-l1/denormal repeat=2/train 0.035s
+# START kde-epanechnikov-l1/denormal repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/denormal repeat=2/infer-save-reload 0.071s
+# START kde-epanechnikov-l1/denormal repeat=2/batch
+# DONE kde-epanechnikov-l1/denormal repeat=2/batch 0.076s
+# START kde-epanechnikov-l1/denormal repeat=2/stepfull
+# DONE kde-epanechnikov-l1/denormal repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/denormal STABLE 0.363s
+# START kde-epanechnikov-l1/denormal_ftz repeat=1/train
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=1/train 0.035s
+# START kde-epanechnikov-l1/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=1/infer-save-reload 0.071s
+# START kde-epanechnikov-l1/denormal_ftz repeat=1/batch
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=1/batch 0.073s
+# START kde-epanechnikov-l1/denormal_ftz repeat=1/stepfull
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/denormal_ftz repeat=2/train
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=2/train 0.034s
+# START kde-epanechnikov-l1/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=2/infer-save-reload 0.070s
+# START kde-epanechnikov-l1/denormal_ftz repeat=2/batch
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=2/batch 0.074s
+# START kde-epanechnikov-l1/denormal_ftz repeat=2/stepfull
+# DONE kde-epanechnikov-l1/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/denormal_ftz STABLE 0.358s
+# START kde-epanechnikov-l1/dupes repeat=1/train
+# DONE kde-epanechnikov-l1/dupes repeat=1/train 0.022s
+# START kde-epanechnikov-l1/dupes repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/dupes repeat=1/infer-save-reload 0.044s
+# START kde-epanechnikov-l1/dupes repeat=1/batch
+# DONE kde-epanechnikov-l1/dupes repeat=1/batch 0.046s
+# START kde-epanechnikov-l1/dupes repeat=1/stepfull
+# DONE kde-epanechnikov-l1/dupes repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/dupes repeat=2/train
+# DONE kde-epanechnikov-l1/dupes repeat=2/train 0.021s
+# START kde-epanechnikov-l1/dupes repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/dupes repeat=2/infer-save-reload 0.044s
+# START kde-epanechnikov-l1/dupes repeat=2/batch
+# DONE kde-epanechnikov-l1/dupes repeat=2/batch 0.045s
+# START kde-epanechnikov-l1/dupes repeat=2/stepfull
+# DONE kde-epanechnikov-l1/dupes repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/dupes STABLE 0.223s
+# START kde-epanechnikov-l1/odd repeat=1/train
+# DONE kde-epanechnikov-l1/odd repeat=1/train 0.022s
+# START kde-epanechnikov-l1/odd repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/odd repeat=1/infer-save-reload 0.043s
+# START kde-epanechnikov-l1/odd repeat=1/batch
+# DONE kde-epanechnikov-l1/odd repeat=1/batch 0.047s
+# START kde-epanechnikov-l1/odd repeat=1/stepfull
+# DONE kde-epanechnikov-l1/odd repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/odd repeat=2/train
+# DONE kde-epanechnikov-l1/odd repeat=2/train 0.021s
+# START kde-epanechnikov-l1/odd repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/odd repeat=2/infer-save-reload 0.044s
+# START kde-epanechnikov-l1/odd repeat=2/batch
+# DONE kde-epanechnikov-l1/odd repeat=2/batch 0.047s
+# START kde-epanechnikov-l1/odd repeat=2/stepfull
+# DONE kde-epanechnikov-l1/odd repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/odd STABLE 0.225s
+# START kde-epanechnikov-l1/negative repeat=1/train
+# DONE kde-epanechnikov-l1/negative repeat=1/train 0.022s
+# START kde-epanechnikov-l1/negative repeat=1/infer-save-reload
+# DONE kde-epanechnikov-l1/negative repeat=1/infer-save-reload 0.046s
+# START kde-epanechnikov-l1/negative repeat=1/batch
+# DONE kde-epanechnikov-l1/negative repeat=1/batch 0.047s
+# START kde-epanechnikov-l1/negative repeat=1/stepfull
+# DONE kde-epanechnikov-l1/negative repeat=1/stepfull 0.000s
+# START kde-epanechnikov-l1/negative repeat=2/train
+# DONE kde-epanechnikov-l1/negative repeat=2/train 0.023s
+# START kde-epanechnikov-l1/negative repeat=2/infer-save-reload
+# DONE kde-epanechnikov-l1/negative repeat=2/infer-save-reload 0.045s
+# START kde-epanechnikov-l1/negative repeat=2/batch
+# DONE kde-epanechnikov-l1/negative repeat=2/batch 0.048s
+# START kde-epanechnikov-l1/negative repeat=2/stepfull
+# DONE kde-epanechnikov-l1/negative repeat=2/stepfull 0.000s
+# CELL kde-epanechnikov-l1/negative STABLE 0.231s
+| kde-epanechnikov-l1    | f8f65516ba475fa2 | 9d61f71062dcd4c2 | 8a47aa91f3a3e0d1 | 2d201ece23c520b1 | 9bd34001eee4e722 | 9bd34001eee4e722 | f8f65516ba475fa2 | 655ac21a6761f8b5 | 9a130c4224101ef9 |
+| kde-epanechnikov-l1 infer | 33f8a3ca1a52a0b4 | b32f12fa353fa102 | c8cbf111f14c7810 | 1f6ce946305e9a91 | 3b9d9b732e5389eb | 3b9d9b732e5389eb | 33f8a3ca1a52a0b4 | 026977dfcfedd87d | 2596dbd563f03730 |
+| kde-epanechnikov-l1 model | a39cb2033ade3b6f | 607371bac93ff1c3 | c0e22f41a3a70995 | 9bcb591ef7fe5a57 | d39564b3a291262a | 80188120a2b1babd | a39cb2033ade3b6f | d51c423a7e0e2eb0 | c5fdbfa167d32071 |
+| kde-epanechnikov-l1 batch | 703f14a4e3090576 | c529724d75630610 | 3c48c205dd3b6f37 | f98fa183a91e8283 | 45aab15f2a899b48 | 45aab15f2a899b48 | 703f14a4e3090576 | ddb8c885a96e7ddb | c9bb223c8ba3b04b |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-epanechnikov-l1 stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-epanechnikov-l1/kde-epanechnikov-l1/cpu-clean.json

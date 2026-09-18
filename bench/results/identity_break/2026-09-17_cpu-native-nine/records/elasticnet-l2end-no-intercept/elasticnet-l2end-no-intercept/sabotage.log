@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:31:39  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START elasticnet-l2end-no-intercept/base repeat=1/train
+# DONE elasticnet-l2end-no-intercept/base repeat=1/train 0.018s
+# START elasticnet-l2end-no-intercept/base repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/base repeat=1/infer-save-reload 0.003s
+# START elasticnet-l2end-no-intercept/base repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/base repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/base repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/base repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/base repeat=2/train
+# DONE elasticnet-l2end-no-intercept/base repeat=2/train 0.017s
+# START elasticnet-l2end-no-intercept/base repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/base repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/base repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/base repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/base repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/base repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/base STABLE 0.043s
+# START elasticnet-l2end-no-intercept/ties repeat=1/train
+# DONE elasticnet-l2end-no-intercept/ties repeat=1/train 0.653s
+# START elasticnet-l2end-no-intercept/ties repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/ties repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/ties repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/ties repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/ties repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/ties repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/ties repeat=2/train
+# DONE elasticnet-l2end-no-intercept/ties repeat=2/train 0.653s
+# START elasticnet-l2end-no-intercept/ties repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/ties repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/ties repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/ties repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/ties repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/ties repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/ties STABLE 1.314s
+# START elasticnet-l2end-no-intercept/hashed repeat=1/train
+# DONE elasticnet-l2end-no-intercept/hashed repeat=1/train 0.016s
+# START elasticnet-l2end-no-intercept/hashed repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/hashed repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/hashed repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/hashed repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/hashed repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/hashed repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/hashed repeat=2/train
+# DONE elasticnet-l2end-no-intercept/hashed repeat=2/train 0.016s
+# START elasticnet-l2end-no-intercept/hashed repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/hashed repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/hashed repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/hashed repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/hashed repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/hashed repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/hashed STABLE 0.040s
+# START elasticnet-l2end-no-intercept/wide repeat=1/train
+# DONE elasticnet-l2end-no-intercept/wide repeat=1/train 0.029s
+# START elasticnet-l2end-no-intercept/wide repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/wide repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/wide repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/wide repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/wide repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/wide repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/wide repeat=2/train
+# DONE elasticnet-l2end-no-intercept/wide repeat=2/train 0.029s
+# START elasticnet-l2end-no-intercept/wide repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/wide repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/wide repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/wide repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/wide repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/wide repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/wide STABLE 0.065s
+# START elasticnet-l2end-no-intercept/denormal repeat=1/train
+# DONE elasticnet-l2end-no-intercept/denormal repeat=1/train 0.017s
+# START elasticnet-l2end-no-intercept/denormal repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/denormal repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/denormal repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/denormal repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/denormal repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/denormal repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/denormal repeat=2/train
+# DONE elasticnet-l2end-no-intercept/denormal repeat=2/train 0.017s
+# START elasticnet-l2end-no-intercept/denormal repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/denormal repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/denormal repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/denormal repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/denormal repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/denormal repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/denormal STABLE 0.041s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=1/train
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=1/train 0.016s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=2/train
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=2/train 0.016s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/denormal_ftz repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/denormal_ftz repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/denormal_ftz STABLE 0.040s
+# START elasticnet-l2end-no-intercept/dupes repeat=1/train
+# DONE elasticnet-l2end-no-intercept/dupes repeat=1/train 0.016s
+# START elasticnet-l2end-no-intercept/dupes repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/dupes repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/dupes repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/dupes repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/dupes repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/dupes repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/dupes repeat=2/train
+# DONE elasticnet-l2end-no-intercept/dupes repeat=2/train 0.016s
+# START elasticnet-l2end-no-intercept/dupes repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/dupes repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/dupes repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/dupes repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/dupes repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/dupes repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/dupes STABLE 0.039s
+# START elasticnet-l2end-no-intercept/odd repeat=1/train
+# DONE elasticnet-l2end-no-intercept/odd repeat=1/train 0.011s
+# START elasticnet-l2end-no-intercept/odd repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/odd repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/odd repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/odd repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/odd repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/odd repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/odd repeat=2/train
+# DONE elasticnet-l2end-no-intercept/odd repeat=2/train 0.011s
+# START elasticnet-l2end-no-intercept/odd repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/odd repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/odd repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/odd repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/odd repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/odd repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/odd STABLE 0.029s
+# START elasticnet-l2end-no-intercept/negative repeat=1/train
+# DONE elasticnet-l2end-no-intercept/negative repeat=1/train 0.843s
+# START elasticnet-l2end-no-intercept/negative repeat=1/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/negative repeat=1/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/negative repeat=1/batch
+# DONE elasticnet-l2end-no-intercept/negative repeat=1/batch 0.002s
+# START elasticnet-l2end-no-intercept/negative repeat=1/stepfull
+# DONE elasticnet-l2end-no-intercept/negative repeat=1/stepfull 0.000s
+# START elasticnet-l2end-no-intercept/negative repeat=2/train
+# DONE elasticnet-l2end-no-intercept/negative repeat=2/train 0.831s
+# START elasticnet-l2end-no-intercept/negative repeat=2/infer-save-reload
+# DONE elasticnet-l2end-no-intercept/negative repeat=2/infer-save-reload 0.001s
+# START elasticnet-l2end-no-intercept/negative repeat=2/batch
+# DONE elasticnet-l2end-no-intercept/negative repeat=2/batch 0.002s
+# START elasticnet-l2end-no-intercept/negative repeat=2/stepfull
+# DONE elasticnet-l2end-no-intercept/negative repeat=2/stepfull 0.000s
+# CELL elasticnet-l2end-no-intercept/negative STABLE 1.682s
+| elasticnet-l2end-no-intercept | 31e2141230d1c3d5 | 5c4a035ee8bc3df6 | 266720f1e3036c06 | 80f334cf80207ba3 | 727f609e4a32aa42 | 727f609e4a32aa42 | d67865b51e64cbb6 | 7376856ad5db4823 | 855f0d2e5f3a38e7 |
+| elasticnet-l2end-no-intercept infer | 24e8f25b7446b60b | adc91fb6a895df4e | ae3e43d5c1eab94d | bac305c38ced3636 | cbf1a75ad1564c6d | cbf1a75ad1564c6d | c5d5256d1347bb58 | b495ec5a8b99d182 | 0375a52adf07bab6 |
+| elasticnet-l2end-no-intercept model | 7da9420764193b01 | 12dc5dc6dea9819c | 0047b7ff8a73c1ab | dc1eb4739569adbc | b0cb6dbd9427a864 | b0cb6dbd9427a864 | ac7a39a465eb25dd | 77e0c6c7577e5e2d | 2180aef7fc9b773c |
+| elasticnet-l2end-no-intercept batch | aa9ebab56f36a448 | bbeb4ca1130a3e50 | 8220d721e27da999 | 5f51e31b8570a814 | 5e5117e405bd3ef8 | 5e5117e405bd3ef8 | e5933ddd6cde8728 | b840485ed7dfce6f | 78e8ed32939131bc |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: elasticnet-l2end-no-intercept stepfull n/a:no-decode-state
+wrote /root/leg_out/records/elasticnet-l2end-no-intercept/elasticnet-l2end-no-intercept/cpu-sabotage.json

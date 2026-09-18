@@ -71,8 +71,12 @@ from cluster.checks.reduce_by_key import (
     accumulate_centroid_sums_kernel,
     accumulate_grid_blocks,
     accumulate_weight_per_cluster_kernel,
+    BLOCK_ACC_ROWS,
+    blocked_acc_table_cells,
     launch_accumulate_centroid_sums,
+    launch_accumulate_centroid_sums_blocked,
     launch_accumulate_weight_per_cluster,
+    launch_accumulate_weight_per_cluster_blocked,
     zero_i32_kernel,
 )
 from cluster.impl.kmeans import fit
@@ -1893,6 +1897,147 @@ def _accumulate_arm_correct(d: Int, expect_veclen: Int) raises:
         + " weight cells bit-identical to the direct oracle ("
         + String(nonzero) + " nonzero)"
     )
+
+
+def check_blocked_accumulate() raises:
+    """DEVIATION 3080: the row-block accumulator against the direct atomic
+    kernels. Bit-identical Int32 totals, every cell, on the hashed, scattered,
+    skewed fixture, at a shape that spans FOUR row blocks with a ragged last
+    one and an odd feature count (so no read-width ladder can be what makes
+    it pass); a run-twice assertion; and the shipped sabotage arm (the first
+    row of every block dropped), which MUST move the totals.
+    """
+    var ctx = DeviceContext()
+    var n = 3 * BLOCK_ACC_ROWS + 37
+    var d = 33
+    var k = ACC_CLUSTERS
+    var cd = k * d
+
+    var x = ctx.enqueue_create_buffer[DType.float32](n * d)
+    var labels = ctx.enqueue_create_buffer[DType.uint32](n)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n)
+    var sums = ctx.enqueue_create_buffer[DType.int32](cd)
+    var wsum = ctx.enqueue_create_buffer[DType.int32](k)
+    var table = ctx.enqueue_create_buffer[DType.int32](
+        blocked_acc_table_cells(n, d, k)
+    )
+    var table_w = ctx.enqueue_create_buffer[DType.int32](
+        blocked_acc_table_cells(n, 1, k)
+    )
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n * d)
+    var hl = ctx.enqueue_create_host_buffer[DType.uint32](n)
+    var hw = ctx.enqueue_create_host_buffer[DType.float32](n)
+    var h_direct_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_direct_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var h_blk_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_blk_w = ctx.enqueue_create_host_buffer[DType.int32](k)
+    var h_again_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    var h_sab_s = ctx.enqueue_create_host_buffer[DType.int32](cd)
+    ctx.synchronize()
+    for i in range(n):
+        hl.unsafe_ptr().unsafe_store(i, UInt32(_acc_label(i)))
+        hw.unsafe_ptr().unsafe_store(i, Float32(1.0) + Float32(i % 5) * 0.25)
+        for f in range(d):
+            hx.unsafe_ptr().unsafe_store(i * d + f, _jitter(i, f) * 10.0)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=hx.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=labels, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=weights, src_ptr=hw.unsafe_ptr())
+    ctx.synchronize()
+
+    # --- run A: the DIRECT atomic kernels, as the oracle ------------------
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    ctx.enqueue_function[accumulate_centroid_sums_kernel](
+        sums.unsafe_ptr(), x.unsafe_ptr(), labels.unsafe_ptr(),
+        weights.unsafe_ptr(), Int32(n), Int32(d), ACC_SCALE,
+        grid_dim=(accumulate_grid_blocks(n * d, 0), 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_function[accumulate_weight_per_cluster_kernel](
+        wsum.unsafe_ptr(), labels.unsafe_ptr(), weights.unsafe_ptr(),
+        Int32(n), ACC_SCALE,
+        grid_dim=((n + REDUCE_BY_KEY_TPB - 1) // REDUCE_BY_KEY_TPB, 1, 1),
+        block_dim=(REDUCE_BY_KEY_TPB, 1, 1),
+    )
+    ctx.enqueue_copy(dst_ptr=h_direct_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_direct_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+
+    # --- run B: the row-block arm ------------------------------------------
+    _zero_and_wait(ctx, sums, cd)
+    _zero_and_wait(ctx, wsum, k)
+    launch_accumulate_centroid_sums_blocked(
+        ctx, sums, table, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    launch_accumulate_weight_per_cluster_blocked(
+        ctx, wsum, table_w, labels, weights, n, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_blk_s.unsafe_ptr(), src_buf=sums)
+    ctx.enqueue_copy(dst_ptr=h_blk_w.unsafe_ptr(), src_buf=wsum)
+    ctx.synchronize()
+    var s_diff = 0
+    var nonzero = 0
+    for i in range(cd):
+        if h_blk_s.unsafe_ptr().unsafe_load(i) != h_direct_s.unsafe_ptr().unsafe_load(i):
+            s_diff += 1
+        if h_direct_s.unsafe_ptr().unsafe_load(i) != Int32(0):
+            nonzero += 1
+    var w_diff = 0
+    for i in range(k):
+        if h_blk_w.unsafe_ptr().unsafe_load(i) != h_direct_w.unsafe_ptr().unsafe_load(i):
+            w_diff += 1
+    if s_diff != 0 or w_diff != 0:
+        raise Error(
+            "row-block totals are NOT bit-identical to the direct kernel's: "
+            + String(s_diff) + " of " + String(cd) + " sum cells and "
+            + String(w_diff) + " of " + String(k) + " weight cells differ"
+        )
+    if nonzero < cd // 2:
+        raise Error(
+            "the oracle's totals are mostly zero (" + String(nonzero)
+            + " of " + String(cd) + "); the fixture proves nothing"
+        )
+
+    # --- run twice ----------------------------------------------------------
+    _zero_and_wait(ctx, sums, cd)
+    launch_accumulate_centroid_sums_blocked(
+        ctx, sums, table, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_again_s.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+    for i in range(cd):
+        if h_again_s.unsafe_ptr().unsafe_load(i) != h_blk_s.unsafe_ptr().unsafe_load(i):
+            raise Error(
+                "two identical row-block runs disagree at cell " + String(i)
+            )
+
+    # --- sabotage: the shipped define's arm, first row of each block dropped
+    _zero_and_wait(ctx, sums, cd)
+    launch_accumulate_centroid_sums_blocked[True](
+        ctx, sums, table, x, labels, weights, n, d, k, ACC_SCALE
+    )
+    ctx.enqueue_copy(dst_ptr=h_sab_s.unsafe_ptr(), src_buf=sums)
+    ctx.synchronize()
+    var moved = 0
+    for i in range(cd):
+        if h_sab_s.unsafe_ptr().unsafe_load(i) != h_blk_s.unsafe_ptr().unsafe_load(i):
+            moved += 1
+    if moved == 0:
+        raise Error(
+            "SABOTAGE FAILED TO REGISTER: dropping the first row of every"
+            " block moved no total"
+        )
+    print(
+        "check_blocked_accumulate OK: " + String(cd) + " sum cells + "
+        + String(k) + " weight cells bit-identical direct vs row-block at "
+        + String(n) + " x " + String(d) + " (4 blocks, ragged tail), run-twice"
+        " bitwise equal, sabotage moved " + String(moved) + " cells"
+    )
+    _ = x^
+    _ = labels^
+    _ = weights^
+    _ = table^
+    _ = table_w^
 
 
 def check_accumulate_veclen_dispatch() raises:

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:41:40  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-linear-cosine/base repeat=1/train
+# DONE kde-linear-cosine/base repeat=1/train 0.034s
+# START kde-linear-cosine/base repeat=1/infer-save-reload
+# DONE kde-linear-cosine/base repeat=1/infer-save-reload 0.070s
+# START kde-linear-cosine/base repeat=1/batch
+# DONE kde-linear-cosine/base repeat=1/batch 0.121s
+# START kde-linear-cosine/base repeat=1/stepfull
+# DONE kde-linear-cosine/base repeat=1/stepfull 0.000s
+# START kde-linear-cosine/base repeat=2/train
+# DONE kde-linear-cosine/base repeat=2/train 0.033s
+# START kde-linear-cosine/base repeat=2/infer-save-reload
+# DONE kde-linear-cosine/base repeat=2/infer-save-reload 0.067s
+# START kde-linear-cosine/base repeat=2/batch
+# DONE kde-linear-cosine/base repeat=2/batch 0.120s
+# START kde-linear-cosine/base repeat=2/stepfull
+# DONE kde-linear-cosine/base repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/base STABLE 0.445s
+# START kde-linear-cosine/ties repeat=1/train
+# DONE kde-linear-cosine/ties repeat=1/train 0.039s
+# START kde-linear-cosine/ties repeat=1/infer-save-reload
+# DONE kde-linear-cosine/ties repeat=1/infer-save-reload 0.079s
+# START kde-linear-cosine/ties repeat=1/batch
+# DONE kde-linear-cosine/ties repeat=1/batch 0.132s
+# START kde-linear-cosine/ties repeat=1/stepfull
+# DONE kde-linear-cosine/ties repeat=1/stepfull 0.000s
+# START kde-linear-cosine/ties repeat=2/train
+# DONE kde-linear-cosine/ties repeat=2/train 0.039s
+# START kde-linear-cosine/ties repeat=2/infer-save-reload
+# DONE kde-linear-cosine/ties repeat=2/infer-save-reload 0.081s
+# START kde-linear-cosine/ties repeat=2/batch
+# DONE kde-linear-cosine/ties repeat=2/batch 0.130s
+# START kde-linear-cosine/ties repeat=2/stepfull
+# DONE kde-linear-cosine/ties repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/ties STABLE 0.501s
+# START kde-linear-cosine/hashed repeat=1/train
+# DONE kde-linear-cosine/hashed repeat=1/train 0.035s
+# START kde-linear-cosine/hashed repeat=1/infer-save-reload
+# DONE kde-linear-cosine/hashed repeat=1/infer-save-reload 0.068s
+# START kde-linear-cosine/hashed repeat=1/batch
+# DONE kde-linear-cosine/hashed repeat=1/batch 0.120s
+# START kde-linear-cosine/hashed repeat=1/stepfull
+# DONE kde-linear-cosine/hashed repeat=1/stepfull 0.000s
+# START kde-linear-cosine/hashed repeat=2/train
+# DONE kde-linear-cosine/hashed repeat=2/train 0.033s
+# START kde-linear-cosine/hashed repeat=2/infer-save-reload
+# DONE kde-linear-cosine/hashed repeat=2/infer-save-reload 0.069s
+# START kde-linear-cosine/hashed repeat=2/batch
+# DONE kde-linear-cosine/hashed repeat=2/batch 0.120s
+# START kde-linear-cosine/hashed repeat=2/stepfull
+# DONE kde-linear-cosine/hashed repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/hashed STABLE 0.446s
+# START kde-linear-cosine/wide repeat=1/train
+# DONE kde-linear-cosine/wide repeat=1/train 0.043s
+# START kde-linear-cosine/wide repeat=1/infer-save-reload
+# DONE kde-linear-cosine/wide repeat=1/infer-save-reload 0.084s
+# START kde-linear-cosine/wide repeat=1/batch
+# DONE kde-linear-cosine/wide repeat=1/batch 0.135s
+# START kde-linear-cosine/wide repeat=1/stepfull
+# DONE kde-linear-cosine/wide repeat=1/stepfull 0.000s
+# START kde-linear-cosine/wide repeat=2/train
+# DONE kde-linear-cosine/wide repeat=2/train 0.041s
+# START kde-linear-cosine/wide repeat=2/infer-save-reload
+# DONE kde-linear-cosine/wide repeat=2/infer-save-reload 0.084s
+# START kde-linear-cosine/wide repeat=2/batch
+# DONE kde-linear-cosine/wide repeat=2/batch 0.135s
+# START kde-linear-cosine/wide repeat=2/stepfull
+# DONE kde-linear-cosine/wide repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/wide STABLE 0.522s
+# START kde-linear-cosine/denormal repeat=1/train
+# DONE kde-linear-cosine/denormal repeat=1/train 0.035s
+# START kde-linear-cosine/denormal repeat=1/infer-save-reload
+# DONE kde-linear-cosine/denormal repeat=1/infer-save-reload 0.071s
+# START kde-linear-cosine/denormal repeat=1/batch
+# DONE kde-linear-cosine/denormal repeat=1/batch 0.120s
+# START kde-linear-cosine/denormal repeat=1/stepfull
+# DONE kde-linear-cosine/denormal repeat=1/stepfull 0.000s
+# START kde-linear-cosine/denormal repeat=2/train
+# DONE kde-linear-cosine/denormal repeat=2/train 0.034s
+# START kde-linear-cosine/denormal repeat=2/infer-save-reload
+# DONE kde-linear-cosine/denormal repeat=2/infer-save-reload 0.070s
+# START kde-linear-cosine/denormal repeat=2/batch
+# DONE kde-linear-cosine/denormal repeat=2/batch 0.122s
+# START kde-linear-cosine/denormal repeat=2/stepfull
+# DONE kde-linear-cosine/denormal repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/denormal STABLE 0.453s
+# START kde-linear-cosine/denormal_ftz repeat=1/train
+# DONE kde-linear-cosine/denormal_ftz repeat=1/train 0.035s
+# START kde-linear-cosine/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-linear-cosine/denormal_ftz repeat=1/infer-save-reload 0.072s
+# START kde-linear-cosine/denormal_ftz repeat=1/batch
+# DONE kde-linear-cosine/denormal_ftz repeat=1/batch 0.122s
+# START kde-linear-cosine/denormal_ftz repeat=1/stepfull
+# DONE kde-linear-cosine/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-linear-cosine/denormal_ftz repeat=2/train
+# DONE kde-linear-cosine/denormal_ftz repeat=2/train 0.035s
+# START kde-linear-cosine/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-linear-cosine/denormal_ftz repeat=2/infer-save-reload 0.072s
+# START kde-linear-cosine/denormal_ftz repeat=2/batch
+# DONE kde-linear-cosine/denormal_ftz repeat=2/batch 0.119s
+# START kde-linear-cosine/denormal_ftz repeat=2/stepfull
+# DONE kde-linear-cosine/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/denormal_ftz STABLE 0.456s
+# START kde-linear-cosine/dupes repeat=1/train
+# DONE kde-linear-cosine/dupes repeat=1/train 0.034s
+# START kde-linear-cosine/dupes repeat=1/infer-save-reload
+# DONE kde-linear-cosine/dupes repeat=1/infer-save-reload 0.067s
+# START kde-linear-cosine/dupes repeat=1/batch
+# DONE kde-linear-cosine/dupes repeat=1/batch 0.118s
+# START kde-linear-cosine/dupes repeat=1/stepfull
+# DONE kde-linear-cosine/dupes repeat=1/stepfull 0.000s
+# START kde-linear-cosine/dupes repeat=2/train
+# DONE kde-linear-cosine/dupes repeat=2/train 0.033s
+# START kde-linear-cosine/dupes repeat=2/infer-save-reload
+# DONE kde-linear-cosine/dupes repeat=2/infer-save-reload 0.067s
+# START kde-linear-cosine/dupes repeat=2/batch
+# DONE kde-linear-cosine/dupes repeat=2/batch 0.117s
+# START kde-linear-cosine/dupes repeat=2/stepfull
+# DONE kde-linear-cosine/dupes repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/dupes STABLE 0.437s
+# START kde-linear-cosine/odd repeat=1/train
+# DONE kde-linear-cosine/odd repeat=1/train 0.034s
+# START kde-linear-cosine/odd repeat=1/infer-save-reload
+# DONE kde-linear-cosine/odd repeat=1/infer-save-reload 0.067s
+# START kde-linear-cosine/odd repeat=1/batch
+# DONE kde-linear-cosine/odd repeat=1/batch 0.119s
+# START kde-linear-cosine/odd repeat=1/stepfull
+# DONE kde-linear-cosine/odd repeat=1/stepfull 0.000s
+# START kde-linear-cosine/odd repeat=2/train
+# DONE kde-linear-cosine/odd repeat=2/train 0.033s
+# START kde-linear-cosine/odd repeat=2/infer-save-reload
+# DONE kde-linear-cosine/odd repeat=2/infer-save-reload 0.069s
+# START kde-linear-cosine/odd repeat=2/batch
+# DONE kde-linear-cosine/odd repeat=2/batch 0.119s
+# START kde-linear-cosine/odd repeat=2/stepfull
+# DONE kde-linear-cosine/odd repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/odd STABLE 0.441s
+# START kde-linear-cosine/negative repeat=1/train
+# DONE kde-linear-cosine/negative repeat=1/train 0.034s
+# START kde-linear-cosine/negative repeat=1/infer-save-reload
+# DONE kde-linear-cosine/negative repeat=1/infer-save-reload 0.068s
+# START kde-linear-cosine/negative repeat=1/batch
+# DONE kde-linear-cosine/negative repeat=1/batch 0.121s
+# START kde-linear-cosine/negative repeat=1/stepfull
+# DONE kde-linear-cosine/negative repeat=1/stepfull 0.000s
+# START kde-linear-cosine/negative repeat=2/train
+# DONE kde-linear-cosine/negative repeat=2/train 0.033s
+# START kde-linear-cosine/negative repeat=2/infer-save-reload
+# DONE kde-linear-cosine/negative repeat=2/infer-save-reload 0.067s
+# START kde-linear-cosine/negative repeat=2/batch
+# DONE kde-linear-cosine/negative repeat=2/batch 0.117s
+# START kde-linear-cosine/negative repeat=2/stepfull
+# DONE kde-linear-cosine/negative repeat=2/stepfull 0.000s
+# CELL kde-linear-cosine/negative STABLE 0.441s
+| kde-linear-cosine      | afa97b36fbe911fb | 038d0662d8a2348a | c6ac6acaf1551161 | a5caf2c8fa841881 | e5fa16ac419a08df | e5fa16ac419a08df | afa97b36fbe911fb | f41fe39918a6a2d5 | 97bb4ab75de5a992 |
+| kde-linear-cosine infer | abf3fbff5c858cef | 07c4969f173c9414 | c0315d9bb1da6048 | 204c7da79d79af78 | 297d414f21e0e75e | 297d414f21e0e75e | abf3fbff5c858cef | 90a289b091484c96 | b247e880ea3a6a4b |
+| kde-linear-cosine model | 13cf8ce7fe202391 | 799ff55929e006b7 | 753718d9fcec3f76 | 047b34653ea8eb71 | 7b4dc8fb3d40d436 | 7b4dc8fb3d40d436 | 13cf8ce7fe202391 | ae04ae4206c6620e | 4299096fe8a0893b |
+| kde-linear-cosine batch | 9b366c6405ab66a7 | 5131de9bc1acdacd | 9c4546a5a15c60de | 6428c993be76a289 | c7c022838d3276ba | c7c022838d3276ba | 9b366c6405ab66a7 | 5486ec35e3824264 | bbdc8c94e37d40ae |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-linear-cosine stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-linear-cosine/kde-linear-cosine/cpu-clean.json

@@ -81,6 +81,16 @@ order because callers rely on it; the two elementwise helpers reproduce
 """
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, u32_ptr
+from bindings.hotpath_helpers import (
+    cast_elements_binding,
+    check_indices_i64_binding,
+    equal_elements_binding,
+    fold_ids_binding,
+    gather_i32_binding,
+    indices_overlap_i64_binding,
+    reduce_stat_binding,
+    select_fold_i64_binding,
+)
 from std.os import abort
 from std.math import isfinite
 from std.memory import memcpy
@@ -1833,6 +1843,16 @@ def PyInit__mojolearn() abi("C") -> PythonObject:
         m.def_function[encode_labels_i64_binding]("encode_labels_i64")
         m.def_function[encode_labels_u32_binding]("encode_labels_u32")
         m.def_function[encode_labels_u8_binding]("encode_labels_u8")
+        # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers of
+        # bindings/hotpath_helpers.mojo that stand in for per-row Python.
+        m.def_function[cast_elements_binding]("cast_elements")
+        m.def_function[reduce_stat_binding]("reduce_stat")
+        m.def_function[equal_elements_binding]("equal_elements")
+        m.def_function[gather_i32_binding]("gather_i32")
+        m.def_function[check_indices_i64_binding]("check_indices_i64")
+        m.def_function[indices_overlap_i64_binding]("indices_overlap_i64")
+        m.def_function[fold_ids_binding]("fold_ids")
+        m.def_function[select_fold_i64_binding]("select_fold_i64")
         m.def_function[gather_i64_binding]("gather_i64")
         m.def_function[gather_f64_binding]("gather_f64")
         m.def_function[argmax_rows_f32_binding]("argmax_rows_f32")

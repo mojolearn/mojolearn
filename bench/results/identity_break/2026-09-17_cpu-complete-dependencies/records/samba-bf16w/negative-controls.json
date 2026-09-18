@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "samba-bf16w/base",
+      "context_matches": true,
+      "clean": "501528c4887bd54b",
+      "sabotage": "651c0b044ab54de4",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/denormal",
+      "context_matches": true,
+      "clean": "ea34cb72985f6924",
+      "sabotage": "bf4ea8a9acd38688",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/denormal_ftz",
+      "context_matches": true,
+      "clean": "74b5ea29a2d304cc",
+      "sabotage": "f5d4b04174724cd3",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/dupes",
+      "context_matches": true,
+      "clean": "501528c4887bd54b",
+      "sabotage": "651c0b044ab54de4",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/hashed",
+      "context_matches": true,
+      "clean": "950979811d965c3e",
+      "sabotage": "56a96bfac75eb0ba",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/negative",
+      "context_matches": true,
+      "clean": "c82167f7f39ef800",
+      "sabotage": "5263e58b149e9809",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/odd",
+      "context_matches": true,
+      "clean": "501528c4887bd54b",
+      "sabotage": "651c0b044ab54de4",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/ties",
+      "context_matches": true,
+      "clean": "4aac3696d9334aac",
+      "sabotage": "fc727e4a36c91704",
+      "detected": true
+    },
+    {
+      "cell": "samba-bf16w/wide",
+      "context_matches": true,
+      "clean": "4e15d620003335cd",
+      "sabotage": "c77a09389291d3bf",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

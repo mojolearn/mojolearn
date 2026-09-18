@@ -344,11 +344,15 @@ def _column_means(x, weights):
     if weights is None:
         mu = _column_means_f64(x, rows, cols)
     else:
-        w = weights.tolist()
         total = _weight_total(weights)
-        wx = Array.from_list(
-            [[v * wr for v in row] for wr, row in zip(w, x.tolist())], "<f4"
-        )
+        # `fl32(x_ij * w_i)`, one rounding of an exact float64 product: what
+        # the native `scale_rows_f32` (DEVIATION 2442) computes, without a
+        # Python float per cell (3.1 s per 1,000,000 x 10, lane/python-hotpath
+        # audit 2026-09-17).
+        wx = _helper_output(x.shape, rows * cols)
+        _native_helper("scale_rows_f32")(
+            addr_ro(x, name="X"), int(rows), int(cols),
+            addr_ro(weights, name="sample_weight"), addr(wx, name="weighted X"))
         mu = [m * rows / total for m in _column_means_f64(wx, rows, cols)]
     return [_round_f32(m) for m in mu]
 

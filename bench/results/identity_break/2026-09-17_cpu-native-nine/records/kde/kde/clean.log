@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:40:55  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde/base repeat=1/train
+# DONE kde/base repeat=1/train 0.039s
+# START kde/base repeat=1/infer-save-reload
+# DONE kde/base repeat=1/infer-save-reload 0.079s
+# START kde/base repeat=1/batch
+# DONE kde/base repeat=1/batch 0.083s
+# START kde/base repeat=1/stepfull
+# DONE kde/base repeat=1/stepfull 0.000s
+# START kde/base repeat=2/train
+# DONE kde/base repeat=2/train 0.040s
+# START kde/base repeat=2/infer-save-reload
+# DONE kde/base repeat=2/infer-save-reload 0.079s
+# START kde/base repeat=2/batch
+# DONE kde/base repeat=2/batch 0.082s
+# START kde/base repeat=2/stepfull
+# DONE kde/base repeat=2/stepfull 0.000s
+# CELL kde/base STABLE 0.403s
+# START kde/ties repeat=1/train
+# DONE kde/ties repeat=1/train 0.053s
+# START kde/ties repeat=1/infer-save-reload
+# DONE kde/ties repeat=1/infer-save-reload 0.107s
+# START kde/ties repeat=1/batch
+# DONE kde/ties repeat=1/batch 0.107s
+# START kde/ties repeat=1/stepfull
+# DONE kde/ties repeat=1/stepfull 0.000s
+# START kde/ties repeat=2/train
+# DONE kde/ties repeat=2/train 0.052s
+# START kde/ties repeat=2/infer-save-reload
+# DONE kde/ties repeat=2/infer-save-reload 0.103s
+# START kde/ties repeat=2/batch
+# DONE kde/ties repeat=2/batch 0.107s
+# START kde/ties repeat=2/stepfull
+# DONE kde/ties repeat=2/stepfull 0.000s
+# CELL kde/ties STABLE 0.530s
+# START kde/hashed repeat=1/train
+# DONE kde/hashed repeat=1/train 0.039s
+# START kde/hashed repeat=1/infer-save-reload
+# DONE kde/hashed repeat=1/infer-save-reload 0.076s
+# START kde/hashed repeat=1/batch
+# DONE kde/hashed repeat=1/batch 0.080s
+# START kde/hashed repeat=1/stepfull
+# DONE kde/hashed repeat=1/stepfull 0.000s
+# START kde/hashed repeat=2/train
+# DONE kde/hashed repeat=2/train 0.039s
+# START kde/hashed repeat=2/infer-save-reload
+# DONE kde/hashed repeat=2/infer-save-reload 0.078s
+# START kde/hashed repeat=2/batch
+# DONE kde/hashed repeat=2/batch 0.081s
+# START kde/hashed repeat=2/stepfull
+# DONE kde/hashed repeat=2/stepfull 0.000s
+# CELL kde/hashed STABLE 0.394s
+# START kde/wide repeat=1/train
+# DONE kde/wide repeat=1/train 0.039s
+# START kde/wide repeat=1/infer-save-reload
+# DONE kde/wide repeat=1/infer-save-reload 0.079s
+# START kde/wide repeat=1/batch
+# DONE kde/wide repeat=1/batch 0.083s
+# START kde/wide repeat=1/stepfull
+# DONE kde/wide repeat=1/stepfull 0.000s
+# START kde/wide repeat=2/train
+# DONE kde/wide repeat=2/train 0.040s
+# START kde/wide repeat=2/infer-save-reload
+# DONE kde/wide repeat=2/infer-save-reload 0.079s
+# START kde/wide repeat=2/batch
+# DONE kde/wide repeat=2/batch 0.083s
+# START kde/wide repeat=2/stepfull
+# DONE kde/wide repeat=2/stepfull 0.000s
+# CELL kde/wide STABLE 0.404s
+# START kde/denormal repeat=1/train
+# DONE kde/denormal repeat=1/train 0.039s
+# START kde/denormal repeat=1/infer-save-reload
+# DONE kde/denormal repeat=1/infer-save-reload 0.075s
+# START kde/denormal repeat=1/batch
+# DONE kde/denormal repeat=1/batch 0.077s
+# START kde/denormal repeat=1/stepfull
+# DONE kde/denormal repeat=1/stepfull 0.000s
+# START kde/denormal repeat=2/train
+# DONE kde/denormal repeat=2/train 0.037s
+# START kde/denormal repeat=2/infer-save-reload
+# DONE kde/denormal repeat=2/infer-save-reload 0.074s
+# START kde/denormal repeat=2/batch
+# DONE kde/denormal repeat=2/batch 0.077s
+# START kde/denormal repeat=2/stepfull
+# DONE kde/denormal repeat=2/stepfull 0.000s
+# CELL kde/denormal STABLE 0.379s
+# START kde/denormal_ftz repeat=1/train
+# DONE kde/denormal_ftz repeat=1/train 0.037s
+# START kde/denormal_ftz repeat=1/infer-save-reload
+# DONE kde/denormal_ftz repeat=1/infer-save-reload 0.074s
+# START kde/denormal_ftz repeat=1/batch
+# DONE kde/denormal_ftz repeat=1/batch 0.077s
+# START kde/denormal_ftz repeat=1/stepfull
+# DONE kde/denormal_ftz repeat=1/stepfull 0.000s
+# START kde/denormal_ftz repeat=2/train
+# DONE kde/denormal_ftz repeat=2/train 0.037s
+# START kde/denormal_ftz repeat=2/infer-save-reload
+# DONE kde/denormal_ftz repeat=2/infer-save-reload 0.074s
+# START kde/denormal_ftz repeat=2/batch
+# DONE kde/denormal_ftz repeat=2/batch 0.077s
+# START kde/denormal_ftz repeat=2/stepfull
+# DONE kde/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde/denormal_ftz STABLE 0.377s
+# START kde/dupes repeat=1/train
+# DONE kde/dupes repeat=1/train 0.039s
+# START kde/dupes repeat=1/infer-save-reload
+# DONE kde/dupes repeat=1/infer-save-reload 0.079s
+# START kde/dupes repeat=1/batch
+# DONE kde/dupes repeat=1/batch 0.082s
+# START kde/dupes repeat=1/stepfull
+# DONE kde/dupes repeat=1/stepfull 0.000s
+# START kde/dupes repeat=2/train
+# DONE kde/dupes repeat=2/train 0.039s
+# START kde/dupes repeat=2/infer-save-reload
+# DONE kde/dupes repeat=2/infer-save-reload 0.086s
+# START kde/dupes repeat=2/batch
+# DONE kde/dupes repeat=2/batch 0.084s
+# START kde/dupes repeat=2/stepfull
+# DONE kde/dupes repeat=2/stepfull 0.000s
+# CELL kde/dupes STABLE 0.410s
+# START kde/odd repeat=1/train
+# DONE kde/odd repeat=1/train 0.040s
+# START kde/odd repeat=1/infer-save-reload
+# DONE kde/odd repeat=1/infer-save-reload 0.080s
+# START kde/odd repeat=1/batch
+# DONE kde/odd repeat=1/batch 0.087s
+# START kde/odd repeat=1/stepfull
+# DONE kde/odd repeat=1/stepfull 0.000s
+# START kde/odd repeat=2/train
+# DONE kde/odd repeat=2/train 0.041s
+# START kde/odd repeat=2/infer-save-reload
+# DONE kde/odd repeat=2/infer-save-reload 0.079s
+# START kde/odd repeat=2/batch
+# DONE kde/odd repeat=2/batch 0.081s
+# START kde/odd repeat=2/stepfull
+# DONE kde/odd repeat=2/stepfull 0.000s
+# CELL kde/odd STABLE 0.408s
+# START kde/negative repeat=1/train
+# DONE kde/negative repeat=1/train 0.039s
+# START kde/negative repeat=1/infer-save-reload
+# DONE kde/negative repeat=1/infer-save-reload 0.079s
+# START kde/negative repeat=1/batch
+# DONE kde/negative repeat=1/batch 0.081s
+# START kde/negative repeat=1/stepfull
+# DONE kde/negative repeat=1/stepfull 0.000s
+# START kde/negative repeat=2/train
+# DONE kde/negative repeat=2/train 0.039s
+# START kde/negative repeat=2/infer-save-reload
+# DONE kde/negative repeat=2/infer-save-reload 0.077s
+# START kde/negative repeat=2/batch
+# DONE kde/negative repeat=2/batch 0.081s
+# START kde/negative repeat=2/stepfull
+# DONE kde/negative repeat=2/stepfull 0.000s
+# CELL kde/negative STABLE 0.396s
+| kde                    | e0d6e3d0623d6112 | 0a800c7b3cca66e4 | dc279c30b7c5d070 | 36c3cbb2ef71f768 | 2128392fe1eb228a | 2128392fe1eb228a | e0d6e3d0623d6112 | 8a2b6beee09a98f3 | 84ca35b6a157c265 |
+| kde infer              | 1a2c3054b661b72a | 63b4da91ce458ab7 | f0d1cae79c88ca8a | 39622885a3c508a9 | 21caf753bc5b6352 | 21caf753bc5b6352 | 1a2c3054b661b72a | e49f797e443af916 | 30a64b99c13a89c4 |
+| kde model              | cd5469f3b8854867 | c6b86284b81d2eea | 9d8fc4cff3c9ae8e | 4d511b1377a350b9 | ddc0470537b3c6d1 | 6e413286a1f8aebb | cd5469f3b8854867 | eaf7436bbd4ff68f | 14b5ed33ef52d808 |
+| kde batch              | 6651a609fb572c44 | 42cfc4523132cd86 | e2fba14a5348aab0 | ff463469d5431eea | 3057d72e4203ed59 | 3057d72e4203ed59 | 6651a609fb572c44 | 0c6fa88005d660ff | 652c907c19e1f656 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde/kde/cpu-clean.json

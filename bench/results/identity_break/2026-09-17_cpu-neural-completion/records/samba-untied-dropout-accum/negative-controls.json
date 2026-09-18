@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "samba-untied-dropout-accum/base",
+      "context_matches": true,
+      "clean": "4610c84719bc1a25",
+      "sabotage": "8d537e9ff4264ddf",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/denormal",
+      "context_matches": true,
+      "clean": "70a608ce179e03dd",
+      "sabotage": "c4d196e54053be36",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/denormal_ftz",
+      "context_matches": true,
+      "clean": "eb0dc6c31a737411",
+      "sabotage": "171bd3343d297188",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/dupes",
+      "context_matches": true,
+      "clean": "9a7b9c31419aa4b9",
+      "sabotage": "cd3da5fa320fe698",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/hashed",
+      "context_matches": true,
+      "clean": "18a317bc4260eb9a",
+      "sabotage": "54ff7c2812dc97ce",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/negative",
+      "context_matches": true,
+      "clean": "42e27eabc8c4706f",
+      "sabotage": "4904492ed74fdf4c",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/odd",
+      "context_matches": true,
+      "clean": "4610c84719bc1a25",
+      "sabotage": "8d537e9ff4264ddf",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/ties",
+      "context_matches": true,
+      "clean": "603f4c03dcbe47c9",
+      "sabotage": "eced74849e79a188",
+      "detected": true
+    },
+    {
+      "cell": "samba-untied-dropout-accum/wide",
+      "context_matches": true,
+      "clean": "70d8b0c335b40464",
+      "sabotage": "03e5e8fffa4bcbbd",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

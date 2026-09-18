@@ -1,0 +1,177 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:15  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START optim-adam-clip/base repeat=1/train
+# DONE optim-adam-clip/base repeat=1/train 0.003s
+# START optim-adam-clip/base repeat=1/infer-save-reload
+# DONE optim-adam-clip/base repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/base repeat=1/batch
+# DONE optim-adam-clip/base repeat=1/batch 0.008s
+# START optim-adam-clip/base repeat=1/stepfull
+# DONE optim-adam-clip/base repeat=1/stepfull 0.000s
+# START optim-adam-clip/base repeat=2/train
+# DONE optim-adam-clip/base repeat=2/train 0.002s
+# START optim-adam-clip/base repeat=2/infer-save-reload
+# DONE optim-adam-clip/base repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/base repeat=2/batch
+# DONE optim-adam-clip/base repeat=2/batch 0.008s
+# START optim-adam-clip/base repeat=2/stepfull
+# DONE optim-adam-clip/base repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/base STABLE 0.022s
+# START optim-adam-clip/ties repeat=1/train
+# DONE optim-adam-clip/ties repeat=1/train 0.002s
+# START optim-adam-clip/ties repeat=1/infer-save-reload
+# DONE optim-adam-clip/ties repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/ties repeat=1/batch
+# DONE optim-adam-clip/ties repeat=1/batch 0.009s
+# START optim-adam-clip/ties repeat=1/stepfull
+# DONE optim-adam-clip/ties repeat=1/stepfull 0.000s
+# START optim-adam-clip/ties repeat=2/train
+# DONE optim-adam-clip/ties repeat=2/train 0.002s
+# START optim-adam-clip/ties repeat=2/infer-save-reload
+# DONE optim-adam-clip/ties repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/ties repeat=2/batch
+# DONE optim-adam-clip/ties repeat=2/batch 0.008s
+# START optim-adam-clip/ties repeat=2/stepfull
+# DONE optim-adam-clip/ties repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/ties STABLE 0.021s
+# START optim-adam-clip/hashed repeat=1/train
+# DONE optim-adam-clip/hashed repeat=1/train 0.002s
+# START optim-adam-clip/hashed repeat=1/infer-save-reload
+# DONE optim-adam-clip/hashed repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/hashed repeat=1/batch
+# DONE optim-adam-clip/hashed repeat=1/batch 0.008s
+# START optim-adam-clip/hashed repeat=1/stepfull
+# DONE optim-adam-clip/hashed repeat=1/stepfull 0.000s
+# START optim-adam-clip/hashed repeat=2/train
+# DONE optim-adam-clip/hashed repeat=2/train 0.002s
+# START optim-adam-clip/hashed repeat=2/infer-save-reload
+# DONE optim-adam-clip/hashed repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/hashed repeat=2/batch
+# DONE optim-adam-clip/hashed repeat=2/batch 0.008s
+# START optim-adam-clip/hashed repeat=2/stepfull
+# DONE optim-adam-clip/hashed repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/hashed STABLE 0.020s
+# START optim-adam-clip/wide repeat=1/train
+# DONE optim-adam-clip/wide repeat=1/train 0.002s
+# START optim-adam-clip/wide repeat=1/infer-save-reload
+# DONE optim-adam-clip/wide repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/wide repeat=1/batch
+# DONE optim-adam-clip/wide repeat=1/batch 0.008s
+# START optim-adam-clip/wide repeat=1/stepfull
+# DONE optim-adam-clip/wide repeat=1/stepfull 0.000s
+# START optim-adam-clip/wide repeat=2/train
+# DONE optim-adam-clip/wide repeat=2/train 0.002s
+# START optim-adam-clip/wide repeat=2/infer-save-reload
+# DONE optim-adam-clip/wide repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/wide repeat=2/batch
+# DONE optim-adam-clip/wide repeat=2/batch 0.009s
+# START optim-adam-clip/wide repeat=2/stepfull
+# DONE optim-adam-clip/wide repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/wide STABLE 0.021s
+# START optim-adam-clip/denormal repeat=1/train
+# DONE optim-adam-clip/denormal repeat=1/train 0.002s
+# START optim-adam-clip/denormal repeat=1/infer-save-reload
+# DONE optim-adam-clip/denormal repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/denormal repeat=1/batch
+# DONE optim-adam-clip/denormal repeat=1/batch 0.008s
+# START optim-adam-clip/denormal repeat=1/stepfull
+# DONE optim-adam-clip/denormal repeat=1/stepfull 0.000s
+# START optim-adam-clip/denormal repeat=2/train
+# DONE optim-adam-clip/denormal repeat=2/train 0.002s
+# START optim-adam-clip/denormal repeat=2/infer-save-reload
+# DONE optim-adam-clip/denormal repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/denormal repeat=2/batch
+# DONE optim-adam-clip/denormal repeat=2/batch 0.008s
+# START optim-adam-clip/denormal repeat=2/stepfull
+# DONE optim-adam-clip/denormal repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/denormal STABLE 0.021s
+# START optim-adam-clip/denormal_ftz repeat=1/train
+# DONE optim-adam-clip/denormal_ftz repeat=1/train 0.002s
+# START optim-adam-clip/denormal_ftz repeat=1/infer-save-reload
+# DONE optim-adam-clip/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/denormal_ftz repeat=1/batch
+# DONE optim-adam-clip/denormal_ftz repeat=1/batch 0.008s
+# START optim-adam-clip/denormal_ftz repeat=1/stepfull
+# DONE optim-adam-clip/denormal_ftz repeat=1/stepfull 0.000s
+# START optim-adam-clip/denormal_ftz repeat=2/train
+# DONE optim-adam-clip/denormal_ftz repeat=2/train 0.002s
+# START optim-adam-clip/denormal_ftz repeat=2/infer-save-reload
+# DONE optim-adam-clip/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/denormal_ftz repeat=2/batch
+# DONE optim-adam-clip/denormal_ftz repeat=2/batch 0.008s
+# START optim-adam-clip/denormal_ftz repeat=2/stepfull
+# DONE optim-adam-clip/denormal_ftz repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/denormal_ftz STABLE 0.021s
+# START optim-adam-clip/dupes repeat=1/train
+# DONE optim-adam-clip/dupes repeat=1/train 0.002s
+# START optim-adam-clip/dupes repeat=1/infer-save-reload
+# DONE optim-adam-clip/dupes repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/dupes repeat=1/batch
+# DONE optim-adam-clip/dupes repeat=1/batch 0.008s
+# START optim-adam-clip/dupes repeat=1/stepfull
+# DONE optim-adam-clip/dupes repeat=1/stepfull 0.000s
+# START optim-adam-clip/dupes repeat=2/train
+# DONE optim-adam-clip/dupes repeat=2/train 0.002s
+# START optim-adam-clip/dupes repeat=2/infer-save-reload
+# DONE optim-adam-clip/dupes repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/dupes repeat=2/batch
+# DONE optim-adam-clip/dupes repeat=2/batch 0.008s
+# START optim-adam-clip/dupes repeat=2/stepfull
+# DONE optim-adam-clip/dupes repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/dupes STABLE 0.021s
+# START optim-adam-clip/odd repeat=1/train
+# DONE optim-adam-clip/odd repeat=1/train 0.002s
+# START optim-adam-clip/odd repeat=1/infer-save-reload
+# DONE optim-adam-clip/odd repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/odd repeat=1/batch
+# DONE optim-adam-clip/odd repeat=1/batch 0.008s
+# START optim-adam-clip/odd repeat=1/stepfull
+# DONE optim-adam-clip/odd repeat=1/stepfull 0.000s
+# START optim-adam-clip/odd repeat=2/train
+# DONE optim-adam-clip/odd repeat=2/train 0.002s
+# START optim-adam-clip/odd repeat=2/infer-save-reload
+# DONE optim-adam-clip/odd repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/odd repeat=2/batch
+# DONE optim-adam-clip/odd repeat=2/batch 0.008s
+# START optim-adam-clip/odd repeat=2/stepfull
+# DONE optim-adam-clip/odd repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/odd STABLE 0.020s
+# START optim-adam-clip/negative repeat=1/train
+# DONE optim-adam-clip/negative repeat=1/train 0.002s
+# START optim-adam-clip/negative repeat=1/infer-save-reload
+# DONE optim-adam-clip/negative repeat=1/infer-save-reload 0.000s
+# START optim-adam-clip/negative repeat=1/batch
+# DONE optim-adam-clip/negative repeat=1/batch 0.008s
+# START optim-adam-clip/negative repeat=1/stepfull
+# DONE optim-adam-clip/negative repeat=1/stepfull 0.000s
+# START optim-adam-clip/negative repeat=2/train
+# DONE optim-adam-clip/negative repeat=2/train 0.002s
+# START optim-adam-clip/negative repeat=2/infer-save-reload
+# DONE optim-adam-clip/negative repeat=2/infer-save-reload 0.000s
+# START optim-adam-clip/negative repeat=2/batch
+# DONE optim-adam-clip/negative repeat=2/batch 0.008s
+# START optim-adam-clip/negative repeat=2/stepfull
+# DONE optim-adam-clip/negative repeat=2/stepfull 0.000s
+# CELL optim-adam-clip/negative STABLE 0.021s
+| optim-adam-clip        | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab | 51b469c04f3c62ab |
+| optim-adam-clip batch  | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      | BATCH_MOVED      |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: batch_moved=9
+stepfull: n/a=9
+n/a: optim-adam-clip infer n/a:function, optim-adam-clip model n/a:no-save, optim-adam-clip stepfull n/a:no-decode-state
+BATCH_MOVED optim-adam-clip/base: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/ties: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/hashed: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/wide: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/denormal: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/denormal_ftz: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/dupes: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/odd: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+BATCH_MOVED optim-adam-clip/negative: BATCH_MOVED:AdamW step_accumulated A=2:row 1 of 64 alone:output 0 element 0: whole 0xbee4b95c vs alone 0xbee410ba
+wrote /root/leg_out/records/optim-adam-clip/optim-adam-clip/cpu-sabotage.json

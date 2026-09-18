@@ -352,7 +352,11 @@ def _class_weight_rows(class_weight, classes, codes):
         raise ValueError("class weights must remain finite and nonzero when positive in Float32")
     if max(narrowed) <= 0:
         raise ValueError("class weights must have positive total")
-    return Array.from_list([narrowed[c] for c in codes], "<f4")
+    # One scalar Array.__getitem__ per row cost 1.1 s per 1,000,000 rows
+    # (lane/python-hotpath audit, 2026-09-17); the same float32 values
+    # through a list lookup driven by map, then one C-level store.
+    table = narrowed.tolist()
+    return Array._from_flat(list(map(table.__getitem__, codes)), (len(codes),), "<f4")
 
 
 class _RandomForestBase(ForestProtocol, NumericModeMixin):

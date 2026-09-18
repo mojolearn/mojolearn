@@ -20,12 +20,31 @@
 #                           gbm-bench/istella/istella_speed.npz
 #                           corpus/enwik8/input.txt
 #                           corpus/pile_github/input.txt
-#                         The forest datasets are pinned too and land where
-#                         tools/speed_gbdt_arm.py reads them (added 2026-09-17)
+#                         MOJOLEARN_STAGE_KEYS="" (empty, set) stages nothing.
+#
+#                         THE FOREST DATASETS ARE NOT IN THE DEFAULT SET AND A
+#                         CALLER MUST NAME THEM. They are pinned and they land
+#                         where tools/speed_gbdt_arm.py reads them, but higgs
+#                         alone is 1.28 GB and staging it onto every neural leg
+#                         would be 1.28 GB nobody reads:
 #                           gbm-bench/higgs/higgs_speed.npz
 #                           gbm-bench/covtype/covtype_speed.npz
 #                           gbm-bench/year/year_speed.npz
-#                         MOJOLEARN_STAGE_KEYS="" (empty, set) stages nothing.
+#                         Until 2026-09-17 this header said they were in the
+#                         default set and the code five lines below said they
+#                         were not; the code was right, and a forest leg that
+#                         trusted the header downloaded `year` from
+#                         archive.ics.uci.edu and `covtype` through sklearn's
+#                         fetcher on the box. tools/gemm_remote_leg.sh now names
+#                         them per family.
+#
+#                         AND THE OPPONENT WHEEL SETS, for a leg that is
+#                         measuring an opponent rather than reading its row out
+#                         of bench/OPPONENT_REFERENCE.md (tools/opponent_wheels.sh):
+#                           opponents/trees-linux-x86_64-cp311    340 MB
+#                           opponents/rapids-linux-x86_64-cp311   2.13 GB
+#                         Each is a group, so naming it stages every wheel in
+#                         it, each checked against its own size and sha256.
 #   MOJOLEARN_STAGE_REMOTE_SH   the shell that runs the staging commands on the
 #                         box (default `sh -s`; Hot Aisle needs `sudo -n -H sh -s`
 #                         because the ssh user is not root)

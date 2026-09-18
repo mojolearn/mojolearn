@@ -410,8 +410,16 @@ def _materialize(obj, name):
         # Nested lists of Python scalars: infer like NumPy (any float ->
         # float64, else int64), so a later cast is the SAME single
         # rounding NumPy would do from the same intermediate.
-        from ._array import _flatten
+        from ._array import _flatten, _SCALAR_TYPES
         shape, flat = _flatten(obj)
+        # DEVIATION 3106: the two per-leaf isinstance walks below cost 40 ns
+        # a leaf each; `set(map(type, ...))` asks the same question in C.
+        # Only when every leaf is EXACTLY a Python float, int or bool is the
+        # answer read from the type set; a subclass (a NumPy scalar is one)
+        # or anything else takes the walks, which define the refusal.
+        kinds = set(map(type, flat))
+        if kinds and kinds <= _SCALAR_TYPES and hotpath_enabled():
+            return Array._from_flat(flat, shape, "<f8" if float in kinds else "<i8"), True
         if any(isinstance(v, float) for v in flat):
             return Array._from_flat(flat, shape, "<f8"), True
         for v in flat:
@@ -461,10 +469,44 @@ def _materialize(obj, name):
                 n = len(raw) // 2
                 values = struct.unpack("<%de" % n, raw) if n else ()
                 return Array._from_flat(list(values), shape, "<f2"), True
+            if _CODE[target] == letter and hotpath_enabled():
+                # DEVIATION 3105: a strided view whose dtype an Array already
+                # holds needs no per-element conversion. `array.array(code,
+                # <memoryview>)` builds a Python object per element (22 ns);
+                # the bytes `tobytes()` linearized ARE the answer, except
+                # that the object round trip quiets a float32 signaling NaN,
+                # which `_same_dtype_store` reproduces.
+                fast = _same_dtype_store(raw, target)
+                if fast is not None:
+                    return Array._owned(fast, shape, target, "C"), True
             flat = memoryview(raw).cast(letter)
             store = array.array(_CODE[target], flat)
             return Array._owned(store, shape, target, "C"), True
     return Array.from_buffer(obj), False
+
+
+def _same_dtype_store(raw, dtype):
+    """An `array.array` holding the elements `raw` (bytes of `dtype`) holds,
+    equal byte for byte to `array.array(code, memoryview(raw).cast(code))`,
+    or None when that cannot be promised without the conversion loop.
+
+    For every dtype but float32 the conversion loop is the identity on the
+    bytes (integers, and a float64 that travels as a C double untouched),
+    so this is `frombytes`. For float32 the loop widens to a Python float
+    and narrows back, which sets the quiet bit of a signaling NaN; the core
+    helper `cast_elements` float32 -> float32 is that same function of the
+    bits (DEVIATION 3100), and without it the loop itself runs."""
+    code = _CODE[dtype]
+    store = array.array(code)
+    store.frombytes(raw)
+    if dtype != "<f4" or not len(store):
+        return store
+    fn = _native_optional("cast_elements")
+    if fn is None:
+        return None
+    at = store.buffer_info()[0]
+    fn(at, 0, at, 0, len(store))  # in place: element i reads and writes slot i only
+    return store
 
 
 # Buffer dtypes that are not Array dtypes land on the narrowest Array dtype
@@ -739,6 +781,43 @@ def all_finite(arr):
 
 
 _NATIVE = {}
+_NATIVE_MISSING = set()
+
+#: lane/python-hotpath (2026-09-17). `MOJOLEARN_HOTPATH=python` sends every
+#: DEVIATION 3100-3107 seam down the Python routine it replaced: the
+#: reference arm of `tests/test_hotpath_native.py` and of an A/B timing. Any
+#: other value, or none, takes the compiled helper when the binary has it.
+_HOTPATH_ENV = "MOJOLEARN_HOTPATH"
+
+
+def hotpath_enabled():
+    import os
+    return os.environ.get(_HOTPATH_ENV, "").strip().lower() != "python"
+
+
+def _native_optional(key):
+    """`_native(key)`, or None when this install's binary does not carry
+    `key` or `MOJOLEARN_HOTPATH=python` is set.
+
+    FOR THE lane/python-hotpath HELPERS ONLY, and the reason it may return
+    None where `_native` raises: each of those helpers stands in for a
+    Python routine that STAYS in the package as its definition, so an
+    install whose binary predates the helper (a GPU base binding not yet
+    rebuilt, a core host binding from before 2026-09-17) computes the same
+    answer more slowly instead of refusing to run. The miss is remembered,
+    so a missing symbol costs one lookup per process."""
+    if not hotpath_enabled():
+        return None
+    fn = _NATIVE.get(key)
+    if fn is not None:
+        return fn
+    if key in _NATIVE_MISSING:
+        return None
+    try:
+        return _native(key)
+    except ImportError:
+        _NATIVE_MISSING.add(key)
+        return None
 
 
 def _native(key):
