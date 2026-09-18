@@ -21,6 +21,13 @@ export PATH="$HOME/.pixi/bin:$PATH"
 export PYTHONPATH=python
 export PYTHONUNBUFFERED=1
 export MOJOLEARN_NUMERIC_MODE=identical
+# A pod whose host driver is older than 580 (CUDA 13.0) refuses to load the
+# module unless the runtime is pointed at a system ptxas; the kNN lane's pod
+# harness does the same. Unset when the driver is new enough.
+if [ -z "${MODULAR_NVPTX_COMPILER_PATH:-}" ] && [ -x /usr/local/cuda/bin/ptxas ]; then
+    _drv=$(nvidia-smi --query-gpu=driver_version --format=csv,noheader 2>/dev/null | head -1 | cut -d. -f1)
+    [ -n "$_drv" ] && [ "$_drv" -lt 580 ] 2>/dev/null && export MODULAR_NVPTX_COMPILER_PATH=/usr/local/cuda/bin/ptxas
+fi
 export MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-12}
 export MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-12}
 mkdir -p "$OUT/logs"
@@ -32,8 +39,11 @@ case "${1:-}" in
 setup)
     [ -x "$HOME/.pixi/bin/pixi" ] || curl -fsSL --max-time 300 https://pixi.sh/install.sh | sh
     step pixi_install-"$(basename "$PWD")" pixi install || exit 1
-    for b in rf trees gbdt; do
-        step build_"$b"-"$(basename "$PWD")" pixi run sh bindings/build_"$b".sh || exit 1
+    # the base extension carries encode_labels_i32, which every classifier fit
+    # reaches before it ever touches a forest kernel
+    for b in "" rf trees gbdt; do
+        _s="bindings/build${b:+_$b}.sh"
+        step build_"${b:-base}"-"$(basename "$PWD")" pixi run sh "$_s" || exit 1
     done
     say "setup done"
     ;;
@@ -54,20 +64,25 @@ repro)
     tail -25 "$OUT/$L-$M.log"
     ;;
 lanes)
+    # $2 label, $3 the lane list (default: the two that hang a one-GPU box
+    # TOGETHER; each alone is the baseline both trees can produce)
     L=${2:?label}
-    say "identity_break rf-clf-balanced-parallel,et-reg-bootstrap-parallel ($L)"
+    LN=${3:-rf-clf-balanced-parallel,et-reg-bootstrap-parallel}
+    say "identity_break $LN ($L)"
     pixi run python3 tools/identity_break.py \
-        --lanes rf-clf-balanced-parallel,et-reg-bootstrap-parallel \
-        --fixtures base --repeats 2 --vendor cuda-4090 \
-        --json "$OUT/$L-parallel-lanes.json" > "$OUT/$L-parallel-lanes.log" 2>&1
+        --lanes "$LN" --fixtures base --repeats 2 --vendor cuda-4090 \
+        --json "$OUT/$L.json" > "$OUT/$L.log" 2>&1
     rc=$?
     say "lanes $L rc=$rc"
-    echo "lanes	$L	-	$rc" >> "$OUT/verdicts.tsv"
-    tail -30 "$OUT/$L-parallel-lanes.log"
+    echo "lanes	$L	$LN	$rc" >> "$OUT/verdicts.tsv"
+    tail -30 "$OUT/$L.log"
     ;;
 gate)
     L=${2:?label}
-    LANES=${LANES:-rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,rf-score-weighted,rf-clf-balanced-parallel,et-reg-bootstrap-parallel}
+    # The two -parallel lanes are LEFT OUT here on purpose: the BEFORE tree
+    # cannot finish them in one process, so a column that contained them
+    # could not be compared. They get their own before/after arms.
+    LANES=${LANES:-rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,rf-score-weighted,gbdt-symmetric,gbdt-depthwise,gbdt-rmse}
     say "identity_break gate ($L): $LANES"
     pixi run python3 tools/identity_break.py --lanes "$LANES" \
         --fixtures base,ties,odd,dupes,wide --repeats 2 --vendor cuda-4090 \
