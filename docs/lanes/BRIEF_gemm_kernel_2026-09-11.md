@@ -1873,3 +1873,110 @@ instrument used in 21.1 is vendor-agnostic and derives its own column, so an
 AMD itemization is one `tools/step_breakdown_leg.sh` run on an MI300X with
 `MOJOLEARN_STAGE_STRICT=1`. That is the AMD measurement worth buying next, and
 it is a measurement, not an arm.
+
+## 22. The `proj` fold, isolated; and the AMD column, itemized for the first time (2026-09-18)
+
+### 22.1 The `proj` gap of 21.3 has a cause, and the contract already names it
+
+Evidence: `bench/results/e1g/2026-09-18_013251-nvidia-h100-gemm-proj-phase/remote/gemm-kernel/price_tables.txt`
+(RunPod H100 80GB HBM3, pod 20usq6mvqsq2u5 terminated and verified gone,
+`MOJOLEARN_STAGE_STRICT=1`). No new code: `tools/gemm_kernel_leg.sh`, whose
+`PHASE` lines decompose each call into workspace allocation, group launch and
+fold launch, each host-synchronized, medians over 7 rounds.
+
+| call | `group_leaves` | `group_ms` | `fold_ms` | `sum_ms` | fold share |
+|---|---:|---:|---:|---:|---:|
+| `proj_fwd` | **1** | 0.1939 | 0.0606 | 0.2575 | **23.5%** |
+| `proj_dA` | **1** | 0.1939 | 0.0602 | 0.2576 | **23.4%** |
+| `proj_dB` | **1** | 0.1955 | 0.0512 | 0.2500 | **20.5%** |
+| `gateup_dA` | 2 | 0.4430 | 0.0702 | 0.5161 | 13.6% |
+| `gateup_dB` | 2 | 0.4404 | 0.0698 | 0.5131 | 13.6% |
+| `down_fwd` | 2 | 0.4459 | 0.0704 | 0.5196 | 13.6% |
+| `head_dA` | 64 | 11.5375 | 0.0672 | 11.6074 | 0.6% |
+
+**The fold is a roughly CONSTANT 0.05 to 0.07 ms per call whatever the leaf
+count**, from one leaf to sixty-four. It is a fixed launch cost, not work. On a
+0.25 ms `proj` call that fixed cost is a quarter of the call; on the 11.6 ms
+`head_dA` it is six parts in a thousand. That is the whole of the `proj` rate
+gap and it is not a property of the shape or of the kernel body.
+
+**And every `proj` call has `group_leaves = 1`.** `gemm/IDENTICAL_FP32_CONTRACT.md`
+section 7.3 is titled "`P == 1` performs NO fold addition" and says: "The tree
+over one node has no internal node. The single leaf partial reaches the output
+through seam 5g and through nothing else."
+
+At 144 `proj` calls per step the fold costs `48 * (0.0606 + 0.0602 + 0.0512)` =
+**8.3 ms, 4.0 percent of the 207 ms step, and it performs no arithmetic.** That
+independently reproduces the 4.0 to 5.7 percent estimated in 21.3 from the rate
+gap alone, by a different route.
+
+**Say the change precisely, because 7.3's next clause matters.** The `P == 1`
+fold is NOT a no-op: it applies seam 5g and copies the partial to `c`
+(`c.unsafe_store(cell, ftz(v))`). So the change is not "skip the launch". It is
+**"when `leaves == 1`, have the GROUP kernel apply 5g and write `c` directly
+instead of writing a partial to the workspace for a second kernel to flush and
+copy"**, which is bit-preserving because `ftz` is applied to the same binary32
+word either way, in the same order, at the same address.
+
+It is **not a ninth scheduling arm**: no plan, no geometry, no group rule and no
+leaf boundary moves, and the kernel-matrix rows are untouched. It is the same
+class of change as the wait removal that already landed. UNBUILT AND UNPRICED;
+the estimate above is a fold-launch sum, not a measured flip.
+
+### 22.2 AMD, itemized: the step is 81 percent GEMM
+
+Evidence: `bench/results/e1g/2026-09-18_013257-amd-mi300x-hotaisle-step-breakdown/remote/step-breakdown/`
+(Hot Aisle MI300X gfx942, commit ce29b6185, `column=amd` derived on the box,
+every phase in `status.tsv` exit 0, `witnesses.tsv` `all bits_identical True`,
+`MOJOLEARN_STAGE_STRICT=1`). **No AMD step has ever been itemized before.** The
+instrument of 21.1 is vendor-agnostic and derives its own column, so this is the
+same `tools/step_breakdown_leg.sh` with nothing added.
+
+| | AMD MI300X | NVIDIA H100 (21.1) |
+|---|---:|---:|
+| REAL step (untimed) | 687.97 ms | 207.21 ms |
+| instrumentation | 6.94 ms (**1.01%**) | 7.21 ms (3.48%) |
+| **GEMM** | **559.22 ms, 81.3%** | **119.50 ms, 57.7%** |
+| attention kernels and scans | 91.57 ms, 13.3% | 60.12 ms, 29.0% |
+| everything else | 37.2 ms, 5.4% | 27.6 ms, 13.3% |
+| GEMM rate, same 1.5180 TFLOP/step | **2.72 TFLOP/s** | 12.84 TFLOP/s |
+
+The two columns are running the same kernel over the same shapes and AMD is
+**4.7x slower at it**. GEMM is therefore a much larger target on AMD than on
+NVIDIA: 81 percent of that step against 58 percent of this one.
+
+**The 33.5 TFLOP/s contract ceiling is an H100 figure** (section 3.2 derives it
+from that part's issue model at 1.98 GHz). It MUST NOT be applied to the AMD
+column, and no AMD ceiling is stated here because none has been derived.
+
+### 22.3 The new discriminating fact is the FLATNESS, and it is a contrast, not an isolation
+
+| | AMD spread | NVIDIA spread |
+|---|---|---|
+| per-kind TFLOP/s over the twelve LM calls | 2.51 to 2.85, **1.13x** | 9.80 to 15.79, **1.61x** |
+
+On NVIDIA the rate varies by shape by more than half, and 22.1 has just shown
+why: a fixed per-call launch cost that a short call cannot amortize. On AMD the
+rate is very nearly **shape-independent**, which is what a fixed cost PER
+PRODUCT STEP looks like rather than per call. AMD's seam is eight issued
+instructions per product step where NVIDIA's is two (20.1).
+
+**That is a consistent contrast and NOT an isolation.** Clock, CU occupancy,
+LDS bandwidth and the memory path are not excluded, and `[[measure-before-attributing]]`
+forbids naming the seam as the cause on this evidence. What it does do is raise
+the value of the contract-preserving 8-to-5 spelling of 19b6a9c7f, because the
+thing it would touch is 81 percent of the AMD step rather than 58 percent of the
+NVIDIA one. The isolation is available and is the same shape as 22.1: price the
+seam spelling against shipped on the twelve calls with the existing harness.
+
+### 22.4 The ranking after both legs
+
+1. **`proj` fold fusion, NVIDIA, about 4.0 percent of the step**, cause
+   isolated, bit-preserving by contract 7.3, not an arm. Build it.
+2. **The AMD seam spelling, 8 slots to 5**, on 81 percent of the AMD step. Needs
+   the device proof of 19b6a9c7f first (the probe lane hashing `rtf`), which is
+   ten seconds, and then a price leg.
+3. The NVIDIA barrier skew and staging-head global loads, still unsized, still
+   needing DIAG variants re-based on the shipped body.
+4. The Apple seam repair (section 19), which is Andrew's call and
+   `lane/reference-regen`'s table.
