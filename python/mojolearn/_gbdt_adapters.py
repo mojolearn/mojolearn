@@ -129,12 +129,12 @@ class GradientBoostingClassifier(_GBDTAdapter):
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
         self._clear_fit()
-        target, kind = metrics._classification_labels(y, 'y')
-        classes = sorted(set(target))
+        target, kind = metrics._classification_encoded(y, 'y')
+        classes = sorted(metrics._label_set(target))
         if len(classes) != 2:
             raise ValueError('GradientBoostingClassifier requires exactly two training classes')
         vocabulary = {label: i for i, label in enumerate(classes)}
-        encoded = Array.from_list([vocabulary[label] for label in target], '<f4')
+        encoded = metrics._label_map(target, vocabulary.__getitem__).astype('<f4')
         if eval_set is not None:
             if isinstance(eval_set, list):
                 if len(eval_set) != 1:
@@ -143,10 +143,10 @@ class GradientBoostingClassifier(_GBDTAdapter):
             if not isinstance(eval_set, tuple) or len(eval_set) != 2:
                 raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
             eval_X, eval_y = eval_set
-            eval_labels, eval_kind = metrics._classification_labels(eval_y, 'eval_set y')
-            if eval_kind != kind or any(label not in vocabulary for label in eval_labels):
+            eval_labels, eval_kind = metrics._classification_encoded(eval_y, 'eval_set y')
+            if eval_kind != kind or any(label not in vocabulary for label in metrics._label_set(eval_labels)):
                 raise ValueError('eval_set contains labels outside the training vocabulary')
-            eval_set = (eval_X, Array.from_list([vocabulary[label] for label in eval_labels], '<f4'))
+            eval_set = (eval_X, metrics._label_map(eval_labels, vocabulary.__getitem__).astype('<f4'))
         self._fit_native(X, encoded, sample_weight, eval_set)
         self.classes_ = classes
         self.n_classes_ = 2
@@ -185,11 +185,11 @@ class GradientBoostingClassifier(_GBDTAdapter):
         `np.average(y == predict(X), weights=sample_weight)` on the pinned-sum
         path, `metrics.accuracy_score`)."""
         self._check_fitted()
-        target, kind = metrics._classification_labels(y, 'y')
+        target, kind = metrics._classification_encoded(y, 'y')
         if kind != self._label_kind_:
             raise TypeError('score labels must have the training label type')
         vocabulary = {label: i for i, label in enumerate(self.classes_)}
-        encoded = Array.from_list([vocabulary.get(label, -1) for label in target], '<i4')
+        encoded = metrics._label_map(target, lambda label: vocabulary.get(label, -1))
         return metrics.accuracy_score(encoded, self._binary_output(X, False),
                                       sample_weight=sample_weight,
                                       numeric_mode=self.numeric_mode_)
