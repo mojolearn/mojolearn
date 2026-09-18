@@ -1,5 +1,44 @@
 # HANDOFF 2026-09-18 evening: where we are, what remains
 
+## Closeout decision (2026-09-18, subsequent session)
+
+Andrew asked to finish this line of work using judgment, avoid unnecessary
+expansion, and consider different vendor paths where they improve speed.
+Disposition: **close the tokenizer/attention/GEMM improvement session with
+the landed defaults intact; cross-vendor identity remains incomplete.**
+This is a scope decision, not a new qualification result or a waiver of the
+numerical contract. The original handoff below remains the evidence index.
+
+Different Apple, AMD and NVIDIA implementations are appropriate when each
+implements the same promised result. They already exist. Permission to use
+different implementations is not interpreted as permission to silently give
+`identical` different numerical semantics on each vendor.
+
+| Item | Disposition and condition for resuming |
+|---|---|
+| Tokenizer and vocabulary builder | Complete for this session. Keep tokenize-once, the native builder default, and user-supplied vocabulary support. No further builder optimization is needed for closeout. |
+| Attention replay | Keep the qualified NVIDIA/AMD improvements and Apple's tested implementation. Do not claim an Apple training speedup. |
+| Apple GEMM repair | Keep enabled. Removing it would reintroduce a demonstrated contract violation. |
+| R1 | Unresolved correctness work, deferred from this session. Resume with separating boundary fixtures and scoped family repairs when closing the Apple identity gap. The static count is approximate. |
+| R2 | Unresolved numerical-contract decision. Do not change NVIDIA/AMD reference bits or add slow emulation as incidental cleanup. If pursued, prefer evaluating a common flush policy, with an explicit contract change and regenerated, qualified references. No such change is made here. |
+| R3 | Optional performance work, parked. Resume for an actual Apple training need, with both corpus measurements and identity checks before changing its schedule. |
+| R4 | Untested diagnostic, deferred with R1. Run before sizing the next repair effort; its result would not make the current work universally identical. |
+| R5 | Known NaN-bit discrepancy, unresolved. A passing finite fixture does not close it; a future canonicalization change needs its own contract and tests. |
+| R6 | Optional performance work, parked. Resume if the measured vocabulary-backward cost matters to an Apple workload, retaining the exact repair. |
+
+The other candidates below are not automatically started. In particular,
+the buffer-lifetime/deadlock lead is separate correctness work, not declared
+fixed by this closeout. Release qualification remains separate and incomplete;
+do not remove or turn on `release_qualified` to obtain a green status.
+
+This closeout changes documentation only. It reviews the retained lane
+evidence; it does not rerun device tests, launch rentals, publish a release,
+or certify arbitrary inputs. Reopen these items based on a concrete workload
+or an identity/release requirement, rather than treating every candidate as
+the next mandatory optimization.
+
+## Original handoff
+
 Written for a session with NO context, at the point Claude Code ran out of
 weekly capacity. Everything below is merged to `main`; nothing is in flight.
 
