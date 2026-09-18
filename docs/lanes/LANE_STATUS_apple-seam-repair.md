@@ -315,3 +315,15 @@ AMD re-check of all five programs running (xasm/xcheck2.sh).
   (45 / 68 / 522 / 75 / 70 modules). With sm_90a already identical, the
   branch cannot move an NVIDIA or AMD bit in any kernel these programs
   instantiate: the device code IS main's.
+
+## RESULT 11 (partial): the LM lane on Apple, target shape (162M params, L=2048)
+
+Evidence (in progress) `~/mojolearn-evidence/apple-seam-repair-2026-09-18/lm/`
+(tools/lm_step_memory_probe.py --target --resident-lean --witness-every-step
+--steps 5, private package copies, byte_lm .so sha256 3c879da6863b8c82
+norepair / 3e882e32bf0b0f14 repair). enwik8 runs 1 (norepair) and 2 (repair):
+**all five steps' witnesses (loss, gradients, parameters, m, v, flags)
+byte-identical between the arms**: INERT on the LM lane, enwik8, 5 steps.
+Step times from these first two runs are CONTAMINATED by my own concurrent
+one-core cross-compiles (norepair 41-52 s, repair 49-75 s); not used.
+Remaining six runs have no concurrent build of mine.
