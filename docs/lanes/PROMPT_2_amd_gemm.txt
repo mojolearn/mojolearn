@@ -90,11 +90,31 @@ STALE FACTS YOU WILL FIND IN OLDER DOCS, CORRECTED:
    that won 9% on NVIDIA as `kpack_hg`. Its row is 1, not 0, so check what is
    actually in it before assuming either way.
 
-5. NOTE FOR SIZING, NOT FOR YOU TO FIX: a separate, smaller finding is that
-   the three `proj_*` GEMM kinds run a P=1 fold that performs NO arithmetic
-   (contract section 7.3 is titled "P == 1 performs NO fold addition"),
-   costing 8.3 ms = 4.0% of the NVIDIA step. That is being handled
-   separately. Do not duplicate it, but expect AMD to have the same fold.
+5. RETRACTED, DO NOT CHASE IT. An earlier version of this file claimed the
+   three `proj_*` kinds run a P=1 fold performing NO arithmetic, worth 8.3 ms
+   = 4.0% of the NVIDIA step. THAT IS FALSE and was retracted at af7c496c8.
+   `group_leaves` is leaves PER GROUP, not P: `_ksplit_resolve_leaves` returns
+   (group_leaves, ceil(p_count / group_leaves)), so group_leaves=1 is the
+   MAXIMUM number of groups, not one leaf overall. With
+   CONTRACT_K_LEAF_MIN = 128, contract_leaf_count(768) = 6 and
+   contract_leaf_count(2048) = 16, and the PHASE line prints groups=6 for
+   proj_fwd/proj_dA and groups=16 for proj_dB. So there are FIVE real
+   additions per cell at proj and FIFTEEN at proj_dB; NO call in the step has
+   P == 1, contract 7.3 never applies, and fusing the fold WOULD MOVE BITS.
+   P is a pure function of k and is vendor independent, so AMD has no P == 1
+   fold either.
+
+   The corrected reading of the same evidence: `fold_ms` tracks OUTPUT SIZE,
+   not P. Every 1.57M-cell call folds in 0.067-0.070 ms at 6, 7 or 8
+   partials, and proj_dB -- most partials, fewest cells -- is the FASTEST
+   fold at 0.0512 ms. With the fold excluded the rate is UNIFORM, 12.36 to
+   14.80 TFLOP/s across every kind including proj. The proj gap is
+   STRUCTURAL: proj does the least arithmetic per output cell (k=768 into
+   1.57M cells, where gateup/down do k=2048 into the same cells), so it
+   amortizes the same fixed fold over 2.7x less work. That is not waste.
+   Note also that `fold_ms` is host-synchronized by construction and the
+   fold's ~44 MB is ~15 us of HBM against 60 us measured, so much of the
+   measured time may be the harness's own sync.
 
 
 === CONSTRAINTS, ABSOLUTE ===
