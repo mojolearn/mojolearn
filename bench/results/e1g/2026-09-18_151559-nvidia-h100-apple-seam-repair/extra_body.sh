@@ -42,10 +42,4 @@ for prog in gemm_seam_probe gemm_rtf_boundary_check; do
 done
 python3 tools/gemm_seam_probe_reference.py "$OUT/gemm_seam_probe.log" > "$OUT/reference.txt" 2>&1
 echo "reference=$?" >> "$OUT/status.txt"
-# 3. Optional (Hot Aisle, whose runner has no card payload): the GEMM
-#    identity card of this commit, to diff HERE against the Apple card.
-if [ "${MOJOLEARN_RTF_LEG_CARD:-0}" = 1 ]; then
-    sh tools/gemm_card.sh device "$OUT/$MOJOLEARN_TARGET_COLUMN.card" > "$OUT/card.log" 2>&1
-    echo "card=$?" >> "$OUT/status.txt"
-fi
 echo "finished=$(date -u +%FT%TZ)" >> "$OUT/status.txt"

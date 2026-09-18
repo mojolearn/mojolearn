@@ -199,3 +199,31 @@ on that 4% is honest. Still a GEMM sum, not a step: the step share is owed
 - Then NVIDIA + AMD legs: tools/gemm_remote_leg.sh with
   MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_rtf_leg.sh --local-card <branch apple card>.
 - POD (mine): 9rts6f6fpgw7fm mojolearn-gemm-nvidia-2026-09-18_110519-93300 (RTX 4090, 60 min lease, dead-man armed) — NVIDIA leg: GEMM card vs Apple card + tools/gemm_rtf_leg.sh. Console ~/mojolearn-evidence/apple-seam-repair-2026-09-18/nvidia_leg.console. Pods d8klbzo3aga6d6 / vn4vonca6du36q are OTHER lanes'.
+
+## RESULT 6: NVIDIA H100 leg (RunPod, 2026-09-18 15:16Z, pod 2knce7572vc9k1 terminated, verified 404)
+
+Evidence `bench/results/e1g/2026-09-18_151559-nvidia-h100-apple-seam-repair/`
+(branch commit 431cf44c6). A first attempt on an RTX 4090 (pod
+9rts6f6fpgw7fm) never got ssh in 600 s and was terminated and verified 404
+(infra, not evidence; console kept as nvidia_leg_4090_readytimeout.console in
+the evidence dir).
+- GEMM identity card, NVIDIA (this branch) vs the retained Apple card from
+  main: 60 matched stages, **RESULT: IDENTICAL**.
+- Seam probe on NVIDIA: shipped lane **`62a6b5621e27c707` -> rtf** (unchanged
+  from 2026-09-13); `nativefix` = `none` (rtf_fix is the identity off Apple),
+  as designed.
+- Whole-GEMM boundary check: pairs / draw0 / draw1 / draw2 / draw3 /
+  admitted device_fnv values EQUAL the Apple column's, cell for cell hash:
+  a62658ede5aff32e, 941b9586f3f46787, f17d5419b7613ab8, 3be7a64bdda61cab,
+  4667eea0d0c3eb34, b89e27b4dd7768ca. So Apple (repaired) and NVIDIA now agree
+  on the fixtures that separate fbr from rtf.
+- **FINDING, NOT THIS LANE'S DEFECT: draw4 (64x64x300) differs across columns
+  in NaN payloads.** NVIDIA device fnv bb1a4c2c7aba843d, first cell device
+  7fffffff vs the pod's x86 host oracle ffc00000; Apple device = Apple (ARM)
+  host oracle = fa49a9f1815ee8a5 (in BOTH the repaired and the unrepaired
+  Apple builds, so the repair did not cause it). The fixture overflows to
+  inf and forms inf - inf: each backend writes its own default NaN (NVIDIA
+  0x7fffffff, ARM 0x7fc00000, x86 0xffc00000). Only the FIRST mismatch was
+  printed; that all 3,078 are NaN-payload cells is inferred, not listed.
+  Recorded as a CANDIDATE (NaN canonicalization in the GEMM contract), not
+  opened.
