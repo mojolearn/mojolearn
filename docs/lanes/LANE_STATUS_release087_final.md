@@ -1,6 +1,6 @@
 # 0.8.7 final release work
 
-Updated 2026-09-17 evening. Publication of both wheels is explicitly authorized
+Updated 2026-09-18 UTC. Publication of both wheels is explicitly authorized
 by Andrew. Continue fixes and qualification through publication; do not ask
 for publication permission again. Use isolated worktrees, commit, and merge
 verified changes to main. No wheel has been published by this lane yet.
@@ -17,6 +17,12 @@ Mac builds generate Python helper copies: do not use its resulting untracked
 files as the Linux native inventory. Evidence and live process state are in
 `~/mojolearn-evidence/release-087-final/release-state.json` and `logs/`.
 
+Main subsequently received native Python hot-path work at `3aefe1127`, outside
+this release freeze. **Do not pull those native changes into the active release
+branch.** Release-tool changes are merged into main while the release branch
+keeps its recorded native inputs. Dispatch/tag the release branch's final
+commit explicitly; main is no longer a substitute for it.
+
 Completed:
 
 - Full Python tests: 1847 passed, 98 environment/dependency skips.
@@ -32,6 +38,15 @@ Completed:
   and verifier CLI. Optional properties lacking references remain OWED;
   mismatches, refusals and inconsistent exit/verdict combinations fail.
 - Release tooling tests: 25 passed and 33 subtests passed.
+- After integrating the parallel-scaler numerical-mismatch reporting fix:
+  103 verifier/reference-gate tests passed.
+- Additional targeted Apple columns: 20 property lanes and four ordinary
+  neural lanes, all nine fixtures twice. Together with Mamba: 252/252 stable
+  cells, applicable inference/model/batch/RL-pair parts stable. These captures
+  do not enable the separate step/full flag. The existing current CPU core
+  capture matches Apple on all 162 compared train/infer/model parts.
+- Fresh AMD gfx942 build at the native freeze: all 61 binding hashes and the
+  source inventory verified; rental deleted (HTTP 404). R2 retention confirmed.
 
 Unresolved release work:
 
@@ -48,6 +63,21 @@ Unresolved release work:
   with its CPU certification. Stage the qualified combined Linux wheel before
   starting the ephemeral real-Metal runner, so both wheels publish in one run.
 - Verify actual PyPI bytes and hashes, then record publication evidence.
+
+The CPU workflow's historical-reference preflight now accounts explicitly for
+18 x 9 stale-revision cells per vendor; all three actual historical-reference
+steps, including negative controls, passed. Retained CPU records also exposed
+optional model/batch properties whose native prediction faults do not alter
+their hashes. Fresh independent GPU property columns are being collected for
+the certification diff; its OWED-property rule is not being weakened.
+
+The H100 attempt `zaq7fr4osqlq7c` lost its artifacts while the Mac slept and its
+lease expired; absence was verified with HTTP 404. Subsequent controllers run
+under a bounded awake assertion, with an additional object-scoped R2 upload
+armed on each rented box. The external `build_nvidia_remaining.py` driver owns
+two sequential attempts (L40S then H100), stops on failure, verifies all 61
+fetched binding hashes, and verifies deletion before renting the next device.
+Consult the external state and logs before starting any additional rental.
 
 Limits remain one local numerical/compiler worker and two cloud CPU workers;
 GPU rentals are sequential and must have watchdogs, external deadmen and
