@@ -1,5 +1,22 @@
 # LANE STATUS: tokenized-corpus (lane/tokenized-corpus)
 
+**STATE 2026-09-18 ~11:40 local: DONE and MERGED to main (18c15b346; rename alone landed
+first as 5bde47f20). No pods live: ph5zsazy7u4kxn, vn4vonca6du36q, d8klbzo3aga6d6,
+nqbmrf373yti99 all read HTTP 404 from the RunPod API.**
+
+Open questions for Andrew (not acted on):
+1. The built-in default trains with `BpeVocabularyTrainer`, which is the PURE PYTHON trainer; at
+   50,256 ranks on 10 MB that is impractical (the Mojo trainer took 71 min for the same job).
+   Candidate follow-up: expose `tokenizer/train/bpe_train.mojo` through the tokenizer binding
+   (held file-byte-equal to the Python one already by check-bpe-trainer) and drop its dense
+   V x V count table (20.2 GB at 50,256). Not opened.
+2. Should mojolearn ever ship a trained vocabulary? It would be derived from third-party text.
+   Today: none ships; ours is in R2 only.
+3. Default vocabulary size 50,256 ranks (GPT-3 Small's 50,257 ids) and 10 MB training sample:
+   picked to match the target shape, not measured for quality.
+Other candidates (not opened): a Mojo cut path for the Llama 3 / Qwen 2 patterns; a sharded
+parallel `prepare` (documents are independent); parquet (FineWeb) input to `prepare`.
+
 Written for a session with no context. Worktree `~/mojolearn-wt/tokenized-corpus`,
 branch `lane/tokenized-corpus`. Original brief (binding):
 `~/mojolearn-evidence/relaunch-sep18/BRIEF_tokenized-corpus_original.txt`. Two items were
@@ -55,7 +72,7 @@ skipped: no GPT-2 files present), `test_tokenizer_manifest.py` (with a new alias
 `test_host_surface.py` + `test_models_loader.py` (pytest, 215 passed / 4 skipped), and
 `tools/verification_matrix.py --check`. The sabotage build fails the surface test 11 of 23.
 
-## Item B and the original brief: IN PROGRESS (WIP, pushed)
+## Item B and the original brief: DONE
 
 - THE ENTRY POINT. There was none. `LanguageModelTrainer.train_step(ids)` takes one
   materialized batch and fetches nothing; every corpus-reading loop was a probe in `tools/`
@@ -132,7 +149,7 @@ NO VOCABULARY SHIPS. Trained tables live in the user's cache (and ours in
 ~/mojolearn-evidence / R2). Question for Andrew, not acted on: whether mojolearn should ever
 ship a built-in trained vocabulary (it would be derived from third-party text).
 
-## The vocabulary job (OWED, do not kill)
+## The vocabulary job (FINISHED 10:38, outcome below)
 
 pid 95203, `train_main`, started 09:26 local 2026-09-18, one core, nice 19: 50,256 ranks
 (n_vocab 50,257 with `<|endoftext|>`) on the first 10 MB of enwik8 + the first 10 MB of
