@@ -290,8 +290,77 @@ sh tools/knn_selector_body.sh probe sabotage2 final_selsabo KSS_KS=32,64 KSS_ROW
 sh tools/trees_leg.sh pull /root/kss_out ~/mojolearn-evidence/knn-selector-speed/finish/
 ```
 
+## The finish ran: the committed tip has its own columns (2026-09-18)
+
+Pod `uywhryt7b9vtz4`, one RTX 4090 (driver 580.159.04, sm_89, 24564 MiB),
+96 vCPU AMD EPYC 7642, 251 GB, $0.74/h, image
+`runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`, Mojo 1.0.0
+(ed45d567). Shipped tree `cb6520f7a4f23db966108752bbab993b8b2aa36d`, the
+lane tip, base arm from `origin/main`. 07:17:07Z start, 07:30:25Z done,
+13 minutes for the whole sequence. Raw JSON, consoles and logs are outside
+the repo under
+`~/mojolearn-evidence/knn-selector-speed/finish-2026-09-18/kss_out/`.
+
+Six arms built on the tip with NO defines except the arms' own
+(`base`, `final`, `final_allk`, `final_allk_sabo`, `final_selsabo`,
+`final_cachesabo`), plus the two host families before and after. This is
+what the first pod never did: every number in the sections above came from
+arms built at `0a582fe8d` with the rows forced by define, and the tip had
+no column of its own.
+
+### Identity (`kss_out/identity2`)
+
+| comparison | train | infer/model | batch |
+|---|---|---|---|
+| base vs final (the two flipped rows) | IDENTICAL=75 | IDENTICAL=150 | IDENTICAL=75 |
+| base vs final_allk (bound at every k + matrix select) | IDENTICAL=75 | IDENTICAL=150 | IDENTICAL=75 |
+| final vs cpu-after | IDENTICAL=75 | IDENTICAL=150 | IDENTICAL=75 |
+| cpu-base vs cpu-after | IDENTICAL=75 | IDENTICAL=150 | IDENTICAL=75 |
+| final_allk vs final_allk_sabo | **DIVERGENT=50**, IDENTICAL=25 | **DIVERGENT=50**, IDENTICAL=100 | **DIVERGENT=50**, IDENTICAL=25 |
+| final vs final_cachesabo | **DIVERGENT=10**, IDENTICAL=65 | **DIVERGENT=30**, IDENTICAL=90, RELOAD-MOVED=30 | **DIVERGENT=30**, IDENTICAL=45 |
+
+DEVIATIONs 3060 and 3061 move no bit on their own tip, on the GPU column
+and against the CPU column, and BOTH sabotage arms bite, so the two
+IDENTICAL rows above are not vacuous.
+
+### The k race (`kss_out/race2/race_summary.tsv`, paired, digests equal)
+
+Every cell's `digests` column reads `equal`; the ratio is final/base.
+
+| dataset | k | rows | base ms | final ms | ratio |
+|---|---|---|---|---|---|
+| istella | 1 | 4000 | 42.680 | 34.896 | 0.819 |
+| istella | 10 | 4000 | 53.476 | 45.614 | 0.856 |
+| istella | 32 | 4000 | 72.263 | 55.544 | 0.765 |
+| istella | 64 | 4000 | 124.441 | 55.949 | 0.453 |
+| taxi | 1 | 4000 | 12.068 | 11.497 | 0.953 |
+| taxi | 10 | 4000 | 24.957 | 23.639 | 0.943 |
+| taxi | 32 | 4000 | 54.531 | 35.496 | 0.651 |
+| taxi | 64 | 4000 | 94.057 | 36.215 | 0.384 |
+
+The one-query rows (`rows=1`) all improve too (0.17x to 0.63x) but most
+carry the `u` gate: at 1 to 9 ms a round the spread is the launch
+sequence, not the kernel, and no claim rests on them.
+
+### A defect in the finish runner, and its repair
+
+`/root/finish.sh` wrote each identity column as `cuda-<arm>.json` and then
+asked `diff` for `<arm>.json`. Five of the six diffs died with
+`FileNotFoundError` and the runner printed an EMPTY summary for each,
+which reads exactly like a clean comparison in the console log: the
+per-diff line was `diff.base-vs-final.txt:` with nothing after it. The
+failed tracebacks are preserved in the pulled tree. The five diffs were
+re-run on the same pod against the same JSONs with the real filenames
+before it was reaped, and those are the numbers in the table above. A
+summary line that is EMPTY is not a summary line that says IDENTICAL.
+
+Pod terminated after the pull, DELETE 204 / GET 404 at 07:34Z. No kNN
+rental remains.
+
 ## Owed and not done
 
+- The tip's own identity, sabotage and race columns are NO LONGER OWED; see
+  the finish section above.
 - Apple and AMD columns of DEVIATIONs 3060 and 3061 at the next release
   record; the rows are NVIDIA only and the kernels compile on every column
   (integer counts and UInt64 compares; the flagged launch is the small-k
