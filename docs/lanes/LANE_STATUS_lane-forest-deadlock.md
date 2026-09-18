@@ -351,8 +351,67 @@ What this rules out for the next session, all by measurement:
   passes at one fixture, at nine fixtures with every part, and under
   `verify --all --lanes`.
 
-What is still open: the culprit is some OTHER teardown among the lanes in
-that prefix. `bindings/_mojolearn_mamba.mojo` has three undrained stateless
+### The backtrace, taken: it IS the same lock, and the caller is LINALG
+
+Re-run with `tools/native_stack_dump.c` preloaded and `kill -USR2` from
+outside while it was hung
+(`bench/results/forest_deadlock_2026-09-18/HANG_transformer-bf16w.nativestack.txt`):
+
+```
+pthread_mutex_lock
+libKGENCompilerRTShared.so (+0x8a1cc, +0x8a0ad, +0x75fc8, +0x5d7f3,
+                            +0x73ebc, +0x8a4a6, +0x94650)
+M::Driver::DeviceContext::enqueueCreateBuffer
+AsyncRT_DeviceContext_createBuffer_async
+_mojolearn_linalg.so   <- NOT the transformer binding
+```
+
+The SAME seven offsets in the same order as the forest hang and as
+DEVIATION 2520's. So **all three manifestations block on the SAME LOCK in
+the SAME allocator**: this is one defect CLASS, not three bugs. What
+differs is the culprit teardown and the victim allocation, and DEVIATION
+3010 covers only the forest's.
+
+The victim here is `_mojolearn_linalg.so`'s low-bit GEMM entry
+(`bindings/_mojolearn_linalg.mojo:288`), whose first
+`enqueue_create_buffer` is the blocked call: `transformer-bf16w`'s train
+goes through the bf16-weight GEMM. And the prefix change that MADE the hang
+appear was adding `mlp`, which is the lane that pulls
+`_mojolearn_linalg.so` in.
+
+**THE SUSPECT WAS RIGHT, AND IT IS NOW CURED. Measured.** every GEMM entry in
+`bindings/_mojolearn_linalg.mojo` creates `var ctx = DeviceContext()` inside
+a `with GILReleased(...)` block and lets the context and its buffers die
+together at the end of the block, with no drain and no explicit ordering
+between them. `linalg_gemm_binding` (`:175`) is the barest: a
+`DeviceContext()`, a call, and the end of the block. That is the shape
+DEVIATION 2520 names, in the library the backtrace blames, reached by the
+lane whose addition makes the hang appear. All seven entries now transfer their buffers
+away and then `ctx.synchronize()` before the block ends.
+
+THE A/B IS A SINGLE VARIABLE, because the previous arm had already ruled
+the other two drains out:
+
+| tree | linalg drain | cells | result |
+|---|---|---|---|
+| ml-before (origin/main) | no | 279 | **HANG** at `transformer-bf16w/base repeat=1/train` |
+| ml-after, forest + transformer drains | no | 279 | **HANG**, same cell, same signature |
+| ml-after, forest + transformer + LINALG drains | **yes** | **288** | **rc=0**, all nine `transformer-bf16w` cells complete |
+
+288 is 279 plus the nine bf16w fixtures: the run finished. The ONLY change
+between the second and third rows is `_mojolearn_linalg.so` rebuilt from
+the patched source in the same tree.
+
+Bitwise, before vs after over the whole reproducing prefix:
+**IDENTICAL=252, 0 DIVERGENT, 0 MOVED** (450 infer/model, 243 batch, 36
+rlpair). The 9 ONE-COLUMN cells are exactly the `transformer-bf16w` cells
+main cannot produce, and the 27 REFUSED are the `byte-lm-host` lanes whose
+host binding is absent on BOTH sides.
+
+So all three manifestations are ONE DEFECT CLASS on ONE LOCK, and all
+three are now fixed: the forest's resident teardown, and the linalg GEMM
+entries'. The transformer stateless drain remains INERT against any
+observed hang and is kept only as a correctness fix of the same class. `bindings/_mojolearn_mamba.mojo` has three undrained stateless
 sites (`:380`, `:916`, `:1183`) and mamba1/2/3 run immediately before
 `transformer`; `metrics/estimator.mojo` has nineteen; `mlp` pulls in
 `training` and `linalg`, and adding `mlp` to the prefix is what made the

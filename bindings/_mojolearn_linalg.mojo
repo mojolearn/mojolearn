@@ -174,6 +174,13 @@ def gemm_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         identical_gemm_host(ctx, cp, ap, bp, m, n, k, op)
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(m * n)
 
 
@@ -304,9 +311,16 @@ def gemm_bf16_binding(
             _ = da2
         ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
         ctx.synchronize()
-        _ = db
-        _ = dc
+        _ = db^
+        _ = dc^
         _ = work^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(m * n)
 
 
@@ -346,11 +360,18 @@ def gemm_int8_binding(
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=f32_ptr(c_address), src_buf=dc)
         ctx.synchronize()
-        _ = dqa
-        _ = dea
-        _ = dqb
-        _ = deb
-        _ = dc
+        _ = dqa^
+        _ = dea^
+        _ = dqb^
+        _ = deb^
+        _ = dc^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(m * n)
 
 
@@ -382,9 +403,16 @@ def quantize_int8_binding(
         ctx.enqueue_copy(dst_ptr=i8_ptr(q_address), src_buf=dq)
         ctx.enqueue_copy(dst_ptr=i32_ptr(e_address), src_buf=de)
         ctx.synchronize()
-        _ = dx
-        _ = dq
-        _ = de
+        _ = dx^
+        _ = dq^
+        _ = de^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(rows * cols)
 
 
@@ -414,9 +442,16 @@ def dequantize_int8_binding(
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=f32_ptr(y_address), src_buf=dy)
         ctx.synchronize()
-        _ = dq
-        _ = de
-        _ = dy
+        _ = dq^
+        _ = de^
+        _ = dy^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(rows * cols)
 
 
@@ -440,8 +475,15 @@ def to_bf16_binding(
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=u16_ptr(dst_address), src_buf=ddst)
         ctx.synchronize()
-        _ = dsrc
-        _ = ddst
+        _ = dsrc^
+        _ = ddst^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(count)
 
 
@@ -465,8 +507,15 @@ def from_bf16_binding(
         ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=f32_ptr(dst_address), src_buf=ddst)
         ctx.synchronize()
-        _ = dsrc
-        _ = ddst
+        _ = dsrc^
+        _ = ddst^
+        # DEVIATION 3010: the buffers above are gone; DRAIN the frees they
+        # enqueued before this block's end destroys the context. Without it
+        # the MAX runtime allocator's lock is left held and the NEXT
+        # enqueue_create_buffer in the process blocks for ever (DEVIATION
+        # 2520's mechanism; the native backtrace of the `transformer-bf16w`
+        # hang blames exactly this library). Host-side drain, no arithmetic.
+        ctx.synchronize()
     return PythonObject(count)
 
 @export
