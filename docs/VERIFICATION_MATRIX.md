@@ -26,7 +26,7 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **229** (179 single-device, 50 `par-*` multi-GPU drivers).
+- Lanes: **228** (178 single-device, 50 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **224**.
 - Source public API entries with ALL FOUR kinds on at least one lane: **163** of 224.
 - Source public API entries with NO IDENTITY LANE AT ALL: **19**.
@@ -46,12 +46,12 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 219 | 10 |
-| gpu column on all three classes | 171 | 58 |
-| cpu verifier declared | 194 | 35 |
-| sabotage seen to move a build | 192 | 37 |
-| batch part or named n/a | 229 | 0 |
-| ALL FOUR | 182 | 47 |
+| gpu column (any class) | 218 | 10 |
+| gpu column on all three classes | 170 | 58 |
+| cpu verifier declared | 193 | 35 |
+| sabotage seen to move a build | 192 | 36 |
+| batch part or named n/a | 228 | 0 |
+| ALL FOUR | 182 | 46 |
 
 Sabotage, split by what was actually watched:
 
@@ -59,7 +59,7 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 192 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 4 | the family declares a define; no committed pair moves this lane |
+| declared | 3 | the family declares a define; no committed pair moves this lane |
 | none | 33 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -147,7 +147,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `HostGBDT` | **0** |  |  |  |  | NO |
 | `IVFIndex` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `IsolationForest` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `KMeans` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `KMeans` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KNeighborsClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KNeighborsRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KernelDensity` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -439,7 +439,6 @@ A blank cell means no lane of this algorithm has that kind.
 | kmeans | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
 | kmeans-array | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
 | kmeans-classic-pp | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
-| kmeans-cosine | amd,apple,nvidia | training | declared | - | n/a n/a:fit-refused | NO |
 | kmeans-random | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
 | kmeans-sqrt | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
 | kmeans-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.host-sabotage.json` | part | yes |
@@ -594,9 +593,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-pool, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
-**Sabotage not seen to move a build: 37**
+**Sabotage not seen to move a build: 36**
 
-> kmeans-cosine, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
+> par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
 **Batch undeclared: 0**
 
