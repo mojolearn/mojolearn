@@ -47,8 +47,6 @@ and carries older bytes for several changed implementations. This is expected
 for an older candidate and establishes why a fresh expanded build is required.
 No 0.8.5 artifact was examined for this implementation task.
 
-## Remaining
-
 ## Integrated proof and API checkpoints
 
 - Six kernel variants are now selectable in the classical saved-model gate,
@@ -71,6 +69,11 @@ No 0.8.5 artifact was examined for this implementation task.
   new CLI tests, then 47 coverage/resource/CLI tests passed. The package import
   inventory reports every current root module reachable. No full native sweep
   was substituted for missing hardware evidence.
+- Experimental `models.ParallelCausalLM` is integrated with explicit layer
+  ownership, process-local weights/state and host activation transport. It
+  remains host-cache backed and still needs physical GPU/capacity qualification.
+  The public proof CLI accepts the explicit layer map. New focused tests after
+  integration: 33 passed, including strict capture comparison and CLI routing.
 
 ## Remaining execution
 

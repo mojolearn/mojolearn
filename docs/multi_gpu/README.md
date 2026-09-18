@@ -18,6 +18,24 @@ qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 
+Loaded checkpoints have an explicit experimental layer-owner API:
+
+```python
+from mojolearn.models import ParallelCausalLM
+
+# Two-layer example: one device index for each checkpoint layer.
+with ParallelCausalLM.load(checkpoint_directory, layer_devices=(0, 1)) as model:
+    output_ids = model.generate(input_ids, 8)
+```
+
+Only assigned layers are constructed in each persistent worker. Activations
+cross devices through host memory; standard block caches remain host-backed.
+Loading currently materializes the checkpoint in parent RAM. This implements
+sequential layer distribution, not within-layer tensor parallelism, resident-KV
+capacity certification or a measured speedup. Physical two-GPU evidence is
+pending. Use `verify-causal-lm --device gpu --layer-devices 0 1 --output PATH`
+to capture the tiny two-layer proof through this route.
+
 The expanded 0.8.7 source also exposes fitted-model forecast scheduling:
 
 ```python

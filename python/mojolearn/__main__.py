@@ -103,7 +103,8 @@ def _causal_lm_dispatch(args):
     path = Path(args.output)
     if path.exists():
         raise ValueError('capture output already exists; choose a new path to preserve evidence')
-    result = proof.capture(args.device, tuple(args.formats))
+    options = {'layer_devices': args.layer_devices} if args.layer_devices is not None else {}
+    result = proof.capture(args.device, tuple(args.formats), **options)
     with path.open('x') as stream:
         json.dump(result, stream, indent=2)
         stream.write('\n')
@@ -138,6 +139,8 @@ def build_parser():
     lm.add_argument('--formats', nargs='+', choices=('float32', 'bfloat16', 'int8'),
                     default=['float32', 'bfloat16', 'int8'])
     lm.add_argument('--cpu-threads', type=int, default=1)
+    lm.add_argument('--layer-devices', nargs='+', type=int,
+                    help='experimental GPU layer-owner map, one device index per fixture layer')
     lm.set_defaults(func=_causal_lm_dispatch)
 
     v = sub.add_parser(

@@ -36,3 +36,15 @@ def test_compare_never_runs_model(tmp_path, monkeypatch, equal, exit_code):
 def test_requires_an_explicit_action():
     with pytest.raises(SystemExit):
         cli.build_parser().parse_args(['verify-causal-lm'])
+
+
+def test_distributed_capture_routes_explicit_layer_map(tmp_path, monkeypatch):
+    calls = []
+    def capture(device, formats, **kwargs):
+        calls.append((device, kwargs))
+        return {'status': 'CAPTURED_UNQUALIFIED'}
+    monkeypatch.setattr(proof, 'capture', capture)
+    args = cli.build_parser().parse_args(['verify-causal-lm', '--device', 'gpu',
+        '--layer-devices', '1', '0', '--output', str(tmp_path/'distributed.json')])
+    assert args.func(args) == 0
+    assert calls == [('gpu', {'layer_devices': [1, 0]})]
