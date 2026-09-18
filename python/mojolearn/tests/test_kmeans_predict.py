@@ -113,10 +113,12 @@ def arm_refuse(rep):
     rep.raises("REFUSE", ValueError, "features", "a feature count other than the fit's", m.predict, x[:, :3])
     rep.raises("REFUSE", Exception, "", "a 1-D X", m.predict, x[0])
     rep.raises("REFUSE", ValueError, "X is empty", "an empty X", m.predict, np.zeros((0, 4), dtype=np.float32))
-    cos = KMeans(n_clusters=2, metric="cosine")
-    cos.cluster_centers_ = np.asarray(m.cluster_centers_)
-    rep.raises("REFUSE", Exception, "L2Expanded or L2SqrtExpanded",
-               "metric='cosine' predict is refused BY NAME, as its fit is", cos.predict, x)
+    # cosine was deleted 2026-09-18; an unsupported metric CODE must still be
+    # refused by the kernel rather than accepted and ignored.
+    bad = KMeans(n_clusters=2, metric=2)
+    bad.cluster_centers_ = np.asarray(m.cluster_centers_)
+    rep.raises("REFUSE", Exception, "L2Expanded (0) and L2SqrtExpanded",
+               "an unsupported metric code predict is refused BY NAME, as its fit is", bad.predict, x)
     bad = KMeans(n_clusters=2, metric="manhattan")
     bad.cluster_centers_ = np.asarray(m.cluster_centers_)
     rep.raises("REFUSE", ValueError, "metric must be", "an unknown metric name", bad.predict, x)

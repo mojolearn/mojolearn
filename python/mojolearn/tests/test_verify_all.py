@@ -41,7 +41,7 @@ def test_shipped_table_loads_and_is_small():
     # closed the optional properties took the table from 6,680 cell parts to
     # 15,426: `stepfull`, `batchgrad`, `batchscale`, `ragged` and `rlpair` are
     # emitted now, where before only the four default parts were, and every
-    # registered lane has a cell on every fixture (2,061 = 229 x 9). 1.21 MB
+    # registered lane has a cell on every fixture (2,052 = 228 x 9). 1.21 MB
     # for 2.3x the content is proportionate, and the old 1 MB would be met
     # only by dropping parts a user can check.
     #

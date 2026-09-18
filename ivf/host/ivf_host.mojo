@@ -85,7 +85,6 @@ from cluster.host.kmeans_oracle import (
     DEFAULT_OVERSAMPLING,
     DEFAULT_TOL,
     INIT_KMEANS_PLUS_PLUS,
-    METRIC_COSINE_EXPANDED,
     KMeansHostTrace,
     host_assign,
     host_fit_main,
@@ -110,6 +109,7 @@ from ivf.impl.neighbors.ivf_common import (
     postprocess_neighbors,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    METRIC_COSINE_EXPANDED,
     IvfFlatIndexParams,
     IvfFlatSearchParams,
     ivf_index_params_validate,

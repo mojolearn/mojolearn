@@ -84,8 +84,6 @@ def test_kmeans_is_a_declared_inference_lane_and_no_longer_owed():
     for lane in ("kmeans", "kmeans-random", "kmeans-array", "kmeans-weighted",
                  "kmeans-sqrt", "kmeans-classic-pp"):
         assert lane in declared, f"{lane} is not a declared inference lane"
-    # kmeans-cosine has no fitted model to save: its fit is refused by name.
-    assert "kmeans-cosine" not in declared
     assert "kmeans" not in host_surface.saved_model_inference_owed()
 
 
