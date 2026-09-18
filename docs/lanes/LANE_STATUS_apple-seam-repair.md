@@ -251,3 +251,28 @@ Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-card-pinned/`.
 
   A real price on the classical GEMM paths, measured in isolation. Not yet
   expressed as a share of any estimator's fit time (unmeasured).
+
+## RESULT 8: NVIDIA and AMD device code, main vs branch (cross-compiled on the M4, no rental)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-xasm/`. Five GEMM
+programs (gemm_step_price_main, gemm_device_check, lanes_price_main,
+gemm_lowbit_check, gram_outputs_parallel_check) built `--emit asm` for sm_90a
+and gfx942 with origin/main's five changed files and with the branch's, in
+ONE worktree path (`devcmp.txt`):
+- **NVIDIA sm_90a: every embedded PTX module is byte-identical** (44 to 421
+  modules per program); host asm differs only in integer immediates (source
+  line numbers baked into error paths).
+- **AMD gfx942: NOT byte-identical.** 5 to 8 code objects per program differ;
+  in gemm_device_check the 5 are the TUNED kernels (LDS 9,216 to 40,960 B).
+  Per-kernel GCN sidecars (`gcn-diff-*.txt`, `fpcmp.txt`): the floating-point
+  opcode multiset is equal in every differing kernel; 3 of 5 differ only in
+  register assignment/order, 2 in integer address arithmetic
+  (v_lshlrev_b64 / v_subb / v_lshl_add_u64 / s_mov / s_nop counts). So the
+  AMD arithmetic is unchanged by construction and by opcode count, but the
+  byte-level claim does NOT hold on AMD; the AMD runtime proof (card + probe
+  + boundary check on an MI300X) is required and is pending Hot Aisle stock
+  (RunPod AMD create returned HTTP 500). Cause under test (gcn3.sh): the
+  tuned kernel's always-declared admission registers or the
+  `_tuned_step_admitted` wrapper.
+- Apple: the gemm_device_check metallib differs (59 of 66 modules), as it
+  must: the check can fail.
