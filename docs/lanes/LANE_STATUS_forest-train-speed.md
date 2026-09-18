@@ -153,6 +153,23 @@ and tree count confirm or deny this below. Under
 DEVIATION 3022 the same 16-tree regressor fit went 44.85 s to 4.73 s (table
 above), so a 100-tree fit is about 30 s on this box.
 
+## Commands (the resume pod, 2026-09-18 01:37Z)
+
+    # from the worktree ~/mojolearn-wt/forest-train-speed at f1fe7057c
+    export MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key TREES_LEG_STATE=$HOME/mojolearn-evidence/forest-train-speed/pod
+    TREES_LEG_NAME=mojolearn-forest-train-speed TREES_LEG_CUDA_VERSIONS=13.0 \
+      MOJOLEARN_STAGE_KEYS="gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz" \
+      sh tools/trees_leg.sh rent --gpu "NVIDIA GeForce RTX 4090" --minutes 150
+    # BEFORE = git archive 86d33fcdf (main's forest sources are unchanged since), shipped as /root/before.tgz
+    # the chain: ~/mojolearn-evidence/forest-train-speed/pod2/resume.sh (setup, tree, fast, ab x3, profile x7)
+    sh tools/trees_leg.sh ssh 'nohup setsid bash /root/resume.sh > /root/leg_out/resume.out 2>&1 < /dev/null &'
+    sh tools/trees_leg.sh pull /root/leg_out/ ~/mojolearn-evidence/forest-train-speed/leg_out2/
+    sh tools/trees_leg.sh reap
+
+Every A/B process warms up at the timed size (`--warm-rows 0`), one timed fit
+per process, arms alternated, 5 rounds. Ledgers and the pinning table are read
+by `~/mojolearn-evidence/forest-train-speed/pod2/ledger.py`.
+
 ## Owed (the resume pod carries these)
 
 1. Interleaved A/B, 100 trees, ET classifier taxi 4.0M and Istella-S 2.0M,

@@ -100,7 +100,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.compile import is_defined
-from std.sys.info import size_of
+from std.sys.info import has_nvidia_gpu_accelerator, size_of
 
 from checks.numerics import ftz, identical_div, identical_mul
 from core.philox import launch_uniform_int
@@ -2994,6 +2994,49 @@ def _device_max_acc() -> Int:
         return 16
     return 32
 
+
+comptime REGRESSION_ACC_WIDTH = _regression_acc_width()
+"""DEVIATION 3023 (lane/forest-train-speed, 2026-09-18): the REGRESSION
+score pass is instantiated at width 4 on an NVIDIA build, not at
+`DEVICE_MAX_ACC` (32).
+
+WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod glxrxg2r9dlm6r, `nsys`
+kernel sums, 16-tree depth-16 fits after DEVIATION 3022). The regressor's
+score kernel instance (`STACK:256`, `cuobjdump -res-usage`) was 94.3 percent
+of the taxireg 4.0M x 16 fit at 96.4 ms a launch, against 1.74 ms a launch
+for the classifier's instance (`STACK:32`, the width-4 dispatch below) on the
+same rows, while the range kernel, one instance shared by both tasks, cost
+the two fits 187 and 83 ms over the same cells: the regressor's score pass was
+22.7x its own range pass where the classifier's was 1.5x. DEVIATION 2021
+priced the 32-wide private arrays (two `stack_allocation[MAX_ACC, Int32]`
+per thread, zeroed per block, in local memory) and gave CLASSIFICATION a
+4/8/16/32 dispatch in `search_batch`; `search_batch_regression` kept
+`comptime MAX_ACC = DEVICE_MAX_ACC` with `n_acc = 1`, so every regression
+block paid the 32-class frame. The width-4 arm (`-D MOJOLEARN_ET_MAX_ACC_4`,
+already an identity-gated arm of DEVIATION 2021) is what this flips for the
+regression pass alone; the classification dispatch is untouched.
+
+WHY NO BIT MOVES: DEVIATION 2021's reason. The arrays hold the same integers
+in the same slots and the unused tail was zeros folded through integer sums;
+the score and finalize kernels read `n_acc = 1` cells whatever the width, and
+both refuse a width below `n_acc`. `-D MOJOLEARN_ET_SAB_REG_ACC_WIDTH=1` is
+the arm that must move: the narrow regression instance publishes every
+accumulator sum plus one (`node_feature_score_kernel`), and the same define
+under `-D MOJOLEARN_ET_REG_ACC_32=1` (the 32-wide instance, the A/B's BEFORE)
+must NOT move, which places the sabotage inside the new path.
+
+NVIDIA only by default; `-D MOJOLEARN_ET_REG_ACC_4=1` opts another column
+in, `-D MOJOLEARN_ET_REG_ACC_32=1` restores the full width. Apple and AMD
+columns are owed at the next release."""
+
+
+def _regression_acc_width() -> Int:
+    if is_defined["MOJOLEARN_ET_REG_ACC_32"]():
+        return DEVICE_MAX_ACC
+    if has_nvidia_gpu_accelerator() or is_defined["MOJOLEARN_ET_REG_ACC_4"]():
+        return 4 if DEVICE_MAX_ACC >= 4 else DEVICE_MAX_ACC
+    return DEVICE_MAX_ACC
+
 comptime FOREST_SAB_NONE = Int32(0)
 comptime FOREST_SAB_SCALAR_TREE = Int32(1)
 """DEVIATION 211 sabotage: every item in a merged batch is staged with the
@@ -4819,7 +4862,8 @@ def search_batch_regression(
     (`builder.cuh:142`).
     """
     comptime TPB = DEVICE_TPB
-    comptime MAX_ACC = DEVICE_MAX_ACC
+    # DEVIATION 3023: the regression pass's own width, 4 on NVIDIA.
+    comptime MAX_ACC = REGRESSION_ACC_WIDTH
     var n_nodes = len(work_items)
     if n_nodes == 0:
         # DEVIATION 466: a best-first cycle can have NOTHING to search --

@@ -322,6 +322,8 @@ this); `-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for
 the A/B. Apple's default is already relaxed."""
 
 comptime SAB_RELAXED_PUBLISH = is_defined["MOJOLEARN_ET_SAB_RELAXED_PUBLISH"]()
+comptime SAB_REG_ACC_WIDTH = is_defined["MOJOLEARN_ET_SAB_REG_ACC_WIDTH"]()
+"""DEVIATION 3023's sabotage arm (`builder.mojo`, `REGRESSION_ACC_WIDTH`)."""
 
 
 @always_inline
@@ -1532,6 +1534,12 @@ def node_feature_score_kernel[
         _search_barrier()
         var bt = block_sum[block_size=TPB](priv_total[unsafe_offset=k])
         _search_barrier()
+        # DEVIATION 3023's sabotage: only the NARROW regression instance
+        # (the width the regression pass now dispatches) publishes plus one,
+        # so the same define on the 32-wide instance is its control.
+        comptime if SAB_REG_ACC_WIDTH and not CLASSIFICATION and MAX_ACC < 32:
+            bl += Int32(1)
+            bt += Int32(1)
         if Int(thread_idx.x) == 0 and publishes:
             _publish_add(out_acc_left, slot * n_acc + k, bl, single)
             _publish_add(out_acc_total, slot * n_acc + k, bt, single)
