@@ -55,7 +55,9 @@ def summarize(root):
     else: raise AssertionError('step gate accepted sabotage')
     for name, d in runs.items(): equal(base, d, name)
     summary = dict(corpus=base['corpus'], shape=SHAPE, steps=700,
-                   reported_window='steps 501-700; component timing at steps 701-710', arms={})
+                   reported_window='steps 501-700; component timing at steps 701-710',
+                   gemm_share_denominator='instrumented step at 701-710',
+                   instrumentation_note='Different step windows: their gap is NOT isolated instrumentation overhead.', arms={})
     for arm in ('base', 'class'):
         pure, timed = runs[arm+'-pure'], runs[arm+'-timers']
         late_ms = 1000*statistics.median(pure['steady_step_seconds'][499:])
@@ -69,9 +71,10 @@ def summarize(root):
         all_ms = statistics.median([sum(series[k][i] for k in all_gemm) for i in range(10)])
         env_ms = 1000*timed['component_timing_step_seconds']
         summary['arms'][arm] = dict(real_step_ms=late_ms, gemm_ms=all_ms,
-            gemm_share_pct=100*all_ms/late_ms, twelve_gemm_ms=gemm_ms,
+            gemm_share_pct=100*all_ms/env_ms,
+            gemm_share_of_late_pure_window_estimate_pct=100*all_ms/late_ms, twelve_gemm_ms=gemm_ms,
             gemm_tflops=1518.0/gemm_ms, instrumented_step_ms=env_ms,
-            instrumentation_pct=100*(env_ms/late_ms-1),
+            timed_vs_late_window_gap_pct=100*(env_ms/late_ms-1),
             windows_ms={f'{lo}-{lo+99}': 1000*statistics.median(
                 pure['steady_step_seconds'][lo-2:lo+98]) for lo in (101, 201, 301, 401, 501, 601)})
     b, c = [summary['arms'][a]['real_step_ms'] for a in ('base','class')]
