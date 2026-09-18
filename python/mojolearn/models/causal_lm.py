@@ -210,11 +210,12 @@ class CausalLMState:
     `max_tokens` (the capacity the transformer caches were allocated for)
     and `positions`, how many tokens each row has consumed."""
 
-    def __init__(self, batch_size, max_tokens, layers):
+    def __init__(self, batch_size, max_tokens, layers, *, owner=None):
         self.batch_size = int(batch_size)
         self.max_tokens = int(max_tokens)
         self.layers = list(layers)
         self.positions = 0
+        self._owner = owner
 
     def __repr__(self):
         return (f"CausalLMState(batch_size={self.batch_size}, max_tokens={self.max_tokens}, "
@@ -438,6 +439,8 @@ class CausalLM:
         if state is not None:
             if not isinstance(state, CausalLMState):
                 raise TypeError(f"mojolearn {what}: state must be a CausalLMState (allocate_state)")
+            if state._owner is not self:
+                raise ValueError(f"mojolearn {what}: state belongs to another model; allocate a state on this model")
             if state.batch_size != b or len(state.layers) != self.n_layers:
                 raise ValueError(
                     f"mojolearn {what}: the state holds {state.batch_size} rows and {len(state.layers)} layers, "
@@ -480,7 +483,19 @@ class CausalLM:
         layers = []
         for blk in self._blocks:
             layers.append(blk.allocate_state(b, smax) if self.kind == "transformer" else blk.allocate_state(b))
-        return CausalLMState(b, smax, layers)
+        return CausalLMState(b, smax, layers, owner=self)
+
+    def reset_state(self, state):
+        """Replace caches with fresh zero state, preserving capacity and batch size.
+
+        States are owned by their allocating model; cross-model reuse is refused.
+        """
+        if not isinstance(state, CausalLMState) or state._owner is not self:
+            raise ValueError("mojolearn CausalLM.reset_state: state belongs to another model")
+        fresh = self.allocate_state(state.batch_size, state.max_tokens)
+        state.layers = fresh.layers
+        state.positions = 0
+        return state
 
     def step(self, ids, state):
         """One decode token per row: `(B,)` or `(B, 1)` ids in, `(B, vocab)`
