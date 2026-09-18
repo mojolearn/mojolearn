@@ -74,6 +74,10 @@ timeout -k 10 300 env -u PYTHONPATH -u PYTHONHOME \
     "$VPY" "$ROOT/tools/classical_host_gate.py" --package-root '' \
     check "$OUT/umap-saved-models" --gpu-column "$OUT/umap-column.json" \
     --report "$OUT/umap-cpu-replay.json" > "$OUT/umap-cpu-replay.log" 2>&1
+expanded_args=(--expected-source-commit "$MOJOLEARN_COMMIT")
+if [[ -n "${MOJOLEARN_RELEASE_MULTI_GPU_DEVICES:-}" ]]; then
+    expanded_args+=(--multi-gpu-devices "$MOJOLEARN_RELEASE_MULTI_GPU_DEVICES")
+fi
 timeout -k 10 900 "$VPY" "$ROOT/tools/qualify_verifier_wheel.py" "$WHEEL" \
-    --python "$VPY" --output "$OUT/verifier-cli" > "$OUT/verifier-cli.log" 2>&1
+    --python "$VPY" "${expanded_args[@]}" --output "$OUT/verifier-cli" > "$OUT/verifier-cli.log" 2>&1
 printf '0\n' > "$OUT/exit_code"
