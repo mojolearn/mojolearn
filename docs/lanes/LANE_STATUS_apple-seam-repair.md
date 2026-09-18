@@ -137,3 +137,24 @@ in the contract order and fold (`_rtf_cell`, `_rtf_leaf_partial`). Test arm
 `-D MOJOLEARN_GEMM_ADMIT_NEVER=1` forces every block onto the exact path.
 New check `gemm/checks/gemm_rtf_boundary_check.mojo` compares whole device
 GEMMs on adversarial-word matrices with the host oracle (rtf), five plans.
+
+## RESULT 3: whole-GEMM boundary check on Apple (2026-09-18, one Metal slot, 35 s)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-gemm-rtf-boundary-check/`.
+`gemm/checks/gemm_rtf_boundary_check.mojo`, four builds of the same source in
+the same directory, five plans each (dispatcher, FLAT, TUNED 64 reg4x4, TUNED
+128 reg8x8, SPLIT 128 reg8x8), seven fixtures, device bits vs host oracle:
+
+| build | failing plan/case pairs |
+|---|---:|
+| no repair (`-D MOJOLEARN_NO_ZERO_FMA_REPAIR=1`) | **15** (pairs 8 cells, draw0 21, draw1 11, on every plan) |
+| block admission (the default) | 0 |
+| admission forced to fail (`-D MOJOLEARN_GEMM_ADMIT_NEVER=1`) | 0 |
+| inline per-step repair (`-D MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR=1`) | 0 |
+
+The check fails without the repair (first: cell (6,16) device 00000000,
+oracle 00800000). The default build passes on the same fixtures, so its
+exact block path is REACHED (its fast step alone is fbr). Fixtures draw2-4
+and `admitted` do not separate the arms (OK even unrepaired): they are
+coverage, not evidence. Device FNV hashes per case are printed for cross-column
+comparison (e.g. pairs `a62658ede5aff32e`, draw0 `941b9586f3f46787`).
