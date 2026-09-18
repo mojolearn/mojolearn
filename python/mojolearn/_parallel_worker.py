@@ -11,6 +11,9 @@ _forest_snapshot = None
 def execute(request):
     global _forest_snapshot
     operation, state, args = request
+    if operation == 'causal_lm_layer':
+        from ._causal_lm_worker import execute as run_layer
+        return run_layer(state, args)
     if operation == 'cpu_reference':
         # The pool wraps a request this way only on a CPU-only install and
         # only while its caller is inside reference_training() (the internal
