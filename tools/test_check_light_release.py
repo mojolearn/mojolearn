@@ -40,6 +40,21 @@ class LightReleaseTests(unittest.TestCase):
         self.assertEqual(result['status'], 'PASSED_LIGHT_RELEASE')
         self.assertFalse(result['full_numerical_certification'])
 
+    def test_explicit_platform_batch_keeps_its_full_smoke_required(self):
+        removed = self.reports.pop('cuda')
+        self.manifest['files'].pop(Path(removed['wheel']).name)
+        (self.root / Path(removed['wheel']).name).unlink()
+        self.write()
+        self.assertEqual(gate.check(self.root, self.commit, 'macos')['runtime_vendors'], ['metal'])
+        with self.assertRaises(ValueError):
+            gate.check(self.root, self.commit)
+        with self.assertRaises(ValueError):
+            gate.check(self.root, self.commit, 'linux')
+        self.reports['metal']['jobs'].pop()
+        self.write()
+        with self.assertRaisesRegex(ValueError, 'missing required smoke'):
+            gate.check(self.root, self.commit, 'macos')
+
     def test_altered_wheel_is_rejected(self):
         self.write()
         with (self.root / self.reports['cuda']['wheel']).open('ab') as f:

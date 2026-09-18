@@ -26,16 +26,17 @@ def digest(path):
     return h.hexdigest()
 
 
-def check(directory, source_commit):
+def check(directory, source_commit, platform="all"):
+    vendors = {"all": {"metal", "cuda"}, "macos": {"metal"}, "linux": {"cuda"}}[platform]
     directory = Path(directory)
     require(re.fullmatch('[0-9a-f]{40}', source_commit), 'invalid source commit')
     manifest = json.loads((directory / 'alpha-manifest.json').read_text())
     contract = manifest.get('light_smoke', {})
-    require(contract.get('source_commit') == source_commit, 'smoke source differs from release checkout')
+    require(contract.get('source_commit') == source_commit, 'smoke source differs from frozen release source')
     receipts = contract.get('receipts', {})
-    require(isinstance(receipts, dict) and len(receipts) == 2, 'Apple and NVIDIA smoke receipts required')
+    require(isinstance(receipts, dict) and len(receipts) == len(vendors), 'required platform smoke receipts missing')
     wheels = manifest.get('files', {})
-    require(isinstance(wheels, dict) and len(wheels) == 2, 'exactly two release wheels required')
+    require(isinstance(wheels, dict) and len(wheels) == len(vendors), 'exactly one wheel per selected platform required')
     seen_vendors, seen_wheels = set(), set()
     for name, expected in receipts.items():
         require(re.fullmatch(r'light-smoke-[a-z0-9-]+\.json', name), 'unsafe smoke filename')
@@ -49,7 +50,7 @@ def check(directory, source_commit):
         require(report.get('source_commit') == source_commit, 'receipt source mismatch')
         require(report.get('release_qualified') is False, 'smoke cannot claim full release qualification')
         vendor = report.get('installed', {}).get('vendor')
-        require(vendor in ('metal', 'cuda') and vendor not in seen_vendors, 'wrong or duplicate vendor')
+        require(vendor in vendors and vendor not in seen_vendors, 'wrong or duplicate vendor')
         wheel = Path(report.get('wheel', '')).name
         require(wheel in wheels and wheel not in seen_wheels, 'unlisted or duplicate wheel')
         require(('macosx' in wheel) if vendor == 'metal' else ('manylinux' in wheel), 'vendor/platform mismatch')
@@ -65,19 +66,20 @@ def check(directory, source_commit):
         require(report.get('expanded', {}).get('scope') == 'expanded', 'missing expanded API/loaded-model proof')
         seen_vendors.add(vendor)
         seen_wheels.add(wheel)
-    require(seen_vendors == {'metal', 'cuda'} and seen_wheels == set(wheels), 'incomplete artifact smoke')
+    require(seen_vendors == vendors and seen_wheels == set(wheels), 'incomplete artifact smoke')
     return {'status': 'PASSED_LIGHT_RELEASE', 'source_commit': source_commit,
             'wheels': wheels, 'runtime_vendors': sorted(seen_vendors),
             'full_numerical_certification': False,
-            'scope': 'Exact Apple/NVIDIA installed smoke; other architectures and experimental contracts are not newly certified'}
+            'scope': 'Exact installed smoke for the published platforms; other architectures and experimental contracts are not newly certified'}
 
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('directory', type=Path)
     parser.add_argument('--source-commit', required=True)
+    parser.add_argument('--platform', choices=('all', 'macos', 'linux'), default='all')
     args = parser.parse_args()
-    print(json.dumps(check(args.directory, args.source_commit), indent=2))
+    print(json.dumps(check(args.directory, args.source_commit, args.platform), indent=2))
 
 
 if __name__ == '__main__':

@@ -89,6 +89,21 @@ on:
           - full
           - light
 
+      light_platform:
+        description: Explicit platform batch for light publication; each wheel needs its own successful installed smoke.
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos
+          - linux
+      artifact_source_commit:
+        description: Optional frozen artifact source SHA when only publisher automation changed after the build.
+        required: false
+        default: ''
+        type: string
+
 # Deny by default. Every job adds back exactly what it needs, so a step that
 # starts wanting a token has to say so in a diff.
 permissions: {}
@@ -666,7 +681,10 @@ jobs:
           cat alpha-admission.json
       - name: Admit the exact prepared wheels under the light release policy
         if: inputs.validation_profile == 'light'
-        run: python3 tools/check_light_release.py dist --source-commit "$GITHUB_SHA"
+        env:
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
+        run: python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mojolearn-alpha-wheel
@@ -719,6 +737,8 @@ jobs:
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
           VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
         run: |
           set -euo pipefail
           cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
@@ -729,7 +749,7 @@ jobs:
           timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
             dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
           if [ "$VALIDATION_PROFILE" = light ]; then
-            python3 tools/check_light_release.py dist --source-commit "$GITHUB_SHA"
+            python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
           fi
           rm dist/alpha-manifest.json
           rm -f dist/light-smoke-*.json

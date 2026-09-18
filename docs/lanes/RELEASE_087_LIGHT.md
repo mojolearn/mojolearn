@@ -7,7 +7,7 @@ Do not claim universal Apple identity or promote pending references merely to
 publish. Existing boundary discrepancies remain unresolved outside certified
 workloads.
 
-The `light` workflow profile admits prepared alpha API artifacts only. It
+The `light` workflow profile admits prepared alpha API artifacts only. Its default combined batch
 requires the normal wheel content/RECORD/native-inventory admission and two
 SHA-bound successful `qualify_verifier_wheel.py` receipts: one exact macOS wheel
 on Metal and one exact Linux wheel on CUDA. Both must contain the frozen source
@@ -32,3 +32,17 @@ Main reconciliation restored the existing GEMM temporary-workspace allocation
 that a partial SIMD revert had replaced with a refusal. This preserves the
 previous main behavior for valid plans requiring more workspace than the
 transpose buffer; arithmetic is unchanged.
+
+## Independent platform publication
+
+For this alpha release, ready platforms may publish independently. The default
+light batch still requires both wheels; an explicit `light_platform=macos` or
+`linux` requires exactly that platform's wheel and its complete successful smoke
+receipt. Linux is added to the same version once ready; an existing filename is
+never overwritten or silently skipped. This changes scheduling, not the smoke
+required of each published wheel.
+
+`artifact_source_commit` pins the already-built source when publisher-only tools
+change after the freeze. It must match the SHA-bound receipt and embedded wheel
+witness. For 0.8.7 the native/Python inputs remain the frozen `4e1828f90` tree;
+publisher automation changes do not justify rebuilding those identical inputs.

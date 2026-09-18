@@ -255,7 +255,7 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
     if smoke is not None:
         require(isinstance(smoke, dict) and set(smoke) == {'source_commit', 'receipts'}
                 and re.fullmatch('[0-9a-f]{40}', str(smoke['source_commit']))
-                and isinstance(smoke['receipts'], dict) and len(smoke['receipts']) == 2,
+                and isinstance(smoke['receipts'], dict) and 1 <= len(smoke['receipts']) <= 2,
                 'invalid light smoke contract')
         smoke_files = smoke['receipts']
         for name, expected in smoke_files.items():
