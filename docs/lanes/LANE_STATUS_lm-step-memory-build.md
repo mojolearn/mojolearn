@@ -11,6 +11,67 @@ Every device number below is someone else's measurement and is attributed.
 
 ---
 
+## VERDICT, H100 leg 2026-09-18: all seven checks PASS, hypothesis CONFIRMED
+
+Filed at `bench/results/e1g/2026-09-18_lm-ce-alias-nvidia-h100/`
+(`remote/lm-ce-alias/verdict.json`). Pod 4tshk1f4ioag5k, sm_90a, commit
+131568247, 60-minute lease, terminated and verified gone.
+
+| check | result | evidence |
+|---|---|---|
+| `ce_arms_are_two_arms` | PASS | `ce_aliased` `[true, false]` read from inside each process |
+| `ce_bits_unmoved` | PASS | 5 steps, six hashes each, 0 differing |
+| `ce_memory_moved` | PASS | aliased 15,153 MiB vs unaliased 16,177 MiB |
+| `eager_witness_moves` | PASS | 0/8 grown fused (288 B) vs 8/8 eager (5,905,580,032 B) |
+| `eager_hypothesis_not_falsified` | PASS | verdict CONFIRMED |
+| `resume_matches` | PASS | 162M resume across a process boundary, 0 differing |
+| `resume_control_separates` | PASS | see below |
+
+### Rank 3, MEASURED: 1,024 MiB, not the 1,178 MiB I predicted
+
+The aliasing saves **1,024 MiB of device peak at B1/L2048/V50257** (15,153
+against 16,177 MiB), with every one of five steps' loss, gradient, parameter,
+`m`, `v` and `flags` hashes equal across the two arms and the two arms proved
+distinct by `ce_aliased`.
+
+**The prediction was 1,178 MiB and the measurement is 1,024 MiB, and the
+measurement is the number.** `3 * M * V * 4` is 1,178 MiB of buffer; what
+nvidia-smi reports is device-wide pool occupancy in MiB, which moves in
+allocator granularity rather than in request sizes. The 154 MiB gap is not
+explained here and is not worth a claim either way; what matters is that the
+peak MOVED, which is what the check exists to catch, and that it moved by
+about the right amount.
+
+### The binary checkpoint at 162,147,840 parameters, through the device
+
+`1,945,779,645 bytes` written in 13.3 s, which is exactly
+`12 * 162,147,840 + 4 * 110 + 5,125` (payload, flags, and magic plus header
+plus digests). The file's on-disk SHA-256 after two further processes had
+opened and read it equals the digest recorded at save time.
+
+`resume_matches`: the resumed tail equals the uninterrupted run hash for hash.
+`resume_control_separates`, exactly where the arithmetic says it must:
+
+    completed_steps 4   differ = [parameters, m, v]
+    completed_steps 5   differ = [loss, gradients, parameters, m, v]
+
+The first resumed step's loss and gradient MATCH because the parameters were
+restored correctly and the moments only enter the update; by the second step
+the divergence has reached the loss. That is the signature
+`lane/lm-training-shakedown` measured independently, and it is why the
+moments are in the file.
+
+### A DEFECT IN MY OWN METRIC, reported rather than left to pass
+
+`eager_hypothesis.slowed` computes `seconds_tail_mean > 1.5 *
+seconds_head_mean` and read `0.4757` against `0.5081`, i.e. FALSE, on a run
+that demonstrably slowed from 0.206 s to 0.44 s. The head window includes
+step 0, which is 15.32 s of session setup, so the head mean is meaningless.
+The verdict did not depend on it (`memory_stepped` carried the outcome and the
+per-step table is in `witness-long/result.json`), but the flag as written
+cannot detect the thing it is named for and would read FALSE on any run.
+Fix: drop step 0 from the head window. OWED.
+
 ## 0. CONFIRMED: the unexplained 2.03x is the eager attention fallback
 
 H100 sm_90a, pod 4tshk1f4ioag5k, commit 131568247, 2026-09-18, target shape
@@ -34,7 +95,8 @@ time and never being released.
 | 219 | 0.2332 | | 6 / 6 | 8,657,043,672 |
 | 300 | 0.3090 | 27,439 | 9 / 9 | 12,985,565,292 |
 | 309 | 0.3918 | | 11 / 11 | 15,871,246,372 |
-| 509 | 0.4386 | | **12 / 12** | **17,314,086,912** |
+| 456 | | | **12 / 12** | **17,314,086,912** (all twelve grown by here) |
+| 509 | 0.4386 | | 12 / 12 | 17,314,086,912 |
 | 699 | 0.4646 | 31,535 | 12 / 12 | 17,314,086,912 |
 
 **THE PREDICTION WAS WRITTEN DOWN BEFORE THE RUN AND IT LANDED ON THE BYTE.**
