@@ -68,9 +68,15 @@ def arm_metric(rep):
             m = KMeans(n_clusters=4, random_state=3, metric=metric).fit(xs)
             bad = _label_not_argmin(xs, m.cluster_centers_, m.labels_)
             rep.check("METRIC", bad == 0, f"{metric} on {name}: every label is the argmin to the returned centers", f"{bad} of {len(xs)} are not")
-    rep.raises("METRIC", Exception, "L2Expanded or L2SqrtExpanded", "metric='cosine' is routed and REFUSED BY NAME on the Mojo host (kmeans_params.mojo::validate)",
+    # The cosine metric was DELETED 2026-09-18 (lane/kmeans-cosine-capability).
+    # What is checked now is the property its routed refusal existed to give:
+    # an unsupported metric is refused BY NAME and never accepted and ignored.
+    # A NAME is refused in Python, a CODE in Mojo, so both are asked.
+    rep.raises("METRIC", Exception, "metric must be one of", "metric='cosine' is no longer a metric and is refused by name",
                KMeans(n_clusters=4, metric="cosine").fit, x)
-    rep.raises("METRIC", Exception, "L2Expanded or L2SqrtExpanded", "metric='cosine_expanded' the same", KMeans(n_clusters=4, metric="cosine_expanded").fit, x)
+    rep.raises("METRIC", Exception, "metric must be one of", "metric='cosine_expanded' the same", KMeans(n_clusters=4, metric="cosine_expanded").fit, x)
+    rep.raises("METRIC", Exception, "L2Expanded (0) and L2SqrtExpanded", "metric=2, cosine's old code, is refused by the kernel",
+               KMeans(n_clusters=4, metric=2).fit, x)
     rep.raises("METRIC", ValueError, "metric must be", "an unknown metric name", KMeans(n_clusters=4, metric="manhattan").fit, x)
 
 

@@ -91,7 +91,6 @@ from cluster.impl.kmeans import predict
 from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
-    METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
 )
@@ -147,6 +146,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_build import (
     upload_f32,
 )
 from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
+    METRIC_COSINE_EXPANDED,
     IvfFlatIndex,
     IvfFlatIndexParams,
     IvfFlatSearchParams,

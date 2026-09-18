@@ -653,7 +653,6 @@ TRAINING_LANE_NAMES = {
     # kmeans-sqrt, kmeans-classic-pp and cross-val on every fixture.
     "kmeans-sqrt": "k-means under the rooted euclidean metric",
     "kmeans-classic-pp": "k-means from the classic k-means++ start",
-    "kmeans-cosine": "the refusal of k-means under cosine distance",
     "cross-val": "cross-validation of gradient boosting",
     # lane/cpu-training-misc batch 2 (2026-09-15): the resampling functions
     # through the resample family's own host binding
@@ -1170,7 +1169,7 @@ FAMILIES = (
             "kmeans-weighted", "knn-sqeuclidean", "knn-clf-distance", "knn-reg-distance",
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
-            "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
+            "kmeans-sqrt", "kmeans-classic-pp",
             "par-queries-knn", "par-queries-nn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
         ),
@@ -1181,8 +1180,10 @@ FAMILIES = (
         # lanes, from a saved `mojolearn-kmeans-1` file through `HostKMeans`
         # on this binding (`kmeans_predict` and `kmeans_transform`, the
         # arithmetic of cluster/host/kmeans_oracle.mojo). One format carries
-        # every metric and every start. `kmeans-cosine` is NOT an inference
-        # lane: its fit is refused by name, so there is no model to save.
+        # every metric and every start, and since 2026-09-18
+        # (lane/kmeans-cosine-capability) the SIX fitted k-means lanes are
+        # the whole set: the seventh, `kmeans-cosine`, was a refusal with no
+        # model to save, and the metric behind it was deleted.
         inference_lanes=("knn", "knn-clf", "knn-reg", "knn-sqeuclidean", "knn-manhattan",
                          "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
                          "knn-clf-distance", "knn-reg-distance", "radius", "radius-manhattan",
