@@ -104,6 +104,21 @@ predicted to match NVIDIA per step AND per layer, not only in total:
   the flip; speed is reported either way).
 - An AMD zdot CORNER or zdot site anywhere falsifies prediction 1 above.
 
+## NVIDIA native gates on the flipped source: PASS (pod ur4bbe8u4pe9wr, 404 verified)
+
+Commit a9584a477, H100. `nvidia_gates/remote/attn-replay-extra/gates_verdict.txt`:
+row-off control (LEGACY_CORNER) fails "masked-tail repair disabled: INERT";
+SAB_Z / SAB_DQ fail with fused=0x80000000 eager=0x00000000; preserve
+corruptions fail with fused=0x00000000 eager=0x80000000; dk/dv tail sabotage
+fails "no_tail accepted dk differs at 0 fused=0x00000000 eager=0x80000000".
+Then clean masked-tail, tail-guard and broad fused gates PASS.
+
+Reduced HD64 witness [1,256,128,2,2,64,256,2,256], seed 20260917, enwik8,
+100 steps: default == legacy on all 100 losses and 5 witnessed steps. Every
+forward/backward status RAN, zero replay sites: the replay is INERT at this
+shape (no corner occurs). It is a cross-column fused-HD64 witness, not a
+replay witness; the replay's own evidence is the native fixtures.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
