@@ -2733,12 +2733,12 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: NOT mean nothing is left to implement. A new `save` that ships without a
 #: recording belongs here, with the reason, rather than nowhere.
 SAVED_MODEL_INFERENCE_OWED = {
-    "kernel-ridge-poly": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
-    "kernel-ridge-sigmoid": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
-    "kernel-ridge-laplacian": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
-    "nystroem-poly": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
-    "nystroem-sigmoid": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
-    "nystroem-laplacian": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "kernel-ridge-poly": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-sigmoid": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-laplacian": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-poly": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-sigmoid": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-laplacian": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
 }
 
 
