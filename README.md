@@ -251,15 +251,13 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **<!--fact:published_version-->0.8.5<!--/fact--> is published on PyPI** as an alpha API release, a macOS arm64
-wheel and one Linux x86-64 wheel that now carries **CUDA sm_89, CUDA sm_90 and
-HIP gfx942** together, the tree bindings in all three numeric modes and every other binding in identical only, plus the
-identical-mode byte-LM trainer extension per architecture. NVIDIA Linux is no
-longer source-build-only. For 0.8.3 the installed Linux wheel passed its
-identical qualification jobs on HIP gfx942 and CUDA sm_90a (all 29 smoke lanes
-with equal hashes on both) and an installed SVC fit check on an H100; sm_89 was
-not qualified installed, and the fast and deterministic qualification jobs do
-not run on the 0.8 release line. The wheels expose public `linalg`, `umap`, `training`,
+Version **<!--fact:published_version-->0.8.5<!--/fact--> is published on PyPI** as a macOS arm64
+wheel and one Linux x86-64 wheel carrying CUDA and HIP together. The 0.8.7
+release targets **CUDA sm_89, CUDA sm_90a and HIP gfx942**, with the tree bindings
+in all three numeric modes, every other GPU binding in identical mode, and
+all 32 CPU host bindings. Its release gates require installed-wheel checks on
+all three Linux architectures, including the tree bindings' three numeric modes.
+The wheels expose public `linalg`, `umap`, `training`,
 Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
@@ -374,8 +372,8 @@ is Apache-2.0.
 
 ### Check the claims on your machine
 
-The commands below describe the 0.8.7 release candidate; older published wheels
-do not contain this full verifier. Inspect `verify --coverage` for the installed
+The commands below describe the 0.8.7 verifier; earlier wheels do not contain
+this full verifier. Inspect `verify --coverage` for the installed
 package's 246 appendix entries, additional lanes, missing references and batch
 contracts. Mappings are not certification. `verify --batch-checks` additionally
 runs gradient, batch-size, ragged-batch and sampler/replay probes; see [the verification guide](docs/VERIFY.md).
