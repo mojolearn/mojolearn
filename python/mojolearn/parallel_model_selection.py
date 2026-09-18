@@ -9,6 +9,7 @@ import pickle
 from . import _backend
 from ._array import Array
 from ._parallel_pool import DevicePool
+from ._gpu_witness import require_distinct_workers
 from .model_selection import _clone, _prepare_folds, _take_rows
 
 __all__ = ['cross_val_score']
@@ -35,7 +36,8 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     Fold indices are host metadata. There is no distributed CPU fit route.
     """
     pool = DevicePool(devices)
-    if _backend.vendor() not in ('cuda', 'hip'):
+    vendor = _backend.vendor()
+    if vendor not in ('cuda', 'hip'):
         raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
     prototype = _clone(estimator)
@@ -50,6 +52,8 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     scores = []
     try:
         width = len(pool.devices)
+        inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])
+        require_distinct_workers(inventory, vendor, width)
         for start in range(0, len(folds), width):
             requests = []
             for train, test in folds[start:start + width]:

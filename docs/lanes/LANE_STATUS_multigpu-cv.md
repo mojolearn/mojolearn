@@ -35,3 +35,19 @@ Inventory alone must never be labeled evidence of kernel execution. Add an
 actual-execution witness before admitting this as qualified multi-GPU coverage.
 The module is not re-exported at the top-level API and no verifier lane is
 promoted or release artifact changed by this feature branch.
+
+## Driver inventory checkpoint
+
+Added _gpu_witness.visible_gpu_inventory for CUDA Driver/HIP Runtime UUID,
+PCI bus ID, visible ordinal, device name, worker PID and visibility-mask readback.
+CV queries every worker before dispatching folds and requires exactly one visible
+GPU per worker, unique UUIDs, unique PCI devices and unique worker processes.
+This rejects mixed index/UUID aliases and two MIG instances on one PCI device.
+Inventory is placement evidence only; it is not a kernel-execution trace.
+The driver API signatures are linked in the source to NVIDIA and AMD references.
+
+Updated contract tests: 66 passed, 10 optional sklearn tests skipped. These use
+fake driver C calls and fake worker fits. Actual NVIDIA/AMD driver loading and
+physical scheduling remain untested. Keep the feature off main. Next is the
+one-vs-two-device numerical/placement runner with retained per-fold model and
+prediction hashes; actual-execution tracing remains a separate admission gate.

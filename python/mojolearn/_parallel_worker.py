@@ -11,6 +11,10 @@ _forest_snapshot = None
 def execute(request):
     global _forest_snapshot
     operation, state, args = request
+    if operation == 'device_inventory':
+        from . import _backend
+        from ._gpu_witness import visible_gpu_inventory
+        return visible_gpu_inventory(_backend.vendor())
     if operation == 'cross_val_fold':
         from . import _backend
         from .model_selection import _fit_score_fold

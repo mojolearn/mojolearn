@@ -62,6 +62,11 @@ def setup(monkeypatch):
             instances.append(self)
 
         def map(self, requests):
+            if all(request[0] == 'device_inventory' for request in requests):
+                return [dict(kind='visible-device-inventory', vendor='cuda', pid=100 + device,
+                             devices=[dict(ordinal=0, uuid=f'{device + 1:032x}',
+                                           pci_bus_id=f'0000:{device + 1:02x}:00.0')])
+                        for device in self.devices]
             # Pickle boundaries prevent a fake in-process worker from hiding
             # accidental fitted-state or mutable-parameter sharing.
             self.widths.append(len(requests))
@@ -183,6 +188,8 @@ def test_fit_failure_closes_pool(setup):
                 raise RuntimeError('GPU worker failed: ' + str(exc)) from exc
         class FailingPool(parallel.DevicePool):
             def map(self, requests):
+                if requests[0][0] == 'device_inventory':
+                    return super().map(requests)
                 return failed_map(requests)
         original = parallel.DevicePool
         parallel.DevicePool = FailingPool
@@ -242,3 +249,17 @@ def test_visible_device_order_and_hip_filter_are_preserved(setup, monkeypatch, v
             assert all(other not in env for env in started)
     finally:
         pool.close()
+
+
+def test_physical_alias_refused_before_fits_and_pool_closed(setup, monkeypatch):
+    X, y, pools = setup
+    class AliasedPool(parallel.DevicePool):
+        def map(self, requests):
+            assert all(request[0] == 'device_inventory' for request in requests)
+            records = super().map(requests)
+            records[1]['devices'] = records[0]['devices']
+            return records
+    monkeypatch.setattr(parallel, 'DevicePool', AliasedPool)
+    with pytest.raises(RuntimeError, match='repeated physical device'):
+        parallel.cross_val_score(Estimator(), X, y, devices=(0, 1))
+    assert pools[-1].closed and not pools[-1].widths
