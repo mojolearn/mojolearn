@@ -145,6 +145,7 @@ from gemm.checks.gemm_oracle import (
     fold_node_total,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.rtf_seam import rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     PINNED_ACC_COLS_PER_TH,
@@ -665,12 +666,10 @@ def identical_gemm_flat_kernel(
             # operands flushed as loaded (5a, 5b) and the accumulator flushed
             # after every step (5c). No sub-partition of a leaf -- section
             # 7.1's clause about register tiling and vectorization.
-            acc = ftz(
-                identical_mul_add(
-                    ftz(a.unsafe_load(a_row + p * a_sp)),
-                    ftz(b.unsafe_load(p * b_sp + b_col)),
-                    acc,
-                )
+            acc = rtf_mul_add(
+                ftz(a.unsafe_load(a_row + p * a_sp)),
+                ftz(b.unsafe_load(p * b_sp + b_col)),
+                acc,
             )
         # 5d: the leaf partial as written.
         var part = ftz(acc)
@@ -834,12 +833,10 @@ def identical_gemm_tiled_kernel[
                 # Contract 7.1 again, character for character the FLAT
                 # plan's step with the two loads served from threadgroup
                 # memory. Seams 5a, 5b, 5c.
-                acc = ftz(
-                    identical_mul_add(
-                        ftz(as_[unsafe_offset = r * KS + cc3]),
-                        ftz(bs_[unsafe_offset = cc3 * TN + s]),
-                        acc,
-                    )
+                acc = rtf_mul_add(
+                    ftz(as_[unsafe_offset = r * KS + cc3]),
+                    ftz(bs_[unsafe_offset = cc3 * TN + s]),
+                    acc,
                 )
             barrier()
             p += chunk
@@ -938,12 +935,10 @@ def identical_gemm_leaf_kernel(
     var a_row = i * a_si
     var b_col = j * b_sj
     for p in range(bounds[0], bounds[1]):
-        acc = ftz(
-            identical_mul_add(
-                ftz(a.unsafe_load(a_row + p * a_sp)),
-                ftz(b.unsafe_load(p * b_sp + b_col)),
-                acc,
-            )
+        acc = rtf_mul_add(
+            ftz(a.unsafe_load(a_row + p * a_sp)),
+            ftz(b.unsafe_load(p * b_sp + b_col)),
+            acc,
         )
     var slot = t
     comptime if SAB_NODE_ORDER:
@@ -1266,7 +1261,10 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         ](rounded, Float32(1.0))
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
-    return ftz(identical_mul_add(a, b, acc))
+    # Apple (lane/apple-seam-repair): the native FMA flushes before rounding;
+    # `rtf_mul_add` repairs the signed-zero boundary case exactly and is the
+    # plain `ftz(identical_mul_add(...))` on every other column.
+    return rtf_mul_add(a, b, acc)
 
 
 
