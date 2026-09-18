@@ -1,12 +1,40 @@
 # Attention fallback: exact replay and bounded storage
 
-Current measured result: H100 enwik8 700-step replay trial matches every loss
-and checkpoint witness, removes all 3697 backward CORNER refusals, improves
-late median 0.456855 -> 0.199255 seconds, and lowers device use 31537 ->
-15153 MiB. NVIDIA and AMD match at all 130 explicit native repair/preservation
-sites, with observed failing controls. Apple has compile evidence only.
-The NVIDIA default is enabled on this branch; two-corpus final qualification
-and B4 2000-step endurance are running before main merge.
+The NVIDIA default passed paired 700-step training on both pinned R2 corpora.
+Every loss and all six FP32/state witnesses at steps 0 and 699 match legacy.
+
+| B1 corpus | Legacy tail seconds | Default tail seconds | Speedup | Device MiB before → after | Backward CORNER before → after |
+|---|---:|---:|---:|---:|---:|
+| enwik8 | 0.455438880 | 0.197156515 | 2.3100x | 31537 → 15153 | 3697 → 0 |
+| Pile GitHub | 0.377133856 | 0.196830695 | 1.9160x | 30257 → 15153 | 1768 → 0 |
+
+Two-corpus geometric-mean speedup: 2.1038x. All 8400 forward observations
+per corpus/arm are RAN; default backward is also 8400 RAN per corpus. Zero
+regime refusals. Default eager storage is 432 bytes after every step;
+aexp stays separate at 2415919104 bytes. Legacy eager storage ends at
+17314086912 bytes (English) / 15871246372 bytes (code).
+
+B4 enwik8 completed 2000 steps with finite losses and zero refusals in all
+24000 forward and 24000 backward observations. Last-200 median 0.664205971
+seconds (12333.5 tokens/s); sampled device peak and tail 38959 MiB. Eager
+storage stays 432 bytes; aexp stays 9663676416 bytes. dQ replay is active in
+13609 layer-steps; zdot replay is INERT in training. The separate same-device
+B1/B4 timing and B4 legacy-reference bit comparison is still running before
+main merge; do not infer its multiplier from these different pods.
+
+The release-only English control also matches all 700 losses, each layer's
+original statuses, and all state hashes: tail 0.461724 seconds, sampled peak
+18497 MiB, eager storage 432 bytes after every step. It exercises automatic
+returns to fused execution after freeing scratch. It is a storage win, not a
+speed win. Default release is INERT when replay prevents all eager calls.
+
+NVIDIA and AMD match at all 130 explicit native repair/preservation sites,
+with observed failing controls; both native broad gates pass 15 cases.
+Apple has compile and host-mock evidence only, no GPU run. Raw comparisons,
+negative controls, source hashes, stage logs and verified teardown records
+are under [the evidence directory](../../bench/results/lm_attention_fallback_2026-09-18/).
+The numerical implementation tested is source 57cf16d61; later edits so far
+are documentation, comparison tools and the probe metadata-label correction.
 
 ## Initial registration (historical)
 
