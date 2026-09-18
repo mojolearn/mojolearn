@@ -1,0 +1,1125 @@
+mac_slot: waiting 0.0s for metal capacity
+mac_slot: waiting 30.1s for metal capacity
+mac_slot: waiting 60.2s for metal capacity
+mac_slot: waiting 90.2s for metal capacity
+mac_slot: waiting 120.3s for metal capacity
+mac_slot: waiting 150.4s for metal capacity
+mac_slot: waiting 180.5s for metal capacity
+mac_slot: waiting 210.5s for metal capacity
+mac_slot: waiting 240.6s for metal capacity
+mac_slot: waiting 270.6s for metal capacity
+mac_slot: waiting 300.7s for metal capacity
+mac_slot: waiting 330.7s for metal capacity
+mac_slot: waiting 360.9s for metal capacity
+mac_slot: waiting 391.0s for metal capacity
+mac_slot: waiting 421.2s for metal capacity
+mac_slot: admitted after 450.848s
+.....FFFFFFFFFFFFFFFF..........                                          [100%]
+=================================== FAILURES ===================================
+___________ test_kernel_host_reload_and_batch[sigmoid-3-KernelRidge] ___________
+
+family = 'KernelRidge', kernel = 'sigmoid', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba4')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x11227bb10>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the sigmoid kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+____________ test_kernel_host_reload_and_batch[sigmoid-3-Nystroem] _____________
+
+family = 'Nystroem', kernel = 'sigmoid', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba5')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x11260e990>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the sigmoid kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+__________ test_kernel_host_reload_and_batch[laplacian-3-KernelRidge] __________
+
+family = 'KernelRidge', kernel = 'laplacian', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba6')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x1126d0e90>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the laplacian kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+___________ test_kernel_host_reload_and_batch[laplacian-3-Nystroem] ____________
+
+family = 'Nystroem', kernel = 'laplacian', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba7')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x1126d16e0>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the laplacian kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-0-KernelRidge] _____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 0
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba8')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x1126d1f30>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+______________ test_kernel_host_reload_and_batch[poly-0-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 0
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba9')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x1126d2780>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-1-KernelRidge] _____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 1
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba10')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x112bf9250>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+______________ test_kernel_host_reload_and_batch[poly-1-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 1
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba11')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x112bf97f0>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-2-KernelRidge] _____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 2
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba12')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x116a8c9e0>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+______________ test_kernel_host_reload_and_batch[poly-2-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 2
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba13')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x116a8cf30>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-3-KernelRidge] _____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba14')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x1125cb130>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+______________ test_kernel_host_reload_and_batch[poly-3-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 3
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba15')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x11257b680>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-7-KernelRidge] _____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 7
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba16')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x112bead50>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+______________ test_kernel_host_reload_and_batch[poly-7-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 7
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba17')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x112beaa50>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+____________ test_kernel_host_reload_and_batch[poly-32-KernelRidge] ____________
+
+family = 'KernelRidge', kernel = 'poly', degree = 32
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba18')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostKernelRidge object at 0x112be9e50>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def predict(self, X):
+        """`K(X, X_fit_) . dual_coef_` through the identical GEMM
+        (DEVIATION 1680). Returns float32, `(q,)` or `(q, n_targets)` as
+        `y` was."""
+        if not hasattr(self, "dual_coef_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before predict")
+        xq, _ = as_f32_c(X, ndim=2, name="X")
+        q, d = xq.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        n, t = self.X_fit_.shape[0], self.n_targets_
+        kernel, degree, gamma, coef0, alpha = self._kernel_params
+        flat_dual = self.dual_coef_.reshape((n * t,))
+        out = empty((q * t,), "<f4")
+>       self._extension().kernel_ridge_predict(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_predict_binding.
+            # x_fit, dual, x_new, out
+            [addr_ro(self.X_fit_, name="X_fit_"), addr_ro(flat_dual, name="dual_coef_"), addr_ro(xq, name="X"), addr(out, name="predict")],
+            # n, d, t, kernel, degree, gamma, coef0, alpha, info, q
+            [n, d, t, kernel, degree, gamma, coef0, alpha, self.info_, q],
+        )
+E       Exception: kernel_ridge: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:255: Exception
+_____________ test_kernel_host_reload_and_batch[poly-32-Nystroem] ______________
+
+family = 'Nystroem', kernel = 'poly', degree = 32
+tmp_path = PosixPath('/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/pytest-of-andrewhendel/pytest-97/test_kernel_host_reload_and_ba19')
+
+    @pytest.mark.parametrize('family', ['KernelRidge', 'Nystroem'])
+    @pytest.mark.parametrize('kernel,degree', [('linear', 3), ('rbf', 3), ('sigmoid', 3),
+        ('laplacian', 3), ('poly', 0), ('poly', 1), ('poly', 2), ('poly', 3), ('poly', 7), ('poly', 32)])
+    def test_kernel_host_reload_and_batch(family, kernel, degree, tmp_path):
+        cpu()
+        rng = np.random.default_rng(293)
+        X = (rng.standard_normal((24, 5)) * .125).astype('float32')
+        Q = (rng.standard_normal((7, 5)) * .125).astype('float32')
+        y = rng.standard_normal((24, 2)).astype('float32')
+        kwargs = dict(kernel=kernel, degree=degree, gamma=.5, coef0=.25)
+        if family == 'KernelRidge':
+            model = ml.KernelRidge(alpha=64., **kwargs)
+            method = 'predict'
+        else:
+            model = ml.Nystroem(n_components=7, random_state=3, **kwargs)
+            method = 'transform'
+        with reference_training():
+            model.fit(X, y)
+        expected = getattr(model, method)(Q)
+        path = tmp_path / 'model.npz'
+        model.save(path)
+        restored = ml.host_model(path)
+        assert restored.vendor_used() == 'cpu'
+        assert restored._kernel_params[1] == degree
+>       assert bits(expected) == bits(getattr(restored, method)(Q))
+                                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+python/mojolearn/tests/test_cpu_kernel_variants.py:61: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <mojolearn._classical_host.HostNystroem object at 0x112be9450>
+X = array([[-0.18904628, -0.25028595,  0.00949858,  0.04956248, -0.01169572],
+       [-0.00172711,  0.01718985,  0.0508691...18630229,  0.11783428],
+       [-0.02772649,  0.22063605,  0.1530329 , -0.05688902,  0.09893018]],
+      dtype=float32)
+
+    def transform(self, X):
+        """`K(X, components_) @ normalization_.T`, float32 `(m, n_components)`."""
+        if not hasattr(self, "components_"):
+            raise ValueError(f"mojolearn {self._WHERE}: call fit before transform")
+        x, _ = as_f32_c(X, ndim=2, name="X")
+        m, d = x.shape
+        if d != self.n_features_in_:
+            raise ValueError(
+                f"mojolearn {self._WHERE}: X has {d} features, the fit had {self.n_features_in_}"
+            )
+        q = self.components_.shape[0]
+        kernel, degree, gamma, coef0, seed = self._kernel_params
+        out = empty((m * q,), "<f4")
+        flat_c = self.components_.reshape((q * d,))
+        flat_n = self.normalization_.reshape((q * q,))
+        flat_e = self.eigenvectors_.reshape((q * q,))
+>       self._extension().nystroem_transform(
+            # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::nystroem_transform_binding.
+            # components, indices, normalization, eigenvalues, eigenvectors, x, out
+            [addr_ro(flat_c, name="components_"), addr_ro(self.component_indices_, name="component_indices_"),
+             addr_ro(flat_n, name="normalization_"), addr_ro(self.eigenvalues_, name="eigenvalues_"),
+             addr_ro(flat_e, name="eigenvectors_"), addr_ro(x, name="X"), addr(out, name="transform")],
+            # q, d, kernel, degree, gamma, coef0, seed, sweeps, m
+            [q, d, kernel, degree, gamma, coef0, seed, self.sweeps_, m],
+        )
+E       Exception: nystroem: the polynomial kernel has no CPU implementation; the kernel_methods host binding restates the linear and rbf kernels only, the two an identity lane diffs against the GPU columns. Run it on a GPU binding
+
+python/mojolearn/kernel_methods.py:405: Exception
+=========================== short test summary info ============================
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[sigmoid-3-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[sigmoid-3-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[laplacian-3-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[laplacian-3-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-0-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-0-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-1-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-1-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-2-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-2-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-3-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-3-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-7-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-7-Nystroem]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-32-KernelRidge]
+FAILED python/mojolearn/tests/test_cpu_kernel_variants.py::test_kernel_host_reload_and_batch[poly-32-Nystroem]
+16 failed, 15 passed in 1.19s
+mac_slot: {"wait_seconds": 450.84750737500144, "run_seconds": 1.7495740419981303, "exit_code": 1}

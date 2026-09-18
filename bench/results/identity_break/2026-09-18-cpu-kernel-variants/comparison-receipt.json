@@ -1,0 +1,155 @@
+{
+  "status": "PASSED",
+  "source_commit": "3f778b7fe03d843c16a305fac7b3c3a3e9f43d79",
+  "scope": "New kernel-family CPU and Apple source comparison; not installed-wheel or NVIDIA/AMD qualification",
+  "records": [
+    {
+      "arm": "cpu",
+      "lane": "kernel-ridge-poly",
+      "sha256": "5d7b6c2e5ca164b5587d212b652cc9880f8d00255540794e91df290539aa91dd"
+    },
+    {
+      "arm": "cpu",
+      "lane": "kernel-ridge-sigmoid",
+      "sha256": "62612c1516efa86d371af3511c8bbe13173a637322e3b47de29a61b639387cdd"
+    },
+    {
+      "arm": "cpu",
+      "lane": "kernel-ridge-laplacian",
+      "sha256": "796b8a2e59efaee399265e9c1826461164dbbc5a37f4542aadbb7d11ec1d3039"
+    },
+    {
+      "arm": "cpu",
+      "lane": "nystroem-poly",
+      "sha256": "0f84f0ee922c1bd6a7adf68d6ccede29e8eb02d0bbae0b120b216b3cc0aac1b2"
+    },
+    {
+      "arm": "cpu",
+      "lane": "nystroem-sigmoid",
+      "sha256": "9b361d3ac0152a81e07ce6921350fa9224cddc3fdffa99b896a5659ff73ddbe5"
+    },
+    {
+      "arm": "cpu",
+      "lane": "nystroem-laplacian",
+      "sha256": "f51ed9e5f23ed15f80794191965bc618b63df1fc48dc34af11fbb3b7b3ad9016"
+    },
+    {
+      "arm": "apple",
+      "lane": "kernel-ridge-poly",
+      "sha256": "facfa585933fc1eb2c8bebaab529eb30c2eeaf6959da93dbf638509d15eecc89"
+    },
+    {
+      "arm": "apple",
+      "lane": "kernel-ridge-sigmoid",
+      "sha256": "a97205ee65198a36a9fc1f2dc70a0ceb51a0a6f005ce92af7028ae17cc0875ea"
+    },
+    {
+      "arm": "apple",
+      "lane": "kernel-ridge-laplacian",
+      "sha256": "0ee3628c99455a951f50f32f33fe88deb58de081ac79f347616deac5f7a005a9"
+    },
+    {
+      "arm": "apple",
+      "lane": "nystroem-poly",
+      "sha256": "e46a58a2fe6625f023f94d81b2be0849c9bf9d3b00a110e747961c961f46b2f3"
+    },
+    {
+      "arm": "apple",
+      "lane": "nystroem-sigmoid",
+      "sha256": "a5de2412260149f48fba49b6075f637f9bb6aa27bce049e3be20b1fa65cab764"
+    },
+    {
+      "arm": "apple",
+      "lane": "nystroem-laplacian",
+      "sha256": "a2fe173dcd2ccee9392572834ce77f0194af9bdd9c3254f056fab24e56846982"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "kernel-ridge-poly",
+      "sha256": "6303346b716b59e695ada4b0959e9f755d87eac783dfd26620b26e9a076730cb"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "kernel-ridge-sigmoid",
+      "sha256": "84819c851265e3077a0bb2f42022bc917e196803ee9ed29c87037d793ca37175"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "kernel-ridge-laplacian",
+      "sha256": "49b15d2a34fb6dd0e781f7ed7174cb1814c036c4d444424cf5b05f7f45f4714c"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "nystroem-poly",
+      "sha256": "127595f9a9e80347d8ca1a1d663619927834fb2c31c05002fb242fa1a6c72ddd"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "nystroem-sigmoid",
+      "sha256": "e56f11cab18fb313fda6ade25252e49866c4dd661c6e88b39c82f4c0f3f754a1"
+    },
+    {
+      "arm": "sabotage",
+      "lane": "nystroem-laplacian",
+      "sha256": "519ee8c185b84fa4109326a1a3ed345907b6ea3463073c993dd2a7b08a7cf4a3"
+    }
+  ],
+  "reused_support_bindings_source": "aff968968f3ffc45844e36f3fd6260391eb829e5",
+  "matched_numerical_parts": 216,
+  "sabotage_changed_training_cells": [
+    "kernel-ridge-poly/base",
+    "kernel-ridge-poly/ties",
+    "kernel-ridge-poly/hashed",
+    "kernel-ridge-poly/wide",
+    "kernel-ridge-poly/denormal",
+    "kernel-ridge-poly/denormal_ftz",
+    "kernel-ridge-poly/dupes",
+    "kernel-ridge-poly/odd",
+    "kernel-ridge-poly/negative",
+    "kernel-ridge-sigmoid/base",
+    "kernel-ridge-sigmoid/ties",
+    "kernel-ridge-sigmoid/hashed",
+    "kernel-ridge-sigmoid/wide",
+    "kernel-ridge-sigmoid/denormal",
+    "kernel-ridge-sigmoid/denormal_ftz",
+    "kernel-ridge-sigmoid/dupes",
+    "kernel-ridge-sigmoid/odd",
+    "kernel-ridge-sigmoid/negative",
+    "kernel-ridge-laplacian/base",
+    "kernel-ridge-laplacian/ties",
+    "kernel-ridge-laplacian/hashed",
+    "kernel-ridge-laplacian/wide",
+    "kernel-ridge-laplacian/denormal",
+    "kernel-ridge-laplacian/denormal_ftz",
+    "kernel-ridge-laplacian/dupes",
+    "kernel-ridge-laplacian/odd",
+    "kernel-ridge-laplacian/negative",
+    "nystroem-poly/base",
+    "nystroem-poly/ties",
+    "nystroem-poly/hashed",
+    "nystroem-poly/wide",
+    "nystroem-poly/denormal",
+    "nystroem-poly/denormal_ftz",
+    "nystroem-poly/dupes",
+    "nystroem-poly/odd",
+    "nystroem-poly/negative",
+    "nystroem-sigmoid/base",
+    "nystroem-sigmoid/ties",
+    "nystroem-sigmoid/hashed",
+    "nystroem-sigmoid/wide",
+    "nystroem-sigmoid/denormal",
+    "nystroem-sigmoid/denormal_ftz",
+    "nystroem-sigmoid/dupes",
+    "nystroem-sigmoid/odd",
+    "nystroem-sigmoid/negative",
+    "nystroem-laplacian/base",
+    "nystroem-laplacian/ties",
+    "nystroem-laplacian/hashed",
+    "nystroem-laplacian/wide",
+    "nystroem-laplacian/denormal",
+    "nystroem-laplacian/denormal_ftz",
+    "nystroem-laplacian/dupes",
+    "nystroem-laplacian/odd",
+    "nystroem-laplacian/negative"
+  ]
+}

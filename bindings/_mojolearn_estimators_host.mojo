@@ -1138,6 +1138,7 @@ def kernel_ridge_predict_binding(
     var d = Int(py=params[1])
     var t = Int(py=params[2])
     var kernel = Int(py=params[3])
+    var degree = Int(py=params[4])
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
@@ -1146,7 +1147,7 @@ def kernel_ridge_predict_binding(
     var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
     with GILReleased(Python()):
         var out = kmh_kernel_ridge_predict(
-            x_fit, dual, n, d, t, kernel, gamma, coef0, x_new, q
+            x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q
         )
         for i in range(q * t):
             op.unsafe_store(i, out[i])
@@ -1180,6 +1181,7 @@ def nystroem_transform_binding(
     var q = Int(py=params[0])
     var d = Int(py=params[1])
     var kernel = Int(py=params[2])
+    var degree = Int(py=params[3])
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
@@ -1189,7 +1191,7 @@ def nystroem_transform_binding(
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
         var out = kmh_nystroem_transform(
-            components, normalization, q, d, kernel, gamma, coef0, x, m
+            components, normalization, q, d, kernel, degree, gamma, coef0, x, m
         )
         for i in range(m * q):
             op.unsafe_store(i, out[i])

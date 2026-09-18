@@ -57,3 +57,18 @@ the failed evidence.
 Andrew explicitly requested periodic WIP commits in dedicated worktrees.
 Checkpoint commits may be unqualified; only tested implementation increments
 are merged to main. This branch's native implementation is still not merged.
+
+## Source comparison and saved-model dependency checkpoint
+
+Session 63052 passed: six lanes × nine fixtures × two repeats; 216 applicable
+CPU/Apple numerical properties matched, and all 54 sabotage training cells
+changed. Raw records, receipt, capture scripts and initial runtime log are
+committed under bench/results/identity_break/2026-09-18-cpu-kernel-variants.
+No installed-wheel or NVIDIA/AMD qualification is claimed.
+
+Session 5999 returned 15 passed, 16 failed. The public saved-model subclasses
+use the estimators host binding, not the reference-training family binding.
+The reused frozen estimators binary refused the new kernels. Its source also
+needed degree transport at both oracle call sites; that fix is checkpointed
+here and needs a fresh build plus runtime rerun before merging. Frozen release
+files remain unchanged. Do not erase the initial failed log.
