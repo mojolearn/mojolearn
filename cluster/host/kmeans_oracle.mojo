@@ -242,7 +242,6 @@ comptime INIT_ARRAY = 2
 
 comptime METRIC_L2_EXPANDED = 0
 comptime METRIC_L2_SQRT_EXPANDED = 1
-comptime METRIC_COSINE_EXPANDED = 2
 
 #: `KMeansParams.default()`, the fields the fit reads (`kmeans_params.mojo`).
 comptime DEFAULT_MAX_ITER = 300
@@ -412,6 +411,32 @@ def host_row_norms(
     for row in range(n_rows):
         out[row] = host_row_norm(a, row, d, take_sqrt)
     return out^
+
+
+def host_norms_take_sqrt(metric: Int) -> Bool:
+    """`centroid_norms_take_sqrt`, `kmeans_common.mojo`, and the same answer.
+
+    DO NOT SIMPLIFY THIS AWAY, AND DO NOT INVERT IT. It is False for every
+    metric this tree admits. It is a named function rather than a literal
+    `False` at each of its call sites because the flag it feeds is exactly
+    where a measured defect already lived, and the measurement has to travel
+    with it.
+
+    DEVIATION 2716. The flag used to follow `metric_is_sqrt`, so under
+    L2SqrtExpanded the final assignment computed `||x|| + ||c||^2 - 2 x.c`:
+    the row constant was wrong, the value went negative wherever `||x||^2`
+    exceeded `||x||`, the clamp made it 0, and the tie went to the lowest
+    key. Measured on the M4 at 1eea14f80: 9,675 of 20,000 `labels_` on the
+    `wide` fixture and 4 on `base` were not the argmin to the returned
+    centers, ON EVERY COLUMN ALIKE, so the record read IDENTICAL on a wrong
+    answer. No identity check can catch that; only an argmin check can.
+
+    The rooted arm existed for a cosine metric, which divides by the norms.
+    That metric was deleted on 2026-09-18 (lane/kmeans-cosine-capability).
+    Both surviving metrics want SQUARED norms; the root belongs to the
+    reduction's OUTPUT alone, which is `host_metric_is_sqrt`.
+    """
+    return False
 
 
 def host_metric_is_sqrt(metric: Int) -> Bool:
@@ -945,11 +970,18 @@ def host_init_scalable(
 def host_validate_params(
     metric: Int, n_clusters: Int, tol: Float64, oversampling_factor: Float64
 ) raises:
-    """`KMeansParams.validate`, `kmeans_params.mojo`, in its words."""
+    """`KMeansParams.validate`, `kmeans_params.mojo`, in its words.
+
+    The sentence must stay byte-equal to the device's
+    (`python/mojolearn/tests/test_cpu_training_misc.py` reads both files and
+    compares), so that a CPU-only install refuses in the same words a GPU
+    install does.
+    """
     if metric != METRIC_L2_EXPANDED and metric != METRIC_L2_SQRT_EXPANDED:
         raise Error(
-            "kmeans only supports L2Expanded or L2SqrtExpanded distance"
-            " metrics."
+            "kmeans supports only the L2Expanded (0) and L2SqrtExpanded"
+            " (1) distance metrics; got metric="
+            + String(metric)
         )
     if n_clusters <= 0:
         raise Error("invalid parameter (n_clusters<=0)")
@@ -1068,7 +1100,7 @@ def host_fit_main(
         var it = 1
         while it <= max_iter:
             var it_tag = restart_tag + "iter" + _trace_pad2(it) + "."
-            c_norm = host_row_norms(cur, k, d, metric == METRIC_COSINE_EXPANDED)
+            c_norm = host_row_norms(cur, k, d, host_norms_take_sqrt(metric))
             host_assign(x, n, x_norm, cur, k, c_norm, d, is_sqrt, labels, min_dist)
             trace.record_f32(it_tag + "centroid_norm", c_norm)
             trace.record_u32(it_tag + "labels", labels)
@@ -1100,7 +1132,7 @@ def host_fit_main(
             it += 1
 
         # The post-loop assignment and the weighted inertia.
-        c_norm = host_row_norms(cur, k, d, metric == METRIC_COSINE_EXPANDED)
+        c_norm = host_row_norms(cur, k, d, host_norms_take_sqrt(metric))
         host_assign(x, n, x_norm, cur, k, c_norm, d, is_sqrt, labels, min_dist)
         var cost32 = host_sum_device(min_dist, weights, n, SUM_MODE_PRODUCT)
         var iter_cost = Float64(cost32)
@@ -1252,10 +1284,10 @@ def host_kmeans_fit(
     )
 
     # fit_predict's FRESH assignment against the returned centroids, with
-    # the estimator's own row norms: squared for both L2 metrics, rooted for
-    # cosine alone (DEVIATION 2716, `cluster/estimator.mojo`).
-    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
-    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    # the estimator's own row norms: SQUARED, for both metrics
+    # (DEVIATION 2716, `cluster/estimator.mojo`; `host_norms_take_sqrt`).
+    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
+    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(
         x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
@@ -1290,8 +1322,8 @@ def host_kmeans_predict(
             + String(k)
         )
     host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
-    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
-    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
+    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
     var min_dist = List[Float32](length=n, fill=Float32(0.0))
     host_assign(
         x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
@@ -1330,8 +1362,8 @@ def host_kmeans_transform(
             + String(k)
         )
     host_validate_params(metric, k, 1e-4, DEFAULT_OVERSAMPLING)
-    var x_norm = host_row_norms(x, n, d, metric == METRIC_COSINE_EXPANDED)
-    var c_norm = host_row_norms(centroids, k, d, metric == METRIC_COSINE_EXPANDED)
+    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
+    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
     var is_sqrt = host_metric_is_sqrt(metric)
     for row in range(n):
         var xn = x_norm[row]

@@ -91,7 +91,8 @@ def _approximate_predict(e, X):
 
 #: The k-means saved-model lanes (lane/classical-host-recordings, 2026-09-16).
 #: One format, `mojolearn-kmeans-1`, carries every metric and every start, so
-#: all six FITTED k-means lanes load through it. `kmeans-cosine` is NOT here:
+#: all six FITTED k-means lanes load through it. The cosine lane was NOT here
+#: while it existed (deleted 2026-09-18, lane/kmeans-cosine-capability):
 #: its fit is refused by name (cluster/impl/kmeans_params.mojo::validate), and
 #: a refusal has no model to save, so it has no saved-model cell to record.
 _KMEANS_LANES = ('kmeans', 'kmeans-random', 'kmeans-array', 'kmeans-weighted',

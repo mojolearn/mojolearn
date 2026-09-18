@@ -135,16 +135,42 @@ file by any means, and compare. Nothing we wrote is an input to the answer
 except the code they both installed from PyPI.
 
 ```sh
-# each party, on their own machine, on their own hardware
+# 1. each party, on their own machine, on their own hardware
 python3 -m pip install mojolearn==<version>
 MOJOLEARN_NUMERIC_MODE=identical python3 -m mojolearn verify --all --json-out mine.json
 
-# swap the file by any means at all: email, a gist, a USB stick
+# 2. SEAL IT BEFORE YOU SEE THEIRS. This writes a random nonce into the
+#    document and prints a 64-character commitment over its cells, its
+#    provenance, its contract, its binding digests and its own verdict.
+#    Publish that line anywhere, by any means, BEFORE the exchange.
+python3 -m mojolearn verify --commitment mine.json
 
-# either party, on any machine; this step needs no GPU, no binding and no
-# numeric mode, and it is reached before any of them is checked
-python3 -m mojolearn verify --compare mine.json theirs.json
+# 3. now swap the documents, nonces included: email, a gist, a USB stick
+
+# 4. either party, on any machine; this step needs no GPU, no binding and no
+#    numeric mode, and it is reached before any of them is checked
+python3 -m mojolearn verify --compare mine.json theirs.json \
+    --commitment-a <the line you published> \
+    --commitment-b <the line they published>
 ```
+
+**Step 2 is not optional ceremony.** Without it, whoever receives the other's
+file FIRST can paste its cell values into a document carrying their own
+provenance, and the comparer reads a clean `AGREE` across two "independent"
+vendors. That is the exact question a reader should ask of us, so the tool
+answers it: a party who has published a commitment cannot copy, because what
+they were bound to was fixed before there was anything to copy from. A
+comparison run without commitments is not an error; it is labelled a weaker
+result, and a BROKEN commitment outranks every cell outcome including
+`MISMATCH`.
+
+**What a commitment does NOT prove is that a document came from a run.** Our
+shipped `verify_reference/table.json` pins the expected hash of every cell, so
+a party can synthesise a well-formed document from the table and commit to
+that without executing anything. Closing it needs a challenge nonce, a value
+neither party controls mixed into what the run computes, so a document cannot
+be written ahead of time. That is designed and parked, not built. Until it
+exists, read a commitment as evidence about ORDER, not about execution.
 
 `--compare` takes the lane set from the two documents. It never enumerates,
 greps or imports a lane list of its own, so it cannot quietly compare a
@@ -189,19 +215,44 @@ Time: minutes for the comparison; the two `verify --all` runs are whatever
 each machine costs (about 25 minutes on one core of an Apple M4 for the
 CPU-only lane set).
 
-### Comparing against our own published document
+### If you have nobody to swap with: our own documents
 
-We publish our own `verify --all --json-out` documents so that this recipe
-works for someone who does not already know another user:
-`bench/results/verify_reports/`, one per device class, each taken at the
-commit named inside it.
+`bench/results/verify_reports/` carries our own sealed `verify --all` output,
+so this recipe works on the day you install the wheel rather than on the day
+you find a second party. Its README says which device classes are there; as
+of the first publication it is **CPU only**, two boxes, and the comparison
+between them reads `AGREE` on 5,174 cell parts with both commitments
+verified.
 
-**This is weaker than two strangers comparing, and it is not a substitute for
-it.** Comparing against our document puts us back in the loop: you are
-trusting that we ran what we say we ran on the hardware we say we ran it on.
-Recipe 4 proper removes us from the answer entirely. Use ours to get started,
-to check that your install produces comparable output at all, and as the
-fallback when you have nobody to swap with. Then find a stranger.
+**This is weaker than comparing with a stranger, and it does not replace it.**
+Comparing against our document puts us back in the loop: the answer then rests
+on our having run what we say we ran on the hardware we say we ran it on.
+Recipe 4 above removes us from the answer entirely; this does not. Use ours to
+check that your install produces a comparable document at all, and as the
+fallback when you have no second party. Then find one.
+
+Read the pair honestly, and note that the tool does this for you: both of our
+CPU rentals came back as the same processor model, so `verify --compare`
+prints `WARNING: both documents describe the SAME device. Agreement then shows
+repeatability, not cross-hardware identity, and proves much less.` The
+cross-vendor claim rests on the recorded columns under
+`bench/results/identity_break/`, never on these two files.
+
+Three things make a comparison against ours fail without anything being wrong
+with your machine, and each is the protection working rather than a defect:
+
+- **a different commit.** Each document names its commit and harness digest,
+  and a comparison across a harness change reads `INCOMPARABLE` rather than a
+  silent wrong answer. Check out the commit the document names, as Recipe 2
+  already has you do. These are re-emitted per release for that reason.
+- **different flags.** Ours are plain `verify --all` documents: five parts per
+  cell. `--batch-checks` adds four more properties, so a document made with it
+  carries cells ours do not and the comparison reads `INCOMPLETE`. Both sides
+  must use the same flags.
+- **a cell one side did not run.** `compare-uncomputed-negative-control.txt`
+  in that directory is that case, kept on purpose: two documents with ZERO
+  differing cells still read `INCOMPLETE. Absence is not agreement.` because
+  90 cell parts ran on neither side.
 
 ## Two smaller checks
 

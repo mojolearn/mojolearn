@@ -28,13 +28,3 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.KMeans(n_clusters=8, random_state=3, oversampling_factor=0.0).fit(X)
     return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_))),
                 m, "n/a:no-predict")
-
-
-@lane("kmeans-cosine")
-def _(ml, X, yc, yr, Xh=None):
-    """metric='cosine' is routed and REFUSED BY NAME on the Mojo host
-    (cluster/impl/kmeans_params.mojo::validate): the expected cell is the
-    refusal sentence on every column, never a hash. A column that hashes
-    here means the refusal was lifted without a fused cosine arm."""
-    m = ml.KMeans(n_clusters=8, random_state=3, metric="cosine").fit(X)
-    return _fit(dict(centers=_h(m.cluster_centers_)), m, "n/a:no-predict")

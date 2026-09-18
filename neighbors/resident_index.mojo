@@ -45,6 +45,7 @@ from neighbors.estimator import (
 )
 from neighbors.impl.detail.knn_brute_force import (
     KNN_METHOD_AUTO,
+    KnnIndexCache,
     METRIC_FROM_IS_SQRT,
 )
 
@@ -57,6 +58,9 @@ struct ResidentKnnIndex(Movable):
     var index: DeviceBuffer[DType.float32]
     var n_index: Int
     var n_features: Int
+    #: DEVIATION 3061: what every search derives from `index` alone, built
+    #: by the first search that needs it and kept for the handle's life.
+    var cache: KnnIndexCache
 
     def __init__(
         out self,
@@ -74,9 +78,11 @@ struct ResidentKnnIndex(Movable):
         self.n_features = n_features
         self.index = index^
         self.ctx = ctx^
+        self.cache = KnnIndexCache()
 
     def __deinit__(deinit self):
-        # The buffer before the context it was created on (DEVIATION 1946).
+        # The buffers before the context they were created on (DEVIATION 1946).
+        _ = self.cache^
         _ = self.index^
         _ = self.ctx^
 
@@ -158,6 +164,7 @@ def knn_index_search(
         entry.ctx, entry.index, index_ptr, n_index, queries_ptr, n_queries,
         n_features, k, out_dist_ptr, out_idx_ptr, return_sqrt,
         requested_query_tile, knn_method, metric, metric_arg,
+        MutPointer(to=entry.cache).unsafe_origin_cast[MutAnyOrigin](),
     )
 
 
@@ -206,6 +213,7 @@ def knn_index_classify(
         n_features, k, y_ptr, n_outputs, n_classes, out_labels_ptr,
         out_proba_ptr, out_uniq_ptr, want_proba, requested_query_tile,
         metric, metric_arg, weights,
+        MutPointer(to=entry.cache).unsafe_origin_cast[MutAnyOrigin](),
     )
 
 
@@ -234,4 +242,5 @@ def knn_index_regress(
         entry.ctx, entry.index, index_ptr, n_index, queries_ptr, n_queries,
         n_features, k, y_ptr, n_outputs, out_ptr, requested_query_tile,
         metric, metric_arg, weights,
+        MutPointer(to=entry.cache).unsafe_origin_cast[MutAnyOrigin](),
     )

@@ -2652,7 +2652,9 @@ leg_create_pod() {
     if [ "${MOJOLEARN_GEMM_LEG_REHEARSAL:-}" = "1" ]; then
         leg_die "INTERLOCK: a rehearsal child reached leg_create_pod. Nothing was created. This is the interlock working; if you meant to rent, run the leg directly rather than from inside a dry run."
     fi
-    POD_NAME="mojolearn-gemm-${VENDOR}-${STAMP}"
+    # A failed create adopts by name. Second-resolution names can collide
+    # between simultaneous corpus legs and adopt the OTHER leg's pod.
+    POD_NAME="mojolearn-gemm-${VENDOR}-${STAMP}-$$"
     # THE DEAD-MAN IS ARMED HERE: after the interlock (so no rehearsal child
     # can reach it) and BEFORE the POST that starts the bill. Arming it after
     # the create would leave uncovered the one instant it exists for -- the
@@ -4660,7 +4662,10 @@ RELEASE_SOURCE
             ;;
     esac
     MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-$_stage_default}" \
-        sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || true
+        sh tools/stage_from_r2.sh "$SSH_TARGET" > "$OUT/stage.log" 2>&1 || {
+            leg_say "$(tail -1 "$OUT/stage.log")"
+            [ "${MOJOLEARN_STAGE_STRICT:-0}" != 1 ] || leg_die "Strict R2 staging failed; payload not started"
+        }
     leg_say "$(tail -1 "$OUT/stage.log")"
     # lane/r2-binding-cache (2026-09-15), DEFAULT OFF. MOJOLEARN_BINCACHE=1
     # hands the box presigned URLs for tools/bincache.py; a body opts in per
