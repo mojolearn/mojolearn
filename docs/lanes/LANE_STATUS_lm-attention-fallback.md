@@ -43,8 +43,10 @@ negative controls, source hashes, stage logs and verified teardown records
 are under [the evidence directory](../../bench/results/lm_attention_fallback_2026-09-18/).
 The numerical implementation tested is source 57cf16d61; the same-device
 B4 comparison used f3eeb0c35 with the same numerical implementation. Later
-edits are documentation, comparison tools and the probe metadata-label
-correction. All rented test pods/VMs have verified teardown records. The
+edits include the probe metadata-label correction and integration with
+main’s diagnostics. Merged source 9d3cf5627 passed a further 700-step run
+(see the final integration record below). All rented test pods/VMs have
+verified teardown records. The
 mechanical verdict is [FLIP NVIDIA](../../bench/results/lm_attention_fallback_2026-09-18/default/flip_verdict.log);
 its deliberately doubled-time control returned NO FLIP first.
 
@@ -327,3 +329,42 @@ bit, status or replay-site observation falsifies numerical integration;
 exceeding either timing/memory bound falsifies retained-performance prediction.
 Commit/push this merged source before renting. Native replay sabotage must
 fail for both sites, then the clean native gate and the 700-step run complete.
+
+
+### Final integration result
+
+Source **9d3cf5627** completed all 700 steps on a RunPod H100 80GB HBM3,
+strict R2 enwik8 with the pinned 100000000-byte hash, seed 20260917. All
+700 losses and six state hashes at steps 0/699 match the independently
+recorded legacy run. All 8400 forward and 8400 backward statuses are RAN;
+repair masks exactly match the qualified default at every step/layer:
+4951 none, 3449 dQ, zero zdot (INERT). Tail median **0.19805343449115753 s**,
+sampled peak/tail **15153 MiB**, eager **432 B**, aexp **2415919104 B**.
+Every registered integration prediction passed.
+
+Both skipped-replay native defects failed with fused `0x80000000` versus
+eager `0x00000000`; the clean 130-site repair/preservation gate passed.
+The Apple single-worker compile and 44 host-mock surface tests passed;
+no Apple GPU job ran. Full/short/empty report fixtures reject all three
+layout mutations first. The old/new status-count comparator also rejects
+invented and missing nonzero sticky counts before accepting the fixtures.
+
+The remote training finished, but the on-box post-run comparator raised
+FileNotFoundError for its historical reference: the runner intentionally
+excludes bench/results from source transfers. That is a harness-location
+failure, not a numerical verdict. The unchanged comparator ran on the
+fetched result on the host, where the committed reference exists; each
+loss/state/status/site mutation failed and every actual match was printed.
+Both the original failure and successful host transcript are retained.
+The body now explicitly leaves that comparison to the host. No owed run
+was cancelled or repeated to hide the failure. Pod gh0ejxm05juevy was
+DELETE 204 / verified absent 404 before this record was committed.
+
+Evidence: [integrated verdict](../../bench/results/lm_attention_fallback_2026-09-18/integrated/verdict.log),
+[raw result](../../bench/results/lm_attention_fallback_2026-09-18/integrated/repaired/result.json),
+[stage log](../../bench/results/lm_attention_fallback_2026-09-18/integrated/stage.log),
+[teardown](../../bench/results/lm_attention_fallback_2026-09-18/integrated/teardown.txt).
+Main fdbe015de adds only the completed forest-deadlock status record and
+merges cleanly. Later attention changes are comments, host comparison
+compatibility and this evidence; numerical source remains the qualified
+merged implementation.

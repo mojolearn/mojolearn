@@ -202,15 +202,15 @@ WHY. `-0.0` in a fused accumulator is a refusal only because the EAGER chain
 folds the masked cells too and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s
 sign bit is clear. That laundering needs a masked cell AFTER the last visible
 one. The forward tests `rr[1] < s - 1` for exactly this (`:2031`) and so does
-the `dq` chain (`j_hi < s - 1`, `:2871`). The `dk`/`dv` chains test nothing.
+the `dq` chain. The legacy `dk`/`dv` predicate lacked this guard.
 
 Their chains are over the QUERY axis, and `_key_query_range` returns
 `hi = l - 1` for EVERY key unless a sliding window is set. At the byte-LM
-target shape (`window == 0`, `n_rep == 1`) there is no masked tail at all, so
-every one of those refusals is a false positive. MEASURED on an H100,
-2026-09-18, 700 steps at that shape: the guarded FORWARD refused 0 times out
-of 8,400 observations and the unguarded BACKWARD refused 3,697 times out of
-8,400. That asymmetry is the whole of the 2.13x.
+target shape (`window == 0`, `n_rep == 1`) there is no masked tail in
+these dk/dv chains. This guard removes 248 of the 3697 backward refusals;
+the other 3449 are dQ masked-tail cases and need exact replay. Forward
+never refused in the 700-step witness. Counts alone do not localize a site:
+the guard-only arm and per-site replay witnesses isolate those contributions.
 
 The `hh + 1 < n_rep` term is the grouped-query case: under GQA the chain
 continues into the next head of the kv group, whose rows below `lo[u]` ARE

@@ -22,6 +22,7 @@ done
 pixi run mojo run -j 2 --target-accelerator sm_90a $DEFS -I . transformer/checks/attention_masked_tail_check.mojo > "$OUT/native_gate.log" 2>&1
 sh bindings/build_byte_lm.sh > "$OUT/build_default.log" 2>&1
 pixi run python tools/lm_ce_alias_probe.py --out "$OUT/repaired" --steps 700 --tail 0 --corpus training/corpus/enwik8/input.txt --smi-every 10 --witness-every 699 > "$OUT/repaired.log" 2>&1
-pixi run python tools/lm_attention_integrated_compare.py "$OUT/repaired/result.json" > "$OUT/verdict.log" 2>&1
-cat "$OUT/verdict.log"
-echo complete > "$OUT/status.txt"
+# The source transfer intentionally excludes bench/results. Compare the
+# fetched result on the host, where the committed legacy references live:
+# python tools/lm_attention_integrated_compare.py <fetched>/repaired/result.json
+echo training_complete_host_comparison_required > "$OUT/status.txt"
