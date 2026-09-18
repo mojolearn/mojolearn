@@ -198,3 +198,4 @@ on that 4% is honest. Still a GEMM sum, not a step: the step share is owed
   prediction test, medians give the step price.
 - Then NVIDIA + AMD legs: tools/gemm_remote_leg.sh with
   MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_rtf_leg.sh --local-card <branch apple card>.
+- POD (mine): 9rts6f6fpgw7fm mojolearn-gemm-nvidia-2026-09-18_110519-93300 (RTX 4090, 60 min lease, dead-man armed) — NVIDIA leg: GEMM card vs Apple card + tools/gemm_rtf_leg.sh. Console ~/mojolearn-evidence/apple-seam-repair-2026-09-18/nvidia_leg.console. Pods d8klbzo3aga6d6 / vn4vonca6du36q are OTHER lanes'.
