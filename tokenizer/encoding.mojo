@@ -3,7 +3,7 @@
 """The public Mojo surface: byte-level BPE `encode` and `decode` in the GPT-2
 format, over a rank table the caller supplies.
 
-    var tok = load_gpt2_tokenizer_from("path/to/ranks.tsv")
+    var tok = load_bpe_tokenizer_from("path/to/ranks.tsv")
     var ids = tok.encode("hello world", False)
     var back = tok.decode(ids)
 
@@ -76,7 +76,7 @@ def bytes_string(data: List[UInt8]) -> String:
     return s^
 
 
-struct Gpt2Tokenizer(Copyable, Movable):
+struct BpeTokenizer(Copyable, Movable):
     var ranks: RankTable
     var classes: UnicodeClasses
     var eot: List[UInt8]
@@ -191,8 +191,8 @@ def _slice(data: List[UInt8], start: Int, end: Int) -> List[UInt8]:
     return out^
 
 
-def load_gpt2_tokenizer_from(ranks_path: String) raises -> Gpt2Tokenizer:
+def load_bpe_tokenizer_from(ranks_path: String) raises -> BpeTokenizer:
     """The caller's rank file and the compiled-in Unicode classes."""
     var ranks = load_rank_table(ranks_path)
     var classes = builtin_unicode_classes()
-    return Gpt2Tokenizer(ranks^, classes^)
+    return BpeTokenizer(ranks^, classes^)

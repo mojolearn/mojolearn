@@ -50,15 +50,19 @@ from checks.numerics import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
+    FUSED_SKIPPED_STICKY,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
     fused_backward_launch,
     fused_backward_launch_estash_ran,
+    fused_backward_launch_estash_report,
 )
 from transformer.impl.llama.modeling_llama import (
+    ATTN_PATH_AUTO,
     ATTN_PATH_EAGER,
     timing_on,
     timing_tick,
@@ -1030,19 +1034,14 @@ def bwd_softmax_zdot_kernel(
     """`z = sum_j dy_j * y_j`, a SERIAL ASCENDING CHAIN over the ABSOLUTE
     key index from `+0.0`, FUSED. One thread per `(batch, head, query)`.
 
-    **THE `z` FOLD FOLLOWS CONTRACT 5.3's ARGUMENT AND IT CARRIES, BUT IT
-    NEEDED CHECKING RATHER THAN ASSUMING, BECAUSE THE TERMS ARE DIFFERENT
-    TERMS.** At a masked cell `y_j` is exactly `+0.0` (contract 7.1) while
-    `dy_j` is an ordinary nonzero number, so the term is
-    `fma(dy_j, +0.0, acc) = acc + (+-0.0) = acc`, provided `acc` is not
-    `-0.0`. A `+0.0`-seeded fma chain never holds `-0.0`: `fma` returns a
-    negative zero only when the exact `a*b + acc` is a zero of NEGATIVE
-    SIGN, which under round-to-nearest needs BOTH addends to be `-0.0` (an
-    exact cancellation of two nonzero opposites gives `+0.0`), and the seed
-    forbids it. **So the masked tail is bitwise inert and `z` -- and every
-    activation gradient downstream of it -- is independent of the kv
-    length.** That is the theorem the backward's length clause rests on and
-    it is contract 7.1 pointed the other way.
+    Masked cells have exactly `y_j = +0.0`, but omitting them is NOT
+    always bitwise inert. The RN-FMA then FTZ-multiply seam can flush a
+    negative subnormal result to `-0.0`, even from a `+0.0` seed. A later
+    masked term with positive dy changes that accumulator to `+0.0`.
+    This full ascending chain is the oracle: fused kernels must either
+    replay the omitted tail when the visible chain ends at negative zero,
+    or refuse and use this eager path. A blanket zero-sign canonicalization
+    is also wrong when all remaining terms preserve negative zero.
 
     **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE USED**, for the
     third time in this profile and for the same reason: it is a halving
@@ -1219,18 +1218,16 @@ def bwd_dq_kernel(
     CONTRACTED**: `dA` contracts over the OUTPUT WIDTH, and S11's output
     width is the KV AXIS. So the routed `dq` would be an `OP_NN` at
     `(l, hd, s)` with `k' = S`, and `P = f(S)` builds one tree at `S = 257`
-    and a different one at `S = 200`. The masked `+0.0` tail -- bitwise
-    inert in a serial ascending chain -- is NOT inert under a tree whose
-    shape changes with the length.
+    and a different one at `S = 200`. The masked signed-zero tail is NOT
+    inert under a tree whose shape changes with the length. Keep this
+    serial ascending eager chain as the oracle.
 
-    Under the chain it IS inert. At a masked `(t, j)` the gradient `dcell`
-    is a signed zero (the softmax's `y_j` is exactly `+0.0` there and the
-    mask backward is the identity), `fma(+-0.0, k, acc)` is `acc + (+-0.0)`,
-    and a `+0.0`-seeded chain never holds `-0.0`. **So `dq` is independent
-    of the kv length and a decode step's `dq` is the prefill's `dq` bit for
-    bit** -- the backward's clause (c) and clause (d), holding by
-    CONSTRUCTION, with the gate there to catch an execution plan violating
-    the construction.
+    Even in the chain, a masked term can change a preceding `-0.0` to
+    `+0.0`: RN-FMA followed by the FTZ-multiply seam can produce negative
+    zero from a negative subnormal intermediate. The fused dQ kernel must
+    replay that tail exactly or refuse; the +0 seed alone does not prove
+    masked-tail invariance. No fold or zero-sign canonicalization is
+    permitted to repair this discrepancy.
 
     Sabotage `B11_DQ_VIA_GEMM` lives in the launcher rather than here,
     because it is a different call graph and not a different branch. It is
@@ -1821,7 +1818,11 @@ struct LlamaBackwardStages(Movable):
     var gemm_workspace: GemmWorkspace
     var head_a: DeviceBuffer[DType.float32]  # [L, head_dim]
     var head_b: DeviceBuffer[DType.float32]  # [s_max, head_dim]
+    var attn_repaired: Int  # bit 0 zdot; bit 1 dq; actual masked-tail replay
     var attn_backward_status: Int  # -1 not attempted; otherwise FUSED_*
+    var attn_bwd_fused_off: Bool
+    """DEVIATION 3110: this layer's fused BACKWARD refused once, so it is not
+    launched again for the life of this struct."""
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
     def __init__(
@@ -1917,7 +1918,9 @@ struct LlamaBackwardStages(Movable):
         self.tmp2 = _zeros[False](ctx, m * wide)
         self.head_a = _zeros[False](ctx, l * hd)
         self.head_b = _zeros[False](ctx, s_max * hd)
+        self.attn_repaired = 0
         self.attn_backward_status = -1
+        self.attn_bwd_fused_off = False
         self.head_c = _zeros[False](ctx, head_c_n)
 
         # All fill targets are fields of self and remain alive through this
@@ -3067,15 +3070,34 @@ def llama_decoder_layer_backward_device(
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
     timing_tick(ctx, ton, tk, "bwd.before_attention")
+    bst.attn_repaired = 0
     bst.attn_backward_status = -1
     var choice = attention_path_choice(PLANT_AT_NONE)
+    if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:
+        choice = ATTN_PATH_EAGER
     var need_eager = materialize or trace.enabled or choice == ATTN_PATH_EAGER
     if need_eager:
         bwd_attention_eager_stages(
             ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
             trace, prefix,
         )
-    if choice != ATTN_PATH_EAGER:
+    # DEVIATION 3110: see fused_attention.mojo. A backward refusal is worse
+    # than a forward one -- `bwd_attention_eager_stages` calls
+    # `ensure_attention_materialized`, which recomputes this layer's whole
+    # EAGER FORWARD as well -- so the discarded launch is paid on top of two
+    # eager passes. The latch removes the launch.
+    # `not need_eager` confines the latch to the trace-off trainer path; see
+    # `eager_attention_forward`. Under `need_eager` this branch reduces to the
+    # code that was here before, so the identity card is untouched.
+    if (choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off
+            and ATTN_STICKY and not need_eager):
+        bst.attn_backward_status = FUSED_SKIPPED_STICKY
+        if not need_eager:
+            bwd_attention_eager_stages(
+                ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+                trace, prefix,
+            )
+    elif choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
@@ -3090,11 +3112,11 @@ def llama_decoder_layer_backward_device(
             if fused_attention_arm_estash_runs(arm):
                 var kept_cells = fwd.attn_estash_cells
                 var ran = 0
-                status = fused_backward_launch_estash_ran(
+                status = fused_backward_launch_estash_report(
                     ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
                     fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                     fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
-                    key_lo, window, scale, arm, ran,
+                    key_lo, window, scale, arm, ran, bst.attn_repaired,
                 )
                 estash_done = True
         if not estash_done:
@@ -3104,6 +3126,8 @@ def llama_decoder_layer_backward_device(
                 fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
             )
         bst.attn_backward_status = status
+        if status != FUSED_RAN and not need_eager:
+            bst.attn_bwd_fused_off = True
         if status != FUSED_RAN and not need_eager:
             bwd_attention_eager_stages(
                 ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,

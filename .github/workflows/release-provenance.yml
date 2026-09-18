@@ -294,6 +294,7 @@ jobs:
             set -- --wheelhouse "$MOJOLEARN_QUALIFICATION_WHEELHOUSE"
           fi
           python3 tools/qualify_verifier_wheel.py "$wheel" "$@" \
+            --expected-source-commit "$GITHUB_SHA" \
             --output "$RUNNER_TEMP/verifier-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
 
       - name: Retain installed verifier qualification

@@ -1,0 +1,346 @@
+{
+  "backend": "hip",
+  "gate_sha256": "1d5d79c42f7e6aa9dca5f3c71b67ef4d3865d32d71c88f0f2240842a6a459aca",
+  "harness_sha256": "64b557064b40f724f5e19ea457dfd2fd2c40fb80cdcaf6f1feca3a2c6fca4861",
+  "lanes": [
+    "kernel-ridge-poly",
+    "kernel-ridge-sigmoid",
+    "kernel-ridge-laplacian",
+    "nystroem-poly",
+    "nystroem-sigmoid",
+    "nystroem-laplacian"
+  ],
+  "promotion": "NOT_PERFORMED",
+  "properties": [
+    "--batch-grad",
+    "--batch-scale",
+    "--ragged",
+    "--step-full"
+  ],
+  "repeats": 2,
+  "seconds": 72.11083175400017,
+  "source_capture": true,
+  "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "stages": [
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "kernel-ridge-poly",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-poly.json"
+      ],
+      "exit_code": 0,
+      "name": "column-kernel-ridge-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly",
+        "--lanes",
+        "kernel-ridge-poly"
+      ],
+      "exit_code": 0,
+      "name": "record-kernel-ridge-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-poly.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/kernel-ridge-poly-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-kernel-ridge-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "kernel-ridge-sigmoid",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-sigmoid.json"
+      ],
+      "exit_code": 0,
+      "name": "column-kernel-ridge-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid",
+        "--lanes",
+        "kernel-ridge-sigmoid"
+      ],
+      "exit_code": 0,
+      "name": "record-kernel-ridge-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-sigmoid.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/kernel-ridge-sigmoid-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-kernel-ridge-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "kernel-ridge-laplacian",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-laplacian.json"
+      ],
+      "exit_code": 0,
+      "name": "column-kernel-ridge-laplacian"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian",
+        "--lanes",
+        "kernel-ridge-laplacian"
+      ],
+      "exit_code": 0,
+      "name": "record-kernel-ridge-laplacian"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/kernel-ridge-laplacian.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/kernel-ridge-laplacian-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-kernel-ridge-laplacian"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "nystroem-poly",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-poly.json"
+      ],
+      "exit_code": 0,
+      "name": "column-nystroem-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly",
+        "--lanes",
+        "nystroem-poly"
+      ],
+      "exit_code": 0,
+      "name": "record-nystroem-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-poly.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/nystroem-poly-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-nystroem-poly"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "nystroem-sigmoid",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-sigmoid.json"
+      ],
+      "exit_code": 0,
+      "name": "column-nystroem-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid",
+        "--lanes",
+        "nystroem-sigmoid"
+      ],
+      "exit_code": 0,
+      "name": "record-nystroem-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-sigmoid.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/nystroem-sigmoid-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-nystroem-sigmoid"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/identity_break.py",
+        "--lanes",
+        "nystroem-laplacian",
+        "--repeats",
+        "2",
+        "--require-backend",
+        "hip",
+        "--vendor",
+        "amd-mi300x-gfx942",
+        "--fail-on-refused",
+        "--batch-grad",
+        "--batch-scale",
+        "--ragged",
+        "--step-full",
+        "--json",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-laplacian.json"
+      ],
+      "exit_code": 0,
+      "name": "column-nystroem-laplacian"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "record",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian",
+        "--lanes",
+        "nystroem-laplacian"
+      ],
+      "exit_code": 0,
+      "name": "record-nystroem-laplacian"
+    },
+    {
+      "command": [
+        "/root/mojolearn/.pixi/envs/default/bin/python",
+        "/root/mojolearn/tools/classical_host_gate.py",
+        "--package-root",
+        "/root/mojolearn/python",
+        "check",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian",
+        "--gpu-column",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/nystroem-laplacian.json",
+        "--report",
+        "/root/gemm_leg_out/ordinary-holds/captures-kernels/attempt-1789754449398641025/nystroem-laplacian-cpu-replay.json"
+      ],
+      "exit_code": 0,
+      "name": "replay-nystroem-laplacian"
+    }
+  ],
+  "status": "CAPTURED_UNQUALIFIED",
+  "vendor": "amd-mi300x-gfx942"
+}

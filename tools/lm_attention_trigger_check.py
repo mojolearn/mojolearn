@@ -18,8 +18,10 @@ def validate(result, minimum):
         for key in ('forward_status', 'backward_status'):
             values = a[key]
             assert len(values) == n, 'layer coverage'
-            assert all(v in (-1, 0, 1, 2) for v in values), 'unknown status'
+            assert all(v in (-1, 0, 1, 2, 3) for v in values), 'unknown status'
             names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN', 1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER'}
+            if 3 in values or 'FUSED_SKIPPED_STICKY' in a[key + '_counts']:
+                names[3] = 'FUSED_SKIPPED_STICKY'
             assert a[key + '_counts'] == {name: values.count(code) for code, name in names.items()}, 'status counts'
         assert len(a['attn_materialized']) == n, 'materialization coverage'
     return rows

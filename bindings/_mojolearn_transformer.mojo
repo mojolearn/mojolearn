@@ -896,7 +896,15 @@ def _transformer_run[discard_cache: Bool = False](
     _ = rope^
     _ = stages^
     _ = dx^
-    # Keep the context alive until every device allocation is destroyed.
+    # Keep the context alive until every device allocation is destroyed
+    # (DEVIATION 1946) AND drain the frees those destructions enqueued
+    # before it goes (DEVIATION 2520, extended by DEVIATION 3010). Without
+    # this drain the MAX runtime allocator's lock stays held for the whole
+    # PROCESS and the next GPU allocation anywhere in it never returns:
+    # measured as `verify --all` walking 47 lanes and then stopping dead at
+    # `transformer-bf16w`, the first lane to allocate after this one's
+    # context died.
+    ctx.synchronize()
     _ = ctx^
     return out_len
 
@@ -1618,6 +1626,10 @@ def _transformer_backward_run(
     _ = kv^
     _ = rope^
     _ = dx^
+    # The `synchronize()` above drained the OUTPUT COPIES; these six
+    # destructions enqueue the frees, and those must drain too before the
+    # context is destroyed (DEVIATION 2520, extended by DEVIATION 3010).
+    ctx.synchronize()
     _ = ctx^
 
 

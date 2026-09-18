@@ -12,7 +12,7 @@ not a CPU twin of a GPU entry; it is the door itself, loaded by path through
 `_backend.load_host_module` from `python/mojolearn/tokenizer.py`, and the
 same binary serves a GPU box and a CPU-only install alike.
 
-WHAT IT COMPUTES. `tokenizer/encoding.mojo::Gpt2Tokenizer.encode_bytes` and
+WHAT IT COMPUTES. `tokenizer/encoding.mojo::BpeTokenizer.encode_bytes` and
 `decode_bytes` over the rank file the caller loads (mojolearn ships no
 vocabulary, 2026-09-15): the ids of a byte string and the bytes back.
 `tokenizer/checks/tokenizer_check.mojo` (`pixi run check-tokenizer`) is where
@@ -24,27 +24,27 @@ text.
 THE ADDRESS CONTRACT, mirrored word for word in `python/mojolearn/
 tokenizer.py`:
 
-    gpt2_load(ranks_path) -> handle
+    bpe_load(ranks_path) -> handle
         parses the caller's rank file once, with the Unicode classes
-        compiled into this build, and returns an opaque `_Gpt2Handle` every
-        other entry takes first. One handle per GPT2Tokenizer.
-    gpt2_n_vocab(handle) -> the ranks plus `<|endoftext|>`
-    gpt2_max_token_bytes(handle) -> the longest token's byte length, so the
+        compiled into this build, and returns an opaque `_BpeHandle` every
+        other entry takes first. One handle per BpeTokenizer.
+    bpe_n_vocab(handle) -> the ranks plus `<|endoftext|>`
+    bpe_max_token_bytes(handle) -> the longest token's byte length, so the
         caller can size a decode output in one call
-    gpt2_encode(handle, text_addr, n_bytes, out_addr, out_cap, allow_endoftext)
+    bpe_encode(handle, text_addr, n_bytes, out_addr, out_cap, allow_endoftext)
         reads `n_bytes` uint8 at `text_addr`, writes the ids as int32 at
         `out_addr` and returns how many. An encoding never has more ids than
         bytes (a merge only shortens, and the 13-byte special token is one
         id), so `out_cap = n_bytes` always suffices; a count above `out_cap`
         is refused before anything is written. `n_bytes = 0` reads and
         writes nothing and returns 0.
-    gpt2_decode(handle, ids_addr, n_ids, out_addr, out_cap)
+    bpe_decode(handle, ids_addr, n_ids, out_addr, out_cap)
         reads `n_ids` int32 at `ids_addr`, writes the bytes at `out_addr`
         and returns how many. An id outside [0, n_vocab) is refused BY NAME
         AND POSITION (`encoding.mojo`'s own sentence) with nothing written;
-        `out_cap = n_ids * gpt2_max_token_bytes` always suffices.
+        `out_cap = n_ids * bpe_max_token_bytes` always suffices.
 
-THE SABOTAGE. `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` makes `gpt2_encode`
+THE SABOTAGE. `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` makes `bpe_encode`
 write the ids in REVERSE order. It is the Python gate's negative control: a
 build with it defined must fail `python/mojolearn/tests/
 test_tokenizer_surface.py`'s exact-id cases, or that test is not reading
@@ -53,14 +53,25 @@ this binary's output. `tokenizer_host_sabotage()` reads it back and
 batch entry honors it too (each document's ids reversed).
 
 THE BATCH ENTRY (lane/inference-tokenizer-neural, 2026-09-15).
-`gpt2_encode_batch` encodes many documents in one call, each ALONE, so
-its ids per document are `gpt2_encode`'s. It exists because the crossing
+`bpe_encode_batch` encodes many documents in one call, each ALONE, so
+its ids per document are `bpe_encode`'s. It exists because the crossing
 is most of the cost for short documents: on the M4, one core, 20,000
-documents of about 18 bytes took 0.23 s through 20,000 `gpt2_encode`
+documents of about 18 bytes took 0.23 s through 20,000 `bpe_encode`
 calls and 0.033 s as one call on the same bytes concatenated.
 `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` swaps ids across each document
 boundary inside a batch (a batch of one is untouched), the batch part's
 negative control; `tokenizer_host_sabotage()` reads True for either define.
+
+THE TRAINER ENTRIES (lane/bpe-builder-native, 2026-09-18). `bpe_train`
+runs `tokenizer/train/bpe_train.mojo::train_bpe` on documents passed like
+`bpe_encode_batch`'s (bytes back to back, int64 offsets) and returns an
+opaque `_BpeTrainedHandle`; `bpe_trained_sizes` and `bpe_trained_copy` read
+the vocabulary out. `BpeVocabularyTrainer` (backend "auto" or "mojo") calls
+them; `pixi run check-bpe-trainer` holds the trainer to the Python reference
+file byte for file byte. `-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the
+tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
+it; the `break_ties_high` flag in `dims` is the Python door's environment
+spelling of the same arm.
 """
 from std.memory import memcpy
 from std.os import abort
@@ -78,34 +89,56 @@ from checks.kernel_matrix import (
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from tokenizer.encoding import (
     GPT2_ENDOFTEXT,
-    Gpt2Tokenizer,
-    load_gpt2_tokenizer_from,
+    BpeTokenizer,
+    load_bpe_tokenizer_from,
+)
+from tokenizer.impl.unicode_class import builtin_unicode_classes
+from tokenizer.train.bpe_train import (
+    BPE_TRAINER_SABOTAGE,
+    TrainedVocabulary,
+    train_bpe,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
 comptime TOKENIZER_BATCH_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_BATCH_SABOTAGE"]()
 
 
-struct Gpt2Handle(Movable, Writable):
+struct BpeHandle(Movable, Writable):
     """Python-owned tokenizer lifetime: the parsed rank table and Unicode
-    classes, loaded once by `gpt2_load` and kept for the handle's life. No
+    classes, loaded once by `bpe_load` and kept for the handle's life. No
     global slot and no retained host pointer."""
 
-    var tok: Optional[Gpt2Tokenizer]
+    var tok: Optional[BpeTokenizer]
     var max_token_bytes: Int
 
     def __init__(out self):
-        self.tok = Optional[Gpt2Tokenizer]()
+        self.tok = Optional[BpeTokenizer]()
         self.max_token_bytes = 0
 
     # Both spelled out: `add_type` derives whichever is missing by
-    # reflection over the fields, and `Optional[Gpt2Tokenizer]` is not
+    # reflection over the fields, and `Optional[BpeTokenizer]` is not
     # Writable (the byte LM session does the same).
     def write_to(self, mut writer: Some[Writer]):
-        writer.write("_Gpt2Handle(loaded=", Bool(self.tok), ")")
+        writer.write("_BpeHandle(loaded=", Bool(self.tok), ")")
 
     def write_repr_to(self, mut writer: Some[Writer]):
-        writer.write("_Gpt2Handle(loaded=", Bool(self.tok), ")")
+        writer.write("_BpeHandle(loaded=", Bool(self.tok), ")")
+
+
+struct BpeTrainedHandle(Movable, Writable):
+    """Python-owned result of one `bpe_train` call: the trained vocabulary,
+    held until `bpe_trained_copy` has copied it into the caller's buffers."""
+
+    var vocab: Optional[TrainedVocabulary]
+
+    def __init__(out self):
+        self.vocab = Optional[TrainedVocabulary]()
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -133,7 +166,7 @@ def _u8_ptr(addr: Int) raises -> MutPointer[UInt8, MutUntrackedOrigin]:
 
 def _require_loaded(loaded: Bool) raises:
     if not loaded:
-        raise Error("tokenizer host: the handle holds no tokenizer; gpt2_load it")
+        raise Error("tokenizer host: the handle holds no tokenizer; bpe_load it")
 
 
 def tokenizer_host_numeric_mode_binding() raises -> PythonObject:
@@ -163,21 +196,27 @@ def tokenizer_host_column_binding() raises -> PythonObject:
 
 
 def tokenizer_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary writes encode's ids in reverse order on purpose
-    (-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1, the gate's negative control)."""
-    return PythonObject(TOKENIZER_HOST_SABOTAGE or TOKENIZER_BATCH_SABOTAGE)
+    """Whether this binary is a negative-control build: encode's ids in
+    reverse order (-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1), ids swapped
+    across batch boundaries (-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1) or
+    the trainer's tie-break reversed (-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1)."""
+    return PythonObject(
+        TOKENIZER_HOST_SABOTAGE
+        or TOKENIZER_BATCH_SABOTAGE
+        or BPE_TRAINER_SABOTAGE
+    )
 
 
-def gpt2_load_binding(ranks_path: PythonObject) raises -> PythonObject:
+def bpe_load_binding(ranks_path: PythonObject) raises -> PythonObject:
     """Parse the caller's rank file once into a handle. Every refusal in
     `tokenizer/impl/ranks.mojo::load_rank_table` (a rank out of order, an
     odd hex field, a duplicate token) and
     `unicode_class.mojo::builtin_unicode_classes` (a generated table that is
     not the pin) raises here with its own sentence."""
     var rp = String(py=ranks_path)
-    var handle = Gpt2Handle()
+    var handle = BpeHandle()
     with GILReleased(Python()):
-        var tok = load_gpt2_tokenizer_from(rp)
+        var tok = load_bpe_tokenizer_from(rp)
         var longest = len(String(GPT2_ENDOFTEXT).as_bytes())
         for i in range(tok.ranks.n_tokens()):
             if tok.ranks.length[i] > longest:
@@ -187,19 +226,19 @@ def gpt2_load_binding(ranks_path: PythonObject) raises -> PythonObject:
     return PythonObject(alloc=handle^)
 
 
-def gpt2_n_vocab_binding(handle: PythonObject) raises -> PythonObject:
-    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+def bpe_n_vocab_binding(handle: PythonObject) raises -> PythonObject:
+    var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
     return PythonObject(owner[].tok.value().n_vocab())
 
 
-def gpt2_max_token_bytes_binding(handle: PythonObject) raises -> PythonObject:
-    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+def bpe_max_token_bytes_binding(handle: PythonObject) raises -> PythonObject:
+    var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
     return PythonObject(owner[].max_token_bytes)
 
 
-def gpt2_encode_binding(
+def bpe_encode_binding(
     handle: PythonObject,
     text_addr: PythonObject,
     n_bytes: PythonObject,
@@ -207,16 +246,16 @@ def gpt2_encode_binding(
     out_cap: PythonObject,
     allow_endoftext: PythonObject,
 ) raises -> PythonObject:
-    """`GPT2Tokenizer.encode_bytes` on the host. Returns the id count."""
-    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+    """`BpeTokenizer.encode_bytes` on the host. Returns the id count."""
+    var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
     var n = _index(n_bytes)
     var cap = _index(out_cap)
     var allow = _flag(allow_endoftext, "allow_endoftext")
     if n < 0:
-        raise Error("gpt2_encode: n_bytes must be >= 0, got " + String(n))
+        raise Error("bpe_encode: n_bytes must be >= 0, got " + String(n))
     if cap < 0:
-        raise Error("gpt2_encode: out_cap must be >= 0, got " + String(cap))
+        raise Error("bpe_encode: out_cap must be >= 0, got " + String(cap))
     if n == 0:
         return PythonObject(0)
     var text_address = _index(text_addr)
@@ -231,7 +270,7 @@ def gpt2_encode_binding(
         count = len(ids)
         if count > cap:
             raise Error(
-                "gpt2_encode: "
+                "bpe_encode: "
                 + String(count)
                 + " ids do not fit an output of "
                 + String(cap)
@@ -252,7 +291,7 @@ def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
     return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
-def gpt2_encode_batch_binding(
+def bpe_encode_batch_binding(
     handle: PythonObject,
     text_addr: PythonObject,
     offsets_addr: PythonObject,
@@ -260,32 +299,32 @@ def gpt2_encode_batch_binding(
     counts_addr: PythonObject,
     dims: PythonObject,
 ) raises -> PythonObject:
-    """`GPT2Tokenizer.encode_batch` on the host: ONE crossing for many
+    """`BpeTokenizer.encode_batch` on the host: ONE crossing for many
     documents. `dims` is `[n_docs, n_bytes, out_cap, allow_endoftext]`.
     Reads the concatenated `n_bytes` uint8 at `text_addr` and `n_docs + 1`
     int64 offsets at `offsets_addr` (0 first, nondecreasing, `n_bytes`
     last); document k is bytes [offsets[k], offsets[k + 1]). Each document
-    is encoded ALONE, by the same `encode_bytes` call `gpt2_encode` makes on
-    its own buffer, so its ids are those of `gpt2_encode` on that document
+    is encoded ALONE, by the same `encode_bytes` call `bpe_encode` makes on
+    its own buffer, so its ids are those of `bpe_encode` on that document
     byte for byte. Writes every document's ids back to back as int32 at
     `out_addr` and each document's id count as int64 at `counts_addr`;
     returns the total. `out_cap = n_bytes` always suffices. Every offset is
     checked before any document is encoded; a total above `out_cap` is
     refused with nothing written."""
-    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+    var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
     if Int(py=len(dims)) != 4:
-        raise Error("gpt2_encode_batch: dims must be [n_docs, n_bytes, out_cap, allow_endoftext]")
+        raise Error("bpe_encode_batch: dims must be [n_docs, n_bytes, out_cap, allow_endoftext]")
     var n_docs = _index(dims[0])
     var n = _index(dims[1])
     var cap = _index(dims[2])
     var allow = _flag(dims[3], "allow_endoftext")
     if n_docs < 0:
-        raise Error("gpt2_encode_batch: n_docs must be >= 0, got " + String(n_docs))
+        raise Error("bpe_encode_batch: n_docs must be >= 0, got " + String(n_docs))
     if n < 0:
-        raise Error("gpt2_encode_batch: n_bytes must be >= 0, got " + String(n))
+        raise Error("bpe_encode_batch: n_bytes must be >= 0, got " + String(n))
     if cap < 0:
-        raise Error("gpt2_encode_batch: out_cap must be >= 0, got " + String(cap))
+        raise Error("bpe_encode_batch: out_cap must be >= 0, got " + String(cap))
     if n_docs == 0:
         return PythonObject(0)
     var text_address = _index(text_addr) if n > 0 else 0
@@ -297,7 +336,7 @@ def gpt2_encode_batch_binding(
         var offs = _i64_ptr(offsets_address)
         if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
             raise Error(
-                "gpt2_encode_batch: offsets must start at 0 and end at n_bytes "
+                "bpe_encode_batch: offsets must start at 0 and end at n_bytes "
                 + String(n)
                 + ", got "
                 + String(Int(offs[0]))
@@ -307,7 +346,7 @@ def gpt2_encode_batch_binding(
         for k in range(n_docs):
             if Int(offs[k + 1]) < Int(offs[k]):
                 raise Error(
-                    "gpt2_encode_batch: offsets decrease at document "
+                    "bpe_encode_batch: offsets decrease at document "
                     + String(k)
                 )
         var all_ids = List[Int](capacity=n)
@@ -319,7 +358,7 @@ def gpt2_encode_batch_binding(
             if m > 0:
                 var src = _u8_ptr(text_address + a)
                 memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
-            # THE SAME CALL gpt2_encode MAKES, on this document alone.
+            # THE SAME CALL bpe_encode MAKES, on this document alone.
             var ids = owner[].tok.value().encode_bytes(doc, allow)
             var c = len(ids)
             for j in range(c):
@@ -343,7 +382,7 @@ def gpt2_encode_batch_binding(
         total = len(all_ids)
         if total > cap:
             raise Error(
-                "gpt2_encode_batch: "
+                "bpe_encode_batch: "
                 + String(total)
                 + " ids do not fit an output of "
                 + String(cap)
@@ -359,22 +398,22 @@ def gpt2_encode_batch_binding(
     return PythonObject(total)
 
 
-def gpt2_decode_binding(
+def bpe_decode_binding(
     handle: PythonObject,
     ids_addr: PythonObject,
     n_ids: PythonObject,
     out_addr: PythonObject,
     out_cap: PythonObject,
 ) raises -> PythonObject:
-    """`GPT2Tokenizer.decode_bytes` on the host. Returns the byte count."""
-    var owner = handle.downcast_value_ptr[Gpt2Handle]()
+    """`BpeTokenizer.decode_bytes` on the host. Returns the byte count."""
+    var owner = handle.downcast_value_ptr[BpeHandle]()
     _require_loaded(Bool(owner[].tok))
     var n = _index(n_ids)
     var cap = _index(out_cap)
     if n < 0:
-        raise Error("gpt2_decode: n_ids must be >= 0, got " + String(n))
+        raise Error("bpe_decode: n_ids must be >= 0, got " + String(n))
     if cap < 0:
-        raise Error("gpt2_decode: out_cap must be >= 0, got " + String(cap))
+        raise Error("bpe_decode: out_cap must be >= 0, got " + String(cap))
     if n == 0:
         return PythonObject(0)
     var ids_address = _index(ids_addr)
@@ -391,7 +430,7 @@ def gpt2_decode_binding(
         count = len(out)
         if count > cap:
             raise Error(
-                "gpt2_decode: "
+                "bpe_decode: "
                 + String(count)
                 + " bytes do not fit an output of "
                 + String(cap)
@@ -403,6 +442,134 @@ def gpt2_decode_binding(
     return PythonObject(count)
 
 
+def bpe_train_binding(
+    text_addr: PythonObject,
+    offsets_addr: PythonObject,
+    dims: PythonObject,
+) raises -> PythonObject:
+    """`tokenizer/train/bpe_train.mojo::train_bpe` on the host
+    (lane/bpe-builder-native, 2026-09-18): TRAIN a vocabulary.
+
+    `dims` is `[n_docs, n_bytes, vocab_size, min_frequency,
+    break_ties_high]`. Reads the concatenated `n_bytes` uint8 at `text_addr`
+    and `n_docs + 1` int64 offsets at `offsets_addr` (0 first,
+    nondecreasing, `n_bytes` last); document k is bytes
+    [offsets[k], offsets[k + 1]), and each is pre-tokenized ALONE, exactly
+    as `BpeVocabularyTrainer` hands them over. `break_ties_high` is the
+    Python door's MOJOLEARN_BPE_TRAINER_SABOTAGE environment arm and must be
+    False outside a negative control. Returns an opaque handle;
+    `bpe_trained_sizes` then `bpe_trained_copy` read the result out. This
+    file adds no arithmetic: the one call below is the trainer
+    `pixi run check-bpe-trainer` holds to the Python reference."""
+    if Int(py=len(dims)) != 5:
+        raise Error(
+            "bpe_train: dims must be [n_docs, n_bytes, vocab_size,"
+            " min_frequency, break_ties_high]"
+        )
+    var n_docs = _index(dims[0])
+    var n = _index(dims[1])
+    var vocab_size = _index(dims[2])
+    var min_frequency = _index(dims[3])
+    var reverse = _flag(dims[4], "break_ties_high")
+    if n_docs < 1:
+        raise Error("bpe_train: n_docs must be >= 1, got " + String(n_docs))
+    if n < 0:
+        raise Error("bpe_train: n_bytes must be >= 0, got " + String(n))
+    var text_address = _index(text_addr) if n > 0 else 0
+    var offsets_address = _index(offsets_addr)
+    var handle = BpeTrainedHandle()
+    with GILReleased(Python()):
+        var offs = _i64_ptr(offsets_address)
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+            raise Error(
+                "bpe_train: offsets must start at 0 and end at n_bytes "
+                + String(n)
+                + ", got "
+                + String(Int(offs[0]))
+                + " and "
+                + String(Int(offs[n_docs]))
+            )
+        for k in range(n_docs):
+            if Int(offs[k + 1]) < Int(offs[k]):
+                raise Error(
+                    "bpe_train: offsets decrease at document " + String(k)
+                )
+        var documents = List[List[UInt8]](capacity=n_docs)
+        for k in range(n_docs):
+            var a = Int(offs[k])
+            var m = Int(offs[k + 1]) - a
+            var doc = List[UInt8](length=m, fill=UInt8(0))
+            if m > 0:
+                memcpy(
+                    dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
+                )
+            documents.append(doc^)
+        var classes = builtin_unicode_classes()
+        # THE ONE CALL THAT COMPUTES ANYTHING.
+        handle.vocab = train_bpe(
+            documents, classes, vocab_size, min_frequency, reverse
+        )
+    return PythonObject(alloc=handle^)
+
+
+def bpe_trained_sizes_binding(handle: PythonObject) raises -> PythonObject:
+    """`[n_tokens, arena_bytes, n_merges, n_ties_broken, n_groups]`, so the
+    caller can size `bpe_trained_copy`'s buffers."""
+    var owner = handle.downcast_value_ptr[BpeTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer host: the handle holds no trained vocabulary")
+    ref v = owner[].vocab.value()
+    var out = Python.list()
+    out.append(PythonObject(v.n_tokens()))
+    out.append(PythonObject(len(v.arena)))
+    out.append(PythonObject(v.n_merges()))
+    out.append(PythonObject(v.n_ties_broken))
+    out.append(PythonObject(v.n_groups))
+    return out
+
+
+def bpe_trained_copy_binding(
+    handle: PythonObject,
+    arena_addr: PythonObject,
+    lengths_addr: PythonObject,
+    left_addr: PythonObject,
+    right_addr: PythonObject,
+) raises -> PythonObject:
+    """Copy the trained vocabulary out: the token bytes back to back in rank
+    order (uint8, `arena_bytes`), each token's length (int64, `n_tokens`),
+    and the merges' left and right ids (int64, `n_merges` each). Buffers are
+    sized from `bpe_trained_sizes`. Returns `n_tokens`."""
+    var owner = handle.downcast_value_ptr[BpeTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer host: the handle holds no trained vocabulary")
+    var arena_address = _index(arena_addr)
+    var lengths_address = _index(lengths_addr)
+    var nm = owner[].vocab.value().n_merges()
+    var left_address = _index(left_addr) if nm > 0 else 0
+    var right_address = _index(right_addr) if nm > 0 else 0
+    ref v = owner[].vocab.value()
+    var arena = _u8_ptr(arena_address)
+    var lengths = _i64_ptr(lengths_address)
+    # The arena is written in RANK order from each token's own offset, so
+    # the caller's slicing by cumulative length is correct whatever order
+    # the trainer's arena was filled in.
+    var at = 0
+    for id in range(v.n_tokens()):
+        var m = v.length[id]
+        var src = v.offset[id]
+        for i in range(m):
+            arena[at + i] = v.arena[src + i]
+        at += m
+        lengths[id] = Int64(m)
+    if nm > 0:
+        var left = _i64_ptr(left_address)
+        var right = _i64_ptr(right_address)
+        for k in range(nm):
+            left[k] = Int64(v.merge_left[k])
+            right[k] = Int64(v.merge_right[k])
+    return PythonObject(v.n_tokens())
+
+
 @export
 def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
     try:
@@ -411,13 +578,17 @@ def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
         module.def_function[tokenizer_host_vendor_binding]("tokenizer_host_vendor")
         module.def_function[tokenizer_host_column_binding]("tokenizer_host_column")
         module.def_function[tokenizer_host_sabotage_binding]("tokenizer_host_sabotage")
-        _ = module.add_type[Gpt2Handle]("_Gpt2Handle")
-        module.def_function[gpt2_load_binding]("gpt2_load")
-        module.def_function[gpt2_n_vocab_binding]("gpt2_n_vocab")
-        module.def_function[gpt2_max_token_bytes_binding]("gpt2_max_token_bytes")
-        module.def_function[gpt2_encode_binding]("gpt2_encode")
-        module.def_function[gpt2_encode_batch_binding]("gpt2_encode_batch")
-        module.def_function[gpt2_decode_binding]("gpt2_decode")
+        _ = module.add_type[BpeHandle]("_BpeHandle")
+        module.def_function[bpe_load_binding]("bpe_load")
+        module.def_function[bpe_n_vocab_binding]("bpe_n_vocab")
+        module.def_function[bpe_max_token_bytes_binding]("bpe_max_token_bytes")
+        module.def_function[bpe_encode_binding]("bpe_encode")
+        module.def_function[bpe_encode_batch_binding]("bpe_encode_batch")
+        module.def_function[bpe_decode_binding]("bpe_decode")
+        _ = module.add_type[BpeTrainedHandle]("_BpeTrainedHandle")
+        module.def_function[bpe_train_binding]("bpe_train")
+        module.def_function[bpe_trained_sizes_binding]("bpe_trained_sizes")
+        module.def_function[bpe_trained_copy_binding]("bpe_trained_copy")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

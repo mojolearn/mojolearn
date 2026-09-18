@@ -1,0 +1,10 @@
+{
+  "source": "f771338c7",
+  "run_completed": {
+    "conclusion": "failure",
+    "status": "completed"
+  },
+  "output": "/Users/andrewhendel/mojolearn-evidence/ordinary-23-2026-09-18/2026-09-18_175536-amd-mi300x-ordinary-23",
+  "stage": "CONTROLLER_FINISHED",
+  "exit_code": 0
+}

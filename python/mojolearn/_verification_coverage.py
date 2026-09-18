@@ -1,10 +1,12 @@
 """Installed-package verification scope; inspection never executes a lane."""
 import hashlib
 import json
+import re
 from pathlib import Path
 
 from . import host_surface
 from . import _verify_reference as vref
+from . import _verify_small as small_profile
 from ._verification_catalog import ENTRIES, PROVENANCE
 from ._verification_ctr_models import MODEL_SHA256 as CTR_MODELS
 from ._verification_evidence_data import DATA as HISTORICAL_EVIDENCE
@@ -16,6 +18,38 @@ def declaration(spec):
     if isinstance(spec, str) and spec.startswith("n/a:"):
         return dict(kind="not_applicable", reason=spec)
     return dict(kind="undeclared", reason="no explicit verification contract")
+
+
+def reference_support(table, lane, fixtures, parts, stale=False):
+    """Expose which current numerical answers each device class supports.
+
+    An old, conflicting or N/A entry is not a numerical witness. These are
+    reference-table counts, not executions of the installed wheel.
+    """
+    result = {}
+    for part in parts:
+        row = dict(numerical_fixtures=0, not_applicable_fixtures=0,
+                   missing_or_conflicted_fixtures=0, stale_fixtures=0,
+                   agreeing_device_classes={c: 0 for c in ('cpu', 'apple', 'nvidia', 'amd')})
+        for fixture in fixtures:
+            ent = vref.entry(table, lane, fixture, part)
+            if stale:
+                row['stale_fixtures'] += 1
+                continue
+            ref = ent.get('ref') if ent else None
+            if not ent or ent.get('conflict') or not isinstance(ref, str):
+                row['missing_or_conflicted_fixtures'] += 1
+            elif ref.startswith('n/a:'):
+                row['not_applicable_fixtures'] += 1
+            elif re.fullmatch('[0-9a-f]{16}', ref):
+                row['numerical_fixtures'] += 1
+                for cls, column in vref.columns_of(table, ent).items():
+                    if cls in row['agreeing_device_classes'] and column['agrees']:
+                        row['agreeing_device_classes'][cls] += 1
+            else:
+                row['missing_or_conflicted_fixtures'] += 1
+        result[part] = row
+    return result
 
 
 def inventory(harness, table, vendor_class):
@@ -41,6 +75,10 @@ def inventory(harness, table, vendor_class):
                 status, reason = "unavailable", "no declared public CPU verification route"
         if status == "available" and name in stale:
             status, reason = "withheld", "stale reference"
+        elif reason == "stale reference" and name not in stale:
+            # A fresh CPU recording can repair the revision before independent
+            # GPU qualification closes the explicit hold in host_surface.
+            reason = "reference qualification pending"
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
@@ -63,6 +101,8 @@ def inventory(harness, table, vendor_class):
                                requires_gpu_for_execution=name not in covered,
                                physical_multi_gpu_measured_by_cpu=False),
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES),
+                           reference_support=reference_support(table, name, harness.FIXTURES,
+                                                               refs, stale=name in stale),
                            reference_admission=table.get('lane_admission', {}).get(name,
                                dict(policy=table.get('admission_policy', dict(status='legacy')))))
     for name, lane in lanes.items():
@@ -116,6 +156,19 @@ def inventory(harness, table, vendor_class):
                 reference_admission_policy=table.get('admission_policy',
                     dict(status='legacy', reason='predates repeated-value and protocol admission; regenerate before release')),
                 declared_ctr_model_sha256=CTR_MODELS,
+                supplemental_checks=[dict(command='verify-causal-lm',
+                    scope='tiny whole loaded-model inference composition',
+                    reference_admitted=False, release_qualified=False),
+                    dict(command='verify-distributed',
+                    scope='two-GPU forecasting, GPC and disjoint IVF numerical checks with transport controls',
+                    reference_admitted=False, release_qualified=False),
+                    dict(command='verify-cross-validation',
+                    scope='GPU fold scheduling, model, prediction and score checks',
+                    reference_admitted=False, release_qualified=False)],
+                experimental_profiles=[dict(profile=small_profile.PROFILE,
+                    lanes=list(small_profile.LANES), cases=len(small_profile.CASES),
+                    max_rows=small_profile.MAX_ROWS,
+                    default_reference_compatible=False, reference_admitted=False)],
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())

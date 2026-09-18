@@ -145,6 +145,7 @@ from gemm.checks.gemm_oracle import (
     fold_node_total,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     PINNED_ACC_COLS_PER_TH,
@@ -154,6 +155,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
@@ -665,12 +667,10 @@ def identical_gemm_flat_kernel(
             # operands flushed as loaded (5a, 5b) and the accumulator flushed
             # after every step (5c). No sub-partition of a leaf -- section
             # 7.1's clause about register tiling and vectorization.
-            acc = ftz(
-                identical_mul_add(
-                    ftz(a.unsafe_load(a_row + p * a_sp)),
-                    ftz(b.unsafe_load(p * b_sp + b_col)),
-                    acc,
-                )
+            acc = rtf_mul_add(
+                ftz(a.unsafe_load(a_row + p * a_sp)),
+                ftz(b.unsafe_load(p * b_sp + b_col)),
+                acc,
             )
         # 5d: the leaf partial as written.
         var part = ftz(acc)
@@ -834,12 +834,10 @@ def identical_gemm_tiled_kernel[
                 # Contract 7.1 again, character for character the FLAT
                 # plan's step with the two loads served from threadgroup
                 # memory. Seams 5a, 5b, 5c.
-                acc = ftz(
-                    identical_mul_add(
-                        ftz(as_[unsafe_offset = r * KS + cc3]),
-                        ftz(bs_[unsafe_offset = cc3 * TN + s]),
-                        acc,
-                    )
+                acc = rtf_mul_add(
+                    ftz(as_[unsafe_offset = r * KS + cc3]),
+                    ftz(bs_[unsafe_offset = cc3 * TN + s]),
+                    acc,
                 )
             barrier()
             p += chunk
@@ -938,12 +936,10 @@ def identical_gemm_leaf_kernel(
     var a_row = i * a_si
     var b_col = j * b_sj
     for p in range(bounds[0], bounds[1]):
-        acc = ftz(
-            identical_mul_add(
-                ftz(a.unsafe_load(a_row + p * a_sp)),
-                ftz(b.unsafe_load(p * b_sp + b_col)),
-                acc,
-            )
+        acc = rtf_mul_add(
+            ftz(a.unsafe_load(a_row + p * a_sp)),
+            ftz(b.unsafe_load(p * b_sp + b_col)),
+            acc,
         )
     var slot = t
     comptime if SAB_NODE_ORDER:
@@ -1206,13 +1202,13 @@ comptime TUNED_HW_FTZ_FMA = (
 )
 
 
-# Apply operand seams before shared staging on the measured NVIDIA path.
+# Apply operand seams before shared staging on qualified NVIDIA/AMD paths.
 # Consumers read the same flushed words without repeating their tests.
 # Explicit opt-in qualifies other columns; the legacy flag supplies A/B control.
 comptime TUNED_STAGE_FTZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_GEMM_LEGACY_STAGE_FTZ"]()
-    and (TUNED_HW_FTZ_FMA or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
+    and (lib_gemm_stage_ftz_for[TARGET_COLUMN]() or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
 )
 
 
@@ -1266,7 +1262,110 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
         ](rounded, Float32(1.0))
     comptime if TUNED_CLASS_FLUSH:
         return _ftz_class(identical_mul_add(a, b, acc))
-    return ftz(identical_mul_add(a, b, acc))
+    # Apple (lane/apple-seam-repair): the native FMA flushes before rounding;
+    # `rtf_mul_add` repairs the signed-zero boundary case exactly and is the
+    # plain `ftz(identical_mul_add(...))` on every other column.
+    return rtf_mul_add(a, b, acc)
+
+
+#: lane/apple-seam-repair, 2026-09-18. The per-step repair inlined into the
+#: tuned kernel's 64-cell register tile made the Apple metallib 10x larger and
+#: the Apple GEMM sum ~2.4x slower (LANE_STATUS_apple-seam-repair.md). The
+#: tuned kernel therefore takes an EXACT block admission instead: while
+#: staging, each thread keeps the minimum biased exponent of the NONZERO
+#: operand words it loaded (A and B separately); the block reduces them once
+#: after the last window. If `minA + minB >= 151` (in exponent-field units),
+#: every product of two nonzero flushed operands this block can form has its
+#: lowest bit at or above 2^-149, every flushed accumulator is a multiple of
+#: 2^-149, so every exact step result is a multiple of 2^-149 and none lies in
+#: the window [2^-126 - 2^-150, 2^-126): the fast step's bits ARE rtf. Blocks
+#: that fail admission recompute each of their cells with the exact repaired
+#: step (`rtf_mul_add`) in the contract's order and fold. Price arm
+#: `-D MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR` keeps the per-step repair.
+comptime TUNED_BLOCK_ADMIT = (
+    RTF_REPAIR and not is_defined["MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR"]()
+)
+
+comptime _EXP_NONE = UInt32(0x7F800000)
+
+
+@always_inline
+def _tuned_step_admitted(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """The tuned kernel's step: without the inline repair when the block
+    admission is compiled in (it then proves or repairs the block)."""
+    comptime if TUNED_BLOCK_ADMIT:
+        return ftz(identical_mul_add(a, b, acc))
+    return _tuned_step(a, b, acc)
+
+
+@always_inline
+def _nz_exp_min[W: Int](v: SIMD[DType.float32, W], cur: UInt32) -> UInt32:
+    """Minimum exponent field over the words of `v` that flush to a NONZERO
+    value (exponent field nonzero); zeros and subnormals flush to zero and
+    constrain nothing. Inf/NaN read 0x7F800000, the no-constraint value."""
+    var e = bitcast[DType.uint32](v) & SIMD[DType.uint32, W](0x7F800000)
+    var z = e.eq(SIMD[DType.uint32, W](0))
+    var ez = z.select(SIMD[DType.uint32, W](0x7F800000), e)
+    return min(cur, ez.reduce_min())
+
+
+@always_inline
+def _admit_track[
+    WA: Int, WB: Int
+](
+    pa: SIMD[DType.float32, WA],
+    pb: SIMD[DType.float32, WB],
+    mut emin_a: UInt32,
+    mut emin_b: UInt32,
+):
+    comptime if TUNED_BLOCK_ADMIT:
+        emin_a = _nz_exp_min(pa, emin_a)
+        emin_b = _nz_exp_min(pb, emin_b)
+
+
+@always_inline
+def _admission_holds(emin_a: UInt32, emin_b: UInt32) -> Bool:
+    if emin_a == _EXP_NONE or emin_b == _EXP_NONE:
+        return True
+    return emin_a + emin_b >= UInt32(151 << 23)
+
+
+@always_inline
+def _rtf_leaf_partial(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    i: Int, j: Int, t: Int, p_count: Int, leaf: Int, k: Int,
+    a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
+) -> Float32:
+    """One logical leaf of cell (i, j), the exact rtf step, contract 7.1."""
+    var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
+    var acc = Float32(0.0)
+    for p in range(bounds[0], bounds[1]):
+        acc = rtf_mul_add(
+            ftz(a.unsafe_load(i * a_si + p * a_sp)),
+            ftz(b.unsafe_load(p * b_sp + j * b_sj)),
+            acc,
+        )
+    return ftz(acc)
+
+
+@always_inline
+def _rtf_cell(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    i: Int, j: Int, p_count: Int, leaf: Int, k: Int,
+    a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
+) -> Float32:
+    """Cell (i, j) exactly as `identical_gemm_flat_kernel` computes it (every
+    leaf, then the contract's fold tree), with the exact rtf step."""
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for t in range(p_count):
+        var part = _rtf_leaf_partial(
+            a, b, i, j, t, p_count, leaf, k, a_si, a_sp, b_sp, b_sj
+        )
+        _ = _fold_push(stack, occ, part)
+    return ftz(_fold_drain(stack, occ))
 
 
 
@@ -1581,7 +1680,7 @@ def _tuned_g2r[
                         out[s0 * VEC + e0] = src.unsafe_load(
                             oi0 * outer_stride + (p0 + cc0) * k_stride
                         )
-        comptime if TUNED_STAGE_FTZ:
+        comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
             comptime for f in range(SLOTS * VEC):
                 out[f] = ftz(out[f])
         return out
@@ -1604,7 +1703,7 @@ def _tuned_g2r[
                             out[s * VEC + e] = src.unsafe_load(
                                 oi * outer_stride + (p0 + cc + e) * k_stride
                             )
-    comptime if TUNED_STAGE_FTZ:
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
         comptime for f in range(SLOTS * VEC):
             out[f] = ftz(out[f])
     return out
@@ -1784,6 +1883,8 @@ def identical_gemm_tuned_kernel[
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
     var occ = 0
     var serial = SIMD[DType.float32, NCELL](0.0)
+    var emin_a = _EXP_NONE
+    var emin_b = _EXP_NONE
 
     if p_count <= 0:
         # `k == 0`, contract section 8: every cell is `+0.0`, and the
@@ -1822,6 +1923,12 @@ def identical_gemm_tuned_kernel[
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
         var chunk = win[1]
         var pgw = w % PAGES
+        # The window's operand words, exactly once each (see
+        # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
+        # A helper and not an inline `comptime if`: an empty `comptime if`
+        # block inside this loop changed the gfx942 schedule of five tuned
+        # kernels (integer address arithmetic only, bisected 2026-09-18).
+        _admit_track(pa, pb, emin_a, emin_b)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES`.
         # The slot -> (row, column) expression is `_tuned_g2r`'s, in both
@@ -1920,7 +2027,7 @@ def identical_gemm_tuned_kernel[
                             # 4 (one fused rounding) and 5c (the accumulator
                             # flushed after EVERY step). 5c is per cell per
                             # step and is NOT hoisted, because it cannot be.
-                            acc[u2 * CPT + v3] = _tuned_step(
+                            acc[u2 * CPT + v3] = _tuned_step_admitted(
                                 afl, bfl[v3], acc[u2 * CPT + v3]
                             )
         else:
@@ -1938,7 +2045,7 @@ def identical_gemm_tuned_kernel[
                         as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
                     )
                     comptime for v5 in range(NCOL):
-                        acc[u3 * CPT + v5] = _tuned_step(
+                        acc[u3 * CPT + v5] = _tuned_step_admitted(
                             afl2, bfl2[v5], acc[u3 * CPT + v5]
                         )
 
@@ -2003,6 +2110,56 @@ def identical_gemm_tuned_kernel[
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+
+    comptime if TUNED_BLOCK_ADMIT:
+        comptime assert (NTH & (NTH - 1)) == 0, "block admission: NTH power of two"
+        # Every thread is here (the early returns above are block-uniform).
+        # The shared pages are free once every thread has left the last
+        # window's compute.
+        barrier()
+        as_.unsafe_store(tid, bitcast[DType.float32](emin_a))
+        bs_.unsafe_store(tid, bitcast[DType.float32](emin_b))
+        barrier()
+        var half = NTH // 2
+        while half > 0:
+            if tid < half:
+                var xa = bitcast[DType.uint32](as_.unsafe_load(tid))
+                var ya = bitcast[DType.uint32](as_.unsafe_load(tid + half))
+                as_.unsafe_store(tid, bitcast[DType.float32](min(xa, ya)))
+                var xb = bitcast[DType.uint32](bs_.unsafe_load(tid))
+                var yb = bitcast[DType.uint32](bs_.unsafe_load(tid + half))
+                bs_.unsafe_store(tid, bitcast[DType.float32](min(xb, yb)))
+            barrier()
+            half = half // 2
+        var admitted = _admission_holds(
+            bitcast[DType.uint32](as_.unsafe_load(0)),
+            bitcast[DType.uint32](bs_.unsafe_load(0)),
+        )
+        comptime if is_defined["MOJOLEARN_GEMM_ADMIT_NEVER"]():
+            admitted = False  # test arm: every block takes the exact path
+        if not admitted:
+            comptime for ur in range(NR):
+                comptime for vr in range(NCOL):
+                    var ri = i0 + accrow + ur * TR
+                    var rj = j0 + acccol + vr * TC
+                    if ri < m and rj < n:
+                        comptime if SPLIT:
+                            c.unsafe_store(
+                                t_pos * (m * n) + ri * n + rj,
+                                _rtf_leaf_partial(
+                                    a, b, ri, rj, t_pos, p_count, leaf, k,
+                                    a_si, a_sp, b_sp, b_sj,
+                                ),
+                            )
+                        else:
+                            c.unsafe_store(
+                                ri * n + rj,
+                                _rtf_cell(
+                                    a, b, ri, rj, p_count, leaf, k,
+                                    a_si, a_sp, b_sp, b_sj,
+                                ),
+                            )
+            return
 
     comptime if SPLIT:
         # Every partial is in the workspace; the fold is the next launch.
@@ -3710,6 +3867,10 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
+comptime GEMM_REUSE_GROUP_WS = (
+    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
+)
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
@@ -4250,13 +4411,33 @@ def _shipped_body_kpack_hg[
     `identical_gemm_kpack_kernel` as the `kpack_hg` arm ran it (padded
     aligned page, gather staging, hardware fold flush): the group launch plus
     the fold at the ksplit row's group size where the rule takes the call
-    (`_kpack_run` allocates the node workspace and SYNCHRONIZES, `ws`
-    unused), all leaves in one asynchronous launch otherwise. Every other
+    (the reusable-workspace arm uses sufficiently sized caller scratch;
+    otherwise `_kpack_run` allocates the nodes and synchronizes), all leaves
+    in one asynchronous launch otherwise. Every other
     call keeps `choose_gemm_plan`'s plan. `SAB = True` is the trial hook's
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
     if m <= 0 or n <= 0:
         return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        comptime if GEMM_REUSE_GROUP_WS:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var part = contract_partition(k)
+            if gl > 0 and part[1] > 0:
+                var rg = _ksplit_resolve_leaves(gl, part[1])
+                if len(ws) >= m * n * rg[1]:
+                    # Same two kernels and same stream, with caller-owned
+                    # scratch kept alive until the caller's final fence.
+                    _kpack_launch[
+                        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
+                        GEMM_KPACK_KS, GEMM_KPACK_FS, True, SAB,
+                        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+                    ](ctx, ws, a, b, m, n, k, part[0], part[1],
+                      gemm_operand_strides(op, m, n, k), rg[0], rg[1])
+                    comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
+                        _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
+                    return
+                # Older callers with only plan-sized scratch retain the
+                # allocating path; they never write past a small buffer.
         _kpack_run[
             GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
             GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
@@ -5010,11 +5191,26 @@ def _kpack_gather[
     zeros, `_tuned_g2r`), flushed at staging exactly as `_tuned_g2r` flushes."""
     var out = SIMD[DType.float32, R](0.0)
     if step < chunk:
-        comptime for u in range(R):
-            var oi = base_outer + g + u * G
-            if oi < outer_limit:
-                out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
-    comptime if TUNED_STAGE_FTZ:
+        comptime if is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]():
+            # A block-uniform full-tile test replaces R per-line predicates.
+            # The ragged path still checks every line; no operand is padded.
+            if base_outer + R * G <= outer_limit:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+                comptime if is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FULL"]():
+                    out[0] = Float32(12345.0)
+            else:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    if oi < outer_limit:
+                        out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+        else:
+            comptime for u in range(R):
+                var oi = base_outer + g + u * G
+                if oi < outer_limit:
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FTZ"]():
         comptime for f in range(R):
             out[f] = ftz(out[f])
     return out
@@ -5307,6 +5503,12 @@ def identical_gemm_kpack_kernel[
         pb = _tuned_g2r[BREG, VEC, KV, BN, NTH](
             b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
         )
+
+    comptime if (DIAG == 3 or DIAG == 5) and GATHER:
+        comptime for initial_page in range(PAGES):
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+        barrier()
 
     while w < w_end:
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
@@ -6543,12 +6745,22 @@ def identical_gemm[allow_vendor: Bool = True](
 
 
 def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
-    """The workspace `identical_gemm` may need at this shape: what
-    `choose_gemm_plan`'s answer costs. Phase 3 and Phase 4 allocate with
-    this. Never less than 1, so the buffer is always constructible."""
+    """Scratch for the actual dispatcher, including enabled grouped reuse.
+
+    Phase 3 and Phase 4 allocate with this. Never less than 1, so the buffer
+    is always constructible. Older smaller buffers take the allocating path.
+    """
     var w = identical_gemm_workspace_floats(
         m, n, k, choose_gemm_plan(m, n, k)
     )
+    comptime if GEMM_REUSE_GROUP_WS and GEMM_BODY_KPACK_HG:
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var p = contract_partition(k)[1]
+            if gl > 0 and p > 0:
+                var required = m * n * ((p + gl - 1) // gl)
+                if required > w:
+                    w = required
     if w < 1:
         return 1
     return w

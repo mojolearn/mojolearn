@@ -325,6 +325,7 @@ class HopperSpelling(unittest.TestCase):
         self.assertEqual(set(result['runtime_coverage']),
                          {'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})
         self.assertEqual(result['jobs_per_runtime_architecture'], 11)
+        self.assertIn(f"FULL {result['jobs_per_runtime_architecture']} installed jobs", result['scope'])
 
     def test_hopper_spelled_sm_90_still_admits(self):
         result = self._run({'cuda/sm_89', 'cuda/sm_90', 'hip/gfx942'})

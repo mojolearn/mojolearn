@@ -20,6 +20,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1).
 from core.step_phase import (
     StepPhaseClock,
+    step_count_device_alloc,
     step_count_h2d,
     step_count_host_alloc,
     step_count_launch,
@@ -75,8 +76,13 @@ from training.checks.optimizer import (
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
+from checks.kernel_matrix import TARGET_COLUMN, byte_lm_release_eager_for
+from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
+)
+from transformer.impl.llama.fused_attention import (
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
 )
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
@@ -165,6 +171,12 @@ not refuse the flag for that reason; the gate reads the availability
 witness and skips the controls on a build without it."""
 
 
+comptime BYTE_LM_STICKY_EAGER = is_defined["MOJOLEARN_BYTE_LM_STICKY_EAGER"]()
+
+comptime BYTE_LM_RELEASE_EAGER = (
+    is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"]() or byte_lm_release_eager_for[TARGET_COLUMN]()
+) and not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"]()
+
 comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
 """DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
 SEPARATE allocations, the way they were before rank 3 of
@@ -185,6 +197,42 @@ def byte_lm_ce_aliased() -> Bool:
     witness, building the same arm twice and comparing it with itself reads
     exactly like a passed identity gate."""
     comptime if BYTE_LM_CE_UNALIASED:
+        return False
+    return True
+
+
+def byte_lm_attn_sticky_fallback() -> Bool:
+    """DEVIATION 3110: TRUE only in a build carrying
+    `-D MOJOLEARN_ATTN_STICKY=1`, which stops relaunching the fused attention
+    kernels for a layer that has already refused. The default is FALSE and
+    relaunches, because the latch measured 3.6% SLOWER.
+
+    The A/B that claims the latch moves no bit reads this from INSIDE the
+    process that loaded the binding. A `.so` digest cannot answer it: the
+    define gates a single runtime branch on a comptime constant, so the two
+    builds differ by about one byte and are the same size."""
+    comptime if not ATTN_STICKY:
+        return False
+    return True
+
+
+def byte_lm_attn_kv_corner_guard() -> Bool:
+    """Whether the exact masked-tail predicate guards dk/dv negative zeros.
+
+    Enabled by the qualified replay column or either explicit guard define.
+    Read this inside the loaded binding to distinguish experimental arms.
+    """
+    comptime if ATTN_BWD_KV_CORNER_GUARD:
+        return True
+    return False
+
+
+def byte_lm_attn_bwd_corner_refuses() -> Bool:
+    """DEVIATION 3112: False in the MEASUREMENT build carrying
+    `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1`, whose backward does not refuse on a
+    corner. That build is never shipped and its only use is the bit
+    comparison against the refusing arm."""
+    comptime if ATTN_NO_BWD_CORNER:
         return False
     return True
 
@@ -323,7 +371,7 @@ def _require_profile() raises:
         raise Error("byte LM: training requires IDENTICAL")
     comptime if (GEMM_SABOTAGE or GEMM_BWD_SABOTAGE or ANY_EMB_SABOTAGE
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
-                 or BLOCK_ANY_SABOTAGE):
+                 or BLOCK_ANY_SABOTAGE or ATTN_TAIL_GUARD_SABOTAGE or ATTN_REPAIR_SAB_Z or ATTN_REPAIR_SAB_DQ):
         raise Error("byte LM: numerical sabotage build refused")
 
 
@@ -673,6 +721,7 @@ struct ByteTrainer(Movable):
     var scan: DeviceScanScratch
     var shadow_valid: Bool
     var shadow_step: Int
+    var released_eager_cells: Int
     var grad_step: Int
 
     def __init__(out self, ctx: DeviceContext, initial_params: List[Float32],
@@ -691,6 +740,7 @@ struct ByteTrainer(Movable):
         self.healthy = True
         self.shadow_valid = False
         self.shadow_step = -1
+        self.released_eager_cells = 0
         self.grad_step = -1
         self.scan = DeviceScanScratch(ctx)
         self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count)
@@ -746,6 +796,13 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
         4  layers grown backward   layers whose len(d_attn_weights) > 1
         5  layers with a full aexp layers whose len(aexp) > 1
 
+    Then forward/backward stage-list lengths and one
+    (forward status, backward status, materialized) triple per paired layer; exact-tail-guard flag; release flag; released eager cells;
+    sticky-routing flag; one prefer-eager flag per layer; replay flag;
+    one actual estash repair-site bitmask per layer (1 zdot, 2 dQ).
+    The binding prepends its original four session fields. The two list
+    lengths precede all variable-length fields; Python reads min(lengths).
+
     `aexp` IS REPORTED APART FROM THE OTHER THREE ON PURPOSE. Two
     different mechanisms grow it and they mean opposite things: the eager
     fallback grows all four together
@@ -758,15 +815,15 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     section 1.5 says these ten arrays are allocated at ONE element and
     grow on demand, that the growth is data dependent per layer and per
     step (`regime_product_ok`, `regime_finite`, or a `FUSED_CORNER` hit),
-    and that once grown they are **never released within a session**. So
+    and that under the legacy policy they never leave the session. So
     the device footprint of a long run is not a property of its shape: a
     session can double its device memory at some step nobody chose, and
     every capacity number taken in the first few steps is then wrong for
     the rest of the run. Nothing reported that growth, so a run that had
     it and a run that did not looked the same from outside.
 
-    NO ARITHMETIC AND NO DEVICE WORK. Every term is `len()` of a buffer
-    the trainer already owns, which is host metadata; nothing is
+    NO ARITHMETIC AND NO DEVICE WORK. Counts use `len()` of owned buffers;
+    path fields are saved host metadata. Nothing is
     launched, downloaded or synchronized, and no step path calls this.
     It is read between steps.
     """
@@ -776,7 +833,18 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     var grown_fwd = 0
     var grown_bwd = 0
     var grown_aexp = 0
-    for layer in range(tr.config.n_layers):
+    # DEVIATION 3110: BOUND BY THE LIST, NOT BY `n_layers`. The backward
+    # loop `pop`s each layer's stages out of `tr.forward` and `tr.backward`
+    # and reinserts them (`:1169-1170`), so a step that raises inside a
+    # backward call leaves the lists SHORT. Reading `n_layers` entries out of
+    # an 11-entry list then aborts the process with an out-of-bounds assert
+    # instead of reporting anything, which is how the batch-4 arm of the
+    # 2026-09-18 H100 leg died at step ~320: not an OOM, this. The counts are
+    # reported so a short list is VISIBLE rather than fatal.
+    var n_fwd = len(tr.forward)
+    var n_bwd = len(tr.backward)
+    var n = n_fwd if n_fwd < n_bwd else n_bwd
+    for layer in range(n):
         fwd_eager += len(tr.forward[layer].scores)
         fwd_eager += len(tr.forward[layer].masked)
         fwd_eager += len(tr.forward[layer].weights)
@@ -800,11 +868,22 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(grown_fwd)
     out.append(grown_bwd)
     out.append(grown_aexp)
+    out.append(n_fwd)
+    out.append(n_bwd)
     # Triples in layer order: actual launch statuses and current materialization.
-    for layer in range(tr.config.n_layers):
+    for layer in range(n):
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))
+    out.append(Int(ATTN_EXACT_TAIL_GUARD))
+    out.append(Int(BYTE_LM_RELEASE_EAGER))
+    out.append(tr.released_eager_cells)
+    out.append(Int(BYTE_LM_STICKY_EAGER))
+    for layer in range(n):
+        out.append(Int(tr.forward[layer].attn_prefer_eager))
+    out.append(Int(ATTN_REPAIR_MASKED_TAIL))
+    for layer in range(n):
+        out.append(tr.backward[layer].attn_repaired)
     return out^
 
 
@@ -1066,6 +1145,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                 tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
         step_count_sync()
         ctx.synchronize()
+        comptime if BYTE_LM_RELEASE_EAGER:
+            tr.released_eager_cells += _byte_release_forward_scratch(ctx, stages)
         tr.forward.insert(layer, stages^)
     # The blocks print their own `block.*` / `attn.*` lines; this envelope
     # is the whole forward loop including the per-layer waits and the
@@ -1110,9 +1191,81 @@ def _byte_step_device(ctx: DeviceContext, mut tr: ByteTrainer,
     return loss
 
 
+def _byte_release_forward_scratch(ctx: DeviceContext,
+                                  mut fwd: LlamaDeviceStages) raises -> Int:
+    """After forward completion/trace: backward reads weights, not these
+    score/mask/gather buffers. Keep weights and aexp valid until backward.
+    This bounds the eager forward peak when several layers prefer eager."""
+    var released = 0
+    if len(fwd.scores) > 1:
+        released += len(fwd.scores) - 1
+        step_count_device_alloc()
+        fwd.scores = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(fwd.masked) > 1:
+        released += len(fwd.masked) - 1
+        step_count_device_alloc()
+        fwd.masked = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(fwd.sbh) > 1:
+        released += len(fwd.sbh) - 1
+        step_count_device_alloc()
+        fwd.sbh = ctx.enqueue_create_buffer[DType.float32](1)
+    return released
+
+
+def _byte_release_eager(ctx: DeviceContext, mut fwd: LlamaDeviceStages,
+                        mut bwd: LlamaBackwardStages) raises -> Int:
+    """Called only AFTER the layer backward completion fence. These nine
+    arrays are dead until the next eager call's ensure-capacity writes them.
+    Keep aexp (the independent forward exp stash) and every dw/dx tensor.
+    Return released cells, excluding the replacement one-cell placeholders.
+    This is buffer lifetime only, with no kernel or arithmetic changes."""
+    var released = 0
+    if len(fwd.scores) > 1:
+        released += len(fwd.scores) - 1
+        step_count_device_alloc()
+        fwd.scores = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(fwd.masked) > 1:
+        released += len(fwd.masked) - 1
+        step_count_device_alloc()
+        fwd.masked = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(fwd.weights) > 1:
+        released += len(fwd.weights) - 1
+        step_count_device_alloc()
+        fwd.weights = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(fwd.sbh) > 1:
+        released += len(fwd.sbh) - 1
+        step_count_device_alloc()
+        fwd.sbh = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(bwd.d_attn_weights) > 1:
+        released += len(bwd.d_attn_weights) - 1
+        step_count_device_alloc()
+        bwd.d_attn_weights = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(bwd.d_attn_masked) > 1:
+        released += len(bwd.d_attn_masked) - 1
+        step_count_device_alloc()
+        bwd.d_attn_masked = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(bwd.d_attn_scores) > 1:
+        released += len(bwd.d_attn_scores) - 1
+        step_count_device_alloc()
+        bwd.d_attn_scores = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(bwd.d_qk_cell) > 1:
+        released += len(bwd.d_qk_cell) - 1
+        step_count_device_alloc()
+        bwd.d_qk_cell = ctx.enqueue_create_buffer[DType.float32](1)
+    if len(bwd.head_c) > 1:
+        released += len(bwd.head_c) - 1
+        step_count_device_alloc()
+        bwd.head_c = ctx.enqueue_create_buffer[DType.float32](1)
+    if released > 0:
+        fwd.attn_materialized = False
+        fwd.attn_estash_cells = 0
+    return released
+
+
 def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
                          ids: List[Int32]) raises -> Float32:
     """Internal gradient half. Caller owns admission and transaction recovery."""
+    tr.released_eager_cells = 0
     var config = tr.config.copy()
     var M = config.batch * config.length
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
@@ -1172,6 +1325,14 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
                 config.batch, config.length, 0, trace, prefix)
         step_count_sync()
         ctx.synchronize()
+        comptime if BYTE_LM_STICKY_EAGER:
+            # A policy decision from an observed refusal, not a prediction of
+            # a numerical corner. Both directions use the existing eager
+            # kernels BEFORE attempting fused on subsequent auto calls.
+            if stages.attn_forward_status == FUSED_CORNER or backward.attn_backward_status == FUSED_CORNER:
+                stages.attn_prefer_eager = True
+        comptime if BYTE_LM_RELEASE_EAGER:
+            tr.released_eager_cells += _byte_release_eager(ctx, stages, backward)
         tr.backward.insert(layer, backward^)
         tr.forward.insert(layer, stages^)
     # Envelope of the whole backward loop (the blocks print `bwd.*`).

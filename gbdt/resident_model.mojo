@@ -374,6 +374,14 @@ struct ResidentGbdtModel(Movable):
         _ = self.d_off^
         _ = self.h_off^
         _ = self.d_borders^
+        # DEVIATION 3010 (DEVIATION 2520's drain): the frees enqueued by the
+        # releases above must complete before the context is destroyed, or
+        # the runtime allocator's lock is left held and the next context's
+        # first allocation never returns. Host-side drain; no output bit.
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
         _ = self.ctx^
 
     def _prepare_workspace(mut self, n_rows: Int) raises:

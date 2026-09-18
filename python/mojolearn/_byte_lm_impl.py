@@ -92,6 +92,23 @@ def _canonical(value):
                       ensure_ascii=True, allow_nan=False).encode('ascii')
 
 
+def _require_schedule_vocabulary(descriptor, shape):
+    """The ONE field of `data_schedule` that is checked (2026-09-18,
+    lane/tokenized-corpus): a schedule that names its vocabulary
+    (`mojolearn.lm_corpus.TokenBatches.data_schedule`) must name one of this
+    model's size, or the ids index rows of a different table. A schedule
+    with no `vocabulary` key (every byte run) is not affected."""
+    v = descriptor.get('vocabulary')
+    if v is None:
+        return
+    if not isinstance(v, dict) or type(v.get('n_vocab')) is not int or type(v.get('sha256')) is not str:
+        raise ValueError("SmallByteLanguageModelTrainer data_schedule['vocabulary'] must carry "
+                         "an int n_vocab and a str sha256 (mojolearn.lm_corpus)")
+    if v['n_vocab'] != shape.vocab_size:
+        raise ValueError(f"vocabulary mismatch: data_schedule names vocabulary {v['sha256']} with n_vocab "
+                         f"{v['n_vocab']}, and this model's vocab_size is {shape.vocab_size}")
+
+
 def _schedule(value):
     if not isinstance(value, dict) or not value:
         raise ValueError('SmallByteLanguageModelTrainer data_schedule must be a nonempty JSON object')
@@ -500,6 +517,7 @@ class SmallByteLanguageModelTrainer:
         flat = _parameters(parameters, shape)
         config = _configuration(lr, betas, eps, weight_decay)
         descriptor = _schedule(data_schedule)
+        _require_schedule_vocabulary(descriptor, shape)
         _mode()
         self._lock = threading.RLock()
         self._runtime = None
@@ -513,6 +531,13 @@ class SmallByteLanguageModelTrainer:
                            config=config, data_schedule=descriptor)
         if shape.profile != PROFILE:
             self._state['model_shape'] = shape.to_dict()
+
+    @property
+    def data_schedule(self):
+        """A copy of the caller's `data_schedule` descriptor, as every
+        checkpoint of this trainer keeps it (`mojolearn.lm_corpus.
+        tokenizer_for` reads its `vocabulary`)."""
+        return json.loads(json.dumps(self._state['data_schedule']))
 
     @staticmethod
     def parameter_registry(shape=None):
@@ -593,7 +618,9 @@ class SmallByteLanguageModelTrainer:
         `total_bytes` (those plus `aexp`). New bindings also report per-layer
         `forward_status`, `backward_status`, their named `*_counts`, and
         `attn_materialized` after the latest step. Status -1 means not
-        attempted; 0 ran, 1 refused regime, 2 corner. Materialization may
+        attempted; 0 ran, 1 refused regime, 2 corner, 3 DEVIATION 3110's
+        latch (this layer refused before, so nothing was launched at all and
+        the eager path ran alone). Materialization may
         have occurred during backward recomputation. Retained capacity does
         not say which path ran this step.
 
@@ -601,8 +628,16 @@ class SmallByteLanguageModelTrainer:
         allocated at ONE element for the fused path and GROW ON DEMAND the
         first time a layer takes the eager path -- a refused regime, or a
         `FUSED_CORNER` hit, both of which depend on the DATA and so on the
-        step. Once grown they are never released while the session lives.
-        A run therefore has no single device footprint: it can step up
+        step. With the legacy retention policy they stay for the session.
+        `release_eager` builds release dead forward scratch after forward
+        and remaining eager stages after each layer backward; the report's
+        `released_eager_bytes` witnesses that work separately from capacity.
+        `sticky_eager` and `layers_prefer_eager` report the policy which
+        chooses eager before launch after a layer's first corner refusal.
+        `repair_masked_tail` identifies the replay build; per-layer
+        `backward_repair_sites` is a bitmask of estash repairs actually executed:
+        1 for zdot, 2 for dQ, 3 for both, 0 for neither.
+        A legacy run therefore has no single device footprint: it can step up
         once, at a step nobody chose, and every capacity figure taken
         before that step is wrong afterwards. A three-step probe cannot
         see it. Read this between steps and the step where it moved is
@@ -634,16 +669,32 @@ class SmallByteLanguageModelTrainer:
                         layers_full_aexp=int(info[9]),
                         layers=state_shape(self._state).n_layers)
             n = report['layers']
-            if len(info) >= 10 + 3 * n:
+            if len(info) >= 12:
+                report['stage_lists'] = (int(info[10]), int(info[11]))
+                n = min(n, int(info[10]), int(info[11]))
+            if len(info) >= 12 + 3 * n:
                 names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
-                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER'}
+                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER', 3: 'FUSED_SKIPPED_STICKY'}
                 for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
-                    values = [int(info[10 + 3 * layer + offset]) for layer in range(n)]
+                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
                     report[key] = values
                     report[key + '_counts'] = {name: values.count(code)
                                               for code, name in names.items()}
-                report['attn_materialized'] = [bool(info[12 + 3 * layer])
+                report['attn_materialized'] = [bool(info[14 + 3 * layer])
                                              for layer in range(n)]
+            if len(info) > 12 + 3 * n:
+                report['exact_tail_guard'] = bool(info[12 + 3 * n])
+            if len(info) > 14 + 3 * n:
+                report['release_eager'] = bool(info[13 + 3 * n])
+                report['released_eager_bytes'] = int(info[14 + 3 * n]) * 4
+            if len(info) >= 16 + 4 * n:
+                report['sticky_eager'] = bool(info[15 + 3 * n])
+                report['layers_prefer_eager'] = [bool(info[16 + 3 * n + layer])
+                                               for layer in range(n)]
+            if len(info) >= 17 + 5 * n:
+                report['repair_masked_tail'] = bool(info[16 + 4 * n])
+                report['backward_repair_sites'] = [int(info[17 + 4 * n + layer])
+                                                  for layer in range(n)]
             return report
 
     def _export_state_impl(self):

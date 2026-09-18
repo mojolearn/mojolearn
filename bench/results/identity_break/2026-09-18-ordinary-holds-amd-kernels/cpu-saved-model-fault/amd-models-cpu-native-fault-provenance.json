@@ -1,0 +1,19 @@
+{
+  "exit_code": 0,
+  "native_sha256": "65d6d6f530adfdab38b2f13f2f8e1c8d6c9c865d6de8d137e3b5d32485c25260",
+  "command": [
+    "/Users/andrewhendel/mojolearn-wt/release-087-final/.pixi/envs/test/bin/python",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/tools/classical_host_gate.py",
+    "check",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly",
+    "/Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid",
+    "--expect-mismatch",
+    "--every-fixture",
+    "--report",
+    "/Users/andrewhendel/mojolearn-evidence/ordinary-23-2026-09-18/amd-models-cpu-native-fault.json"
+  ]
+}

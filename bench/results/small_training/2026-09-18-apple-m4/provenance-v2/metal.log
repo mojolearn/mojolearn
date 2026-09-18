@@ -1,0 +1,90 @@
+ridge/rows-31: 0.078s
+standard-scaler/rows-31: 0.025s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-31: 0.025s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-32: 0.038s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-32: 0.026s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-32: 0.025s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-33: 0.037s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-33: 0.028s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-33: 0.027s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-63: 0.040s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-63: 0.028s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-63: 0.029s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-64: 0.043s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-64: 0.029s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-64: 0.029s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-65: 0.044s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-65: 0.031s
+Context leak detected, CoreAnalytics returned false
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-65: 0.032s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-255: 0.048s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-255: 0.048s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-255: 0.038s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-256: 0.052s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-256: 0.035s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-256: 0.035s
+Context leak detected, CoreAnalytics returned false
+ridge/rows-257: 0.052s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/rows-257: 0.037s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/rows-257: 0.035s
+Context leak detected, CoreAnalytics returned false
+ridge/ties: 0.052s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/ties: 0.037s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/ties: 0.035s
+Context leak detected, CoreAnalytics returned false
+ridge/dupes: 0.052s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/dupes: 0.040s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/dupes: 0.037s
+Context leak detected, CoreAnalytics returned false
+ridge/wide: 0.052s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/wide: 0.045s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/wide: 0.041s
+Context leak detected, CoreAnalytics returned false
+ridge/denormal: 0.059s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/denormal: 0.042s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/denormal: 0.044s
+Context leak detected, CoreAnalytics returned false
+ridge/denormal_ftz: 0.063s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/denormal_ftz: 0.048s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/denormal_ftz: 0.045s
+Context leak detected, CoreAnalytics returned false
+ridge/negative: 0.065s
+Context leak detected, CoreAnalytics returned false
+standard-scaler/negative: 0.046s
+Context leak detected, CoreAnalytics returned false
+minmax-scaler/negative: 0.048s
+CAPTURED_UNQUALIFIED: 45 cells; /Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/small-training-v2/metal/capture.json

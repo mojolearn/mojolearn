@@ -24,6 +24,10 @@ WHAT IT PRINTS, per triple set, five lanes:
   hwftz     NVIDIA: `llvm.nvvm.fma.rn.ftz.f`; other columns: the `fma` lane again
   swrtf     `ftz(identical_mul_add(...))`, the software round-then-flush spelling
   class     post-round AMD class flush; software spelling on other columns
+  nativefix `rtf_fix(fma(...))` with NO software flush (lane/apple-seam-repair,
+            2026-09-18): on Apple the native FMA's own flush plus the exact
+            zero repair, the candidate cheaper spelling; on NVIDIA and AMD
+            `rtf_fix` is the identity, so this lane is `fma` again (`none`)
 The closed wave-mode experiment is not launched. `class_shipped` reports
 whether this build enables the class spelling in the production seam.
 and for each lane an FNV-1a 64-bit hash over the 262,144 result words in
@@ -47,10 +51,11 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_name
+from checks.rtf_seam import rtf_fix, RTF_REPAIR
 from gemm.checks.gemm_identical import _tuned_step, _ftz_class, TUNED_HW_FTZ_FMA, TUNED_CLASS_FLUSH
 from transformer.impl.llama.modeling_llama import _upload, _download, _zeros
 
-comptime LANES = 5
+comptime LANES = 6
 
 #: DEVIATION 2701, extended 2026-09-17 (lane `lane/gemm-next`, brief section
 #: 14.5 point 2 and section 20). A FIFTH lane, in its own kernel and its own
@@ -124,6 +129,8 @@ def seam_kernel(
         if i == 400:
             class_value = bitcast[DType.float32](bitcast[DType.uint32](class_value) ^ UInt32(1))
     results.unsafe_store(LANES * i + 4, class_value)
+    var native = identical_mul_add(a, b, acc)
+    results.unsafe_store(LANES * i + 5, rtf_fix(a, b, acc, native))
 
 
 def _hex(w: UInt32) -> String:
@@ -173,7 +180,8 @@ def main() raises:
         wline += " " + _hex(words[i])
     print("SEAM_PROBE column=" + column_name(TARGET_COLUMN) + " hwftz=" + String(TUNED_HW_FTZ_FMA)
           + " class_shipped=" + String(TUNED_CLASS_FLUSH)
-          + " lanes=shipped,fma,hwftz,swrtf,class")
+          + " rtf_repair=" + String(RTF_REPAIR)
+          + " lanes=shipped,fma,hwftz,swrtf,class,nativefix")
     print(wline)
     var ctx = DeviceContext()
     var inputs = _upload(ctx, values)
@@ -187,7 +195,7 @@ def main() raises:
     ctx.synchronize()
     var actual = _download(ctx, result, LANES * n)
     print("SEAM_N " + String(n))
-    var names: List[String] = ["shipped", "fma", "hwftz", "swrtf", "class"]
+    var names: List[String] = ["shipped", "fma", "hwftz", "swrtf", "class", "nativefix"]
     for lane in range(LANES):
         print("SEAM_HASH lane=" + names[lane] + " fnv1a64=" + _hex64(_fnv1a(actual, n, lane)))
 
@@ -199,8 +207,8 @@ def main() raises:
         bl += " " + names[lane] + "=" + _hex(bitcast[DType.uint32](actual[LANES * boundary + lane]))
     print(bl)
     # Pairwise mismatches, the first 24 of each as hex triples.
-    var pairs_a: List[Int] = [0, 1, 0, 1, 0]
-    var pairs_b: List[Int] = [3, 2, 1, 3, 4]
+    var pairs_a: List[Int] = [0, 1, 0, 1, 0, 0]
+    var pairs_b: List[Int] = [3, 2, 1, 3, 4, 5]
     for p in range(len(pairs_a)):
         var la = pairs_a[p]
         var lb = pairs_b[p]

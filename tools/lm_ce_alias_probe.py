@@ -6,8 +6,9 @@ that has to separate before the CE aliasing may be believed.
 Public API only (`LanguageModelConfig`, `LanguageModelTrainer`,
 `parameter_registry`, `train_step`, `export_state`, `export_gradients`,
 `run_metadata`, `attention_stage_report`, `export_checkpoint_binary`,
-`from_checkpoint_binary`, `close`). Nothing here is a timing sample: the
-seconds are reported so a run can be sized, and the claim is about BITS.
+`from_checkpoint_binary`, `close`). Full-step wall times are recorded before
+optional state export; they are session measurements, not isolated-kernel
+benchmarks. Exact witnesses qualify the compared arithmetic.
 
 Modes:
 
@@ -61,14 +62,27 @@ def sha(data):
 
 
 def device_peak_mb(index=0):
-    """Device-wide used memory from nvidia-smi, in MB, or None."""
+    """Device-wide used memory from nvidia-smi (or rocm-smi), in MB, or None."""
     if not shutil.which('nvidia-smi'):
-        return None
+        return rocm_used_mb(index)
     try:
         out = subprocess.run(['nvidia-smi', '-i', str(index), '--query-gpu=memory.used',
                               '--format=csv,noheader,nounits'],
                              capture_output=True, text=True, timeout=20).stdout
         return int(out.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
+def rocm_used_mb(index=0):
+    """AMD device-wide used VRAM from rocm-smi, in MiB, or None."""
+    if not shutil.which('rocm-smi'):
+        return None
+    try:
+        out = subprocess.run(['rocm-smi', '-d', str(index), '--showmeminfo', 'vram', '--json'],
+                             capture_output=True, text=True, timeout=20).stdout
+        card = next(iter(json.loads(out).values()))
+        return int(card['VRAM Total Used Memory (B)']) // (1024 * 1024)
     except Exception:
         return None
 
@@ -82,7 +96,7 @@ def rss_bytes():
         return None
 
 
-def build(args):
+def build(args, corpus=None):
     import numpy as np
     from mojolearn import LanguageModelTrainer as Trainer, LanguageModelConfig as Shape
     shape = Shape(*args.shape)
@@ -93,7 +107,8 @@ def build(args):
             weights[entry['offset']:entry['offset'] + entry['size']] += np.float32(1)
     trainer = Trainer(weights, shape=shape, resident=True, step_result='lean',
                       data_schedule={'fixture': 'lm ce alias probe', 'seed': args.seed,
-                                     'batches': 'synthetic uniform token ids, no corpus'})
+                                     'batches': corpus.describe() if corpus is not None else
+                                                'synthetic uniform token ids, no corpus'})
     return trainer, shape
 
 
@@ -131,6 +146,41 @@ def aliasing_witness(trainer):
     from mojolearn import _backend
     binding = _backend.binding('_mojolearn_byte_lm', 'identical')
     entry = getattr(binding, 'byte_lm_ce_aliased', None)
+    return None if entry is None else bool(entry())
+
+
+def gemm_stage_witness(entry_name='byte_lm_gemm_stage_ftz'):
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, entry_name, None)
+    return None if entry is None else bool(entry())
+
+
+def sticky_witness():
+    """DEVIATION 3110's `byte_lm_attn_sticky_fallback()` straight off the
+    loaded binding. False means the build relaunches a refused layer's fused
+    kernels and discards them; None means a binding that predates the flag."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_sticky_fallback', None)
+    return None if entry is None else bool(entry())
+
+
+def kv_guard_witness():
+    """DEVIATION 3111's `byte_lm_attn_kv_corner_guard()` off the loaded
+    binding. False means the dk/dv corner fires on any -0.0."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_kv_corner_guard', None)
+    return None if entry is None else bool(entry())
+
+
+def bwd_corner_witness():
+    """DEVIATION 3112's `byte_lm_attn_bwd_corner_refuses()` off the loaded
+    binding. False means this build's backward never refuses."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_bwd_corner_refuses', None)
     return None if entry is None else bool(entry())
 
 
@@ -205,7 +255,7 @@ def main():
         resumed_at = trainer.state_dict()['completed_steps']
         run_steps(trainer, shape, args, resumed_at, args.tail, records, corpus)
     else:
-        trainer, shape = build(args)
+        trainer, shape = build(args, corpus)
         run_steps(trainer, shape, args, 0, args.steps, records, corpus)
         if args.mode == 'checkpoint':
             t0 = time.perf_counter()
@@ -226,11 +276,19 @@ def main():
                   corpus=(corpus.describe() if corpus is not None else None),
                   ids='pinned corpus' if corpus is not None else 'synthetic uniform token ids',
                   ce_aliased=aliasing_witness(trainer),
+                  gemm_stage_ftz=gemm_stage_witness(),
+                  gemm_reuse_group_ws=gemm_stage_witness('byte_lm_gemm_reuse_group_ws'),
+                  attn_sticky_fallback=sticky_witness(),
+                  attn_kv_corner_guard=kv_guard_witness(),
+                  attn_bwd_corner_refuses=bwd_corner_witness(),
                   run_metadata=trainer.run_metadata(),
                   steps=records, started=started, finished=time.time())
     (args.out / 'result.json').write_text(json.dumps(result, indent=1, allow_nan=False))
     trainer.close()
     print(json.dumps(dict(event='done', out=str(args.out), ce_aliased=result['ce_aliased'],
+                          attn_sticky_fallback=result['attn_sticky_fallback'],
+                          attn_kv_corner_guard=result['attn_kv_corner_guard'],
+                          attn_bwd_corner_refuses=result['attn_bwd_corner_refuses'],
                           steps=len(records))), flush=True)
 
 

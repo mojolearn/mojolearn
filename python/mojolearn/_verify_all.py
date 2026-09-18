@@ -372,6 +372,7 @@ def _device_block(ml, harness):
         vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
         device=_verify.describe_device(), cpu_model=harness.cpu_model(),
         requested_parallel_devices=list(harness._par_devices()),
+        verifier_cpu_threads=os.environ.get('MOJOLEARN_VERIFY_CPU_THREADS'),
         platform=platform.platform(), python=platform.python_version(),
         numpy=__import__("numpy").__version__,
     )
@@ -583,13 +584,11 @@ APPLE_LANE_CAP = 24
 def cross_check_lanes(harness, scope="default"):
     """The lanes a GPU-against-CPU cross-check runs, and what it leaves out.
 
-    The intersection is every lane with BOTH a shipped GPU path and a shipped
-    host family, which is ALL 79 declared inference lanes: every one is
-    reachable from a binding the wheel already carries.
+    The intersection is every registered lane with both a GPU path and a
+    host inference route reachable from the bindings shipped in the wheel.
+    Derive this set from the manifest so newly exposed variants are included.
 
-    THE TIER IS THE POINT. A verification nobody runs proves nothing, so the
-    default has to be something a user will actually sit through, while doing
-    visibly enough work that the number of checks is impressive on its face:
+    Separate scopes keep routine verification bounded:
 
       quick    one lane per family, base fixture. Seconds, for someone in a
                hurry or wiring this into CI.

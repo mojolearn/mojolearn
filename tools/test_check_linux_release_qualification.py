@@ -179,6 +179,31 @@ class ReleaseAdmissionTests(unittest.TestCase):
                         patch.object(gate.surface, 'check_quality'), self.assertRaises(ValueError):
                     gate.check_vendor(out, 'hip', wheel_sha, inventory, extensions, sets)
 
+    def test_hopper_driver_capability_matches_only_its_supported_binary(self):
+        import test_release061_end_to_end as end_to_end
+        cases = [('sm_90a', 'sm_90', True), ('sm_90a', 'sm_90a', True),
+                 ('sm_90a', 'sm_89', False), ('sm_90a', 'sm_90b', False),
+                 ('sm_89', 'sm_89a', False), ('sm_89', 'sm_90', False)]
+        for arch, device, accepted in cases:
+            with self.subTest(arch=arch, device=device), tempfile.TemporaryDirectory() as directory, \
+                    patch.object(end_to_end, 'ARCHES', frozenset({'cuda/sm_89', 'cuda/sm_90a', 'hip/gfx942'})):
+                root = Path(directory)
+                wheel, qualification = end_to_end.fixture(root)
+                out = qualification / 'cuda' / arch
+                for path in out.glob('*.installed.json'):
+                    row = json.loads(path.read_text())
+                    row['device_architecture'] = device
+                    write_json(path, row)
+                end_to_end.seal_evidence(out)
+                extensions, sets = gate.inspect_wheel(wheel, root, flat_python=True, byte_lm=True)
+                args = (out, 'cuda', gate.digest_file(wheel), gate.native_inventory(root), extensions, sets)
+                if accepted:
+                    result = gate.check_vendor(*args, arch=arch)
+                    self.assertEqual(len(result['installed_records']), 11)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'claimed native architecture'):
+                        gate.check_vendor(*args, arch=arch)
+
     def test_nonidentical_job_binding_cannot_hide_behind_success_manifest(self):
         with tempfile.TemporaryDirectory() as directory:
             out, qualification, *args = self.vendor_fixture(Path(directory))

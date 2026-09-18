@@ -299,6 +299,10 @@ def shard_lanes(lanes, shards):
 
 
 def do_run_column(args):
+    resume = bool(getattr(args, 'resume', False))
+    if '--resume' in args.extra:
+        print('run-column: pass --resume before -- so checkpoints are preserved', file=sys.stderr)
+        return 2
     lanes = [n for n in args.lanes.split(",") if n]
     if not lanes:
         print("run-column: --lanes is empty", file=sys.stderr)
@@ -312,7 +316,7 @@ def do_run_column(args):
     tool = os.path.join(os.path.dirname(os.path.abspath(__file__)), "identity_break.py")
     parts = [f"{stem}.part{k}.json" for k in range(len(shards))]
     logs = [f"{stem}.part{k}.log" for k in range(len(shards))]
-    for path in parts + [args.json]:
+    for path in ([args.json] if resume else parts + [args.json]):
         if os.path.exists(path):
             os.remove(path)             # a part left by an earlier run must not be merged
     print(f"run-column: {len(lanes)} lanes in {len(shards)} shards, {jobs} at a time", flush=True)
@@ -327,7 +331,11 @@ def do_run_column(args):
         while pending and len(running) < jobs:
             k = pending.pop(0)
             cmd = [sys.executable, tool, "--lanes", ",".join(shards[k]), "--json", parts[k]] + args.extra
-            fh = open(logs[k], "w")
+            if resume and os.path.isfile(parts[k]):
+                # The harness validates source/binary bytes, environment,
+                # machine provenance and protocol before reusing any cell.
+                cmd.append('--resume')
+            fh = open(logs[k], "a" if resume else "w")
             running[k] = (subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT), fh, time.time())
         for k in list(running):
             proc, fh, started = running[k]
@@ -462,6 +470,7 @@ def main(argv=None):
     rc.add_argument("--jobs", type=int, default=0, help="shards running at once (default: --shards)")
     rc.add_argument("--heartbeat", type=float, default=120.0, help="seconds between progress lines")
     rc.add_argument("--sabotage", action="store_true", help="accept exit one only for complete, repeated native oracle failures")
+    rc.add_argument("--resume", action="store_true", help="preserve shard checkpoints; the harness refuses incompatible source, binaries, environment or protocol")
     rc.add_argument("extra", nargs="*", help="after --, arguments passed to every identity_break shard")
     bl = sub.add_parser("build-list", help="the gate's build lists must cover every host binding the manifest declares")
     bl.add_argument("--families", required=True, help="families built for the production set, space or comma separated")

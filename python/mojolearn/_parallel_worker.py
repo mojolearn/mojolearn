@@ -6,11 +6,25 @@ import traceback
 
 
 _forest_snapshot = None
+_ivf_snapshot = None
 
 
 def execute(request):
-    global _forest_snapshot
+    global _forest_snapshot, _ivf_snapshot
     operation, state, args = request
+    if operation == 'device_inventory':
+        from . import _backend
+        from ._gpu_witness import visible_gpu_inventory
+        return visible_gpu_inventory(_backend.vendor())
+    if operation == 'cross_val_fold':
+        from . import _backend
+        from .model_selection import _fit_score_fold
+        if _backend.vendor() not in ('cuda', 'hip'):
+            raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
+        return _fit_score_fold(state, *args)
+    if operation == 'causal_lm_layer':
+        from ._causal_lm_worker import execute as run_layer
+        return run_layer(state, args)
     if operation == 'cpu_reference':
         # The pool wraps a request this way only on a CPU-only install and
         # only while its caller is inside reference_training() (the internal
@@ -144,6 +158,35 @@ def execute(request):
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
+    if operation == 'ivf_store':
+        state._entry(state._extension(), 'ivf_flat_partial_search')
+        _ivf_snapshot = state
+        return state.n_rows_
+    if operation == 'ivf_search_stored':
+        from .parallel_ivf import _partial_search
+        if _ivf_snapshot is None:
+            raise RuntimeError('IVF shard is not stored in this worker')
+        return _partial_search(_ivf_snapshot, args[0])
+    if operation == 'ivf_finalize':
+        from ._buffer import addr
+        if _ivf_snapshot is None:
+            raise RuntimeError('IVF shard is not stored in this worker')
+        native = _ivf_snapshot._extension()
+        native.ivf_finalize_distances(addr(state, name='distances'), state.size, args[0])
+        return state
+    if operation == 'gpc_class_fit':
+        from ._gpc_impl import _kernel_arrays
+        x, y01 = args
+        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
+    if operation == 'gpc_class_predict':
+        fit, q, want_proba = args
+        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)
+        return probability if want_proba else mean
+    if operation == 'forecast_predict':
+        method, positional = args
+        if method != 'predict':
+            raise ValueError('invalid forecasting worker operation')
+        return state.predict(*positional)
     if operation == 'arima_fit':
         from ._arima_impl import ARIMA
         return ARIMA(**state).fit(*args)

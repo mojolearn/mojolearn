@@ -121,6 +121,7 @@ def ivf_flat_search_host(
     n_probes: Int,
     tile_tpb: Int = PINNED_TILE_TPB,
     expand_tpb: Int = IVF_EXPAND_TPB,
+    partial_storage: Bool = False,
 ) raises -> IvfSearchResult:
     """`ivf_flat::search`, host list in, distances and ORIGINAL ids out.
 
@@ -130,7 +131,7 @@ def ivf_flat_search_host(
     var sp = IvfFlatSearchParams(n_probes)
     var trace = IdentityTrace()
     return ivf_flat_search_traced(
-        ctx, trace, index, sp, queries, n_queries, k, tile_tpb, expand_tpb
+        ctx, trace, index, sp, queries, n_queries, k, tile_tpb, expand_tpb, partial_storage
     )
 
 

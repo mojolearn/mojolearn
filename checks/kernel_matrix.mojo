@@ -1196,6 +1196,18 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
+def lib_gemm_stage_ftz_for[column: Int]() -> Bool:
+    """Flush input operands once before shared staging, preserving their bits.
+
+    NVIDIA already uses this transport. AMD CDNA qualified 2026-09-18:
+    22.4% lower fixed-shape GEMM sum; 700-step enwik8/Pile comparisons
+    improve 13.9%/15.3% with identical loss and state witnesses. The FMA
+    rounding seam and fold topology do not change. Other columns remain
+    on their existing path. See LANE_STATUS_gemm-kernel-speed.md.
+    """
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD
+
+
 def lib_postround_class_flush_for[column: Int]() -> Bool:
     """AMD post-round class flush, measured 2026-09-18.
 
@@ -1205,6 +1217,64 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
     docs/lanes/LANE_STATUS_amd-gemm-class.md. Fold topology is unchanged.
     """
     return column == COLUMN_AMD
+
+
+def lib_zero_fma_repair_for[column: Int]() -> Bool:
+    """NUMERIC row (lane `lane/apple-seam-repair`, 2026-09-18): the column's
+    native FMA flushes BEFORE rounding, so an rtf-spelled seam
+    (`ftz(fma(a, b, acc))`) must repair a signed-zero result whose exact value
+    rounds up to the smallest normal. Apple M4 hashes `fbr` over the
+    262,144-triple seam probe (GEMM brief 14.3); NVIDIA and AMD compute `rtf`
+    already. Implementation: `checks/rtf_seam.mojo`. `-D
+    MOJOLEARN_NO_ZERO_FMA_REPAIR` is the never-shipped price arm."""
+    comptime if is_defined["MOJOLEARN_NO_ZERO_FMA_REPAIR"]():
+        return False
+    return column == COLUMN_APPLE
+
+
+def attn_masked_tail_replay_for[column: Int]() -> Bool:
+    """Exact omitted-tail replay, measured H100 and MI300X 2026-09-18.
+
+    NVIDIA: paired 700-step enwik8/Pile GitHub runs: 3697/1768 backward
+    corner refusals become zero; every loss and state witness matches. Late
+    medians 0.455439 -> 0.197157 and 0.377134 -> 0.196831 seconds (geomean
+    2.1038x). See docs/lanes/LANE_STATUS_lm-attention-fallback.md.
+
+    AMD (Hot Aisle MI300X, same probe, seed and shape): all 700 losses, the
+    six state hashes at steps 0/699 AND every per-step, per-layer status and
+    replay-site vector equal NVIDIA's, in both arms. Refusals 3697/1768 -> 0
+    (dQ replay 3449/1612 sites; zdot 0). Late medians 0.835384 -> 0.632183
+    and 0.773939 -> 0.630843 seconds (1.3214x / 1.2268x, geomean 1.2733x).
+    AMD's default arm has no estash zdot kernel, so its zdot keeps refusing
+    on a corner (zero in training on either corpus).
+    Merged with AMD GEMM operand staging, an MI325X enwik8 pair again equals
+    NVIDIA everywhere: 0.762693 -> 0.550012 seconds (1.3867x).
+
+    Apple: the Metal corner fixtures (zdot, 64 dQ cells, dk/dv) equal eager
+    bit for bit, the replay-disabled arms differ (0x80000000 vs 0x00000000),
+    and all 130 sites equal NVIDIA's. Apple's DEFAULT arm (`stash_tiled`)
+    reaches none of the replay kernels, so on Apple this row is INERT in
+    default training; a reduced HD64 training witness under the NVIDIA
+    schedule define equals NVIDIA's. See
+    docs/lanes/LANE_STATUS_attention-replay-vendors.md.
+    """
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
+
+
+def byte_lm_release_eager_for[column: Int]() -> Bool:
+    """Bound byte-LM eager buffers at their last consumers.
+
+    NVIDIA: the active 700-step eager lifetime arm matches all losses and
+    checkpoint hashes and returns retained eager capacity to 432 bytes; aexp
+    is kept separately. Automatic fused/eager switching matches too, with
+    sampled peak 31537 -> 18497 MiB. AMD (MI300X, enwik8, legacy arithmetic
+    with release): every loss, hash and routing vector equals legacy, eager
+    capacity 432 bytes after every step (release active on 499 of 700 steps).
+    Apple: the reduced HD64 witness with this row on equals NVIDIA's. This is
+    a storage bound, not a speed claim. See
+    docs/lanes/LANE_STATUS_attention-replay-vendors.md.
+    """
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
 
 
 def attn_zdot_rows_per_block_for[column: Int]() -> Int:

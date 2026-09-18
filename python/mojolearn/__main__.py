@@ -51,6 +51,8 @@ docs/VERIFY.md is the human document for all of it.
 """
 
 import argparse
+import json
+from pathlib import Path
 import sys
 
 from . import _conformance
@@ -78,13 +80,70 @@ def _wants_suite(args):
                 or getattr(args, "coverage", False)
                 or getattr(args, "include_pending", False)
                 or getattr(args, "models_only", False)
+                or getattr(args, "training_only", False)
                 or getattr(args, "batch_checks", False))
 
 
 def _verify_dispatch(args):
+    if getattr(args, "training_only", False):
+        args.no_models = True
     if _wants_suite(args):
         return _verify_all.cmd_verify_all(args)
     return _verify.cmd_verify(args)
+
+
+def _causal_lm_dispatch(args):
+    from . import _verify_causal_lm as proof
+    if args.compare:
+        left, right = (json.loads(Path(p).read_text()) for p in args.compare)
+        equal = proof.compare(left, right)
+        print(json.dumps({'status': 'NUMERICAL_MATCH_UNQUALIFIED' if equal else 'DIVERGENT',
+                          'release_qualified': False}))
+        return 0 if equal else 1
+    path = Path(args.output)
+    if path.exists():
+        raise ValueError('capture output already exists; choose a new path to preserve evidence')
+    options = {'layer_devices': args.layer_devices} if args.layer_devices is not None else {}
+    result = proof.capture(args.device, tuple(args.formats), **options)
+    with path.open('x') as stream:
+        json.dump(result, stream, indent=2)
+        stream.write('\n')
+    print(json.dumps({'status': result['status'], 'output': str(path), 'release_qualified': False}))
+    return 0 if result['status'] == 'CAPTURED_UNQUALIFIED' else 1
+
+
+def _distributed_dispatch(args):
+    from ._verify_distributed import main as distributed_main
+    if args.compare:
+        argv = ['--compare', *args.compare]
+        if args.devices or args.out or args.require_installed:
+            raise ValueError('--compare cannot be combined with capture options')
+    else:
+        argv = []
+        if args.devices is not None:
+            argv += ['--devices', args.devices]
+        if args.out is not None:
+            argv += ['--out', args.out]
+        if args.require_installed:
+            argv += ['--require-installed']
+    return distributed_main(argv)
+
+
+def _cross_validation_dispatch(args):
+    from ._verify_parallel_cv import main as cv_main
+    if args.compare:
+        if args.devices or args.out or args.require_installed or args.require_backend:
+            raise ValueError('--compare cannot be combined with capture options')
+        argv = ['--compare', *args.compare]
+    else:
+        argv = []
+        for flag, value in (('--devices', args.devices), ('--out', args.out),
+                            ('--require-backend', args.require_backend)):
+            if value is not None:
+                argv += [flag, value]
+        if args.require_installed:
+            argv += ['--require-installed']
+    return cv_main(argv)
 
 
 def build_parser():
@@ -101,6 +160,44 @@ def build_parser():
             "  4 cannot run 5 no reference\n"),
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
+
+    cv = sub.add_parser('verify-cross-validation',
+        help='checkpoint small GPU cross-validation scheduling checks')
+    cv.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
+    cv.add_argument('--out', metavar='DIRECTORY', help='new evidence directory')
+    cv.add_argument('--require-installed', action='store_true')
+    cv.add_argument('--require-backend', choices=('cuda', 'hip'))
+    cv.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
+    cv.add_argument('--cpu-threads', type=int, default=1)
+    cv.set_defaults(func=_cross_validation_dispatch)
+
+    distributed = sub.add_parser('verify-distributed',
+        help='checkpoint small two-GPU forecast, classifier and sharded-index checks',
+        description='Numerical and device-placement checks with transport fault controls. '
+                    'Independent GPU execution traces and release qualification remain separate.')
+    distributed.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
+    distributed.add_argument('--out', metavar='PATH', help='new checkpoint JSON path')
+    distributed.add_argument('--require-installed', action='store_true',
+                             help='require package and native bytes to match installed wheel RECORD')
+    distributed.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
+    distributed.add_argument('--cpu-threads', type=int, default=1)
+    distributed.set_defaults(func=_distributed_dispatch)
+
+    lm = sub.add_parser('verify-causal-lm',
+        help='capture tiny loaded-model inference properties or compare two captures',
+        description='End-to-end loaded-model logits, stateful decode, batch, reset and reload checks. '
+                    'A successful capture or numerical comparison is not release qualification.')
+    action = lm.add_mutually_exclusive_group(required=True)
+    action.add_argument('--output', metavar='PATH', help='write a fresh capture; never overwrite')
+    action.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'),
+                        help='compare matching captures without executing models')
+    lm.add_argument('--device', choices=('cpu', 'gpu'), default='cpu')
+    lm.add_argument('--formats', nargs='+', choices=('float32', 'bfloat16', 'int8'),
+                    default=['float32', 'bfloat16', 'int8'])
+    lm.add_argument('--cpu-threads', type=int, default=1)
+    lm.add_argument('--layer-devices', nargs='+', type=int,
+                    help='experimental GPU layer-owner map, one device index per fixture layer')
+    lm.set_defaults(func=_causal_lm_dispatch)
 
     v = sub.add_parser(
         "verify",
@@ -129,8 +226,13 @@ def build_parser():
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
-    v.add_argument("--models-only", action="store_true",
+    scope = v.add_mutually_exclusive_group()
+    scope.add_argument("--models-only", "--inference", dest="models_only", action="store_true",
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
+    scope.add_argument("--training", dest="training_only", action="store_true",
+                   help="run fit-based algorithm verification and learned-model properties, excluding the separate bundled-model suite; narrow with --lanes and --fixtures")
+    v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
+                   help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
                    help="implies --all: one lane per family on the base "
                         "fixture")
@@ -427,6 +529,13 @@ def main(argv=None):
         # asked for is how a green line ends up quoted out of context.
         parser.print_help()
         return _verify.EXIT_USAGE
+    from ._verify_resources import run_with_budget
+    try:
+        resource_exit = run_with_budget(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if resource_exit is not None:
+        return resource_exit
     return args.func(args)
 
 

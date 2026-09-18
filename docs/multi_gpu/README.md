@@ -18,6 +18,73 @@ qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 
+IVF search now has a disjoint candidate-storage API:
+
+```python
+from mojolearn import DistributedIVFIndex
+
+with DistributedIVFIndex.from_index(fitted_or_loaded_index, devices=(0, 1)) as distributed:
+    distances, row_ids = distributed.search(queries)
+```
+
+Workers retain separate candidate rows and upload only their shard for search.
+The coarse quantizer is shared, so global probe selection is preserved. Local
+searches return valid counts even for empty/short candidate sets; final selection
+uses squared-distance/global-row-ID order before Euclidean rooting. The API
+requires the rebuilt IVF binding with partial-search support. It does not yet
+distribute index training or extension, and each shard plus coarse centers must
+fit on its GPU. Apple native logical-partition checks passed; physical two-GPU
+and measured capacity qualification are still pending.
+
+Loaded checkpoints have an explicit experimental layer-owner API:
+
+```python
+from mojolearn.models import ParallelCausalLM
+
+# Two-layer example: one device index for each checkpoint layer.
+with ParallelCausalLM.load(checkpoint_directory, layer_devices=(0, 1)) as model:
+    output_ids = model.generate(input_ids, 8)
+```
+
+Only assigned layers are constructed in each persistent worker. Activations
+cross devices through host memory; standard block caches remain host-backed.
+Loading currently materializes the checkpoint in parent RAM. This implements
+sequential layer distribution, not within-layer tensor parallelism, resident-KV
+capacity certification or a measured speedup. Physical two-GPU evidence is
+pending. Use `verify-causal-lm --device gpu --layer-devices 0 1 --output PATH`
+to capture the tiny two-layer proof through this route.
+
+The expanded 0.8.7 source also exposes fitted-model forecast scheduling:
+
+```python
+from mojolearn.parallel_forecasting import forecast_arima, forecast_exponential_smoothing
+
+predictions = forecast_arima(fitted_arima, 12, devices=(0, 1), series_per_shard=2)
+forecasts = forecast_exponential_smoothing(fitted_hw, 12, devices=(0, 1), series_per_shard=2)
+```
+
+These partition independent series and preserve output order. ARIMA exogenous
+models and Holt-Winters in-sample prediction are explicitly outside this initial
+distributed API. Software partition/failure tests pass; physical NVIDIA/AMD
+qualification is pending. This does not inherit the older fit-path receipts.
+
+Independent GPC classes can also be scheduled explicitly:
+
+```python
+from mojolearn.parallel_gaussian_process import (
+    fit_gaussian_process_classifier, predict_gaussian_process_classifier,
+)
+
+fit_gaussian_process_classifier(gpc, X, y, devices=(0, 1))
+probabilities = predict_gaussian_process_classifier(gpc, queries, devices=(0, 1),
+                                                   method='predict_proba')
+```
+
+This preserves binary solves and class/probability order. It can distribute
+multiclass work, but a single binary covariance problem still must fit on one
+GPU. Physical vendor qualification is pending; software scheduling tests alone
+are not a throughput or capacity measurement.
+
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
 | Pooled byte language model | Decoder layers and their model/optimizer state; embedding/head on the first device | Original layer kernels, ordered logical gradient sums and atomic owned AdamW updates |
@@ -824,3 +891,20 @@ two H100s and two MI300X at one commit
 (`bench/results/multi_gpu/2026-09-15/kernel-methods-cholesky-final/`) pass the
 native and public gates, fail under sabotage builds, and are equal across the
 two vendors.
+
+### Independent cross-validation folds
+
+```python
+from mojolearn.parallel_model_selection import cross_val_score
+scores = cross_val_score(estimator, X, y, devices=(0, 1), cv=5)
+```
+
+The scheduler clones a fresh estimator per fold, sends only that fold's data to
+its worker, and returns scores in fold order. Fits run in bounded waves with at
+most one fit per selected CUDA/HIP device. Every individual fit must fit on one
+GPU. Estimators and custom scorers must be pickleable and importable by fresh
+workers; dense inputs and `error_score='raise'` match the supported serial scope.
+Failed or incomplete worker responses raise and close the pool.
+
+Software contracts are tested. NVIDIA/AMD execution evidence and release-wheel
+qualification remain pending; the interrupted NVIDIA build produced no CV result.

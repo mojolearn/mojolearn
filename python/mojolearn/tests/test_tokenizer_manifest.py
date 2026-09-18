@@ -30,12 +30,12 @@ def test_manifest_declares_the_family():
     f = host_surface.family("tokenizer")
     assert f["binding"] == "_mojolearn_tokenizer_host"
     assert f["routes"] is None, "the tokenizer has no GPU binding to route from"
-    assert f["classes"] == ("GPT2Tokenizer",)
+    assert f["classes"] == ("BpeTokenizer",)
     assert f["sabotage_define"] == "MOJOLEARN_TOKENIZER_HOST_SABOTAGE"
     # A covered TRAINING lane since lane/cpu-verifier-gaps-7 (11c5f2192,
     # 2026-09-15): the gate builds this family into its sabotage host set with
-    # the family's own define, which reverses the ids of gpt2_encode and of
-    # every document of gpt2_encode_batch, so the lane's train, infer and batch
+    # the family's own define, which reverses the ids of bpe_encode and of
+    # every document of bpe_encode_batch, so the lane's train, infer and batch
     # parts all move. It was () when this test was written (2026-09-14), before
     # that gate existed. No INFERENCE lane, because the family has no saved
     # model to predict from.
@@ -47,15 +47,30 @@ def test_manifest_declares_the_family():
 
 
 def test_package_exports_the_class():
-    assert "GPT2Tokenizer" in mojolearn.__all__
+    assert "BpeTokenizer" in mojolearn.__all__
     assert "tokenizer" in mojolearn.__all__
-    assert mojolearn.GPT2Tokenizer is tokenizer_module.GPT2Tokenizer
-    assert "GPT2Tokenizer" in tokenizer_module.__all__
+    assert mojolearn.BpeTokenizer is tokenizer_module.BpeTokenizer
+    assert "BpeTokenizer" in tokenizer_module.__all__
+
+
+def test_gpt2_tokenizer_is_a_deprecated_alias():
+    """Renamed 2026-09-18: `GPT2Tokenizer` shipped in 0.8.x and stays in
+    mojolearn.__all__ as the SAME class, with a DeprecationWarning."""
+    import warnings
+    assert "GPT2Tokenizer" in mojolearn.__all__
+    with warnings.catch_warnings(record=True) as seen:
+        warnings.simplefilter("always")
+        a = mojolearn.GPT2Tokenizer
+        b = tokenizer_module.GPT2Tokenizer
+        from mojolearn import GPT2Tokenizer as c
+    assert a is b is c is tokenizer_module.BpeTokenizer
+    msgs = [str(w.message) for w in seen if issubclass(w.category, DeprecationWarning)]
+    assert len(msgs) >= 3 and all("renamed BpeTokenizer" in m for m in msgs), msgs
 
 
 def test_alpha_api_names_it():
     text = _read("python/mojolearn/ALPHA_API.md")
-    assert "mojolearn.tokenizer.GPT2Tokenizer" in text
+    assert "mojolearn.tokenizer.BpeTokenizer" in text
     assert "_mojolearn_tokenizer_host" in text
 
 
@@ -98,14 +113,14 @@ def test_no_vocabulary_is_tracked_or_shipped():
 
 def test_missing_vocabulary_refused_by_name_before_any_load():
     try:
-        mojolearn.GPT2Tokenizer()
+        mojolearn.BpeTokenizer()
     except ValueError as exc:
         assert "needs a vocabulary, and mojolearn ships none" in str(exc)
     else:
         raise AssertionError("a tokenizer with no vocabulary was not refused")
     missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")
     try:
-        mojolearn.GPT2Tokenizer.from_ranks_file(missing)
+        mojolearn.BpeTokenizer.from_ranks_file(missing)
     except FileNotFoundError as exc:
         assert "does not exist" in str(exc)
     else:

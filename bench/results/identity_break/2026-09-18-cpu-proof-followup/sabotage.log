@@ -1,0 +1,55 @@
+# vendor=cpu-apple-m4 commit=49b747897e160a41f01c73e2f3a77122ee8ce00d (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-18 11:12:44  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | ties             |
+|------------------------|------------------|
+# START byte-lm-host-infer/ties repeat=1/train
+# DONE byte-lm-host-infer/ties repeat=1/train 0.061s
+# START byte-lm-host-infer/ties repeat=1/infer-save-reload
+# DONE byte-lm-host-infer/ties repeat=1/infer-save-reload 0.019s
+# START byte-lm-host-infer/ties repeat=1/batch
+# DONE byte-lm-host-infer/ties repeat=1/batch 0.739s
+# START byte-lm-host-infer/ties repeat=1/rlpair
+# DONE byte-lm-host-infer/ties repeat=1/rlpair 0.331s
+# START byte-lm-host-infer/ties repeat=2/train
+# DONE byte-lm-host-infer/ties repeat=2/train 0.053s
+# START byte-lm-host-infer/ties repeat=2/infer-save-reload
+# DONE byte-lm-host-infer/ties repeat=2/infer-save-reload 0.017s
+# START byte-lm-host-infer/ties repeat=2/batch
+# DONE byte-lm-host-infer/ties repeat=2/batch 0.650s
+# START byte-lm-host-infer/ties repeat=2/rlpair
+# DONE byte-lm-host-infer/ties repeat=2/rlpair 0.359s
+# CELL byte-lm-host-infer/ties STABLE 2.228s
+| byte-lm-host-infer     | 8637b8094b01879d |
+| byte-lm-host-infer infer | 6e309b41212e3cfd |
+| byte-lm-host-infer batch | e91a2b24dd1b698d |
+| byte-lm-host-infer rlpair | RLPAIR_MOVED     |
+# START par-reference-knn/ties repeat=1/train
+# DONE par-reference-knn/ties repeat=1/train 0.306s
+# START par-reference-knn/ties repeat=2/train
+# DONE par-reference-knn/ties repeat=2/train 0.268s
+# CELL par-reference-knn/ties DIVERGENT 0.574s
+| par-reference-knn      | DIVERGENT        |
+| par-reference-knn infer | REFUSED          |
+| par-reference-knn model | REFUSED          |
+| par-reference-knn batch | REFUSED          |
+# START par-reference-knn-reg/ties repeat=1/train
+# DONE par-reference-knn-reg/ties repeat=1/train 0.170s
+# START par-reference-knn-reg/ties repeat=2/train
+# DONE par-reference-knn-reg/ties repeat=2/train 0.173s
+# CELL par-reference-knn-reg/ties DIVERGENT 0.342s
+| par-reference-knn-reg  | DIVERGENT        |
+| par-reference-knn-reg infer | REFUSED          |
+| par-reference-knn-reg model | REFUSED          |
+| par-reference-knn-reg batch | REFUSED          |
+
+cells=3 stable=1 moved=2 refused=0
+infer: stable=1
+model: n/a=1
+batch: stable=1
+rlpair: rlpair_moved=1
+n/a: byte-lm-host-infer model n/a:no-save
+MOVED   par-reference-knn/ties: ['000b08f6d6cf0d88', '000b08f6d6cf0d88']
+MOVED   par-reference-knn-reg/ties: ['49a20b7d3ffb86de', '49a20b7d3ffb86de']
+RLPAIR_MOVED byte-lm-host-infer/ties: RLPAIR_MOVED:sampler threaded=True prefix recompute B=5 vs trainer B=5:seq 0 token 0:nll 0x40a869f1 vs 0x40a869f2; logits element 0 0xbd885067 vs 0xbd885061
+wrote /Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-proof-followup/sabotage.json

@@ -41,6 +41,7 @@ from core.step_phase import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
+from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import download_f32
 from training.byte_lm_config import ByteConfig
@@ -49,7 +50,9 @@ from training.byte_lm import (
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
-    byte_attention_eager_cells, byte_lm_ce_aliased,
+    byte_attention_eager_cells, byte_lm_attn_bwd_corner_refuses,
+    byte_lm_attn_kv_corner_guard,
+    byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
 from training.byte_lm_model_pool import ByteModelPool
@@ -727,6 +730,16 @@ def byte_lm_fault_inject_available_binding() raises -> PythonObject:
     return PythonObject(byte_lm_fault_inject_available())
 
 
+def byte_lm_gemm_reuse_group_ws_binding() raises -> PythonObject:
+    """Read grouped-scratch reuse from the loaded training binary."""
+    return PythonObject(GEMM_REUSE_GROUP_WS)
+
+
+def byte_lm_gemm_stage_ftz_binding() raises -> PythonObject:
+    """Read operand-flush placement from the loaded training binary."""
+    return PythonObject(TUNED_STAGE_FTZ)
+
+
 def byte_lm_ce_aliased_binding() raises -> PythonObject:
     """DEVIATION 3011: False in a build carrying
     -D MOJOLEARN_BYTE_LM_CE_UNALIASED=1, which allocates the five [M, V]
@@ -734,6 +747,27 @@ def byte_lm_ce_aliased_binding() raises -> PythonObject:
     The A/B that claims aliasing moves no bit reads this to prove its two
     arms are two arms."""
     return PythonObject(byte_lm_ce_aliased())
+
+
+def byte_lm_attn_sticky_fallback_binding() raises -> PythonObject:
+    """DEVIATION 3110: False in a build carrying
+    -D MOJOLEARN_ATTN_NO_STICKY=1, which relaunches the fused attention
+    kernels for a layer that has already refused and then discards the
+    launch. The A/B that claims the latch moves no bit reads this to prove
+    its two arms are two arms."""
+    return PythonObject(byte_lm_attn_sticky_fallback())
+
+
+def byte_lm_attn_bwd_corner_refuses_binding() raises -> PythonObject:
+    """DEVIATION 3112: False in the measurement build carrying
+    -D MOJOLEARN_ATTN_NO_BWD_CORNER=1."""
+    return PythonObject(byte_lm_attn_bwd_corner_refuses())
+
+
+def byte_lm_attn_kv_corner_guard_binding() raises -> PythonObject:
+    """DEVIATION 3111: False in a build carrying
+    the qualified replay column or explicit guard defines."""
+    return PythonObject(byte_lm_attn_kv_corner_guard())
 
 
 def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
@@ -1054,9 +1088,12 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     layers grown forward, layers grown backward, layers with a full
     `aexp`. They are ZERO when no trainer is open. Existing callers index
     positions 0 to 3 and are unaffected; nothing here launches, downloads
-    or synchronizes. Open trainers additionally append one triple per layer:
+    or synchronizes. Open trainers append the forward/backward list lengths,
+    then one triple per paired layer:
     forward launch status, backward launch status, current materialization.
-    Status -1 means no fused attempt, otherwise the actual FUSED_* code."""
+    Status -1 means no fused attempt, otherwise the actual FUSED_* code.
+    Policy flags, released cells and repair-site masks follow these triples;
+    byte_attention_eager_cells documents their append-only ordering."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var completed = -1
     var grad_step = -1
@@ -1641,7 +1678,12 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_rollback_binding]("byte_lm_session_rollback")
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
+        module.def_function[byte_lm_gemm_reuse_group_ws_binding]("byte_lm_gemm_reuse_group_ws")
+        module.def_function[byte_lm_gemm_stage_ftz_binding]("byte_lm_gemm_stage_ftz")
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
+        module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
+        module.def_function[byte_lm_attn_kv_corner_guard_binding]("byte_lm_attn_kv_corner_guard")
+        module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).

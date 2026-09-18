@@ -375,6 +375,7 @@ def ivf_flat_search_traced(
     k: Int,
     tile_tpb: Int = PINNED_TILE_TPB,
     expand_tpb: Int = IVF_EXPAND_TPB,
+    partial_storage: Bool = False,
 ) raises -> IvfSearchResult:
     """`ivf_flat::search`, `ivf_flat_search.cuh:311-374` then `:40-306`.
 
@@ -573,7 +574,7 @@ def ivf_flat_search_traced(
         var chunks = calc_chunk_indices(list_sizes, this_probe, n_probes)
         var n_cand = n_samples_from_chunks(chunks, n_probes)
         cand_counts.append(Int32(n_cand))
-        if n_cand < k:
+        if n_cand < k and not partial_storage:
             # DEVIATION 1794. Their `postprocess_neighbors_kernel` fills
             # the short slots with `kOutOfBoundsRecord`
             # (`ivf_common.cuh:106-108`); that fill is not implemented and the
@@ -592,6 +593,16 @@ def ivf_flat_search_traced(
                 " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
                 " or lower k, or rebuild with fewer lists."
             )
+
+        # Partial storage keeps global coarse probes but may own no candidates.
+        # Padding has no numerical meaning; n_candidates gives min(k, count)
+        # valid slots and the driver must ignore the remainder.
+        var selected = min(k, n_cand)
+        if selected == 0:
+            for i in range(k):
+                out_dist.append(Float32(0))
+                out_idx.append(UInt32(0))
+            continue
 
         var slots = merge_probed_lists(layout, this_probe, n_probes)
         var cand_vec = gather_candidate_vectors(layout, slots)
@@ -614,24 +625,27 @@ def ivf_flat_search_traced(
 
         _select_top_k(
             ctx, dcand_dist, dsel_val, dsel_idx, dcbuf_val, dcbuf_idx,
-            1, n_cand, k, cand_buf_len,
+            1, n_cand, selected, cand_buf_len,
         )
         ctx.synchronize()
 
-        var sel_dist = download_f32(ctx, dsel_val, k)
-        var sel_pos = download_u32(ctx, dsel_idx, k)
-        var sel_orig = postprocess_neighbors(sel_pos, cand_orig, k)
-        sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, k)
+        var sel_dist = download_f32(ctx, dsel_val, selected)
+        var sel_pos = download_u32(ctx, dsel_idx, selected)
+        var sel_orig = postprocess_neighbors(sel_pos, cand_orig, selected)
+        sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, selected)
         # The root, if the metric wants one, AFTER the order is fixed on
         # the squared keys (their store-time `post_process`). `sqrt` is
         # monotone, so the rooted row is still ascending; two squared
         # values that root to one float keep their squared order.
-        if not dist_is_identity:
+        if not dist_is_identity and not partial_storage:
             postprocess_distances(sel_dist, index.metric)
 
-        for i in range(k):
+        for i in range(selected):
             out_dist.append(sel_dist[i])
             out_idx.append(sel_orig[i])
+        for i in range(selected, k):
+            out_dist.append(Float32(0))
+            out_idx.append(UInt32(0))
         if trace.enabled:
             var row = download_f32(ctx, dcand_dist, n_cand)
             for i in range(n_cand):

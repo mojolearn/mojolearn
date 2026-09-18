@@ -1,0 +1,1352 @@
+{
+  "bindings": [
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_arima_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_arima_host.so",
+      "sha256": "8418d2e48128b6bd4d306ebd4db8c622e2f905409a29a10d0d852dae7d6d5b46",
+      "size": 396688
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_byte_lm_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_byte_lm_host.so",
+      "sha256": "c297140191e773961db8527ee9da4ee6c3203af7c910275d0a42618374b34163",
+      "size": 549536
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_core_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_core_host.so",
+      "sha256": "583f5652d779e7558b05797d6dc300867970461c89b2e93978d7136587d4e0e7",
+      "size": 611632
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_embedding_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_embedding_host.so",
+      "sha256": "2cc2cf82e0901d9dbdc3dac881b115505eadf93cf0b484e38b796476b0bbdf71",
+      "size": 246144
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_embedding_infer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_embedding_infer_host.so",
+      "sha256": "b81bbb65ff99f1e00878ffbdd74c247408b85f6737e4f4538e538ae095c87c18",
+      "size": 226112
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_estimators_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_estimators_host.so",
+      "sha256": "f276342ca4a20b99503c0f89f0401c85a57a220944f935116555387fcacd1686",
+      "size": 679360
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_forecast_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_forecast_host.so",
+      "sha256": "c3901c9501262085fb0622873c2b2d13e47f35ea2a65c662630a0587696000e9",
+      "size": 369408
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_forest_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_forest_host.so",
+      "sha256": "23af30c46f554b6c7695a9a22384020f339616edd28e78bcd2fb417444ae0870",
+      "size": 515824
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_gbdt_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_gbdt_host.so",
+      "sha256": "078bc711a2831390c7b6d879ba57f15013f9596a55c15fc69397cab011336957",
+      "size": 1322832
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_gp_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_gp_host.so",
+      "sha256": "5f24a22ac7fb30199eb3db3b2dd1e805178d59d6fcde786cc688bf1e399d9778",
+      "size": 466752
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_gp_infer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_gp_infer_host.so",
+      "sha256": "ab4f9df25f8fc2b9dedd3223c7ca0d514d86d806b4cceab2d47147daff9812d6",
+      "size": 304672
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_hdbscan_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_hdbscan_host.so",
+      "sha256": "4b642bf7d114e6a73756a1f5d07fe360a2a43d7327ce0efae1d3947d208e93a6",
+      "size": 460144
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_hdbscan_infer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_hdbscan_infer_host.so",
+      "sha256": "ccee46bf3111055970f6ef646e1cc2c11bab17098885520d9844908d1aa44375",
+      "size": 329200
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_ivf_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_ivf_host.so",
+      "sha256": "15baa7db56e3cae5b6fa07846cfd92ac953398d7f9709eda7d0b0a852262a250",
+      "size": 465776
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_ivf_search_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_ivf_search_host.so",
+      "sha256": "44b7a76d2b43e81633b53a5fb496aa634538ef332529ff0056ad0c7077f2bf0c",
+      "size": 302624
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_kernel_methods_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_kernel_methods_host.so",
+      "sha256": "2d2952edcf612e18055e1ba86006160c993e16c0e92bd8d4fef0e051ce8c99e6",
+      "size": 368432
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_linalg_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_linalg_host.so",
+      "sha256": "32de6e3b558f44ebd4859ced416a1b13d0c1933ea666d99c52c01703513328df",
+      "size": 307088
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_mamba_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_mamba_host.so",
+      "sha256": "7e95777a5959988c28c8dca460b9cd6f7095d720677c52360968d1aa22a3dd5c",
+      "size": 1069408
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_metrics_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_metrics_host.so",
+      "sha256": "596421a4161d5e678256c81845a072544a8de394792fe2d28105b3223c00f646",
+      "size": 794512
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_mixture_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_mixture_host.so",
+      "sha256": "6c386ab8ee805672361eb61016cee39acaf1a9a38c8a437d917c68fbd4600443",
+      "size": 449216
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_mixture_infer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_mixture_infer_host.so",
+      "sha256": "1968cc705a415f5102c30202e51904cb9c39e8eb92ec73f48850451b36c010cb",
+      "size": 268576
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_neural_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_neural_host.so",
+      "sha256": "6a1f49d19c472c74637010467b3a03d3531ecb2d6cf86f804b88f5c890a01777",
+      "size": 630368
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_preprocessing_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_preprocessing_host.so",
+      "sha256": "5d641d16f5c36246c8fdb0c1c0bb26fb6304986074a25bf55b1af8aaea263c4b",
+      "size": 252304
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_resample_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_resample_host.so",
+      "sha256": "885251507281d06fd10f905f38611094fcfd8ffd10273cdcf5879cbb2038f677",
+      "size": 342144
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_rf_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_rf_host.so",
+      "sha256": "b95cbbe9fc83df626d43d3df9423b574ba22da8f62c60f848c57e2ea5a748646",
+      "size": 544032
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_solver_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_solver_host.so",
+      "sha256": "60eb515bef0e2832a5f587c35a782d98251a25221d4a4eae2e7f4d01318e785d",
+      "size": 307888
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_svm_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_svm_host.so",
+      "sha256": "ae3dde32e9ac55ccb5666fb87b57651823aec493d1a16573ce6733ca341271ed",
+      "size": 413328
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_tokenizer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_tokenizer_host.so",
+      "sha256": "1ec6d6e9a2be247d34d5ec09df46a7c2a5f8c24d52db1659e876159995bab71c",
+      "size": 386432
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_training_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_training_host.so",
+      "sha256": "7aeb5610b629d3c1aa9d88ffd593bfa8705bf87179505831538a710625f84926",
+      "size": 429440
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_transformer_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_transformer_host.so",
+      "sha256": "de4f9ceb321753eafbf0b995030bce173c4904af66a55bc3c3b2f8a3bdff1ca3",
+      "size": 440000
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_trees_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_trees_host.so",
+      "sha256": "256073be3925e4e551e10e323f597fbdb9710ce85ca50aa21a74a1f69b41585e",
+      "size": 555840
+    },
+    {
+      "kind": "host",
+      "module": "mojolearn._host._mojolearn_tsa_host",
+      "path": "/Users/andrewhendel/mojolearn-wt/release-087-final/python/mojolearn/host/_mojolearn_tsa_host.so",
+      "sha256": "77fd0fc2d6f28010e255bb9510c336d1f7557ed62d3bdefa2b3b5dae2f5dbca3",
+      "size": 329216
+    }
+  ],
+  "capture_tool_sha256": "24ee95f2e3c56756385e9cbfe130ad54d4eea5b54e5904a51b333610852b892e",
+  "cells": {
+    "minmax-scaler/denormal": {
+      "batch": [
+        "bedd214bedc9c655",
+        "bedd214bedc9c655"
+      ],
+      "errors": [],
+      "infer": [
+        "871f3ff2ba0ab805",
+        "871f3ff2ba0ab805"
+      ],
+      "model": [
+        "3469cfebb9eb9099",
+        "3469cfebb9eb9099"
+      ],
+      "seconds": 0.007878,
+      "train": [
+        "7d121fac497bd666",
+        "7d121fac497bd666"
+      ]
+    },
+    "minmax-scaler/denormal_ftz": {
+      "batch": [
+        "bedd214bedc9c655",
+        "bedd214bedc9c655"
+      ],
+      "errors": [],
+      "infer": [
+        "871f3ff2ba0ab805",
+        "871f3ff2ba0ab805"
+      ],
+      "model": [
+        "3469cfebb9eb9099",
+        "3469cfebb9eb9099"
+      ],
+      "seconds": 0.007807,
+      "train": [
+        "7d121fac497bd666",
+        "7d121fac497bd666"
+      ]
+    },
+    "minmax-scaler/dupes": {
+      "batch": [
+        "c8dd5bf8ab5cc38c",
+        "c8dd5bf8ab5cc38c"
+      ],
+      "errors": [],
+      "infer": [
+        "f73ddb31aaf50c83",
+        "f73ddb31aaf50c83"
+      ],
+      "model": [
+        "f5e9a8c22b7cfb1a",
+        "f5e9a8c22b7cfb1a"
+      ],
+      "seconds": 0.007594,
+      "train": [
+        "2876763c88a33748",
+        "2876763c88a33748"
+      ]
+    },
+    "minmax-scaler/negative": {
+      "batch": [
+        "8be70a8899163353",
+        "8be70a8899163353"
+      ],
+      "errors": [],
+      "infer": [
+        "021d7f9e7e32d581",
+        "021d7f9e7e32d581"
+      ],
+      "model": [
+        "03a5810731447081",
+        "03a5810731447081"
+      ],
+      "seconds": 0.007469,
+      "train": [
+        "5d21ae32d234f46c",
+        "5d21ae32d234f46c"
+      ]
+    },
+    "minmax-scaler/rows-255": {
+      "batch": [
+        "81dd153fc4d1fb19",
+        "81dd153fc4d1fb19"
+      ],
+      "errors": [],
+      "infer": [
+        "deda353a3fcb2a14",
+        "deda353a3fcb2a14"
+      ],
+      "model": [
+        "ba87b8c0c09334d2",
+        "ba87b8c0c09334d2"
+      ],
+      "seconds": 0.009467,
+      "train": [
+        "ce76eab8cb9c673a",
+        "ce76eab8cb9c673a"
+      ]
+    },
+    "minmax-scaler/rows-256": {
+      "batch": [
+        "77f63b95b725deed",
+        "77f63b95b725deed"
+      ],
+      "errors": [],
+      "infer": [
+        "2ae279c5f93da03c",
+        "2ae279c5f93da03c"
+      ],
+      "model": [
+        "57db01388e7c710a",
+        "57db01388e7c710a"
+      ],
+      "seconds": 0.010175,
+      "train": [
+        "bb8e092f87548ee4",
+        "bb8e092f87548ee4"
+      ]
+    },
+    "minmax-scaler/rows-257": {
+      "batch": [
+        "16e7bb9c4a63c3fe",
+        "16e7bb9c4a63c3fe"
+      ],
+      "errors": [],
+      "infer": [
+        "2693c835041d869c",
+        "2693c835041d869c"
+      ],
+      "model": [
+        "3dc54eda0f377e8a",
+        "3dc54eda0f377e8a"
+      ],
+      "seconds": 0.009267,
+      "train": [
+        "7738511ceb62d633",
+        "7738511ceb62d633"
+      ]
+    },
+    "minmax-scaler/rows-31": {
+      "batch": [
+        "452d1e4b0a1cd33a",
+        "452d1e4b0a1cd33a"
+      ],
+      "errors": [],
+      "infer": [
+        "8189ddedcbd97330",
+        "8189ddedcbd97330"
+      ],
+      "model": [
+        "6530a97513012950",
+        "6530a97513012950"
+      ],
+      "seconds": 0.006682,
+      "train": [
+        "c03d3c8d9a2e00af",
+        "c03d3c8d9a2e00af"
+      ]
+    },
+    "minmax-scaler/rows-32": {
+      "batch": [
+        "62472775f2cbb0f5",
+        "62472775f2cbb0f5"
+      ],
+      "errors": [],
+      "infer": [
+        "fa9865b399ad2a93",
+        "fa9865b399ad2a93"
+      ],
+      "model": [
+        "920e16f3b1ec0a66",
+        "920e16f3b1ec0a66"
+      ],
+      "seconds": 0.006009,
+      "train": [
+        "3240fb9bfa88e383",
+        "3240fb9bfa88e383"
+      ]
+    },
+    "minmax-scaler/rows-33": {
+      "batch": [
+        "fcc902ca7482d45e",
+        "fcc902ca7482d45e"
+      ],
+      "errors": [],
+      "infer": [
+        "e63c88d19ee07e33",
+        "e63c88d19ee07e33"
+      ],
+      "model": [
+        "f3c064ba1be1ae0b",
+        "f3c064ba1be1ae0b"
+      ],
+      "seconds": 0.006813,
+      "train": [
+        "2610ee9328b29b65",
+        "2610ee9328b29b65"
+      ]
+    },
+    "minmax-scaler/rows-63": {
+      "batch": [
+        "a2cac0f22fe7b526",
+        "a2cac0f22fe7b526"
+      ],
+      "errors": [],
+      "infer": [
+        "c93221b77cf2c2a4",
+        "c93221b77cf2c2a4"
+      ],
+      "model": [
+        "e6b0fa74c52749ad",
+        "e6b0fa74c52749ad"
+      ],
+      "seconds": 0.006308,
+      "train": [
+        "37638ddf4ac9eba1",
+        "37638ddf4ac9eba1"
+      ]
+    },
+    "minmax-scaler/rows-64": {
+      "batch": [
+        "f82ac17db8e9bd11",
+        "f82ac17db8e9bd11"
+      ],
+      "errors": [],
+      "infer": [
+        "b17f47016af4b48a",
+        "b17f47016af4b48a"
+      ],
+      "model": [
+        "04e4bc21af3e06bb",
+        "04e4bc21af3e06bb"
+      ],
+      "seconds": 0.006776,
+      "train": [
+        "c88c7d41c4474355",
+        "c88c7d41c4474355"
+      ]
+    },
+    "minmax-scaler/rows-65": {
+      "batch": [
+        "f0cc6173876fdd98",
+        "f0cc6173876fdd98"
+      ],
+      "errors": [],
+      "infer": [
+        "1b1ad1e1f6fb77b7",
+        "1b1ad1e1f6fb77b7"
+      ],
+      "model": [
+        "25a6403636cb684a",
+        "25a6403636cb684a"
+      ],
+      "seconds": 0.007634,
+      "train": [
+        "d3d5f95a05d586c5",
+        "d3d5f95a05d586c5"
+      ]
+    },
+    "minmax-scaler/ties": {
+      "batch": [
+        "6680d5eeebefca7b",
+        "6680d5eeebefca7b"
+      ],
+      "errors": [],
+      "infer": [
+        "7b161171bb611d3a",
+        "7b161171bb611d3a"
+      ],
+      "model": [
+        "0b53a7bb7fe6be06",
+        "0b53a7bb7fe6be06"
+      ],
+      "seconds": 0.007138,
+      "train": [
+        "4f0b25fca2c56853",
+        "4f0b25fca2c56853"
+      ]
+    },
+    "minmax-scaler/wide": {
+      "batch": [
+        "23cfbb5b8811e353",
+        "23cfbb5b8811e353"
+      ],
+      "errors": [],
+      "infer": [
+        "96fa583b8a26c857",
+        "96fa583b8a26c857"
+      ],
+      "model": [
+        "5008c0883b9bfc0f",
+        "5008c0883b9bfc0f"
+      ],
+      "seconds": 0.008277,
+      "train": [
+        "2c6c51f08f897e62",
+        "2c6c51f08f897e62"
+      ]
+    },
+    "ridge/denormal": {
+      "batch": [
+        "3fa8033dd7bbffef",
+        "3fa8033dd7bbffef"
+      ],
+      "errors": [],
+      "infer": [
+        "5a98896a71353e22",
+        "5a98896a71353e22"
+      ],
+      "model": [
+        "ba5c05b514c8f7b0",
+        "ba5c05b514c8f7b0"
+      ],
+      "seconds": 0.008427,
+      "train": [
+        "373dcdebb399f9c6",
+        "373dcdebb399f9c6"
+      ]
+    },
+    "ridge/denormal_ftz": {
+      "batch": [
+        "3fa8033dd7bbffef",
+        "3fa8033dd7bbffef"
+      ],
+      "errors": [],
+      "infer": [
+        "5a98896a71353e22",
+        "5a98896a71353e22"
+      ],
+      "model": [
+        "ba5c05b514c8f7b0",
+        "ba5c05b514c8f7b0"
+      ],
+      "seconds": 0.008421,
+      "train": [
+        "373dcdebb399f9c6",
+        "373dcdebb399f9c6"
+      ]
+    },
+    "ridge/dupes": {
+      "batch": [
+        "d571d06ea59f76fc",
+        "d571d06ea59f76fc"
+      ],
+      "errors": [],
+      "infer": [
+        "002173876547fa99",
+        "002173876547fa99"
+      ],
+      "model": [
+        "570619d87e13651d",
+        "570619d87e13651d"
+      ],
+      "seconds": 0.007614,
+      "train": [
+        "c41226b4e9223b9d",
+        "c41226b4e9223b9d"
+      ]
+    },
+    "ridge/negative": {
+      "batch": [
+        "6409e7fceb7ee7a3",
+        "6409e7fceb7ee7a3"
+      ],
+      "errors": [],
+      "infer": [
+        "bf51805e6a2672af",
+        "bf51805e6a2672af"
+      ],
+      "model": [
+        "3f3dda2aa7be8bea",
+        "3f3dda2aa7be8bea"
+      ],
+      "seconds": 0.007805,
+      "train": [
+        "1951303fabd9f580",
+        "1951303fabd9f580"
+      ]
+    },
+    "ridge/rows-255": {
+      "batch": [
+        "021b8db7d66519ac",
+        "021b8db7d66519ac"
+      ],
+      "errors": [],
+      "infer": [
+        "807d8e02bd4810ee",
+        "807d8e02bd4810ee"
+      ],
+      "model": [
+        "1360c44b42503c2e",
+        "1360c44b42503c2e"
+      ],
+      "seconds": 0.010189,
+      "train": [
+        "d0059eeb57cd15cc",
+        "d0059eeb57cd15cc"
+      ]
+    },
+    "ridge/rows-256": {
+      "batch": [
+        "c4153410d3a9cd48",
+        "c4153410d3a9cd48"
+      ],
+      "errors": [],
+      "infer": [
+        "8567ad9e3544b4df",
+        "8567ad9e3544b4df"
+      ],
+      "model": [
+        "75ccbcecb5fe3ab0",
+        "75ccbcecb5fe3ab0"
+      ],
+      "seconds": 0.012263,
+      "train": [
+        "61090a62834ab17b",
+        "61090a62834ab17b"
+      ]
+    },
+    "ridge/rows-257": {
+      "batch": [
+        "0a5f21ad65f3f135",
+        "0a5f21ad65f3f135"
+      ],
+      "errors": [],
+      "infer": [
+        "69ecdbc5b0a14842",
+        "69ecdbc5b0a14842"
+      ],
+      "model": [
+        "dc61812861858837",
+        "dc61812861858837"
+      ],
+      "seconds": 0.010876,
+      "train": [
+        "481559bdb16db77c",
+        "481559bdb16db77c"
+      ]
+    },
+    "ridge/rows-31": {
+      "batch": [
+        "4f393a1df739df2b",
+        "4f393a1df739df2b"
+      ],
+      "errors": [],
+      "infer": [
+        "e83192b4cf5f4817",
+        "e83192b4cf5f4817"
+      ],
+      "model": [
+        "b59cb9371648cb31",
+        "b59cb9371648cb31"
+      ],
+      "seconds": 0.013025,
+      "train": [
+        "c95a11070fb0652b",
+        "c95a11070fb0652b"
+      ]
+    },
+    "ridge/rows-32": {
+      "batch": [
+        "1ab0c10f9030d624",
+        "1ab0c10f9030d624"
+      ],
+      "errors": [],
+      "infer": [
+        "c5906fa09d9fe94b",
+        "c5906fa09d9fe94b"
+      ],
+      "model": [
+        "3f4799546c42d023",
+        "3f4799546c42d023"
+      ],
+      "seconds": 0.007053,
+      "train": [
+        "b16cc7c78843015f",
+        "b16cc7c78843015f"
+      ]
+    },
+    "ridge/rows-33": {
+      "batch": [
+        "3fea2734f82e1baa",
+        "3fea2734f82e1baa"
+      ],
+      "errors": [],
+      "infer": [
+        "862fbc0874892dc9",
+        "862fbc0874892dc9"
+      ],
+      "model": [
+        "7434bc48cca75ec2",
+        "7434bc48cca75ec2"
+      ],
+      "seconds": 0.006457,
+      "train": [
+        "087ae67a9ff856b2",
+        "087ae67a9ff856b2"
+      ]
+    },
+    "ridge/rows-63": {
+      "batch": [
+        "661052dbf434aabb",
+        "661052dbf434aabb"
+      ],
+      "errors": [],
+      "infer": [
+        "c88213b61034e443",
+        "c88213b61034e443"
+      ],
+      "model": [
+        "249067004fb7dbca",
+        "249067004fb7dbca"
+      ],
+      "seconds": 0.007219,
+      "train": [
+        "83914af7511323ee",
+        "83914af7511323ee"
+      ]
+    },
+    "ridge/rows-64": {
+      "batch": [
+        "ccfa8cc741832d2f",
+        "ccfa8cc741832d2f"
+      ],
+      "errors": [],
+      "infer": [
+        "acea38ef3fccdb83",
+        "acea38ef3fccdb83"
+      ],
+      "model": [
+        "30e88b4877259a1b",
+        "30e88b4877259a1b"
+      ],
+      "seconds": 0.006502,
+      "train": [
+        "1c436b0bb19db593",
+        "1c436b0bb19db593"
+      ]
+    },
+    "ridge/rows-65": {
+      "batch": [
+        "6743fa3a1ae94280",
+        "6743fa3a1ae94280"
+      ],
+      "errors": [],
+      "infer": [
+        "1c845bc1347fd188",
+        "1c845bc1347fd188"
+      ],
+      "model": [
+        "69688927ed7c4fd4",
+        "69688927ed7c4fd4"
+      ],
+      "seconds": 0.006896,
+      "train": [
+        "7697ef014e289852",
+        "7697ef014e289852"
+      ]
+    },
+    "ridge/ties": {
+      "batch": [
+        "3a8c10bd3b682555",
+        "3a8c10bd3b682555"
+      ],
+      "errors": [],
+      "infer": [
+        "d844ab4cb35dce24",
+        "d844ab4cb35dce24"
+      ],
+      "model": [
+        "97be06205013a288",
+        "97be06205013a288"
+      ],
+      "seconds": 0.008714,
+      "train": [
+        "1dc6b28b5d7ba6c5",
+        "1dc6b28b5d7ba6c5"
+      ]
+    },
+    "ridge/wide": {
+      "batch": [
+        "d94d811a95008fa6",
+        "d94d811a95008fa6"
+      ],
+      "errors": [],
+      "infer": [
+        "98f8b5ad326bcf4c",
+        "98f8b5ad326bcf4c"
+      ],
+      "model": [
+        "ae7aeba3326dbcbd",
+        "ae7aeba3326dbcbd"
+      ],
+      "seconds": 0.00761,
+      "train": [
+        "60fc655c185899cb",
+        "60fc655c185899cb"
+      ]
+    },
+    "standard-scaler/denormal": {
+      "batch": [
+        "dd52dcbfe9f7b9aa",
+        "dd52dcbfe9f7b9aa"
+      ],
+      "errors": [],
+      "infer": [
+        "c664d7f2dd26f024",
+        "c664d7f2dd26f024"
+      ],
+      "model": [
+        "c7225598cdb9d5e7",
+        "c7225598cdb9d5e7"
+      ],
+      "seconds": 0.007403,
+      "train": [
+        "be7e81745590c95c",
+        "be7e81745590c95c"
+      ]
+    },
+    "standard-scaler/denormal_ftz": {
+      "batch": [
+        "dd52dcbfe9f7b9aa",
+        "dd52dcbfe9f7b9aa"
+      ],
+      "errors": [],
+      "infer": [
+        "c664d7f2dd26f024",
+        "c664d7f2dd26f024"
+      ],
+      "model": [
+        "c7225598cdb9d5e7",
+        "c7225598cdb9d5e7"
+      ],
+      "seconds": 0.006943,
+      "train": [
+        "be7e81745590c95c",
+        "be7e81745590c95c"
+      ]
+    },
+    "standard-scaler/dupes": {
+      "batch": [
+        "9bf19db740f55c92",
+        "9bf19db740f55c92"
+      ],
+      "errors": [],
+      "infer": [
+        "57443972b5917960",
+        "57443972b5917960"
+      ],
+      "model": [
+        "7f0407d3a1ec4e61",
+        "7f0407d3a1ec4e61"
+      ],
+      "seconds": 0.008718,
+      "train": [
+        "630116a4923e65e0",
+        "630116a4923e65e0"
+      ]
+    },
+    "standard-scaler/negative": {
+      "batch": [
+        "233481c11b8aae00",
+        "233481c11b8aae00"
+      ],
+      "errors": [],
+      "infer": [
+        "b4b279da90e2881e",
+        "b4b279da90e2881e"
+      ],
+      "model": [
+        "c8f2eb00ae2a0836",
+        "c8f2eb00ae2a0836"
+      ],
+      "seconds": 0.008173,
+      "train": [
+        "5bafd9547508c0a1",
+        "5bafd9547508c0a1"
+      ]
+    },
+    "standard-scaler/rows-255": {
+      "batch": [
+        "5898538144c77fee",
+        "5898538144c77fee"
+      ],
+      "errors": [],
+      "infer": [
+        "a190988a5a55faca",
+        "a190988a5a55faca"
+      ],
+      "model": [
+        "7815ccd2483d9b52",
+        "7815ccd2483d9b52"
+      ],
+      "seconds": 0.008513,
+      "train": [
+        "e84ea040d55a3bd9",
+        "e84ea040d55a3bd9"
+      ]
+    },
+    "standard-scaler/rows-256": {
+      "batch": [
+        "e2cccb62c2ef43bb",
+        "e2cccb62c2ef43bb"
+      ],
+      "errors": [],
+      "infer": [
+        "4e7a273b2be98ab7",
+        "4e7a273b2be98ab7"
+      ],
+      "model": [
+        "67421f309c96c226",
+        "67421f309c96c226"
+      ],
+      "seconds": 0.008884,
+      "train": [
+        "1288f5ae3c220ebf",
+        "1288f5ae3c220ebf"
+      ]
+    },
+    "standard-scaler/rows-257": {
+      "batch": [
+        "c1d4ad799c7234bc",
+        "c1d4ad799c7234bc"
+      ],
+      "errors": [],
+      "infer": [
+        "38b3d447e1420c2c",
+        "38b3d447e1420c2c"
+      ],
+      "model": [
+        "c45c12ba3a0c3b34",
+        "c45c12ba3a0c3b34"
+      ],
+      "seconds": 0.008744,
+      "train": [
+        "50137c56ee6d3173",
+        "50137c56ee6d3173"
+      ]
+    },
+    "standard-scaler/rows-31": {
+      "batch": [
+        "45dcc9332675457e",
+        "45dcc9332675457e"
+      ],
+      "errors": [],
+      "infer": [
+        "2aeb21c4abd0903b",
+        "2aeb21c4abd0903b"
+      ],
+      "model": [
+        "e86ddc76d2292915",
+        "e86ddc76d2292915"
+      ],
+      "seconds": 0.007769,
+      "train": [
+        "efbb12ff52305876",
+        "efbb12ff52305876"
+      ]
+    },
+    "standard-scaler/rows-32": {
+      "batch": [
+        "f516f04e3de9e4f4",
+        "f516f04e3de9e4f4"
+      ],
+      "errors": [],
+      "infer": [
+        "4caf684a871ef53c",
+        "4caf684a871ef53c"
+      ],
+      "model": [
+        "27aefb35b8170c4b",
+        "27aefb35b8170c4b"
+      ],
+      "seconds": 0.006107,
+      "train": [
+        "476bb828e372bf9f",
+        "476bb828e372bf9f"
+      ]
+    },
+    "standard-scaler/rows-33": {
+      "batch": [
+        "a5b876de4ca1c72a",
+        "a5b876de4ca1c72a"
+      ],
+      "errors": [],
+      "infer": [
+        "046e53d30851696a",
+        "046e53d30851696a"
+      ],
+      "model": [
+        "b116a496a9443486",
+        "b116a496a9443486"
+      ],
+      "seconds": 0.006481,
+      "train": [
+        "46df6ba7074a0e06",
+        "46df6ba7074a0e06"
+      ]
+    },
+    "standard-scaler/rows-63": {
+      "batch": [
+        "3522811c02f07b04",
+        "3522811c02f07b04"
+      ],
+      "errors": [],
+      "infer": [
+        "3a84d1dc69047fa4",
+        "3a84d1dc69047fa4"
+      ],
+      "model": [
+        "9e4b2b54da5bce83",
+        "9e4b2b54da5bce83"
+      ],
+      "seconds": 0.00598,
+      "train": [
+        "9f82f9f050ea852d",
+        "9f82f9f050ea852d"
+      ]
+    },
+    "standard-scaler/rows-64": {
+      "batch": [
+        "301acf1ec1db22b2",
+        "301acf1ec1db22b2"
+      ],
+      "errors": [],
+      "infer": [
+        "c67e517a6f0cffac",
+        "c67e517a6f0cffac"
+      ],
+      "model": [
+        "f5d61266be75d210",
+        "f5d61266be75d210"
+      ],
+      "seconds": 0.005824,
+      "train": [
+        "aa87b6e231f8fc2b",
+        "aa87b6e231f8fc2b"
+      ]
+    },
+    "standard-scaler/rows-65": {
+      "batch": [
+        "a68d3397d1ecb4c5",
+        "a68d3397d1ecb4c5"
+      ],
+      "errors": [],
+      "infer": [
+        "528f3198a6f67f8c",
+        "528f3198a6f67f8c"
+      ],
+      "model": [
+        "19d38f0d64db3106",
+        "19d38f0d64db3106"
+      ],
+      "seconds": 0.006529,
+      "train": [
+        "ce1d35aa3d37ce0b",
+        "ce1d35aa3d37ce0b"
+      ]
+    },
+    "standard-scaler/ties": {
+      "batch": [
+        "cf47b3a18436f8c5",
+        "cf47b3a18436f8c5"
+      ],
+      "errors": [],
+      "infer": [
+        "7e2bf093f1b7fa5d",
+        "7e2bf093f1b7fa5d"
+      ],
+      "model": [
+        "09f2367b10e6be01",
+        "09f2367b10e6be01"
+      ],
+      "seconds": 0.007063,
+      "train": [
+        "9deb43dc8fd636d7",
+        "9deb43dc8fd636d7"
+      ]
+    },
+    "standard-scaler/wide": {
+      "batch": [
+        "e2d19a9a5e252025",
+        "e2d19a9a5e252025"
+      ],
+      "errors": [],
+      "infer": [
+        "f28ce44096c393fc",
+        "f28ce44096c393fc"
+      ],
+      "model": [
+        "ca8b828a823c5ab7",
+        "ca8b828a823c5ab7"
+      ],
+      "seconds": 0.006961,
+      "train": [
+        "49ce562711fc50a3",
+        "49ce562711fc50a3"
+      ]
+    }
+  },
+  "complete": true,
+  "contract": {
+    "cases": [
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-31",
+        "rows": 31
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-32",
+        "rows": 32
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-33",
+        "rows": 33
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-63",
+        "rows": 63
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-64",
+        "rows": 64
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-65",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-255",
+        "rows": 255
+      },
+      {
+        "columns": 16,
+        "kind": "base",
+        "name": "rows-256",
+        "rows": 256
+      },
+      {
+        "columns": 17,
+        "kind": "base",
+        "name": "rows-257",
+        "rows": 257
+      },
+      {
+        "columns": 16,
+        "kind": "ties",
+        "name": "ties",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "dupes",
+        "name": "dupes",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "wide",
+        "name": "wide",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "denormal",
+        "name": "denormal",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "denormal_ftz",
+        "name": "denormal_ftz",
+        "rows": 65
+      },
+      {
+        "columns": 16,
+        "kind": "negative",
+        "name": "negative",
+        "rows": 65
+      }
+    ],
+    "default_reference_compatible": false,
+    "harness_sha256": "e34f6d3f95d9e24f1c0ed352dfefa6657110af53d1542af7f0b625f501c0495f",
+    "lanes": [
+      "ridge",
+      "standard-scaler",
+      "minmax-scaler"
+    ],
+    "max_rows": 257,
+    "profile": "small-training-v1",
+    "profile_sha256": "dcc0e37e4408e97b181e89d134c098bd5c2f3bc9a9a787c90f9b5290de37594c",
+    "repeats_minimum": 2
+  },
+  "device": {
+    "commit": null,
+    "commit_source": "none (no witness in this install)",
+    "cpu_model": "Apple M4",
+    "device": "Apple M4 / Mac16,12",
+    "device_class": "cpu",
+    "mojolearn_version": "0.8.7",
+    "numeric_mode": "identical",
+    "numpy": "2.5.3",
+    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+    "python": "3.14.7",
+    "requested_parallel_devices": [
+      0
+    ],
+    "vendor": "cpu",
+    "verifier_cpu_threads": null
+  },
+  "elapsed_seconds": 0.487452,
+  "format": "mojolearn.small-training-capture.v1",
+  "inputs": {
+    "denormal": {
+      "X": "d9d6e97b34d77121",
+      "heldout": "d2b626afd6b15ac7",
+      "y_clf": "9b8d78d30283b506",
+      "y_reg": "645ebbe007160c0a"
+    },
+    "denormal_ftz": {
+      "X": "92ea80d2f32a1d76",
+      "heldout": "bfc2fffb09c1c144",
+      "y_clf": "9b8d78d30283b506",
+      "y_reg": "645ebbe007160c0a"
+    },
+    "dupes": {
+      "X": "013246d75d3e1105",
+      "heldout": "227b0cf41cc2bd40",
+      "y_clf": "127e68d3e633fdd3",
+      "y_reg": "4c8b3f63fd5eefd4"
+    },
+    "negative": {
+      "X": "1820c8892e69ac28",
+      "heldout": "e1d6fe643f2aa78b",
+      "y_clf": "9dcbaddac6330e37",
+      "y_reg": "ce54ec263d88137e"
+    },
+    "rows-255": {
+      "X": "46277777fe790804",
+      "heldout": "60694ad0b16a8e32",
+      "y_clf": "f81a3db66e5514bb",
+      "y_reg": "95e1dbb7adfa05c5"
+    },
+    "rows-256": {
+      "X": "8fec2af371c5bddb",
+      "heldout": "33ede7d48c9b13bb",
+      "y_clf": "b1331870bd3fd1c7",
+      "y_reg": "adbe976f7ef9fb1c"
+    },
+    "rows-257": {
+      "X": "84fafbd10b92f776",
+      "heldout": "d8b693a02d667462",
+      "y_clf": "a156741bb74d95a1",
+      "y_reg": "3e2077bae5d06bc3"
+    },
+    "rows-31": {
+      "X": "89b753b7bb29ba39",
+      "heldout": "dcf75d7484bcb82c",
+      "y_clf": "b1bbcafe39e178a7",
+      "y_reg": "b802ec0367f4a6d6"
+    },
+    "rows-32": {
+      "X": "b6a374860c3832bd",
+      "heldout": "7555c70c9148a2e2",
+      "y_clf": "e0317f6e44024ce4",
+      "y_reg": "16b1ad1fc2fbb156"
+    },
+    "rows-33": {
+      "X": "f85c1babfdef666e",
+      "heldout": "25dd60ec2f9a20d5",
+      "y_clf": "f4f3af2d6d889eb5",
+      "y_reg": "6702a37dd166af7a"
+    },
+    "rows-63": {
+      "X": "41d94469f86cfdf8",
+      "heldout": "4df47536b2157af1",
+      "y_clf": "46b9fcd4bf12c522",
+      "y_reg": "3d4e94fc4d6378e3"
+    },
+    "rows-64": {
+      "X": "00cc6643490a5e95",
+      "heldout": "6cca25ac57ad52a0",
+      "y_clf": "9a15226e028f1e78",
+      "y_reg": "10bb414820409f96"
+    },
+    "rows-65": {
+      "X": "0345a7d7460bdacf",
+      "heldout": "7337d3035adb6d01",
+      "y_clf": "9b8d78d30283b506",
+      "y_reg": "f105729fd347e4aa"
+    },
+    "ties": {
+      "X": "7b9a84049909e609",
+      "heldout": "8d9363068babfdb3",
+      "y_clf": "5db3d7b6ac7ffc93",
+      "y_reg": "01e0f0ad9316a36b"
+    },
+    "wide": {
+      "X": "fdaf41b8a191f5bd",
+      "heldout": "2278cb5026352f08",
+      "y_clf": "465df9429ebe8b49",
+      "y_reg": "f5436bd27b6f6d2f"
+    }
+  },
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/next-wheel-coverage/python/mojolearn",
+  "reference_admitted": false,
+  "repeats": 2,
+  "status": "CAPTURED_UNQUALIFIED"
+}

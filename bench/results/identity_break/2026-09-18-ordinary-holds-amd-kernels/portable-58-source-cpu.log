@@ -1,0 +1,79 @@
+mac_slot: admitted after 0.002s
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: cpu (cpu), 0 lanes x 0 fixtures, harness checkout, table /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/python/mojolearn/verify_reference/table.json
+  portable:rf-clf                    base        0.2s
+  portable:gbdt-symmetric            base        0.2s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.0s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.7  commit adb5beb7526429877ec20380e3502dc3ec5aa904 (WORKING TREE DIRTY) (git checkout beside the package)
+# mode identical  vendor cpu (class cpu)  device Apple M4 / Mac16,12
+# cpu Apple M4  macOS-26.5.2-arm64-arm-64bit-Mach-O  python 3.14.7  numpy 2.5.3
+# reference table /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/python/mojolearn/verify_reference/table.json (sha256 ae21de159d2418ef, 183 records)
+# depth full: 0 lanes x 0 fixtures, 2 repeat(s), 10 portable model(s)
+# note: this harness is not the one the table was generated with; lanes added or changed since then read OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    10 |       116 |         0 |    0 |       0 |   0 |
+
+Batch invariance: IDENTICAL=58, DIVERGENT=0, OWED=0, REFUSED=0, N/A=0
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 116 of 116 cell parts (0 divergent, 0 owed, 0 refused, 0 n/a)). 1.4s. exit 0
+# evidence written to /Users/andrewhendel/mojolearn-evidence/ordinary-23-2026-09-18/portable-58-source-cpu.json
+mac_slot: {"wait_seconds": 0.0024446249881293625, "run_seconds": 1.7390875420096563, "exit_code": 0}

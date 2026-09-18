@@ -681,6 +681,15 @@ def main():
         record.append(f"{dist}/RECORD,,")
         z.writestr(f"{dist}/RECORD", "\n".join(record) + "\n")
 
+    # Audit independently of the package allow-list above, so adding an API
+    # without updating packaging fails at build time rather than after upload.
+    from wheel_api_audit import audit
+    surface = audit([whl])
+    (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
+    if not surface['wheels'][0]['source_payload_complete']:
+        whl.unlink()
+        raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
+
     size = whl.stat().st_size
     per_set = {}
     for vendor, arch, files, libs, manifest, _ in sets:

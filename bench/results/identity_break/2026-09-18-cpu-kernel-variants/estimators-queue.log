@@ -1,0 +1,28 @@
+mac_slot: waiting 0.0s for metal capacity
+mac_slot: waiting 30.1s for metal capacity
+mac_slot: waiting 60.2s for metal capacity
+mac_slot: waiting 90.4s for metal capacity
+mac_slot: waiting 120.5s for metal capacity
+mac_slot: waiting 150.7s for metal capacity
+mac_slot: waiting 180.8s for metal capacity
+mac_slot: waiting 211.0s for metal capacity
+mac_slot: waiting 241.1s for metal capacity
+mac_slot: waiting 271.4s for metal capacity
+mac_slot: waiting 301.4s for metal capacity
+mac_slot: waiting 331.5s for metal capacity
+mac_slot: waiting 361.5s for metal capacity
+mac_slot: waiting 391.6s for metal capacity
+mac_slot: waiting 421.6s for metal capacity
+mac_slot: waiting 451.7s for metal capacity
+mac_slot: waiting 481.7s for metal capacity
+mac_slot: waiting 511.8s for metal capacity
+mac_slot: waiting 541.8s for metal capacity
+mac_slot: waiting 571.9s for metal capacity
+mac_slot: waiting 601.9s for metal capacity
+mac_slot: waiting 632.0s for metal capacity
+mac_slot: admitted after 646.496s
+BUILT estimators clean
+BUILT estimators sabotage
+...............................                                          [100%]
+31 passed in 0.55s
+mac_slot: {"wait_seconds": 646.4958291250005, "run_seconds": 25.96967666699493, "exit_code": 0}

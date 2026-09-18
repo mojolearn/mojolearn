@@ -198,3 +198,119 @@ own published document is WEAKER than two strangers comparing.
   in the tree.
 - RunPod CPU hosts were running at load 60 to 160 throughout. Cell rates in
   this document are from those boxes and are not a property of the code.
+
+
+---
+
+# PART 2, 2026-09-18: publishing our own evidence documents
+
+## Why
+
+`docs/VERIFY_EXTERNALLY.md` Recipe 4 is `verify --compare`, the only protocol
+here that does not rest on our records. It was documented and INERT: a
+stranger who runs `verify --all --json-out mine.json` had nothing to diff
+against, because `python/mojolearn/verify_reference/` holds only `models` and
+`table.json`.
+
+## State right now
+
+`bench/results/verify_reports/` exists and carries:
+
+| file | what |
+|---|---|
+| `README.md` | which classes, what the pair proves, the three ways a comparison fails without anything being wrong |
+| `verify-all.cpu-a.json.gz` | a real `verify --all` run, AMD EPYC 4564P, at `b9c338384` |
+| `verify-all.cpu-a.json.commitment` | its commitment |
+| `verify-all.cpu-a.txt` `self-test.cpu-a.txt` | the human output, and the self-test that watched the verifier detect a one-ULP perturbation |
+| `compare-same-device-agree.txt` | `AGREE`, 5174 parts, both commitments verified |
+| `compare-uncomputed-negative-control.txt` | `INCOMPLETE. Absence is not agreement.` |
+| `nvidia-hang/` | the deadlock below |
+
+**DEVICE CLASSES: CPU ONLY.** No Apple, NVIDIA or AMD document exists. Do not
+read the published pair as cross-vendor evidence.
+
+**DONE:** `cpu-b` landed on an AMD EPYC 7702P, DIFFERENT silicon from
+`cpu-a`'s EPYC 4564P, and the published pair compares:
+
+    agree 5165   differ 0   self-contradicted 0   neither computed 0
+    RESULT: AGREE ... Neither machine trusted the other, and neither had to
+    trust us. Both documents were committed to before either party saw the
+    other's.
+
+with the tool's own limit printed beside it: `NOTE: these documents share a
+device class. Agreement is weaker evidence than two genuinely different
+vendors would give.` Two x86 CPUs are not two vendors.
+
+**STILL OWED:** an Apple, NVIDIA or AMD document. NVIDIA is blocked on the
+deadlock below, not on a rental.
+
+## THE HARNESS DIGEST MOVED TODAY, AND IT INVALIDATES OLDER DOCUMENTS
+
+`lane/kmeans-cosine-capability` deleted the `kmeans-cosine` lane. The harness
+went from 229 lanes to 228 and `tools/identity_break.py` went from sha256
+`5160aff733ed3c36` to `90bdd7557b3c123b` at commit `b9c338384`.
+
+`compare_documents` refuses to compare across a harness change:
+`comparison_context_problems` reads `INCOMPARABLE`, never a silent wrong
+answer. So EVERY evidence document emitted before that deletion, including
+the four this lane made earlier today at `1863520e9`, is INCOMPARABLE against
+anything run at today's main. That is the protection working, and it is why
+`cpu-a` was re-emitted. It is also why these documents are RELEASE artifacts:
+they need re-emitting whenever the harness moves.
+
+The rebuilt table needed no work for the same event: an independent
+`--emit-reference --batch-checks` over the merged records came out BYTE
+IDENTICAL to main's at 2052 cells, 228 lanes, no cosine cell, every optional
+part present. Two independent regenerations agreeing byte for byte is the
+strongest statement available that no hash in that file is typed.
+
+## A GPU INSTALL'S `verify --all` DEADLOCKS AT `transformer-bf16w`
+
+Measured 2026-09-18 on a rented RTX 4090 (sm_89), all ten GPU bindings built
+clean, evidence in `bench/results/verify_reports/nvidia-hang/`:
+
+    47 lanes in about four minutes, including mamba1/2/3 and transformer,
+    then nothing for over ten minutes at `transformer-bf16w`
+    nvidia-smi   utilization 0 %, 978 MiB
+    /proc/<pid>  State: S (sleeping), Threads: 195
+    wchan        futex_wait_queue
+
+GPU idle, 195 threads, blocked on a futex: a host-side synchronisation
+deadlock, not slow arithmetic. THE USER-FACING CONSEQUENCE: the fourteen
+low-bit weight lanes are PUBLIC as of 2026-09-17, they were promoted on CPU
+evidence, and a GPU install's `verify --all` runs every lane. So `verify
+--all` on an NVIDIA box hangs rather than finishing. This is not this lane's
+to fix and no lane has been opened for it.
+
+## What a plain `verify --all` on a CPU box reads now, and why not VERIFIED
+
+    RESULT: INCOMPLETE (verified 5165 of 7253 cell parts
+                        (0 divergent, 0 owed, 0 refused, 2088 n/a)). exit 5
+
+Zero divergent, zero owed, ZERO REFUSED. The only thing between this and
+VERIFIED is `scope_gaps`: `_verify_all` makes every WITHHELD lane a scope gap
+on a full run, and `verdict()` reads any gap as INCOMPLETE. Twelve
+`PUBLIC_REFERENCE_CANDIDATES` and five `one column` lanes remain, and both
+need columns from a device class that is not CPU.
+
+An earlier pair of documents read 90 REFUSED. That was NOT a code defect:
+`tools/runpod_cpu_leg.sh` leaves `bench/results` at home, so the two CTR
+lanes' digest-checked `.npz` models never reached the box. `resolve_model`
+falls back to the checkout copy correctly. The fix is
+`--include bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models`.
+
+## THE EXACT NEXT COMMAND
+
+Nothing is owed for the CPU class. The next thing this directory needs is a
+document from a device class that is not CPU:
+
+  * NVIDIA is blocked by the `transformer-bf16w` deadlock above. Fix that
+    first; a document cannot be emitted from a run that does not finish.
+  * Apple is one machine and one GPU, and a full column is hours, so it
+    belongs to the release record rather than to a lane.
+  * AMD needs a rental and has no blocker known to this lane.
+
+Re-emitting the CPU pair when the harness moves is one command per box:
+
+    python3 -m mojolearn verify --all --json-out verify-all.<class>.json
+    python3 -m mojolearn verify --commitment verify-all.<class>.json

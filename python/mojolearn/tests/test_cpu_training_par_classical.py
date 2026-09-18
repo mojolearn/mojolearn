@@ -43,10 +43,11 @@ LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters":
          "par-forest": "rf", "par-forest-et": "trees", "par-mlp": "training",
          # wave 3 (lane/cpu-verifier-par-samba, 2026-09-16): the Samba stack's
          # gradient shards, the same driver as par-mlp on the same family
-         "par-samba": "training", "par-samba-clip": "training"}
+         "par-samba": "training", "par-samba-clip": "training",
+         "par-rbf-sampler": "kernel_methods"}
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
-    "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit"),
+    "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit", "rbf_sampler_rows"),
     "python/mojolearn/parallel_neighbors.py": ("neighbor_query",),
     "python/mojolearn/parallel_neighbors_reference.py": ("neighbor_reference", "neighbor_vote"),
     "python/mojolearn/parallel_ensemble.py": ("forest_fit",),
@@ -121,7 +122,7 @@ def test_refusals_come_before_any_worker():
         return
     for devices, cooperative, op, words in (
             ((0,), True, "glm_fit", "cooperative multi-GPU driver glm_fit"),
-            ((0,), False, "rbf_sampler_rows", "parallel worker operation rbf_sampler_rows"),
+            ((0,), False, "forest_prepare", "parallel worker operation forest_prepare"),
             ((0, 1), True, "mlp_update", "cooperative multi-GPU driver mlp_update across 2 devices"),
             ((0, 1), True, "samba_update", "cooperative multi-GPU driver samba_update across 2 devices")):
         pool = _parallel_pool.DevicePool(devices, cooperative=cooperative)

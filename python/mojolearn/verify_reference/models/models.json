@@ -73,6 +73,1194 @@
     ],
     "vendor": "metal"
    }
+  },
+  {
+   "batch_hash": "2d495dae96246c37",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.base.npz",
+   "fixture": "base",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "8c222a5b89d0f520",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/base",
+    "record_sha256": "865db23165009af5cd332eb05288a04dfa20f3fa9beab64e03e76527c9e77215",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "79d348ae1cd8d648",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.denormal.npz",
+   "fixture": "denormal",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "047872cc9d57b979",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/denormal",
+    "record_sha256": "120babfc520a7eb7c08c4bbf98a3be3b3f99659fa0e27a504bb5f4d64b524196",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "79d348ae1cd8d648",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "6638b7e5a05a1f08",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/denormal_ftz",
+    "record_sha256": "057ec84bcb3b977264fd1572b66d1728f90de8d3a931a4e10d5173bc5883b89e",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "5e5b1a9d977a224b",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.dupes.npz",
+   "fixture": "dupes",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "a0632a87ef34d737",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/dupes",
+    "record_sha256": "5a442ee13fb1aef2e4052db5b4ca612288e64289d561ce7917a969f98cc46528",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "071d1f9f3614cb9e",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.hashed.npz",
+   "fixture": "hashed",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "ecdd20a18fddcfac",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/hashed",
+    "record_sha256": "afa39b4c9d078b339583176bc13a271d754f1976c0c4e2b0edb5acfc18d69a9a",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "ad5d89fdd50ba904",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.negative.npz",
+   "fixture": "negative",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "6a51f60e14cbc0dd",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/negative",
+    "record_sha256": "c73ca2cc925834a6fa8483a683199ad8ed5025fb5294ddb8890ae6bd545371e7",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "6e37077e397d49e6",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.odd.npz",
+   "fixture": "odd",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "242d6365ce89e185",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/odd",
+    "record_sha256": "96f71252363695239609eb78e67c83385fd7b2328e7b8da6e063afe96e153702",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "54001895e91abd09",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.ties.npz",
+   "fixture": "ties",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "857ab7ff0c67b9ca",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/ties",
+    "record_sha256": "a3b48507ea77cc8f5b7b083202b358d85f664393df955f9aa5545a1522c6a58a",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "fcbe7a8e5773fb00",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-laplacian.wide.npz",
+   "fixture": "wide",
+   "lane": "kernel-ridge-laplacian",
+   "load": "load",
+   "model_hash": "95b734acb147fe05",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/wide",
+    "record_sha256": "b2bed0c6c1a5edeac2792c5d77924b8febe37c4274ff1530461a8826cc4715ea",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "31cc69bc610faf3b",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.base.npz",
+   "fixture": "base",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "3cb5b554392b9c64",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/base",
+    "record_sha256": "fb93f4ceb49b1c1ba756deae8a0accfee31dc3a75a31ea1b0b2f7de42f378e3e",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "4724b0db84f9a65c",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.denormal.npz",
+   "fixture": "denormal",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "c85c95edb51db53b",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/denormal",
+    "record_sha256": "e89f952507550d973b815a95dbdbe4b1999b6284fb31fa3452af29d4f393af5a",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "4724b0db84f9a65c",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "bc72cd423aa823cb",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/denormal_ftz",
+    "record_sha256": "7c4c04b9c40033eaba5718a1d9e25a83aa67b188c5cbd20ce32438b464fce838",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "39a4074f8df4f696",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.dupes.npz",
+   "fixture": "dupes",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "a610160c984b5da8",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/dupes",
+    "record_sha256": "c798e4fb4ed4b8d63035ccc8bac6dc996bb7e7e99930fd2e58540a4f056d64ae",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "c3bb18f194f85621",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.hashed.npz",
+   "fixture": "hashed",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "8ccf3282e056fb09",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/hashed",
+    "record_sha256": "eb017b489d94deab0cb2017a8e1c1d4ffa24c3b272929f18cd278055d7c783d2",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "9ac6fa991d26d95d",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.negative.npz",
+   "fixture": "negative",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "73a9bc6f72a67956",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/negative",
+    "record_sha256": "8c47bd47b4761a876c7d8cc42bfdced5702b83a55a5393c7f2192bf9f16aece0",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "8ee922739ea3b9ff",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.odd.npz",
+   "fixture": "odd",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "bbf78f551ba29cfb",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/odd",
+    "record_sha256": "b1cb9a9a9984aee9e5d30920e13f76fc2c8e119e9b02da6fc164c94213c4bcd1",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "0b5219578e1e1dee",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.ties.npz",
+   "fixture": "ties",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "c35c2c5ce99c3456",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/ties",
+    "record_sha256": "ea27bbed7dc975f296e365c5a9f9df5f0c4218defd99e0a0570f07a633149b83",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "3b05e689bffc4e39",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-poly.wide.npz",
+   "fixture": "wide",
+   "lane": "kernel-ridge-poly",
+   "load": "load",
+   "model_hash": "4c784ab3dfa17581",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-poly/kernel-ridge-poly/wide",
+    "record_sha256": "4cca62cbaaef85e21f6a2218350c09e18ff12f9b44694d745747cdd862baec28",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "4637348f319328b3",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.base.npz",
+   "fixture": "base",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "01b80bafa79d7e11",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/base",
+    "record_sha256": "b4750fd23995444db01d6f7dba4853660a17dbeefc84e06b1a5b9d58dffa24ed",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "a75b90b1f19795b1",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.denormal.npz",
+   "fixture": "denormal",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "aee11d8e159b5d06",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/denormal",
+    "record_sha256": "9879c36a78b6a816d51b57f5f3d964fcff423f17db9a24693b87d9ad54bff9b7",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "a75b90b1f19795b1",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "738eadecea288223",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/denormal_ftz",
+    "record_sha256": "b904850bc5684e37808fbca8bce749299786b86a11be5255ce0dc1b31e08009d",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "b36c90e041ea4f3f",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.dupes.npz",
+   "fixture": "dupes",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "7be40ded64a7232a",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/dupes",
+    "record_sha256": "543f73ac8e2c87955efd449aeae52aa0fa87ad35eb16be67bcdeaaaec669213c",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "ade96066b408a1f1",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.hashed.npz",
+   "fixture": "hashed",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "9076208aa14e62d9",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/hashed",
+    "record_sha256": "d1362145425e84a342fce2056be5484066b021325d459f81110229cb08751393",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "5f07c3b74562629d",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.negative.npz",
+   "fixture": "negative",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "6d37208bc261fb79",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/negative",
+    "record_sha256": "101a71e0356021584451da73ae83ded0f8ff5820d5e9c8df1be38e8b8a042de4",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "58c7b79372715966",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.odd.npz",
+   "fixture": "odd",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "a5c31068bb72f550",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/odd",
+    "record_sha256": "921255c76f29e337e337b4e11dde095d2e39597fa14afd230a28133783ba1c97",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "e2b86a79415e3151",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.ties.npz",
+   "fixture": "ties",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "445dbc32d4e9611c",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/ties",
+    "record_sha256": "b8733f8efc64e9a42ca063c2ab21d94384d8c7c2a03864091c70a357ae6f330f",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "b6927fb3e33baf6d",
+   "bytes": 2812,
+   "class": "KernelRidge",
+   "file": "kernel-ridge-sigmoid.wide.npz",
+   "fixture": "wide",
+   "lane": "kernel-ridge-sigmoid",
+   "load": "load",
+   "model_hash": "b49cbf31b328ac08",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-sigmoid/kernel-ridge-sigmoid/wide",
+    "record_sha256": "ae1a8588780e2b6e2f182074bc3d0012498d5d3e57027516092ce09c12cb59fc",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "12fa7ead7bca7aa6",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.base.npz",
+   "fixture": "base",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "28f4695cd4465bfd",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/base",
+    "record_sha256": "bf1d14ba076b86f328efd0887ba04076ecb0aec316109fff0e802c4023aeda28",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "5eebd25d657956f5",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.denormal.npz",
+   "fixture": "denormal",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "36e7097286c2bb97",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/denormal",
+    "record_sha256": "e22967a33d5bc49bb6ee4e020d9834e23445447ec1ef9b572cbcff2e330ce389",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "5eebd25d657956f5",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "837c24b153316e6f",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/denormal_ftz",
+    "record_sha256": "aff859226e72f5607f5a998f94a52ebfce48d44ca3f53dc151b9bc6f8483328b",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "12fa7ead7bca7aa6",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.dupes.npz",
+   "fixture": "dupes",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "28f4695cd4465bfd",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/dupes",
+    "record_sha256": "9dd40747d84ef24f7e548d5a2e584bb1af51b9899c70feaea701e06f45f86c8e",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "9a6d08b22e608e27",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.hashed.npz",
+   "fixture": "hashed",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "539991c19e879093",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/hashed",
+    "record_sha256": "169be33cd0f2c502da71689230653dc92647da12837dbaab92a0e3b7e23ef3c5",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "065432d75fbd3400",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.negative.npz",
+   "fixture": "negative",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "bded433ad62b9443",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/negative",
+    "record_sha256": "7641c52cf1363c7de5515362d3ac3377a168a3ae5816a14daeb9888d6abf8221",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "0f0f54b034306561",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.odd.npz",
+   "fixture": "odd",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "96704e86af8cc3d6",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/odd",
+    "record_sha256": "e80a181cc4dd52d08bb5bafdc8402a0983765c3272d9fc2b505dddc606108f27",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "94c300b9a20404b4",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.ties.npz",
+   "fixture": "ties",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "bff3c6ddc9eb1bcb",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/ties",
+    "record_sha256": "861eda735df092da6afa8bd7158ff419cd494ff056e1786e177a4c882d766b2d",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "f2d4e65b88e66089",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-laplacian.wide.npz",
+   "fixture": "wide",
+   "lane": "nystroem-laplacian",
+   "load": "load",
+   "model_hash": "dff8bbac56c9b8db",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-laplacian/nystroem-laplacian/wide",
+    "record_sha256": "4d96140d6a31c9ce1ae72ce2368048d610924b19acbd6a8aee217a3c2cc2189a",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "420564d7ed5051b7",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.base.npz",
+   "fixture": "base",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "c774abd983d4c17e",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/base",
+    "record_sha256": "318efd9667e068da1122029d331cbb67a7ab930531694100478d0eb9f2d43a62",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "ad148dc32e01fc72",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.denormal.npz",
+   "fixture": "denormal",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "60625a8079a65c65",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/denormal",
+    "record_sha256": "a351e171488b5fbfadad07c047028923c54f2b8594615f7f5d0034eb3c67d5ab",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "ad148dc32e01fc72",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "bae6fd0317617982",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/denormal_ftz",
+    "record_sha256": "f657be204dcf2ef68bd5f6f7ff017907b5281f8b6038c9a589c966b96287c7b2",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "420564d7ed5051b7",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.dupes.npz",
+   "fixture": "dupes",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "c774abd983d4c17e",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/dupes",
+    "record_sha256": "4364303befd4ed2f94f2755de287f8275b7058df0452c63541f79d069b9901f9",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "233b5ca3945abda9",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.hashed.npz",
+   "fixture": "hashed",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "6a75a46ca93a2495",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/hashed",
+    "record_sha256": "3844df077c5387f041b703a11812a55e10cff9a9e2fc823a4d63743177f53868",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "7a6c3c22523567e6",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.negative.npz",
+   "fixture": "negative",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "f3f717a18d4b8373",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/negative",
+    "record_sha256": "ca60da6cb4163dfa4b57be47e4e2ae06b37f7a813bfe8869af8cc662cc9f3960",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "0e14e23781ba2597",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.odd.npz",
+   "fixture": "odd",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "710ec4027aef65f9",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/odd",
+    "record_sha256": "ea9ebf0b438bf9508928d2229a0e0fdc0793706a7a9389e906d184887904cb06",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "2c0faf6d9f385ff4",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.ties.npz",
+   "fixture": "ties",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "83fbe7988b408856",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/ties",
+    "record_sha256": "0ab59211301944c817e6f46809912a8390b3622c471b9766465fde4cdd1fb633",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "51eb48bcf271dfda",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-poly.wide.npz",
+   "fixture": "wide",
+   "lane": "nystroem-poly",
+   "load": "load",
+   "model_hash": "b31eacfe0fee3308",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-poly/nystroem-poly/wide",
+    "record_sha256": "09fabf7416b52b9a199c1c35b110062eee50060053c4bb41fea18a91cd8bf31d",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "db0184625875244d",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.base.npz",
+   "fixture": "base",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "b606536588020728",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/base",
+    "record_sha256": "411dd23e39bd69a8e97cc371de49b8db020c0157c464e81d47e6c003e4564ad0",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "45379ace2b86d3c2",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.denormal.npz",
+   "fixture": "denormal",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "4bfa400514d0ecbf",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/denormal",
+    "record_sha256": "1ecb877884c852c8e2791445d515336bab5a5bf4055a55240ea1e438016d6c91",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "45379ace2b86d3c2",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.denormal_ftz.npz",
+   "fixture": "denormal_ftz",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "9c9e1a298930db2d",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/denormal_ftz",
+    "record_sha256": "1865abe47baeb3872eec123249d2e4d84d21d37acc2b2864a0ee9fe719050279",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "db0184625875244d",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.dupes.npz",
+   "fixture": "dupes",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "b606536588020728",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/dupes",
+    "record_sha256": "ac7737ce21fc01a76b9ca0f0c0700372a6019cb0e331424899296477b38ace59",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "a800b30f0200d455",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.hashed.npz",
+   "fixture": "hashed",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "020a40e03b552809",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/hashed",
+    "record_sha256": "a454c18037380b0432d96f4ec62d308a08f4ba40ead6f02bf52ac417db83f3ea",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "c3f6e7f2a6866c2c",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.negative.npz",
+   "fixture": "negative",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "290324d689ccdd95",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/negative",
+    "record_sha256": "c04176bf8fbf1921659fb12afb711611907765da8dda5746b2d482c174bdda4e",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "ef3ec79e1709336b",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.odd.npz",
+   "fixture": "odd",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "e21103395c9be9d1",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/odd",
+    "record_sha256": "abb744a6c376f62443384a3c253fb6b46df91b6e121e1d0c755a042ccffc96c0",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "1ff21c7d7bc7d6e3",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.ties.npz",
+   "fixture": "ties",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "535f23122efa5fa9",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/ties",
+    "record_sha256": "f1f95c63e6b84e23bdd9db10f017eb55fffd9ba4ca9702780bd6c09d2cc2d4df",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
+  },
+  {
+   "batch_hash": "415ad551affc8538",
+   "bytes": 3256,
+   "class": "Nystroem",
+   "file": "nystroem-sigmoid.wide.npz",
+   "fixture": "wide",
+   "lane": "nystroem-sigmoid",
+   "load": "load",
+   "model_hash": "0f1765d6855a61a9",
+   "trained_on": {
+    "classes_agreeing": [
+     "amd",
+     "apple",
+     "cpu"
+    ],
+    "qualification": "CPU/Apple/AMD source evidence; NVIDIA and final wheel qualification pending",
+    "record": "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-nystroem-sigmoid/nystroem-sigmoid/wide",
+    "record_sha256": "e338c5ff855eab9710b6634ee2eff363fe11f6b6944cc80db64a854fcc3d68f8",
+    "source_commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+    "vendor": "hip"
+   }
   }
  ]
 }

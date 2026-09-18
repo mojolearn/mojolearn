@@ -4,7 +4,7 @@
 
     render_ranks            OURS: `rank<TAB>hex_of_token_bytes`, the file
                             `impl/ranks.mojo` loads and
-                            `GPT2Tokenizer.from_ranks_file` reads.
+                            `BpeTokenizer.from_ranks_file` reads.
     render_tokenizer_json   `tokenizer.json`, which Hugging Face `tokenizers`
                             loads, so a model published with one of our
                             vocabularies is usable by people who do not use

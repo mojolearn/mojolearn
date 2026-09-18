@@ -42,12 +42,16 @@ two conditions the host and the kernel check rather than assume:
   2. THE CORNER (kernel, per chain): a chain that holds `-0.0` when its
      visible run ends could be laundered to `+0.0` by a masked tail whose
      products are `+0.0` (a flushed subnormal product is how a chain
-     reaches `-0.0`). The kernel does not reason about the tail; it sets a
-     flag and the caller runs the eager path for the whole call.
+     reaches `-0.0`). The measured HD64 estash/preflushed path replays
+     those omitted zdot/dQ terms with the exact eager seams and order.
+     Other unresolved corners set a flag and take the eager path. The
+     joint r2 dk/dv guard only refuses when omitted terms actually remain;
+     a terminal negative zero with no tail is already the correct result.
 
 Both fallbacks are EXACT by construction (the eager path is the profile)
 and both are counted by the launcher's status, which the fused check
-asserts on: a case built to hit the corner must report it.
+asserts on: a case built to hit an unresolved corner must report it.
+Actual estash repairs are separately reported; a repaired launch returns RAN.
 
 WHAT IS NOT HERE. Plants (`transformer_fixture.ScorePlant`) are an eager
 feature; a planted call takes the eager path. `head_dim` outside
@@ -122,6 +126,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
     TARGET_COLUMN,
     attn_default_arm_for,
+    attn_masked_tail_replay_for,
     attn_dkdv_keys_per_block_for,
     attn_fwd_rows_per_block_for,
     attn_zdot_rows_per_block_for,
@@ -141,6 +146,15 @@ from checks.numerics import (
 # STATUS CODES AND LIMITS
 # ===========================================================================
 
+# The matrix enables measured columns. Explicit old arms preserve reproducibility.
+comptime ATTN_REPAIR_MASKED_TAIL = (
+    is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"]() or attn_masked_tail_replay_for[TARGET_COLUMN]()
+) and not is_defined["MOJOLEARN_ATTN_LEGACY_CORNER"]()
+comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
+comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
+comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]() or is_defined["MOJOLEARN_ATTN_KV_CORNER_GUARD"]()
+comptime ATTN_TAIL_GUARD_SABOTAGE = is_defined["MOJOLEARN_ATTN_TAIL_GUARD_SABOTAGE"]()
+
 comptime FUSED_RAN = 0
 """The fused kernels produced the output."""
 comptime FUSED_REFUSED_REGIME = 1
@@ -149,11 +163,64 @@ written and the caller must run the eager path."""
 comptime FUSED_CORNER = 2
 """A chain ended its visible run holding `-0.0`; the caller must run the
 eager path."""
+comptime FUSED_SKIPPED_STICKY = 3
+"""DEVIATION 3110: this layer/direction refused once already, so the fused
+kernels were NOT launched at all and the eager path ran alone. Not a
+refusal: a refusal that has been REMEMBERED, so the step stops paying for
+a launch whose result is then thrown away."""
+
+
+# ===========================================================================
+# DEVIATION 3110: experimental direction-specific sticky fallback, default OFF.
+# The 700-step H100 control found refusals are intermittent and the latch
+# regresses throughput by 3.6%. It remains available to reproduce that trial.
+# The qualified default instead replays omitted masked terms with exact bits.
+# See docs/lanes/LANE_STATUS_lm-attention-fallback.md and the earlier
+# LANE_STATUS_attention-fallback-fix.md for the separate measured records.
+# ===========================================================================
+
+comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
+
+comptime ATTN_NO_BWD_CORNER = is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"]()
+"""DEVIATION 3112, A MEASUREMENT ARM AND NEVER A SHIPPED BUILD: the backward
+launchers stop refusing on a corner. See the comment at their `return
+FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
+arm; on its own it proves nothing and could be silently wrong."""
+
+comptime ATTN_BWD_KV_CORNER_GUARD = ATTN_EXACT_TAIL_GUARD
+"""Exact dk/dv corner predicate, shared by the qualified replay and old
+experimental guard names. The old guard-only trial removed 248/3697 refusals
+without a measurable speed or memory win. The full replay is independently
+qualified; native tests include sliding-window/GQA tails and signed zeros.
+
+WHY. `-0.0` in a fused accumulator is a refusal only because the EAGER chain
+folds the masked cells too and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s
+sign bit is clear. That laundering needs a masked cell AFTER the last visible
+one. The forward tests `rr[1] < s - 1` for exactly this (`:2031`) and so does
+the `dq` chain. The legacy `dk`/`dv` predicate lacked this guard.
+
+Their chains are over the QUERY axis, and `_key_query_range` returns
+`hi = l - 1` for EVERY key unless a sliding window is set. At the byte-LM
+target shape (`window == 0`, `n_rep == 1`) there is no masked tail in
+these dk/dv chains. This guard removes 248 of the 3697 backward refusals;
+the other 3449 are dQ masked-tail cases and need exact replay. Forward
+never refused in the 700-step witness. Counts alone do not localize a site:
+the guard-only arm and per-site replay witnesses isolate those contributions.
+
+The `hh + 1 < n_rep` term is the grouped-query case: under GQA the chain
+continues into the next head of the kv group, whose rows below `lo[u]` ARE
+masked cells that follow. It is INERT at `n_rep == 1`, and it is written
+because the kernel is not restricted to `n_rep == 1`.
+
+NOT COVERED, and said rather than counted: `fused_bwd_dkdv_tiled_kernel` and
+`fused_bwd_kvfold_r2_kernel` carry the same unguarded test and are NOT
+changed here. They are trial arms; the column default resolves to
+`fused_bwd_dkdv_r2_kernel`, which is the one measured."""
 
 comptime REGIME_BOUND: Float64 = 1267650600228229401496703205376.0
 """`2^100`. `head_dim * max|a| * max|b|` below this keeps every dot below
@@ -4342,6 +4409,20 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
             zdot.unsafe_store(row, zf)
 
 
+def _masked_tail_dy[HD: Int](
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    rowbase: Int, kvbase: Int, j: Int,
+) -> Float32:
+    """The eager dW GEMM's single HD<=128 leaf, same ascending RN-FMA/FTZ
+    seams. Only needed for a masked term after an actual negative zero."""
+    var dy = Float32(0.0)
+    comptime for p in range(HD):
+        dy = _step_preflushed(ftz(dctx.unsafe_load(rowbase + p)),
+                             ftz(v_cache.unsafe_load(kvbase + j * HD + p)), dy)
+    return ftz(dy)
+
+
 def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4358,6 +4439,8 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     key_lo_in: Int32,
     window_in: Int32,
     scale_in: Float32,
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
 ):
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
@@ -4469,7 +4552,23 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
             comptime for v in range(CPT):
                 var x = acc[u * CPT + v]
                 if bitcast[DType.uint32](x) == NEG_ZERO_BITS and Int(hi[u]) < s - 1:
-                    corner.unsafe_store(0, Float32(1.0))
+                    comptime if ATTN_REPAIR_MASKED_TAIL:
+                        corner.unsafe_store(2, Float32(1.0))
+                        comptime if not ATTN_REPAIR_SAB_DQ:
+                            # Replay the omitted eager terms, not a zero-sign
+                            # guess. Once +0 is reached, all remaining finite
+                            # signed-zero products leave it +0 exactly.
+                            var rowbase = (bb * l + t) * nh * HD + h * HD
+                            var z = ftz(zs.unsafe_load(tr + u * 16))
+                            for j in range(Int(hi[u]) + 1, s):
+                                var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                                var ds = _pmul(Float32(0.0), ftz(dy - z))
+                                var dcell = _pmul(ftz(ds), scale_in)
+                                x = _step_preflushed(dcell, ftz(k_cache.unsafe_load(kvbase + j * HD + tc + v * 16)), x)
+                                if bitcast[DType.uint32](x) != NEG_ZERO_BITS:
+                                    break
+                    else:
+                        corner.unsafe_store(0, Float32(1.0))
                 dq.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
 
 
@@ -4806,12 +4905,28 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                             dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
             barrier()
         # The end of this head's visible run for every key this thread
-        # holds: a `-0.0` here could be laundered by the masked tail.
+        # holds: a `-0.0` here could be laundered by the masked tail --
+        # BUT ONLY IF THERE IS ONE. DEVIATION 3111, see
+        # `ATTN_BWD_KV_CORNER_GUARD`.
         comptime for i in range(RPT * CPT):
-            if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
-                hit = True
-            if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
-                hit = True
+            var may_launder = True
+            comptime if ATTN_EXACT_TAIL_GUARD:
+                # The eager chain runs heads ascending, then all query rows.
+                # A skipped initial prefix starts from +0 and cannot change it.
+                # At the end of this visible interval, a negative zero matters
+                # only if a masked suffix or the next head's prefix follows.
+                # Never canonicalize zero: preserve the computed sign exactly.
+                comptime U = i // CPT
+                may_launder = Int(hi[U]) < l - 1 or (hh < n_rep - 1 and Int(lo[U]) > 0)
+            if may_launder:
+                if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
+                if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
+            comptime if ATTN_TAIL_GUARD_SABOTAGE:
+                # Deliberate defect: erase a negative zero the clean arm keeps.
+                if not may_launder and bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                    dk_acc[i] = Float32(0.0)
     comptime for u in range(RPT):
         var jc = j0 + tr + u * 16
         if jc < s:
@@ -5649,7 +5764,16 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     if valid and kj == 0:
         var zf = ftz(z)
         if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
-            corner.unsafe_store(0, Float32(1.0))
+            comptime if ATTN_REPAIR_MASKED_TAIL:
+                corner.unsafe_store(1, Float32(1.0))
+                comptime if not ATTN_REPAIR_SAB_Z:
+                    for j in range(j_hi + 1, s):
+                        var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                        zf = _step_preflushed(dy, Float32(0.0), zf)
+                        if bitcast[DType.uint32](zf) != NEG_ZERO_BITS:
+                            break
+            else:
+                corner.unsafe_store(0, Float32(1.0))
         comptime if SABN:
             if row % 2 == 0:
                 zdot.unsafe_store(row, _flip_ulp(zf))
@@ -5665,11 +5789,11 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
 # ===========================================================================
 
 
-def _read_flag(
+def _read_flags(
     ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
-) raises -> Bool:
+) raises -> Tuple[Bool, Int]:
     step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
     step_count_sync()
     ctx.synchronize()
     step_count_d2h()
@@ -5677,13 +5801,22 @@ def _read_flag(
     step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
+    var repaired = 0
+    if len(flag) >= 3:
+        if host.unsafe_ptr().unsafe_load(1) != Float32(0.0):
+            repaired += 1
+        if host.unsafe_ptr().unsafe_load(2) != Float32(0.0):
+            repaired += 2
     _ = host^
-    return v != Float32(0.0)
+    return (v != Float32(0.0), repaired)
+
+def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]) raises -> Bool:
+    return _read_flags(ctx, flag)[0]
 
 
 def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     step_count_device_alloc()
-    var f = ctx.enqueue_create_buffer[DType.float32](1)
+    var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
     f.enqueue_fill(Float32(0.0))
     step_count_sync()
@@ -6240,6 +6373,7 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6410,6 +6544,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6785,6 +6920,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6879,6 +7015,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
             dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
             Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
             Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
             grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
         )
         _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -7002,14 +7139,54 @@ def fused_backward_launch_ran(
     arm: Int,
     mut ran: Int,
 ) raises -> Int:
+    """`fused_backward_launch_ran_report` without the replay-site report."""
+    var repaired = 0
+    return fused_backward_launch_ran_report(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
+    )
+
+
+def fused_backward_launch_ran_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+    mut repaired: Int,
+) raises -> Int:
     """`fused_backward_launch_arm`, also reporting in `ran` the arm word of
     the kernels that launched (DEVIATION 2534): 0 for the shipped kernels
     or a refusal before any kernel, `bwd_stash` / `bwd_stash_tiled` for the
     first-round stash, the `_pf` and `_ztiled` words (rows resolved) for the
     second-round launches. Written inside the launching branch;
     `fused_attention_arm_backward_resolved` is what it must equal at
-    head_dim 64. Sabotage bits are never reported."""
+    head_dim 64. Sabotage bits are never reported. `repaired` reports the
+    exact masked-tail replay bits the kernels raised (1 zdot, 2 dQ), read
+    from the same flag buffer as the corner: metadata, no arithmetic. Before
+    lane/attention-replay-vendors this path discarded them, so a column whose
+    default arm is not `_estash` (AMD) reported zero replay sites even when
+    `fused_bwd_dq_tiled_pf_kernel` replayed."""
     ran = ATTN_ARM_BASELINE
+    repaired = 0
     if not fused_supported_head_dim(hd):
         return FUSED_REFUSED_REGIME
     comptime if ATTN_OPERAND_DUMP:
@@ -7367,11 +7544,17 @@ def fused_backward_launch_ran(
             )
     step_count_sync()
     ctx.synchronize()
-    var hit = _read_flag(ctx, corner)
+    var flags = _read_flags(ctx, corner)
+    var hit = flags[0]
+    repaired = flags[1]
     _ = corner^
     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
     if hit:
-        return FUSED_CORNER
+        # Experimental bypass, default OFF. Model-state equality alone
+        # does not establish intermediate signed-zero identity. Native
+        # repair/preservation gates establish why exact replay is needed.
+        comptime if not ATTN_NO_BWD_CORNER:
+            return FUSED_CORNER
     return FUSED_RAN
 
 
@@ -7528,6 +7711,42 @@ def fused_backward_launch_estash_ran(
     arm: Int,
     mut ran: Int,
 ) raises -> Int:
+    var repaired = 0
+    return fused_backward_launch_estash_report(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        kept, kept_cells, b, l, nh, nkv, hd, s, pos0, key_lo, window,
+        scale, arm, ran, repaired,
+    )
+
+
+def fused_backward_launch_estash_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut kept: DeviceBuffer[DType.float32],
+    kept_cells: Int,
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+    mut repaired: Int,
+) raises -> Int:
     """`fused_backward_launch_ran`, and under an `_estash` arm this build
     runs (`fused_attention_arm_estash_runs`, head_dim 64) with a VALID kept
     stash (`kept_cells` equal to this call's `B * n_heads * L * S`, set by
@@ -7539,6 +7758,7 @@ def fused_backward_launch_estash_ran(
     With no valid kept stash the plain launcher runs, unchanged, and `ran`
     says so (no estash bit). The regime scans and the corner flag are the
     plain launcher's."""
+    repaired = 0
     comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD and kept_cells > 0 and kept_cells == b * nh * l * s:
             ran = ATTN_ARM_BASELINE
@@ -7647,13 +7867,19 @@ def fused_backward_launch_estash_ran(
                 ran = ran | ATTN_ARM_BSWZ
             step_count_sync()
             ctx.synchronize()
-            var hit = _read_flag(ctx, corner)
+            var flags = _read_flags(ctx, corner)
+            var hit = flags[0]
+            repaired = flags[1]
             _ = corner^
             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
             if hit:
-                return FUSED_CORNER
+                # Experimental bypass, default OFF. Model-state equality alone
+                # does not establish intermediate signed-zero identity. Native
+                # repair/preservation gates establish why exact replay is needed.
+                comptime if not ATTN_NO_BWD_CORNER:
+                    return FUSED_CORNER
             return FUSED_RAN
-    return fused_backward_launch_ran(
+    return fused_backward_launch_ran_report(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
-        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran,
+        b, l, nh, nkv, hd, s, pos0, key_lo, window, scale, arm, ran, repaired,
     )

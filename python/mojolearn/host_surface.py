@@ -304,6 +304,15 @@ FOREST_RECORDED_ROOT = "bench/results/forest_host"
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.
 TRAINING_LANE_NAMES = {
+    "kernel-ridge-poly": "kernel ridge poly kernel variant",
+    "kernel-ridge-sigmoid": "kernel ridge sigmoid kernel variant",
+    "kernel-ridge-laplacian": "kernel ridge laplacian kernel variant",
+    "nystroem-poly": "nystroem poly kernel variant",
+    "nystroem-sigmoid": "nystroem sigmoid kernel variant",
+    "nystroem-laplacian": "nystroem laplacian kernel variant",
+
+    # Logical row shards; pending independent reference qualification.
+    "par-rbf-sampler": "the row-sharded random Fourier feature transform",
     "select-d": "ordinary differencing order selection",
     "gemm-pinned": "pinned GEMM",
     "kde": "kernel density",
@@ -1069,31 +1078,37 @@ FAMILIES = (
         # there) and MOJOLEARN_HOST_SABOTAGE reaches nothing in it: the
         # binding holds integers and tables with no float fold. The gate now
         # builds every family into that set and this one with its own define
-        # (GATE_SABOTAGE_OWN_DEFINES), which reverses the ids of gpt2_encode
-        # and of every document of gpt2_encode_batch, so the train, infer and
+        # (GATE_SABOTAGE_OWN_DEFINES), which reverses the ids of bpe_encode
+        # and of every document of bpe_encode_batch, so the train, infer and
         # batch parts move.
         # mojolearn ships no vocabulary (2026-09-15): the lane loads the
         # synthetic one (python/mojolearn/_tokenizer_synthetic.py) at
         # identity_break's LANE_REVISIONS["tokenizer"], so the records above
         # hashed older input and its cells are owed to the next record.
-        # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
+        # bpe_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
         training_lanes=("tokenizer",),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GPT2Tokenizer",),
+        classes=("BpeTokenizer",),
         display="the byte-level BPE tokenizer (GPT-2 format, user-supplied vocabulary)",
         host_modules=(
             "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
             "tokenizer/impl/pretokenize.mojo", "tokenizer/impl/ranks.mojo",
             "tokenizer/impl/unicode_class.mojo", "tokenizer/impl/byte_unicode.mojo",
+            # lane/bpe-builder-native (2026-09-18): the vocabulary TRAINER is
+            # compiled in too (bpe_train, bpe_trained_sizes, bpe_trained_copy),
+            # the default backend of BpeVocabularyTrainer. Its own negative
+            # control is -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (reversed
+            # tie-break), which tokenizer_host_sabotage() also reads True for.
+            "tokenizer/train/bpe_train.mojo",
         ),
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
-            "tokenizer_host_column", "tokenizer_host_sabotage", "gpt2_load",
-            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_encode_batch",
-            "gpt2_decode",
+            "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
+            "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
+            "bpe_decode", "bpe_train", "bpe_trained_sizes", "bpe_trained_copy",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(
@@ -1291,6 +1306,8 @@ FAMILIES = (
             "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
             "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
+            "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian",
+            "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted",
             # lane/saved-model-reference-gaps (2026-09-16): DBSCAN.predict and
@@ -1684,15 +1701,18 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_kernel_methods` on a
         # CPU-only install with the GPU binding's fit, predict and transform
         # names for KernelRidge, Nystroem and RBFSampler at the linear and
-        # rbf kernels; the polynomial, sigmoid and laplacian kernels refuse
-        # by name, and kernel_methods_rows_parallel_available stays absent,
-        # so the multi-GPU driver refuses by name.
+        # rbf kernels and now polynomial, sigmoid and Laplacian;
+        # kernel_methods_rows_parallel_available stays absent,
+        # so cooperative kernel-method drivers refuse by name. The RBF sampler
+        # transform splits whole rows in Python and uses the ordinary host
+        # transform per shard; its non-cooperative CPU route is declared here.
         family="kernel_methods",
         binding="_mojolearn_kernel_methods_host",
         routes="_mojolearn_kernel_methods",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem"),
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler",
+                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("KernelRidge", "Nystroem", "RBFSampler"),
@@ -1713,8 +1733,9 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: the kernel ridge, Nystroem and random Fourier feature fits, so those three "
-            "lanes can be checked on an installed CPU. Saved models still predict and transform "
+            "Ships: the kernel ridge, Nystroem and random Fourier feature fits, plus the "
+            "logical row-sharded Fourier transform. Its parallel lane remains pending "
+            "reference qualification. Saved models still predict and transform "
             "through the shipped estimators binding."
         ),
         ships_in_wheel=True,
@@ -2501,43 +2522,17 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    # mamba2-dtlimit regained all-nine references at its corrected clamp;
-    # see the CPU verification completion records (2026-09-17).
-    # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
-    # two same-shape RMSNorm weights were both a vector of ones, so they were
-    # the SAME TENSOR and exchanging them on the way in was the identity
-    # function; `_block_weights(near_one=...)` gives each its own vector,
-    # which moves each cell once. The shipped table carries the all-ones
-    # bytes (63de4bf6b9f8262a, 295d4e62d4c78b14, 49ffb2316f238e6d on `base`),
-    # so leaving them public would have a user read DIVERGENT for something
-    # that is not their machine. They come back at the next release record.
-    # lane/reference-regen (2026-09-17): these four are no longer STALE. The
-    # regeneration this lane landed draws on CPU columns recorded at their
-    # current LANE_REVISIONS entry (`norms-near-one-1` for the three norm
-    # lanes, `steps-3-1` for samba-untied-dropout-accum), so the table
-    # describes the bytes this harness makes and a run would prove something.
-    # What it would prove rests on ONE device class, because the fixture
-    # change emptied their Apple, NVIDIA and AMD cells and only the CPU column
-    # has been retaken. That is `one column`, and the classes are read out of
-    # the table rather than asserted here.
-    "mamba3": "one column",
-    "transformer": "one column",
-    "transformer-window": "one column",
-    # lane/reference-regen (2026-09-17): `unwatched` said the only thing
-    # missing was a run. It was not. Every cell the shipped table carries for
-    # samba comes from the CPU column alone, so a run would have compared this
-    # lane against a number no second machine has ever produced. The reason is
-    # `one column`, and the check that reads the classes out of the table says
-    # so by name.
-    "samba": "one column",
-    # lane/shrink-floors (2026-09-16) put this lane in identity_break's
-    # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
-    # the shipped table carries and a run would prove nothing. The reason is
-    # "stale reference", not "unwatched", and the test that checks these
-    # reasons against the harness FAILED on main saying exactly that. Found
-    # by lane/classical-host-recordings merging main; it is not this lane's
-    # change and it leaves this dict at the next release record.
-    "samba-untied-dropout-accum": "one column",
+
+    # 2026-09-18: current all-nine, full-property AMD captures now agree
+    # with the CPU references for these five neural routes. The independent
+    # second column clears their former "one column" reason. Watched installed
+    # CPU replay is still owed; NVIDIA/current Apple completion and the exact
+    # expanded 0.8.7 release certificate are separately outstanding.
+    "mamba3": "unwatched",
+    "transformer": "unwatched",
+    "transformer-window": "unwatched",
+    "samba": "unwatched",
+    "samba-untied-dropout-accum": "unwatched",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
@@ -2596,10 +2591,18 @@ def public_reference_lanes():
 #: regression, which is why the derivation adds it back rather than deriving
 #: it: it is the one public lane a run selects without comparing.
 # BPE vocabulary training and fold construction are pure host operations.
-# Their fixtures run locally, but missing reference hashes must read OWED.
-# None means pure Python: no native host binding is required.
-PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
-                          "cross-val-folds": None}
+# Vocabulary serialization and corpus preparation also run on the host, but
+# use the shipped tokenizer binding to encode and decode. Their replay and
+# both negative controls are recorded in 2026-09-18_tokenized-corpus; this is
+# CPU-only evidence, not a claim of independent GPU implementation equality.
+# Missing reference hashes must still read OWED.
+# None means pure Python: no native host binding is required. bpe-trainer
+# names the tokenizer family since lane/bpe-builder-native (2026-09-18):
+# BpeVocabularyTrainer trains through that binding's bpe_train by default and
+# falls back to the pure Python reference only when the binding lacks it.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
+                          "cross-val-folds": None, "bpe-vocabulary": "tokenizer",
+                          "tokenized-corpus": "tokenizer"}
 
 #: Lanes that PASS every static condition for `public_reference_lanes()` and
 #: are not in it (lane/expose-inference-surface, 2026-09-16). Each one:
@@ -2638,6 +2641,15 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
+    # Strict all-nine CPU/Apple/AMD references admitted 2026-09-18.
+    # NVIDIA evidence and installed verifier replay are still owed.
+    "kernel-ridge-poly",
+    "kernel-ridge-sigmoid",
+    "kernel-ridge-laplacian",
+    "nystroem-poly",
+    "nystroem-sigmoid",
+    "nystroem-laplacian",
+
     # CPU diagnostics now match all nine fixtures, but the bundled table
     # has only Apple GPU witnesses for these optimizers. CUDA/HIP release
     # records and installed-wheel verification are still owed.
@@ -2669,17 +2681,12 @@ PUBLIC_REFERENCE_CANDIDATES = (
     "ivf-extend",
 )
 
-#: Saved-model CPU inference that IS implemented and that
-#: `mojolearn.host_model()` already dispatches, but that the manifest does not
-#: declare as an inference lane, so no gate covers it and no user is told it
-#: exists (lane/expose-inference-surface, 2026-09-16). {lane: why it is not
-#: declared}. `inference_lanes()` must equal tools/classical_host_gate.py's
-#: LANES, and that gate's `check` needs a recording made by
-#: `classical_host_gate.py record` on a GPU box, which refuses a CPU-only
-#: install so the host binding can never record its own answer as the
-#: reference. Every entry here is therefore waiting on ONE thing, a GPU
-#: recording, not on code. They are listed so the gap is in the file rather
-#: than only in the reader's head.
+#: Implemented saved-model CPU inference with recording or qualification debt.
+#: `inference_lanes()` names selectable classical_host_gate.py routes; a route
+#: can now be declared and carry Apple recordings while still owing the other
+#: vendor columns and installed replay. The debt must remain visible until its
+#: named gates pass. Recording itself always requires a GPU, so the CPU binding
+#: cannot manufacture its own expected answer.
 #:
 #: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
 #: entries it took a GPU box for: `dbscan`, `agglomerative`, `spectral` and
@@ -2698,7 +2705,14 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: dispatches is also a declared, gated and recorded inference lane; it does
 #: NOT mean nothing is left to implement. A new `save` that ships without a
 #: recording belongs here, with the reason, rather than nowhere.
-SAVED_MODEL_INFERENCE_OWED = {}
+SAVED_MODEL_INFERENCE_OWED = {
+    "kernel-ridge-poly": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "kernel-ridge-sigmoid": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "kernel-ridge-laplacian": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-poly": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-sigmoid": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-laplacian": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+}
 
 
 def public_reference_candidates():
@@ -2707,7 +2721,7 @@ def public_reference_candidates():
 
 
 def saved_model_inference_owed():
-    """{lane: why it is implemented but not a declared inference lane}."""
+    """{lane: remaining saved-model recording or qualification debt}."""
     return dict(SAVED_MODEL_INFERENCE_OWED)
 
 

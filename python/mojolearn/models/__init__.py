@@ -33,7 +33,8 @@ not a model's logits. `README.md` beside this file carries the matrix.
 from .config import FAMILIES, HFConfig, ModelPlan, UnsupportedModel, plan_for
 from .safetensors import Checkpoint, SafetensorsFile
 from .causal_lm import CausalLM, CausalLMState
+from .parallel_causal_lm import ParallelCausalLM
 from .tokenizer import PATTERNS, Tokenizer
 
-__all__ = ["CausalLM", "CausalLMState", "Checkpoint", "FAMILIES", "HFConfig", "ModelPlan",
+__all__ = ["ParallelCausalLM", "CausalLM", "CausalLMState", "Checkpoint", "FAMILIES", "HFConfig", "ModelPlan",
            "PATTERNS", "SafetensorsFile", "Tokenizer", "UnsupportedModel", "plan_for"]

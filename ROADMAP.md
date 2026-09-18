@@ -1,8 +1,12 @@
 # Current work
 
-Updated 2026-09-17. Start here for active work; archived plans are historical
+Updated 2026-09-18. Start here for active work; archived plans are historical
 snapshots and do not establish current completion or execution policy.
 
+- **Tokenizer, attention and Apple GEMM closeout:** [September 18 handoff](docs/lanes/HANDOFF_2026-09-18_evening.md#closeout-decision-2026-09-18-subsequent-session).
+  Keep the landed improvements; further Apple performance work is parked.
+  Remaining numerical identity defects are unresolved, and this closeout does
+  not establish release qualification.
 - **Release 0.8.7:** [September 17 handoff](docs/lanes/HANDOFF_2026-09-17_release_087.md).
   It records the frozen source, completed Linux artifacts, failed or missing
   qualification columns, the macOS build failure, and remaining publication work.
