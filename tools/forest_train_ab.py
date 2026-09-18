@@ -5,7 +5,8 @@
 
     fit        --lane {rf,et} --dataset {taxi,taxireg,istella,istellareg} --rows N
                --rounds R --label NAME --json OUT [--score]
-               One warmup fit on 20,000 rows (context, kernel load), then R timed
+               One warmup fit on --warm-rows rows (default 20,000; 0 = the timed
+               size, which the full-size A/Bs use), then R timed
                fits of the speed board's forest configuration (100 trees, depth 16,
                sqrt or 1.0 features, 128 bins for rf, seed 7;
                tools/speed_gbdt_arm.py::lane_config). Every fitted model's five
@@ -99,10 +100,18 @@ def cmd_fit(args):
     print("FTRAIN-HEADER lane=%s dataset=%s rows=%d cols=%d task=%s label=%s mode=%s vendor=%s"
           % (args.lane, args.dataset, n_rows, n_cols, data.task, args.label,
              os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset"), mojolearn.vendor()), flush=True)
+    # --warm-rows 0 warms up at the timed size: on pod 6x6vfh2zqas3n4 every
+    # process's FIRST full-size fit of Istella-S (1.76 GB of X) cost about
+    # 1.4 s more than its second, in both arms alike (rf 5.07 s then 3.70 s),
+    # which a 20,000-row warmup does not cover and which put both arms of
+    # that cell outside the 1.10 spread gate.
+    warm_rows = n_rows if args.warm_rows <= 0 else min(args.warm_rows, n_rows)
     warm = _make(args.lane, cfg, data.task, max_features)
     t0 = time.perf_counter()
-    warm.fit(x[:20000], y[:20000])
+    warm.fit(x[:warm_rows], y[:warm_rows])
     warm_ms = (time.perf_counter() - t0) * 1000.0
+    print("FTRAIN-WARMUP lane=%s dataset=%s label=%s rows=%d ms=%.1f"
+          % (args.lane, args.dataset, args.label, warm_rows, warm_ms), flush=True)
     del warm
     times, hashes = [], []
     model = None
@@ -131,7 +140,8 @@ def cmd_fit(args):
         lane=args.lane, dataset=args.dataset, rows=int(n_rows), cols=int(n_cols),
         task=data.task, label=args.label, config=cfg, max_features=max_features,
         numeric_mode=os.environ.get("MOJOLEARN_NUMERIC_MODE", "unset"),
-        vendor=mojolearn.vendor(), warmup_ms=warm_ms, ms=times, hashes=hashes,
+        vendor=mojolearn.vendor(), warmup_ms=warm_ms, warmup_rows=int(warm_rows),
+        ms=times, hashes=hashes,
         quality=quality, binding=_binding_record(model, module),
         fit_numeric_mode=getattr(model, "_fit_numeric_mode", None),
         checkout=ROOT, stage_times=os.environ.get("MOJOLEARN_STAGE_TIMES", ""),
@@ -203,6 +213,8 @@ def main():
     f.add_argument("--json", required=True)
     f.add_argument("--score", action="store_true")
     f.add_argument("--score-rows", type=int, default=200000)
+    f.add_argument("--warm-rows", type=int, default=20000,
+                   help="rows of the untimed warmup fit; 0 = the timed size")
     s = sub.add_parser("summarize")
     s.add_argument("json", nargs="+")
     s.add_argument("--before", default="before")

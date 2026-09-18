@@ -12,6 +12,11 @@
 #   bash tools/forest_train_body.sh fast       the FAST tier's rf and trees bindings beside them
 #   bash tools/forest_train_body.sh candidate  /root/mojolearn-cand (main plus the pushed sources):
 #                                             its GPU and host bindings, and the CPU-only copies
+#   bash tools/forest_train_body.sh tree       TREE=/root/<dir> LABEL=<label>: an unpacked source
+#                                             tree (main's bindings copied in) gets the GPU
+#                                             families in VARIANT_FAMILIES and the host
+#                                             families in TREE_HOST_FAMILIES rebuilt, then a
+#                                             CPU-only copy at <dir>-cpu (resume, 2026-09-17)
 #   bash tools/forest_train_body.sh variants   /root/mojolearn-v-<name>: a source copy with
 #                                             rf+trees rebuilt under one define set each
 #                                             (VARIANTS="name:defines|name:defines")
@@ -20,7 +25,8 @@
 #                                             ("a:b a:c")
 #   bash tools/forest_train_body.sh ab         alternating processes over ARMS
 #                                             ("label:tree label:tree"), CELLS
-#                                             ("lane:dataset:rows ..."), AB_ROUNDS passes
+#                                             ("lane:dataset:rows ..."), AB_ROUNDS passes;
+#                                             AB_WARM_ROWS=0 warms each process at the timed size
 #
 # Everything lands in /root/leg_out, pulled home after each phase.
 set -u
@@ -109,11 +115,13 @@ phase_profile() {
         stem="$OUT/profile/$_l.$lane.$ds.$rows"
         # 1. untimed: the honest wall time beside the serialized table
         PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" --dataset "$ds" \
-            --rows "$rows" --rounds "${PROFILE_ROUNDS:-3}" ${PROFILE_TREES:+--trees $PROFILE_TREES} --label "$_l" --json "$stem.plain.json" > "$stem.plain.log" 2>&1
+            --rows "$rows" --rounds "${PROFILE_ROUNDS:-3}" ${PROFILE_TREES:+--trees $PROFILE_TREES} ${PROFILE_WARM_ROWS:+--warm-rows $PROFILE_WARM_ROWS} \
+            --label "$_l" --json "$stem.plain.json" > "$stem.plain.log" 2>&1
         say "plain $cell: $(grep '^FTRAIN ' "$stem.plain.log" | tr '\n' ' ' | cut -c1-300)"
         # 2. the stage table (drains per stage; attribution, never a timing)
         MOJOLEARN_STAGE_TIMES=1 PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
-            --dataset "$ds" --rows "$rows" --rounds 1 ${PROFILE_TREES:+--trees $PROFILE_TREES} --label "$_l-staged" --json "$stem.staged.json" > "$stem.staged.log" 2>&1
+            --dataset "$ds" --rows "$rows" --rounds 1 ${PROFILE_TREES:+--trees $PROFILE_TREES} ${PROFILE_WARM_ROWS:+--warm-rows $PROFILE_WARM_ROWS} \
+            --label "$_l-staged" --json "$stem.staged.json" > "$stem.staged.log" 2>&1
         say "staged $cell done"
         # 3. nsys, when the box has it: per-kernel GPU time, CUDA API time, memcpy
         if NSYS=$(find_nsys); then
@@ -165,6 +173,34 @@ phase_candidate() {
         cat "$OUT/cpu_probe_$(basename "$dst").log"
     done
     : > "$OUT/candidate.done"
+}
+
+phase_tree() {
+    # TREE: an unpacked source tree beside $R (a git archive of another
+    # commit); LABEL names its logs. Main's bindings are copied in first so
+    # the families this lane does not rebuild are main's, then the trees
+    # family is rebuilt (GPU and host) from TREE's own sources, each binding
+    # removed first so a failed build leaves nothing under this label.
+    _t="${TREE:?}"; _l="${LABEL:?}"
+    cd "$_t" || return 1
+    ln -sfn "$R/.pixi" "$_t/.pixi"
+    mkdir -p python/mojolearn/identical python/mojolearn/host
+    cp -n "$R"/python/mojolearn/identical/*.so python/mojolearn/identical/
+    cp -n "$R"/python/mojolearn/host/*.so python/mojolearn/host/
+    MOJOLEARN_COMPILE_JOBS=32 build_gpu "$_t" "$_l" ""
+    cd "$_t" || return 1
+    for fam in ${TREE_HOST_FAMILIES:-trees}; do
+        rm -f "python/mojolearn/host/_mojolearn_${fam}_host.so"
+        MOJOLEARN_BUILD_JOBS=32 step "${_l}_host_$fam" sh bindings/build_host_family.sh "$fam"
+    done
+    { ls -l --time-style=full-iso python/mojolearn/host/*.so
+      sha256sum python/mojolearn/identical/*.so python/mojolearn/host/*.so; } > "$OUT/${_l}_host_mtimes_sha.txt" 2>&1
+    rsync -a --delete --exclude .pixi --exclude 'python/mojolearn/identical' \
+        --exclude 'python/mojolearn/_mojolearn_*.so' "$_t/" "$_t-cpu/"
+    ln -sfn "$R/.pixi" "$_t-cpu/.pixi"
+    (cd "$_t-cpu" && PYTHONPATH=python pixi run python3 -c "import mojolearn; print('$_t-cpu vendor', mojolearn.vendor())") > "$OUT/cpu_probe_$(basename "$_t-cpu").log" 2>&1
+    cat "$OUT/cpu_probe_$(basename "$_t-cpu").log"
+    : > "$OUT/tree.$_l.done"
 }
 
 phase_variants() {
@@ -229,7 +265,8 @@ phase_ab() {
                 IFS=: read -r label tree mode <<< "$arm"
                 stem="$_dir/$lane.$ds.$rows.$label.$i"
                 ( cd "$tree" && MOJOLEARN_NUMERIC_MODE="${mode:-identical}" PYTHONPATH=python pixi run python3 tools/forest_train_ab.py fit --lane "$lane" \
-                    --dataset "$ds" --rows "$rows" --rounds "${AB_FITS:-2}" ${AB_TREES:+--trees $AB_TREES} --label "$label" ${AB_SCORE:+--score} \
+                    --dataset "$ds" --rows "$rows" --rounds "${AB_FITS:-2}" ${AB_TREES:+--trees $AB_TREES} ${AB_WARM_ROWS:+--warm-rows $AB_WARM_ROWS} \
+                    --label "$label" ${AB_SCORE:+--score} \
                     --json "$stem.json" > "$stem.log" 2>&1 )
                 say "$cell $label $i: $(grep '^FTRAIN ' "$stem.log" | sed 's/.*round=/r/' | tr '\n' ' ')"
             done
@@ -247,6 +284,7 @@ case "${1:-}" in
     profile) phase_profile ;;
     fast) phase_fast ;;
     candidate) phase_candidate ;;
+    tree) phase_tree ;;
     variants) phase_variants ;;
     identity) phase_identity ;;
     ab) phase_ab ;;
