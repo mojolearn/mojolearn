@@ -478,12 +478,12 @@ reported so the next person does not think DEVIATION 3010 closed the class.
 
 ### Pods
 
-- `s14hskn0y3jorl`, RTX 4090 driver 580.159.04, $0.74/h, ssh
-  `-p 52583 root@213.181.111.2`. **STILL RUNNING and NOT covered by a
-  deadman.** `/root/ml-before` (origin/main) and `/root/ml-after` (this
-  branch) with 10 bindings each, `/root/fd_out` with every result. Reap it
-  with a DELETE to `https://rest.runpod.io/v1/pods/s14hskn0y3jorl` using
-  the key in `~/.mojolearn_runpod_key`; confirm DELETE 204 then GET 404.
+- `s14hskn0y3jorl`, RTX 4090 driver 580.159.04, $0.74/h. **TERMINATED
+  after the work finished, DELETE 204 / GET 404.** While it was up it
+  carried a `tools/runpod_guard.sh` lease, so it would have reaped itself
+  had this session died. It held `/root/ml-before` (origin/main) and
+  `/root/ml-after` (this branch) with 11 bindings each; everything under
+  `/root/fd_out` was pulled before the reap.
 - `uywhryt7b9vtz4` (the kNN pod) and `dgh8ghg5fu7iro` (a first forest pod
   whose driver was too old): both TERMINATED, DELETE 204 / GET 404.
 
