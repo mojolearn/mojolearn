@@ -16,6 +16,12 @@ def execute(request):
         from . import _backend
         from ._gpu_witness import visible_gpu_inventory
         return visible_gpu_inventory(_backend.vendor())
+    if operation == 'cross_val_fold':
+        from . import _backend
+        from .model_selection import _fit_score_fold
+        if _backend.vendor() not in ('cuda', 'hip'):
+            raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
+        return _fit_score_fold(state, *args)
     if operation == 'causal_lm_layer':
         from ._causal_lm_worker import execute as run_layer
         return run_layer(state, args)
