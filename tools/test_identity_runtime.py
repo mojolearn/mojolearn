@@ -248,3 +248,56 @@ def test_wrong_backend_refuses_before_fit(run_fixture, backend):
     with pytest.raises(SystemExit, match='requested .* backend, loaded'):
         ib._run_reference(args)
     assert state['calls'] == 0
+
+
+@pytest.mark.parametrize('route,changed', [
+    ('par-reference-knn', changed)
+    for changed in (None, 'distances', 'indices', 'predict', 'predict_proba', 'raise')
+] + [('par-reference-knn-reg', changed) for changed in (None, 'predict', 'raise')])
+def test_reference_neighbors_keep_wrong_bytes_and_do_not_waive_refusals(monkeypatch, route, changed):
+    from contextlib import nullcontext
+
+    outputs = dict(distances=np.zeros((64, 8), dtype='<f4'),
+                   indices=np.zeros((64, 8), dtype='<i4'),
+                   predict=np.zeros(64, dtype='<f4'),
+                   predict_proba=np.zeros((64, 2), dtype='<f4'))
+    actual = {key: value.copy() for key, value in outputs.items()}
+    if changed not in (None, 'raise'):
+        actual[changed].flat[0] = 1
+
+    class Model:
+        def __init__(self, values):
+            self.values = values
+
+        def fit(self, *args):
+            return self
+
+        def kneighbors(self, *args):
+            return self.values['distances'], self.values['indices']
+
+        def predict(self, *args):
+            if changed == 'raise' and self.values is actual:
+                raise RuntimeError('worker unavailable')
+            return self.values['predict']
+
+        def predict_proba(self, *args):
+            return self.values['predict_proba']
+
+    ml = SimpleNamespace(KNeighborsClassifier=lambda **kw: Model(outputs),
+                         KNeighborsRegressor=lambda **kw: Model(outputs))
+    monkeypatch.setattr(ib, '_rsn', lambda model: nullcontext(Model(actual)))
+    X = np.zeros((4160, 1), dtype='<f4')
+    y = np.zeros(4160, dtype='<f4')
+    names = {'predict': 'predict'} if route.endswith('-reg') else {
+        'dist': 'distances', 'idx': 'indices', 'predict': 'predict', 'proba': 'predict_proba'}
+    expected_parts = {name: ib._h(actual[field]) for name, field in names.items()}
+    if changed == 'raise':
+        with pytest.raises(RuntimeError, match='worker unavailable'):
+            ib.LANES[route](ml, X, y, y, X[:64])
+    elif changed:
+        with pytest.raises(ib.NumericalMismatch, match=changed) as exc:
+            ib.LANES[route](ml, X, y, y, X[:64])
+        assert exc.value.parts == expected_parts
+        assert exc.value.parts != {name: ib._h(outputs[field]) for name, field in names.items()}
+    else:
+        assert dict(ib.LANES[route](ml, X, y, y, X[:64])) == expected_parts

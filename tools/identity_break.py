@@ -4578,15 +4578,21 @@ def _(ml, X, yc, yr, Xh=None):
         d, i = rs.kneighbors(q)
         pr, pp = rs.predict(q), rs.predict_proba(q)
     d0, i0 = m.kneighbors(q)
-    _same_bytes("ReferenceShardedNeighbors distances", d, "plain distances", d0)
-    _same_bytes("ReferenceShardedNeighbors indices", i, "plain indices", i0)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
-    _same_bytes("ReferenceShardedNeighbors predict_proba", pp, "plain predict_proba", m.predict_proba(q))
+    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
+    # Retain measured bytes when the independent comparison detects a fault;
+    # a generic refusal would discard the evidence and cannot qualify a control.
+    for name, actual, expected in (("distances", d, d0), ("indices", i, i0),
+                                   ("predict", pr, m.predict(q)),
+                                   ("predict_proba", pp, m.predict_proba(q))):
+        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, actual,
+                                   "plain " + name, expected)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return rs.predict(Xh[:64]), rs.predict_proba(Xh[:64])
-    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-reference-knn-reg")
@@ -4597,12 +4603,15 @@ def _(ml, X, yc, yr, Xh=None):
     q = np.ascontiguousarray(X[4096:4160])
     with _rsn(m) as rs:
         pr = rs.predict(q)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    parts = dict(predict=_h(pr))
+    mismatch = _mismatch_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return (rs.predict(Xh[:64]),)
-    return _fit(dict(predict=_h(pr)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-graph-agglomerative")
