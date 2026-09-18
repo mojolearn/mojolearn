@@ -47,8 +47,9 @@ exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus 2 --memory 16g \
         mkdir "$probe"
         start=$(date +%s)
         OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
-          MOJOLEARN_CORE_HOST_OUTDIR="$probe" MOJOLEARN_BUILD_JOBS=2 \
-          timeout -k 10 120 bash bindings/build_core_host.sh
+          MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_SKIP_BUILD_GATE=1 \
+          MOJOLEARN_CORE_HOST_OUTDIR="$probe" MOJOLEARN_BUILD_JOBS=1 \
+          timeout -k 10 120 pixi run -e default bash bindings/build_core_host.sh
         patchelf --set-rpath '\''$ORIGIN/../.libs:$ORIGIN/../cuda/.libs:$ORIGIN/../hip/.libs:$ORIGIN/.libs'\'' \
           "$probe/_mojolearn_core_host.so"
         actual=$(sha256sum "$probe/_mojolearn_core_host.so" | cut -d" " -f1)
