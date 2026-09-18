@@ -67,3 +67,29 @@ triples of digests in each clean build, and all 12 cross-build price matches.
 Any changed word is a defect. Both corpora at 700 steps remain required
 before shipping a measured candidate. No training run is owed until it is
 registered and launched.
+
+## Experiment 1 result and registered experiment 3
+
+H100 em6ro8lqzvh0ml completed both sweeps and was deleted (DELETE 204, GET 404).
+Base weighted sum 120.861107 / 120.840876 ms; no-stage ratios
+0.722425 / 0.722484, no-shared-load ratios 0.989565 / 0.989932.
+All 24 base/shipped full-output comparisons matched, all 24 device sabotages
+failed. Per-step shared-load >=3% hypothesis falsified. Staging/prefetch/barrier
+>=5% hypothesis supported as an aggregate diagnostic, not an isolated cause or
+achievable optimization. Diagnostics intentionally compute different answers.
+Evidence: bench/results/e1g/2026-09-18-nvidia-h100-gemm-hg-diag-retry.
+
+NVIDIA candidate: on a full operand tile, perform one block-uniform bounds
+check instead of repeating the outer-index check at each of 8 scalar gathers.
+Keep the masked loads on ragged tiles, all operand bits, step sequence, FMA
+seam and fold unchanged. Opt-in MOJOLEARN_GEMM_GATHER_FULL_TILE only.
+Prediction before rental: >=2% lower weighted 12-call GEMM sum in both ABBA
+pairs. Less is INERT for the hypothesis; regression rejects default flip.
+288 transport fixtures now include 129x131 full-plus-ragged tiles; all must
+match the untuned flat kernel and host oracle. A deliberate full-tile load
+corruption must fail before the clean gate. The independent price comparator
+also receives actual sabotaged device output and must reject it.
+
+Experiment 2 (AMD) was already launched at 8c9c1cbf9 with its preregistered
+144 small ragged fixtures, no full-tile optimization. Experiment 3's expanded
+fixture is independent; no retrospective claim it ran on experiment 2.

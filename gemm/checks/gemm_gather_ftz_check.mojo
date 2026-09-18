@@ -132,55 +132,56 @@ def main() raises:
         raise Error("gemm_stage_ftz_check requires IDENTICAL")
     print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))
     var ks: List[Int] = [0, 1, 3, 15, 16, 17, 129, 257]
-    var m = 17
-    var n = 33
     var cases = 0
     var words_checked = 0
     with DeviceContext() as ctx:
-        for op in range(3):
-            for k_index in range(len(ks)):
-                var k = ks[k_index]
-                for swap in range(2):
-                    var a = List[Float32]()
-                    var b = List[Float32]()
-                    for _ in range(m * k):
-                        a.append(Float32(0))
-                    for _ in range(k * n):
-                        b.append(Float32(0))
-                    for i in range(m):
-                        for p in range(k):
-                            var at = i * k + p
-                            if op == OP_TN:
-                                at = p * m + i
-                            var value = _small(i, p)
-                            if swap == 1:
-                                value = _partner(i)
-                            a[at] = value
-                    for j in range(n):
-                        for p in range(k):
-                            var at = p * n + j
-                            if op == OP_NT:
-                                at = j * k + p
-                            var value = _partner(j)
-                            if swap == 1:
-                                value = _small(j, p)
-                            b[at] = value
-                    var tag = String("stage_ftz op=") + String(op) + " k=" + String(k) + " swap=" + String(swap)
-                    var oracle = gemm_oracle(a, b, op, m, n, k)
-                    var flat = _run_device(ctx, a, b, op, m, n, k, PLAN_FLAT, tag)
-                    # This cell is positive subnormal * 2^100 on every step.
-                    # Literal zero independently asserts the fixture's witness.
-                    if bitcast[DType.uint32](oracle[0]) != UInt32(0):
-                        raise Error(tag + " input-flush witness is not +0")
-                    for plan in range(3):
-                        var got = _run_gather(ctx, a, b, op, m, n, k, plan, tag)
-                        for c in range(m * n):
-                            var want = bitcast[DType.uint32](oracle[c])
-                            if bitcast[DType.uint32](flat[c]) != want or bitcast[DType.uint32](got[c]) != want:
-                                raise Error(tag + " plan=" + String(plan) + " cell=" + String(c) + " got=" + String(bitcast[DType.uint32](got[c])) + " flat=" + String(bitcast[DType.uint32](flat[c])) + " oracle=" + String(want))
-                            words_checked += 1
-                        cases += 1
-                        print("MATCH", tag, "group_leaves=" + String(plan),
-                              "got=" + hex(_digest(got)), "flat=" + hex(_digest(flat)),
-                              "oracle=" + hex(_digest(oracle)))
+        for shape in range(2):
+            var m = 17 if shape == 0 else 129
+            var n = 33 if shape == 0 else 131
+            for op in range(3):
+                for k_index in range(len(ks)):
+                    var k = ks[k_index]
+                    for swap in range(2):
+                        var a = List[Float32]()
+                        var b = List[Float32]()
+                        for _ in range(m * k):
+                            a.append(Float32(0))
+                        for _ in range(k * n):
+                            b.append(Float32(0))
+                        for i in range(m):
+                            for p in range(k):
+                                var at = i * k + p
+                                if op == OP_TN:
+                                    at = p * m + i
+                                var value = _small(i, p)
+                                if swap == 1:
+                                    value = _partner(i)
+                                a[at] = value
+                        for j in range(n):
+                            for p in range(k):
+                                var at = p * n + j
+                                if op == OP_NT:
+                                    at = j * k + p
+                                var value = _partner(j)
+                                if swap == 1:
+                                    value = _small(j, p)
+                                b[at] = value
+                        var tag = String("stage_ftz m=") + String(m) + " n=" + String(n) + " op=" + String(op) + " k=" + String(k) + " swap=" + String(swap)
+                        var oracle = gemm_oracle(a, b, op, m, n, k)
+                        var flat = _run_device(ctx, a, b, op, m, n, k, PLAN_FLAT, tag)
+                        # This cell is positive subnormal * 2^100 on every step.
+                        # Literal zero independently asserts the fixture's witness.
+                        if bitcast[DType.uint32](oracle[0]) != UInt32(0):
+                            raise Error(tag + " input-flush witness is not +0")
+                        for plan in range(3):
+                            var got = _run_gather(ctx, a, b, op, m, n, k, plan, tag)
+                            for c in range(m * n):
+                                var want = bitcast[DType.uint32](oracle[c])
+                                if bitcast[DType.uint32](flat[c]) != want or bitcast[DType.uint32](got[c]) != want:
+                                    raise Error(tag + " plan=" + String(plan) + " cell=" + String(c) + " got=" + String(bitcast[DType.uint32](got[c])) + " flat=" + String(bitcast[DType.uint32](flat[c])) + " oracle=" + String(want))
+                                words_checked += 1
+                            cases += 1
+                            print("MATCH", tag, "group_leaves=" + String(plan),
+                                  "got=" + hex(_digest(got)), "flat=" + hex(_digest(flat)),
+                                  "oracle=" + hex(_digest(oracle)))
     print("gemm_gather_ftz_check PASS cases=", cases, "words=", words_checked)

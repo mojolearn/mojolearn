@@ -5010,10 +5010,25 @@ def _kpack_gather[
     zeros, `_tuned_g2r`), flushed at staging exactly as `_tuned_g2r` flushes."""
     var out = SIMD[DType.float32, R](0.0)
     if step < chunk:
-        comptime for u in range(R):
-            var oi = base_outer + g + u * G
-            if oi < outer_limit:
-                out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+        comptime if is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]():
+            # A block-uniform full-tile test replaces R per-line predicates.
+            # The ragged path still checks every line; no operand is padded.
+            if base_outer + R * G <= outer_limit:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+                comptime if is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FULL"]():
+                    out[0] = Float32(12345.0)
+            else:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    if oi < outer_limit:
+                        out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+        else:
+            comptime for u in range(R):
+                var oi = base_outer + g + u * G
+                if oi < outer_limit:
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
     comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FTZ"]():
         comptime for f in range(R):
             out[f] = ftz(out[f])
