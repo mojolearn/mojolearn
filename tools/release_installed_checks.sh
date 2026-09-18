@@ -31,6 +31,16 @@ timeout -k 10 600 env -u PYTHONPATH -u PYTHONHOME \
     --lanes mamba1,mamba2,mamba2-dtlimit,mamba3 --repeats 2 \
     --require-backend "$VENDOR" --fail-on-refused --vendor "$COLUMN" \
     --json "$OUT/mamba-column.json" > "$OUT/mamba-column.log" 2>&1
+# These properties lack current three-vendor columns in the historical CPU
+# gate. A prediction-arithmetic fault need not alter a saved model's bytes;
+# retain actual independent device references instead of weakening that gate.
+EXTRA_LANES=transformer,transformer-window,samba,samba-untied-dropout-accum,radius,radius-chebyshev,radius-manhattan,radius-minkowski-p3,dbscan,dbscan-brute-l1,dbscan-weighted,minmax-scaler,minmax-scaler-clip,standard-scaler-no-std,optim-sgd,spectral-precomputed,metrics-homogeneity-completeness,ordered-gradient-sum,mamba1-bf16w,mamba1-int8w,mlp-bf16w,mlp-int8w,samba-bf16w,samba-int8w
+timeout -k 10 900 env -u PYTHONPATH -u PYTHONHOME \
+    MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
+    "$VPY" -m mojolearn._identity_break \
+    --lanes "$EXTRA_LANES" --repeats 2 --require-backend "$VENDOR" \
+    --fail-on-refused --vendor "$COLUMN" \
+    --json "$OUT/property-column.json" > "$OUT/property-column.log" 2>&1
 timeout -k 10 900 "$VPY" "$ROOT/tools/qualify_verifier_wheel.py" "$WHEEL" \
     --python "$VPY" --output "$OUT/verifier-cli" > "$OUT/verifier-cli.log" 2>&1
 printf '0\n' > "$OUT/exit_code"
