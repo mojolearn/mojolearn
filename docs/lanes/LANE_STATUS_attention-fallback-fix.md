@@ -18,8 +18,14 @@
   tail 0.45737 s. Device 15,151 -> 31,537 MB, `eager_bytes` 432 ->
   17,314,086,912, twelve layers grown. **The latch (3110) and the guard
   (3111) each move NO BIT and each leave those numbers where they are.**
-- **BATCH 4 OOMs FOR REAL at step ~361** (`CUDA_ERROR_OUT_OF_MEMORY` out of
-  `byte_lm_session_step`), not the brief's step 210. It does not reach 2,000.
+- **BATCH 4, BOTH WAYS.** With the fallback: a real
+  `CUDA_ERROR_OUT_OF_MEMORY` out of `byte_lm_session_step` at **step ~361**
+  (not the brief's step 210; the OOM step is data dependent like everything
+  else here). Without it: **step 1,323 and still running**, 0.666 s a step,
+  loss 1.593, `forward_eager_cells` still 48, killed by THIS LEG'S OWN 900 s
+  `timeout` (exit 124) and NOT by memory. **It did not reach 2,000 steps and
+  no claim is made that it would**; what is measured is 1,323 against 361 and
+  a footprint that never grew.
 - **`attn_materialized` PLUMBING IS DONE AND RUNNING.** Per layer, per step,
   per direction: `forward_status`, `backward_status`, their named `*_counts`,
   and `attn_materialized`, out through `byte_lm_session_info` into
@@ -33,11 +39,11 @@
 
       rhjqy941tjl5yw  stamp 035439  leg 1  TERMINATED, VERIFIED gone (404)
       h6o7o98tid619l  stamp 043438  leg 2  TERMINATED, VERIFIED gone (404)
-      5guu23hvyqj7tg  stamp 050110  leg 3  OUT AND WORKING, do not reap
+      5guu23hvyqj7tg  stamp 050110  leg 3  TERMINATED, VERIFIED gone (404)
 
   Never more than one at a time. `5guu23hvyqj7tg`
-  (`-p 11076 root@103.207.149.101`, lease armed 09:02:01Z, 60 minutes,
-  pod-side dead-man) is mid-run on the batch-4 arm at 98% GPU and 38,959 MiB.
+  is now also TERMINATED and VERIFIED gone (404). **THIS LANE HAS NO PODS
+  OUT.**
   **Any other `mojolearn-gemm-nvidia-` pod is NOT this lane's** and must not
   be reaped on its account; this lane's ids are the three above and they are
   in `pod_id.txt` in each filed leg directory.

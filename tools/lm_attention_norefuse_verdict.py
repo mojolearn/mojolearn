@@ -202,8 +202,8 @@ def main():
 
     print()
     print('=== 5. controls at head_dim 64 ===')
-    for arm, expected in (('guarded-forced-eager', -1), ('guarded-forced-fused', 0),
-                          ('unguarded-forced-fused', 0)):
+    for arm, expected in (('refusing-forced-eager', -1), ('refusing-forced-fused', 0),
+                          ('norefuse-forced-fused', 0)):
         try:
             c = load(root, arm)
         except AssertionError as e:
@@ -217,7 +217,7 @@ def main():
             v.setdefault('controls', {})[arm + '.' + key] = vals
 
     print()
-    print('=== 6. batch 4 for 2,000 steps, under the guarded build ===')
+    print('=== 6. batch 4 for 2,000 steps, under the NOREFUSE build ===')
     try:
         b4 = load(root, 'batch4')
         rows = b4['steps']
