@@ -1862,7 +1862,7 @@ def format_human(report):
         lines.append(f"| {fam:<{w}} | {c['lanes']:>5} | {c['IDENTICAL']:>9} | {c['DIVERGENT']:>9} | "
                      f"{c['OWED']:>4} | {c['REFUSED']:>7} | {c['N/A']:>3} |")
     c = report["counts"]
-    lines.append(f"| {'all':<{w}} | {len(report['lanes']) + report['models_checked']:>5} | {c['IDENTICAL']:>9} | "
+    lines.append(f"| {'all':<{w}} | {len(report['lanes']) + report.get('model_lanes_checked', report['models_checked']):>5} | {c['IDENTICAL']:>9} | "
                  f"{c['DIVERGENT']:>9} | {c['OWED']:>4} | {c['REFUSED']:>7} | {c['N/A']:>3} |")
     bad = [r for r in report["cells"] if r["state"] == vref.DIVERGENT]
     refused = [r for r in report["cells"] if r["state"] == vref.REFUSED]
@@ -2116,7 +2116,10 @@ def cmd_verify_all(args):
     report = dict(
         format="mojolearn.verify-all-report.v1", verdict=headline, exit=code, detail=detail,
         depth=depth, lanes=lanes, fixtures=fixtures, repeats=repeats,
-        models_checked=len({r["lane"] for r in model_rows}),
+        models_checked=len({(r["lane"], r["fixture"]) for r in model_rows
+                            if r["lane"] != "portable:manifest"}),
+        model_lanes_checked=len({r["lane"] for r in model_rows
+                                if r["lane"] != "portable:manifest"}),
         elapsed_s=round(time.time() - started, 2), device=device,
         harness=dict(path=harness_file, how=harness_how, sha256=harness_sha,
                      matches_table=harness_sha == table.get("harness_sha256")),
