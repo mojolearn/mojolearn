@@ -310,3 +310,8 @@ is a helper call whose body is the comptime-if. Result (xasm/gcn4.sh):
   so every Apple measurement above (probe, boundary check, prices, card)
   holds for the new spelling unchanged.
 AMD re-check of all five programs running (xasm/xcheck2.sh).
+- xcheck2 (after the helper fix), `bench/results/e1g/2026-09-18_apple-m4-seam-repair-xasm/xcheck2_cmp.txt`:
+  **gfx942 device modules byte-identical to main in all five programs**
+  (45 / 68 / 522 / 75 / 70 modules). With sm_90a already identical, the
+  branch cannot move an NVIDIA or AMD bit in any kernel these programs
+  instantiate: the device code IS main's.
