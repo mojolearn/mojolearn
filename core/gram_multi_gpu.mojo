@@ -38,8 +38,8 @@ def pinned_gemm_nt_gram_kernel(
     var acc_v = SIMD[DType.float32, 4](0.0)
     var p = 0
     while p <= k - 4:
-        var xv = x.unsafe_ptr().load[width=4](i * k + p)
-        var yv = x.unsafe_ptr().load[width=4](j * k + p)
+        var xv = x.load[width=4](i * k + p)
+        var yv = x.load[width=4](j * k + p)
         acc_v = ftz_simd[4](
             identical_mul_add_simd[4](
                 ftz_simd[4](xv),

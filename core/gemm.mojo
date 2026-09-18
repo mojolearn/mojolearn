@@ -58,8 +58,8 @@ def pinned_gemm_nt_kernel(
     var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
     var p = 0
     while p <= k - GEMM_VECLEN:
-        var xv = x.unsafe_ptr().load[width=GEMM_VECLEN](i * k + p)
-        var yv = y.unsafe_ptr().load[width=GEMM_VECLEN](j * k + p)
+        var xv = x.load[width=GEMM_VECLEN](i * k + p)
+        var yv = y.load[width=GEMM_VECLEN](j * k + p)
         acc_v = ftz_simd[GEMM_VECLEN](
             identical_mul_add_simd[GEMM_VECLEN](
                 ftz_simd[GEMM_VECLEN](xv),
@@ -107,8 +107,8 @@ def pinned_gemv_n_kernel(
     var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
     var p = 0
     while p <= k - GEMM_VECLEN:
-        var xv = x.unsafe_ptr().load[width=GEMM_VECLEN](i * k + p)
-        var yv = y.unsafe_ptr().load[width=GEMM_VECLEN](p)
+        var xv = x.load[width=GEMM_VECLEN](i * k + p)
+        var yv = y.load[width=GEMM_VECLEN](p)
         acc_v = ftz_simd[GEMM_VECLEN](
             identical_mul_add_simd[GEMM_VECLEN](
                 ftz_simd[GEMM_VECLEN](xv),
