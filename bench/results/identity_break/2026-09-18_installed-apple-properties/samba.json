@@ -1,0 +1,1299 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit",
+ "vendor": "apple-m4",
+ "commit": "aff968968f3ffc45844e36f3fd6260391eb829e5",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59edc5499524917a",
+    "59edc5499524917a"
+   ],
+   "parts": [
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    },
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    }
+   ],
+   "infer": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c6e035a367052c95",
+    "c6e035a367052c95"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "batch": [
+    "bb2812badec02047",
+    "bb2812badec02047"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ad0368c40ec8bb2b",
+    "ad0368c40ec8bb2b"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "19dccc24eeb5f7ee",
+    "19dccc24eeb5f7ee"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "1f4bbc392bc8bd36",
+    "1f4bbc392bc8bd36"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "3ee55356bde7ab34",
+    "3ee55356bde7ab34"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "e9c89afd1eb7f273",
+    "e9c89afd1eb7f273"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 15.228560666000703,
+    "stages": {
+     "repeat=1/train": 0.24863624999852618,
+     "repeat=1/infer-save-reload": 0.05479908300185343,
+     "repeat=1/batch": 0.4067292919935426,
+     "repeat=1/batchgrad": 2.709370875003515,
+     "repeat=1/batchscale": 1.48676266700204,
+     "repeat=1/ragged": 0.5272806249995483,
+     "repeat=1/stepfull": 0.4891731250027078,
+     "repeat=1/rlpair": 2.8369341249999707,
+     "repeat=2/train": 0.18350512500182958,
+     "repeat=2/infer-save-reload": 0.05209870900580427,
+     "repeat=2/batch": 0.3979342500024359,
+     "repeat=2/batchgrad": 2.053698292002082,
+     "repeat=2/batchscale": 0.884321290999651,
+     "repeat=2/ragged": 0.37372479099576594,
+     "repeat=2/stepfull": 0.36892354099836666,
+     "repeat=2/rlpair": 2.1537192500036326
+    }
+   }
+  },
+  "samba/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "66b4e01985f14c83",
+    "66b4e01985f14c83"
+   ],
+   "parts": [
+    {
+     "loss": "2669e94f3047ce39",
+     "logits": "9889bec2d73ffc9d",
+     "params": "81c39d0ddc7f5f71"
+    },
+    {
+     "loss": "2669e94f3047ce39",
+     "logits": "9889bec2d73ffc9d",
+     "params": "81c39d0ddc7f5f71"
+    }
+   ],
+   "infer": [
+    "4148172aef516854",
+    "4148172aef516854"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c63e34cf3642971c",
+    "c63e34cf3642971c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4148172aef516854",
+    "4148172aef516854"
+   ],
+   "batch": [
+    "f0d5f05d6d8945b0",
+    "f0d5f05d6d8945b0"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "12c71a776c337d04",
+    "12c71a776c337d04"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "7e0ce32e57dd762e",
+    "7e0ce32e57dd762e"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "432a585a0671417b",
+    "432a585a0671417b"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9198edbda770eb75",
+    "9198edbda770eb75"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "07dfbef4b25cce56",
+    "07dfbef4b25cce56"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 12.297532333999698,
+    "stages": {
+     "repeat=1/train": 0.13758500000403728,
+     "repeat=1/infer-save-reload": 0.03655779100517975,
+     "repeat=1/batch": 0.24428137500217417,
+     "repeat=1/batchgrad": 1.9366912909972598,
+     "repeat=1/batchscale": 0.8616405409993604,
+     "repeat=1/ragged": 0.34995708300266415,
+     "repeat=1/stepfull": 0.36208287499903236,
+     "repeat=1/rlpair": 2.1915459590018145,
+     "repeat=2/train": 0.13730870799918193,
+     "repeat=2/infer-save-reload": 0.03671070899872575,
+     "repeat=2/batch": 0.25571870900603244,
+     "repeat=2/batchgrad": 1.9045024170045508,
+     "repeat=2/batchscale": 0.8664674169995124,
+     "repeat=2/ragged": 0.3505173330049729,
+     "repeat=2/stepfull": 0.3500895000033779,
+     "repeat=2/rlpair": 2.2749662499991246
+    }
+   }
+  },
+  "samba/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7aed2e21f3d1fd37",
+    "7aed2e21f3d1fd37"
+   ],
+   "parts": [
+    {
+     "loss": "69641f4ede230075",
+     "logits": "d70936b0790595e9",
+     "params": "0ccfd23d73b04715"
+    },
+    {
+     "loss": "69641f4ede230075",
+     "logits": "d70936b0790595e9",
+     "params": "0ccfd23d73b04715"
+    }
+   ],
+   "infer": [
+    "d1140f3f1a3929ff",
+    "d1140f3f1a3929ff"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5aff1ce5f8021c9f",
+    "5aff1ce5f8021c9f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d1140f3f1a3929ff",
+    "d1140f3f1a3929ff"
+   ],
+   "batch": [
+    "10ded88aa18f2d4c",
+    "10ded88aa18f2d4c"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "9e4adedf2e3a0e4b",
+    "9e4adedf2e3a0e4b"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "51e15ec2577aade0",
+    "51e15ec2577aade0"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "87e51e49296dc8b1",
+    "87e51e49296dc8b1"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f5f225f14cfb4daf",
+    "f5f225f14cfb4daf"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "29e7379f3055fd26",
+    "29e7379f3055fd26"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 12.527686665998772,
+    "stages": {
+     "repeat=1/train": 0.1569537500035949,
+     "repeat=1/infer-save-reload": 0.039381167000101414,
+     "repeat=1/batch": 0.28797916699841153,
+     "repeat=1/batchgrad": 1.9480110419972334,
+     "repeat=1/batchscale": 0.9099931669989019,
+     "repeat=1/ragged": 0.3652007920027245,
+     "repeat=1/stepfull": 0.378094334002526,
+     "repeat=1/rlpair": 2.236134917002346,
+     "repeat=2/train": 0.13467162499728147,
+     "repeat=2/infer-save-reload": 0.0358845829978236,
+     "repeat=2/batch": 0.25844216699624667,
+     "repeat=2/batchgrad": 1.8947107920030248,
+     "repeat=2/batchscale": 0.8581071669977973,
+     "repeat=2/ragged": 0.3837350419998984,
+     "repeat=2/stepfull": 0.39165891699667554,
+     "repeat=2/rlpair": 2.2478609169993433
+    }
+   }
+  },
+  "samba/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "55bb0a35a4717e21",
+    "55bb0a35a4717e21"
+   ],
+   "parts": [
+    {
+     "loss": "9e1a0b30af42df13",
+     "logits": "b287271b6496b8a3",
+     "params": "f94bcd666684eb45"
+    },
+    {
+     "loss": "9e1a0b30af42df13",
+     "logits": "b287271b6496b8a3",
+     "params": "f94bcd666684eb45"
+    }
+   ],
+   "infer": [
+    "2fc3ccc6b00ca18e",
+    "2fc3ccc6b00ca18e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "af36d39066a15e99",
+    "af36d39066a15e99"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2fc3ccc6b00ca18e",
+    "2fc3ccc6b00ca18e"
+   ],
+   "batch": [
+    "3367b43b2b85532f",
+    "3367b43b2b85532f"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "bfe0ab5d5bc62360",
+    "bfe0ab5d5bc62360"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "ef6533b59eb206a1",
+    "ef6533b59eb206a1"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "f0e51a0af340b3c1",
+    "f0e51a0af340b3c1"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "a7002e43050dbea5",
+    "a7002e43050dbea5"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "c3a071be39462e31",
+    "c3a071be39462e31"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 12.630169208001462,
+    "stages": {
+     "repeat=1/train": 0.13487124999664957,
+     "repeat=1/infer-save-reload": 0.037634624997735955,
+     "repeat=1/batch": 0.25325529200199526,
+     "repeat=1/batchgrad": 1.90761499999644,
+     "repeat=1/batchscale": 0.9178204170020763,
+     "repeat=1/ragged": 0.38016475000040373,
+     "repeat=1/stepfull": 0.3774725000039325,
+     "repeat=1/rlpair": 2.234503333005705,
+     "repeat=2/train": 0.1383692079980392,
+     "repeat=2/infer-save-reload": 0.034980750002432615,
+     "repeat=2/batch": 0.25563166700158035,
+     "repeat=2/batchgrad": 1.9170570420028525,
+     "repeat=2/batchscale": 0.8933394580017193,
+     "repeat=2/ragged": 0.3721514159988146,
+     "repeat=2/stepfull": 0.3999044580050395,
+     "repeat=2/rlpair": 2.3745012910003425
+    }
+   }
+  },
+  "samba/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f04dfe354d334185",
+    "f04dfe354d334185"
+   ],
+   "parts": [
+    {
+     "loss": "403ca4f3988d028e",
+     "logits": "b1bfbe4d36838bf5",
+     "params": "d532bb3ae761a06e"
+    },
+    {
+     "loss": "403ca4f3988d028e",
+     "logits": "b1bfbe4d36838bf5",
+     "params": "d532bb3ae761a06e"
+    }
+   ],
+   "infer": [
+    "82959e01162a288c",
+    "82959e01162a288c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "423a94e0285c57d1",
+    "423a94e0285c57d1"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "82959e01162a288c",
+    "82959e01162a288c"
+   ],
+   "batch": [
+    "95f606e710724f62",
+    "95f606e710724f62"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "05e89149be56adfd",
+    "05e89149be56adfd"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "279be889ac7b9f86",
+    "279be889ac7b9f86"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "affe0f14bc5c7ab6",
+    "affe0f14bc5c7ab6"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9eeb316358599a7a",
+    "9eeb316358599a7a"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "d4930fb32f501278",
+    "d4930fb32f501278"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 12.585034042000188,
+    "stages": {
+     "repeat=1/train": 0.13844100000278559,
+     "repeat=1/infer-save-reload": 0.038622208005108405,
+     "repeat=1/batch": 0.2789032079963363,
+     "repeat=1/batchgrad": 2.018970791999891,
+     "repeat=1/batchscale": 0.8874316249930416,
+     "repeat=1/ragged": 0.36900708300527185,
+     "repeat=1/stepfull": 0.36861804199725157,
+     "repeat=1/rlpair": 2.2476171669986797,
+     "repeat=2/train": 0.13458895800431492,
+     "repeat=2/infer-save-reload": 0.036123999998380896,
+     "repeat=2/batch": 0.2504040409985464,
+     "repeat=2/batchgrad": 1.8812555829936173,
+     "repeat=2/batchscale": 0.8980387080009677,
+     "repeat=2/ragged": 0.4135877500011702,
+     "repeat=2/stepfull": 0.3844586669947603,
+     "repeat=2/rlpair": 2.2380820410035085
+    }
+   }
+  },
+  "samba/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "21b48585cac5f2dc",
+    "21b48585cac5f2dc"
+   ],
+   "parts": [
+    {
+     "loss": "623d930f2cf4f3dc",
+     "logits": "8e5281b34f0a209f",
+     "params": "721217f58d7c911f"
+    },
+    {
+     "loss": "623d930f2cf4f3dc",
+     "logits": "8e5281b34f0a209f",
+     "params": "721217f58d7c911f"
+    }
+   ],
+   "infer": [
+    "858a31e49040a404",
+    "858a31e49040a404"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a14095988dd7cb32",
+    "a14095988dd7cb32"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "858a31e49040a404",
+    "858a31e49040a404"
+   ],
+   "batch": [
+    "8690de249eb499f3",
+    "8690de249eb499f3"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "0863c4289a0408b2",
+    "0863c4289a0408b2"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "b7a5eba5e7489478",
+    "b7a5eba5e7489478"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "25d0510b2bbad4cc",
+    "25d0510b2bbad4cc"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "3d2c1463d3fa3881",
+    "3d2c1463d3fa3881"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "742d70594cece49b",
+    "742d70594cece49b"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 14.255498750004335,
+    "stages": {
+     "repeat=1/train": 0.13572375000512693,
+     "repeat=1/infer-save-reload": 0.037865791004151106,
+     "repeat=1/batch": 0.25520487500034506,
+     "repeat=1/batchgrad": 1.9164357080007903,
+     "repeat=1/batchscale": 0.9177541249955539,
+     "repeat=1/ragged": 0.3801150420040358,
+     "repeat=1/stepfull": 0.3910614170017652,
+     "repeat=1/rlpair": 2.414887874998385,
+     "repeat=2/train": 0.16007954100496136,
+     "repeat=2/infer-save-reload": 0.039241083002707455,
+     "repeat=2/batch": 0.30755737500294344,
+     "repeat=2/batchgrad": 2.236592125002062,
+     "repeat=2/batchscale": 1.760686458001146,
+     "repeat=2/ragged": 0.4753301669989014,
+     "repeat=2/stepfull": 0.4602865409979131,
+     "repeat=2/rlpair": 2.3656602499977453
+    }
+   }
+  },
+  "samba/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59edc5499524917a",
+    "59edc5499524917a"
+   ],
+   "parts": [
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    },
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    }
+   ],
+   "infer": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c6e035a367052c95",
+    "c6e035a367052c95"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "batch": [
+    "d2c9f7a0e527809f",
+    "d2c9f7a0e527809f"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ad0368c40ec8bb2b",
+    "ad0368c40ec8bb2b"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "4ec176c52475c4ff",
+    "4ec176c52475c4ff"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "89910676f400fb8c",
+    "89910676f400fb8c"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e6784e16def9566f",
+    "e6784e16def9566f"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "e9c89afd1eb7f273",
+    "e9c89afd1eb7f273"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 13.687034249996941,
+    "stages": {
+     "repeat=1/train": 0.14574524999625282,
+     "repeat=1/infer-save-reload": 0.03795670800172957,
+     "repeat=1/batch": 0.27207337499567075,
+     "repeat=1/batchgrad": 1.9895360840018839,
+     "repeat=1/batchscale": 1.1533296250054264,
+     "repeat=1/ragged": 0.40735908400529297,
+     "repeat=1/stepfull": 0.4106483340001432,
+     "repeat=1/rlpair": 2.352590083006362,
+     "repeat=2/train": 0.14307141699828207,
+     "repeat=2/infer-save-reload": 0.0418112920015119,
+     "repeat=2/batch": 0.3112232909988961,
+     "repeat=2/batchgrad": 2.000647291999485,
+     "repeat=2/batchscale": 1.0506412910035579,
+     "repeat=2/ragged": 0.4424552499986021,
+     "repeat=2/stepfull": 0.44691570800205227,
+     "repeat=2/rlpair": 2.480041999995592
+    }
+   }
+  },
+  "samba/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "59edc5499524917a",
+    "59edc5499524917a"
+   ],
+   "parts": [
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    },
+    {
+     "loss": "e15866e366e466c9",
+     "logits": "150f40d4da19c07e",
+     "params": "cf5f6b5ef148b001"
+    }
+   ],
+   "infer": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c6e035a367052c95",
+    "c6e035a367052c95"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1c36768346e2b31c",
+    "1c36768346e2b31c"
+   ],
+   "batch": [
+    "bb2812badec02047",
+    "bb2812badec02047"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ad0368c40ec8bb2b",
+    "ad0368c40ec8bb2b"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "19dccc24eeb5f7ee",
+    "19dccc24eeb5f7ee"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "3906c9a02ef8b201",
+    "3906c9a02ef8b201"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "3ee55356bde7ab34",
+    "3ee55356bde7ab34"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "e9c89afd1eb7f273",
+    "e9c89afd1eb7f273"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 12.964737124995736,
+    "stages": {
+     "repeat=1/train": 0.14253695899969898,
+     "repeat=1/infer-save-reload": 0.03974679100065259,
+     "repeat=1/batch": 0.27922883299470413,
+     "repeat=1/batchgrad": 1.973408958001528,
+     "repeat=1/batchscale": 0.8818015830038348,
+     "repeat=1/ragged": 0.37609966700256336,
+     "repeat=1/stepfull": 0.38366270899859956,
+     "repeat=1/rlpair": 2.2804555000038818,
+     "repeat=2/train": 0.1357457499980228,
+     "repeat=2/infer-save-reload": 0.03684637499827659,
+     "repeat=2/batch": 0.2585455419975915,
+     "repeat=2/batchgrad": 1.893266416998813,
+     "repeat=2/batchscale": 0.894587082999351,
+     "repeat=2/ragged": 0.36265829100011615,
+     "repeat=2/stepfull": 0.388778166998236,
+     "repeat=2/rlpair": 2.6363930419975077
+    }
+   }
+  },
+  "samba/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "baf9314d6be7ee55",
+    "baf9314d6be7ee55"
+   ],
+   "parts": [
+    {
+     "loss": "b6d645150f3d1984",
+     "logits": "b890b4a92b8f0160",
+     "params": "220333c117962363"
+    },
+    {
+     "loss": "b6d645150f3d1984",
+     "logits": "b890b4a92b8f0160",
+     "params": "220333c117962363"
+    }
+   ],
+   "infer": [
+    "4081aae61a0dac2f",
+    "4081aae61a0dac2f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "659b0e317fe93396",
+    "659b0e317fe93396"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4081aae61a0dac2f",
+    "4081aae61a0dac2f"
+   ],
+   "batch": [
+    "419ca0e4218c4d21",
+    "419ca0e4218c4d21"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "e60b4741ed635b00",
+    "e60b4741ed635b00"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(ids, state) + step",
+    "trainer:forward(ids) stateless"
+   ],
+   "batchgrad": [
+    "d131797203952c79",
+    "d131797203952c79"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "loss_and_grads(num_items=T): n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "loss_and_grads(num_items=T): A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 1 of 1 claimed tensors moved",
+    "loss_and_grads(num_items=T): REPORTED (not claimed; optimizer contract clause 9.3 claims only the LM head and final-norm weights) moved at aligned splits: ['A2:embed.weight', 'A4:embed.weight']"
+   ],
+   "batchscale": [
+    "bfd802c96117dd3d",
+    "bfd802c96117dd3d"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "893bde510eed4b43",
+    "893bde510eed4b43"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "c04d3d6c47a934f2",
+    "c04d3d6c47a934f2"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 15.72406066700205,
+    "stages": {
+     "repeat=1/train": 0.16857249999884516,
+     "repeat=1/infer-save-reload": 0.04885887500131503,
+     "repeat=1/batch": 0.43770191699877614,
+     "repeat=1/batchgrad": 2.4166415830040933,
+     "repeat=1/batchscale": 1.6032822499983013,
+     "repeat=1/ragged": 0.6004279580010916,
+     "repeat=1/stepfull": 0.572999959003937,
+     "repeat=1/rlpair": 2.855245749997266,
+     "repeat=2/train": 0.13795962499716552,
+     "repeat=2/infer-save-reload": 0.040200374998676125,
+     "repeat=2/batch": 0.29142337500525173,
+     "repeat=2/batchgrad": 2.01744858299935,
+     "repeat=2/batchscale": 1.189541375002591,
+     "repeat=2/ragged": 0.44332754100469174,
+     "repeat=2/stepfull": 0.4413269159995252,
+     "repeat=2/rlpair": 2.450276000003214
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-pending-_r3l16_d/venv/lib/python3.12/site-packages/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.12.11",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "0bf75606de698fe4c8c963c5c5458e6724348d37dd8b19396f0f634c48116e3f",
+    "size": 2839600
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "dc875600e4cb2d3968b05ff70e9063492c5088270e975de27272058e6d4098f5",
+    "size": 725024
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "b0fe7a0a8fbc1f43ee0d4d01a9e1f7bd94d11a19b9aba246ac375d800869295a",
+    "size": 4045472
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "e754ee7fb97db5b46a7168b39ada503006a0959316cdfe04cc5f3def4ae2a541",
+    "size": 372432
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "682f38730919c2a66c85e2db0800e4d7ac8f0502c0c09bd59add139f6c804f51",
+    "size": 3406656
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "fdae51baef68a67e890cd52e738d3b6f74cdd0cb950e66207678a1897a47716d",
+    "size": 7191280
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "d0ae3bc1a1a58dbb3e39694c08f3c71919c3a01cb89c3fe02445627b523b61c6",
+    "size": 1678640
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "c27e132b328c39320142a898a98c1a953df0fca7448a140e2c0dff02d22d330f",
+    "size": 2055328
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "cce3f6823f629d9ace321c34a62944a2bb9f988ddc84e1f9d7ad2ea9b01b7de3",
+    "size": 1252064
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "9c1b7414b2ed57de2a793c743046f8cfb387dcef42f1850e85c496729e49fc44",
+    "size": 1628368
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "2061e05d8f282b74e8c7c9268828973826df32b66bc36e3bcf60ea5c9e4b6319",
+    "size": 1078464
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "44fcb5b4c75071ca77effc8fe430c0fe16d49c61af1fab76e9fd3dd1998eb096",
+    "size": 2856160
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "d8b0e1ea65dd53a4b7a6228ad6dcc9018fb98c6ff9a657fc12ee36af1e01741d",
+    "size": 3980208
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "a347cc7bf466f4fb929e5bc95dfbd33e2426ec7bf4b8f40beca9742386c5f05f",
+    "size": 2374016
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "4b321ab522d49dcd660f45dc11069241ba7f3f1ff30e9ddf8303e6ffcf3e789b",
+    "size": 362112
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "e176f58e6ea440e2d532326cec72ec2f9bf2e19b0e8f91e96954c58d2edbb3d2",
+    "size": 1220704
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "c05ac3260d577b6dde4217ea3dadad8aa0984a75c9a4a7a06fa1365a161df891",
+    "size": 1769488
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "28bc061fcf7c8d8f8cee5404634888c24c2fecf59e2f3b15038082dfc2515582",
+    "size": 1501616
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "194506aadd7031450f130b42b41d1a487252f9ec0950e4003db2e049e17c8417",
+    "size": 1857008
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "207770d57a86d079134f0843df8ac6552519c24eb67b20fec88d083982644a42",
+    "size": 1616976
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "2898992eea5aed2615f376439ebde90605adf399c70ac6489a6126eb3d5ae449",
+    "size": 3114256
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "283e1498968cb0d08c4e3a440f6eaeb7241bab9d7706be8894d2fcf7f8411aa1",
+    "size": 1442560
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "eade6f126046f704a4d7ded313bd4b55fb12a91d0bf4c0c542de2ee7005dccd8",
+    "size": 612480
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "061e63733453b28fd2bb3526f00476a11ccb3f42a7e3dc3d4c76015dc15cb159",
+  "options": {
+   "require_backend": "metal",
+   "require_cpu": false,
+   "fail_on_refused": true,
+   "lanes": "samba",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "apple-m4",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": true,
+   "batch_scale": true,
+   "ragged": true,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "75c4432eb526efe5db5b46829919aa060e887b56bbefecfafe6610258bd47862",
+  "provenance": {
+   "commit": "aff968968f3ffc45844e36f3fd6260391eb829e5",
+   "mode": "identical",
+   "vendor": "apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit",
+   "python": "3.12.11",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

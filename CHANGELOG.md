@@ -3,6 +3,17 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (main after 0.8.7)
+
+- `GPT2Tokenizer` is renamed `BpeTokenizer` (2026-09-18). It ships no GPT-2
+  vocabulary and `TrainedBpeVocabulary.tokenizer()` returns one over mojolearn's own
+  trained table, so the old name described a model it does not carry.
+  `mojolearn.GPT2Tokenizer` and `mojolearn.tokenizer.GPT2Tokenizer` remain importable as a
+  deprecated alias of the SAME class, with a DeprecationWarning. The host binding's
+  entries moved from `gpt2_*` to `bpe_*`; the Python door still reads a binding built
+  before the rename. No id moved: the `tokenizer` and `bpe-trainer` identity lanes hash
+  the same before and after (docs/lanes/LANE_STATUS_tokenized-corpus.md).
+
 ## 0.8.7 (unreleased 2026-09-17)
 
 **0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch

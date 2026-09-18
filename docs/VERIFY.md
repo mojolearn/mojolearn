@@ -24,6 +24,16 @@ lane, so newer features cannot disappear behind the historical count. Entries
 are not distinct Python classes and mappings are not execution certificates.
 For every lane the inventory shows CPU availability, withheld-reference reasons,
 batch applicability and reference-fixture counts. It executes no algorithms.
+The JSON also includes `lanes.<name>.reference_support`: for each property,
+the number of fixtures with a numerical reference and matching CPU, Apple,
+NVIDIA and AMD records. Missing/conflicted, stale and inapplicable fixtures
+are counted separately. These counts describe the bundled reference table;
+they do not certify the installed wheel or promote a pending lane.
+
+The appendix is a historical list, not the total number of today's public
+algorithms. `additional_lanes` names registered checks outside that list.
+For the source/API/wheel comparison and the remaining qualification work, see
+[the next-wheel coverage audit](NEXT_WHEEL_COVERAGE.md).
 
 The candidate's default CPU selection now includes spectral clustering,
 Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
@@ -142,6 +152,61 @@ The command prints a table per family and a verdict. The verdict line leads
 with how much of the run was actually checked, as in `verified 44 of 332 cell
 parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
 cannot be misread as a run that passed.
+
+## Choose the verification cost and scope
+
+Release certification builds native bindings and runs clean and injected-fault
+sweeps on several architectures. It is a maintainer workflow, not a requirement
+for each user installation. Choose a narrower installed-package command:
+
+```sh
+python -m mojolearn verify --coverage                    # inspect scope; no fits
+python -m mojolearn verify --inference                   # bundled saved models; no fits
+python -m mojolearn verify --training --lanes ols --fixtures base --repeats 2
+python -m mojolearn verify --training                    # all available fit-based routes
+python -m mojolearn verify --all --batch-checks --repeats 2 # comprehensive suite
+```
+
+`--inference` is an alias for `--models-only`. It covers the bundled models,
+not every possible inference API or input. `--training` excludes that separate
+bundled-model suite, but still checks applicable inference/reload/batch properties
+of the models it fits. These scopes are mutually exclusive. `--quick` selects
+one fit-based route per family; it is smaller, but it still performs training
+and is not guaranteed to finish in seconds on every CPU.
+
+Evidence applies to the tested artifact, implementation, inputs, properties and
+hardware. Unchanged compatible results can be retained; changing native code,
+bindings, numerical behavior or verification protocol requires the affected
+checks again. Small targeted checks during development catch bugs before an
+expensive final frozen-artifact certification.
+
+The installed CLI defaults to a one-thread setting for supported CPU host and
+math libraries. To request up to five threads for an inference check:
+
+```sh
+python -m mojolearn verify --inference --cpu-threads 5
+```
+
+The request is clamped to at most the detected available logical CPU count
+minus one (minimum one). Process affinity is respected where available. Thread
+settings are applied in a fresh interpreter before native imports; numerical
+evidence records the selected verifier setting. This setting is not five
+parallel algorithm fits and is not an OS CPU/RAM limit. Internally parallel
+algorithms can have their own workers; a thread setting cannot guarantee that
+a large model fits memory. Start with inference or a named training lane on
+machines with limited resources. Read-only coverage/comparison commands do not
+launch another numerical process for these settings.
+
+There is no corresponding "five GPU cores" setting. GPU kernels are scheduled
+across the selected device by its runtime. Workload size, memory, selected GPU
+devices and concurrent jobs are the useful controls. Ordinary users need not
+run multi-GPU or large-capacity stress tests to check their installation.
+
+Small boundary fixtures remain valuable: duplicate/tied values, odd row counts,
+values near numerical limits, and sizes around kernel or batch boundaries.
+These can expose incorrect reductions or indexing that a large easy input
+misses. The planned small training profile needs independently recorded hashes;
+it is not implemented merely by lowering the old fixture size.
 
 ## What the CPU training bindings are for
 

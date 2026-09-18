@@ -107,7 +107,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             The n/a reasons are transductive as for infer, function
             (metrics, resampling, cross-validation), no-batch-axis
             (the tokenizer in records before 2026-09-15, when
-            GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
+            BpeTokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
             no estimator). batch-dependent-by-contract was UMAP.transform's
             reason until lane/umap-batch-fix made the transform row
@@ -3544,7 +3544,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("tokenizer")
 def _(ml, X, yc, yr, Xh=None):
-    """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
+    """BpeTokenizer (python/mojolearn/tokenizer.py), host integers and
     tables through _mojolearn_tokenizer_host; no float arithmetic, so
     cross-vendor identity is by construction and what this measures is
     that the SAME binary bytes were built on every box. mojolearn ships no
@@ -3555,7 +3555,7 @@ def _(ml, X, yc, yr, Xh=None):
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
     held-out probe encodes Xh's first 4,096 bytes
     (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
-    tok = ml.tokenizer.GPT2Tokenizer._synthetic()
+    tok = ml.tokenizer.BpeTokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
@@ -3609,7 +3609,17 @@ def _(ml, X, yc, yr, Xh=None):
     vocabularies the same. The Mojo trainer carries the same arm as a build
     define, and `pixi run check-bpe-trainer-sabotage` is where THAT one is
     watched failing; this Python door's arm is watched failing in the
-    directory above."""
+    directory above.
+
+    THE DOOR NOW RUNS THE MOJO TRAINER (lane/bpe-builder-native,
+    2026-09-18): `BpeVocabularyTrainer` defaults to `bpe_train` in the
+    tokenizer host binding and falls back to the Python reference only when
+    the binding lacks it. Before (main, Python) vs after (Mojo): IDENTICAL on
+    all nine fixtures, `base` still 6ed8b49585df3d85. The binding built with
+    -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves every cell (`base` ->
+    f5172d25e6499662, the env arm's value) and the env arm now reaches the
+    Mojo trainer as `break_ties_high`
+    (bench/results/identity_break/2026-09-18_bpe-builder-native/)."""
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
     ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
@@ -3618,6 +3628,110 @@ def _(ml, X, yc, yr, Xh=None):
                      n_tokens=_h(np.int64(v.n_tokens)),
                      n_merges=_h(np.int64(len(v.merges))),
                      n_ties_broken=_h(np.int64(v.n_ties_broken))))
+
+
+@lane("bpe-vocabulary")
+def _(ml, X, yc, yr, Xh=None):
+    """TrainedBpeVocabulary (python/mojolearn/tokenizer.py), which had ZERO
+    lanes while the trainer that returns it and the tokenizer it builds each
+    had one (lane/tokenized-corpus, 2026-09-18). What a user does with a
+    trained vocabulary is WRITE it and USE it, so that is what is hashed:
+    the two files as written to disk (`write_ranks`, `write_tokenizer_json`),
+    whether each is byte-equal to its `render_*` text, the vocabulary's
+    identity (`identity`, the sha256 a model carries), and the ids and bytes
+    of Xh's first 4,096 bytes through `tokenizer()` and through the WRITTEN
+    rank file loaded back, which must agree.
+
+    The vocabulary is re-made through the public constructor from the
+    trainer's tokens, merges and stats, so the object hashed is one the lane
+    built itself and not only one the trainer returned.
+
+    SABOTAGE, two arms, both must move it. MEASURED on the M4, one core,
+    `--repeats 2`, all nine fixtures DIVERGENT under each
+    (bench/results/identity_break/2026-09-18_tokenized-corpus/):
+    MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (the trainer's reversed tie-break) moves
+    `ranks`, `tokenizer_json`, `identity` and `ids` and leaves `decoded`,
+    `roundtrip` and `flags` (a different vocabulary still round trips); the
+    tokenizer host build with -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1 (ids
+    written in reverse) moves `ids`, `decoded` and `roundtrip` and leaves the
+    files and the identity alone."""
+    import tempfile
+    TV = ml.tokenizer.TrainedBpeVocabulary
+    raw = np.ascontiguousarray(X).tobytes()[:4096]
+    held = np.ascontiguousarray(Xh).tobytes()[:4096]
+    t = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
+    v = TV(list(t.tokens), list(t.merges), dict(t.stats))
+    with tempfile.TemporaryDirectory(prefix="ib-bpe-vocabulary-") as d:
+        rp, jp = os.path.join(d, "v.ranks.tsv"), os.path.join(d, "v.tokenizer.json")
+        v.write_ranks(rp)
+        v.write_tokenizer_json(jp)
+        with open(rp, "rb") as fh:
+            ranks = fh.read()
+        with open(jp, "rb") as fh:
+            tj = fh.read()
+        from_file = ml.tokenizer.BpeTokenizer.from_ranks_file(rp)
+        ids_file = np.asarray(from_file.encode_bytes(held), dtype=np.int32)
+    tok = v.tokenizer()
+    ids = np.asarray(tok.encode_bytes(held), dtype=np.int32)
+    back = tok.decode_bytes(ids.tolist())
+    ident = json.dumps(v.identity, sort_keys=True).encode("ascii")
+    flags = np.asarray([ranks == v.render_ranks().encode("ascii"), tj == v.render_tokenizer_json().encode("ascii"),
+                        tok.identity == v.identity, from_file.identity == v.identity,
+                        ids.tobytes() == ids_file.tobytes()], dtype=np.int64)
+    return _fit(dict(ranks=_h(np.frombuffer(ranks, dtype=np.uint8)), tokenizer_json=_h(np.frombuffer(tj, dtype=np.uint8)),
+                     identity=_h(np.frombuffer(ident, dtype=np.uint8)), ids=_h(ids),
+                     decoded=_h(np.frombuffer(back, dtype=np.uint8)),
+                     roundtrip=_h(np.int64(1 if back == held else 0)), flags=_h(flags)))
+
+
+@lane("tokenized-corpus")
+def _(ml, X, yc, yr, Xh=None):
+    """mojolearn.lm_corpus (lane/tokenized-corpus, 2026-09-18): a corpus
+    tokenized ONCE with a vocabulary trained on it, cached, and read back as
+    training batches. The corpus is X's first 16,384 bytes as a file with no
+    manifest (one train range); `prepare` trains a 300-rank vocabulary on it
+    with `BpeVocabularyTrainer`, cuts 4,096-byte documents at the last 0x0A,
+    and writes the pinned id array. Hashed: the id array's bytes, the
+    vocabulary identity, the ids of TokenBatches(2, 64) at steps 0, 1 and 7,
+    the data schedule the trainer would carry, and flags: a second `prepare`
+    reads the SAME cache entry, `tokenizer_for` accepts the model's own
+    vocabulary and refuses the synthetic one by name, and the user-vocabulary
+    arm (the trained rank file passed back as `vocab=`) lands on the same
+    ids.
+
+    SABOTAGE, MEASURED like bpe-vocabulary's (same directory), all nine
+    fixtures DIVERGENT under each: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves
+    `tokens`, `identity`, `batches` and `schedule`; the tokenizer host
+    sabotage build moves `tokens`, `batches` and `schedule` (the schedule
+    carries the id array's sha256) and leaves `identity`."""
+    import tempfile
+    LC = ml.lm_corpus
+    raw = np.ascontiguousarray(X).tobytes()[:16384]
+    with tempfile.TemporaryDirectory(prefix="ib-tokenized-corpus-") as d:
+        path = os.path.join(d, "corpus.txt")
+        with open(path, "wb") as fh:
+            fh.write(raw)
+        cache = os.path.join(d, "cache")
+        c = LC.prepare(path, cache_dir=cache, vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+        again = LC.prepare(path, cache_dir=cache, vocab_size=300, vocab_sample_bytes=16384, document_bytes=4096)
+        user = LC.prepare(path, cache_dir=cache, vocab=str(c.vocabulary_path), document_bytes=4096)
+        with open(os.path.join(c.tokens_dir, "tokens.i32"), "rb") as fh:
+            tokens = np.frombuffer(fh.read(), dtype="<i4")
+        b = c.batches(2, 64)
+        steps = np.concatenate([b.ids(k) for k in (0, 1, 7)])
+        schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
+        ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
+        try:
+            LC.require_vocabulary(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            refused = 0
+        except ValueError as exc:
+            refused = int("vocabulary mismatch" in str(exc))
+        flags = np.asarray([isinstance(c, LC.TokenizedCorpus), again.tokens_dir == c.tokens_dir,
+                            user.manifest["sha256"] == c.manifest["sha256"],
+                            ok.identity == c.vocabulary, refused, isinstance(b, LC.TokenBatches)], dtype=np.int64)
+        ident = json.dumps(c.vocabulary, sort_keys=True).encode("ascii")
+    return _fit(dict(tokens=_h(tokens), identity=_h(np.frombuffer(ident, dtype=np.uint8)), batches=_h(steps),
+                     schedule=_h(np.frombuffer(schedule, dtype=np.uint8)), flags=_h(flags)))
 
 
 @lane("cross-val")
@@ -3777,6 +3891,54 @@ def _(ml, X, yc, yr, Xh=None):
                      eigenvalues=_h(m.eigenvalues_), eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
                      transform=_h(m.transform(X[256:320, :4]))),
                 m, lambda e: (e.transform(Xh[:64, :4]),))
+
+
+def _kernel_variant(ml, X, yr, Xh, family, kernel):
+    # Fixed power-of-two input scaling keeps the polynomial matrix bounded
+    # while preserving fixture ties and denormal/FTZ distinctions.
+    x = np.ascontiguousarray(X[:48, :4] * np.float32(0.125))
+    test = np.ascontiguousarray(X[48:64, :4] * np.float32(0.125))
+    held = np.ascontiguousarray(Xh[:64, :4] * np.float32(0.125))
+    kw = dict(kernel=kernel, gamma=0.5, coef0=0.25, degree=3)
+    if family == "kernel-ridge":
+        m = ml.KernelRidge(alpha=64.0, **kw).fit(x, yr[:48])
+        return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)),
+                         predict=_h(m.predict(test))), m, lambda e: (e.predict(held),))
+    m = ml.Nystroem(n_components=8, random_state=7, **kw).fit(x)
+    return _fit(dict(components=_h(m.components_), indices=_h(m.component_indices_),
+                     normalization=_h(m.normalization_), eigenvalues=_h(m.eigenvalues_),
+                     eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
+                     transform=_h(m.transform(test))), m, lambda e: (e.transform(held),))
+
+
+@lane("kernel-ridge-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "poly")
+
+
+@lane("kernel-ridge-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "sigmoid")
+
+
+@lane("kernel-ridge-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "laplacian")
+
+
+@lane("nystroem-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "poly")
+
+
+@lane("nystroem-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "sigmoid")
+
+
+@lane("nystroem-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "laplacian")
 
 
 @lane("rbf-sampler")
@@ -4530,15 +4692,21 @@ def _(ml, X, yc, yr, Xh=None):
         d, i = rs.kneighbors(q)
         pr, pp = rs.predict(q), rs.predict_proba(q)
     d0, i0 = m.kneighbors(q)
-    _same_bytes("ReferenceShardedNeighbors distances", d, "plain distances", d0)
-    _same_bytes("ReferenceShardedNeighbors indices", i, "plain indices", i0)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
-    _same_bytes("ReferenceShardedNeighbors predict_proba", pp, "plain predict_proba", m.predict_proba(q))
+    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
+    # Retain measured bytes when the independent comparison detects a fault;
+    # a generic refusal would discard the evidence and cannot qualify a control.
+    for name, actual, expected in (("distances", d, d0), ("indices", i, i0),
+                                   ("predict", pr, m.predict(q)),
+                                   ("predict_proba", pp, m.predict_proba(q))):
+        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, actual,
+                                   "plain " + name, expected)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return rs.predict(Xh[:64]), rs.predict_proba(Xh[:64])
-    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-reference-knn-reg")
@@ -4549,12 +4717,15 @@ def _(ml, X, yc, yr, Xh=None):
     q = np.ascontiguousarray(X[4096:4160])
     with _rsn(m) as rs:
         pr = rs.predict(q)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    parts = dict(predict=_h(pr))
+    mismatch = _mismatch_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return (rs.predict(Xh[:64]),)
-    return _fit(dict(predict=_h(pr)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-graph-agglomerative")
@@ -5705,6 +5876,14 @@ def _batch_par_graph_umap(ml, e, Xh):
 
 _batch_decl(_batch_umap, "umap")
 _batch_decl(_batch_par_graph_umap, "par-graph-umap")
+def _kernel_variant_rows(X):
+    return np.ascontiguousarray(X[:64, :4] * np.float32(0.125))
+
+
+_batch_decl(_rows_calls("predict", prep=_kernel_variant_rows),
+            "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian")
+_batch_decl(_rows_calls("transform", prep=_kernel_variant_rows),
+            "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
@@ -5989,7 +6168,7 @@ _batch_decl(_batch_silhouette_chunks, "metrics-classification")
 _batch_decl("n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
             "metrics-homogeneity-completeness")
 _batch_decl("n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
-            "bpe-trainer")
+            "bpe-trainer", "bpe-vocabulary", "tokenized-corpus")
 _batch_decl(_batch_cross_val, "cross-val")
 # The fold PARTITION is metadata, not an inference call: the lane fits nothing
 # and asks nothing for a row's answer, so there is no batch axis to vary
@@ -6001,7 +6180,7 @@ _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integr
             "folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; "
             "no per-sample output exists to compare an i_first range against)", "monte-carlo")
 def _batch_tokenizer(ml, e, Xh):
-    """GPT2Tokenizer.encode_batch and decode_bytes_batch
+    """BpeTokenizer.encode_batch and decode_bytes_batch
     (lane/inference-tokenizer-neural, 2026-09-15). A row of the held-out
     slice is one document: its 8 * d float64 bytes, so a batch is 64
     documents of binary text with every byte value in reach. Each

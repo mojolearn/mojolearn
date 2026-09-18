@@ -1,0 +1,68 @@
+# vendor=cpu-apple-m4 commit=49b747897e160a41f01c73e2f3a77122ee8ce00d (git rev-parse HEAD) host.cpu_model='Apple M4' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-18 11:12:36  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | ties             |
+|------------------------|------------------|
+# START byte-lm-host-infer/ties repeat=1/train
+# DONE byte-lm-host-infer/ties repeat=1/train 0.061s
+# START byte-lm-host-infer/ties repeat=1/infer-save-reload
+# DONE byte-lm-host-infer/ties repeat=1/infer-save-reload 0.019s
+# START byte-lm-host-infer/ties repeat=1/batch
+# DONE byte-lm-host-infer/ties repeat=1/batch 0.773s
+# START byte-lm-host-infer/ties repeat=1/rlpair
+# DONE byte-lm-host-infer/ties repeat=1/rlpair 0.530s
+# START byte-lm-host-infer/ties repeat=2/train
+# DONE byte-lm-host-infer/ties repeat=2/train 0.060s
+# START byte-lm-host-infer/ties repeat=2/infer-save-reload
+# DONE byte-lm-host-infer/ties repeat=2/infer-save-reload 0.019s
+# START byte-lm-host-infer/ties repeat=2/batch
+# DONE byte-lm-host-infer/ties repeat=2/batch 0.808s
+# START byte-lm-host-infer/ties repeat=2/rlpair
+# DONE byte-lm-host-infer/ties repeat=2/rlpair 0.549s
+# CELL byte-lm-host-infer/ties STABLE 2.821s
+| byte-lm-host-infer     | 5eb6c37f486dcb83 |
+| byte-lm-host-infer infer | 8ac5fad2d951d6cb |
+| byte-lm-host-infer batch | 4247444b5e741c45 |
+| byte-lm-host-infer rlpair | 839a8419ba0bb3f8 |
+# START par-reference-knn/ties repeat=1/train
+# DONE par-reference-knn/ties repeat=1/train 0.313s
+# START par-reference-knn/ties repeat=1/infer-save-reload
+# DONE par-reference-knn/ties repeat=1/infer-save-reload 0.369s
+# START par-reference-knn/ties repeat=1/batch
+# DONE par-reference-knn/ties repeat=1/batch 0.525s
+# START par-reference-knn/ties repeat=2/train
+# DONE par-reference-knn/ties repeat=2/train 0.363s
+# START par-reference-knn/ties repeat=2/infer-save-reload
+# DONE par-reference-knn/ties repeat=2/infer-save-reload 0.409s
+# START par-reference-knn/ties repeat=2/batch
+# DONE par-reference-knn/ties repeat=2/batch 0.572s
+# CELL par-reference-knn/ties STABLE 2.551s
+| par-reference-knn      | 853a07551e849373 |
+| par-reference-knn infer | d7292e53ec625170 |
+| par-reference-knn model | 02aa0eb5e36cffee |
+| par-reference-knn batch | 7902b96b1a57fd33 |
+# START par-reference-knn-reg/ties repeat=1/train
+# DONE par-reference-knn-reg/ties repeat=1/train 0.161s
+# START par-reference-knn-reg/ties repeat=1/infer-save-reload
+# DONE par-reference-knn-reg/ties repeat=1/infer-save-reload 0.315s
+# START par-reference-knn-reg/ties repeat=1/batch
+# DONE par-reference-knn-reg/ties repeat=1/batch 0.279s
+# START par-reference-knn-reg/ties repeat=2/train
+# DONE par-reference-knn-reg/ties repeat=2/train 0.187s
+# START par-reference-knn-reg/ties repeat=2/infer-save-reload
+# DONE par-reference-knn-reg/ties repeat=2/infer-save-reload 0.306s
+# START par-reference-knn-reg/ties repeat=2/batch
+# DONE par-reference-knn-reg/ties repeat=2/batch 0.254s
+# CELL par-reference-knn-reg/ties STABLE 1.501s
+| par-reference-knn-reg  | 556283a80ad1e387 |
+| par-reference-knn-reg infer | fcbc1a112c60d1d0 |
+| par-reference-knn-reg model | 059724706575c43d |
+| par-reference-knn-reg batch | 82302d325c95041c |
+
+cells=3 stable=3 moved=0 refused=0
+infer: stable=3
+model: stable=2 n/a=1
+batch: stable=3
+rlpair: stable=1
+n/a: byte-lm-host-infer model n/a:no-save
+wrote /Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/cpu-proof-followup/clean.json

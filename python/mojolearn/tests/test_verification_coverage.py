@@ -7,6 +7,26 @@ from mojolearn import _verification_coverage as coverage
 from mojolearn._verification_catalog import ENTRIES
 
 
+def test_reference_support_does_not_count_old_conflicted_or_na_as_numeric_evidence():
+    records = [dict(dir='records', file=c+'.json', vendor=c, commit='a'*40)
+               for c in ('cpu', 'amd')]
+    table = dict(records=records, cells={
+        'x/base': dict(train=dict(ref='a'*16, cols={'cpu': 0, 'amd': [1, 'b'*16]})),
+        'x/ties': dict(train=dict(ref='a'*16, conflict=True, cols={'cpu': 0})),
+        'x/odd': dict(train=dict(ref='n/a:no-operation', cols={'cpu': 0})),
+    })
+    fixtures = ['base', 'ties', 'odd', 'missing']
+    row = coverage.reference_support(table, 'x', fixtures, ['train'])['train']
+    assert row['numerical_fixtures'] == 1
+    assert row['not_applicable_fixtures'] == 1
+    assert row['missing_or_conflicted_fixtures'] == 2
+    assert row['agreeing_device_classes'] == dict(cpu=1, apple=0, nvidia=0, amd=0)
+    stale = coverage.reference_support(table, 'x', fixtures, ['train'], stale=True)['train']
+    assert stale['stale_fixtures'] == 4
+    assert stale['numerical_fixtures'] == 0
+    assert not any(stale['agreeing_device_classes'].values())
+
+
 def test_all_246_appendix_entries_are_preserved_and_resolve():
     h = va.load_harness()
     assert len(ENTRIES) == len({e['id'] for e in ENTRIES}) == 246
@@ -15,6 +35,10 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
         assert entry['lanes'] or entry.get('alternative_gate')
         assert set(entry['lanes']) <= set(h.LANES), entry
     report = coverage.inventory(h, vr.load_table(), 'cpu')
+    stale = set(vr.stale_reference_lanes(vr.load_table(), h))
+    for name, row in report['lanes'].items():
+        if row['reason'] == 'stale reference':
+            assert name in stale
     mapped = {l for e in ENTRIES for l in e['lanes']}
     assert set(report['additional_lanes']) == set(h.LANES) - mapped
     assert report['execution'] == 'not run'

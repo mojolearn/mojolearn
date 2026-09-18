@@ -78,6 +78,7 @@ default-flip input under ENGINEERING_RULES 9 is the LM step on the two
 corpora (`tools/gemm_step_leg.sh`), never this harness.
 """
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -87,6 +88,7 @@ from gemm.checks.gemm_identical import (
     GEMM_ARM_SABOTAGE,
     GEMM_ARM_TRIAL,
     GEMM_BODY_KPACK_HG,
+    GEMM_REUSE_GROUP_WS,
     GEMM_GEOM_KFOLDV,
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
@@ -102,6 +104,7 @@ from gemm.checks.gemm_identical import (
     GEMM_KSPLIT_DEFAULT_S,
     GEMM_KSPLIT_S,
     TUNED_CLASS_FLUSH,
+    TUNED_STAGE_FTZ,
     choose_gemm_plan,
     gemm_plan_name,
     gemm_shipped_dispatch_name,
@@ -155,7 +158,7 @@ def _launch(
     geom: Int,
 ) raises:
     if candidate:
-        identical_gemm_step_geometry_into(ctx, dc, da, db, dw, m, n, k, op, geom, False)
+        identical_gemm_step_geometry_into(ctx, dc, da, db, dw, m, n, k, op, geom, is_defined["MOJOLEARN_GEMM_PRICE_SABOTAGE"]())
     else:
         # DEVIATION 2595: the reference is the SHIPPED dispatch (the ksplit
         # default where the column's row is above 0), never the old plan by
@@ -192,6 +195,7 @@ def _price_call(
     var sname = gemm_shipped_dispatch_name(m, n, k)
     var counts = gemm_step_operand_counts(m, n, k)
     var nws = identical_gemm_workspace_max_floats(m, n, k)
+    print("WORKSPACE call=" + cname + " floats=" + String(nws) + " reuse=" + String(GEMM_REUSE_GROUP_WS))
     var da = ctx.enqueue_create_buffer[DType.float32](counts[0])
     var db = ctx.enqueue_create_buffer[DType.float32](counts[1])
     var dc = ctx.enqueue_create_buffer[DType.float32](mn)
@@ -417,6 +421,9 @@ def main() raises:
         + " shipped=[" + gemm_step_geometry_name(GEMM_GEOM_SHIPPED) + "]"
     )
     print("CLASS_FLUSH enabled=" + String(TUNED_CLASS_FLUSH))
+    print("REUSE_GROUP_WS enabled=" + String(GEMM_REUSE_GROUP_WS))
+    print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))
+    print("GATHER_FULL enabled=" + String(is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]()))
     print("PLANLABEL arm=" + name + " label=" + gemm_step_arm_plan_label(arm))
     # Brief section 11: one CALLER shape's dispatch on this build under this
     # arm, host only (no DeviceContext), so a classical A/B leg records which

@@ -1,21 +1,49 @@
-# Byte-level BPE tokenizer (GPT-2 format)
+# Byte-level BPE tokenizer
 
-`encode` and `decode` for byte-level BPE in the GPT-2 format, in Mojo, over a
-vocabulary the caller supplies. mojolearn ships no vocabulary and tracks no
-tokenizer data file (2026-09-15).
+`encode` and `decode` for byte-level BPE, in Mojo, over a vocabulary the
+caller supplies or trains with `BpeVocabularyTrainer`. mojolearn ships no
+vocabulary and tracks no tokenizer data file (2026-09-15).
+
+The class is `BpeTokenizer` (the Mojo struct and the Python class alike). It
+was `GPT2Tokenizer` until 2026-09-18: it ships no GPT-2 vocabulary, and
+`TrainedBpeVocabulary.tokenizer()` returns one over OUR OWN trained table, so
+the old name described a model it does not carry. `mojolearn.GPT2Tokenizer`
+stays importable as a deprecated alias of the same class (it shipped in
+0.8.x). The binding's entries moved from `gpt2_*` to `bpe_*` in the same
+change; `python/mojolearn/tokenizer.py` still reads a binding built before
+the rename through its old names. The GPT-2 name stays only where it names a
+GPT-2 thing: the pre-tokenization pattern (`GPT2_PAT_STR`) and the
+`encoder.json` + `vocab.bpe` file format.
+
+## Two cut paths, one of them compiled
+
+Pre-tokenization (cutting text into the pieces BPE merges inside) runs on
+one of TWO paths, and they do not cover the same families:
+
+| path | cuts | merges |
+|---|---|---|
+| the Mojo binding (`impl/pretokenize.mojo`, through `BpeTokenizer`) | the GPT-2 pattern ONLY | compiled (`impl/bpe.mojo`) |
+| the Python path (`python/mojolearn/models/tokenizer.py`) | GPT-2, Llama 3 and Qwen 2 | the package's Python BPE, except that the GPT-2 pattern hands its pieces to the compiled binding |
+
+So the fast path covers one family. A Llama 3 or Qwen 2 vocabulary loaded
+through `mojolearn.models` tokenizes in Python. Closing that gap is a new
+hand-rolled cut function beside `pretoken_end` per pattern, with its own
+cases; no lane has it yet. `BpeVocabularyTrainer` and `train/bpe_train.mojo`
+cut with the GPT-2 pattern too, so a vocabulary WE train is always a
+compiled-path vocabulary.
 
 ```mojo
-from tokenizer.encoding import load_gpt2_tokenizer_from
+from tokenizer.encoding import load_bpe_tokenizer_from
 
-var tok = load_gpt2_tokenizer_from("ranks.tsv")   # rank<TAB>hex lines
+var tok = load_bpe_tokenizer_from("ranks.tsv")   # rank<TAB>hex lines
 var ids = tok.encode("hello world", False)
 var back = tok.decode(ids)
 ```
 
-From Python, `mojolearn.GPT2Tokenizer.from_files(encoder_json, vocab_bpe)`
+From Python, `mojolearn.BpeTokenizer.from_files(encoder_json, vocab_bpe)`
 loads the two files of the GPT-2 format, which users download themselves;
 `from_ranks_file(path)` and `from_token_bytes(tokens)` load a rank table.
-`GPT2Tokenizer()` with no vocabulary refuses by name.
+`BpeTokenizer()` with no vocabulary refuses by name.
 
 ## Verify
 
@@ -46,7 +74,7 @@ the one stated.
 
 | file | what it holds |
 | --- | --- |
-| `encoding.mojo` | the public surface: `load_gpt2_tokenizer_from`, `encode`/`encode_bytes`, `decode`/`decode_bytes`, `token_spelling`, and the `<|endoftext|>` rule |
+| `encoding.mojo` | the public surface: `load_bpe_tokenizer_from`, `encode`/`encode_bytes`, `decode`/`decode_bytes`, `token_spelling`, and the `<|endoftext|>` rule |
 | `impl/byte_unicode.mojo` | the format's byte-to-unicode bijection, built from the recipe: 188 printable Latin-1 fixed points, the other 68 bytes at U+0100..U+0143 |
 | `impl/unicode_class.mojo` | `\p{L}`, `\p{N}` and `\s` as binary searches over range tables, the pinned Unicode version and table sha256, plus the UTF-8 decoder |
 | `impl/pretokenize.mojo` | the pattern, hand-rolled. Mojo has no regex engine |
@@ -144,7 +172,7 @@ A gate that only compared ids could call such a sabotage correct.
 
 ## The Python door (2026-09-14)
 
-`mojolearn.GPT2Tokenizer` (`python/mojolearn/tokenizer.py`) reaches
+`mojolearn.BpeTokenizer` (`python/mojolearn/tokenizer.py`) reaches
 `encoding.mojo` through the host binding
 `bindings/_mojolearn_tokenizer_host.mojo`, built from source with
 `bindings/build_tokenizer_host.sh` (a shim over
@@ -156,8 +184,8 @@ refusal by name. A build with `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` (ids
 written in reverse) must fail it. The lane brief is
 `docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md`.
 
-`GPT2Tokenizer.encode_batch(documents, allow_endoftext=False)` (2026-09-15)
-passes every document to `gpt2_encode_batch` in ONE call; the binding
+`BpeTokenizer.encode_batch(documents, allow_endoftext=False)` (2026-09-15)
+passes every document to `bpe_encode_batch` in ONE call; the binding
 encodes each document alone with the same `encode_bytes` call, so each
 document's ids equal `encode` on it. `decode_batch` and `decode_bytes_batch`
 are a loop over `decode_bytes`. `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1`

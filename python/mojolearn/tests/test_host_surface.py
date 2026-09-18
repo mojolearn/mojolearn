@@ -622,13 +622,9 @@ def test_command_line_prints_the_exposure_surface(capsys):
     assert host_surface.main(["--wheel-notes"]) == 0
     assert "resample:" in capsys.readouterr().out
     assert host_surface.main(["--saved-model-inference-owed"]) == 0
-    # lane/saved-model-reference-gaps (2026-09-16) recorded spectral, dbscan
-    # and agglomerative; lane/classical-host-recordings (2026-09-16) recorded
-    # the six k-means lanes, and the list is empty. The flag must still EXIT 0
-    # and print nothing rather than fail, so an empty gap reads as an empty
-    # gap and not as a broken command. The exit code above is the assertion;
-    # this one is that it printed no lane.
-    assert capsys.readouterr().out.strip() == ""
+    expected = "\n".join(f"{lane}: {reason}" for lane, reason in
+                         host_surface.saved_model_inference_owed().items())
+    assert capsys.readouterr().out.strip() == expected
 
 
 def _reference_classes(table, lane):

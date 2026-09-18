@@ -62,14 +62,27 @@ def sha(data):
 
 
 def device_peak_mb(index=0):
-    """Device-wide used memory from nvidia-smi, in MB, or None."""
+    """Device-wide used memory from nvidia-smi (or rocm-smi), in MB, or None."""
     if not shutil.which('nvidia-smi'):
-        return None
+        return rocm_used_mb(index)
     try:
         out = subprocess.run(['nvidia-smi', '-i', str(index), '--query-gpu=memory.used',
                               '--format=csv,noheader,nounits'],
                              capture_output=True, text=True, timeout=20).stdout
         return int(out.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
+def rocm_used_mb(index=0):
+    """AMD device-wide used VRAM from rocm-smi, in MiB, or None."""
+    if not shutil.which('rocm-smi'):
+        return None
+    try:
+        out = subprocess.run(['rocm-smi', '-d', str(index), '--showmeminfo', 'vram', '--json'],
+                             capture_output=True, text=True, timeout=20).stdout
+        card = next(iter(json.loads(out).values()))
+        return int(card['VRAM Total Used Memory (B)']) // (1024 * 1024)
     except Exception:
         return None
 
@@ -133,6 +146,13 @@ def aliasing_witness(trainer):
     from mojolearn import _backend
     binding = _backend.binding('_mojolearn_byte_lm', 'identical')
     entry = getattr(binding, 'byte_lm_ce_aliased', None)
+    return None if entry is None else bool(entry())
+
+
+def gemm_stage_witness(entry_name='byte_lm_gemm_stage_ftz'):
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, entry_name, None)
     return None if entry is None else bool(entry())
 
 
@@ -256,6 +276,8 @@ def main():
                   corpus=(corpus.describe() if corpus is not None else None),
                   ids='pinned corpus' if corpus is not None else 'synthetic uniform token ids',
                   ce_aliased=aliasing_witness(trainer),
+                  gemm_stage_ftz=gemm_stage_witness(),
+                  gemm_reuse_group_ws=gemm_stage_witness('byte_lm_gemm_reuse_group_ws'),
                   attn_sticky_fallback=sticky_witness(),
                   attn_kv_corner_guard=kv_guard_witness(),
                   attn_bwd_corner_refuses=bwd_corner_witness(),

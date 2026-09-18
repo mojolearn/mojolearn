@@ -1,22 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""A byte-level BPE tokenizer in the GPT-2 format, over a vocabulary the
-caller supplies.
+"""A byte-level BPE tokenizer over a vocabulary the caller supplies or
+trains with `BpeVocabularyTrainer`.
 
-MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). `GPT2Tokenizer` is the GPT-2
-tokenization ALGORITHM: the GPT-2 pre-tokenizer pattern, byte-level BPE by
-merge rank, and `<|endoftext|>` as the id after the last rank. The class name
-names that format. The vocabulary is yours to load:
+MOJOLEARN SHIPS NO VOCABULARY (2026-09-15). `BpeTokenizer` is byte-level BPE
+by merge rank, cut into pre-tokens by the GPT-2 pre-tokenization pattern (the
+only pattern the compiled binding cuts; `mojolearn.models.tokenizer` cuts
+Llama 3 and Qwen 2 in Python, see `tokenizer/README.md`), with
+`<|endoftext|>` as the id after the last rank. The vocabulary is yours:
 
-    tok = GPT2Tokenizer.from_files("encoder.json", "vocab.bpe")
-    tok = GPT2Tokenizer.from_ranks_file("ranks.tsv")      # rank<TAB>hex lines
-    tok = GPT2Tokenizer.from_token_bytes(list_of_bytes)   # rank = list index
+    tok = BpeTokenizer.from_files("encoder.json", "vocab.bpe")
+    tok = BpeTokenizer.from_ranks_file("ranks.tsv")      # rank<TAB>hex lines
+    tok = BpeTokenizer.from_token_bytes(list_of_bytes)   # rank = list index
+    tok = BpeVocabularyTrainer(vocab_size=32000).train(docs).tokenizer()
+
+THE NAME (2026-09-18, lane/tokenized-corpus). This class was `GPT2Tokenizer`
+until 0.8.7. It ships no GPT-2 vocabulary and `TrainedBpeVocabulary.
+tokenizer()` returns one over OUR OWN trained table, so the old name described
+a model it does not carry. `GPT2Tokenizer` stays importable as a deprecated
+alias of this class (same object, a DeprecationWarning on access). The GPT-2
+name is kept where it names a GPT-2 thing: the pre-tokenization pattern and
+the `encoder.json` + `vocab.bpe` file format `from_files` reads.
 
 OpenAI publishes the GPT-2 `encoder.json` and `vocab.bpe` with its GPT-2
 release, for example under
 https://openaipublic.blob.core.windows.net/gpt-2/encodings/main/ ; download
 them yourself and pass their paths. With those two files the ids are the
-GPT-2 ids. `GPT2Tokenizer()` with no vocabulary is refused by name.
+GPT-2 ids. `BpeTokenizer()` with no vocabulary is refused by name.
 
 The arithmetic is `tokenizer/encoding.mojo` (integers and tables only, no
 float, no device kernel), reached through the host binding
@@ -43,19 +53,70 @@ from ._buffer import addr, addr_ro
 
 _EXTENSION = "_mojolearn_tokenizer_host"
 
-__all__ = ["GPT2Tokenizer", "BpeVocabularyTrainer", "TrainedBpeVocabulary"]
+__all__ = ["BpeTokenizer", "BpeVocabularyTrainer", "TrainedBpeVocabulary"]
 
 _NO_VOCABULARY = (
-    "mojolearn: GPT2Tokenizer needs a vocabulary, and mojolearn ships none. "
-    "Load one you obtained yourself: GPT2Tokenizer.from_files(encoder_json, vocab_bpe) "
+    "mojolearn: BpeTokenizer needs a vocabulary, and mojolearn ships none. "
+    "Load one you obtained yourself: BpeTokenizer.from_files(encoder_json, vocab_bpe) "
     "with the encoder.json and vocab.bpe that OpenAI publishes with its GPT-2 release, "
-    "GPT2Tokenizer.from_ranks_file(path) with a rank<TAB>hex file, or "
-    "GPT2Tokenizer.from_token_bytes(tokens)"
+    "BpeTokenizer.from_ranks_file(path) with a rank<TAB>hex file, or "
+    "BpeTokenizer.from_token_bytes(tokens)"
 )
 
 
+#: The binding's entries were `gpt2_*` until 2026-09-18 and are `bpe_*`
+#: since. A binding built before the rename (an older host directory under
+#: MOJOLEARN_HOST_DIR) is read through its old names so it keeps loading;
+#: the ids are the same arithmetic under either name.
+_ABI = ("load", "n_vocab", "max_token_bytes", "encode", "encode_batch", "decode")
+
+
+class _Entries:
+    """The binding module with its tokenizer entries under their `bpe_*`
+    names; every other attribute is the module's own."""
+
+    def __init__(self, module):
+        self._module = module
+        for name in _ABI:
+            f = getattr(module, "bpe_" + name, None) or getattr(module, "gpt2_" + name, None)
+            if f is None:
+                raise ImportError(f"mojolearn: the tokenizer binding exports neither bpe_{name} nor gpt2_{name}")
+            setattr(self, "bpe_" + name, f)
+
+    def __getattr__(self, name):
+        return getattr(self._module, name)
+
+
+VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
+
+
+def _identity_from_tokens_text(text, n_ranks):
+    import hashlib
+    return dict(schema=VOCABULARY_SCHEMA, sha256=hashlib.sha256(text.encode("ascii")).hexdigest(),
+                n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
+
+
+def _identity_of_ranks_file(path):
+    """`_identity_from_tokens_text` over the canonical rendering of a rank
+    file. The binding is what refuses a malformed file; this reads only what
+    it needs to canonicalize and leaves a line it cannot read to the loader."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    lines = raw.decode("ascii", errors="replace").splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    out = []
+    for k, line in enumerate(lines):
+        _rank, _, hx = line.strip().partition("\t")
+        try:
+            out.append(f"{k}\t{bytes.fromhex(hx).hex()}\n")
+        except ValueError:
+            out.append(f"{k}\t{hx}\n")
+    return _identity_from_tokens_text("".join(out), len(lines))
+
+
 def _binding():
-    return _backend.load_host_module(_EXTENSION)
+    return _Entries(_backend.load_host_module(_EXTENSION))
 
 
 def _byte_to_char():
@@ -74,7 +135,7 @@ def _byte_to_char():
     return out
 
 
-class GPT2Tokenizer:
+class BpeTokenizer:
     """`encode` and `decode` for byte-level BPE in the GPT-2 format.
 
     Ids are in [0, n_vocab): the vocabulary's ranks, then `<|endoftext|>` at
@@ -98,12 +159,13 @@ class GPT2Tokenizer:
             raise ValueError(_NO_VOCABULARY)
         path = os.path.abspath(os.fspath(ranks_file))
         if not os.path.isfile(path):
-            raise FileNotFoundError(f"mojolearn: GPT2Tokenizer rank file {path} does not exist")
+            raise FileNotFoundError(f"mojolearn: BpeTokenizer rank file {path} does not exist")
         self._source = path
+        self._identity = _identity_of_ranks_file(path)
         self._m = _binding()
-        self._handle = self._m.gpt2_load(path)
-        self._n_vocab = int(self._m.gpt2_n_vocab(self._handle))
-        self._max_token_bytes = int(self._m.gpt2_max_token_bytes(self._handle))
+        self._handle = self._m.bpe_load(path)
+        self._n_vocab = int(self._m.bpe_n_vocab(self._handle))
+        self._max_token_bytes = int(self._m.bpe_max_token_bytes(self._handle))
 
     # ------------------------------------------------------------ loading
 
@@ -232,6 +294,18 @@ class GPT2Tokenizer:
     def vocabulary_source(self):
         return self._source
 
+    @property
+    def identity(self):
+        """What names this vocabulary, whatever file it came from:
+        `dict(schema, sha256, n_ranks, n_vocab, endoftext_id)`, `sha256` being
+        over the CANONICAL rank file (`rank<TAB>lowercase hex` per line, the
+        text `TrainedBpeVocabulary.render_ranks` writes). The same table read
+        from a rank file, from `encoder.json` + `vocab.bpe` or from a trained
+        vocabulary has the same identity. A model trained on ids carries this
+        (`mojolearn.lm_corpus`), so its ids are never decoded with another
+        table."""
+        return dict(self._identity)
+
     # ------------------------------------------------------------ encode
 
     @staticmethod
@@ -262,10 +336,10 @@ class GPT2Tokenizer:
         if n == 0:
             return []
         out = array.array("i", bytes(4 * n))
-        count = int(self._m.gpt2_encode(
+        count = int(self._m.bpe_encode(
             self._handle, addr_ro(raw, name="text"), n, addr(out, name="ids"), n, allow))
         if not 0 <= count <= n:
-            raise RuntimeError(f"mojolearn: gpt2_encode returned {count} ids for {n} bytes")
+            raise RuntimeError(f"mojolearn: bpe_encode returned {count} ids for {n} bytes")
         return out[:count].tolist()
 
     def encode(self, text, allow_endoftext=False):
@@ -278,7 +352,7 @@ class GPT2Tokenizer:
         Each document is a str (UTF-8 encoded first) or bytes-like and is
         encoded ALONE: `encode_batch(docs)[k] == encode(docs[k])` id for id,
         whatever else is in the batch. The documents are encoded one after
-        another inside ONE binding call (`gpt2_encode_batch`), which saves
+        another inside ONE binding call (`bpe_encode_batch`), which saves
         the per-call crossing that dominates short documents."""
         if isinstance(documents, (str, bytes, bytearray, memoryview)):
             raise TypeError(
@@ -311,12 +385,12 @@ class GPT2Tokenizer:
         counts = array.array("q", bytes(8 * n_docs))
         ids = array.array("i", bytes(4 * max(n, 1)))
         text_buf = text if n > 0 else b"\0"
-        total = int(self._m.gpt2_encode_batch(
+        total = int(self._m.bpe_encode_batch(
             self._handle, addr_ro(text_buf, name="text"), addr_ro(offsets, name="offsets"),
             addr(ids, name="ids"), addr(counts, name="counts"), [n_docs, n, n, allow]))
         if not 0 <= total <= n or sum(counts) != total:
             raise RuntimeError(
-                f"mojolearn: gpt2_encode_batch returned {total} ids for {n} bytes (counts sum {sum(counts)})"
+                f"mojolearn: bpe_encode_batch returned {total} ids for {n} bytes (counts sum {sum(counts)})"
             )
         out, at = [], 0
         for c in counts:
@@ -358,10 +432,10 @@ class GPT2Tokenizer:
             return b""
         cap = n * self._max_token_bytes
         out = bytearray(cap)
-        count = int(self._m.gpt2_decode(
+        count = int(self._m.bpe_decode(
             self._handle, addr_ro(arr, name="ids"), n, addr(out, name="text"), cap))
         if not 0 <= count <= cap:
-            raise RuntimeError(f"mojolearn: gpt2_decode returned {count} bytes into {cap}")
+            raise RuntimeError(f"mojolearn: bpe_decode returned {count} bytes into {cap}")
         return bytes(out[:count])
 
     def decode(self, ids, errors="replace"):
@@ -370,7 +444,7 @@ class GPT2Tokenizer:
 
     def decode_bytes_batch(self, batch):
         """`[decode_bytes(ids) for ids in batch]`. A thin loop over the one
-        `gpt2_decode` call per sequence: decode is a table copy, and a
+        `bpe_decode` call per sequence: decode is a table copy, and a
         sequence of ids already carries its own boundaries."""
         if isinstance(batch, (str, bytes, bytearray)):
             raise TypeError(f"mojolearn: decode_bytes_batch takes a sequence of id sequences, got {type(batch).__name__}")
@@ -381,7 +455,7 @@ class GPT2Tokenizer:
         return [b.decode("utf-8", errors) for b in self.decode_bytes_batch(batch)]
 
     def __repr__(self):
-        return f"GPT2Tokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"
+        return f"BpeTokenizer(n_vocab={self._n_vocab}, vocabulary={self._source!r})"
 
 
 class TrainedBpeVocabulary:
@@ -430,10 +504,15 @@ class TrainedBpeVocabulary:
         _bpe_trainer.write_tokenizer_json(self.tokens, self.merges, path)
         return path
 
+    @property
+    def identity(self):
+        """`BpeTokenizer.identity` of this vocabulary, without loading it."""
+        return _identity_from_tokens_text(self.render_ranks(), self.n_tokens)
+
     def tokenizer(self):
-        """A `GPT2Tokenizer` over this vocabulary, so a freshly trained table
+        """A `BpeTokenizer` over this vocabulary, so a freshly trained table
         can be used without going through a file."""
-        return GPT2Tokenizer.from_token_bytes(self.tokens)
+        return BpeTokenizer.from_token_bytes(self.tokens)
 
     def __repr__(self):
         return (f"TrainedBpeVocabulary(n_tokens={self.n_tokens}, "
@@ -460,13 +539,25 @@ class BpeVocabularyTrainer:
     selection that never depends on an iteration order, and no float anywhere
     in the selection.
 
-    The arithmetic is `tokenizer/train/bpe_train.mojo`; this door runs the
-    independent Python implementation of the same stated algorithm, which
-    `pixi run check-bpe-trainer` holds the Mojo one to file byte for file
-    byte.
+    THE BACKEND (lane/bpe-builder-native, 2026-09-18). `backend="auto"`
+    (the default) trains with the Mojo trainer `tokenizer/train/
+    bpe_train.mojo` through the tokenizer host binding (`bpe_train`), and
+    falls back to the pure Python reference `_bpe_trainer.train` when the
+    binding is not built or predates that entry. `"mojo"` requires the
+    binding; `"python"` runs the reference. The two are held to the SAME
+    BYTES by `pixi run check-bpe-trainer` (file byte for file byte, both
+    formats) and by the identity lanes, so which one ran cannot reach the
+    vocabulary; `stats["backend"]` records it. The Python reference recounts
+    every pair per merge in pure Python and is impractical at tens of
+    thousands of ranks; the Mojo one trained 50,256 ranks on 20 MB on one
+    core (see docs/lanes/LANE_STATUS_bpe-builder-native.md).
+    `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break on EITHER
+    backend (the negative control).
     """
 
-    def __init__(self, vocab_size=32000, min_frequency=2):
+    _BACKENDS = ("auto", "mojo", "python")
+
+    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
         if not isinstance(vocab_size, int) or isinstance(vocab_size, bool):
             raise TypeError(f"mojolearn: vocab_size must be an int, got {type(vocab_size).__name__}")
         if vocab_size < 256:
@@ -477,8 +568,11 @@ class BpeVocabularyTrainer:
             raise TypeError(f"mojolearn: min_frequency must be an int, got {type(min_frequency).__name__}")
         if min_frequency < 1:
             raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
+        if backend not in self._BACKENDS:
+            raise ValueError(f"mojolearn: backend must be one of {self._BACKENDS}, got {backend!r}")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
+        self.backend = backend
 
     def train(self, documents):
         """Train on `documents`, a sequence of bytes-like or str."""
@@ -503,9 +597,88 @@ class BpeVocabularyTrainer:
             else:
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
-        tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
+        native = None
+        if self.backend != "python":
+            native = _native_trainer(required=self.backend == "mojo")
+        if native is not None:
+            tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency,
+                                                  _bpe_trainer.sabotaged())
+            stats["backend"] = "mojo"
+        else:
+            tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
+            stats["backend"] = "python"
         return TrainedBpeVocabulary(tokens, merges, stats)
 
     def __repr__(self):
         return (f"BpeVocabularyTrainer(vocab_size={self.vocab_size}, "
-                f"min_frequency={self.min_frequency})")
+                f"min_frequency={self.min_frequency}, backend={self.backend!r})")
+
+
+def _native_trainer(required):
+    """The binding when it exports `bpe_train`, else None (or the reason,
+    raised, when `required`)."""
+    try:
+        module = _backend.load_host_module(_EXTENSION)
+    except ImportError as exc:
+        if required:
+            raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
+        return None
+    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):
+        if required:
+            raise ImportError("mojolearn: backend='mojo': this tokenizer binding predates bpe_train; rebuild it")
+        return None
+    return module
+
+
+def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
+    """`_bpe_trainer.train`'s return shape, `(tokens, merges, stats)`, from
+    the Mojo trainer: one crossing in (the documents back to back with
+    int64 offsets), one out (the token bytes, lengths and merge ids)."""
+    offsets = array.array("q", [0])
+    for r in raws:
+        offsets.append(offsets[-1] + len(r))
+    text = bytearray(b"".join(raws))
+    n = len(text)
+    handle = module.bpe_train(addr_ro(text, name="documents") if n else 0, addr_ro(offsets, name="offsets"),
+                              [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
+    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
+    arena = bytearray(max(arena_bytes, 1))
+    lengths = array.array("q", [0]) * n_tokens
+    left = array.array("q", [0]) * max(n_merges, 1)
+    right = array.array("q", [0]) * max(n_merges, 1)
+    module.bpe_trained_copy(handle, addr(arena, name="arena"), addr(lengths, name="lengths"),
+                            addr(left, name="merge_left"), addr(right, name="merge_right"))
+    tokens, at = [], 0
+    for m in lengths:
+        tokens.append(bytes(arena[at:at + m]))
+        at += m
+    merges = [(int(left[k]), int(right[k]), 256 + k) for k in range(n_merges)]
+    stats = {
+        "n_tokens": n_tokens,
+        "n_merges": n_merges,
+        "n_groups": n_groups,
+        "n_ties_broken": n_ties,
+        "tie_break": _bpe_trainer.TIE_BREAK,
+        "vocab_size": vocab_size,
+        "min_frequency": min_frequency,
+    }
+    return tokens, merges, stats
+
+
+#: Renamed classes still importable under their old name, {old: new}.
+#: tools/verification_matrix.py reads this literal as an alias, so the old
+#: name is covered by the new one's lanes instead of reading as a laneless
+#: algorithm.
+_DEPRECATED_ALIASES = {"GPT2Tokenizer": "BpeTokenizer"}
+
+
+def __getattr__(name):
+    if name in _DEPRECATED_ALIASES:
+        import warnings
+        new = _DEPRECATED_ALIASES[name]
+        warnings.warn(
+            f"mojolearn.tokenizer.{name} is renamed {new} (it ships no GPT-2 vocabulary); "
+            "the old name is a deprecated alias of the same class",
+            DeprecationWarning, stacklevel=2)
+        return globals()[new]
+    raise AttributeError(f"module 'mojolearn.tokenizer' has no attribute {name!r}")

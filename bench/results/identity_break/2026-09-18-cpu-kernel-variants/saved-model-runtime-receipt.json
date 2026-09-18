@@ -1,0 +1,13 @@
+{
+  "status": "PASSED",
+  "tests_passed": 31,
+  "tests_skipped": 0,
+  "source_commit": "e811a478d57f51ff1b9c21c641fb0783fdbe5a63",
+  "scope": "CPU runtime and public saved-model reload/batch invariance; not installed-wheel qualification",
+  "bindings": {
+    "clean/_mojolearn_estimators_host.so": "5b9f77144bd20a10776e803bc967aa2c2c9c2bb0b867c9c28ac2d0510a0410e3",
+    "clean/_mojolearn_kernel_methods_host.so": "068d7ea015ded93acd266937ee461c774f882f03b00433dcc10dd6c255be8629",
+    "sabotage/_mojolearn_estimators_host.so": "65d6d6f530adfdab38b2f13f2f8e1c8d6c9c865d6de8d137e3b5d32485c25260",
+    "sabotage/_mojolearn_kernel_methods_host.so": "bdbf8d1805060d411d1ec68a4403ac974c58e8d4791767fa253cab74bd498ec1"
+  }
+}

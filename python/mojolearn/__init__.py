@@ -162,7 +162,8 @@ from ._svm_impl import SVC, SVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
-from .tokenizer import GPT2Tokenizer
+from . import lm_corpus
+from .tokenizer import BpeTokenizer
 # Public neural inference on the CPU from GPU-trained weights (2026-09-15),
 # host/_mojolearn_neural_host.so resolved on first use.
 from .neural_inference import (MLPInference, TransformerBlockInference, Mamba1BlockInference,
@@ -347,6 +348,8 @@ __all__ = [
     "GradientBoostingRegressor",
     "OrderedRMSE",
     "ExponentialSmoothing",
+    "BpeTokenizer",
+    "lm_corpus",
     "GPT2Tokenizer",
     "MLPInference",
     "TransformerBlockInference",
@@ -449,6 +452,10 @@ _NOT_YET = {}
 
 
 def __getattr__(name):
+    if name == "GPT2Tokenizer":
+        # Renamed BpeTokenizer 2026-09-18; kept in __all__ because 0.8.x
+        # shipped it. tokenizer.__getattr__ warns and returns the same class.
+        return getattr(tokenizer, name)
     if name in _NOT_YET:
         raise AttributeError(
             f"mojolearn.{name} is not in this release. What exists stops at "
