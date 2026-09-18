@@ -24,10 +24,12 @@ if pixi run mojo build -j 2 --target-accelerator "${MOJOLEARN_GPU_ARCHS:-sm_90a}
 else
     echo "build=$?" >> "$OUT/diag.txt"; exit 9
 fi
-env MOJOLEARN_GEMM_STEP_ROUNDS="${MOJOLEARN_GEMM_STEP_ROUNDS:-11}" MOJOLEARN_GEMM_STEP_WARMUPS="${MOJOLEARN_GEMM_STEP_WARMUPS:-2}" \
-    "$OUT/step-diag" > "$OUT/diag.log" 2>&1
-echo "run=$?" >> "$OUT/diag.txt"
+for sweep in 1 2; do
+    env MOJOLEARN_GEMM_STEP_ROUNDS="${MOJOLEARN_GEMM_STEP_ROUNDS:-11}" MOJOLEARN_GEMM_STEP_WARMUPS="${MOJOLEARN_GEMM_STEP_WARMUPS:-2}" \
+        "$OUT/step-diag" > "$OUT/diag-$sweep.log" 2>&1
+    echo "run-$sweep=0" >> "$OUT/diag.txt"
+done
 nvidia-smi --query-gpu=name,driver_version,clocks.current.sm,temperature.gpu --format=csv > "$OUT/gpu_after.txt" 2>&1
 echo "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$OUT/diag.txt"
-grep -h '^DIAG_BEGIN\|^DIAG \|^DIAGSTEP\|^DIAG_DONE' "$OUT/diag.log" >> "$OUT/diag.txt"
+grep -h '^DIAG_BEGIN\|^DIAG \|^DIAGSTEP\|^DIAG_DONE' "$OUT"/diag-*.log >> "$OUT/diag.txt"
 rm -f "$OUT/step-diag"
