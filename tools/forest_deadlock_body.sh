@@ -73,9 +73,16 @@ lanes)
     # TOGETHER; each alone is the baseline both trees can produce)
     L=${2:?label}
     LN=${3:-rf-clf-balanced-parallel,et-reg-bootstrap-parallel}
-    say "identity_break $LN ($L)"
-    pixi run python3 tools/identity_break.py \
-        --lanes "$LN" --fixtures base --repeats 2 --vendor cuda-4090 \
+    # NO_BATCH=1 drops the batch part. On the UNFIXED tree that is the only
+    # way these two lanes produce a column at all: the batch part evaluates
+    # the same estimator at many row counts through the public predict, and
+    # `rf-clf-balanced-parallel/base repeat=1/batch` is exactly where main
+    # wedges. LANE_TIMEOUT bounds a hang from outside the process.
+    NB=""
+    [ "${NO_BATCH:-0}" = "1" ] && NB="--no-batch"
+    say "identity_break $LN ($L) $NB"
+    timeout -k 30 "${LANE_TIMEOUT:-1200}" pixi run python3 tools/identity_break.py \
+        --lanes "$LN" $NB --fixtures base --repeats "${LANE_REPEATS:-2}" --vendor cuda-4090 \
         --json "$OUT/$L.json" > "$OUT/$L.log" 2>&1
     rc=$?
     say "lanes $L rc=$rc"
