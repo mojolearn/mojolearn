@@ -97,3 +97,10 @@ for a wheel gate. It never equates process placement with actual GPU execution.
 Success remains `NUMERICAL_MATCH_EXECUTION_TRACE_OWED`; native fault controls and
 NVIDIA/AMD physical kernel traces remain owed. No GPU rental was provisioned by
 this lane. The capture runner has been syntax/CLI checked but not run on two GPUs.
+
+Post-checkpoint hardening: seven additional binding-free checks reject missing
+shards, malformed output shapes, negative/excess candidate counts, invalid local
+IDs, duplicate global IDs, and failed initial storage. The current lightweight
+suite passes 43 checks with 14 native IVF checks skipped unless explicitly
+requested. These deliberate transport-corruption tests do not substitute for
+the still-owed native arithmetic sabotage controls.
