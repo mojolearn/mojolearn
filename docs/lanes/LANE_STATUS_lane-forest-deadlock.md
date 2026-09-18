@@ -178,3 +178,74 @@ silent. The deadline has to come from outside (`timeout -k 30`), and the
 native backtrace above was obtainable only because a SIGNAL HANDLER is not
 a Python thread.
 
+## The two `-parallel` identity_break lanes ARE unblocked
+
+`rf-clf-balanced-parallel` and `et-reg-bootstrap-parallel` have been left
+out of every CUDA column for weeks (`tools/infer_speed_trees_body.sh`,
+`tools/forest_groves_body.sh`, both `SKIP_CUDA`). Measured on this box:
+
+| tree | protocol | result |
+|---|---|---|
+| ml-before (main) | `--repeats 2`, rf lane alone | **HANG** at `base repeat=1/batch` |
+| ml-before (main) | `--repeats 2 --no-batch`, rf lane alone | **HANG** at `base repeat=2/train` |
+| ml-before (main) | `--repeats 1 --no-batch`, both lanes | **HANG (exit 124)** after ONE cell: rf completed, et hung at `repeat=1/train` |
+| ml-after (3010) | `--repeats 1 --no-batch`, both lanes | 2 cells, 2 stable, 0 moved |
+| ml-after (3010) | **full: `--repeats 2` WITH batch, both lanes** | 2 cells, 2 stable, 0 moved, `batch: stable=2` |
+
+So on main these two lanes cannot produce a CUDA column at all -- not
+together, not alone, and not even with the batch part removed. With the
+drain they run the shipped protocol, batch part included, on one GPU. Both
+`SKIP_CUDA` defaults are now empty and carry the reason.
+
+The skip's stated cause was wrong and is corrected in both scripts: it was
+read as "the parallel pool's batch protocol on this box". It is not the
+batch protocol. The batch part predicts with an estimator whose snapshot is
+ALIVE; what dies first is the `model` part's save/reload estimator, and the
+lock it leaves held is process-wide.
+
+## Bitwise: nothing moved
+
+`identity_break --diff`, the SAME lane list and fixtures on both trees,
+`--allow-separate-builds` because the two columns are deliberately
+different builds:
+
+| comparison | train | infer/model | batch |
+|---|---|---|---|
+| before vs after, 13 forest/GBDT/KDE lanes x 5 fixtures | IDENTICAL=65 | IDENTICAL=130 | IDENTICAL=65 |
+| before vs after, `rf-score-weighted` x 5 fixtures | IDENTICAL=5 | n/a | n/a |
+| before vs after, `rf-clf-balanced-parallel` (the one parallel cell main could produce) | IDENTICAL=1 | IDENTICAL=2 | n/a (--no-batch) |
+| after: reduced protocol vs full protocol, both parallel lanes | IDENTICAL=2 | IDENTICAL=4 | n/a |
+
+70 cells, 0 MOVED, 0 REFUSED. Lanes: `rf-clf`, `rf-reg`, `et-clf`,
+`et-reg`, `rf-clf-entropy-log2-noboot`, `rf-reg-poisson`,
+`rf-reg-gamma-ig`, `et-clf-entropy-bestfirst`, `rf-score-weighted`,
+`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-rmse`, `kde`, `kde-weighted`,
+over `base,ties,odd,dupes,wide`, two repeats each. `rf-score-weighted`
+first came back REFUSED on BOTH columns for a `_mojolearn_metrics.so` that
+had not been built; the binding was built in both trees and the five cells
+re-run, rather than leaving a symmetric refusal in the table.
+
+The `et-reg-bootstrap-parallel` cell is ONE-COLUMN and says so: main cannot
+produce it. A diff table that printed IDENTICAL there would be lying, and
+identity_break labels the killed column INCOMPLETE in its own header.
+
+## Evidence
+
+`~/mojolearn-evidence/forest-deadlock/pod1/` (outside the repo): the
+`fd_out` tree with every JSON, console and diff, the three driver scripts,
+the setup log, and the two `HANG_*` captures with the native stack.
+Summaries are committed under `bench/results/forest_deadlock_2026-09-18/`.
+
+## Owed
+
+- Apple and AMD: the drain compiles on every column (it is one
+  `synchronize()` per teardown) but was RUN only on NVIDIA sm_89. The
+  defect itself is sm_89-shaped in every observation on record: an L40S
+  never showed it, and DEVIATION 2520's lane said the same. Nothing here
+  claims the other columns were exercised.
+- `training/byte_lm_model_pool.mojo:139` and
+  `training/byte_lm_offload.mojo:172`, above: the same class, reported and
+  not touched.
+- The multi-GPU `PooledForest.__deinit__` drain is COMPILED and never RUN:
+  `forest_device_count() > 1` needs a second device and this pod had one.
+  Report it as unexercised, not as verified.
