@@ -168,3 +168,10 @@ requirements; the qualification-only successor is hashed with all tools.
 The original smoke stays unchanged in native build provenance. The focused
 regression includes a long valid refusal and a long unrelated failure;
 combined qualification tests now pass 30 tests and 35 subtests.
+
+Qualification v3 passed all 11 installed surface jobs, including all three
+smokes. Its first supplemental capture then correctly refused an absent commit
+witness: the installed harness runs outside the checkout. The wrapper now
+passes the archived `commit.txt` (or local git HEAD), requiring a full 40-hex
+commit, before starting the installed harness. The refusal is retained; v3 is
+not a completed qualification. Check external state for verified teardown.

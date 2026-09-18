@@ -24,6 +24,15 @@ bash "$ROOT/tools/release_linux_surface_qualification.sh" "$@"
 # A supplemental failure must invalidate the successful surface marker too.
 printf '1\n' > "$OUT/exit_code"
 VPY="$OUT/venv/bin/python"
+# The installed harness runs outside the checkout. Carry the exact archived
+# tools/source commit explicitly; an absent witness must still refuse.
+if [[ -s "$ROOT/commit.txt" ]]; then
+    MOJOLEARN_COMMIT=$(cat "$ROOT/commit.txt")
+else
+    MOJOLEARN_COMMIT=$(git -C "$ROOT" rev-parse HEAD)
+fi
+[[ "$MOJOLEARN_COMMIT" =~ ^[0-9a-f]{40}$ ]] || { echo 'Invalid qualification commit witness' >&2; exit 2; }
+export MOJOLEARN_COMMIT
 cd "$OUT"
 timeout -k 10 600 env -u PYTHONPATH -u PYTHONHOME \
     MOJOLEARN_NUMERIC_MODE=identical PYTHONNOUSERSITE=1 \
