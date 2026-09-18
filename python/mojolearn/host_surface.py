@@ -1306,6 +1306,8 @@ FAMILIES = (
             "standard-scaler", "standard-scaler-no-mean", "standard-scaler-no-std",
             "minmax-scaler", "minmax-scaler-clip", "lasso", "elasticnet",
             "elasticnet-l2end-no-intercept", "kernel-ridge", "nystroem", "rbf-sampler", "pca-full-whiten",
+            "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian",
+            "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-linear-cosine", "kde-cosine-minkowski", "kde-weighted",
             # lane/saved-model-reference-gaps (2026-09-16): DBSCAN.predict and
@@ -2703,17 +2705,12 @@ PUBLIC_REFERENCE_CANDIDATES = (
     "ivf-extend",
 )
 
-#: Saved-model CPU inference that IS implemented and that
-#: `mojolearn.host_model()` already dispatches, but that the manifest does not
-#: declare as an inference lane, so no gate covers it and no user is told it
-#: exists (lane/expose-inference-surface, 2026-09-16). {lane: why it is not
-#: declared}. `inference_lanes()` must equal tools/classical_host_gate.py's
-#: LANES, and that gate's `check` needs a recording made by
-#: `classical_host_gate.py record` on a GPU box, which refuses a CPU-only
-#: install so the host binding can never record its own answer as the
-#: reference. Every entry here is therefore waiting on ONE thing, a GPU
-#: recording, not on code. They are listed so the gap is in the file rather
-#: than only in the reader's head.
+#: Implemented saved-model CPU inference with recording or qualification debt.
+#: `inference_lanes()` names selectable classical_host_gate.py routes; a route
+#: can now be declared and carry Apple recordings while still owing the other
+#: vendor columns and installed replay. The debt must remain visible until its
+#: named gates pass. Recording itself always requires a GPU, so the CPU binding
+#: cannot manufacture its own expected answer.
 #:
 #: lane/saved-model-reference-gaps (2026-09-16) emptied this list of the four
 #: entries it took a GPU box for: `dbscan`, `agglomerative`, `spectral` and
@@ -2733,12 +2730,12 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: NOT mean nothing is left to implement. A new `save` that ships without a
 #: recording belongs here, with the reason, rather than nowhere.
 SAVED_MODEL_INFERENCE_OWED = {
-    "kernel-ridge-poly": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "kernel-ridge-sigmoid": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "kernel-ridge-laplacian": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-poly": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-sigmoid": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-laplacian": "Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-poly": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-sigmoid": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-laplacian": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-poly": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-sigmoid": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "nystroem-laplacian": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
 }
 
 
@@ -2748,7 +2745,7 @@ def public_reference_candidates():
 
 
 def saved_model_inference_owed():
-    """{lane: why it is implemented but not a declared inference lane}."""
+    """{lane: remaining saved-model recording or qualification debt}."""
     return dict(SAVED_MODEL_INFERENCE_OWED)
 
 

@@ -381,6 +381,7 @@ EXTRA_PUBLIC_MODULES = (
     "parallel_training", "model_pool_training", "offload_training",
     "parallel_forecasting",
     "parallel_gaussian_process",
+    "parallel_ivf",
 )
 
 

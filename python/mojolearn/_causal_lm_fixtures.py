@@ -134,3 +134,40 @@ def _mamba_tensors(cfg, seed=5):
         t[p + "mixer.out_proj.weight"] = _f32((dm, di), s + 9)
     return t
 
+
+def family_fixture(architecture, tied):
+    """Exercise each supported checkpoint family and its distinct mapping."""
+    if architecture == 'mamba':
+        cfg = _mamba_config()
+        return cfg, _mamba_tensors(cfg)
+    if architecture == 'mamba2':
+        cfg = dict(model_type='mamba2', hidden_size=32, num_hidden_layers=2,
+                   vocab_size=64, tie_word_embeddings=True, time_step_limit=[0.0, 1.5])
+        t = {'backbone.embeddings.weight': _f32((64,32), 6, -0.5,0.5),
+             'backbone.norm_f.weight': _ones((32,))}
+        for i in range(2):
+            p=f'backbone.layers.{i}.'; seed=20+10*i
+            t[p+'norm.weight']=_ones((32,))
+            for name,shape in [('in_proj.weight',(385,32)),('conv1d.weight',(320,1,4)),
+                               ('conv1d.bias',(320,)),('dt_bias',(1,)),('A_log',(1,)),
+                               ('D',(1,)),('out_proj.weight',(32,64))]:
+                t[p+'mixer.'+name]=_f32(shape,seed); seed+=1
+            t[p+'mixer.norm.weight']=_ones((64,))
+        return cfg,t
+    cfg = _llama_config(model_type=architecture, tie_word_embeddings=tied)
+    if architecture == 'mistral': cfg['sliding_window']=3
+    tensors = _llama_tensors(cfg)
+    for i in range(cfg['num_hidden_layers']):
+        p=f'model.layers.{i}.'
+        if architecture == 'qwen2':
+            for name,size in [('q',32),('k',16),('v',16)]:
+                tensors[p+f'self_attn.{name}_proj.bias']=_f32((size,),30+i+size)
+        elif architecture == 'qwen3':
+            for name in ('q','k'):
+                tensors[p+f'self_attn.{name}_norm.weight']=_f32((16,),40+i,0.75,1.25)
+        elif architecture == 'phi3':
+            for group,keys in [('self_attn.qkv_proj.weight', ['self_attn.q_proj.weight','self_attn.k_proj.weight','self_attn.v_proj.weight']),
+                               ('mlp.gate_up_proj.weight',['mlp.gate_proj.weight','mlp.up_proj.weight'])]:
+                pieces=[tensors.pop(p+key) for key in keys]
+                tensors[p+group]=('F32',(sum(x[1][0] for x in pieces),32),b''.join(x[2] for x in pieces))
+    return cfg,tensors

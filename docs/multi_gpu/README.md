@@ -18,6 +18,24 @@ qualify their subsequent kernel-row paths on two H100s.
 
 ## Available paths
 
+IVF search now has a disjoint candidate-storage API:
+
+```python
+from mojolearn import DistributedIVFIndex
+
+with DistributedIVFIndex.from_index(fitted_or_loaded_index, devices=(0, 1)) as distributed:
+    distances, row_ids = distributed.search(queries)
+```
+
+Workers retain separate candidate rows and upload only their shard for search.
+The coarse quantizer is shared, so global probe selection is preserved. Local
+searches return valid counts even for empty/short candidate sets; final selection
+uses squared-distance/global-row-ID order before Euclidean rooting. The API
+requires the rebuilt IVF binding with partial-search support. It does not yet
+distribute index training or extension, and each shard plus coarse centers must
+fit on its GPU. Apple native logical-partition checks passed; physical two-GPU
+and measured capacity qualification are still pending.
+
 Loaded checkpoints have an explicit experimental layer-owner API:
 
 ```python

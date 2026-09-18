@@ -77,6 +77,14 @@ No 0.8.5 artifact was examined for this implementation task.
 
 ## Remaining execution
 
+Additional integrated work: disjoint IVF search/storage with a native partial
+candidate API, and expanded whole-model profile v2 covering 24 cases across
+all seven supported checkpoint families. IVF has 14 real Apple GPU logical
+partition checks and forecast/GPC have 11 real CPU-native partition checks;
+these do not claim two-device execution. Root exports DistributedIVFIndex and
+all new modules in the package/API inventory. Rebuilding IVF is mandatory for
+the new entry points; old binaries cannot supply them.
+
 Integrate each feature checkpoint, exercise real GPU paths with bounded guarded
 jobs, admit matching references only after their actual checks pass, build the
 expanded 0.8.7 candidate, run installed API/verifier gates and qualify exact wheel

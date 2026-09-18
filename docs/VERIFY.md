@@ -211,8 +211,9 @@ it is not implemented merely by lowering the old fixture size.
 ## Whole loaded-language-model inference
 
 The expanded 0.8.7 source includes a small, separate composition check for
-loaded Llama and Mamba models, including tied/untied heads where applicable and
-FP32, BF16 and int8 weights:
+loaded Llama, Mistral, Qwen2, Qwen3, Phi3, Mamba and Mamba2 models. The v2 profile
+has 24 cases, including tied/untied Llama heads, windowed attention, nonzero
+QKV biases, QK normalization, fused checkpoint mapping, and FP32/BF16/int8 weights:
 
 ```sh
 python -m mojolearn verify-causal-lm --device cpu --output cpu-models.json
@@ -226,8 +227,10 @@ CPU threads default to one. The comparison requires matching fixture/profile
 bytes; a successful capture reports `CAPTURED_UNQUALIFIED`, and matching
 captures report `NUMERICAL_MATCH_UNQUALIFIED`. These are numerical evidence,
 not automatic reference admission or a release certificate. Composition faults
-are distinct from faults injected into native arithmetic. Other loaded
-architectures and physical multi-GPU execution require their own records.
+are distinct from faults injected into native arithmetic. Refused architectures
+(such as Gemma) are not covered by this profile. Physical multi-GPU execution
+requires its own records; `--layer-devices 0 1` selects the experimental explicit
+two-layer GPU mapping in this tiny profile.
 
 ## What the CPU training bindings are for
 

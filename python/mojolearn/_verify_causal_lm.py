@@ -20,7 +20,10 @@ from . import _causal_lm_fixtures as fixtures
 
 __all__ = ['capture', 'compare']
 
-PROFILE = 'loaded-causal-lm-v1'
+PROFILE = 'loaded-causal-lm-v2'
+ARCHITECTURES = (('llama', False), ('llama', True), ('mistral', False),
+                 ('qwen2', False), ('qwen3', False), ('phi3', False),
+                 ('mamba', True), ('mamba2', True))
 PARTS = frozenset(('logits', 'prefill', 'decode_1', 'decode_2', 'greedy', 'state'))
 CHECKS = frozenset(('prefill_step', 'batch', 'reset', 'reload', 'greedy_repeat',
                     'state_positions', 'tensor_mapping', 'composition_fault_detected'))
@@ -44,12 +47,7 @@ def digest(value):
 
 
 def capture_case(root, architecture, tied, weight_format, device, layer_devices=None):
-    if architecture == 'llama':
-        cfg = fixtures._llama_config(tie_word_embeddings=tied)
-        tensors = fixtures._llama_tensors(cfg)
-    else:
-        cfg = fixtures._mamba_config()
-        tensors = fixtures._mamba_tensors(cfg)
+    cfg, tensors = fixtures.family_fixture(architecture, tied)
     fixtures._write_checkpoint(root, cfg, tensors)
     models = []
     def load():
@@ -118,7 +116,7 @@ def capture(device='cpu', formats=('float32',), *, layer_devices=None):
               'profile': PROFILE, 'device': device, 'status': 'CAPTURED_UNQUALIFIED',
               'native_fault': 'OWED', 'physical_execution': 'OWED', 'cases': []}
     with tempfile.TemporaryDirectory() as root:
-        for architecture, tied in [('llama', False), ('llama', True), ('mamba', True)]:
+        for architecture, tied in ARCHITECTURES:
             for fmt in formats:
                 path = Path(root) / f'{architecture}-{tied}-{fmt}'
                 result['cases'].append(capture_case(path, architecture, tied, fmt, device, layer_devices))
@@ -160,7 +158,7 @@ def compare(left, right):
         if (not formats or len(formats) != len(set(formats))
                 or set(formats) - {'float32', 'bfloat16', 'int8'} or report.get('repeats') != 2):
             raise ValueError('invalid capture scope or repetitions')
-        expected = {(arch, tied, fmt) for arch, tied in [('llama', False), ('llama', True), ('mamba', True)]
+        expected = {(arch, tied, fmt) for arch, tied in ARCHITECTURES
                     for fmt in formats}
         out = {}
         for c in report['cases']:

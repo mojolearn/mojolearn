@@ -52,3 +52,27 @@ full forward, prefill/decode, exact state, reset, greedy, parameter mappings and
 reversed owner ordering. This validates orchestration, NOT physical GPU use.
 Physical two-device NVIDIA/AMD runs, vendor identity and execution traces remain
 owed; host transfer cost, memory capacity and resident cache are not certified.
+
+Native-fault followup COMPLETE for nine fixtures: paired clean/fault neural host
+bindings compiled from a2061f8af, readbackFalse/True; freshclean matches54/54
+Metal parts; faultmoves45/45 floating parts, greedyIDs unchanged9/9. Evidence in
+`bench/results/loaded_causal_lm/2026-09-18/native-fault-comparison.json` and paired
+captures/buildwitness. Earlier nativefault OWED statements are superseded for
+this exact scope. NVIDIA/AMD, installedwheel and physicalmultiGPU remain owed.
+
+Profile v2 expands the scope to all seven supported config families: Llama
+(tied+untied), Mistral with window3 crossing its ring, Qwen2 with nonzero QKV
+biases, Qwen3 with nontrivial Q/K normalization weights, Phi3 fused QKV/gate-up
+checkpoint mapping, Mamba1 and Mamba2. All FP32/BF16/int8 variants make24 cases.
+Native CPU initial capture passes all checks in11.8seconds. Fixture tests verify
+exact planned checkpoint-name coverage and exercise family-specific options.
+77 loader, transport and verifier tests pass. V1 evidence remains unchanged;
+v2 vendor comparisons are being captured separately.
+
+V2 complete locally:24 cases,144/144 CPU/Metal part hashes match; all properties
+pass; native fault readbackTrue and120/120 floating parts move (greedy24/24
+unchanged). CPU13.28s, Metal6.25s, fault13.68s. Retained under
+`bench/results/loaded_causal_lm/2026-09-18/v2/`, sourcec9c3b96b7. This supersedes
+Mamba2 missing-fixture debt above. NVIDIA/AMD and installed/physical multiGPU
+qualification remain explicitly open, as do real external checkpoint and long
+context/ragged/chunk-boundary coverage.
