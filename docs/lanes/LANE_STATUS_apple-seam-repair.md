@@ -276,3 +276,21 @@ ONE worktree path (`devcmp.txt`):
   `_tuned_step_admitted` wrapper.
 - Apple: the gemm_device_check metallib differs (59 of 66 modules), as it
   must: the check can fail.
+
+## RESULT 9: AMD MI300X leg (Hot Aisle 8core, VM 4875e63c deleted, verified 404, $0.30)
+
+Evidence `bench/results/e1g/2026-09-18_153549-amd-mi300x-hotaisle-apple-seam-repair/`
+(RunPod AMD create had returned HTTP 500; Hot Aisle 13core had no stock).
+- Seam probe on AMD: shipped lane **`62a6b5621e27c707` -> rtf** (unchanged).
+- GEMM identity card of this branch on AMD vs the Apple card: 60 matched
+  stages, **RESULT: IDENTICAL** (`diff_apple_vs_amd.txt`).
+- Whole-GEMM boundary check: all seven fixtures OK against the host oracle;
+  pairs/draw0-3/admitted device_fnv EQUAL Apple's and NVIDIA's.
+- draw4 (the NaN fixture): AMD device fnv 476d0179e49c6ea5 = the x86 oracle's
+  (x86 default NaN 0xffc00000). **All three columns write a different NaN
+  there** (Apple fa49a9f1815ee8a5, NVIDIA bb1a4c2c7aba843d, AMD
+  476d0179e49c6ea5). Pre-existing, independent of this repair; CANDIDATE.
+
+So after the repair, Apple, NVIDIA and AMD agree bit for bit on every
+fixture that separates flush-before-round from round-then-flush, on the GEMM
+identity card, and (seam probe) on all 262,144 triples of the shipped seam.
