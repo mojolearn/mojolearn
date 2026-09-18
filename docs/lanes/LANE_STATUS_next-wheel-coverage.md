@@ -86,3 +86,23 @@ are absent from frozen 0.8.7; its old tokenizer implementation is present.
 The scanner now includes declared deprecated imports outside `__all__` too.
 49 targeted tests passed after integrating the tokenizer changes. The earlier
 284-name comparison above remains evidence for its explicitly pinned snapshot.
+
+
+## Row-sharded RBF sampler CPU follow-up
+
+The next-wheel worktree adds `rbf_sampler_rows` to the non-cooperative CPU
+pool and declares `par-rbf-sampler` on the kernel_methods host family. No
+native arithmetic changes: the existing driver splits whole rows and rejoins
+in order, and the existing CPU transform supplies each shard. Remains excluded
+by default; `--include-pending --lanes par-rbf-sampler` now selects it. Counts
+become 18 logical CPU drivers / 32 GPU-required parallel drivers on this tree.
+
+209 source/inventory/selection tests passed. Five numerical tests (four shard
+sizes and a reordered-result negative control), plus the selection regression,
+are queued under a single Metal slot, session **90053**. Log:
+`~/mojolearn-evidence/next-wheel-coverage/cpu-par-rbf-tests.log`.
+Execution timeout 300 seconds, queue timeout 7200; one numerical worker at a
+time, CPU binding directory from release-087-final. A skip does NOT establish
+numerical coverage. Check all six pass before reporting runtime validation.
+This is source execution, not an installed wheel qualification. Still needs
+full nine-fixture repeated CPU capture and fresh independent GPU qualification.

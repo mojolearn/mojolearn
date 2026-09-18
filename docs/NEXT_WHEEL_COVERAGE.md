@@ -156,3 +156,28 @@ The source scanner, wheel comparison and reference-count regressions passed
 during import; the successful run used the existing host-binding directory
 only to import the package. These tests establish inventory/reporting behavior,
 not new numerical qualification. No pending route was promoted by this audit.
+
+## Row-sharded RBF sampler CPU route (next-wheel follow-up)
+
+`par-rbf-sampler` now has a declared CPU logical-shard route. Its existing
+`transform_rbf_sampler` driver splits query rows in Python, sends each shard
+with identical fitted random weights and offsets, and rejoins results in input
+order. The kernel-methods host binding already implements that per-shard
+transform; the missing piece was admitting `rbf_sampler_rows` in the
+non-cooperative CPU worker pool. Cooperative kernel-method operations remain
+outside this route.
+
+The installed verifier can select it explicitly with
+`verify --include-pending --lanes par-rbf-sampler`. Default public selection
+is unchanged. On this newer main snapshot the implementation inventory becomes
+18 CPU logical-shard drivers and 32 parallel drivers requiring GPU execution;
+the earlier 17/33 inventory above describes the prior audit snapshot. This is
+an execution-route addition, not new physical multi-GPU certification or a
+claim that the frozen 0.8.7 wheel contains this change.
+
+Regression coverage checks pending selection, cooperative refusal, row order,
+uneven and single-row shards, retained model bytes, and a deliberately reordered
+worker response detected by the identity comparator. Numerical execution is
+queued behind the release build; no fresh numerical qualification is claimed
+until that queued run completes. The existing manifest, coverage and export
+checks passed (209 tests across targeted invocations).

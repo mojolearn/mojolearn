@@ -304,6 +304,8 @@ FOREST_RECORDED_ROOT = "bench/results/forest_host"
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.
 TRAINING_LANE_NAMES = {
+    # Logical row shards; pending independent reference qualification.
+    "par-rbf-sampler": "the row-sharded random Fourier feature transform",
     "select-d": "ordinary differencing order selection",
     "gemm-pinned": "pinned GEMM",
     "kde": "kernel density",
@@ -1686,13 +1688,15 @@ FAMILIES = (
         # names for KernelRidge, Nystroem and RBFSampler at the linear and
         # rbf kernels; the polynomial, sigmoid and laplacian kernels refuse
         # by name, and kernel_methods_rows_parallel_available stays absent,
-        # so the multi-GPU driver refuses by name.
+        # so cooperative kernel-method drivers refuse by name. The RBF sampler
+        # transform splits whole rows in Python and uses the ordinary host
+        # transform per shard; its non-cooperative CPU route is declared here.
         family="kernel_methods",
         binding="_mojolearn_kernel_methods_host",
         routes="_mojolearn_kernel_methods",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem"),
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("KernelRidge", "Nystroem", "RBFSampler"),
@@ -1713,8 +1717,9 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: the kernel ridge, Nystroem and random Fourier feature fits, so those three "
-            "lanes can be checked on an installed CPU. Saved models still predict and transform "
+            "Ships: the kernel ridge, Nystroem and random Fourier feature fits, plus the "
+            "logical row-sharded Fourier transform. Its parallel lane remains pending "
+            "reference qualification. Saved models still predict and transform "
             "through the shipped estimators binding."
         ),
         ships_in_wheel=True,

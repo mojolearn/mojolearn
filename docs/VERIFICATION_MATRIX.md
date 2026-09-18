@@ -38,7 +38,7 @@ Per kind, over the public API entries:
 | kind | API entries that have it | missing |
 |---|---|---|
 | gpu column | 199 | 32 |
-| cpu verifier | 169 | 62 |
+| cpu verifier | 170 | 61 |
 | sabotage seen to move a build | 171 | 60 |
 | batch part or named n/a | 205 | 26 |
 
@@ -48,7 +48,7 @@ Per kind, over the lanes:
 |---|---|---|
 | gpu column (any class) | 218 | 10 |
 | gpu column on all three classes | 170 | 58 |
-| cpu verifier declared | 193 | 35 |
+| cpu verifier declared | 194 | 34 |
 | sabotage seen to move a build | 192 | 36 |
 | batch part or named n/a | 228 | 0 |
 | ALL FOUR | 182 | 46 |
@@ -59,8 +59,8 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 192 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 3 | the family declares a define; no committed pair moves this lane |
-| none | 33 | no define reaches the lane and nothing has moved it |
+| declared | 4 | the family declares a define; no committed pair moves this lane |
+| none | 32 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
 
@@ -309,7 +309,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_classical.predict_gaussian_process` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_classical.predict_svm` | 2 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_classical.solve_cholesky` | 1 | amd,nvidia |  | none | part | NO |
-| `parallel_classical.transform_rbf_sampler` | 1 | amd,nvidia |  | none | part | NO |
+| `parallel_classical.transform_rbf_sampler` | 1 | amd,nvidia | training | declared | part | NO |
 | `parallel_ensemble.ParallelForestPredictor` | 1 | amd,nvidia |  | none | part | NO |
 | `parallel_ensemble.fit_boosting` | 4 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ensemble.fit_feature_freq` | 1 | amd,apple,nvidia |  | none | part | NO |
@@ -539,7 +539,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-queries-knn | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-queries-nn | nvidia | training | declared | - | part | NO |
 | par-queries-radius | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
-| par-rbf-sampler | amd,nvidia | - | none | - | part | NO |
+| par-rbf-sampler | amd,nvidia | training | declared | - | part | NO |
 | par-reference-knn | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-reference-knn-reg | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-resample | amd,nvidia | - | none | - | part | NO |
@@ -601,9 +601,9 @@ A blank cell means no lane of this algorithm has that kind.
 
 > gbdt-categorical-ctr-tables, gbdt-pair-logit, gbdt-query-rmse, gbdt-tensor-ctr-tables, gbdt-yeti-rank, gemm-bf16, gemm-int8, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, ivf-extend, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, mlp-bf16w, mlp-int8w, par-boosting-clf, par-boosting-reg, par-cd-elasticnet, par-cholesky, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gram-ols, par-gram-pca, par-gram-tsvd, par-kernel-ridge, par-nystroem, par-queries-nn, par-rbf-sampler, par-resample, par-scaler-minmax, par-svm-svr, samba-bf16w, samba-int8w, svc-poly, transformer-bf16w, transformer-int8w
 
-**No CPU verifier declared: 35**
+**No CPU verifier declared: 34**
 
-> bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-pool, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-rbf-sampler, par-resample, par-svm, par-svm-svr
+> bpe-trainer, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-pool, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-resample, par-svm, par-svm-svr
 
 **Sabotage not seen to move a build: 36**
 
