@@ -2487,8 +2487,8 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "ordered-gradient-sum": "no reference",
-    "metrics-homogeneity-completeness": "no reference",
+    "ordered-gradient-sum": "one column",
+    "metrics-homogeneity-completeness": "one column",
     # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
     # change. UMAP.transform became row separable, so every umap hash in the
     # shipped table describes bytes this build no longer produces. The
@@ -2498,18 +2498,18 @@ PUBLIC_PENDING_LANES = {
     # `no reference` rather than `stale reference`. Without an entry here a
     # user's CPU-only `verify --all` would read OWED for umap on a machine
     # that is fine.
-    "umap": "no reference",
-    "gbdt-nan-modes": "no reference",
-    "gbdt-parametric-losses": "no reference",
-    "gbdt-lossguide-newtoncosine": "no reference",
-    "gbdt-pair-logit": "no reference",
-    "hdbscan": "no reference",
-    "hdbscan-leaf": "no reference",
+    "umap": "one column",
+    "gbdt-nan-modes": "one column",
+    "gbdt-parametric-losses": "one column",
+    "gbdt-lossguide-newtoncosine": "one column",
+    "gbdt-pair-logit": "one column",
+    "hdbscan": "one column",
+    "hdbscan-leaf": "one column",
     # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
     # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
     # harness no longer produces. `unwatched` would be the wrong reason and
     # the test below says so by name.
-    "mamba2-dtlimit": "stale reference",
+    "mamba2-dtlimit": "one column",
     # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
     # two same-shape RMSNorm weights were both a vector of ones, so they were
     # the SAME TENSOR and exchanging them on the way in was the identity
@@ -2518,9 +2518,9 @@ PUBLIC_PENDING_LANES = {
     # bytes (63de4bf6b9f8262a, 295d4e62d4c78b14, 49ffb2316f238e6d on `base`),
     # so leaving them public would have a user read DIVERGENT for something
     # that is not their machine. They come back at the next release record.
-    "mamba3": "stale reference",
-    "transformer": "stale reference",
-    "transformer-window": "stale reference",
+    "mamba3": "one column",
+    "transformer": "one column",
+    "transformer-window": "one column",
     # lane/reference-regen (2026-09-17): `unwatched` said the only thing
     # missing was a run. It was not. Every cell the shipped table carries for
     # samba comes from the CPU column alone, so a run would have compared this
@@ -2535,11 +2535,11 @@ PUBLIC_PENDING_LANES = {
     # reasons against the harness FAILED on main saying exactly that. Found
     # by lane/classical-host-recordings merging main; it is not this lane's
     # change and it leaves this dict at the next release record.
-    "samba-untied-dropout-accum": "stale reference",
-    "byte-lm": "no reference",
-    "byte-lm-resident": "no reference",
-    "gbdt-adapter-score-weighted": "no reference",
-    "rf-score-weighted": "no reference",
+    "samba-untied-dropout-accum": "one column",
+    "byte-lm": "one column",
+    "byte-lm-resident": "one column",
+    "gbdt-adapter-score-weighted": "one column",
+    "rf-score-weighted": "one column",
     "gbdt-yeti-rank": "unwatched",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
@@ -2554,13 +2554,13 @@ PUBLIC_PENDING_LANES = {
     "ivf": "own record",
     "ivf-euclidean": "own record",
     # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
-    "gemm-bf16": "no reference", "gemm-int8": "no reference",
-    "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
-    "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
-    "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
-    "mamba3-bf16w": "no reference", "mamba3-int8w": "no reference",
-    "mlp-bf16w": "no reference", "mlp-int8w": "no reference",
-    "samba-bf16w": "no reference", "samba-int8w": "no reference",
+    "gemm-bf16": "unwatched", "gemm-int8": "unwatched",
+    "transformer-bf16w": "unwatched", "transformer-int8w": "unwatched",
+    "mamba1-bf16w": "unwatched", "mamba1-int8w": "unwatched",
+    "mamba2-bf16w": "unwatched", "mamba2-int8w": "unwatched",
+    "mamba3-bf16w": "unwatched", "mamba3-int8w": "unwatched",
+    "mlp-bf16w": "unwatched", "mlp-int8w": "unwatched",
+    "samba-bf16w": "unwatched", "samba-int8w": "unwatched",
 }
 
 
