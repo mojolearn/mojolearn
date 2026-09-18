@@ -96,3 +96,20 @@ Integrate each feature checkpoint, exercise real GPU paths with bounded guarded
 jobs, admit matching references only after their actual checks pass, build the
 expanded 0.8.7 candidate, run installed API/verifier gates and qualify exact wheel
 bytes. No publication or all-holds-closed claim is made by this checkpoint.
+
+## Installed distributed verifier and three-class kernel checkpoint
+
+Integrated qualification through `60cf3a4ff` and the shipped distributed runner
+through `830098980`. Six kernel variants now have admitted matching CPU/Apple/AMD
+references (54 cells / 216 numerical parts); NVIDIA and installed replay still
+hold default admission. AMD recovery adds the preprocessing dependency required
+by normalized GP routes. Hardware rentals remain owned by their respective lane
+controllers with independent deadlines.
+
+`python -m mojolearn verify-distributed` now exposes the shipped runner, fresh
+checkpoint outputs, read-only comparisons, installed RECORD validation and the
+CPU thread budget. Its numerical/placement and transport-control results do not
+claim independent physical kernel execution or native arithmetic sabotage.
+CLI/resource/coverage integration: 46 tests passed. Wheel import inventory:
+103 package modules, all reachable. New artifacts still require an expanded
+0.8.7 build and installed hardware replay before publication.

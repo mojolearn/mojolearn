@@ -801,3 +801,25 @@ GPU inference with CPU saved-model inference on the same machine. `--compare`
 compares independently produced evidence documents. Native fault controls and
 physical multi-GPU pairs remain historical evidence until rerun on the actual
 release artifacts; the ordinary verifier self-test is not a substitute.
+
+### Two-GPU distributed checks in the installed package
+
+The expanded 0.8.7 candidate includes a separate, opt-in command:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-distributed --devices 0,1 --out distributed.json --require-installed
+python -m mojolearn verify-distributed --compare first.json second.json
+```
+
+This small suite covers ARIMA prediction, Holt-Winters forecasting, Gaussian
+process classification and disjoint IVF search. It checkpoints each completed
+case, compares one-device, two-device and reversed-device results, and exercises
+actual dropped/reordered worker-result controls. Output paths must be new;
+retain partial reports if execution stops. `--require-installed` checks loaded
+Python and native bytes against the installed wheel's RECORD.
+
+The default is one CPU math thread per worker; GPU indices name whole devices,
+not GPU cores. Driver UUID/PCI identities and numerical worker activity establish
+placement. They do not replace independent GPU kernel traces, native arithmetic
+sabotage, or release qualification. Loaded-language-model checks use the separate
+`verify-causal-lm` command above.

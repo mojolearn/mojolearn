@@ -112,6 +112,23 @@ def _causal_lm_dispatch(args):
     return 0 if result['status'] == 'CAPTURED_UNQUALIFIED' else 1
 
 
+def _distributed_dispatch(args):
+    from ._verify_distributed import main as distributed_main
+    if args.compare:
+        argv = ['--compare', *args.compare]
+        if args.devices or args.out or args.require_installed:
+            raise ValueError('--compare cannot be combined with capture options')
+    else:
+        argv = []
+        if args.devices is not None:
+            argv += ['--devices', args.devices]
+        if args.out is not None:
+            argv += ['--out', args.out]
+        if args.require_installed:
+            argv += ['--require-installed']
+    return distributed_main(argv)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m mojolearn",
@@ -126,6 +143,18 @@ def build_parser():
             "  4 cannot run 5 no reference\n"),
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
+
+    distributed = sub.add_parser('verify-distributed',
+        help='checkpoint small two-GPU forecast, classifier and sharded-index checks',
+        description='Numerical and device-placement checks with transport fault controls. '
+                    'Independent GPU execution traces and release qualification remain separate.')
+    distributed.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
+    distributed.add_argument('--out', metavar='PATH', help='new checkpoint JSON path')
+    distributed.add_argument('--require-installed', action='store_true',
+                             help='require package and native bytes to match installed wheel RECORD')
+    distributed.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
+    distributed.add_argument('--cpu-threads', type=int, default=1)
+    distributed.set_defaults(func=_distributed_dispatch)
 
     lm = sub.add_parser('verify-causal-lm',
         help='capture tiny loaded-model inference properties or compare two captures',
