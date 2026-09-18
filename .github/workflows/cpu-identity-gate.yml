@@ -139,8 +139,9 @@ jobs:
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
-      # Keep release certification within two cloud numerical workers.
-      max-parallel: 1
+      # Independent architectures run together (user-approved parallelism).
+      # Each job retains its two-shard cap: at most six numerical workers.
+      max-parallel: 3
       matrix:
         # One CPU environment per OS/architecture. GPU release evidence is
         # separately one Apple, one AMD and one NVIDIA column.
@@ -158,7 +159,7 @@ jobs:
     # Both full-column sweeps have 50-minute step budgets, in addition to
     # binding builds and saved-model/property gates. The previous 90-minute
     # job cap cancelled hosted Apple run 35350125464 during its sabotage
-    # sweep. Preserve serial matrix execution and the two-worker shard cap;
+    # sweep. Preserve the per-job two-worker shard cap;
     # allow bounded time for both arms and artifact upload instead.
     timeout-minutes: 180
     permissions:
