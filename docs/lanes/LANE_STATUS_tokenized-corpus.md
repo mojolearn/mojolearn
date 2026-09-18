@@ -73,8 +73,19 @@ skipped: no GPT-2 files present), `test_tokenizer_manifest.py` (with a new alias
 - Smoke-tested locally (200 KB corpus, 512 ranks): prepare 3.8 s, rerun reuses the cache,
   the user-vocabulary arm lands on the same id sha, a synthetic tokenizer is refused by name.
   Evidence `~/mojolearn-evidence/tokenized-corpus-sep18/smoke/`.
-- Lanes written, NOT YET RUN: `bpe-vocabulary` (TrainedBpeVocabulary) and
-  `tokenized-corpus` (lm_corpus) in `tools/identity_break.py`.
+- LANES, RUN AND RECORDED (`bench/results/identity_break/2026-09-18_tokenized-corpus/`, M4,
+  one core, `--repeats 2`, 9 fixtures, commit 081e14fa9): `bpe-vocabulary`
+  (TrainedBpeVocabulary: write_ranks / write_tokenizer_json bytes, render equality, identity,
+  tokenizer() and written-file round trip) and `tokenized-corpus` (lm_corpus.prepare, cache
+  reuse, user-vocabulary arm, TokenBatches steps, data_schedule, require_vocabulary refusal).
+  clean vs replay IDENTICAL=18; clean vs `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` DIVERGENT=18; clean
+  vs tokenizer host sabotage build DIVERGENT=18. `base` clean hashes: bpe-vocabulary
+  875b2b4bc2a4c302, tokenized-corpus 2580bb7a34e5ae01. Every flag part read [1,...,1]
+  (printed directly, not inferred from a hash).
+- `tools/verification_matrix.py`: `tokenizer.TrainedBpeVocabulary` removed from
+  NOT_ALGORITHMS (68a9241ac had filed it as a result container); it now reads 1 lane,
+  seen(build). `--write` then `--check` green (230 lanes, 236 public API entries).
+  `lm_corpus.*` each read 1 lane, seen(build). No GPU column (host-only, like bpe-trainer).
 
 ## The vocabulary job (OWED, do not kill)
 
