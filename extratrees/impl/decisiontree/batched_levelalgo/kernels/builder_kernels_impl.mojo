@@ -8,7 +8,7 @@ RandomSplitter, instead of cuML's quantile histogram (DEVIATION 137).
 """
 
 from std.sys.compile import is_defined
-from std.sys.info import has_apple_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 
 from extratrees.checks.pcg_rng import SplitKey, key_for, uniform_float
 from extratrees.impl.decisiontree.batched_levelalgo.dataset import Dataset
@@ -31,7 +31,36 @@ comptime SEARCH_ROWS_PER_THREAD = _search_rows_per_thread()
 
 
 def _search_rows_per_thread() -> Int:
-    """DEVIATION 2020's measurement arms."""
+    """DEVIATION 2020's measurement arms; 1 (cuML's one row per thread,
+    `builder.cuh:393-408`) is the default on every column.
+
+    DEVIATION 3020 (lane/forest-train-speed, 2026-09-17) -- THE ARMS WERE
+    FINALLY RUN ON NVIDIA, AND THEY STAY ARMS. RTX 4090, driver 580.159.04,
+    pod 6x6vfh2zqas3n4, 16-tree depth-16 fits, one process each, model
+    hashes equal in every arm. Under the seq_cst publish this file shipped
+    until DEVIATION 3022: taxi 4.0M x 16 took 16.5 s at 1, 9.0 at 2, 4.4 at
+    4, 2.9 at 8, 2.0 at 16, 1.7 at 32, 1.45 at 64, 1.03 at 128, 1.02 at 256;
+    Istella-S 2.0M x 220 took 28.4 s at 1, 4.7 at 16, 3.7 at 64, 3.8 at 256.
+    The tile was dividing a per-BLOCK cost, and DEVIATION 3022 removed that
+    cost at its root: with the RELAXED publish, 1 row per thread runs taxi in
+    0.89 s and Istella-S in 2.53 s, and 64 rows per thread 0.84 s and 2.45 s.
+    That is 3 to 5 percent from single samples, it costs the level loop a
+    restage and a drain per cycle (`builder.mojo`, the
+    `SEARCH_ROWS_PER_THREAD > 1` arm), so the default does not move.
+    `_32`, `_64`, `_128`, `_256` and the explicit `_1` were added for this
+    measurement. Bit-inert at every width for DEVIATION 2020's reasons:
+    integer sums, a key-space range fold, draws keyed by (seed, tree, node,
+    feature); `MOJOLEARN_ET_SAB_RPT_TAIL_DROP` is the arm that must move and
+    was seen to (15 of 15 ExtraTrees cells) at 64, and seen NOT to at 1.
+    """
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_256"]():
+        return 256
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_128"]():
+        return 128
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_64"]():
+        return 64
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_32"]():
+        return 32
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_16"]():
         return 16
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_8"]():
@@ -216,6 +245,130 @@ from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 
+@always_inline
+def _search_barrier():
+    """The explicit barrier after each block reduction of the range and score
+    passes. `-D MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER=1` is a MEASUREMENT ARM that
+    drops it, to price the barrier per block on one vendor; it is never set by
+    a build script and never a default (Metal needs the barrier)."""
+    comptime if not is_defined["MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER"]():
+        barrier()
+
+
+comptime SINGLE_WRITER_PLAIN_PUBLISH = is_defined[
+    "MOJOLEARN_ET_PLAIN_SINGLE_PUBLISH"
+]()
+"""DEVIATION 3021 (lane/forest-train-speed, 2026-09-17), A MEASUREMENT ARM,
+OFF BY DEFAULT: a node that fits in ONE search block publishes its range and
+score cells with plain stores.
+
+A cell is `(node, feature slot)`. Its publishers are the thread 0 of each of
+the node's `num_blocks` blocks on that feature slot's grid row, and nothing
+else in the launch writes it. When `num_blocks == 1` the cell has exactly one
+writer in the whole launch, the seeder that initialized it ran earlier on the
+in-order queue, and no reader runs until the launch is behind it. One writer
+needs no atomic: `cell = min(cell, x)` and `cell += x` store the very integers
+the atomic forms store, so no bit moves. It was written when the publish
+atomics were the two hot passes' whole price; DEVIATION 3022 removed that
+price at its root, after which this arm measured inside the noise (16-tree
+fits, RTX 4090: taxi 0.84 s without it and 0.88 s with it, Istella-S 2.45 s
+and 2.41 s), so it stays an arm. `-D MOJOLEARN_ET_SAB_PLAIN_PUBLISH=1` is the
+arm that must move: the plain path adds one to every count it publishes."""
+
+comptime SAB_PLAIN_PUBLISH = is_defined["MOJOLEARN_ET_SAB_PLAIN_PUBLISH"]()
+
+comptime RELAXED_PUBLISH = (
+    has_nvidia_gpu_accelerator()
+    or is_defined["MOJOLEARN_ET_RELAXED_PUBLISH"]()
+) and not is_defined["MOJOLEARN_ET_SEQCST_PUBLISH"]()
+"""DEVIATION 3022 (lane/forest-train-speed, 2026-09-17): the search's publish
+atomics are RELAXED on an NVIDIA build.
+
+WHAT WAS MEASURED (RTX 4090, driver 580.159.04, pod 6x6vfh2zqas3n4, `nsys`,
+taxi 4.0M x 16, 100 trees depth 16, IDENTICAL). Two kernels were 99.5 percent
+of device time and the host was idle: the score pass 53.3 s and the range
+pass 38.3 s of a 94 s fit, at a CONSTANT 1.4 to 1.9 ns per thread from the
+root level to the deepest, while the partition pass tiled the same rows one
+per thread, published with a plain store, and ran the same grid in under
+1 ms. The cost was per BLOCK and it was the publish: every block's thread 0
+ends in four (range) or `3 + 2 * n_classes` (score) atomic read-modify-writes
+on global memory. A measurement arm that replaced the range pass's four with
+plain stores (`MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH`, wrong on purpose) took
+the whole range pass out of a 16-tree fit, 16.5 s to 10.0 s; dropping the
+explicit barriers moved nothing (`MOJOLEARN_ET_EXP_NO_SEARCH_BARRIER`, 16.5 s
+to 15.1 s).
+
+THE ROOT CAUSE. Mojo's non-Apple default ordering is seq_cst, and on CUDA a
+seq_cst read-modify-write carries fences: about 47 ns of WALL time per
+publish, serialized across the launch. The random forest lane met this first
+and pinned every histogram add to `Ordering.RELAXED`
+(`ensemble/decisiontree/batched_levelalgo/bins.mojo`, "Fences only -- the
+totals cannot move"); this file never did. With the ordering alone changed,
+the 16-tree fits went from 16.5 s to 0.89 s on taxi and from 28.4 s to 2.53 s
+on Istella-S 2.0M x 220, model hashes equal.
+
+WHY NO BIT MOVES. The ordering changes fences, never the read-modify-write:
+an `atomicrmw add`, `min` or `max` loses no update under any ordering, and an
+integer sum, min or max is the same value under any interleaving. No thread
+of a launch READS a published cell; the readers are later launches on the
+same in-order queue, which is a full barrier. cuML's own `atomicAdd` is
+relaxed. `-D MOJOLEARN_ET_SAB_RELAXED_PUBLISH=1` is the arm that must move:
+the relaxed `_publish_add` adds one to every count it publishes.
+
+NVIDIA ONLY by default. `-D MOJOLEARN_ET_RELAXED_PUBLISH=1` opts another
+column in for a measurement (AMD's default is seq_cst too, and DEVIATION
+1943's "dispatch rate" signature on the MI325X is worth re-reading against
+this); `-D MOJOLEARN_ET_SEQCST_PUBLISH=1` restores the default ordering for
+the A/B. Apple's default is already relaxed."""
+
+comptime SAB_RELAXED_PUBLISH = is_defined["MOJOLEARN_ET_SAB_RELAXED_PUBLISH"]()
+
+
+@always_inline
+def _publish_add(
+    cell: MutPointer[Int32, MutAnyOrigin], idx: Int, value: Int32, single: Bool
+):
+    """`cell[idx] += value` for one publish of the search: a RELAXED
+    `Atomic.fetch_add` on NVIDIA (DEVIATION 3022), the default ordering
+    elsewhere, and a plain store for a single-writer cell only under
+    DEVIATION 3021's opt-in arm."""
+    comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+        if single:
+            comptime if SAB_PLAIN_PUBLISH:
+                cell[unsafe_offset=idx] += value + Int32(1)
+            else:
+                cell[unsafe_offset=idx] += value
+            return
+    comptime if RELAXED_PUBLISH:
+        comptime if SAB_RELAXED_PUBLISH:
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                cell.unsafe_offset(idx), value + Int32(1)
+            )
+        else:
+            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                cell.unsafe_offset(idx), value
+            )
+    else:
+        _ = Atomic.fetch_add(cell.unsafe_offset(idx), value)
+
+
+@always_inline
+def _publish_min_max(
+    minkey: MutPointer[UInt32, MutAnyOrigin],
+    maxkey: MutPointer[UInt32, MutAnyOrigin],
+    idx: Int,
+    kmin: UInt32,
+    kmax: UInt32,
+):
+    """The range cell's atomic min and max, RELAXED under DEVIATION 3022."""
+    comptime if RELAXED_PUBLISH:
+        Atomic.min[ordering = Ordering.RELAXED](minkey.unsafe_offset(idx), kmin)
+        Atomic.max[ordering = Ordering.RELAXED](maxkey.unsafe_offset(idx), kmax)
+    else:
+        Atomic.min(minkey.unsafe_offset(idx), kmin)
+        Atomic.max(maxkey.unsafe_offset(idx), kmax)
+
+
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 """The repo-wide numeric mode (`checks/numerics.mojo`)."""
 
@@ -368,18 +521,18 @@ def node_feature_range_kernel[
     var kmax: UInt32
     comptime if BUILD_MODE == NUMERIC_IDENTICAL:
         kmin = block_min[block_size=TPB](range_key(local_min))
-        barrier()
+        _search_barrier()
         kmax = block_max[block_size=TPB](range_key(local_max))
-        barrier()
+        _search_barrier()
     else:
         var blk_min = block_min[block_size=TPB](local_min)
-        barrier()
+        _search_barrier()
         var blk_max = block_max[block_size=TPB](local_max)
-        barrier()
+        _search_barrier()
         kmin = range_key(blk_min)
         kmax = range_key(blk_max)
     var blk_missing = block_sum[block_size=TPB](local_missing)
-    barrier()
+    _search_barrier()
 
     if Int(thread_idx.x) != 0:
         return
@@ -395,10 +548,31 @@ def node_feature_range_kernel[
     if sabotage == RANGE_SAB_EMPTY_NOT_IDENTITY and empty_block:
         kmin = range_key(Float32(0.0))
         kmax = range_key(Float32(0.0))
-    Atomic.min(out_minkey.unsafe_offset(slot), kmin)
-    Atomic.max(out_maxkey.unsafe_offset(slot), kmax)
-    _ = Atomic.fetch_add(out_n_missing.unsafe_offset(slot), blk_missing)
-    _ = Atomic.fetch_add(out_n_merges.unsafe_offset(slot), Int32(1))
+    comptime if is_defined["MOJOLEARN_ET_EXP_RACY_RANGE_PUBLISH"]():
+        # MEASUREMENT ARM, WRONG ON PURPOSE: plain read-modify-writes where the
+        # shipped publish is four atomics, to price the atomics per block. It
+        # loses updates under contention and must never reach a shipped build.
+        if kmin < out_minkey[unsafe_offset=slot]:
+            out_minkey[unsafe_offset=slot] = kmin
+        if kmax > out_maxkey[unsafe_offset=slot]:
+            out_maxkey[unsafe_offset=slot] = kmax
+        out_n_missing[unsafe_offset=slot] += blk_missing
+        out_n_merges[unsafe_offset=slot] += Int32(1)
+    else:
+        # DEVIATION 3021: one block means one writer for this cell.
+        var single = num_blocks == 1
+        comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+            if single:
+                if kmin < out_minkey[unsafe_offset=slot]:
+                    out_minkey[unsafe_offset=slot] = kmin
+                if kmax > out_maxkey[unsafe_offset=slot]:
+                    out_maxkey[unsafe_offset=slot] = kmax
+            else:
+                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+        else:
+            _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+        _publish_add(out_n_missing, slot, blk_missing, single)
+        _publish_add(out_n_merges, slot, Int32(1), single)
 
 
 @always_inline
@@ -467,7 +641,9 @@ def node_nonconstant_flag_kernel(
         if not node_feature_is_constant(
             extent, work_items[unsafe_offset=nid].instances.count
         ):
-            _ = Atomic.fetch_add(out_flag.unsafe_offset(nid), Int32(1))
+            # DEVIATION 3022: RELAXED on NVIDIA, like every other publish of
+            # the search; never the single-writer form (k writers per node).
+            _publish_add(out_flag, nid, Int32(1), False)
         idx += stride
 
 
@@ -1308,17 +1484,19 @@ def node_feature_score_kernel[
         barrier()
 
     var blk_n_left = block_sum[block_size=TPB](n_left)
-    barrier()
+    _search_barrier()
     var blk_n_seen = block_sum[block_size=TPB](n_seen)
-    barrier()
+    _search_barrier()
 
     var publishes = not (
         sabotage == SCORE_SAB_BLOCK0_ONLY and offset_blockid != 0
     )
+    # DEVIATION 3021: one block means one writer for this cell.
+    var single = num_blocks == 1
     if Int(thread_idx.x) == 0 and publishes:
-        _ = Atomic.fetch_add(out_n_left.unsafe_offset(slot), blk_n_left)
-        _ = Atomic.fetch_add(out_n_total.unsafe_offset(slot), blk_n_seen)
-        _ = Atomic.fetch_add(out_n_blocks.unsafe_offset(slot), Int32(1))
+        _publish_add(out_n_left, slot, blk_n_left, single)
+        _publish_add(out_n_total, slot, blk_n_seen, single)
+        _publish_add(out_n_blocks, slot, Int32(1), single)
 
     comptime if SHARED_COUNTS:
         var c = Int(thread_idx.x)
@@ -1351,16 +1529,12 @@ def node_feature_score_kernel[
 
     for k in range(n_acc):
         var bl = block_sum[block_size=TPB](priv_left[unsafe_offset=k])
-        barrier()
+        _search_barrier()
         var bt = block_sum[block_size=TPB](priv_total[unsafe_offset=k])
-        barrier()
+        _search_barrier()
         if Int(thread_idx.x) == 0 and publishes:
-            _ = Atomic.fetch_add(
-                out_acc_left.unsafe_offset(slot * n_acc + k), bl
-            )
-            _ = Atomic.fetch_add(
-                out_acc_total.unsafe_offset(slot * n_acc + k), bt
-            )
+            _publish_add(out_acc_left, slot * n_acc + k, bl, single)
+            _publish_add(out_acc_total, slot * n_acc + k, bt, single)
 
 
 def node_feature_score_finalize_kernel[
