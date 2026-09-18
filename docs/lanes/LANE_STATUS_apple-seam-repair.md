@@ -327,3 +327,25 @@ byte-identical between the arms**: INERT on the LM lane, enwik8, 5 steps.
 Step times from these first two runs are CONTAMINATED by my own concurrent
 one-core cross-compiles (norepair 41-52 s, repair 49-75 s); not used.
 Remaining six runs have no concurrent build of mine.
+
+## RESULT 11: the LM lane on Apple, target shape, both corpora (8 runs)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-lm/` (result.json
+and events.jsonl per run). Runs norepair / repair / repair / norepair per
+corpus, 5 steps each.
+- **PREDICTION HELD on the LM lane: all 5 steps' witnesses (loss, gradients,
+  parameters, m, v, flags) are byte-identical across all four runs of each
+  corpus** (enwik8 step 5 loss cba8412607b7361f, parameters bb044d9a7575e836).
+  INERT.
+- **Step time: the repair looks EXPENSIVE on the real step, far beyond the
+  GEMM-sum price.** Median of steps 2-5 (s): enwik8 norepair 44.87 / 28.71,
+  repair 64.41 / 56.18; Pile GitHub norepair 30.54 / 32.06, repair 45.48 /
+  35.85. Per-corpus geomean ratio repair/norepair: enwik8 1.68, Pile 1.29.
+  The norepair arm alone varies 1.56x on enwik8 (runs 1 vs 4), so this is
+  noisy, but all four repair medians sit above the matching norepair
+  median. The tuned GEMM sum price (+4% of ~12 s, about 1% of the step)
+  cannot explain it. Hypothesis under test: blocks FAILING admission on real
+  training data (tiny gradients/activations make minA+minB < 151) and
+  falling to the slow exact recompute, and/or the inline-repaired
+  FLAT/TILE/leaf kernels on the step's small GEMMs. Component timing
+  (timers build, 2 steps, both arms interleaved) queued: metal4.sh.
