@@ -1069,20 +1069,20 @@ FAMILIES = (
         # there) and MOJOLEARN_HOST_SABOTAGE reaches nothing in it: the
         # binding holds integers and tables with no float fold. The gate now
         # builds every family into that set and this one with its own define
-        # (GATE_SABOTAGE_OWN_DEFINES), which reverses the ids of gpt2_encode
-        # and of every document of gpt2_encode_batch, so the train, infer and
+        # (GATE_SABOTAGE_OWN_DEFINES), which reverses the ids of bpe_encode
+        # and of every document of bpe_encode_batch, so the train, infer and
         # batch parts move.
         # mojolearn ships no vocabulary (2026-09-15): the lane loads the
         # synthetic one (python/mojolearn/_tokenizer_synthetic.py) at
         # identity_break's LANE_REVISIONS["tokenizer"], so the records above
         # hashed older input and its cells are owed to the next record.
-        # gpt2_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
+        # bpe_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
         training_lanes=("tokenizer",),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("GPT2Tokenizer",),
+        classes=("BpeTokenizer",),
         display="the byte-level BPE tokenizer (GPT-2 format, user-supplied vocabulary)",
         host_modules=(
             "tokenizer/encoding.mojo", "tokenizer/impl/bpe.mojo",
@@ -1091,9 +1091,9 @@ FAMILIES = (
         ),
         exports=(
             "tokenizer_host_numeric_mode", "tokenizer_host_vendor",
-            "tokenizer_host_column", "tokenizer_host_sabotage", "gpt2_load",
-            "gpt2_n_vocab", "gpt2_max_token_bytes", "gpt2_encode", "gpt2_encode_batch",
-            "gpt2_decode",
+            "tokenizer_host_column", "tokenizer_host_sabotage", "bpe_load",
+            "bpe_n_vocab", "bpe_max_token_bytes", "bpe_encode", "bpe_encode_batch",
+            "bpe_decode",
         ),
         gate="pixi run check-tokenizer and python/mojolearn/tests/test_tokenizer_surface.py",
         wheel_note=(

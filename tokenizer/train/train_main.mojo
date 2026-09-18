@@ -9,8 +9,8 @@ writes two files, which are the two formats a trained vocabulary is written
 in:
 
     OUT_PREFIX.ranks.tsv        OURS: `rank<TAB>hex`, what
-                                `GPT2Tokenizer.from_ranks_file` and
-                                `load_gpt2_tokenizer_from` read
+                                `BpeTokenizer.from_ranks_file` and
+                                `load_bpe_tokenizer_from` read
     OUT_PREFIX.tokenizer.json   the ecosystem's: what Hugging Face
                                 `tokenizers` loads, so a model published with
                                 this vocabulary is usable by people who do

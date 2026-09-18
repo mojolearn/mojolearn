@@ -6,7 +6,7 @@ byte-level BPE families, with the pre-tokenization pattern a PARAMETER
 
 WHAT THE FILE HOLDS AND WHAT IS TAKEN FROM IT. `model.vocab` (byte-level
 spelling -> id) and `model.merges` become a rank table of token bytes, the
-same table `GPT2Tokenizer.from_files` builds from `encoder.json` and
+same table `BpeTokenizer.from_files` builds from `encoder.json` and
 `vocab.bpe`, checked the same way (ids contiguous, every token a single
 byte or the result of a merge, merge results rising above both parts, so
 that merging by rank IS the merge list). `added_tokens` are the special
@@ -29,7 +29,7 @@ text into pre-tokens, and a different cut is a different id sequence:
 WHERE EACH PATTERN RUNS, AND WHY. The GPT-2 pattern is compiled into the
 host binding (`tokenizer/impl/pretokenize.mojo`, hand-rolled; Mojo has no
 regex engine) and the `gpt2` tokenizer here encodes through that binding via
-`GPT2Tokenizer`, the existing certified door. The Llama 3 and Qwen 2
+`BpeTokenizer`, the existing certified door. The Llama 3 and Qwen 2
 patterns are NOT in the binding: adding a second hand-rolled pattern is a
 Mojo change this lane cannot build or gate (no binding build and no run on
 this box), and the binding's `encode` always pre-tokenizes with the GPT-2
@@ -73,7 +73,7 @@ import os
 import unicodedata
 
 from .. import _tokenizer_synthetic as _syn
-from ..tokenizer import GPT2Tokenizer, _byte_to_char
+from ..tokenizer import BpeTokenizer, _byte_to_char
 
 __all__ = ["Tokenizer", "PATTERNS", "pretokenize", "pattern_name"]
 
@@ -249,7 +249,7 @@ def _refuse(path, what):
 
 
 def _validate(tokens, merges, path, ignore_merges):
-    """`GPT2Tokenizer.from_files`'s checks over token bytes: the conditions
+    """`BpeTokenizer.from_files`'s checks over token bytes: the conditions
     under which merging by rank gives the merge list's own result."""
     n = len(tokens)
     index = {}
@@ -524,7 +524,7 @@ class Tokenizer:
 
     def _gpt2_door(self):
         if self._gpt2 is None:
-            self._gpt2 = GPT2Tokenizer.from_token_bytes(self.tokens)
+            self._gpt2 = BpeTokenizer.from_token_bytes(self.tokens)
         return self._gpt2
 
     def _split_specials(self, raw):

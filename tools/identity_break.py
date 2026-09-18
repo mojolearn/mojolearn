@@ -107,7 +107,7 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
             The n/a reasons are transductive as for infer, function
             (metrics, resampling, cross-validation), no-batch-axis
             (the tokenizer in records before 2026-09-15, when
-            GPT2Tokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
+            BpeTokenizer.encode_batch gave it documents as rows), optimizer-step and training-step (the batch IS the
             arithmetic of a step), no-model (a trainer lane that returns
             no estimator). batch-dependent-by-contract was UMAP.transform's
             reason until lane/umap-batch-fix made the transform row
@@ -3544,7 +3544,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("tokenizer")
 def _(ml, X, yc, yr, Xh=None):
-    """GPT2Tokenizer (python/mojolearn/tokenizer.py), host integers and
+    """BpeTokenizer (python/mojolearn/tokenizer.py), host integers and
     tables through _mojolearn_tokenizer_host; no float arithmetic, so
     cross-vendor identity is by construction and what this measures is
     that the SAME binary bytes were built on every box. mojolearn ships no
@@ -3555,7 +3555,7 @@ def _(ml, X, yc, yr, Xh=None):
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
     held-out probe encodes Xh's first 4,096 bytes
     (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
-    tok = ml.tokenizer.GPT2Tokenizer._synthetic()
+    tok = ml.tokenizer.BpeTokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
     back = np.frombuffer(tok.decode_bytes(ids.tolist()), dtype=np.uint8)
@@ -6001,7 +6001,7 @@ _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integr
             "folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; "
             "no per-sample output exists to compare an i_first range against)", "monte-carlo")
 def _batch_tokenizer(ml, e, Xh):
-    """GPT2Tokenizer.encode_batch and decode_bytes_batch
+    """BpeTokenizer.encode_batch and decode_bytes_batch
     (lane/inference-tokenizer-neural, 2026-09-15). A row of the held-out
     slice is one document: its 8 * d float64 bytes, so a batch is 64
     documents of binary text with every byte value in reach. Each
