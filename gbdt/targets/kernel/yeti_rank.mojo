@@ -51,12 +51,57 @@ DEVIATION (flush at derivation, IDENTITY_PATHS row 10): the centered point, each
 `ftz`. DEVIATION 258: `exp` and `pow` go through `routed_exp` and
 `identical_pow`. DEVIATION (the seed stream): see `doc_parallel_boosting.mojo`,
 where each call's `NextUniformL` is drawn from a YetiRank stream of its own.
+
+================= DEVIATION 3040: one BLOCK per task on the NVIDIA column =================
+MEASURED FIRST (RTX 4090, Istella-S LETOR 2,043,304 x 220, 19,245 queries, 2,046
+tasks, 2026-09-17, `docs/lanes/LANE_STATUS_gbdt-train-speed.md`): the
+one-thread-per-task kernel above ran 29.07 ms a call, two calls a tree (the
+search gradient and the leaf estimation), 58.1 of the fit's 58.2 ms per tree
+and 88.6 percent of all GPU kernel time. One GPU thread walking 1024 positions
+through ten rounds of draws, a ten-pass merge sort and 2048 pair steps in
+device memory is latency bound; the device sat idle beside it.
+
+`yeti_rank_task_block_kernel` runs a task on a 256-thread block with 4 lanes a
+thread, the reference's own shape (`YetiRankGradientSingleGroup`), with the
+sort keys, relevances, exps and the two accumulators in block shared memory
+and a `barrier()` where the reference has `__syncthreads()`.
+
+WHY NO BIT MOVES. (1) The draws: thread `tid` owns positions `tid + 256 * k`
+and advances ONE stream through its lanes in order every round, the stream the
+sequential kernel kept in `s_seed[tid]`; the float expressions are the same
+text. (2) The sort computes NO float. Its result is the unique ascending order
+of the composite key `(query << 42) | (~key << 10) | position`, which is
+(query ascending, key descending, position ascending), the order `_b_first`
+gives the stable merge; every composite is distinct (the position is in it),
+so any correct sort yields this one permutation. Here it is a ten-pass merge
+in which every element finds its output slot by a binary search of the
+sibling run. (3) The pairs: `pairWeight` and `ll` are the same expressions on
+the same operands (`decay` is hoisted out of the round loop; it is a pure
+function of the position and its query begin). Within one (round, lane, phase)
+step every thread writes a DISTINCT document, and the steps are separated by
+barriers, so each document's float sums keep the one order the docstring
+above names: (round t, lane k, phase). (4) The accumulators start at 0.0 in
+shared memory and are stored once to `der_acc` / `weight_acc`, the same values
+the sequential kernel accumulated in place.
+
+THE ROW. `yeti_block_parallel_for[column]` is True on the NVIDIA column only
+(the column this was measured and identity-checked on); Apple (whose 32 KiB
+threadgroup limit this kernel fills exactly) and AMD keep the sequential
+kernel until their columns run it. `-D MOJOLEARN_3040_YETI_SEQUENTIAL=1` is the
+kill switch and the BEFORE arm; `-D MOJOLEARN_3040_YETI_BLOCK=1` opts another
+column in. `-D MOJOLEARN_GBDT_YETI_SABOTAGE=1` runs phase 2 before phase 1 on
+the block kernel, the order this DEVIATION must not change.
+============================================================================================
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import ftz, identical_pow
 from gbdt.data.yeti_rank_tasks import (
     YETI_TASK_POSITIONS,
@@ -80,6 +125,24 @@ from gbdt.targets.kernel.query_rmse import (
 
 comptime YETI_THREADS = 256
 comptime YETI_LANES = 4
+
+
+def yeti_block_parallel_for[column: Int]() -> Bool:
+    """SCHEDULING row (DEVIATION 3040): whether a YetiRank task runs on a
+    256-thread block (`yeti_rank_task_block_kernel`) or on one thread
+    (`yeti_rank_task_kernel`). Same bits either way (the DEVIATION block in
+    the module docstring); NVIDIA is the column it was measured and
+    identity-checked on. The kill switch wins over the opt-in."""
+    comptime if is_defined["MOJOLEARN_3040_YETI_SEQUENTIAL"]():
+        return False
+    comptime if is_defined["MOJOLEARN_3040_YETI_BLOCK"]():
+        return True
+    return column == COLUMN_NVIDIA
+
+
+comptime YETI_BLOCK_PARALLEL = yeti_block_parallel_for[TARGET_COLUMN]()
+#: negative control for DEVIATION 3040: phase 2 before phase 1 (default off)
+comptime YETI_SABOTAGE = is_defined["MOJOLEARN_GBDT_YETI_SABOTAGE"]()
 
 
 def _advance_seed32(seed: UInt32) -> UInt32:
@@ -297,6 +360,210 @@ def yeti_rank_task_kernel(
                                 der_acc.unsafe_store(r2, ftz(der_acc.unsafe_load(r2) + (-ll)))
 
 
+def yeti_rank_task_block_kernel(
+    approx: MutPointer[Float32, MutAnyOrigin],
+    relev: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    has_weights: Int32,
+    row_qids: MutPointer[UInt32, MutAnyOrigin],
+    q_offsets: MutPointer[UInt32, MutAnyOrigin],
+    task_offsets: MutPointer[UInt32, MutAnyOrigin],
+    task_sizes: MutPointer[UInt32, MutAnyOrigin],
+    task_qids: MutPointer[UInt32, MutAnyOrigin],
+    cuda_seed: UInt32,
+    decay_speed: Float32,
+    permutations_in: Int32,
+    der_acc: MutPointer[Float32, MutAnyOrigin],
+    weight_acc: MutPointer[Float32, MutAnyOrigin],
+):
+    """One task on one 256-thread block, 4 lanes a thread (DEVIATION 3040).
+    Grid `(n_tasks, 1, 1)`, block `(YETI_THREADS, 1, 1)`: every block is a
+    task, and every loop bound below is the same on every thread of a block,
+    so every barrier is reached by every thread.
+
+    Shared memory, 32 KiB: the composite sort keys and their ping-pong copy
+    (2 x 1024 x 8 bytes), `relev * weight`, the exps and the two accumulators
+    (4 x 1024 x 4 bytes)."""
+    var sh_keys = stack_allocation[
+        2 * YETI_TASK_POSITIONS,
+        Scalar[DType.uint64],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_relev = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_exp = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_der = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var sh_weight = stack_allocation[
+        YETI_TASK_POSITIONS,
+        Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+
+    var task = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var offset = Int(task_offsets.unsafe_load(task))
+    var size = Int(task_sizes.unsafe_load(task))
+    var first_qid = row_qids.unsafe_load(offset)
+    var pad_qid = row_qids.unsafe_load(offset + size - 1) + UInt32(1) - first_qid
+    var perms = Int(permutations_in)
+
+    # this thread's stream (`:224-237`), advanced through its lanes in order
+    # every round: what the sequential kernel kept in `s_seed[tid]`
+    var s = _task_seed(task_qids.unsafe_load(task), tid, cuda_seed)
+
+    # per lane: the local query id, the query begin and the pair decay
+    var lane_qid = SIMD[DType.uint32, YETI_LANES](0)
+    var lane_begin = SIMD[DType.int32, YETI_LANES](0)
+    var lane_decay = SIMD[DType.float32, YETI_LANES](0.0)
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        var qid = pad_qid
+        # the padding is one query that begins at the first padded position
+        var begin = size
+        if p < size:
+            var row_qid = row_qids.unsafe_load(offset + p)
+            qid = row_qid - first_qid
+            begin = Int(q_offsets.unsafe_load(Int(row_qid))) - offset
+            var w = Float32(1.0)
+            if has_weights != Int32(0):
+                w = weights.unsafe_load(offset + p)
+            sh_relev.unsafe_store(p, ftz(relev.unsafe_load(offset + p) * w))
+            sh_exp.unsafe_store(
+                p, routed_exp(min(approx.unsafe_load(offset + p), Float32(70.0)))
+            )
+        else:
+            sh_relev.unsafe_store(p, Float32(1000.0))
+            sh_exp.unsafe_store(p, Float32(1000.0))
+        sh_der.unsafe_store(p, Float32(0.0))
+        sh_weight.unsafe_store(p, Float32(0.0))
+        lane_qid[k] = qid
+        lane_begin[k] = Int32(begin)
+        if p != begin:
+            # the round loop's `0.15 * pow(decaySpeed, j - queryBegin - 1)`,
+            # hoisted: it depends on the position and its query begin only
+            lane_decay[k] = Float32(0.15) * identical_pow(
+                decay_speed, Float32(p - begin - 1)
+            )
+    barrier()
+
+    for _ in range(perms):
+        # the draws (`:112-121`)
+        for k in range(YETI_LANES):
+            var p = tid + YETI_THREADS * k
+            var val = Float32(-1000.0)
+            if p < size:
+                val = sh_exp.unsafe_load(p)
+            s = _advance_seed32(s)
+            # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
+            # float is exactly 2^-32
+            var uni = Float32(s) * Float32(2.328306435996595e-10)
+            val = val * (uni / (Float32(1.000001) - uni))
+            var bits = bitcast[DType.uint32](val)
+            if (bits & UInt32(0x80000000)) != UInt32(0):
+                bits = bits ^ UInt32(0xFFFFFFFF)
+            else:
+                bits = bits ^ UInt32(0x80000000)
+            # (query ascending, key descending, position ascending) as ONE
+            # ascending integer; the position makes every composite distinct
+            var composite = (
+                (UInt64(lane_qid[k]) << UInt64(42))
+                | (UInt64(bits ^ UInt32(0xFFFFFFFF)) << UInt64(10))
+                | UInt64(p)
+            )
+            sh_keys.unsafe_store(p, composite)
+        barrier()
+
+        # the two stable radix passes as a ten-pass merge: every element
+        # finds its output slot by a binary search of the sibling run (the
+        # composites are distinct, so "strictly below" needs no tie rule).
+        # Ten passes, so the order ends where it began, at `sh_keys[0:1024]`.
+        var src = 0
+        var dst = YETI_TASK_POSITIONS
+        var width = 1
+        while width < YETI_TASK_POSITIONS:
+            for k in range(YETI_LANES):
+                var i = tid + YETI_THREADS * k
+                var lo = (i // (2 * width)) * (2 * width)
+                var mid = lo + width
+                var sibling = mid
+                var own_rank = i - lo
+                if i >= mid:
+                    sibling = lo
+                    own_rank = i - mid
+                var key = sh_keys.unsafe_load(src + i)
+                var base = 0
+                var length = width
+                while length > 1:
+                    var half = length // 2
+                    if sh_keys.unsafe_load(src + sibling + base + half - 1) < key:
+                        base += half
+                    length -= half
+                var below = base
+                if sh_keys.unsafe_load(src + sibling + base) < key:
+                    below += 1
+                sh_keys.unsafe_store(dst + lo + own_rank + below, key)
+            barrier()
+            var swap = src
+            src = dst
+            dst = swap
+            width = width * 2
+
+        # the pairs (`:130-168`): for each lane, phase 1 then phase 2
+        for k in range(YETI_LANES):
+            var j = tid + YETI_THREADS * k
+            var qb = Int(lane_begin[k])
+            var has_pair = j != qb
+            var idx1 = 0
+            var idx2 = 0
+            var pair_weight = Float32(0.0)
+            var ll = Float32(0.0)
+            if has_pair:
+                idx1 = Int(sh_keys.unsafe_load(src + j - 1) & UInt64(1023))
+                idx2 = Int(sh_keys.unsafe_load(src + j) & UInt64(1023))
+                var relev1 = sh_relev.unsafe_load(idx1)
+                var relev2 = sh_relev.unsafe_load(idx2)
+                var approx1 = sh_exp.unsafe_load(idx1)
+                var approx2 = sh_exp.unsafe_load(idx2)
+                var decay = lane_decay[k]
+                pair_weight = ftz(decay * abs(relev1 - relev2) / Float32(perms))
+                var sel = -approx1
+                if relev1 > relev2:
+                    sel = approx2
+                ll = ftz(pair_weight * sel / (approx2 + approx1))
+            comptime for step in range(2):
+                comptime phase = (1 - step) if YETI_SABOTAGE else step
+                comptime if phase == 0:
+                    if has_pair and idx1 < size:
+                        sh_weight.unsafe_store(
+                            idx1, ftz(sh_weight.unsafe_load(idx1) + pair_weight)
+                        )
+                        sh_der.unsafe_store(idx1, ftz(sh_der.unsafe_load(idx1) + ll))
+                else:
+                    if has_pair and idx2 < size:
+                        sh_weight.unsafe_store(
+                            idx2, ftz(sh_weight.unsafe_load(idx2) + pair_weight)
+                        )
+                        sh_der.unsafe_store(idx2, ftz(sh_der.unsafe_load(idx2) + (-ll)))
+                barrier()
+
+    for k in range(YETI_LANES):
+        var p = tid + YETI_THREADS * k
+        if p < size:
+            der_acc.unsafe_store(offset + p, sh_der.unsafe_load(p))
+            weight_acc.unsafe_store(offset + p, sh_weight.unsafe_load(p))
+
+
 def yeti_rank_row_kernel[estimation: Bool](
     der_acc: MutPointer[Float32, MutAnyOrigin],
     weight_acc: MutPointer[Float32, MutAnyOrigin],
@@ -480,6 +747,28 @@ def make_yeti_rank_target_buffers(
     )
 
 
+def _launch_yeti_rank_tasks_sequential(
+    ctx: DeviceContext, mut y: YetiRankTargetBuffers, seed: UInt64
+) raises:
+    """The one-thread-per-task launch (every column but NVIDIA, and the
+    DEVIATION 3040 kill switch)."""
+    ctx.enqueue_function[yeti_rank_task_kernel](
+        y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
+        y.query.weights.unsafe_ptr(),
+        Int32(1) if y.query.has_weights else Int32(0),
+        y.query.qids.unsafe_ptr(),
+        y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+        y.d_task_qids.unsafe_ptr(), Int32(y.n_tasks),
+        yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+        y.s_seed.unsafe_ptr(), y.s_exp.unsafe_ptr(), y.s_relev.unsafe_ptr(),
+        y.s_src.unsafe_ptr(), y.s_begin.unsafe_ptr(), y.s_key.unsafe_ptr(),
+        y.s_idx.unsafe_ptr(), y.s_tmp_key.unsafe_ptr(), y.s_tmp_idx.unsafe_ptr(),
+        y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+        grid_dim=(y.n_tasks, 1, 1),
+        block_dim=(1, 1, 1),
+    )
+
+
 def launch_yeti_rank_with[estimation: Bool](
     ctx: DeviceContext,
     mut y: YetiRankTargetBuffers,
@@ -534,21 +823,22 @@ def launch_yeti_rank_with[estimation: Bool](
             grid_dim=(row_blocks, 1, 1),
             block_dim=(MSE_BLOCK_SIZE, 1, 1),
         )
-    ctx.enqueue_function[yeti_rank_task_kernel](
-        y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
-        y.query.weights.unsafe_ptr(),
-        Int32(1) if y.query.has_weights else Int32(0),
-        y.query.qids.unsafe_ptr(),
-        y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
-        y.d_task_qids.unsafe_ptr(), Int32(y.n_tasks),
-        yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
-        y.s_seed.unsafe_ptr(), y.s_exp.unsafe_ptr(), y.s_relev.unsafe_ptr(),
-        y.s_src.unsafe_ptr(), y.s_begin.unsafe_ptr(), y.s_key.unsafe_ptr(),
-        y.s_idx.unsafe_ptr(), y.s_tmp_key.unsafe_ptr(), y.s_tmp_idx.unsafe_ptr(),
-        y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
-        grid_dim=(y.n_tasks, 1, 1),
-        block_dim=(1, 1, 1),
-    )
+    comptime if YETI_BLOCK_PARALLEL:
+        # DEVIATION 3040: one 256-thread block per task
+        ctx.enqueue_function[yeti_rank_task_block_kernel](
+            y.d_point.unsafe_ptr(), y.query.targets.unsafe_ptr(),
+            y.query.weights.unsafe_ptr(),
+            Int32(1) if y.query.has_weights else Int32(0),
+            y.query.qids.unsafe_ptr(), y.query.q_offsets.unsafe_ptr(),
+            y.d_task_offsets.unsafe_ptr(), y.d_task_sizes.unsafe_ptr(),
+            y.d_task_qids.unsafe_ptr(),
+            yeti_rank_cuda_seed(seed), y.decay, Int32(y.permutations),
+            y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(),
+            grid_dim=(y.n_tasks, 1, 1),
+            block_dim=(YETI_THREADS, 1, 1),
+        )
+    else:
+        _launch_yeti_rank_tasks_sequential(ctx, y, seed)
     if use_inverse:
         ctx.enqueue_function[yeti_rank_row_kernel[estimation]](
             y.d_der_acc.unsafe_ptr(), y.d_weight_acc.unsafe_ptr(), Int32(n_rows),

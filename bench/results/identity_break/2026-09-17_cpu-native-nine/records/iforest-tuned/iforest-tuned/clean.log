@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:40:03  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START iforest-tuned/base repeat=1/train
+# DONE iforest-tuned/base repeat=1/train 0.288s
+# START iforest-tuned/base repeat=1/infer-save-reload
+# DONE iforest-tuned/base repeat=1/infer-save-reload 0.399s
+# START iforest-tuned/base repeat=1/batch
+# DONE iforest-tuned/base repeat=1/batch 3.700s
+# START iforest-tuned/base repeat=1/stepfull
+# DONE iforest-tuned/base repeat=1/stepfull 0.000s
+# START iforest-tuned/base repeat=2/train
+# DONE iforest-tuned/base repeat=2/train 0.283s
+# START iforest-tuned/base repeat=2/infer-save-reload
+# DONE iforest-tuned/base repeat=2/infer-save-reload 0.396s
+# START iforest-tuned/base repeat=2/batch
+# DONE iforest-tuned/base repeat=2/batch 3.637s
+# START iforest-tuned/base repeat=2/stepfull
+# DONE iforest-tuned/base repeat=2/stepfull 0.000s
+# CELL iforest-tuned/base STABLE 8.703s
+# START iforest-tuned/ties repeat=1/train
+# DONE iforest-tuned/ties repeat=1/train 0.302s
+# START iforest-tuned/ties repeat=1/infer-save-reload
+# DONE iforest-tuned/ties repeat=1/infer-save-reload 0.422s
+# START iforest-tuned/ties repeat=1/batch
+# DONE iforest-tuned/ties repeat=1/batch 3.869s
+# START iforest-tuned/ties repeat=1/stepfull
+# DONE iforest-tuned/ties repeat=1/stepfull 0.000s
+# START iforest-tuned/ties repeat=2/train
+# DONE iforest-tuned/ties repeat=2/train 0.304s
+# START iforest-tuned/ties repeat=2/infer-save-reload
+# DONE iforest-tuned/ties repeat=2/infer-save-reload 0.434s
+# START iforest-tuned/ties repeat=2/batch
+# DONE iforest-tuned/ties repeat=2/batch 3.869s
+# START iforest-tuned/ties repeat=2/stepfull
+# DONE iforest-tuned/ties repeat=2/stepfull 0.000s
+# CELL iforest-tuned/ties STABLE 9.201s
+# START iforest-tuned/hashed repeat=1/train
+# DONE iforest-tuned/hashed repeat=1/train 0.286s
+# START iforest-tuned/hashed repeat=1/infer-save-reload
+# DONE iforest-tuned/hashed repeat=1/infer-save-reload 0.404s
+# START iforest-tuned/hashed repeat=1/batch
+# DONE iforest-tuned/hashed repeat=1/batch 3.787s
+# START iforest-tuned/hashed repeat=1/stepfull
+# DONE iforest-tuned/hashed repeat=1/stepfull 0.000s
+# START iforest-tuned/hashed repeat=2/train
+# DONE iforest-tuned/hashed repeat=2/train 0.293s
+# START iforest-tuned/hashed repeat=2/infer-save-reload
+# DONE iforest-tuned/hashed repeat=2/infer-save-reload 0.390s
+# START iforest-tuned/hashed repeat=2/batch
+# DONE iforest-tuned/hashed repeat=2/batch 3.772s
+# START iforest-tuned/hashed repeat=2/stepfull
+# DONE iforest-tuned/hashed repeat=2/stepfull 0.000s
+# CELL iforest-tuned/hashed STABLE 8.933s
+# START iforest-tuned/wide repeat=1/train
+# DONE iforest-tuned/wide repeat=1/train 0.286s
+# START iforest-tuned/wide repeat=1/infer-save-reload
+# DONE iforest-tuned/wide repeat=1/infer-save-reload 0.393s
+# START iforest-tuned/wide repeat=1/batch
+# DONE iforest-tuned/wide repeat=1/batch 3.658s
+# START iforest-tuned/wide repeat=1/stepfull
+# DONE iforest-tuned/wide repeat=1/stepfull 0.000s
+# START iforest-tuned/wide repeat=2/train
+# DONE iforest-tuned/wide repeat=2/train 0.286s
+# START iforest-tuned/wide repeat=2/infer-save-reload
+# DONE iforest-tuned/wide repeat=2/infer-save-reload 0.391s
+# START iforest-tuned/wide repeat=2/batch
+# DONE iforest-tuned/wide repeat=2/batch 3.650s
+# START iforest-tuned/wide repeat=2/stepfull
+# DONE iforest-tuned/wide repeat=2/stepfull 0.000s
+# CELL iforest-tuned/wide STABLE 8.663s
+# START iforest-tuned/denormal repeat=1/train
+# DONE iforest-tuned/denormal repeat=1/train 0.281s
+# START iforest-tuned/denormal repeat=1/infer-save-reload
+# DONE iforest-tuned/denormal repeat=1/infer-save-reload 0.389s
+# START iforest-tuned/denormal repeat=1/batch
+# DONE iforest-tuned/denormal repeat=1/batch 3.642s
+# START iforest-tuned/denormal repeat=1/stepfull
+# DONE iforest-tuned/denormal repeat=1/stepfull 0.000s
+# START iforest-tuned/denormal repeat=2/train
+# DONE iforest-tuned/denormal repeat=2/train 0.283s
+# START iforest-tuned/denormal repeat=2/infer-save-reload
+# DONE iforest-tuned/denormal repeat=2/infer-save-reload 0.397s
+# START iforest-tuned/denormal repeat=2/batch
+# DONE iforest-tuned/denormal repeat=2/batch 3.634s
+# START iforest-tuned/denormal repeat=2/stepfull
+# DONE iforest-tuned/denormal repeat=2/stepfull 0.000s
+# CELL iforest-tuned/denormal STABLE 8.627s
+# START iforest-tuned/denormal_ftz repeat=1/train
+# DONE iforest-tuned/denormal_ftz repeat=1/train 0.285s
+# START iforest-tuned/denormal_ftz repeat=1/infer-save-reload
+# DONE iforest-tuned/denormal_ftz repeat=1/infer-save-reload 0.389s
+# START iforest-tuned/denormal_ftz repeat=1/batch
+# DONE iforest-tuned/denormal_ftz repeat=1/batch 3.642s
+# START iforest-tuned/denormal_ftz repeat=1/stepfull
+# DONE iforest-tuned/denormal_ftz repeat=1/stepfull 0.000s
+# START iforest-tuned/denormal_ftz repeat=2/train
+# DONE iforest-tuned/denormal_ftz repeat=2/train 0.269s
+# START iforest-tuned/denormal_ftz repeat=2/infer-save-reload
+# DONE iforest-tuned/denormal_ftz repeat=2/infer-save-reload 0.388s
+# START iforest-tuned/denormal_ftz repeat=2/batch
+# DONE iforest-tuned/denormal_ftz repeat=2/batch 3.528s
+# START iforest-tuned/denormal_ftz repeat=2/stepfull
+# DONE iforest-tuned/denormal_ftz repeat=2/stepfull 0.000s
+# CELL iforest-tuned/denormal_ftz STABLE 8.502s
+# START iforest-tuned/dupes repeat=1/train
+# DONE iforest-tuned/dupes repeat=1/train 0.260s
+# START iforest-tuned/dupes repeat=1/infer-save-reload
+# DONE iforest-tuned/dupes repeat=1/infer-save-reload 0.365s
+# START iforest-tuned/dupes repeat=1/batch
+# DONE iforest-tuned/dupes repeat=1/batch 3.401s
+# START iforest-tuned/dupes repeat=1/stepfull
+# DONE iforest-tuned/dupes repeat=1/stepfull 0.000s
+# START iforest-tuned/dupes repeat=2/train
+# DONE iforest-tuned/dupes repeat=2/train 0.264s
+# START iforest-tuned/dupes repeat=2/infer-save-reload
+# DONE iforest-tuned/dupes repeat=2/infer-save-reload 0.362s
+# START iforest-tuned/dupes repeat=2/batch
+# DONE iforest-tuned/dupes repeat=2/batch 3.395s
+# START iforest-tuned/dupes repeat=2/stepfull
+# DONE iforest-tuned/dupes repeat=2/stepfull 0.000s
+# CELL iforest-tuned/dupes STABLE 8.047s
+# START iforest-tuned/odd repeat=1/train
+# DONE iforest-tuned/odd repeat=1/train 0.240s
+# START iforest-tuned/odd repeat=1/infer-save-reload
+# DONE iforest-tuned/odd repeat=1/infer-save-reload 0.320s
+# START iforest-tuned/odd repeat=1/batch
+# DONE iforest-tuned/odd repeat=1/batch 3.086s
+# START iforest-tuned/odd repeat=1/stepfull
+# DONE iforest-tuned/odd repeat=1/stepfull 0.000s
+# START iforest-tuned/odd repeat=2/train
+# DONE iforest-tuned/odd repeat=2/train 0.239s
+# START iforest-tuned/odd repeat=2/infer-save-reload
+# DONE iforest-tuned/odd repeat=2/infer-save-reload 0.321s
+# START iforest-tuned/odd repeat=2/batch
+# DONE iforest-tuned/odd repeat=2/batch 3.076s
+# START iforest-tuned/odd repeat=2/stepfull
+# DONE iforest-tuned/odd repeat=2/stepfull 0.000s
+# CELL iforest-tuned/odd STABLE 7.282s
+# START iforest-tuned/negative repeat=1/train
+# DONE iforest-tuned/negative repeat=1/train 0.258s
+# START iforest-tuned/negative repeat=1/infer-save-reload
+# DONE iforest-tuned/negative repeat=1/infer-save-reload 0.359s
+# START iforest-tuned/negative repeat=1/batch
+# DONE iforest-tuned/negative repeat=1/batch 3.355s
+# START iforest-tuned/negative repeat=1/stepfull
+# DONE iforest-tuned/negative repeat=1/stepfull 0.000s
+# START iforest-tuned/negative repeat=2/train
+# DONE iforest-tuned/negative repeat=2/train 0.258s
+# START iforest-tuned/negative repeat=2/infer-save-reload
+# DONE iforest-tuned/negative repeat=2/infer-save-reload 0.366s
+# START iforest-tuned/negative repeat=2/batch
+# DONE iforest-tuned/negative repeat=2/batch 3.358s
+# START iforest-tuned/negative repeat=2/stepfull
+# DONE iforest-tuned/negative repeat=2/stepfull 0.000s
+# CELL iforest-tuned/negative STABLE 7.954s
+| iforest-tuned          | 0a149db6290bacd6 | 8f43ab374b0ab900 | 46897d2134eb25a8 | 0a149db6290bacd6 | 760dacdb8d26ad32 | 760dacdb8d26ad32 | cf1224bee78e2e10 | 55a9927fb2f6741d | e8719530b4c1542e |
+| iforest-tuned infer    | bcbf71b247c3951c | 9f8aee8ed2215f71 | 043d1749e42fd0da | bcbf71b247c3951c | 7eb9b5890a6a932a | 7eb9b5890a6a932a | b6c59cfe033236ce | 5420ba75304c5329 | e9cb81dac0aed7a2 |
+| iforest-tuned model    | b9c8ac0cfcb621b7 | d8e240e70ffb7034 | c085f60c942fbe02 | 9f1386d1c5e9b423 | d4795cdc201c6a36 | 289f5a9befccd7fe | fbf5432597bb751f | 721bbd763eeddb2e | e189655a44e43164 |
+| iforest-tuned batch    | 23c01febba0472d9 | e2eb172cfc7af595 | 353011423abe5f98 | 23c01febba0472d9 | c4cfd19fe9ec68bf | c4cfd19fe9ec68bf | c644f0ba93bd5487 | f01711b01622008c | fd605cc3e036a6b9 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: iforest-tuned stepfull n/a:no-decode-state
+wrote /root/leg_out/records/iforest-tuned/iforest-tuned/cpu-clean.json

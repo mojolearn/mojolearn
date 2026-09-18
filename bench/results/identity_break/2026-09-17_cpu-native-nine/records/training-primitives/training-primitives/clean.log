@@ -1,0 +1,169 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:51  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START training-primitives/base repeat=1/train
+# DONE training-primitives/base repeat=1/train 0.003s
+# START training-primitives/base repeat=1/infer-save-reload
+# DONE training-primitives/base repeat=1/infer-save-reload 0.001s
+# START training-primitives/base repeat=1/batch
+# DONE training-primitives/base repeat=1/batch 0.006s
+# START training-primitives/base repeat=1/stepfull
+# DONE training-primitives/base repeat=1/stepfull 0.000s
+# START training-primitives/base repeat=2/train
+# DONE training-primitives/base repeat=2/train 0.002s
+# START training-primitives/base repeat=2/infer-save-reload
+# DONE training-primitives/base repeat=2/infer-save-reload 0.000s
+# START training-primitives/base repeat=2/batch
+# DONE training-primitives/base repeat=2/batch 0.006s
+# START training-primitives/base repeat=2/stepfull
+# DONE training-primitives/base repeat=2/stepfull 0.000s
+# CELL training-primitives/base STABLE 0.018s
+# START training-primitives/ties repeat=1/train
+# DONE training-primitives/ties repeat=1/train 0.002s
+# START training-primitives/ties repeat=1/infer-save-reload
+# DONE training-primitives/ties repeat=1/infer-save-reload 0.001s
+# START training-primitives/ties repeat=1/batch
+# DONE training-primitives/ties repeat=1/batch 0.006s
+# START training-primitives/ties repeat=1/stepfull
+# DONE training-primitives/ties repeat=1/stepfull 0.000s
+# START training-primitives/ties repeat=2/train
+# DONE training-primitives/ties repeat=2/train 0.002s
+# START training-primitives/ties repeat=2/infer-save-reload
+# DONE training-primitives/ties repeat=2/infer-save-reload 0.001s
+# START training-primitives/ties repeat=2/batch
+# DONE training-primitives/ties repeat=2/batch 0.006s
+# START training-primitives/ties repeat=2/stepfull
+# DONE training-primitives/ties repeat=2/stepfull 0.000s
+# CELL training-primitives/ties STABLE 0.017s
+# START training-primitives/hashed repeat=1/train
+# DONE training-primitives/hashed repeat=1/train 0.002s
+# START training-primitives/hashed repeat=1/infer-save-reload
+# DONE training-primitives/hashed repeat=1/infer-save-reload 0.001s
+# START training-primitives/hashed repeat=1/batch
+# DONE training-primitives/hashed repeat=1/batch 0.006s
+# START training-primitives/hashed repeat=1/stepfull
+# DONE training-primitives/hashed repeat=1/stepfull 0.000s
+# START training-primitives/hashed repeat=2/train
+# DONE training-primitives/hashed repeat=2/train 0.002s
+# START training-primitives/hashed repeat=2/infer-save-reload
+# DONE training-primitives/hashed repeat=2/infer-save-reload 0.000s
+# START training-primitives/hashed repeat=2/batch
+# DONE training-primitives/hashed repeat=2/batch 0.006s
+# START training-primitives/hashed repeat=2/stepfull
+# DONE training-primitives/hashed repeat=2/stepfull 0.000s
+# CELL training-primitives/hashed STABLE 0.017s
+# START training-primitives/wide repeat=1/train
+# DONE training-primitives/wide repeat=1/train 0.002s
+# START training-primitives/wide repeat=1/infer-save-reload
+# DONE training-primitives/wide repeat=1/infer-save-reload 0.000s
+# START training-primitives/wide repeat=1/batch
+# DONE training-primitives/wide repeat=1/batch 0.005s
+# START training-primitives/wide repeat=1/stepfull
+# DONE training-primitives/wide repeat=1/stepfull 0.000s
+# START training-primitives/wide repeat=2/train
+# DONE training-primitives/wide repeat=2/train 0.002s
+# START training-primitives/wide repeat=2/infer-save-reload
+# DONE training-primitives/wide repeat=2/infer-save-reload 0.000s
+# START training-primitives/wide repeat=2/batch
+# DONE training-primitives/wide repeat=2/batch 0.005s
+# START training-primitives/wide repeat=2/stepfull
+# DONE training-primitives/wide repeat=2/stepfull 0.000s
+# CELL training-primitives/wide STABLE 0.016s
+# START training-primitives/denormal repeat=1/train
+# DONE training-primitives/denormal repeat=1/train 0.002s
+# START training-primitives/denormal repeat=1/infer-save-reload
+# DONE training-primitives/denormal repeat=1/infer-save-reload 0.000s
+# START training-primitives/denormal repeat=1/batch
+# DONE training-primitives/denormal repeat=1/batch 0.006s
+# START training-primitives/denormal repeat=1/stepfull
+# DONE training-primitives/denormal repeat=1/stepfull 0.000s
+# START training-primitives/denormal repeat=2/train
+# DONE training-primitives/denormal repeat=2/train 0.002s
+# START training-primitives/denormal repeat=2/infer-save-reload
+# DONE training-primitives/denormal repeat=2/infer-save-reload 0.000s
+# START training-primitives/denormal repeat=2/batch
+# DONE training-primitives/denormal repeat=2/batch 0.006s
+# START training-primitives/denormal repeat=2/stepfull
+# DONE training-primitives/denormal repeat=2/stepfull 0.000s
+# CELL training-primitives/denormal STABLE 0.016s
+# START training-primitives/denormal_ftz repeat=1/train
+# DONE training-primitives/denormal_ftz repeat=1/train 0.002s
+# START training-primitives/denormal_ftz repeat=1/infer-save-reload
+# DONE training-primitives/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START training-primitives/denormal_ftz repeat=1/batch
+# DONE training-primitives/denormal_ftz repeat=1/batch 0.006s
+# START training-primitives/denormal_ftz repeat=1/stepfull
+# DONE training-primitives/denormal_ftz repeat=1/stepfull 0.000s
+# START training-primitives/denormal_ftz repeat=2/train
+# DONE training-primitives/denormal_ftz repeat=2/train 0.002s
+# START training-primitives/denormal_ftz repeat=2/infer-save-reload
+# DONE training-primitives/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START training-primitives/denormal_ftz repeat=2/batch
+# DONE training-primitives/denormal_ftz repeat=2/batch 0.006s
+# START training-primitives/denormal_ftz repeat=2/stepfull
+# DONE training-primitives/denormal_ftz repeat=2/stepfull 0.000s
+# CELL training-primitives/denormal_ftz STABLE 0.017s
+# START training-primitives/dupes repeat=1/train
+# DONE training-primitives/dupes repeat=1/train 0.002s
+# START training-primitives/dupes repeat=1/infer-save-reload
+# DONE training-primitives/dupes repeat=1/infer-save-reload 0.000s
+# START training-primitives/dupes repeat=1/batch
+# DONE training-primitives/dupes repeat=1/batch 0.006s
+# START training-primitives/dupes repeat=1/stepfull
+# DONE training-primitives/dupes repeat=1/stepfull 0.000s
+# START training-primitives/dupes repeat=2/train
+# DONE training-primitives/dupes repeat=2/train 0.002s
+# START training-primitives/dupes repeat=2/infer-save-reload
+# DONE training-primitives/dupes repeat=2/infer-save-reload 0.000s
+# START training-primitives/dupes repeat=2/batch
+# DONE training-primitives/dupes repeat=2/batch 0.006s
+# START training-primitives/dupes repeat=2/stepfull
+# DONE training-primitives/dupes repeat=2/stepfull 0.000s
+# CELL training-primitives/dupes STABLE 0.017s
+# START training-primitives/odd repeat=1/train
+# DONE training-primitives/odd repeat=1/train 0.002s
+# START training-primitives/odd repeat=1/infer-save-reload
+# DONE training-primitives/odd repeat=1/infer-save-reload 0.000s
+# START training-primitives/odd repeat=1/batch
+# DONE training-primitives/odd repeat=1/batch 0.006s
+# START training-primitives/odd repeat=1/stepfull
+# DONE training-primitives/odd repeat=1/stepfull 0.000s
+# START training-primitives/odd repeat=2/train
+# DONE training-primitives/odd repeat=2/train 0.002s
+# START training-primitives/odd repeat=2/infer-save-reload
+# DONE training-primitives/odd repeat=2/infer-save-reload 0.000s
+# START training-primitives/odd repeat=2/batch
+# DONE training-primitives/odd repeat=2/batch 0.005s
+# START training-primitives/odd repeat=2/stepfull
+# DONE training-primitives/odd repeat=2/stepfull 0.000s
+# CELL training-primitives/odd STABLE 0.016s
+# START training-primitives/negative repeat=1/train
+# DONE training-primitives/negative repeat=1/train 0.002s
+# START training-primitives/negative repeat=1/infer-save-reload
+# DONE training-primitives/negative repeat=1/infer-save-reload 0.000s
+# START training-primitives/negative repeat=1/batch
+# DONE training-primitives/negative repeat=1/batch 0.006s
+# START training-primitives/negative repeat=1/stepfull
+# DONE training-primitives/negative repeat=1/stepfull 0.000s
+# START training-primitives/negative repeat=2/train
+# DONE training-primitives/negative repeat=2/train 0.002s
+# START training-primitives/negative repeat=2/infer-save-reload
+# DONE training-primitives/negative repeat=2/infer-save-reload 0.000s
+# START training-primitives/negative repeat=2/batch
+# DONE training-primitives/negative repeat=2/batch 0.006s
+# START training-primitives/negative repeat=2/stepfull
+# DONE training-primitives/negative repeat=2/stepfull 0.000s
+# CELL training-primitives/negative STABLE 0.017s
+| training-primitives    | 18d750e2cd47d7ea | e01da50ed7b342d5 | be6004a0851c285f | 11f4b38cc28490a9 | b93f769a32bb94c8 | 13888a328756a01f | c88879ab86bb99ae | 18d750e2cd47d7ea | b291f07e5d10cfdc |
+| training-primitives infer | 6980d705b0918f94 | 540263f57c3d33e0 | adb2f88b3e41c700 | 53b958c5f891a551 | 748d4e43f72f963f | 5c5d8d395c4d5c79 | 5d0a9f0ddb1b31d0 | 6980d705b0918f94 | 9cf50b16f3e4d8b1 |
+| training-primitives batch | 0885e6867f268221 | 037afef1c391f67d | a8453abd8850a0e4 | bc1691dce6b2da06 | 8b96b58e3965dc35 | deda09dcc02cde02 | 8942735243ea62bf | 0885e6867f268221 | f9bc58a4e8bc4213 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: training-primitives model n/a:no-save, training-primitives stepfull n/a:no-decode-state
+wrote /root/leg_out/records/training-primitives/training-primitives/cpu-clean.json

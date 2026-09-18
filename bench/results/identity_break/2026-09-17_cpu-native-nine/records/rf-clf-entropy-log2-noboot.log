@@ -1,0 +1,3 @@
+rf-clf-entropy-log2-noboot: clean
+rf-clf-entropy-log2-noboot: sabotage
+rf-clf-entropy-log2-noboot: 9/9 controls; passed=True

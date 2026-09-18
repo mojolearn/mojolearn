@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:20  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START pca-full-whiten/base repeat=1/train
+# DONE pca-full-whiten/base repeat=1/train 0.019s
+# START pca-full-whiten/base repeat=1/infer-save-reload
+# DONE pca-full-whiten/base repeat=1/infer-save-reload 0.003s
+# START pca-full-whiten/base repeat=1/batch
+# DONE pca-full-whiten/base repeat=1/batch 0.003s
+# START pca-full-whiten/base repeat=1/stepfull
+# DONE pca-full-whiten/base repeat=1/stepfull 0.000s
+# START pca-full-whiten/base repeat=2/train
+# DONE pca-full-whiten/base repeat=2/train 0.018s
+# START pca-full-whiten/base repeat=2/infer-save-reload
+# DONE pca-full-whiten/base repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/base repeat=2/batch
+# DONE pca-full-whiten/base repeat=2/batch 0.003s
+# START pca-full-whiten/base repeat=2/stepfull
+# DONE pca-full-whiten/base repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/base STABLE 0.047s
+# START pca-full-whiten/ties repeat=1/train
+# DONE pca-full-whiten/ties repeat=1/train 0.019s
+# START pca-full-whiten/ties repeat=1/infer-save-reload
+# DONE pca-full-whiten/ties repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/ties repeat=1/batch
+# DONE pca-full-whiten/ties repeat=1/batch 0.003s
+# START pca-full-whiten/ties repeat=1/stepfull
+# DONE pca-full-whiten/ties repeat=1/stepfull 0.000s
+# START pca-full-whiten/ties repeat=2/train
+# DONE pca-full-whiten/ties repeat=2/train 0.019s
+# START pca-full-whiten/ties repeat=2/infer-save-reload
+# DONE pca-full-whiten/ties repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/ties repeat=2/batch
+# DONE pca-full-whiten/ties repeat=2/batch 0.002s
+# START pca-full-whiten/ties repeat=2/stepfull
+# DONE pca-full-whiten/ties repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/ties STABLE 0.047s
+# START pca-full-whiten/hashed repeat=1/train
+# DONE pca-full-whiten/hashed repeat=1/train 0.017s
+# START pca-full-whiten/hashed repeat=1/infer-save-reload
+# DONE pca-full-whiten/hashed repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/hashed repeat=1/batch
+# DONE pca-full-whiten/hashed repeat=1/batch 0.003s
+# START pca-full-whiten/hashed repeat=1/stepfull
+# DONE pca-full-whiten/hashed repeat=1/stepfull 0.000s
+# START pca-full-whiten/hashed repeat=2/train
+# DONE pca-full-whiten/hashed repeat=2/train 0.018s
+# START pca-full-whiten/hashed repeat=2/infer-save-reload
+# DONE pca-full-whiten/hashed repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/hashed repeat=2/batch
+# DONE pca-full-whiten/hashed repeat=2/batch 0.003s
+# START pca-full-whiten/hashed repeat=2/stepfull
+# DONE pca-full-whiten/hashed repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/hashed STABLE 0.044s
+# START pca-full-whiten/wide repeat=1/train
+# DONE pca-full-whiten/wide repeat=1/train 0.017s
+# START pca-full-whiten/wide repeat=1/infer-save-reload
+# DONE pca-full-whiten/wide repeat=1/infer-save-reload 0.001s
+# START pca-full-whiten/wide repeat=1/batch
+# DONE pca-full-whiten/wide repeat=1/batch 0.002s
+# START pca-full-whiten/wide repeat=1/stepfull
+# DONE pca-full-whiten/wide repeat=1/stepfull 0.000s
+# START pca-full-whiten/wide repeat=2/train
+# DONE pca-full-whiten/wide repeat=2/train 0.018s
+# START pca-full-whiten/wide repeat=2/infer-save-reload
+# DONE pca-full-whiten/wide repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/wide repeat=2/batch
+# DONE pca-full-whiten/wide repeat=2/batch 0.003s
+# START pca-full-whiten/wide repeat=2/stepfull
+# DONE pca-full-whiten/wide repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/wide STABLE 0.043s
+# START pca-full-whiten/denormal repeat=1/train
+# DONE pca-full-whiten/denormal repeat=1/train 0.017s
+# START pca-full-whiten/denormal repeat=1/infer-save-reload
+# DONE pca-full-whiten/denormal repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/denormal repeat=1/batch
+# DONE pca-full-whiten/denormal repeat=1/batch 0.002s
+# START pca-full-whiten/denormal repeat=1/stepfull
+# DONE pca-full-whiten/denormal repeat=1/stepfull 0.000s
+# START pca-full-whiten/denormal repeat=2/train
+# DONE pca-full-whiten/denormal repeat=2/train 0.017s
+# START pca-full-whiten/denormal repeat=2/infer-save-reload
+# DONE pca-full-whiten/denormal repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/denormal repeat=2/batch
+# DONE pca-full-whiten/denormal repeat=2/batch 0.002s
+# START pca-full-whiten/denormal repeat=2/stepfull
+# DONE pca-full-whiten/denormal repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/denormal STABLE 0.043s
+# START pca-full-whiten/denormal_ftz repeat=1/train
+# DONE pca-full-whiten/denormal_ftz repeat=1/train 0.018s
+# START pca-full-whiten/denormal_ftz repeat=1/infer-save-reload
+# DONE pca-full-whiten/denormal_ftz repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/denormal_ftz repeat=1/batch
+# DONE pca-full-whiten/denormal_ftz repeat=1/batch 0.003s
+# START pca-full-whiten/denormal_ftz repeat=1/stepfull
+# DONE pca-full-whiten/denormal_ftz repeat=1/stepfull 0.000s
+# START pca-full-whiten/denormal_ftz repeat=2/train
+# DONE pca-full-whiten/denormal_ftz repeat=2/train 0.018s
+# START pca-full-whiten/denormal_ftz repeat=2/infer-save-reload
+# DONE pca-full-whiten/denormal_ftz repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/denormal_ftz repeat=2/batch
+# DONE pca-full-whiten/denormal_ftz repeat=2/batch 0.002s
+# START pca-full-whiten/denormal_ftz repeat=2/stepfull
+# DONE pca-full-whiten/denormal_ftz repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/denormal_ftz STABLE 0.045s
+# START pca-full-whiten/dupes repeat=1/train
+# DONE pca-full-whiten/dupes repeat=1/train 0.017s
+# START pca-full-whiten/dupes repeat=1/infer-save-reload
+# DONE pca-full-whiten/dupes repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/dupes repeat=1/batch
+# DONE pca-full-whiten/dupes repeat=1/batch 0.002s
+# START pca-full-whiten/dupes repeat=1/stepfull
+# DONE pca-full-whiten/dupes repeat=1/stepfull 0.000s
+# START pca-full-whiten/dupes repeat=2/train
+# DONE pca-full-whiten/dupes repeat=2/train 0.018s
+# START pca-full-whiten/dupes repeat=2/infer-save-reload
+# DONE pca-full-whiten/dupes repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/dupes repeat=2/batch
+# DONE pca-full-whiten/dupes repeat=2/batch 0.002s
+# START pca-full-whiten/dupes repeat=2/stepfull
+# DONE pca-full-whiten/dupes repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/dupes STABLE 0.044s
+# START pca-full-whiten/odd repeat=1/train
+# DONE pca-full-whiten/odd repeat=1/train 0.014s
+# START pca-full-whiten/odd repeat=1/infer-save-reload
+# DONE pca-full-whiten/odd repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/odd repeat=1/batch
+# DONE pca-full-whiten/odd repeat=1/batch 0.003s
+# START pca-full-whiten/odd repeat=1/stepfull
+# DONE pca-full-whiten/odd repeat=1/stepfull 0.000s
+# START pca-full-whiten/odd repeat=2/train
+# DONE pca-full-whiten/odd repeat=2/train 0.013s
+# START pca-full-whiten/odd repeat=2/infer-save-reload
+# DONE pca-full-whiten/odd repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/odd repeat=2/batch
+# DONE pca-full-whiten/odd repeat=2/batch 0.002s
+# START pca-full-whiten/odd repeat=2/stepfull
+# DONE pca-full-whiten/odd repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/odd STABLE 0.035s
+# START pca-full-whiten/negative repeat=1/train
+# DONE pca-full-whiten/negative repeat=1/train 0.018s
+# START pca-full-whiten/negative repeat=1/infer-save-reload
+# DONE pca-full-whiten/negative repeat=1/infer-save-reload 0.002s
+# START pca-full-whiten/negative repeat=1/batch
+# DONE pca-full-whiten/negative repeat=1/batch 0.002s
+# START pca-full-whiten/negative repeat=1/stepfull
+# DONE pca-full-whiten/negative repeat=1/stepfull 0.000s
+# START pca-full-whiten/negative repeat=2/train
+# DONE pca-full-whiten/negative repeat=2/train 0.017s
+# START pca-full-whiten/negative repeat=2/infer-save-reload
+# DONE pca-full-whiten/negative repeat=2/infer-save-reload 0.002s
+# START pca-full-whiten/negative repeat=2/batch
+# DONE pca-full-whiten/negative repeat=2/batch 0.002s
+# START pca-full-whiten/negative repeat=2/stepfull
+# DONE pca-full-whiten/negative repeat=2/stepfull 0.000s
+# CELL pca-full-whiten/negative STABLE 0.043s
+| pca-full-whiten        | 263229c8bf758f64 | 42837424055d6928 | 71d453b980fe45f2 | a13128cd7b9d2fde | e9acbca977c3bd21 | e9acbca977c3bd21 | 9f973aa5564734d3 | 45283c44dfeacbc4 | 7808a51ab3dfa419 |
+| pca-full-whiten infer  | 80830ef90ff4d83e | 9f33088fc1888290 | f12cc87030cdbcd7 | 6083b8d354288bba | cb143b0be377593c | cb143b0be377593c | d8eb9fb31970754d | 38137e67c86ac1f9 | 62c3f5aa9b8e912a |
+| pca-full-whiten model  | fe9c2f93241ab0ed | 80e5a04ad24518a3 | e87e533129539823 | 7da3d4b65fb01442 | 8b6733bfe401fcbf | 8b6733bfe401fcbf | f9e1d3fe8e6182a5 | cb82caaf40508791 | 9bcd00bed872d1ee |
+| pca-full-whiten batch  | 4eadd60edd4c4ecb | 33611036fe7b8d8e | 00c237a95a01692d | cc8b2f51c235c3c3 | a671d26589ea859d | a671d26589ea859d | 58bdb18fdc6dc83c | 04361ec5457d845e | e7c70220e96acb34 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: pca-full-whiten stepfull n/a:no-decode-state
+wrote /root/leg_out/records/pca-full-whiten/pca-full-whiten/cpu-sabotage.json

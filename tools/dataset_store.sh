@@ -97,10 +97,37 @@ groups() {
     cat <<'EOF'
 corpus/fineweb-edu-10BT	ROOT/training/corpus/fineweb-edu-10BT	000_00000.parquet 001_00000.parquet 002_00000.parquet 003_00000.parquet 004_00000.parquet 005_00000.parquet 006_00000.parquet 007_00000.parquet 008_00000.parquet 009_00000.parquet 010_00000.parquet 011_00000.parquet 012_00000.parquet 013_00000.parquet
 models/SmolLM2-360M	HOME/models/SmolLM2-360M	config.json generation_config.json model.safetensors tokenizer.json tokenizer_config.json special_tokens_map.json
+opponents/trees-linux-x86_64-cp311	HOME/opponent-wheels/trees-linux-x86_64-cp311	@file
+opponents/rapids-linux-x86_64-cp311	HOME/opponent-wheels/rapids-linux-x86_64-cp311	@file
 EOF
 }
 
-group_members() { groups | awk -F'\t' -v g="$1" '$1==g {print $3}'; }
+# A group whose member column is the literal `@file` keeps its member list in
+# bench/results/dataset_store/groups/<group with / as __>.txt, one file name per
+# line. A wheel set is sixty-odd files and a resolver picks the transitive
+# closure, so an inline list here would be edited by hand every time a pin moves
+# and would be wrong the first time somebody forgot. The sidecar is written by
+# `tools/opponent_wheels.sh fetch` from what the resolver actually produced, and
+# it is COMMITTED, so the set is still a pin a reviewer reads in a diff --
+# a file that is not in the list is not staged and a file in the list that is
+# not in manifest.tsv has no size or sha256 and refuses.
+group_list_file() {
+    printf '%s/bench/results/dataset_store/groups/%s.txt\n' \
+        "$ROOT" "$(printf '%s' "$1" | tr '/' '@')"
+}
+
+is_group() { groups | cut -f1 | grep -qx "$1"; }
+
+group_members() {
+    _gm=$(groups | awk -F'\t' -v g="$1" '$1==g {print $3}')
+    if [ "$_gm" = "@file" ]; then
+        _glf=$(group_list_file "$1")
+        [ -f "$_glf" ] || return 0
+        sed -e 's/#.*//' -e 's/[[:space:]]*$//' "$_glf" | grep -v '^$'
+        return 0
+    fi
+    printf '%s\n' "$_gm"
+}
 group_dir_for() { groups | awk -F'\t' -v g="$1" '$1==g {print $2}'; }
 
 # Expand group names to their member keys; a plain key expands to itself.
@@ -191,14 +218,45 @@ cmd_manifest() {
         printf '%-44s %14s  %s\n' "$key" "$_sz" "$_sh"
         _hashed=$((_hashed + 1))
     done
+    # GROUP MEMBERS ARE PINNED HERE TOO WHEN THEIR BYTES ARE ON THIS MACHINE.
+    # Before 2026-09-17 every group member fell into the carry-forward block
+    # below, because only `catalog` keys were hashed. That was right for
+    # FineWeb, whose 28.5 GB is pinned by the box that fetched it and never
+    # exists here -- and wrong for anything a group holds LOCALLY, which is
+    # what an opponent wheel set is: `tools/opponent_wheels.sh fetch` resolves
+    # it on this Mac, so this is the only machine that can pin it, and without
+    # this loop `push` refused every wheel with "no pin".
+    #
+    # A member whose file is absent still keeps its pin, exactly as a catalog
+    # key does, so running this in a checkout without the wheels cannot un-pin
+    # what is already in R2.
+    _grouped=0
+    _groupkeys=""
+    for _g in $(groups | cut -f1); do
+        for key in $(expand_keys "$_g"); do
+            _groupkeys="$_groupkeys $key"
+            _lp=$(local_path_for "$key") || continue
+            if [ ! -f "$_lp" ]; then
+                _old=$(pinned "$key")
+                [ -n "$_old" ] && printf '%s\t%s\n' "$key" "$_old" >> "$_tmp"
+                continue
+            fi
+            _sz=$(size_of "$_lp"); _sh=$(sha256_of "$_lp")
+            printf '%s\t%s\t%s\n' "$key" "$_sz" "$_sh" >> "$_tmp"
+            _grouped=$((_grouped + 1))
+        done
+    done
+    [ "$_grouped" = 0 ] || echo "hashed $_grouped group member(s) locally"
+
     # Rows this machine CANNOT hash are carried forward, not dropped. A
     # multi-shard corpus is pinned by the box that fetched it, and its bytes
     # deliberately never exist here; rebuilding the local pins must not
     # silently un-pin 28.5 GB that is sitting in R2. Only keys in the local
-    # catalog are recomputed above.
+    # catalog and in the groups above are recomputed.
     _carried=0
     if [ -f "$MANIFEST" ]; then
-        _localkeys=$(catalog | cut -f1)
+        _localkeys="$(catalog | cut -f1)
+$(printf '%s' "$_groupkeys" | tr ' ' '\n')"
         while IFS= read -r _row; do
             _k=$(printf '%s' "$_row" | cut -f1)
             [ -n "$_k" ] || continue
@@ -308,7 +366,7 @@ PY
 # Accepts a group name, in which case every shard is checked against its pin.
 cmd_verify() {
     key="${1:?usage: verify <key|group> [dest]}"
-    if [ -n "$(group_members "$key")" ]; then
+    if is_group "$key"; then
         [ "$#" -le 1 ] || { echo "verify <group> takes no dest" >&2; return 1; }
         _rc=0
         for _k in $(expand_keys "$key"); do verify_one "$_k" || _rc=1; done

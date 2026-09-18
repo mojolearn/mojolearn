@@ -1,0 +1,168 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:39:55  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gemm-transposed/base repeat=1/train
+# DONE gemm-transposed/base repeat=1/train 0.006s
+# START gemm-transposed/base repeat=1/infer-save-reload
+# DONE gemm-transposed/base repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/base repeat=1/batch
+# DONE gemm-transposed/base repeat=1/batch 0.014s
+# START gemm-transposed/base repeat=1/stepfull
+# DONE gemm-transposed/base repeat=1/stepfull 0.000s
+# START gemm-transposed/base repeat=2/train
+# DONE gemm-transposed/base repeat=2/train 0.005s
+# START gemm-transposed/base repeat=2/infer-save-reload
+# DONE gemm-transposed/base repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/base repeat=2/batch
+# DONE gemm-transposed/base repeat=2/batch 0.014s
+# START gemm-transposed/base repeat=2/stepfull
+# DONE gemm-transposed/base repeat=2/stepfull 0.000s
+# CELL gemm-transposed/base STABLE 0.039s
+# START gemm-transposed/ties repeat=1/train
+# DONE gemm-transposed/ties repeat=1/train 0.010s
+# START gemm-transposed/ties repeat=1/infer-save-reload
+# DONE gemm-transposed/ties repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/ties repeat=1/batch
+# DONE gemm-transposed/ties repeat=1/batch 0.024s
+# START gemm-transposed/ties repeat=1/stepfull
+# DONE gemm-transposed/ties repeat=1/stepfull 0.000s
+# START gemm-transposed/ties repeat=2/train
+# DONE gemm-transposed/ties repeat=2/train 0.010s
+# START gemm-transposed/ties repeat=2/infer-save-reload
+# DONE gemm-transposed/ties repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/ties repeat=2/batch
+# DONE gemm-transposed/ties repeat=2/batch 0.024s
+# START gemm-transposed/ties repeat=2/stepfull
+# DONE gemm-transposed/ties repeat=2/stepfull 0.000s
+# CELL gemm-transposed/ties STABLE 0.069s
+# START gemm-transposed/hashed repeat=1/train
+# DONE gemm-transposed/hashed repeat=1/train 0.005s
+# START gemm-transposed/hashed repeat=1/infer-save-reload
+# DONE gemm-transposed/hashed repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/hashed repeat=1/batch
+# DONE gemm-transposed/hashed repeat=1/batch 0.014s
+# START gemm-transposed/hashed repeat=1/stepfull
+# DONE gemm-transposed/hashed repeat=1/stepfull 0.000s
+# START gemm-transposed/hashed repeat=2/train
+# DONE gemm-transposed/hashed repeat=2/train 0.005s
+# START gemm-transposed/hashed repeat=2/infer-save-reload
+# DONE gemm-transposed/hashed repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/hashed repeat=2/batch
+# DONE gemm-transposed/hashed repeat=2/batch 0.014s
+# START gemm-transposed/hashed repeat=2/stepfull
+# DONE gemm-transposed/hashed repeat=2/stepfull 0.000s
+# CELL gemm-transposed/hashed STABLE 0.038s
+# START gemm-transposed/wide repeat=1/train
+# DONE gemm-transposed/wide repeat=1/train 0.005s
+# START gemm-transposed/wide repeat=1/infer-save-reload
+# DONE gemm-transposed/wide repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/wide repeat=1/batch
+# DONE gemm-transposed/wide repeat=1/batch 0.014s
+# START gemm-transposed/wide repeat=1/stepfull
+# DONE gemm-transposed/wide repeat=1/stepfull 0.000s
+# START gemm-transposed/wide repeat=2/train
+# DONE gemm-transposed/wide repeat=2/train 0.005s
+# START gemm-transposed/wide repeat=2/infer-save-reload
+# DONE gemm-transposed/wide repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/wide repeat=2/batch
+# DONE gemm-transposed/wide repeat=2/batch 0.014s
+# START gemm-transposed/wide repeat=2/stepfull
+# DONE gemm-transposed/wide repeat=2/stepfull 0.000s
+# CELL gemm-transposed/wide STABLE 0.038s
+# START gemm-transposed/denormal repeat=1/train
+# DONE gemm-transposed/denormal repeat=1/train 0.005s
+# START gemm-transposed/denormal repeat=1/infer-save-reload
+# DONE gemm-transposed/denormal repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/denormal repeat=1/batch
+# DONE gemm-transposed/denormal repeat=1/batch 0.014s
+# START gemm-transposed/denormal repeat=1/stepfull
+# DONE gemm-transposed/denormal repeat=1/stepfull 0.000s
+# START gemm-transposed/denormal repeat=2/train
+# DONE gemm-transposed/denormal repeat=2/train 0.005s
+# START gemm-transposed/denormal repeat=2/infer-save-reload
+# DONE gemm-transposed/denormal repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/denormal repeat=2/batch
+# DONE gemm-transposed/denormal repeat=2/batch 0.014s
+# START gemm-transposed/denormal repeat=2/stepfull
+# DONE gemm-transposed/denormal repeat=2/stepfull 0.000s
+# CELL gemm-transposed/denormal STABLE 0.039s
+# START gemm-transposed/denormal_ftz repeat=1/train
+# DONE gemm-transposed/denormal_ftz repeat=1/train 0.005s
+# START gemm-transposed/denormal_ftz repeat=1/infer-save-reload
+# DONE gemm-transposed/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/denormal_ftz repeat=1/batch
+# DONE gemm-transposed/denormal_ftz repeat=1/batch 0.014s
+# START gemm-transposed/denormal_ftz repeat=1/stepfull
+# DONE gemm-transposed/denormal_ftz repeat=1/stepfull 0.000s
+# START gemm-transposed/denormal_ftz repeat=2/train
+# DONE gemm-transposed/denormal_ftz repeat=2/train 0.005s
+# START gemm-transposed/denormal_ftz repeat=2/infer-save-reload
+# DONE gemm-transposed/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/denormal_ftz repeat=2/batch
+# DONE gemm-transposed/denormal_ftz repeat=2/batch 0.014s
+# START gemm-transposed/denormal_ftz repeat=2/stepfull
+# DONE gemm-transposed/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gemm-transposed/denormal_ftz STABLE 0.039s
+# START gemm-transposed/dupes repeat=1/train
+# DONE gemm-transposed/dupes repeat=1/train 0.005s
+# START gemm-transposed/dupes repeat=1/infer-save-reload
+# DONE gemm-transposed/dupes repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/dupes repeat=1/batch
+# DONE gemm-transposed/dupes repeat=1/batch 0.014s
+# START gemm-transposed/dupes repeat=1/stepfull
+# DONE gemm-transposed/dupes repeat=1/stepfull 0.000s
+# START gemm-transposed/dupes repeat=2/train
+# DONE gemm-transposed/dupes repeat=2/train 0.005s
+# START gemm-transposed/dupes repeat=2/infer-save-reload
+# DONE gemm-transposed/dupes repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/dupes repeat=2/batch
+# DONE gemm-transposed/dupes repeat=2/batch 0.015s
+# START gemm-transposed/dupes repeat=2/stepfull
+# DONE gemm-transposed/dupes repeat=2/stepfull 0.000s
+# CELL gemm-transposed/dupes STABLE 0.041s
+# START gemm-transposed/odd repeat=1/train
+# DONE gemm-transposed/odd repeat=1/train 0.005s
+# START gemm-transposed/odd repeat=1/infer-save-reload
+# DONE gemm-transposed/odd repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/odd repeat=1/batch
+# DONE gemm-transposed/odd repeat=1/batch 0.015s
+# START gemm-transposed/odd repeat=1/stepfull
+# DONE gemm-transposed/odd repeat=1/stepfull 0.000s
+# START gemm-transposed/odd repeat=2/train
+# DONE gemm-transposed/odd repeat=2/train 0.005s
+# START gemm-transposed/odd repeat=2/infer-save-reload
+# DONE gemm-transposed/odd repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/odd repeat=2/batch
+# DONE gemm-transposed/odd repeat=2/batch 0.015s
+# START gemm-transposed/odd repeat=2/stepfull
+# DONE gemm-transposed/odd repeat=2/stepfull 0.000s
+# CELL gemm-transposed/odd STABLE 0.041s
+# START gemm-transposed/negative repeat=1/train
+# DONE gemm-transposed/negative repeat=1/train 0.005s
+# START gemm-transposed/negative repeat=1/infer-save-reload
+# DONE gemm-transposed/negative repeat=1/infer-save-reload 0.000s
+# START gemm-transposed/negative repeat=1/batch
+# DONE gemm-transposed/negative repeat=1/batch 0.015s
+# START gemm-transposed/negative repeat=1/stepfull
+# DONE gemm-transposed/negative repeat=1/stepfull 0.000s
+# START gemm-transposed/negative repeat=2/train
+# DONE gemm-transposed/negative repeat=2/train 0.005s
+# START gemm-transposed/negative repeat=2/infer-save-reload
+# DONE gemm-transposed/negative repeat=2/infer-save-reload 0.000s
+# START gemm-transposed/negative repeat=2/batch
+# DONE gemm-transposed/negative repeat=2/batch 0.015s
+# START gemm-transposed/negative repeat=2/stepfull
+# DONE gemm-transposed/negative repeat=2/stepfull 0.000s
+# CELL gemm-transposed/negative STABLE 0.041s
+| gemm-transposed        | e90bde3202c68f28 | adbe818712f9dfe1 | 650df66721c23f9f | fcd891c3425fa86a | 8bad0fa6e14d8760 | 8bad0fa6e14d8760 | 0b6cfa0f61511a9b | 53b8c361e6ebbd2b | 8918082a23a39223 |
+| gemm-transposed batch  | 8ae8ffc44ae6f8ec | d06357b510ad3c0a | f7128d4267dbc0f8 | e4b9ac6df4acbcb1 | 8fd588d6f16c8c23 | 8fd588d6f16c8c23 | 469d0ef3a1acbcd7 | e6c71895be8db349 | 29ae2a69b200095f |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gemm-transposed infer n/a:function, gemm-transposed model n/a:no-save, gemm-transposed stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gemm-transposed/gemm-transposed/cpu-sabotage.json

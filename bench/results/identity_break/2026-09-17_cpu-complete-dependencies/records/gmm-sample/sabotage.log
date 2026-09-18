@@ -1,0 +1,170 @@
+2997 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a09c0000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:54:17  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gmm-sample/base repeat=1/train
+# DONE gmm-sample/base repeat=1/train 0.402s
+# START gmm-sample/base repeat=1/infer-save-reload
+# DONE gmm-sample/base repeat=1/infer-save-reload 0.006s
+# START gmm-sample/base repeat=1/batch
+# DONE gmm-sample/base repeat=1/batch 0.000s
+# START gmm-sample/base repeat=1/stepfull
+# DONE gmm-sample/base repeat=1/stepfull 0.000s
+# START gmm-sample/base repeat=2/train
+# DONE gmm-sample/base repeat=2/train 0.392s
+# START gmm-sample/base repeat=2/infer-save-reload
+# DONE gmm-sample/base repeat=2/infer-save-reload 0.004s
+# START gmm-sample/base repeat=2/batch
+# DONE gmm-sample/base repeat=2/batch 0.000s
+# START gmm-sample/base repeat=2/stepfull
+# DONE gmm-sample/base repeat=2/stepfull 0.000s
+# CELL gmm-sample/base STABLE 0.806s
+# START gmm-sample/ties repeat=1/train
+# DONE gmm-sample/ties repeat=1/train 0.305s
+# START gmm-sample/ties repeat=1/infer-save-reload
+# DONE gmm-sample/ties repeat=1/infer-save-reload 0.004s
+# START gmm-sample/ties repeat=1/batch
+# DONE gmm-sample/ties repeat=1/batch 0.000s
+# START gmm-sample/ties repeat=1/stepfull
+# DONE gmm-sample/ties repeat=1/stepfull 0.000s
+# START gmm-sample/ties repeat=2/train
+# DONE gmm-sample/ties repeat=2/train 0.321s
+# START gmm-sample/ties repeat=2/infer-save-reload
+# DONE gmm-sample/ties repeat=2/infer-save-reload 0.005s
+# START gmm-sample/ties repeat=2/batch
+# DONE gmm-sample/ties repeat=2/batch 0.001s
+# START gmm-sample/ties repeat=2/stepfull
+# DONE gmm-sample/ties repeat=2/stepfull 0.000s
+# CELL gmm-sample/ties STABLE 0.637s
+# START gmm-sample/hashed repeat=1/train
+# DONE gmm-sample/hashed repeat=1/train 0.361s
+# START gmm-sample/hashed repeat=1/infer-save-reload
+# DONE gmm-sample/hashed repeat=1/infer-save-reload 0.006s
+# START gmm-sample/hashed repeat=1/batch
+# DONE gmm-sample/hashed repeat=1/batch 0.000s
+# START gmm-sample/hashed repeat=1/stepfull
+# DONE gmm-sample/hashed repeat=1/stepfull 0.000s
+# START gmm-sample/hashed repeat=2/train
+# DONE gmm-sample/hashed repeat=2/train 0.360s
+# START gmm-sample/hashed repeat=2/infer-save-reload
+# DONE gmm-sample/hashed repeat=2/infer-save-reload 0.004s
+# START gmm-sample/hashed repeat=2/batch
+# DONE gmm-sample/hashed repeat=2/batch 0.000s
+# START gmm-sample/hashed repeat=2/stepfull
+# DONE gmm-sample/hashed repeat=2/stepfull 0.000s
+# CELL gmm-sample/hashed STABLE 0.733s
+# START gmm-sample/wide repeat=1/train
+# DONE gmm-sample/wide repeat=1/train 0.153s
+# START gmm-sample/wide repeat=1/infer-save-reload
+# DONE gmm-sample/wide repeat=1/infer-save-reload 0.004s
+# START gmm-sample/wide repeat=1/batch
+# DONE gmm-sample/wide repeat=1/batch 0.000s
+# START gmm-sample/wide repeat=1/stepfull
+# DONE gmm-sample/wide repeat=1/stepfull 0.000s
+# START gmm-sample/wide repeat=2/train
+# DONE gmm-sample/wide repeat=2/train 0.155s
+# START gmm-sample/wide repeat=2/infer-save-reload
+# DONE gmm-sample/wide repeat=2/infer-save-reload 0.004s
+# START gmm-sample/wide repeat=2/batch
+# DONE gmm-sample/wide repeat=2/batch 0.000s
+# START gmm-sample/wide repeat=2/stepfull
+# DONE gmm-sample/wide repeat=2/stepfull 0.000s
+# CELL gmm-sample/wide STABLE 0.319s
+# START gmm-sample/denormal repeat=1/train
+# DONE gmm-sample/denormal repeat=1/train 0.355s
+# START gmm-sample/denormal repeat=1/infer-save-reload
+# DONE gmm-sample/denormal repeat=1/infer-save-reload 0.004s
+# START gmm-sample/denormal repeat=1/batch
+# DONE gmm-sample/denormal repeat=1/batch 0.000s
+# START gmm-sample/denormal repeat=1/stepfull
+# DONE gmm-sample/denormal repeat=1/stepfull 0.000s
+# START gmm-sample/denormal repeat=2/train
+# DONE gmm-sample/denormal repeat=2/train 0.339s
+# START gmm-sample/denormal repeat=2/infer-save-reload
+# DONE gmm-sample/denormal repeat=2/infer-save-reload 0.004s
+# START gmm-sample/denormal repeat=2/batch
+# DONE gmm-sample/denormal repeat=2/batch 0.000s
+# START gmm-sample/denormal repeat=2/stepfull
+# DONE gmm-sample/denormal repeat=2/stepfull 0.000s
+# CELL gmm-sample/denormal STABLE 0.703s
+# START gmm-sample/denormal_ftz repeat=1/train
+# DONE gmm-sample/denormal_ftz repeat=1/train 0.332s
+# START gmm-sample/denormal_ftz repeat=1/infer-save-reload
+# DONE gmm-sample/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START gmm-sample/denormal_ftz repeat=1/batch
+# DONE gmm-sample/denormal_ftz repeat=1/batch 0.002s
+# START gmm-sample/denormal_ftz repeat=1/stepfull
+# DONE gmm-sample/denormal_ftz repeat=1/stepfull 0.000s
+# START gmm-sample/denormal_ftz repeat=2/train
+# DONE gmm-sample/denormal_ftz repeat=2/train 0.329s
+# START gmm-sample/denormal_ftz repeat=2/infer-save-reload
+# DONE gmm-sample/denormal_ftz repeat=2/infer-save-reload 0.004s
+# START gmm-sample/denormal_ftz repeat=2/batch
+# DONE gmm-sample/denormal_ftz repeat=2/batch 0.000s
+# START gmm-sample/denormal_ftz repeat=2/stepfull
+# DONE gmm-sample/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gmm-sample/denormal_ftz STABLE 0.674s
+# START gmm-sample/dupes repeat=1/train
+# DONE gmm-sample/dupes repeat=1/train 0.404s
+# START gmm-sample/dupes repeat=1/infer-save-reload
+# DONE gmm-sample/dupes repeat=1/infer-save-reload 0.004s
+# START gmm-sample/dupes repeat=1/batch
+# DONE gmm-sample/dupes repeat=1/batch 0.000s
+# START gmm-sample/dupes repeat=1/stepfull
+# DONE gmm-sample/dupes repeat=1/stepfull 0.000s
+# START gmm-sample/dupes repeat=2/train
+# DONE gmm-sample/dupes repeat=2/train 0.393s
+# START gmm-sample/dupes repeat=2/infer-save-reload
+# DONE gmm-sample/dupes repeat=2/infer-save-reload 0.004s
+# START gmm-sample/dupes repeat=2/batch
+# DONE gmm-sample/dupes repeat=2/batch 0.000s
+# START gmm-sample/dupes repeat=2/stepfull
+# DONE gmm-sample/dupes repeat=2/stepfull 0.000s
+# CELL gmm-sample/dupes STABLE 0.806s
+# START gmm-sample/odd repeat=1/train
+# DONE gmm-sample/odd repeat=1/train 0.375s
+# START gmm-sample/odd repeat=1/infer-save-reload
+# DONE gmm-sample/odd repeat=1/infer-save-reload 0.004s
+# START gmm-sample/odd repeat=1/batch
+# DONE gmm-sample/odd repeat=1/batch 0.000s
+# START gmm-sample/odd repeat=1/stepfull
+# DONE gmm-sample/odd repeat=1/stepfull 0.000s
+# START gmm-sample/odd repeat=2/train
+# DONE gmm-sample/odd repeat=2/train 0.393s
+# START gmm-sample/odd repeat=2/infer-save-reload
+# DONE gmm-sample/odd repeat=2/infer-save-reload 0.004s
+# START gmm-sample/odd repeat=2/batch
+# DONE gmm-sample/odd repeat=2/batch 0.000s
+# START gmm-sample/odd repeat=2/stepfull
+# DONE gmm-sample/odd repeat=2/stepfull 0.000s
+# CELL gmm-sample/odd STABLE 0.777s
+# START gmm-sample/negative repeat=1/train
+# DONE gmm-sample/negative repeat=1/train 0.943s
+# START gmm-sample/negative repeat=1/infer-save-reload
+# DONE gmm-sample/negative repeat=1/infer-save-reload 0.006s
+# START gmm-sample/negative repeat=1/batch
+# DONE gmm-sample/negative repeat=1/batch 0.001s
+# START gmm-sample/negative repeat=1/stepfull
+# DONE gmm-sample/negative repeat=1/stepfull 0.000s
+# START gmm-sample/negative repeat=2/train
+# DONE gmm-sample/negative repeat=2/train 0.897s
+# START gmm-sample/negative repeat=2/infer-save-reload
+# DONE gmm-sample/negative repeat=2/infer-save-reload 0.004s
+# START gmm-sample/negative repeat=2/batch
+# DONE gmm-sample/negative repeat=2/batch 0.000s
+# START gmm-sample/negative repeat=2/stepfull
+# DONE gmm-sample/negative repeat=2/stepfull 0.000s
+# CELL gmm-sample/negative STABLE 1.853s
+| gmm-sample             | 1c2e1844d83f2c67 | 61d19a5b1494e1e9 | 1c2853b50d941d3c | 08e931a6a132023c | 216083a47d378224 | 216083a47d378224 | 1c2e1844d83f2c67 | f008ed8d8520be29 | 9b384ab7236109de |
+| gmm-sample infer       | 7c327224646fa7d1 | 43605601885fc70e | 78566a9d2a0c44b8 | 2fbb796cf49f33f8 | 2dda466e4c136128 | 2dda466e4c136128 | 7c327224646fa7d1 | 60e3b32cd6140ff4 | 60fc58330fe5becc |
+| gmm-sample model       | 718ca849904cb838 | b2fba7238414717e | 1267ca36d16c9a2f | 01056bdf59d721c2 | 765df25e243a24bb | 765df25e243a24bb | 718ca849904cb838 | b8f5576cc3eac12a | e39b16ea0319e65a |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: gmm-sample batch n/a:no-batch-axis (GaussianMixture.sample takes no input rows), gmm-sample stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gmm-sample/gmm-sample/cpu-sabotage.json

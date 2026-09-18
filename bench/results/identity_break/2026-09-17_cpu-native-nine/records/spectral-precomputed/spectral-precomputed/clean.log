@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:49:37  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START spectral-precomputed/base repeat=1/train
+# DONE spectral-precomputed/base repeat=1/train 0.249s
+# START spectral-precomputed/base repeat=1/infer-save-reload
+# DONE spectral-precomputed/base repeat=1/infer-save-reload 0.028s
+# START spectral-precomputed/base repeat=1/batch
+# DONE spectral-precomputed/base repeat=1/batch 0.008s
+# START spectral-precomputed/base repeat=1/stepfull
+# DONE spectral-precomputed/base repeat=1/stepfull 0.000s
+# START spectral-precomputed/base repeat=2/train
+# DONE spectral-precomputed/base repeat=2/train 0.242s
+# START spectral-precomputed/base repeat=2/infer-save-reload
+# DONE spectral-precomputed/base repeat=2/infer-save-reload 0.026s
+# START spectral-precomputed/base repeat=2/batch
+# DONE spectral-precomputed/base repeat=2/batch 0.008s
+# START spectral-precomputed/base repeat=2/stepfull
+# DONE spectral-precomputed/base repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/base STABLE 0.564s
+# START spectral-precomputed/ties repeat=1/train
+# DONE spectral-precomputed/ties repeat=1/train 0.243s
+# START spectral-precomputed/ties repeat=1/infer-save-reload
+# DONE spectral-precomputed/ties repeat=1/infer-save-reload 0.025s
+# START spectral-precomputed/ties repeat=1/batch
+# DONE spectral-precomputed/ties repeat=1/batch 0.008s
+# START spectral-precomputed/ties repeat=1/stepfull
+# DONE spectral-precomputed/ties repeat=1/stepfull 0.000s
+# START spectral-precomputed/ties repeat=2/train
+# DONE spectral-precomputed/ties repeat=2/train 0.243s
+# START spectral-precomputed/ties repeat=2/infer-save-reload
+# DONE spectral-precomputed/ties repeat=2/infer-save-reload 0.025s
+# START spectral-precomputed/ties repeat=2/batch
+# DONE spectral-precomputed/ties repeat=2/batch 0.008s
+# START spectral-precomputed/ties repeat=2/stepfull
+# DONE spectral-precomputed/ties repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/ties STABLE 0.553s
+# START spectral-precomputed/hashed repeat=1/train
+# DONE spectral-precomputed/hashed repeat=1/train 0.201s
+# START spectral-precomputed/hashed repeat=1/infer-save-reload
+# DONE spectral-precomputed/hashed repeat=1/infer-save-reload 0.024s
+# START spectral-precomputed/hashed repeat=1/batch
+# DONE spectral-precomputed/hashed repeat=1/batch 0.008s
+# START spectral-precomputed/hashed repeat=1/stepfull
+# DONE spectral-precomputed/hashed repeat=1/stepfull 0.000s
+# START spectral-precomputed/hashed repeat=2/train
+# DONE spectral-precomputed/hashed repeat=2/train 0.202s
+# START spectral-precomputed/hashed repeat=2/infer-save-reload
+# DONE spectral-precomputed/hashed repeat=2/infer-save-reload 0.024s
+# START spectral-precomputed/hashed repeat=2/batch
+# DONE spectral-precomputed/hashed repeat=2/batch 0.008s
+# START spectral-precomputed/hashed repeat=2/stepfull
+# DONE spectral-precomputed/hashed repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/hashed STABLE 0.468s
+# START spectral-precomputed/wide repeat=1/train
+# DONE spectral-precomputed/wide repeat=1/train 0.195s
+# START spectral-precomputed/wide repeat=1/infer-save-reload
+# DONE spectral-precomputed/wide repeat=1/infer-save-reload 0.024s
+# START spectral-precomputed/wide repeat=1/batch
+# DONE spectral-precomputed/wide repeat=1/batch 0.008s
+# START spectral-precomputed/wide repeat=1/stepfull
+# DONE spectral-precomputed/wide repeat=1/stepfull 0.000s
+# START spectral-precomputed/wide repeat=2/train
+# DONE spectral-precomputed/wide repeat=2/train 0.197s
+# START spectral-precomputed/wide repeat=2/infer-save-reload
+# DONE spectral-precomputed/wide repeat=2/infer-save-reload 0.022s
+# START spectral-precomputed/wide repeat=2/batch
+# DONE spectral-precomputed/wide repeat=2/batch 0.008s
+# START spectral-precomputed/wide repeat=2/stepfull
+# DONE spectral-precomputed/wide repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/wide STABLE 0.454s
+# START spectral-precomputed/denormal repeat=1/train
+# DONE spectral-precomputed/denormal repeat=1/train 0.191s
+# START spectral-precomputed/denormal repeat=1/infer-save-reload
+# DONE spectral-precomputed/denormal repeat=1/infer-save-reload 0.022s
+# START spectral-precomputed/denormal repeat=1/batch
+# DONE spectral-precomputed/denormal repeat=1/batch 0.008s
+# START spectral-precomputed/denormal repeat=1/stepfull
+# DONE spectral-precomputed/denormal repeat=1/stepfull 0.000s
+# START spectral-precomputed/denormal repeat=2/train
+# DONE spectral-precomputed/denormal repeat=2/train 0.191s
+# START spectral-precomputed/denormal repeat=2/infer-save-reload
+# DONE spectral-precomputed/denormal repeat=2/infer-save-reload 0.022s
+# START spectral-precomputed/denormal repeat=2/batch
+# DONE spectral-precomputed/denormal repeat=2/batch 0.008s
+# START spectral-precomputed/denormal repeat=2/stepfull
+# DONE spectral-precomputed/denormal repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/denormal STABLE 0.443s
+# START spectral-precomputed/denormal_ftz repeat=1/train
+# DONE spectral-precomputed/denormal_ftz repeat=1/train 0.190s
+# START spectral-precomputed/denormal_ftz repeat=1/infer-save-reload
+# DONE spectral-precomputed/denormal_ftz repeat=1/infer-save-reload 0.022s
+# START spectral-precomputed/denormal_ftz repeat=1/batch
+# DONE spectral-precomputed/denormal_ftz repeat=1/batch 0.008s
+# START spectral-precomputed/denormal_ftz repeat=1/stepfull
+# DONE spectral-precomputed/denormal_ftz repeat=1/stepfull 0.000s
+# START spectral-precomputed/denormal_ftz repeat=2/train
+# DONE spectral-precomputed/denormal_ftz repeat=2/train 0.192s
+# START spectral-precomputed/denormal_ftz repeat=2/infer-save-reload
+# DONE spectral-precomputed/denormal_ftz repeat=2/infer-save-reload 0.023s
+# START spectral-precomputed/denormal_ftz repeat=2/batch
+# DONE spectral-precomputed/denormal_ftz repeat=2/batch 0.008s
+# START spectral-precomputed/denormal_ftz repeat=2/stepfull
+# DONE spectral-precomputed/denormal_ftz repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/denormal_ftz STABLE 0.443s
+# START spectral-precomputed/dupes repeat=1/train
+# DONE spectral-precomputed/dupes repeat=1/train 0.231s
+# START spectral-precomputed/dupes repeat=1/infer-save-reload
+# DONE spectral-precomputed/dupes repeat=1/infer-save-reload 0.023s
+# START spectral-precomputed/dupes repeat=1/batch
+# DONE spectral-precomputed/dupes repeat=1/batch 0.008s
+# START spectral-precomputed/dupes repeat=1/stepfull
+# DONE spectral-precomputed/dupes repeat=1/stepfull 0.000s
+# START spectral-precomputed/dupes repeat=2/train
+# DONE spectral-precomputed/dupes repeat=2/train 0.232s
+# START spectral-precomputed/dupes repeat=2/infer-save-reload
+# DONE spectral-precomputed/dupes repeat=2/infer-save-reload 0.023s
+# START spectral-precomputed/dupes repeat=2/batch
+# DONE spectral-precomputed/dupes repeat=2/batch 0.008s
+# START spectral-precomputed/dupes repeat=2/stepfull
+# DONE spectral-precomputed/dupes repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/dupes STABLE 0.527s
+# START spectral-precomputed/odd repeat=1/train
+# DONE spectral-precomputed/odd repeat=1/train 0.232s
+# START spectral-precomputed/odd repeat=1/infer-save-reload
+# DONE spectral-precomputed/odd repeat=1/infer-save-reload 0.023s
+# START spectral-precomputed/odd repeat=1/batch
+# DONE spectral-precomputed/odd repeat=1/batch 0.008s
+# START spectral-precomputed/odd repeat=1/stepfull
+# DONE spectral-precomputed/odd repeat=1/stepfull 0.000s
+# START spectral-precomputed/odd repeat=2/train
+# DONE spectral-precomputed/odd repeat=2/train 0.235s
+# START spectral-precomputed/odd repeat=2/infer-save-reload
+# DONE spectral-precomputed/odd repeat=2/infer-save-reload 0.023s
+# START spectral-precomputed/odd repeat=2/batch
+# DONE spectral-precomputed/odd repeat=2/batch 0.008s
+# START spectral-precomputed/odd repeat=2/stepfull
+# DONE spectral-precomputed/odd repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/odd STABLE 0.530s
+# START spectral-precomputed/negative repeat=1/train
+# DONE spectral-precomputed/negative repeat=1/train 0.224s
+# START spectral-precomputed/negative repeat=1/infer-save-reload
+# DONE spectral-precomputed/negative repeat=1/infer-save-reload 0.023s
+# START spectral-precomputed/negative repeat=1/batch
+# DONE spectral-precomputed/negative repeat=1/batch 0.008s
+# START spectral-precomputed/negative repeat=1/stepfull
+# DONE spectral-precomputed/negative repeat=1/stepfull 0.000s
+# START spectral-precomputed/negative repeat=2/train
+# DONE spectral-precomputed/negative repeat=2/train 0.234s
+# START spectral-precomputed/negative repeat=2/infer-save-reload
+# DONE spectral-precomputed/negative repeat=2/infer-save-reload 0.023s
+# START spectral-precomputed/negative repeat=2/batch
+# DONE spectral-precomputed/negative repeat=2/batch 0.008s
+# START spectral-precomputed/negative repeat=2/stepfull
+# DONE spectral-precomputed/negative repeat=2/stepfull 0.000s
+# CELL spectral-precomputed/negative STABLE 0.521s
+| spectral-precomputed   | 8df6d51dbff9ddaf | 32ed236da838cb22 | fafd67318e66c8e9 | ebeb9c5c4008a66d | 134d1fdd8654374a | 134d1fdd8654374a | 8df6d51dbff9ddaf | bbe40df82c9e623a | 6231ccf8fca2283f |
+| spectral-precomputed infer | bb2835f47f32e74d | 77b660ca4b2a42e2 | 3aed3a887e2b0c41 | c0ba56eeb5dcea34 | 7cd8401e0437ce89 | 7cd8401e0437ce89 | bb2835f47f32e74d | dce8f63e8bca9703 | 423f584e1c5cce33 |
+| spectral-precomputed model | 6b04b89cfa623e45 | ea7aeb5dfe06471c | 57673edfae833da5 | 710be55734b0c960 | 0df4233607620b15 | 0df4233607620b15 | 6b04b89cfa623e45 | c9fda73cee1e07c0 | 8ff2c152fc6fba9f |
+| spectral-precomputed batch | 403839d9afb03ede | eba1461e59f20122 | f37e31ace943997d | 73a372dffb458803 | 600fc84e875132a6 | 600fc84e875132a6 | 403839d9afb03ede | b7fdd3972dd692b3 | 43d927a591f2c6fa |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: spectral-precomputed stepfull n/a:no-decode-state
+wrote /root/leg_out/records/spectral-precomputed/spectral-precomputed/cpu-clean.json

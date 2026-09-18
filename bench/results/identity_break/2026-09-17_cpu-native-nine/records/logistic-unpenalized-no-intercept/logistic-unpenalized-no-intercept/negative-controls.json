@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "logistic-unpenalized-no-intercept/base",
+      "context_matches": true,
+      "clean": "2d680bec24348fb1",
+      "sabotage": "8e9bc923f7d09283",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/denormal",
+      "context_matches": true,
+      "clean": "626de4d1000c3305",
+      "sabotage": "ec632410dcae3759",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/denormal_ftz",
+      "context_matches": true,
+      "clean": "626de4d1000c3305",
+      "sabotage": "ec632410dcae3759",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/dupes",
+      "context_matches": true,
+      "clean": "47baf3583d5b3a72",
+      "sabotage": "47809a1b40593f01",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/hashed",
+      "context_matches": true,
+      "clean": "568f4ba985007559",
+      "sabotage": "d285b990a6a42cd1",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/negative",
+      "context_matches": true,
+      "clean": "214df080ade37c23",
+      "sabotage": "022d945e55e2ed3c",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/odd",
+      "context_matches": true,
+      "clean": "4c2b1a307f3901c0",
+      "sabotage": "36a100f73d638fe9",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/ties",
+      "context_matches": true,
+      "clean": "d033051f5a6423bc",
+      "sabotage": "e332c2951b085741",
+      "detected": true
+    },
+    {
+      "cell": "logistic-unpenalized-no-intercept/wide",
+      "context_matches": true,
+      "clean": "4e980d6d6bb17dd2",
+      "sabotage": "9c3a473349b6d0f0",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

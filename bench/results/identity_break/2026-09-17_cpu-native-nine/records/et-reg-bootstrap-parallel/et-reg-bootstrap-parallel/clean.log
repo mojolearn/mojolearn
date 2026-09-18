@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:31:55  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START et-reg-bootstrap-parallel/base repeat=1/train
+# DONE et-reg-bootstrap-parallel/base repeat=1/train 0.086s
+# START et-reg-bootstrap-parallel/base repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/base repeat=1/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/base repeat=1/batch
+# DONE et-reg-bootstrap-parallel/base repeat=1/batch 0.100s
+# START et-reg-bootstrap-parallel/base repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/base repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/base repeat=2/train
+# DONE et-reg-bootstrap-parallel/base repeat=2/train 0.086s
+# START et-reg-bootstrap-parallel/base repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/base repeat=2/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/base repeat=2/batch
+# DONE et-reg-bootstrap-parallel/base repeat=2/batch 0.109s
+# START et-reg-bootstrap-parallel/base repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/base repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/base STABLE 0.456s
+# START et-reg-bootstrap-parallel/ties repeat=1/train
+# DONE et-reg-bootstrap-parallel/ties repeat=1/train 0.102s
+# START et-reg-bootstrap-parallel/ties repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/ties repeat=1/infer-save-reload 0.039s
+# START et-reg-bootstrap-parallel/ties repeat=1/batch
+# DONE et-reg-bootstrap-parallel/ties repeat=1/batch 0.098s
+# START et-reg-bootstrap-parallel/ties repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/ties repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/ties repeat=2/train
+# DONE et-reg-bootstrap-parallel/ties repeat=2/train 0.102s
+# START et-reg-bootstrap-parallel/ties repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/ties repeat=2/infer-save-reload 0.039s
+# START et-reg-bootstrap-parallel/ties repeat=2/batch
+# DONE et-reg-bootstrap-parallel/ties repeat=2/batch 0.097s
+# START et-reg-bootstrap-parallel/ties repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/ties repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/ties STABLE 0.477s
+# START et-reg-bootstrap-parallel/hashed repeat=1/train
+# DONE et-reg-bootstrap-parallel/hashed repeat=1/train 0.099s
+# START et-reg-bootstrap-parallel/hashed repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/hashed repeat=1/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/hashed repeat=1/batch
+# DONE et-reg-bootstrap-parallel/hashed repeat=1/batch 0.104s
+# START et-reg-bootstrap-parallel/hashed repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/hashed repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/hashed repeat=2/train
+# DONE et-reg-bootstrap-parallel/hashed repeat=2/train 0.099s
+# START et-reg-bootstrap-parallel/hashed repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/hashed repeat=2/infer-save-reload 0.038s
+# START et-reg-bootstrap-parallel/hashed repeat=2/batch
+# DONE et-reg-bootstrap-parallel/hashed repeat=2/batch 0.094s
+# START et-reg-bootstrap-parallel/hashed repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/hashed repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/hashed STABLE 0.473s
+# START et-reg-bootstrap-parallel/wide repeat=1/train
+# DONE et-reg-bootstrap-parallel/wide repeat=1/train 0.077s
+# START et-reg-bootstrap-parallel/wide repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/wide repeat=1/infer-save-reload 0.035s
+# START et-reg-bootstrap-parallel/wide repeat=1/batch
+# DONE et-reg-bootstrap-parallel/wide repeat=1/batch 0.102s
+# START et-reg-bootstrap-parallel/wide repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/wide repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/wide repeat=2/train
+# DONE et-reg-bootstrap-parallel/wide repeat=2/train 0.078s
+# START et-reg-bootstrap-parallel/wide repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/wide repeat=2/infer-save-reload 0.035s
+# START et-reg-bootstrap-parallel/wide repeat=2/batch
+# DONE et-reg-bootstrap-parallel/wide repeat=2/batch 0.093s
+# START et-reg-bootstrap-parallel/wide repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/wide repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/wide STABLE 0.421s
+# START et-reg-bootstrap-parallel/denormal repeat=1/train
+# DONE et-reg-bootstrap-parallel/denormal repeat=1/train 0.086s
+# START et-reg-bootstrap-parallel/denormal repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/denormal repeat=1/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/denormal repeat=1/batch
+# DONE et-reg-bootstrap-parallel/denormal repeat=1/batch 0.106s
+# START et-reg-bootstrap-parallel/denormal repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/denormal repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/denormal repeat=2/train
+# DONE et-reg-bootstrap-parallel/denormal repeat=2/train 0.087s
+# START et-reg-bootstrap-parallel/denormal repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/denormal repeat=2/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/denormal repeat=2/batch
+# DONE et-reg-bootstrap-parallel/denormal repeat=2/batch 0.093s
+# START et-reg-bootstrap-parallel/denormal repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/denormal repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/denormal STABLE 0.446s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=1/train
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=1/train 0.086s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=1/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=1/batch
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=1/batch 0.107s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=2/train
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=2/train 0.086s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=2/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=2/batch
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=2/batch 0.093s
+# START et-reg-bootstrap-parallel/denormal_ftz repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/denormal_ftz repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/denormal_ftz STABLE 0.446s
+# START et-reg-bootstrap-parallel/dupes repeat=1/train
+# DONE et-reg-bootstrap-parallel/dupes repeat=1/train 0.082s
+# START et-reg-bootstrap-parallel/dupes repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/dupes repeat=1/infer-save-reload 0.036s
+# START et-reg-bootstrap-parallel/dupes repeat=1/batch
+# DONE et-reg-bootstrap-parallel/dupes repeat=1/batch 0.093s
+# START et-reg-bootstrap-parallel/dupes repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/dupes repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/dupes repeat=2/train
+# DONE et-reg-bootstrap-parallel/dupes repeat=2/train 0.082s
+# START et-reg-bootstrap-parallel/dupes repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/dupes repeat=2/infer-save-reload 0.036s
+# START et-reg-bootstrap-parallel/dupes repeat=2/batch
+# DONE et-reg-bootstrap-parallel/dupes repeat=2/batch 0.108s
+# START et-reg-bootstrap-parallel/dupes repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/dupes repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/dupes STABLE 0.438s
+# START et-reg-bootstrap-parallel/odd repeat=1/train
+# DONE et-reg-bootstrap-parallel/odd repeat=1/train 0.056s
+# START et-reg-bootstrap-parallel/odd repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/odd repeat=1/infer-save-reload 0.024s
+# START et-reg-bootstrap-parallel/odd repeat=1/batch
+# DONE et-reg-bootstrap-parallel/odd repeat=1/batch 0.059s
+# START et-reg-bootstrap-parallel/odd repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/odd repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/odd repeat=2/train
+# DONE et-reg-bootstrap-parallel/odd repeat=2/train 0.057s
+# START et-reg-bootstrap-parallel/odd repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/odd repeat=2/infer-save-reload 0.024s
+# START et-reg-bootstrap-parallel/odd repeat=2/batch
+# DONE et-reg-bootstrap-parallel/odd repeat=2/batch 0.058s
+# START et-reg-bootstrap-parallel/odd repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/odd repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/odd STABLE 0.278s
+# START et-reg-bootstrap-parallel/negative repeat=1/train
+# DONE et-reg-bootstrap-parallel/negative repeat=1/train 0.087s
+# START et-reg-bootstrap-parallel/negative repeat=1/infer-save-reload
+# DONE et-reg-bootstrap-parallel/negative repeat=1/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/negative repeat=1/batch
+# DONE et-reg-bootstrap-parallel/negative repeat=1/batch 0.107s
+# START et-reg-bootstrap-parallel/negative repeat=1/stepfull
+# DONE et-reg-bootstrap-parallel/negative repeat=1/stepfull 0.000s
+# START et-reg-bootstrap-parallel/negative repeat=2/train
+# DONE et-reg-bootstrap-parallel/negative repeat=2/train 0.087s
+# START et-reg-bootstrap-parallel/negative repeat=2/infer-save-reload
+# DONE et-reg-bootstrap-parallel/negative repeat=2/infer-save-reload 0.037s
+# START et-reg-bootstrap-parallel/negative repeat=2/batch
+# DONE et-reg-bootstrap-parallel/negative repeat=2/batch 0.094s
+# START et-reg-bootstrap-parallel/negative repeat=2/stepfull
+# DONE et-reg-bootstrap-parallel/negative repeat=2/stepfull 0.000s
+# CELL et-reg-bootstrap-parallel/negative STABLE 0.450s
+| et-reg-bootstrap-parallel | 19364c9a090a07bf | f9f4327d4f1928cc | a62b714ab1e0ae24 | d1c206224be7d638 | 2db72056e0c1f349 | 2db72056e0c1f349 | 5e17e8c07de7964f | c7241fe5a82049b3 | a9c4589c8d79c6a9 |
+| et-reg-bootstrap-parallel infer | 4628f803fa16fc96 | 69009e72583d36e1 | b3dfa1c2a57c95aa | aa7cdfe28fa86131 | 60c628e308470187 | 60c628e308470187 | 3c43291f31a34e53 | 67e9c720c16a404e | 096c906829aa0784 |
+| et-reg-bootstrap-parallel model | cbe2b16ab7f8500f | dc8b0658ce886cf8 | 0dae8e0e9f7f86ca | 57d02fc9e8476c80 | 6117ff1aa7c8ba66 | 6117ff1aa7c8ba66 | 9b94ea715f42ed86 | ab4ac2e0785cb161 | fc1a41eacd8a22bc |
+| et-reg-bootstrap-parallel batch | 8f0d2ec1e7b966f7 | 1b5250036fdc0f89 | 4909becd02eff0ad | f8f3f09344aef35f | d70de1307f3768be | d70de1307f3768be | d3dc64b4fa4eb59d | 1ef1925226b29440 | fe1281bf98c9ea96 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: et-reg-bootstrap-parallel stepfull n/a:no-decode-state
+wrote /root/leg_out/records/et-reg-bootstrap-parallel/et-reg-bootstrap-parallel/cpu-clean.json

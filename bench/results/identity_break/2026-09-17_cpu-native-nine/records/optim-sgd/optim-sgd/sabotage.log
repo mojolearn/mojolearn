@@ -1,0 +1,168 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:17  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START optim-sgd/base repeat=1/train
+# DONE optim-sgd/base repeat=1/train 0.002s
+# START optim-sgd/base repeat=1/infer-save-reload
+# DONE optim-sgd/base repeat=1/infer-save-reload 0.000s
+# START optim-sgd/base repeat=1/batch
+# DONE optim-sgd/base repeat=1/batch 0.008s
+# START optim-sgd/base repeat=1/stepfull
+# DONE optim-sgd/base repeat=1/stepfull 0.000s
+# START optim-sgd/base repeat=2/train
+# DONE optim-sgd/base repeat=2/train 0.001s
+# START optim-sgd/base repeat=2/infer-save-reload
+# DONE optim-sgd/base repeat=2/infer-save-reload 0.000s
+# START optim-sgd/base repeat=2/batch
+# DONE optim-sgd/base repeat=2/batch 0.007s
+# START optim-sgd/base repeat=2/stepfull
+# DONE optim-sgd/base repeat=2/stepfull 0.000s
+# CELL optim-sgd/base STABLE 0.018s
+# START optim-sgd/ties repeat=1/train
+# DONE optim-sgd/ties repeat=1/train 0.002s
+# START optim-sgd/ties repeat=1/infer-save-reload
+# DONE optim-sgd/ties repeat=1/infer-save-reload 0.000s
+# START optim-sgd/ties repeat=1/batch
+# DONE optim-sgd/ties repeat=1/batch 0.012s
+# START optim-sgd/ties repeat=1/stepfull
+# DONE optim-sgd/ties repeat=1/stepfull 0.000s
+# START optim-sgd/ties repeat=2/train
+# DONE optim-sgd/ties repeat=2/train 0.002s
+# START optim-sgd/ties repeat=2/infer-save-reload
+# DONE optim-sgd/ties repeat=2/infer-save-reload 0.000s
+# START optim-sgd/ties repeat=2/batch
+# DONE optim-sgd/ties repeat=2/batch 0.012s
+# START optim-sgd/ties repeat=2/stepfull
+# DONE optim-sgd/ties repeat=2/stepfull 0.000s
+# CELL optim-sgd/ties STABLE 0.029s
+# START optim-sgd/hashed repeat=1/train
+# DONE optim-sgd/hashed repeat=1/train 0.002s
+# START optim-sgd/hashed repeat=1/infer-save-reload
+# DONE optim-sgd/hashed repeat=1/infer-save-reload 0.000s
+# START optim-sgd/hashed repeat=1/batch
+# DONE optim-sgd/hashed repeat=1/batch 0.012s
+# START optim-sgd/hashed repeat=1/stepfull
+# DONE optim-sgd/hashed repeat=1/stepfull 0.000s
+# START optim-sgd/hashed repeat=2/train
+# DONE optim-sgd/hashed repeat=2/train 0.002s
+# START optim-sgd/hashed repeat=2/infer-save-reload
+# DONE optim-sgd/hashed repeat=2/infer-save-reload 0.000s
+# START optim-sgd/hashed repeat=2/batch
+# DONE optim-sgd/hashed repeat=2/batch 0.010s
+# START optim-sgd/hashed repeat=2/stepfull
+# DONE optim-sgd/hashed repeat=2/stepfull 0.000s
+# CELL optim-sgd/hashed STABLE 0.026s
+# START optim-sgd/wide repeat=1/train
+# DONE optim-sgd/wide repeat=1/train 0.002s
+# START optim-sgd/wide repeat=1/infer-save-reload
+# DONE optim-sgd/wide repeat=1/infer-save-reload 0.000s
+# START optim-sgd/wide repeat=1/batch
+# DONE optim-sgd/wide repeat=1/batch 0.012s
+# START optim-sgd/wide repeat=1/stepfull
+# DONE optim-sgd/wide repeat=1/stepfull 0.000s
+# START optim-sgd/wide repeat=2/train
+# DONE optim-sgd/wide repeat=2/train 0.002s
+# START optim-sgd/wide repeat=2/infer-save-reload
+# DONE optim-sgd/wide repeat=2/infer-save-reload 0.000s
+# START optim-sgd/wide repeat=2/batch
+# DONE optim-sgd/wide repeat=2/batch 0.012s
+# START optim-sgd/wide repeat=2/stepfull
+# DONE optim-sgd/wide repeat=2/stepfull 0.000s
+# CELL optim-sgd/wide STABLE 0.028s
+# START optim-sgd/denormal repeat=1/train
+# DONE optim-sgd/denormal repeat=1/train 0.002s
+# START optim-sgd/denormal repeat=1/infer-save-reload
+# DONE optim-sgd/denormal repeat=1/infer-save-reload 0.000s
+# START optim-sgd/denormal repeat=1/batch
+# DONE optim-sgd/denormal repeat=1/batch 0.012s
+# START optim-sgd/denormal repeat=1/stepfull
+# DONE optim-sgd/denormal repeat=1/stepfull 0.000s
+# START optim-sgd/denormal repeat=2/train
+# DONE optim-sgd/denormal repeat=2/train 0.002s
+# START optim-sgd/denormal repeat=2/infer-save-reload
+# DONE optim-sgd/denormal repeat=2/infer-save-reload 0.000s
+# START optim-sgd/denormal repeat=2/batch
+# DONE optim-sgd/denormal repeat=2/batch 0.012s
+# START optim-sgd/denormal repeat=2/stepfull
+# DONE optim-sgd/denormal repeat=2/stepfull 0.000s
+# CELL optim-sgd/denormal STABLE 0.028s
+# START optim-sgd/denormal_ftz repeat=1/train
+# DONE optim-sgd/denormal_ftz repeat=1/train 0.002s
+# START optim-sgd/denormal_ftz repeat=1/infer-save-reload
+# DONE optim-sgd/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START optim-sgd/denormal_ftz repeat=1/batch
+# DONE optim-sgd/denormal_ftz repeat=1/batch 0.012s
+# START optim-sgd/denormal_ftz repeat=1/stepfull
+# DONE optim-sgd/denormal_ftz repeat=1/stepfull 0.000s
+# START optim-sgd/denormal_ftz repeat=2/train
+# DONE optim-sgd/denormal_ftz repeat=2/train 0.002s
+# START optim-sgd/denormal_ftz repeat=2/infer-save-reload
+# DONE optim-sgd/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START optim-sgd/denormal_ftz repeat=2/batch
+# DONE optim-sgd/denormal_ftz repeat=2/batch 0.012s
+# START optim-sgd/denormal_ftz repeat=2/stepfull
+# DONE optim-sgd/denormal_ftz repeat=2/stepfull 0.000s
+# CELL optim-sgd/denormal_ftz STABLE 0.028s
+# START optim-sgd/dupes repeat=1/train
+# DONE optim-sgd/dupes repeat=1/train 0.002s
+# START optim-sgd/dupes repeat=1/infer-save-reload
+# DONE optim-sgd/dupes repeat=1/infer-save-reload 0.000s
+# START optim-sgd/dupes repeat=1/batch
+# DONE optim-sgd/dupes repeat=1/batch 0.012s
+# START optim-sgd/dupes repeat=1/stepfull
+# DONE optim-sgd/dupes repeat=1/stepfull 0.000s
+# START optim-sgd/dupes repeat=2/train
+# DONE optim-sgd/dupes repeat=2/train 0.002s
+# START optim-sgd/dupes repeat=2/infer-save-reload
+# DONE optim-sgd/dupes repeat=2/infer-save-reload 0.000s
+# START optim-sgd/dupes repeat=2/batch
+# DONE optim-sgd/dupes repeat=2/batch 0.013s
+# START optim-sgd/dupes repeat=2/stepfull
+# DONE optim-sgd/dupes repeat=2/stepfull 0.000s
+# CELL optim-sgd/dupes STABLE 0.029s
+# START optim-sgd/odd repeat=1/train
+# DONE optim-sgd/odd repeat=1/train 0.002s
+# START optim-sgd/odd repeat=1/infer-save-reload
+# DONE optim-sgd/odd repeat=1/infer-save-reload 0.000s
+# START optim-sgd/odd repeat=1/batch
+# DONE optim-sgd/odd repeat=1/batch 0.013s
+# START optim-sgd/odd repeat=1/stepfull
+# DONE optim-sgd/odd repeat=1/stepfull 0.000s
+# START optim-sgd/odd repeat=2/train
+# DONE optim-sgd/odd repeat=2/train 0.002s
+# START optim-sgd/odd repeat=2/infer-save-reload
+# DONE optim-sgd/odd repeat=2/infer-save-reload 0.000s
+# START optim-sgd/odd repeat=2/batch
+# DONE optim-sgd/odd repeat=2/batch 0.011s
+# START optim-sgd/odd repeat=2/stepfull
+# DONE optim-sgd/odd repeat=2/stepfull 0.000s
+# CELL optim-sgd/odd STABLE 0.027s
+# START optim-sgd/negative repeat=1/train
+# DONE optim-sgd/negative repeat=1/train 0.002s
+# START optim-sgd/negative repeat=1/infer-save-reload
+# DONE optim-sgd/negative repeat=1/infer-save-reload 0.000s
+# START optim-sgd/negative repeat=1/batch
+# DONE optim-sgd/negative repeat=1/batch 0.013s
+# START optim-sgd/negative repeat=1/stepfull
+# DONE optim-sgd/negative repeat=1/stepfull 0.000s
+# START optim-sgd/negative repeat=2/train
+# DONE optim-sgd/negative repeat=2/train 0.002s
+# START optim-sgd/negative repeat=2/infer-save-reload
+# DONE optim-sgd/negative repeat=2/infer-save-reload 0.000s
+# START optim-sgd/negative repeat=2/batch
+# DONE optim-sgd/negative repeat=2/batch 0.011s
+# START optim-sgd/negative repeat=2/stepfull
+# DONE optim-sgd/negative repeat=2/stepfull 0.000s
+# CELL optim-sgd/negative STABLE 0.029s
+| optim-sgd              | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 | bbc92c9904d81873 |
+| optim-sgd batch        | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc | b5720e41044285cc |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: optim-sgd infer n/a:function, optim-sgd model n/a:no-save, optim-sgd stepfull n/a:no-decode-state
+wrote /root/leg_out/records/optim-sgd/optim-sgd/cpu-sabotage.json

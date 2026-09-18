@@ -1,0 +1,238 @@
+{
+  "transformer-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "transformer-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba1-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba1-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba2-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba2-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba3-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mamba3-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mlp-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "mlp-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "samba-bf16w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "samba-int8w": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gp-optimize": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gp-optimize-restarts": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "svc-poly": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gmm-random-init-sample": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gmm-sample": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gp-normalize-y": {
+    "exit_code": 1,
+    "passed": false,
+    "detected": 0,
+    "clean_failures": [
+      {
+        "cell": "gp-normalize-y/base",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/denormal",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/denormal_ftz",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/dupes",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/hashed",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/negative",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/odd",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/ties",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-normalize-y/wide",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      }
+    ]
+  },
+  "gp-sample-y": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gp-sample-y-normalize": {
+    "exit_code": 1,
+    "passed": false,
+    "detected": 0,
+    "clean_failures": [
+      {
+        "cell": "gp-sample-y-normalize/base",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/denormal",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/denormal_ftz",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/dupes",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/hashed",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/negative",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/odd",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/ties",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      },
+      {
+        "cell": "gp-sample-y-normalize/wide",
+        "part": "verdict",
+        "verdict": "REFUSED"
+      }
+    ]
+  },
+  "gbdt-query-rmse": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gpc": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "ivf-extend": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  },
+  "gpc-multiclass": {
+    "exit_code": 0,
+    "passed": true,
+    "detected": 9,
+    "clean_failures": []
+  }
+}

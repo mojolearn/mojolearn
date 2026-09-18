@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:45:31  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START knn-chebyshev/base repeat=1/train
+# DONE knn-chebyshev/base repeat=1/train 0.009s
+# START knn-chebyshev/base repeat=1/infer-save-reload
+# DONE knn-chebyshev/base repeat=1/infer-save-reload 0.020s
+# START knn-chebyshev/base repeat=1/batch
+# DONE knn-chebyshev/base repeat=1/batch 0.022s
+# START knn-chebyshev/base repeat=1/stepfull
+# DONE knn-chebyshev/base repeat=1/stepfull 0.000s
+# START knn-chebyshev/base repeat=2/train
+# DONE knn-chebyshev/base repeat=2/train 0.008s
+# START knn-chebyshev/base repeat=2/infer-save-reload
+# DONE knn-chebyshev/base repeat=2/infer-save-reload 0.018s
+# START knn-chebyshev/base repeat=2/batch
+# DONE knn-chebyshev/base repeat=2/batch 0.021s
+# START knn-chebyshev/base repeat=2/stepfull
+# DONE knn-chebyshev/base repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/base STABLE 0.100s
+# START knn-chebyshev/ties repeat=1/train
+# DONE knn-chebyshev/ties repeat=1/train 0.027s
+# START knn-chebyshev/ties repeat=1/infer-save-reload
+# DONE knn-chebyshev/ties repeat=1/infer-save-reload 0.055s
+# START knn-chebyshev/ties repeat=1/batch
+# DONE knn-chebyshev/ties repeat=1/batch 0.061s
+# START knn-chebyshev/ties repeat=1/stepfull
+# DONE knn-chebyshev/ties repeat=1/stepfull 0.000s
+# START knn-chebyshev/ties repeat=2/train
+# DONE knn-chebyshev/ties repeat=2/train 0.026s
+# START knn-chebyshev/ties repeat=2/infer-save-reload
+# DONE knn-chebyshev/ties repeat=2/infer-save-reload 0.054s
+# START knn-chebyshev/ties repeat=2/batch
+# DONE knn-chebyshev/ties repeat=2/batch 0.062s
+# START knn-chebyshev/ties repeat=2/stepfull
+# DONE knn-chebyshev/ties repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/ties STABLE 0.286s
+# START knn-chebyshev/hashed repeat=1/train
+# DONE knn-chebyshev/hashed repeat=1/train 0.009s
+# START knn-chebyshev/hashed repeat=1/infer-save-reload
+# DONE knn-chebyshev/hashed repeat=1/infer-save-reload 0.018s
+# START knn-chebyshev/hashed repeat=1/batch
+# DONE knn-chebyshev/hashed repeat=1/batch 0.021s
+# START knn-chebyshev/hashed repeat=1/stepfull
+# DONE knn-chebyshev/hashed repeat=1/stepfull 0.000s
+# START knn-chebyshev/hashed repeat=2/train
+# DONE knn-chebyshev/hashed repeat=2/train 0.009s
+# START knn-chebyshev/hashed repeat=2/infer-save-reload
+# DONE knn-chebyshev/hashed repeat=2/infer-save-reload 0.018s
+# START knn-chebyshev/hashed repeat=2/batch
+# DONE knn-chebyshev/hashed repeat=2/batch 0.021s
+# START knn-chebyshev/hashed repeat=2/stepfull
+# DONE knn-chebyshev/hashed repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/hashed STABLE 0.097s
+# START knn-chebyshev/wide repeat=1/train
+# DONE knn-chebyshev/wide repeat=1/train 0.009s
+# START knn-chebyshev/wide repeat=1/infer-save-reload
+# DONE knn-chebyshev/wide repeat=1/infer-save-reload 0.019s
+# START knn-chebyshev/wide repeat=1/batch
+# DONE knn-chebyshev/wide repeat=1/batch 0.021s
+# START knn-chebyshev/wide repeat=1/stepfull
+# DONE knn-chebyshev/wide repeat=1/stepfull 0.000s
+# START knn-chebyshev/wide repeat=2/train
+# DONE knn-chebyshev/wide repeat=2/train 0.008s
+# START knn-chebyshev/wide repeat=2/infer-save-reload
+# DONE knn-chebyshev/wide repeat=2/infer-save-reload 0.019s
+# START knn-chebyshev/wide repeat=2/batch
+# DONE knn-chebyshev/wide repeat=2/batch 0.021s
+# START knn-chebyshev/wide repeat=2/stepfull
+# DONE knn-chebyshev/wide repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/wide STABLE 0.097s
+# START knn-chebyshev/denormal repeat=1/train
+# DONE knn-chebyshev/denormal repeat=1/train 0.008s
+# START knn-chebyshev/denormal repeat=1/infer-save-reload
+# DONE knn-chebyshev/denormal repeat=1/infer-save-reload 0.018s
+# START knn-chebyshev/denormal repeat=1/batch
+# DONE knn-chebyshev/denormal repeat=1/batch 0.021s
+# START knn-chebyshev/denormal repeat=1/stepfull
+# DONE knn-chebyshev/denormal repeat=1/stepfull 0.000s
+# START knn-chebyshev/denormal repeat=2/train
+# DONE knn-chebyshev/denormal repeat=2/train 0.008s
+# START knn-chebyshev/denormal repeat=2/infer-save-reload
+# DONE knn-chebyshev/denormal repeat=2/infer-save-reload 0.018s
+# START knn-chebyshev/denormal repeat=2/batch
+# DONE knn-chebyshev/denormal repeat=2/batch 0.020s
+# START knn-chebyshev/denormal repeat=2/stepfull
+# DONE knn-chebyshev/denormal repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/denormal STABLE 0.095s
+# START knn-chebyshev/denormal_ftz repeat=1/train
+# DONE knn-chebyshev/denormal_ftz repeat=1/train 0.008s
+# START knn-chebyshev/denormal_ftz repeat=1/infer-save-reload
+# DONE knn-chebyshev/denormal_ftz repeat=1/infer-save-reload 0.018s
+# START knn-chebyshev/denormal_ftz repeat=1/batch
+# DONE knn-chebyshev/denormal_ftz repeat=1/batch 0.021s
+# START knn-chebyshev/denormal_ftz repeat=1/stepfull
+# DONE knn-chebyshev/denormal_ftz repeat=1/stepfull 0.000s
+# START knn-chebyshev/denormal_ftz repeat=2/train
+# DONE knn-chebyshev/denormal_ftz repeat=2/train 0.008s
+# START knn-chebyshev/denormal_ftz repeat=2/infer-save-reload
+# DONE knn-chebyshev/denormal_ftz repeat=2/infer-save-reload 0.018s
+# START knn-chebyshev/denormal_ftz repeat=2/batch
+# DONE knn-chebyshev/denormal_ftz repeat=2/batch 0.021s
+# START knn-chebyshev/denormal_ftz repeat=2/stepfull
+# DONE knn-chebyshev/denormal_ftz repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/denormal_ftz STABLE 0.095s
+# START knn-chebyshev/dupes repeat=1/train
+# DONE knn-chebyshev/dupes repeat=1/train 0.008s
+# START knn-chebyshev/dupes repeat=1/infer-save-reload
+# DONE knn-chebyshev/dupes repeat=1/infer-save-reload 0.018s
+# START knn-chebyshev/dupes repeat=1/batch
+# DONE knn-chebyshev/dupes repeat=1/batch 0.020s
+# START knn-chebyshev/dupes repeat=1/stepfull
+# DONE knn-chebyshev/dupes repeat=1/stepfull 0.000s
+# START knn-chebyshev/dupes repeat=2/train
+# DONE knn-chebyshev/dupes repeat=2/train 0.008s
+# START knn-chebyshev/dupes repeat=2/infer-save-reload
+# DONE knn-chebyshev/dupes repeat=2/infer-save-reload 0.018s
+# START knn-chebyshev/dupes repeat=2/batch
+# DONE knn-chebyshev/dupes repeat=2/batch 0.021s
+# START knn-chebyshev/dupes repeat=2/stepfull
+# DONE knn-chebyshev/dupes repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/dupes STABLE 0.094s
+# START knn-chebyshev/odd repeat=1/train
+# DONE knn-chebyshev/odd repeat=1/train 0.009s
+# START knn-chebyshev/odd repeat=1/infer-save-reload
+# DONE knn-chebyshev/odd repeat=1/infer-save-reload 0.019s
+# START knn-chebyshev/odd repeat=1/batch
+# DONE knn-chebyshev/odd repeat=1/batch 0.022s
+# START knn-chebyshev/odd repeat=1/stepfull
+# DONE knn-chebyshev/odd repeat=1/stepfull 0.000s
+# START knn-chebyshev/odd repeat=2/train
+# DONE knn-chebyshev/odd repeat=2/train 0.009s
+# START knn-chebyshev/odd repeat=2/infer-save-reload
+# DONE knn-chebyshev/odd repeat=2/infer-save-reload 0.019s
+# START knn-chebyshev/odd repeat=2/batch
+# DONE knn-chebyshev/odd repeat=2/batch 0.022s
+# START knn-chebyshev/odd repeat=2/stepfull
+# DONE knn-chebyshev/odd repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/odd STABLE 0.102s
+# START knn-chebyshev/negative repeat=1/train
+# DONE knn-chebyshev/negative repeat=1/train 0.009s
+# START knn-chebyshev/negative repeat=1/infer-save-reload
+# DONE knn-chebyshev/negative repeat=1/infer-save-reload 0.019s
+# START knn-chebyshev/negative repeat=1/batch
+# DONE knn-chebyshev/negative repeat=1/batch 0.021s
+# START knn-chebyshev/negative repeat=1/stepfull
+# DONE knn-chebyshev/negative repeat=1/stepfull 0.000s
+# START knn-chebyshev/negative repeat=2/train
+# DONE knn-chebyshev/negative repeat=2/train 0.008s
+# START knn-chebyshev/negative repeat=2/infer-save-reload
+# DONE knn-chebyshev/negative repeat=2/infer-save-reload 0.019s
+# START knn-chebyshev/negative repeat=2/batch
+# DONE knn-chebyshev/negative repeat=2/batch 0.021s
+# START knn-chebyshev/negative repeat=2/stepfull
+# DONE knn-chebyshev/negative repeat=2/stepfull 0.000s
+# CELL knn-chebyshev/negative STABLE 0.098s
+| knn-chebyshev          | 216fff8aa5989758 | ffb6231807d08ca5 | 38c9ba5b53bf50b4 | 5d9dd46c34e7ea9b | 7529dc2d3cbeffa9 | 7529dc2d3cbeffa9 | e99889dfad36b7f9 | 14e51035498fb41b | a072add0bea1061c |
+| knn-chebyshev infer    | 85bf9daf0386b59f | 61fdcb8274d164a4 | 7d8d316420265922 | 1d44f07f5d59684e | bf5de0931ab4b7a3 | bf5de0931ab4b7a3 | 42aa74427e3c4f6a | 59a6f79d244e35f9 | 5843b582766bc3f1 |
+| knn-chebyshev model    | 9fcdb70c0e9f5be8 | 5243539c628d2238 | cae31f9540e4d4d2 | e17507466bf1509b | 26e61503a445cfbf | bafb044a74f8fc98 | dd5631e90586bfcf | 10eaf9c8e17d945b | d46a6b5b3c433661 |
+| knn-chebyshev batch    | 683144a1f2f526f5 | 17b22dbfae124fbb | e5dab28ecc220dec | ce9423b41590dc2d | e1bc9df6e5700770 | e1bc9df6e5700770 | 12c632e392a08c4f | 789a97a2b3d0393f | 01640868a17e3530 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: knn-chebyshev stepfull n/a:no-decode-state
+wrote /root/leg_out/records/knn-chebyshev/knn-chebyshev/cpu-clean.json

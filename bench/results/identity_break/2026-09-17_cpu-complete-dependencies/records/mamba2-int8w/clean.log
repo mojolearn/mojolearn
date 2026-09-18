@@ -1,0 +1,209 @@
+1471 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x192b40000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:25:22  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START mamba2-int8w/base repeat=1/train
+# DONE mamba2-int8w/base repeat=1/train 0.917s
+# START mamba2-int8w/base repeat=1/infer-save-reload
+# DONE mamba2-int8w/base repeat=1/infer-save-reload 0.299s
+# START mamba2-int8w/base repeat=1/batch
+# DONE mamba2-int8w/base repeat=1/batch 8.349s
+# START mamba2-int8w/base repeat=1/stepfull
+# DONE mamba2-int8w/base repeat=1/stepfull 4.954s
+# START mamba2-int8w/base repeat=1/rlpair
+# DONE mamba2-int8w/base repeat=1/rlpair 26.528s
+# START mamba2-int8w/base repeat=2/train
+# DONE mamba2-int8w/base repeat=2/train 0.919s
+# START mamba2-int8w/base repeat=2/infer-save-reload
+# DONE mamba2-int8w/base repeat=2/infer-save-reload 0.320s
+# START mamba2-int8w/base repeat=2/batch
+# DONE mamba2-int8w/base repeat=2/batch 8.295s
+# START mamba2-int8w/base repeat=2/stepfull
+# DONE mamba2-int8w/base repeat=2/stepfull 4.953s
+# START mamba2-int8w/base repeat=2/rlpair
+# DONE mamba2-int8w/base repeat=2/rlpair 26.308s
+# CELL mamba2-int8w/base STABLE 81.843s
+# START mamba2-int8w/ties repeat=1/train
+# DONE mamba2-int8w/ties repeat=1/train 0.906s
+# START mamba2-int8w/ties repeat=1/infer-save-reload
+# DONE mamba2-int8w/ties repeat=1/infer-save-reload 0.300s
+# START mamba2-int8w/ties repeat=1/batch
+# DONE mamba2-int8w/ties repeat=1/batch 8.351s
+# START mamba2-int8w/ties repeat=1/stepfull
+# DONE mamba2-int8w/ties repeat=1/stepfull 4.958s
+# START mamba2-int8w/ties repeat=1/rlpair
+# DONE mamba2-int8w/ties repeat=1/rlpair 26.365s
+# START mamba2-int8w/ties repeat=2/train
+# DONE mamba2-int8w/ties repeat=2/train 0.909s
+# START mamba2-int8w/ties repeat=2/infer-save-reload
+# DONE mamba2-int8w/ties repeat=2/infer-save-reload 0.300s
+# START mamba2-int8w/ties repeat=2/batch
+# DONE mamba2-int8w/ties repeat=2/batch 8.348s
+# START mamba2-int8w/ties repeat=2/stepfull
+# DONE mamba2-int8w/ties repeat=2/stepfull 4.958s
+# START mamba2-int8w/ties repeat=2/rlpair
+# DONE mamba2-int8w/ties repeat=2/rlpair 26.320s
+# CELL mamba2-int8w/ties STABLE 81.716s
+# START mamba2-int8w/hashed repeat=1/train
+# DONE mamba2-int8w/hashed repeat=1/train 0.904s
+# START mamba2-int8w/hashed repeat=1/infer-save-reload
+# DONE mamba2-int8w/hashed repeat=1/infer-save-reload 0.301s
+# START mamba2-int8w/hashed repeat=1/batch
+# DONE mamba2-int8w/hashed repeat=1/batch 8.351s
+# START mamba2-int8w/hashed repeat=1/stepfull
+# DONE mamba2-int8w/hashed repeat=1/stepfull 4.964s
+# START mamba2-int8w/hashed repeat=1/rlpair
+# DONE mamba2-int8w/hashed repeat=1/rlpair 26.583s
+# START mamba2-int8w/hashed repeat=2/train
+# DONE mamba2-int8w/hashed repeat=2/train 0.918s
+# START mamba2-int8w/hashed repeat=2/infer-save-reload
+# DONE mamba2-int8w/hashed repeat=2/infer-save-reload 0.300s
+# START mamba2-int8w/hashed repeat=2/batch
+# DONE mamba2-int8w/hashed repeat=2/batch 8.380s
+# START mamba2-int8w/hashed repeat=2/stepfull
+# DONE mamba2-int8w/hashed repeat=2/stepfull 4.964s
+# START mamba2-int8w/hashed repeat=2/rlpair
+# DONE mamba2-int8w/hashed repeat=2/rlpair 26.603s
+# CELL mamba2-int8w/hashed STABLE 82.270s
+# START mamba2-int8w/wide repeat=1/train
+# DONE mamba2-int8w/wide repeat=1/train 0.904s
+# START mamba2-int8w/wide repeat=1/infer-save-reload
+# DONE mamba2-int8w/wide repeat=1/infer-save-reload 0.301s
+# START mamba2-int8w/wide repeat=1/batch
+# DONE mamba2-int8w/wide repeat=1/batch 8.360s
+# START mamba2-int8w/wide repeat=1/stepfull
+# DONE mamba2-int8w/wide repeat=1/stepfull 4.960s
+# START mamba2-int8w/wide repeat=1/rlpair
+# DONE mamba2-int8w/wide repeat=1/rlpair 26.671s
+# START mamba2-int8w/wide repeat=2/train
+# DONE mamba2-int8w/wide repeat=2/train 0.908s
+# START mamba2-int8w/wide repeat=2/infer-save-reload
+# DONE mamba2-int8w/wide repeat=2/infer-save-reload 0.303s
+# START mamba2-int8w/wide repeat=2/batch
+# DONE mamba2-int8w/wide repeat=2/batch 8.398s
+# START mamba2-int8w/wide repeat=2/stepfull
+# DONE mamba2-int8w/wide repeat=2/stepfull 4.983s
+# START mamba2-int8w/wide repeat=2/rlpair
+# DONE mamba2-int8w/wide repeat=2/rlpair 26.621s
+# CELL mamba2-int8w/wide STABLE 82.409s
+# START mamba2-int8w/denormal repeat=1/train
+# DONE mamba2-int8w/denormal repeat=1/train 0.898s
+# START mamba2-int8w/denormal repeat=1/infer-save-reload
+# DONE mamba2-int8w/denormal repeat=1/infer-save-reload 0.300s
+# START mamba2-int8w/denormal repeat=1/batch
+# DONE mamba2-int8w/denormal repeat=1/batch 8.312s
+# START mamba2-int8w/denormal repeat=1/stepfull
+# DONE mamba2-int8w/denormal repeat=1/stepfull 4.975s
+# START mamba2-int8w/denormal repeat=1/rlpair
+# DONE mamba2-int8w/denormal repeat=1/rlpair 26.337s
+# START mamba2-int8w/denormal repeat=2/train
+# DONE mamba2-int8w/denormal repeat=2/train 0.908s
+# START mamba2-int8w/denormal repeat=2/infer-save-reload
+# DONE mamba2-int8w/denormal repeat=2/infer-save-reload 0.300s
+# START mamba2-int8w/denormal repeat=2/batch
+# DONE mamba2-int8w/denormal repeat=2/batch 8.346s
+# START mamba2-int8w/denormal repeat=2/stepfull
+# DONE mamba2-int8w/denormal repeat=2/stepfull 4.975s
+# START mamba2-int8w/denormal repeat=2/rlpair
+# DONE mamba2-int8w/denormal repeat=2/rlpair 26.395s
+# CELL mamba2-int8w/denormal STABLE 81.747s
+# START mamba2-int8w/denormal_ftz repeat=1/train
+# DONE mamba2-int8w/denormal_ftz repeat=1/train 0.900s
+# START mamba2-int8w/denormal_ftz repeat=1/infer-save-reload
+# DONE mamba2-int8w/denormal_ftz repeat=1/infer-save-reload 0.300s
+# START mamba2-int8w/denormal_ftz repeat=1/batch
+# DONE mamba2-int8w/denormal_ftz repeat=1/batch 8.306s
+# START mamba2-int8w/denormal_ftz repeat=1/stepfull
+# DONE mamba2-int8w/denormal_ftz repeat=1/stepfull 5.010s
+# START mamba2-int8w/denormal_ftz repeat=1/rlpair
+# DONE mamba2-int8w/denormal_ftz repeat=1/rlpair 26.363s
+# START mamba2-int8w/denormal_ftz repeat=2/train
+# DONE mamba2-int8w/denormal_ftz repeat=2/train 0.900s
+# START mamba2-int8w/denormal_ftz repeat=2/infer-save-reload
+# DONE mamba2-int8w/denormal_ftz repeat=2/infer-save-reload 0.299s
+# START mamba2-int8w/denormal_ftz repeat=2/batch
+# DONE mamba2-int8w/denormal_ftz repeat=2/batch 8.303s
+# START mamba2-int8w/denormal_ftz repeat=2/stepfull
+# DONE mamba2-int8w/denormal_ftz repeat=2/stepfull 4.983s
+# START mamba2-int8w/denormal_ftz repeat=2/rlpair
+# DONE mamba2-int8w/denormal_ftz repeat=2/rlpair 26.408s
+# CELL mamba2-int8w/denormal_ftz STABLE 81.772s
+# START mamba2-int8w/dupes repeat=1/train
+# DONE mamba2-int8w/dupes repeat=1/train 0.901s
+# START mamba2-int8w/dupes repeat=1/infer-save-reload
+# DONE mamba2-int8w/dupes repeat=1/infer-save-reload 0.300s
+# START mamba2-int8w/dupes repeat=1/batch
+# DONE mamba2-int8w/dupes repeat=1/batch 8.302s
+# START mamba2-int8w/dupes repeat=1/stepfull
+# DONE mamba2-int8w/dupes repeat=1/stepfull 4.949s
+# START mamba2-int8w/dupes repeat=1/rlpair
+# DONE mamba2-int8w/dupes repeat=1/rlpair 26.390s
+# START mamba2-int8w/dupes repeat=2/train
+# DONE mamba2-int8w/dupes repeat=2/train 0.909s
+# START mamba2-int8w/dupes repeat=2/infer-save-reload
+# DONE mamba2-int8w/dupes repeat=2/infer-save-reload 0.302s
+# START mamba2-int8w/dupes repeat=2/batch
+# DONE mamba2-int8w/dupes repeat=2/batch 8.316s
+# START mamba2-int8w/dupes repeat=2/stepfull
+# DONE mamba2-int8w/dupes repeat=2/stepfull 4.948s
+# START mamba2-int8w/dupes repeat=2/rlpair
+# DONE mamba2-int8w/dupes repeat=2/rlpair 26.405s
+# CELL mamba2-int8w/dupes STABLE 81.722s
+# START mamba2-int8w/odd repeat=1/train
+# DONE mamba2-int8w/odd repeat=1/train 0.907s
+# START mamba2-int8w/odd repeat=1/infer-save-reload
+# DONE mamba2-int8w/odd repeat=1/infer-save-reload 0.302s
+# START mamba2-int8w/odd repeat=1/batch
+# DONE mamba2-int8w/odd repeat=1/batch 8.320s
+# START mamba2-int8w/odd repeat=1/stepfull
+# DONE mamba2-int8w/odd repeat=1/stepfull 4.948s
+# START mamba2-int8w/odd repeat=1/rlpair
+# DONE mamba2-int8w/odd repeat=1/rlpair 26.402s
+# START mamba2-int8w/odd repeat=2/train
+# DONE mamba2-int8w/odd repeat=2/train 0.907s
+# START mamba2-int8w/odd repeat=2/infer-save-reload
+# DONE mamba2-int8w/odd repeat=2/infer-save-reload 0.301s
+# START mamba2-int8w/odd repeat=2/batch
+# DONE mamba2-int8w/odd repeat=2/batch 8.313s
+# START mamba2-int8w/odd repeat=2/stepfull
+# DONE mamba2-int8w/odd repeat=2/stepfull 4.951s
+# START mamba2-int8w/odd repeat=2/rlpair
+# DONE mamba2-int8w/odd repeat=2/rlpair 26.407s
+# CELL mamba2-int8w/odd STABLE 81.759s
+# START mamba2-int8w/negative repeat=1/train
+# DONE mamba2-int8w/negative repeat=1/train 0.920s
+# START mamba2-int8w/negative repeat=1/infer-save-reload
+# DONE mamba2-int8w/negative repeat=1/infer-save-reload 0.308s
+# START mamba2-int8w/negative repeat=1/batch
+# DONE mamba2-int8w/negative repeat=1/batch 8.325s
+# START mamba2-int8w/negative repeat=1/stepfull
+# DONE mamba2-int8w/negative repeat=1/stepfull 4.951s
+# START mamba2-int8w/negative repeat=1/rlpair
+# DONE mamba2-int8w/negative repeat=1/rlpair 26.369s
+# START mamba2-int8w/negative repeat=2/train
+# DONE mamba2-int8w/negative repeat=2/train 0.911s
+# START mamba2-int8w/negative repeat=2/infer-save-reload
+# DONE mamba2-int8w/negative repeat=2/infer-save-reload 0.301s
+# START mamba2-int8w/negative repeat=2/batch
+# DONE mamba2-int8w/negative repeat=2/batch 8.379s
+# START mamba2-int8w/negative repeat=2/stepfull
+# DONE mamba2-int8w/negative repeat=2/stepfull 4.949s
+# START mamba2-int8w/negative repeat=2/rlpair
+# DONE mamba2-int8w/negative repeat=2/rlpair 26.430s
+# CELL mamba2-int8w/negative STABLE 81.842s
+| mamba2-int8w           | 99f128062804a821 | 2a0f6760033ceac1 | c91df970ef4da597 | 697f3275ea227da1 | ffb1274281ea3c9d | ffb1274281ea3c9d | 91e321a474dd2472 | 99f128062804a821 | f34c3fbdc9e8e996 |
+| mamba2-int8w infer     | 403884646dc80124 | 8d3a5dfdd518ea58 | 92841c5ba418a51a | bf688b3ca0734ce8 | 300f35b542bec604 | 300f35b542bec604 | f8b1258e806214a9 | 403884646dc80124 | 9b03109e693648e1 |
+| mamba2-int8w batch     | d22b275b9c7eb3e5 | 37f3de328f3979c0 | b94134c5bc10dcbe | a027bfe0304327c0 | dad2ee1ccf5e5277 | dad2ee1ccf5e5277 | 9752608c065d66d4 | d22b275b9c7eb3e5 | 3f5faaeddf139198 |
+| mamba2-int8w rlpair    | d05cadfab274cfac | 221f0c014b44cef7 | 02313bf10224fbc9 | c4a2120cea2d1d6b | 238386389d57676b | 5bdca7cc3a2808c3 | d05cadfab274cfac | d05cadfab274cfac | 16b91322fad197bb |
+| mamba2-int8w stepfull  | e510f77cb9994553 | 091efebeb0fc7440 | 728624c64ee4b509 | 03f4649e49a44b92 | 595e3d3f7750190a | 595e3d3f7750190a | f4d24e8fe30e5ad0 | e510f77cb9994553 | 3ac9ee5dc5aeb029 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+rlpair: stable=9
+stepfull: stable=9
+n/a: mamba2-int8w model n/a:no-save
+wrote /root/leg_out/records/mamba2-int8w/mamba2-int8w/cpu-clean.json

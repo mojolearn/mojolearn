@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:41:16  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-cosine-minkowski/base repeat=1/train
+# DONE kde-cosine-minkowski/base repeat=1/train 0.134s
+# START kde-cosine-minkowski/base repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/base repeat=1/infer-save-reload 0.270s
+# START kde-cosine-minkowski/base repeat=1/batch
+# DONE kde-cosine-minkowski/base repeat=1/batch 0.280s
+# START kde-cosine-minkowski/base repeat=1/stepfull
+# DONE kde-cosine-minkowski/base repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/base repeat=2/train
+# DONE kde-cosine-minkowski/base repeat=2/train 0.136s
+# START kde-cosine-minkowski/base repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/base repeat=2/infer-save-reload 0.272s
+# START kde-cosine-minkowski/base repeat=2/batch
+# DONE kde-cosine-minkowski/base repeat=2/batch 0.278s
+# START kde-cosine-minkowski/base repeat=2/stepfull
+# DONE kde-cosine-minkowski/base repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/base STABLE 1.370s
+# START kde-cosine-minkowski/ties repeat=1/train
+# DONE kde-cosine-minkowski/ties repeat=1/train 0.123s
+# START kde-cosine-minkowski/ties repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/ties repeat=1/infer-save-reload 0.249s
+# START kde-cosine-minkowski/ties repeat=1/batch
+# DONE kde-cosine-minkowski/ties repeat=1/batch 0.258s
+# START kde-cosine-minkowski/ties repeat=1/stepfull
+# DONE kde-cosine-minkowski/ties repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/ties repeat=2/train
+# DONE kde-cosine-minkowski/ties repeat=2/train 0.125s
+# START kde-cosine-minkowski/ties repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/ties repeat=2/infer-save-reload 0.252s
+# START kde-cosine-minkowski/ties repeat=2/batch
+# DONE kde-cosine-minkowski/ties repeat=2/batch 0.266s
+# START kde-cosine-minkowski/ties repeat=2/stepfull
+# DONE kde-cosine-minkowski/ties repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/ties STABLE 1.273s
+# START kde-cosine-minkowski/hashed repeat=1/train
+# DONE kde-cosine-minkowski/hashed repeat=1/train 0.141s
+# START kde-cosine-minkowski/hashed repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/hashed repeat=1/infer-save-reload 0.269s
+# START kde-cosine-minkowski/hashed repeat=1/batch
+# DONE kde-cosine-minkowski/hashed repeat=1/batch 0.280s
+# START kde-cosine-minkowski/hashed repeat=1/stepfull
+# DONE kde-cosine-minkowski/hashed repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/hashed repeat=2/train
+# DONE kde-cosine-minkowski/hashed repeat=2/train 0.127s
+# START kde-cosine-minkowski/hashed repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/hashed repeat=2/infer-save-reload 0.275s
+# START kde-cosine-minkowski/hashed repeat=2/batch
+# DONE kde-cosine-minkowski/hashed repeat=2/batch 0.290s
+# START kde-cosine-minkowski/hashed repeat=2/stepfull
+# DONE kde-cosine-minkowski/hashed repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/hashed STABLE 1.381s
+# START kde-cosine-minkowski/wide repeat=1/train
+# DONE kde-cosine-minkowski/wide repeat=1/train 0.160s
+# START kde-cosine-minkowski/wide repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/wide repeat=1/infer-save-reload 0.322s
+# START kde-cosine-minkowski/wide repeat=1/batch
+# DONE kde-cosine-minkowski/wide repeat=1/batch 0.337s
+# START kde-cosine-minkowski/wide repeat=1/stepfull
+# DONE kde-cosine-minkowski/wide repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/wide repeat=2/train
+# DONE kde-cosine-minkowski/wide repeat=2/train 0.161s
+# START kde-cosine-minkowski/wide repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/wide repeat=2/infer-save-reload 0.320s
+# START kde-cosine-minkowski/wide repeat=2/batch
+# DONE kde-cosine-minkowski/wide repeat=2/batch 0.331s
+# START kde-cosine-minkowski/wide repeat=2/stepfull
+# DONE kde-cosine-minkowski/wide repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/wide STABLE 1.631s
+# START kde-cosine-minkowski/denormal repeat=1/train
+# DONE kde-cosine-minkowski/denormal repeat=1/train 0.111s
+# START kde-cosine-minkowski/denormal repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/denormal repeat=1/infer-save-reload 0.224s
+# START kde-cosine-minkowski/denormal repeat=1/batch
+# DONE kde-cosine-minkowski/denormal repeat=1/batch 0.231s
+# START kde-cosine-minkowski/denormal repeat=1/stepfull
+# DONE kde-cosine-minkowski/denormal repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/denormal repeat=2/train
+# DONE kde-cosine-minkowski/denormal repeat=2/train 0.111s
+# START kde-cosine-minkowski/denormal repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/denormal repeat=2/infer-save-reload 0.221s
+# START kde-cosine-minkowski/denormal repeat=2/batch
+# DONE kde-cosine-minkowski/denormal repeat=2/batch 0.229s
+# START kde-cosine-minkowski/denormal repeat=2/stepfull
+# DONE kde-cosine-minkowski/denormal repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/denormal STABLE 1.128s
+# START kde-cosine-minkowski/denormal_ftz repeat=1/train
+# DONE kde-cosine-minkowski/denormal_ftz repeat=1/train 0.111s
+# START kde-cosine-minkowski/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/denormal_ftz repeat=1/infer-save-reload 0.221s
+# START kde-cosine-minkowski/denormal_ftz repeat=1/batch
+# DONE kde-cosine-minkowski/denormal_ftz repeat=1/batch 0.230s
+# START kde-cosine-minkowski/denormal_ftz repeat=1/stepfull
+# DONE kde-cosine-minkowski/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/denormal_ftz repeat=2/train
+# DONE kde-cosine-minkowski/denormal_ftz repeat=2/train 0.111s
+# START kde-cosine-minkowski/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/denormal_ftz repeat=2/infer-save-reload 0.222s
+# START kde-cosine-minkowski/denormal_ftz repeat=2/batch
+# DONE kde-cosine-minkowski/denormal_ftz repeat=2/batch 0.230s
+# START kde-cosine-minkowski/denormal_ftz repeat=2/stepfull
+# DONE kde-cosine-minkowski/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/denormal_ftz STABLE 1.127s
+# START kde-cosine-minkowski/dupes repeat=1/train
+# DONE kde-cosine-minkowski/dupes repeat=1/train 0.134s
+# START kde-cosine-minkowski/dupes repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/dupes repeat=1/infer-save-reload 0.269s
+# START kde-cosine-minkowski/dupes repeat=1/batch
+# DONE kde-cosine-minkowski/dupes repeat=1/batch 0.278s
+# START kde-cosine-minkowski/dupes repeat=1/stepfull
+# DONE kde-cosine-minkowski/dupes repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/dupes repeat=2/train
+# DONE kde-cosine-minkowski/dupes repeat=2/train 0.134s
+# START kde-cosine-minkowski/dupes repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/dupes repeat=2/infer-save-reload 0.272s
+# START kde-cosine-minkowski/dupes repeat=2/batch
+# DONE kde-cosine-minkowski/dupes repeat=2/batch 0.280s
+# START kde-cosine-minkowski/dupes repeat=2/stepfull
+# DONE kde-cosine-minkowski/dupes repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/dupes STABLE 1.368s
+# START kde-cosine-minkowski/odd repeat=1/train
+# DONE kde-cosine-minkowski/odd repeat=1/train 0.134s
+# START kde-cosine-minkowski/odd repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/odd repeat=1/infer-save-reload 0.268s
+# START kde-cosine-minkowski/odd repeat=1/batch
+# DONE kde-cosine-minkowski/odd repeat=1/batch 0.279s
+# START kde-cosine-minkowski/odd repeat=1/stepfull
+# DONE kde-cosine-minkowski/odd repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/odd repeat=2/train
+# DONE kde-cosine-minkowski/odd repeat=2/train 0.136s
+# START kde-cosine-minkowski/odd repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/odd repeat=2/infer-save-reload 0.271s
+# START kde-cosine-minkowski/odd repeat=2/batch
+# DONE kde-cosine-minkowski/odd repeat=2/batch 0.279s
+# START kde-cosine-minkowski/odd repeat=2/stepfull
+# DONE kde-cosine-minkowski/odd repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/odd STABLE 1.367s
+# START kde-cosine-minkowski/negative repeat=1/train
+# DONE kde-cosine-minkowski/negative repeat=1/train 0.137s
+# START kde-cosine-minkowski/negative repeat=1/infer-save-reload
+# DONE kde-cosine-minkowski/negative repeat=1/infer-save-reload 0.275s
+# START kde-cosine-minkowski/negative repeat=1/batch
+# DONE kde-cosine-minkowski/negative repeat=1/batch 0.286s
+# START kde-cosine-minkowski/negative repeat=1/stepfull
+# DONE kde-cosine-minkowski/negative repeat=1/stepfull 0.000s
+# START kde-cosine-minkowski/negative repeat=2/train
+# DONE kde-cosine-minkowski/negative repeat=2/train 0.139s
+# START kde-cosine-minkowski/negative repeat=2/infer-save-reload
+# DONE kde-cosine-minkowski/negative repeat=2/infer-save-reload 0.279s
+# START kde-cosine-minkowski/negative repeat=2/batch
+# DONE kde-cosine-minkowski/negative repeat=2/batch 0.285s
+# START kde-cosine-minkowski/negative repeat=2/stepfull
+# DONE kde-cosine-minkowski/negative repeat=2/stepfull 0.000s
+# CELL kde-cosine-minkowski/negative STABLE 1.401s
+| kde-cosine-minkowski   | 7cd06074fac9bf2c | 8588a8ae9d02382a | 4861c0c1134b408e | f5aa910a8735cd83 | ca72936e0b9367e6 | ca72936e0b9367e6 | 7cd06074fac9bf2c | 2cf08267aad6f079 | 7c0946d59e629432 |
+| kde-cosine-minkowski infer | ba29c22611a6413e | d52a5a3acca3fef8 | 0958bb161715b438 | ae85e5249f3966fb | 09c174bb7d2194cc | 09c174bb7d2194cc | ba29c22611a6413e | 915d7adeed4ccce2 | 997e9682eec569eb |
+| kde-cosine-minkowski model | 3f69c1096d5277d6 | fd7e7226ebe1d3de | 2f143308f55a3554 | 46f68cb6a6438c9d | 22e1263527aa4935 | b1ddb3438b4ddf0a | 3f69c1096d5277d6 | 3c129d599ce8872a | dcd420c8f48dc52d |
+| kde-cosine-minkowski batch | 500803d6761652da | 9c580ee9457af60f | 55f50e7de417e17c | 5ff0036f3afce9f0 | e2c01d78f4900a2d | e2c01d78f4900a2d | 500803d6761652da | c56a820d248fff20 | eb1137566fe4790d |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-cosine-minkowski stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-cosine-minkowski/kde-cosine-minkowski/cpu-sabotage.json

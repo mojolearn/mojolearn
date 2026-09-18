@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "samba/base",
+      "context_matches": true,
+      "clean": "59edc5499524917a",
+      "sabotage": "25ae497054c2b445",
+      "detected": true
+    },
+    {
+      "cell": "samba/denormal",
+      "context_matches": true,
+      "clean": "f04dfe354d334185",
+      "sabotage": "97ffc56c004a47e3",
+      "detected": true
+    },
+    {
+      "cell": "samba/denormal_ftz",
+      "context_matches": true,
+      "clean": "21b48585cac5f2dc",
+      "sabotage": "0a05a1325a2ef0ff",
+      "detected": true
+    },
+    {
+      "cell": "samba/dupes",
+      "context_matches": true,
+      "clean": "59edc5499524917a",
+      "sabotage": "25ae497054c2b445",
+      "detected": true
+    },
+    {
+      "cell": "samba/hashed",
+      "context_matches": true,
+      "clean": "7aed2e21f3d1fd37",
+      "sabotage": "a3d5723b35aed6be",
+      "detected": true
+    },
+    {
+      "cell": "samba/negative",
+      "context_matches": true,
+      "clean": "baf9314d6be7ee55",
+      "sabotage": "5b562ef47103cbdd",
+      "detected": true
+    },
+    {
+      "cell": "samba/odd",
+      "context_matches": true,
+      "clean": "59edc5499524917a",
+      "sabotage": "25ae497054c2b445",
+      "detected": true
+    },
+    {
+      "cell": "samba/ties",
+      "context_matches": true,
+      "clean": "66b4e01985f14c83",
+      "sabotage": "6baed27b2837b477",
+      "detected": true
+    },
+    {
+      "cell": "samba/wide",
+      "context_matches": true,
+      "clean": "55bb0a35a4717e21",
+      "sabotage": "8168fdc07071b8be",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

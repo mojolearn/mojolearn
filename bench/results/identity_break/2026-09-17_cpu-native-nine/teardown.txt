@@ -1,0 +1,5 @@
+pod=l521898scta1lj
+name=mojolearn-cpu-cpu-native-nine-20260917-211617
+terminated_verified=1
+exit=1
+at=2026-09-17T21:50:49Z

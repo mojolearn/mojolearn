@@ -773,6 +773,7 @@ TRAINING_LANE_NAMES = {
     # against the 166-lane record before the gate ran, and the sabotage set
     # DIVERGENT on every train cell.
     "par-scaler": "the column-sharded standard scaler",
+    "par-scaler-minmax": "the column-sharded min-max scaler",
     "par-arima": "series-sharded ARIMA",
     "par-holtwinters": "series-sharded Holt-Winters",
     # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
@@ -782,6 +783,7 @@ TRAINING_LANE_NAMES = {
     # and sends one vote request, served on CPU by the core host binding's
     # knn_classify_neighbors and knn_regress_neighbors.
     "par-queries-knn": "query-sharded k-NN classification",
+    "par-queries-nn": "query-sharded nearest-neighbor distances and indices",
     "par-queries-radius": "query-sharded radius neighbors",
     "par-queries-kde": "query-sharded kernel density",
     "par-reference-knn": "reference-sharded k-NN classification",
@@ -793,6 +795,8 @@ TRAINING_LANE_NAMES = {
     # trees concatenate in ID order.
     "par-forest": "the tree-range-sharded random forest classifier",
     "par-forest-et": "the tree-range-sharded Extra Trees regressor",
+    "par-forest-et-clf": "the tree-range-sharded Extra Trees classifier",
+    "par-forest-reg": "the tree-range-sharded random forest regressor",
     # Wave 2, par-mlp: ParallelNeuralTrainer sends one mlp_gradient request
     # per logical shard (three of 64 rows) and one mlp_update that folds
     # them in shard order in Python and steps the optimizer, on the
@@ -1167,7 +1171,7 @@ FAMILIES = (
             "knn-manhattan", "knn-chebyshev", "knn-cosine", "knn-minkowski-p3", "knn-rbc",
             "radius", "radius-manhattan", "radius-chebyshev", "radius-minkowski-p3",
             "kmeans-sqrt", "kmeans-classic-pp", "kmeans-cosine",
-            "par-queries-knn", "par-queries-radius", "par-reference-knn",
+            "par-queries-knn", "par-queries-nn", "par-queries-radius", "par-reference-knn",
             "par-reference-knn-reg",
         ),
         # The neighbors and density inference lane (2026-09-15) adds every
@@ -1193,7 +1197,7 @@ FAMILIES = (
         display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
-            "cluster/host/kmeans_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
@@ -1205,6 +1209,15 @@ FAMILIES = (
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
             "scale_rows_f32", "probability_rows_f32",
+            # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
+            # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
+            # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
+            # install used to run as a Python loop.
+            "cast_elements", "reduce_stat", "equal_elements",
+            "encode_labels_f32", "encode_labels_f64", "encode_labels_i32",
+            "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
+            "gather_i32", "check_indices_i64", "indices_overlap_i64",
+            "fold_ids", "select_fold_i64",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -1422,7 +1435,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "standard-scaler", "minmax-scaler", "standard-scaler-no-mean",
-            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler",
+            "standard-scaler-no-std", "minmax-scaler-clip", "par-scaler", "par-scaler-minmax",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -1537,7 +1550,7 @@ FAMILIES = (
         routes="_mojolearn_trees",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et"),
+        training_lanes=("et-clf", "et-reg", "et-clf-entropy-bestfirst", "et-reg-bootstrap-parallel", "par-forest-et", "par-forest-et-clf"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExtraTreesClassifier", "ExtraTreesRegressor"),
@@ -1580,7 +1593,7 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "rf-clf", "rf-reg", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "rf-score-weighted",
+            "rf-reg-poisson", "rf-reg-gamma-ig", "par-forest", "par-forest-reg", "rf-score-weighted",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2452,6 +2465,21 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     lanes at once without being able to run that column.
 #:                     The same regeneration gave SIX `no reference`
 #:                     lanes their first cells, so they moved here too.
+#:   one column        the shipped table DOES carry cells for the lane at the
+#:                     current fixture revision, but every one of them rests
+#:                     on a SINGLE device class, so the reference has one
+#:                     witness and nothing has ever reproduced it. A user who
+#:                     disagreed with such a number could not tell their own
+#:                     machine apart from our one column. This is the bar
+#:                     `PUBLIC_REFERENCE_CANDIDATES` already holds `svc-poly`
+#:                     to, written as a condition the table answers rather
+#:                     than as prose: `test_host_surface` counts the classes
+#:                     in each cell's `cols` and fails BOTH when a lane here
+#:                     has gained a second class and when one held as
+#:                     `unwatched` has only one. It leaves the day a second
+#:                     column carries the lane, which for the lanes a fixture
+#:                     change emptied is the next release record
+#:                     (lane/reference-regen, 2026-09-17).
 #:   measured          a CPU-only `verify --all` at this commit WATCHED the
 #:                     lane and it did not read clean. This reason is the only
 #:                     one that comes from a run rather than from a static
@@ -2472,29 +2500,8 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "ordered-gradient-sum": "no reference",
-    "metrics-homogeneity-completeness": "no reference",
-    # lane/umap-batch-fix, 2026-09-16: not a fixture shrink but an arithmetic
-    # change. UMAP.transform became row separable, so every umap hash in the
-    # shipped table describes bytes this build no longer produces. The
-    # regeneration lane/expose-stepfull landed drops those cells rather than
-    # keeping them, because no committed record was taken at the new
-    # revision, so what umap owes is a RECORD and its reason is
-    # `no reference` rather than `stale reference`. Without an entry here a
-    # user's CPU-only `verify --all` would read OWED for umap on a machine
-    # that is fine.
-    "umap": "no reference",
-    "gbdt-nan-modes": "no reference",
-    "gbdt-parametric-losses": "no reference",
-    "gbdt-lossguide-newtoncosine": "no reference",
-    "gbdt-pair-logit": "no reference",
-    "hdbscan": "no reference",
-    "hdbscan-leaf": "no reference",
-    # lane/dead-arms, 2026-09-16: the dt clamp moved from (0.01, 0.1) to
-    # (0.5, 0.9), so the shipped cell 3c1d9aaeaa765468 describes bytes this
-    # harness no longer produces. `unwatched` would be the wrong reason and
-    # the test below says so by name.
-    "mamba2-dtlimit": "stale reference",
+    # mamba2-dtlimit regained all-nine references at its corrected clamp;
+    # see the CPU verification completion records (2026-09-17).
     # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
     # two same-shape RMSNorm weights were both a vector of ones, so they were
     # the SAME TENSOR and exchanging them on the way in was the identity
@@ -2506,7 +2513,13 @@ PUBLIC_PENDING_LANES = {
     "mamba3": "stale reference",
     "transformer": "stale reference",
     "transformer-window": "stale reference",
-    "samba": "unwatched",
+    # lane/reference-regen (2026-09-17): `unwatched` said the only thing
+    # missing was a run. It was not. Every cell the shipped table carries for
+    # samba comes from the CPU column alone, so a run would have compared this
+    # lane against a number no second machine has ever produced. The reason is
+    # `one column`, and the check that reads the classes out of the table says
+    # so by name.
+    "samba": "one column",
     # lane/shrink-floors (2026-09-16) put this lane in identity_break's
     # LANE_REVISIONS as "steps-3-1", so its fixture has moved past the hash
     # the shipped table carries and a run would prove nothing. The reason is
@@ -2515,11 +2528,6 @@ PUBLIC_PENDING_LANES = {
     # by lane/classical-host-recordings merging main; it is not this lane's
     # change and it leaves this dict at the next release record.
     "samba-untied-dropout-accum": "stale reference",
-    "byte-lm": "no reference",
-    "byte-lm-resident": "no reference",
-    "gbdt-adapter-score-weighted": "no reference",
-    "rf-score-weighted": "no reference",
-    "gbdt-yeti-rank": "unwatched",
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
@@ -2527,19 +2535,10 @@ PUBLIC_PENDING_LANES = {
     # from an installed CPU development wheel with bundled, digest-checked models.
     # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
     # inference replay, not CPU CTR training or final release qualification.
-    "kmeans-sqrt": "own record",
-    "embedding": "own record",
-    "embedding-sort": "own record",
-    "ivf": "own record",
-    "ivf-euclidean": "own record",
-    # lane/identical-lowbit-inference (2026-09-17): no committed column yet.
-    "gemm-bf16": "no reference", "gemm-int8": "no reference",
-    "transformer-bf16w": "no reference", "transformer-int8w": "no reference",
-    "mamba1-bf16w": "no reference", "mamba1-int8w": "no reference",
-    "mamba2-bf16w": "no reference", "mamba2-int8w": "no reference",
-    "mamba3-bf16w": "no reference", "mamba3-int8w": "no reference",
-    "mlp-bf16w": "no reference", "mlp-int8w": "no reference",
-    "samba-bf16w": "no reference", "samba-int8w": "no reference",
+    # The other fix-record lanes passed installed reference-table replay;
+    # legacy `identity` still restricts itself to its original column scope.
+    # All twelve low-bit weight lanes gained strict all-nine CPU references
+    # and complete native control pairs in 2026-09-17_cpu-complete-dependencies.
 }
 
 

@@ -1,0 +1,4 @@
+base clean: sabotaged=False n_tokens=302 n_merges=46 n_ties_broken=42
+base sabotage: sabotaged=True n_tokens=301 n_merges=45 n_ties_broken=41
+ties clean: sabotaged=False n_tokens=309 n_merges=53 n_ties_broken=33
+ties sabotage: sabotaged=True n_tokens=308 n_merges=52 n_ties_broken=31

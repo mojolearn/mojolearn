@@ -1,0 +1,3 @@
+ridge-no-intercept: clean
+ridge-no-intercept: sabotage
+ridge-no-intercept: 9/9 controls; passed=True

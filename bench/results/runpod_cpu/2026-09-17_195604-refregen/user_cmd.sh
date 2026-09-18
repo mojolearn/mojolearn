@@ -1,0 +1,1 @@
+set -x; python3 tools/identity_break.py --lanes mamba3,transformer,transformer-window,mamba2-dtlimit,samba-untied-dropout-accum,mamba1,mamba2,samba --repeats 2 --batch-grad --batch-scale --ragged --step-full --json "$LEG_OUT/cpu-x86.json"; echo "EXIT=$?"

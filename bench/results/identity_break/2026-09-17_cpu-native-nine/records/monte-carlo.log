@@ -1,0 +1,3 @@
+monte-carlo: clean
+monte-carlo: sabotage
+monte-carlo: 9/9 controls; passed=True

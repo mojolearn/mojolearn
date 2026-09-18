@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:57  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START metrics-classification/base repeat=1/train
+# DONE metrics-classification/base repeat=1/train 0.798s
+# START metrics-classification/base repeat=1/infer-save-reload
+# DONE metrics-classification/base repeat=1/infer-save-reload 0.000s
+# START metrics-classification/base repeat=1/batch
+# DONE metrics-classification/base repeat=1/batch 0.095s
+# START metrics-classification/base repeat=1/stepfull
+# DONE metrics-classification/base repeat=1/stepfull 0.000s
+# START metrics-classification/base repeat=2/train
+# DONE metrics-classification/base repeat=2/train 0.874s
+# START metrics-classification/base repeat=2/infer-save-reload
+# DONE metrics-classification/base repeat=2/infer-save-reload 0.000s
+# START metrics-classification/base repeat=2/batch
+# DONE metrics-classification/base repeat=2/batch 0.094s
+# START metrics-classification/base repeat=2/stepfull
+# DONE metrics-classification/base repeat=2/stepfull 0.000s
+# CELL metrics-classification/base STABLE 1.861s
+# START metrics-classification/ties repeat=1/train
+# DONE metrics-classification/ties repeat=1/train 1.115s
+# START metrics-classification/ties repeat=1/infer-save-reload
+# DONE metrics-classification/ties repeat=1/infer-save-reload 0.000s
+# START metrics-classification/ties repeat=1/batch
+# DONE metrics-classification/ties repeat=1/batch 0.119s
+# START metrics-classification/ties repeat=1/stepfull
+# DONE metrics-classification/ties repeat=1/stepfull 0.000s
+# START metrics-classification/ties repeat=2/train
+# DONE metrics-classification/ties repeat=2/train 1.106s
+# START metrics-classification/ties repeat=2/infer-save-reload
+# DONE metrics-classification/ties repeat=2/infer-save-reload 0.000s
+# START metrics-classification/ties repeat=2/batch
+# DONE metrics-classification/ties repeat=2/batch 0.118s
+# START metrics-classification/ties repeat=2/stepfull
+# DONE metrics-classification/ties repeat=2/stepfull 0.000s
+# CELL metrics-classification/ties STABLE 2.459s
+# START metrics-classification/hashed repeat=1/train
+# DONE metrics-classification/hashed repeat=1/train 0.882s
+# START metrics-classification/hashed repeat=1/infer-save-reload
+# DONE metrics-classification/hashed repeat=1/infer-save-reload 0.000s
+# START metrics-classification/hashed repeat=1/batch
+# DONE metrics-classification/hashed repeat=1/batch 0.097s
+# START metrics-classification/hashed repeat=1/stepfull
+# DONE metrics-classification/hashed repeat=1/stepfull 0.000s
+# START metrics-classification/hashed repeat=2/train
+# DONE metrics-classification/hashed repeat=2/train 0.832s
+# START metrics-classification/hashed repeat=2/infer-save-reload
+# DONE metrics-classification/hashed repeat=2/infer-save-reload 0.000s
+# START metrics-classification/hashed repeat=2/batch
+# DONE metrics-classification/hashed repeat=2/batch 0.096s
+# START metrics-classification/hashed repeat=2/stepfull
+# DONE metrics-classification/hashed repeat=2/stepfull 0.000s
+# CELL metrics-classification/hashed STABLE 1.907s
+# START metrics-classification/wide repeat=1/train
+# DONE metrics-classification/wide repeat=1/train 0.777s
+# START metrics-classification/wide repeat=1/infer-save-reload
+# DONE metrics-classification/wide repeat=1/infer-save-reload 0.000s
+# START metrics-classification/wide repeat=1/batch
+# DONE metrics-classification/wide repeat=1/batch 0.094s
+# START metrics-classification/wide repeat=1/stepfull
+# DONE metrics-classification/wide repeat=1/stepfull 0.000s
+# START metrics-classification/wide repeat=2/train
+# DONE metrics-classification/wide repeat=2/train 0.720s
+# START metrics-classification/wide repeat=2/infer-save-reload
+# DONE metrics-classification/wide repeat=2/infer-save-reload 0.000s
+# START metrics-classification/wide repeat=2/batch
+# DONE metrics-classification/wide repeat=2/batch 0.086s
+# START metrics-classification/wide repeat=2/stepfull
+# DONE metrics-classification/wide repeat=2/stepfull 0.000s
+# CELL metrics-classification/wide STABLE 1.678s
+# START metrics-classification/denormal repeat=1/train
+# DONE metrics-classification/denormal repeat=1/train 0.698s
+# START metrics-classification/denormal repeat=1/infer-save-reload
+# DONE metrics-classification/denormal repeat=1/infer-save-reload 0.000s
+# START metrics-classification/denormal repeat=1/batch
+# DONE metrics-classification/denormal repeat=1/batch 0.093s
+# START metrics-classification/denormal repeat=1/stepfull
+# DONE metrics-classification/denormal repeat=1/stepfull 0.000s
+# START metrics-classification/denormal repeat=2/train
+# DONE metrics-classification/denormal repeat=2/train 0.737s
+# START metrics-classification/denormal repeat=2/infer-save-reload
+# DONE metrics-classification/denormal repeat=2/infer-save-reload 0.000s
+# START metrics-classification/denormal repeat=2/batch
+# DONE metrics-classification/denormal repeat=2/batch 0.094s
+# START metrics-classification/denormal repeat=2/stepfull
+# DONE metrics-classification/denormal repeat=2/stepfull 0.000s
+# CELL metrics-classification/denormal STABLE 1.622s
+# START metrics-classification/denormal_ftz repeat=1/train
+# DONE metrics-classification/denormal_ftz repeat=1/train 0.711s
+# START metrics-classification/denormal_ftz repeat=1/infer-save-reload
+# DONE metrics-classification/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START metrics-classification/denormal_ftz repeat=1/batch
+# DONE metrics-classification/denormal_ftz repeat=1/batch 0.092s
+# START metrics-classification/denormal_ftz repeat=1/stepfull
+# DONE metrics-classification/denormal_ftz repeat=1/stepfull 0.000s
+# START metrics-classification/denormal_ftz repeat=2/train
+# DONE metrics-classification/denormal_ftz repeat=2/train 0.706s
+# START metrics-classification/denormal_ftz repeat=2/infer-save-reload
+# DONE metrics-classification/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START metrics-classification/denormal_ftz repeat=2/batch
+# DONE metrics-classification/denormal_ftz repeat=2/batch 0.094s
+# START metrics-classification/denormal_ftz repeat=2/stepfull
+# DONE metrics-classification/denormal_ftz repeat=2/stepfull 0.000s
+# CELL metrics-classification/denormal_ftz STABLE 1.603s
+# START metrics-classification/dupes repeat=1/train
+# DONE metrics-classification/dupes repeat=1/train 0.724s
+# START metrics-classification/dupes repeat=1/infer-save-reload
+# DONE metrics-classification/dupes repeat=1/infer-save-reload 0.000s
+# START metrics-classification/dupes repeat=1/batch
+# DONE metrics-classification/dupes repeat=1/batch 0.097s
+# START metrics-classification/dupes repeat=1/stepfull
+# DONE metrics-classification/dupes repeat=1/stepfull 0.000s
+# START metrics-classification/dupes repeat=2/train
+# DONE metrics-classification/dupes repeat=2/train 0.713s
+# START metrics-classification/dupes repeat=2/infer-save-reload
+# DONE metrics-classification/dupes repeat=2/infer-save-reload 0.000s
+# START metrics-classification/dupes repeat=2/batch
+# DONE metrics-classification/dupes repeat=2/batch 0.095s
+# START metrics-classification/dupes repeat=2/stepfull
+# DONE metrics-classification/dupes repeat=2/stepfull 0.000s
+# CELL metrics-classification/dupes STABLE 1.630s
+# START metrics-classification/odd repeat=1/train
+# DONE metrics-classification/odd repeat=1/train 0.728s
+# START metrics-classification/odd repeat=1/infer-save-reload
+# DONE metrics-classification/odd repeat=1/infer-save-reload 0.000s
+# START metrics-classification/odd repeat=1/batch
+# DONE metrics-classification/odd repeat=1/batch 0.096s
+# START metrics-classification/odd repeat=1/stepfull
+# DONE metrics-classification/odd repeat=1/stepfull 0.000s
+# START metrics-classification/odd repeat=2/train
+# DONE metrics-classification/odd repeat=2/train 0.742s
+# START metrics-classification/odd repeat=2/infer-save-reload
+# DONE metrics-classification/odd repeat=2/infer-save-reload 0.000s
+# START metrics-classification/odd repeat=2/batch
+# DONE metrics-classification/odd repeat=2/batch 0.091s
+# START metrics-classification/odd repeat=2/stepfull
+# DONE metrics-classification/odd repeat=2/stepfull 0.000s
+# CELL metrics-classification/odd STABLE 1.657s
+# START metrics-classification/negative repeat=1/train
+/root/mojolearn/tools/identity_break.py:3456: RuntimeWarning: Precision is ill-defined and being set to 0.0 due to zero denominator; use zero_division to control this behavior.
+  parts[f"{fn.__name__}:{avg}"] = _h(np.asarray(fn(yt, yp, average=avg), dtype=np.float64))
+# DONE metrics-classification/negative repeat=1/train 0.733s
+# START metrics-classification/negative repeat=1/infer-save-reload
+# DONE metrics-classification/negative repeat=1/infer-save-reload 0.000s
+# START metrics-classification/negative repeat=1/batch
+# DONE metrics-classification/negative repeat=1/batch 0.092s
+# START metrics-classification/negative repeat=1/stepfull
+# DONE metrics-classification/negative repeat=1/stepfull 0.000s
+# START metrics-classification/negative repeat=2/train
+# DONE metrics-classification/negative repeat=2/train 0.736s
+# START metrics-classification/negative repeat=2/infer-save-reload
+# DONE metrics-classification/negative repeat=2/infer-save-reload 0.000s
+# START metrics-classification/negative repeat=2/batch
+# DONE metrics-classification/negative repeat=2/batch 0.093s
+# START metrics-classification/negative repeat=2/stepfull
+# DONE metrics-classification/negative repeat=2/stepfull 0.000s
+# CELL metrics-classification/negative STABLE 1.654s
+| metrics-classification | be210a27d832b27d | 58a4369afb94438d | 75d571a03d0ad4b0 | bf19b716e93e6a28 | 4b8b5ad753434a72 | 4b8b5ad753434a72 | 0bba37d1e8e21435 | 998a12daa22dcfc2 | 3af93912b356a61d |
+| metrics-classification batch | 25b2df6f41f210ba | d52edefd07c6073a | e349747b1178bab9 | ce67b9563a560a6d | 576b46dc89e23cd6 | 576b46dc89e23cd6 | 25b2df6f41f210ba | c742760daa0c29b3 | 4f3b86d0c4cac947 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: metrics-classification infer n/a:function, metrics-classification model n/a:no-save, metrics-classification stepfull n/a:no-decode-state
+wrote /root/leg_out/records/metrics-classification/metrics-classification/cpu-sabotage.json

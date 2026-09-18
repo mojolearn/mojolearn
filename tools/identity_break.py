@@ -1133,6 +1133,17 @@ class Fit(dict):
     model_na = None
 
 
+class NumericalMismatch(AssertionError):
+    """A completed numerical result disagrees with an independent oracle.
+
+    Keep the measured parts for negative-control evidence while still failing
+    ordinary callers and reference admission. This is not an exception waiver.
+    """
+    def __init__(self, message, parts):
+        super().__init__(message)
+        self.parts = dict(parts)
+
+
 def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
@@ -1372,16 +1383,32 @@ def _(ml, X, yc, yr, Xh=None):
                                       "forecast(h, index=0)", e.forecast(FORECAST_HORIZON, index=0)))
 
 
+def _mismatch_bytes(name_a, a, name_b, b):
+    """`_same_bytes`'s comparison WITHOUT the raise: the message when the two
+    disagree, None when they agree.
+
+    A lane that has parts to hand should raise `NumericalMismatch` with them
+    rather than a bare exception, or a negative control that WORKS is recorded
+    as a refusal and a refusal is not a catch (lane/sabotage-sweep, 2026-09-17:
+    `par-scaler`'s sabotage arm fired and the cell read REFUSED on both
+    fixtures, so the lane stayed `declared` in the matrix while its arm was
+    doing its job)."""
+    ba, bb = np.asarray(a).ravel().tobytes(), np.asarray(b).ravel().tobytes()
+    if ba == bb:
+        return None
+    n = sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
+    return f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}"
+
+
 def _same_bytes(name_a, a, name_b, b):
     """The forecasters' infer probe: two public entries the estimator
     documents as the same answer. Returns both for hashing when their bytes
     agree; raises, naming the pair and the byte count, when they do not, so
     the infer column reads REFUSED with the message instead of a hash that
     hides which of the two moved."""
-    ba, bb = np.asarray(a).ravel().tobytes(), np.asarray(b).ravel().tobytes()
-    if ba != bb:
-        n = sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
-        raise ValueError(f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}")
+    message = _mismatch_bytes(name_a, a, name_b, b)
+    if message is not None:
+        raise ValueError(message)
     return a, b
 
 
@@ -3562,14 +3589,26 @@ def _(ml, X, yc, yr, Xh=None):
 
     SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 reverses ONLY the tie-break
     (largest (left_id, right_id) among the pairs at the top count instead of
-    smallest). MEASURED on this fixture, it moves `ranks`, `tokenizer_json`
-    and `n_ties_broken`, and leaves `n_tokens` and `n_merges` alone -- the
-    vocabulary still fills to vocab_size, it is filled with DIFFERENT tokens.
-    That is why the two artifact hashes are the load-bearing parts of this
-    cell and the counters are not: a cell that watched only the sizes would
-    call this sabotage inert. The Mojo trainer carries the same arm as a
-    build define, and `pixi run check-bpe-trainer-sabotage` is where it is
-    watched failing."""
+    smallest). It moves ALL FIVE parts. MEASURED on x86-64 EPYC, 2026-09-17,
+    both fixtures (`bench/results/identity_break/2026-09-17_sabotage-sweep/
+    e-python-lanes/`): `base` 302 tokens, 46 merges, 42 ties broken clean
+    against 301, 45 and 41 sabotaged; `ties` 309/53/33 against 308/52/31.
+
+    THIS PARAGRAPH USED TO SAY the arm "leaves `n_tokens` and `n_merges`
+    alone -- the vocabulary still fills to vocab_size". It does not, and it
+    never did on this fixture: `min_frequency=2` exhausts the pairs worth
+    merging long before `vocab_size=320`, so the vocabulary's SIZE is an
+    output of the merge sequence and not a constant, and one different
+    tie-break costs one merge. Read as written, the old sentence invited a
+    reader to drop the counters from the cell; the counters move too.
+
+    The two artifact hashes are still the load-bearing parts, for the reason
+    the old sentence was reaching for: they are what a user ships beside a
+    model, and a counter that happened to agree would not make the
+    vocabularies the same. The Mojo trainer carries the same arm as a build
+    define, and `pixi run check-bpe-trainer-sabotage` is where THAT one is
+    watched failing; this Python door's arm is watched failing in the
+    directory above."""
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
     ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
@@ -3955,13 +3994,18 @@ def _(ml, X, yc, yr, Xh=None):
     got = ordered_sum_gradients(iter(shards))
     if len(got) != len(expected):
         raise AssertionError("ordered gradient sum lost a tensor")
+    mismatch = False
     for actual, wanted in zip(got, expected):
         actual = np.asarray(actual)
-        if actual.shape != wanted.shape or actual.dtype != wanted.dtype or actual.tobytes() != wanted.tobytes():
-            raise AssertionError("ordered gradient sum differs from Float32 left fold")
+        if actual.shape != wanted.shape or actual.dtype != wanted.dtype:
+            raise AssertionError("ordered gradient sum changed tensor shape or dtype")
+        mismatch |= actual.tobytes() != wanted.tobytes()
     if before != [[a.tobytes() for a in shard] for shard in shards]:
         raise AssertionError("ordered gradient sum mutated its inputs")
-    return _fit(dict(gradients=_h(*(np.asarray(a) for a in got))))
+    parts = dict(gradients=_h(*(np.asarray(a) for a in got)))
+    if mismatch:
+        raise NumericalMismatch("ordered gradient sum differs from Float32 left fold", parts)
+    return _fit(parts)
 
 
 @lane("training-primitives")
@@ -4309,15 +4353,26 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-scaler")
 def _(ml, X, yc, yr, Xh=None):
     """fit_scaler and transform_scaler with four columns per shard, so the
-    16-column fixture is four shards, held to the plain scaler."""
+    16-column fixture is four shards, held to the plain scaler.
+
+    The disagreement is raised as `NumericalMismatch` CARRYING the parts, not
+    as a bare ValueError. Measured 2026-09-17 (lane/sabotage-sweep,
+    `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/`):
+    under the preprocessing family's sabotage build this lane raised
+    `transform_scaler and plain transform differ: 2847 bytes of 16384` and the
+    cell read REFUSED, so a negative control that was WORKING was recorded as
+    a refusal, and a refusal is not a catch. The clean cell is unchanged: the
+    same parts in the same order whenever the two agree."""
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
     par = fit_scaler(ml.StandardScaler(), X, devices=_par_devices(), columns_per_shard=4)
     plain = ml.StandardScaler().fit(X)
     t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    return _fit(dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
-                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    parts = dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
+                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-arima")
@@ -5104,17 +5159,22 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """fit_scaler and transform_scaler on the minmax-scaler lane's
     MinMaxScaler with four columns per shard, the second class the column
-    driver admits. Its five fitted statistics are the plain lane's."""
+    driver admits. Its five fitted statistics are the plain lane's.
+
+    `NumericalMismatch` rather than a bare raise, for `par-scaler`'s reason
+    above; the clean cell is unchanged."""
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
     par = fit_scaler(ml.MinMaxScaler(), X, devices=_par_devices(), columns_per_shard=4)
     plain = ml.MinMaxScaler().fit(X)
     t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    return _fit(dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
-                     min=_h(par.min_), transform=_h(t),
-                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
-                                                 inverse=True))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    parts = dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
+                 min=_h(par.min_), transform=_h(t),
+                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
+                                             inverse=True)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-queries-nn")
@@ -7848,6 +7908,7 @@ def _run_reference(args):
             X, yc, yr = data[f]
             hs, parts, err = [], [], None
             infers, models, reloads, errs2 = [], [], [], []
+            oracle_errors = []
             batches, errs3 = [], []
             extras = {part: dict(values=[], errors=[], notes=None) for part in extra}
             rls, errs4, rl_sides = [], [], None
@@ -7861,6 +7922,14 @@ def _run_reference(args):
                         p = LANES[name](ml, X, yc, yr, held[f].copy())
                     parts.append(dict(p))
                     hs.append(_train_hash(p))
+                except NumericalMismatch as exc:
+                    # Repeat the actual computation and retain its bytes. An
+                    # oracle mismatch is a failed numerical check, never a
+                    # STABLE reference and never an arbitrary REFUSED control.
+                    parts.append(exc.parts)
+                    hs.append(_train_hash(exc.parts))
+                    oracle_errors.append(str(exc))
+                    continue
                 except Exception as exc:
                     err = f"{type(exc).__name__}: {exc}"
                     if args.verbose:
@@ -7913,6 +7982,9 @@ def _run_reference(args):
             if err:
                 cell = dict(verdict="REFUSED", error=err[:300], hashes=hs, parts=parts)
                 shown = "REFUSED"
+            elif oracle_errors:
+                cell = dict(verdict="DIVERGENT", hashes=hs, parts=parts, oracle_errors=oracle_errors)
+                shown = "DIVERGENT"
             elif len(set(hs)) == 1:
                 cell = dict(verdict="STABLE", hashes=hs, parts=parts)
                 shown = hs[0]
@@ -7920,7 +7992,7 @@ def _run_reference(args):
                 cell = dict(verdict="MOVED", hashes=hs, parts=parts)
                 shown = "MOVED " + hs[0][:8]
             # the two new columns; a REFUSED train column has no fit to probe
-            if not err:
+            if not err and not oracle_errors:
                 iv = _column_verdict(infers)
                 has_reload = all(r is not None for r in reloads)
                 mv = _column_verdict(models, reloads if has_reload else None, infers)
@@ -7979,7 +8051,7 @@ def _run_reference(args):
                 print(f"| {name + ' ' + label:<{W}} | " + " | ".join(f"{s:<16}" for s in r) + " |", flush=True)
 
     refused = {k: v["error"] for k, v in cells.items() if v["verdict"] == "REFUSED"}
-    moved = [k for k, v in cells.items() if v["verdict"] == "MOVED"]
+    moved = [k for k, v in cells.items() if v["verdict"] in ("MOVED", "DIVERGENT")]
     moved2 = [k for k, v in cells.items()
               if v.get("infer_verdict") == "MOVED" or v.get("model_verdict") in ("MOVED", "RELOAD-MOVED")]
     refused2 = {k: v["probe_error"] for k, v in cells.items() if v.get("probe_error")}
@@ -8074,6 +8146,8 @@ def _diff_column(cols, k, col):
             shown.append("(not run)"); continue
         if c.get("verdict") == "REFUSED":
             shown.append("REFUSED"); continue
+        if c.get("verdict") == "DIVERGENT":
+            shown.append("DIVERGENT"); hashes.append("DIVERGENT"); continue
         if f"{col}_verdict" not in c:
             shown.append("(no column)"); missing = True; continue
         v = c[f"{col}_verdict"]
@@ -8084,8 +8158,10 @@ def _diff_column(cols, k, col):
             identical_bm = identical_bm or (v in ("BATCH_MOVED", "RLPAIR_MOVED") and j.get("mode") == "identical")
             continue
         shown.append(c[col][0]); hashes.append(c[col][0])
-    real = [h for h in hashes if h not in ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")]
-    if "RELOAD-MOVED" in hashes:
+    real = [h for h in hashes if h not in ("DIVERGENT", "MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")]
+    if "DIVERGENT" in hashes:
+        verdict = "DIVERGENT"
+    elif "RELOAD-MOVED" in hashes:
         verdict = "RELOAD-MOVED"
     elif "MOVED" in hashes:
         verdict = "MOVED"
@@ -8123,7 +8199,7 @@ def _real_count(verdict):
 
 #: the per-column verdicts that are already a failure on their own; a cell
 #: carrying one is never OWED
-_OWED_BLOCKING = ("MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
+_OWED_BLOCKING = ("DIVERGENT", "MOVED", "RELOAD-MOVED", "REFUSED", "BATCH_MOVED", "RLPAIR_MOVED")
 
 
 def _owed_status(cols, key, col):
@@ -8297,11 +8373,13 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
                 shown.append("(not run)"); continue
             if c["verdict"] == "REFUSED":
                 shown.append("REFUSED"); continue
-            if c["verdict"] == "MOVED":
-                shown.append("MOVED"); vals.append("MOVED"); continue
+            if c["verdict"] in ("MOVED", "DIVERGENT"):
+                shown.append(c["verdict"]); vals.append(c["verdict"]); continue
             shown.append(c["hashes"][0]); vals.append(c["hashes"][0])
         ran = [v for v in vals]
-        if "MOVED" in ran:
+        if "DIVERGENT" in ran:
+            verdict = "DIVERGENT"
+        elif "MOVED" in ran:
             verdict = "MOVED"
         elif len(ran) < 2:
             verdict = "ONE-COLUMN" if len(ran) == 1 else "REFUSED"

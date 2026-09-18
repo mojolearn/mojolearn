@@ -101,6 +101,29 @@ def test_refused_cell_is_not_success(run_fixture):
     assert all(c["verdict"] == "REFUSED" for c in json.loads(Path(args.json).read_text())["cells"].values())
 
 
+def test_numerical_mismatch_keeps_repeated_bytes_but_fails_record(run_fixture, monkeypatch, capsys):
+    args, _, _ = run_fixture
+    calls = []
+    def wrong(*unused):
+        calls.append(1)
+        raise ib.NumericalMismatch('independent oracle disagrees', dict(value='b' * 16))
+    monkeypatch.setattr(ib, 'LANES', {'tiny': wrong})
+    assert ib._run_reference(args) == 1
+    record = json.loads(Path(args.json).read_text())
+    assert record['complete'] and len(calls) == 4
+    for cell in record['cells'].values():
+        assert cell['verdict'] == 'DIVERGENT'
+        assert len(cell['hashes']) == 2 and len(set(cell['hashes'])) == 1
+        assert cell['oracle_errors'] == ['independent oracle disagrees'] * 2
+        assert 'infer' not in cell
+    # Two equally wrong results must never rehabilitate the failed oracle.
+    capsys.readouterr()
+    assert ib.diff([args.json, args.json]) == 1
+    output = capsys.readouterr().out
+    assert 'IDENTICAL x2' not in output
+    assert 'DIVERGENT' in output
+
+
 def test_atomic_checkpoint_preserves_old_record_on_write_error(tmp_path, monkeypatch):
     p = tmp_path / "out.json"
     ib.atomic_json(p, {"old": 1})
