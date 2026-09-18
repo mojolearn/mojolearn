@@ -3,10 +3,10 @@
 
 Nsight Compute is refused in the RunPod container (ERR_NVGPUCTRPERM, brief
 section 15.5), so the missing cycles of `identical_gemm_kpack_kernel`'s window
-are decomposed by REMOVING one thing at a time from the `kpack_padv` body and
+are decomposed by REMOVING one thing at a time from the `kpack_hg` body and
 pricing what is left against the unmodified body on the same twelve LM calls:
 
-    base     the kpack_padv body (DIAG 0), the reference
+    base     the kpack_hg body (DIAG 0), the reference
     nomul    the flush multiply removed: one instruction per step (DIAG 1)
     noload   operands loaded once per window, no per-step shared load (DIAG 2)
     nostage  no staging stores, no barrier, no prefetch (DIAG 3)
@@ -15,8 +15,8 @@ pricing what is left against the unmodified body on the same twelve LM calls:
 
 EVERY VARIANT BUT base COMPUTES WRONG BITS BY DESIGN. Nothing here is an arm,
 a geometry or a candidate; it needs -D MOJOLEARN_GEMM_DIAG=1 to compile, and
-the arms check never builds with it. The group rule is kpack's own
-(`gemm_step_kpack_leaves`), so base reproduces the priced `kpack_padv` line.
+the arms check never builds with it. The group rule is the shipped rule
+(`gemm_default_ksplit_leaves`); base is checked against shipped for every call.
 Output: `DIAG call=<name> variant=<v> median_ms=<ms> ratio=<vs base>` per call
 and variant, `SAMPLE` lines, and `DIAGSTEP variant=<v> sum_ms=<ms> ratio=<vs
 base>` weighted by the per-step counts.
@@ -25,7 +25,7 @@ from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import (
-    GEMM_GEOM_KPACK_PAD,
+    GEMM_GEOM_KPACK_HG,
     GEMM_KPACK_ALIGN,
     GEMM_KPACK_CPT,
     GEMM_KPACK_FS,
@@ -34,10 +34,17 @@ from gemm.checks.gemm_identical import (
     GEMM_KPACK_RPT,
     TUNED_TC,
     _kpack_run,
-    gemm_step_kpack_leaves,
+    gemm_default_ksplit_leaves,
+    identical_gemm_shipped_into,
+    identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_step_arms import (
     GEMM_STEP_LM_CALLS,
+    gemm_step_compare,
+    gemm_step_digest,
+    gemm_step_poison,
+    gemm_step_poison_left,
+    gemm_step_readback,
     gemm_step_env_int,
     gemm_step_fill,
     gemm_step_lm_call,
@@ -64,7 +71,7 @@ def _variant_name(v: Int) -> String:
 
 
 def _run[
-    DIAG: Int
+    DIAG: Int, SAB: Bool = False
 ](
     ctx: DeviceContext,
     mut dc: DeviceBuffer[DType.float32],
@@ -77,8 +84,8 @@ def _run[
     gl: Int,
 ) raises:
     _kpack_run[
-        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, False,
-        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, DIAG,
+        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
+        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, DIAG, True, True,
     ](ctx, dc, da, db, m, n, k, op, gl)
     ctx.synchronize()
 
@@ -117,7 +124,7 @@ def main() raises:
     var warmups = gemm_step_env_int("MOJOLEARN_GEMM_STEP_WARMUPS", 2)
     var ctx = DeviceContext()
     print("DIAG_BEGIN deviation=2705 variants=base,nomul,noload,nostage,nofold,floor rounds=" + String(rounds)
-          + " warmups=" + String(warmups) + " body=kpack_padv (pad=" + String(GEMM_KPACK_PAD)
+          + " warmups=" + String(warmups) + " body=kpack_hg (pad=" + String(GEMM_KPACK_PAD)
           + " align=" + String(GEMM_KPACK_ALIGN) + ") EVERY VARIANT BUT base COMPUTES WRONG BITS BY DESIGN")
     var sums = List[Float64]()
     for _ in range(VARIANTS):
@@ -131,13 +138,38 @@ def main() raises:
         var k = call[3]
         var per = call[4]
         var counts = gemm_step_operand_counts(m, n, k)
-        var gl = gemm_step_kpack_leaves(GEMM_GEOM_KPACK_PAD, m, n, k)
+        var gl = gemm_default_ksplit_leaves(m, n, k)
         var da = ctx.enqueue_create_buffer[DType.float32](counts[0])
         var db = ctx.enqueue_create_buffer[DType.float32](counts[1])
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
         ctx.synchronize()
         gemm_step_fill(ctx, da, counts[0], 11 + i, False)
         gemm_step_fill(ctx, db, counts[1], 22 + i, False)
+        var mn = m * n
+        var dw = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(m, n, k))
+        var expected = ctx.enqueue_create_host_buffer[DType.float32](mn)
+        var got = ctx.enqueue_create_host_buffer[DType.float32](mn)
+        ctx.synchronize()
+        gemm_step_poison(ctx, dc, expected, mn)
+        identical_gemm_shipped_into(ctx, dc, da, db, dw, m, n, k, op)
+        gemm_step_readback(ctx, dc, expected)
+        if gemm_step_poison_left(expected, mn) != 0:
+            raise Error("shipped output left poison")
+        # A real wrong device computation must be rejected before the match.
+        _run[0, True](ctx, dc, da, db, m, n, k, op, gl)
+        gemm_step_readback(ctx, dc, got)
+        var broken = gemm_step_compare(got, expected, mn)
+        print("NEGATIVE call=" + cname + " moved=" + String(broken[0]) + " first=" + String(broken[2]))
+        if broken[0] == 0:
+            raise Error("sabotaged kernel was accepted")
+        gemm_step_poison(ctx, dc, got, mn)
+        _run[0](ctx, dc, da, db, m, n, k, op, gl)
+        gemm_step_readback(ctx, dc, got)
+        var clean = gemm_step_compare(got, expected, mn)
+        print("MATCH call=" + cname + " shipped=" + hex(gemm_step_digest(expected, mn))
+              + " base=" + hex(gemm_step_digest(got, mn)) + " moved=" + String(clean[0]))
+        if clean[0] != 0 or clean[1] != 0:
+            raise Error("diagnostic base differs from shipped")
         var med = List[Float64]()
         for v in range(VARIANTS):
             for _ in range(warmups):
@@ -167,5 +199,5 @@ def main() raises:
         if sums[0] > 0.0:
             ratio = sums[v] / sums[0]
         print("DIAGSTEP variant=" + _variant_name(v) + " sum_ms=" + String(sums[v]) + " ratio=" + String(ratio)
-              + " (per-call medians weighted by per-step counts; base is kpack_padv)")
+              + " (per-call medians weighted by per-step counts; base is kpack_hg)")
     print("DIAG_DONE")

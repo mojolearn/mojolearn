@@ -5308,6 +5308,12 @@ def identical_gemm_kpack_kernel[
             b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
         )
 
+    comptime if (DIAG == 3 or DIAG == 5) and GATHER:
+        comptime for initial_page in range(PAGES):
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+        barrier()
+
     while w < w_end:
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
         var chunk = win[1]
