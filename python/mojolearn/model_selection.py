@@ -488,6 +488,22 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     # all index pairs before fitting, additionally refusing overlap/duplicates.
     if is_bool(n_jobs) or not isinstance(n_jobs, numbers.Integral) or n_jobs != 1:
         raise NotImplementedError('cross_val_score supports n_jobs=1 only')
+    X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
+    scores = []
+    for train, test in folds:
+        fitted = _clone(estimator)
+        try:
+            scores.append(_fit_score_fold(fitted, _take_rows(X, train), _take_rows(y, train),
+                                          _take_rows(X, test), _take_rows(y, test), scoring))
+        finally:
+            # Release each fold before constructing the next estimator. Native
+            # contexts retain their own cleanup contract; no forced GPU reset.
+            del fitted
+    return Array.from_list(scores, "<f8")
+
+
+def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
+    """Validate every fold before serial or GPU-worker fitting begins."""
     if not isinstance(error_score, str) or error_score != 'raise':
         raise NotImplementedError("cross_val_score supports error_score='raise' only")
     if scoring is not None and not callable(scoring):
@@ -515,17 +531,13 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
         folds.append((train, test))
     if not folds:
         raise ValueError('cv must produce at least one fold')
-    scores = []
-    for train, test in folds:
-        fitted = _clone(estimator)
-        try:
-            fitted.fit(_take_rows(X, train), _take_rows(y, train))
-            score = fitted.score(_take_rows(X, test), _take_rows(y, test)) if scoring is None else scoring(fitted, _take_rows(X, test), _take_rows(y, test))
-            if not isinstance(score, numbers.Real):
-                raise TypeError('scoring must return a real scalar')
-            scores.append(float(score))
-        finally:
-            # Release each fold before constructing the next estimator. Native
-            # contexts retain their own cleanup contract; no forced GPU reset.
-            del fitted
-    return Array.from_list(scores, "<f8")
+    return X, y, folds
+
+
+def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
+    """Shared serial/worker operation; the caller supplies a fresh clone."""
+    fitted.fit(X_train, y_train)
+    score = fitted.score(X_test, y_test) if scoring is None else scoring(fitted, X_test, y_test)
+    if not isinstance(score, numbers.Real):
+        raise TypeError('scoring must return a real scalar')
+    return float(score)

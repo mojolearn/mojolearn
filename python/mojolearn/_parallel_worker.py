@@ -11,6 +11,12 @@ _forest_snapshot = None
 def execute(request):
     global _forest_snapshot
     operation, state, args = request
+    if operation == 'cross_val_fold':
+        from . import _backend
+        from .model_selection import _fit_score_fold
+        if _backend.vendor() not in ('cuda', 'hip'):
+            raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
+        return _fit_score_fold(state, *args)
     if operation == 'cpu_reference':
         # The pool wraps a request this way only on a CPU-only install and
         # only while its caller is inside reference_training() (the internal
