@@ -2627,8 +2627,11 @@ def public_reference_lanes():
 # both negative controls are recorded in 2026-09-18_tokenized-corpus; this is
 # CPU-only evidence, not a claim of independent GPU implementation equality.
 # Missing reference hashes must still read OWED.
-# None means pure Python: no native host binding is required.
-PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": None,
+# None means pure Python: no native host binding is required. bpe-trainer
+# names the tokenizer family since lane/bpe-builder-native (2026-09-18):
+# BpeVocabularyTrainer trains through that binding's bpe_train by default and
+# falls back to the pure Python reference only when the binding lacks it.
+PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
                           "cross-val-folds": None, "bpe-vocabulary": "tokenizer",
                           "tokenized-corpus": "tokenizer"}
 

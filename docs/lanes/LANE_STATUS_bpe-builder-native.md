@@ -170,6 +170,19 @@ $0.44/hr; R2 staged 2 keys in 13 s, strict; heads matched the M4 recipe):
 Legs B (new CLI alone) and C (old CLI alone, bounded 9,600 s) go to two more pods so the old
 arm's 20 GB and the new arm's timing do not share a box.
 
+Merged origin/main (1dd7a4179) into the branch: clean. main's ed95d96a1 had filed
+`bpe-trainer` as pure Python (`None`) in `host_surface.PUBLIC_HOST_ONLY_LANES`; it now names
+the tokenizer family (the door trains through that binding), and test_cpu_training_misc's
+pure-Python allow-list drops it. pytest test_host_only_verifier + test_host_surface +
+test_tokenizer_manifest + test_cpu_training_misc + test_models_loader: 234 passed, 4 skipped;
+verification_matrix --check OK.
+
+OLD ARM PEAK, measured on leg 1's pod by hand (RunPod had no CPU capacity for legs B/C: six
+creates refused "no longer any instances available"): main's train_main, same job, bounded
+at 600 s, VmHWM of the train_main process sampled every 10 s:
+`~/mojolearn-evidence/bpe-builder-native-sep18/pod/leg/.../old_bounded/`. Leg B (new CLI
+alone) is retrying for capacity every 3 min (`pod/retry_legB.sh`).
+
 ## Candidates (not opened)
 
 (none yet)
