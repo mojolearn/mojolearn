@@ -1818,6 +1818,29 @@ def knn_fused_distance_select_for[column: Int, identical: Bool]() -> Bool:
     return False
 
 
+def forest_row_threads_for[column: Int]() -> Bool:
+    """SCHEDULING row (DEVIATION 2964, 2026-09-17, lane/forest-groves-row-schedule): whether the `parallel_groves` forest inference kernels give one thread a whole row (its 32 lane sums and the 16/8/4/2/1 fold, the same graph) instead of 32 threads with a shared-memory fold. The launch site applies it only when a row is at most FOREST_ROW_THREADS_MAX_FEATURES floats (`core/forest_inference.mojo`); wider rows keep the 32-thread kernels."""
+    comptime if is_defined["MOJOLEARN_FOREST_ROW_THREADS_OFF"]():
+        return False
+    comptime if is_defined["MOJOLEARN_FOREST_ROW_THREADS"]():
+        return True  # every column, for an A/B
+    if column == COLUMN_CPU:
+        return False  # the host groves engine has its own schedule
+    # FLIPPED ON NVIDIA 2026-09-18 for rows of at most 32 floats (RTX 4090,
+    # bench/results/forest_groves_row_2026-09-18/): eight-call blocks, ms per
+    # call, hashes equal to the 32-thread kernels' in every cell and the
+    # sabotage arm (lane-order fold) divergent in every cell: taxi RF
+    # classifier 4.6M rows x 16 190.7 to 125.7 (1.52x), taxi RF regressor
+    # 5.75M x 16 239.0 to 157.4 (1.52x), HIGGS RF 500k x 28 24.0 to 19.9
+    # (1.20x), HIGGS ET 66.5 to 68.0 (even, one side u). ABOVE 32 floats it
+    # LOSES and stays off: Covtype 54 columns 27.0 to 32.0 (0.84x), Year 90
+    # columns 56.5 to 63.8 (0.89x), Istella-S 220 columns 275.2 to 619.4
+    # (0.44x) and its regressor 257.5 to 545.0 (0.47x): adjacent threads read
+    # 32 different wide rows and the feature reads stop coalescing. Apple
+    # (identity only, checks/forest_inference_gpu.mojo) and AMD are untimed.
+    return column == COLUMN_NVIDIA
+
+
 def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
     """SCHEDULING row (DEVIATION 3000, 2026-09-17, lane/knn-tiled-distance): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances through the SHARED-MEMORY tile (`neighbors/checks/smem_distance_tile.mojo::smem_distance_tile_kernel`): a block of 256 threads owns 64 query rows x 128 index columns, stages each 16-feature slice of the query rows and of the transposed index columns into shared memory once (flushed at the store), and every thread advances its 8 x 4 accumulators from three 16-byte shared loads per feature step, instead of the register tile's twelve global loads and twelve flushes per step. Every cell is still one ascending `_rt_step` chain over the feature axis from +0.0 with the register tile's epilogue, clamp and root, and `ftz` is idempotent, so the bits are the register tile's; the gate is `tools/identity_break.py` on the knn lanes, cuda against the cpu host route, plus `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`. Needs the transposed layout and the register-tile row, and does not carry the Apple metadata or DEVIATION 2629 chains (a request on those keeps the register tile). OFF on every column until measured; `-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY=1` forces the register tile."""
     comptime if not identical:

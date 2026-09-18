@@ -48,6 +48,15 @@ DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
 #                            hip-gfx942.json  (the packer's three, unchanged)
 LEG_MODE="${MOJOLEARN_LEG_MODE:-build}"
 case "$LEG_MODE" in build|qualify) ;; *) echo "MOJOLEARN_LEG_MODE must be build or qualify" >&2; exit 2 ;; esac
+UBUNTU22=${MOJOLEARN_RELEASE_UBUNTU22:-0}
+case "$UBUNTU22" in 0|1) ;; *) echo 'MOJOLEARN_RELEASE_UBUNTU22 must be 0 or 1' >&2; exit 2 ;; esac
+if [ "$UBUNTU22" = 1 ] && { [ "$LEG_MODE" != build ] || [ "${MOJOLEARN_LEG_GPU:-mi325x}" != mi325x ]; }; then
+  echo 'Ubuntu 22.04 container mode applies only to the AMD build' >&2; exit 2
+fi
+CORE_HOST_SHA=${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-}
+if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
+  echo 'Ubuntu 22.04 rebuild requires the NVIDIA core-host SHA256' >&2; exit 2
+fi
 if [ "$LEG_MODE" = qualify ]; then
   QUAL_WHEEL="${MOJOLEARN_QUALIFY_WHEEL:?qualify mode needs the repaired wheel}"
   QUAL_PROOFS="${MOJOLEARN_QUALIFY_PROOFS:?qualify mode needs the proof directory}"
@@ -361,6 +370,7 @@ PREP_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE - 600
 [ "$PREP_SECONDS" -ge 120 ] || { log "only ${PREP_SECONDS}s for host prep; skipping"; exit 7; }
 $SSH "set -u; export DEBIAN_FRONTEND=noninteractive
 need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
+[ '$UBUNTU22' != 1 ] || command -v docker >/dev/null || need=\"\$need docker.io\"
 { command -v objdump && command -v strings; } >/dev/null || need=\"\$need binutils\"
 # DEVIATION 2294: the INSTALLED qualification builds a venv and pip-installs
 # the wheel into it. This image's python has no ensurepip, so python3 -m venv
@@ -368,16 +378,29 @@ need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
 # job. A build never needs this, which is why nothing had noticed.
 $REMOTE_PY -c 'import ensurepip' 2>/dev/null || need=\"\$need python3-venv python3-pip\"
 if [ -n \"\$need\" ]; then
-  timeout -k 10 180 apt-get -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=30 update > /root/apt.log 2>&1
-  timeout -k 10 300 apt-get -qq -o DPkg::Lock::Timeout=120 -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
+  # Fresh images may still be refreshing their indexes in cloud-init. APT's
+  # DPkg lock timeout does not cover the lists lock used by update. Retry that
+  # operation within a deadline; never install from stale indexes after it fails.
+  update_end=\$(( \$(date +%s) + 180 )); updated=0
+  : > /root/apt.log
+  while [ \$(date +%s) -lt \$update_end ]; do
+    timeout -k 10 60 apt-get -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update >> /root/apt.log 2>&1 && { updated=1; break; }
+    sleep 5
+  done
+  if [ \$updated = 1 ]; then
+    timeout -k 10 300 apt-get -qq -o DPkg::Lock::Timeout=120 -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
+  else
+    echo APT_EXIT=124 need=\$need
+  fi
 fi
 export PATH=/root/.pixi/bin:\$PATH
 command -v pixi >/dev/null || timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > /root/pixi_bootstrap.log 2>&1
 cd /root/mojolearn && $REMOTE_PY $LEG_GUARD --seconds $PREP_SECONDS --rss-gib 12 -- \
   pixi install --locked --environment default > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?
-# Match the NVIDIA release builder: a private pinned wheel provides patchelf
-# when the image apt repositories fail. Keep it outside the locked Pixi env.
-if ! command -v patchelf >/dev/null; then
+# Match the NVIDIA release builder. Container reproducibility requires its
+# exact stager version even when apt successfully installs a newer patchelf.
+# Keep the private tool outside the locked Pixi environment.
+if [ '$UBUNTU22' = 1 ] || ! command -v patchelf >/dev/null; then
   tail -40 /root/apt.log
   .pixi/envs/default/bin/python -m venv /root/release-tools &&
   timeout -k 10 120 /root/release-tools/bin/python -m pip install --disable-pip-version-check --only-binary=:all: --retries 1 --timeout 20 patchelf==0.17.2.4
@@ -389,6 +412,21 @@ test -x .pixi/envs/default/bin/mojo && test -x .pixi/envs/default/bin/python && 
   2>&1 | tee "$OUT/prep-console.log" | sed 's/^/[amd prep] /'
 if ! grep -q '^PIXI_INSTALL_EXIT=0$' "$OUT/prep-console.log" || grep -q 'MISSING_\|PIXI_ENV_MISSING' "$OUT/prep-console.log"; then
   echo "build_exit=NOT_STARTED_HOST_PREP_FAILED" >> "$STATE"; log "host prep failed"; exit 8
+fi
+BUILD_ENTRY='tools/release061_remote_build.sh'
+if [ "$UBUNTU22" = 1 ]; then
+  # Environment setup is controller-owned, outside the frozen source archive.
+  # Retain its exact bytes beside the build evidence and pin the transferred copy.
+  cp "$REPO/tools/release_ubuntu22_build.sh" "$OUT/release_ubuntu22_build.sh" || exit 8
+  HELPER_SHA=$(sha256_of "$OUT/release_ubuntu22_build.sh")
+  rsync -az -e "ssh $SSH_OPTS" "$OUT/release_ubuntu22_build.sh" "root@$IP:/root/release_ubuntu22_build.sh" || exit 8
+  [ "$($SSH 'sha256sum /root/release_ubuntu22_build.sh' | cut -d' ' -f1)" = "$HELPER_SHA" ] || exit 8
+  echo "container_helper_sha256=$HELPER_SHA" >> "$STATE"
+  $SSH 'bash /root/release_ubuntu22_build.sh prepare' > "$OUT/container-prepare.log" 2>&1 || {
+    log 'Ubuntu 22.04 build image preparation failed'; exit 8;
+  }
+  BUILD_ENTRY='/root/release_ubuntu22_build.sh run'
+  echo 'build_environment=ROCm 6.4.1 Ubuntu 22.04 pinned container' >> "$STATE"
 fi
 
 # THE BUILD, DETACHED AND POLLED, so a dropped ssh cannot kill a 30-minute compile.
@@ -408,8 +446,9 @@ if [ "$LEG_MODE" = qualify ]; then
 else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
+  MOJOLEARN_EXPECT_CORE_HOST_SHA256=$CORE_HOST_SHA \
   MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
-  timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
+  timeout -k 20 $((WORK_SECONDS + 40)) bash $BUILD_ENTRY $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
 BUILD_EXIT=""
@@ -423,6 +462,9 @@ log "build exit ${BUILD_EXIT:-none}; $($SSH "tail -3 $REMOTE_LOG" 2>/dev/null | 
 
 log "fetch evidence"
 rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && log "fetched release-build/" || log "FETCH FAILED (release-build/)"
+if [ "$UBUNTU22" = 1 ]; then
+  rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/release-toolchain-probe/" "$OUT/toolchain-probe/" || log 'FETCH FAILED (toolchain-probe/)'
+fi
 for f in rel061-build.log pixi_install.log pixi_bootstrap.log apt.log rel061.exit; do
   rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/$f" "$OUT/$f" 2>/dev/null || true
 done
@@ -483,4 +525,19 @@ except Exception as exc:
     print('admission=REFUSED ' + str(exc))
 PY
 fi
+# RELEASE_ADMISSION_STATUS_BEGIN
+# A refusal in the retained-artifact report must also fail the controller.
+# Teardown still runs through the existing EXIT trap on either outcome.
+if [ "${BUILD_EXIT:-}" != 0 ]; then
+  log "remote work did not pass (exit ${BUILD_EXIT:-missing})"; exit 10
+fi
+if [ "$LEG_MODE" = qualify ]; then
+  grep -q '^qualify_admission=GREEN$' "$STATE" &&
+    ! grep -q '^qualify_admission=RED$' "$STATE" &&
+    [ "$(cat "$OUT/release-build/exit_code" 2>/dev/null)" = 0 ] || exit 10
+else
+  grep -q '^admission=BUILT_NOT_INSTALLED ' "$STATE" &&
+    ! grep -q '^admission=REFUSED' "$STATE" || exit 10
+fi
+# RELEASE_ADMISSION_STATUS_END
 log "done -- $OUT (leg.txt has the verdict; the droplet is destroyed by the EXIT trap next)"

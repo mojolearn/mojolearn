@@ -29,6 +29,9 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
     newton_like_walker_estimate,
 )
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    ORACLE_SCRATCH_POOLED,
+    OracleDeviceScratch,
+    OracleScratchPool,
     make_bin_optimized_oracle,
     merge_stage_times,
 )
@@ -612,6 +615,9 @@ struct TEstimationWorkspace(Movable):
     var h_ps: HostBuffer[DType.uint32]
     var d_est: DeviceBuffer[DType.float32]
     var h_est: HostBuffer[DType.float32]
+    #: DEVIATION 3041: the oracle's own device buffers, under their own
+    #: exact keys (`pointwise_oracle.OracleScratchPool`)
+    var oracle_scratch: OracleScratchPool
 
     def __init__(
         out self,
@@ -638,6 +644,7 @@ struct TEstimationWorkspace(Movable):
         self.h_est = ctx.enqueue_create_host_buffer[DType.float32](
             n_leaves * approx_dim
         )
+        self.oracle_scratch = OracleScratchPool()
 
 
 def _estimate_and_apply(
@@ -716,6 +723,17 @@ def _estimate_and_apply(
         est_ws.clear()
         est_ws.append(
             TEstimationWorkspace(ctx, n_rows, approx_dim, n_leaves)
+        )
+    # DEVIATION 3041: the oracle's device buffers from the fit's pool (keyed
+    # exactly; see `OracleScratchPool`), taken as handle views BEFORE the
+    # workspace refs below are borrowed
+    var oracle_ws = Optional[OracleDeviceScratch]()
+    comptime if ORACLE_SCRATCH_POOLED:
+        var pair_blocks = 0
+        if pairs.__bool__():
+            pair_blocks = pairs.value().blocks()
+        oracle_ws = est_ws[0].oracle_scratch.take(
+            ctx, n_rows, n_leaves, objective, num_classes, est_sm, pair_blocks,
         )
     ref g_target = est_ws[0].g_target
     ref g_weights = est_ws[0].g_weights
@@ -814,6 +832,7 @@ def _estimate_and_apply(
         pairs^,
         yeti^,
         yeti_seed,
+        oracle_ws^,
     )
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES

@@ -178,8 +178,11 @@ def _as_i32_1d(x, name):
             "adjusted_rand_index is the same code at a wider type and is "
             "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
         )
-    # int64 -> int32 is `array.array`'s C item loop (`Array.astype`), exact
-    # after the range check above; no Python loop.
+    # int64 -> int32 through `Array.astype`: the core helper `cast_elements`
+    # (DEVIATION 3100), else `array.array`'s item loop, which has no Python
+    # loop BODY but makes one Python int per element (69 ms per 1,000,000
+    # rows on an EPYC 7713 before the helper, 1.9 ms with it,
+    # docs/lanes/LANE_STATUS_python-hotpath.md). Exact after the range check.
     return a.astype("<i4")
 
 
@@ -225,12 +228,13 @@ def _sample_weight_f32(sample_weight, n, caller):
             f"mojolearn {caller}: sample_weight has {shape[0]} entries for {n} samples"
         )
     w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
-    values = flat_view(w, "f")
-    if not all_finite(w) or min(values) < 0:
+    # `Array.min` / `Array.max` answer as `min()` / `max()` over the storage
+    # view did, without one Python float per weight (DEVIATION 3101).
+    if not all_finite(w) or w.min() < 0:
         raise ValueError(
             f"mojolearn {caller}: sample_weight must have finite nonnegative entries"
         )
-    if not max(values) > 0:
+    if not w.max() > 0:
         raise ValueError(
             f"mojolearn {caller}: sample_weight must have positive total weight"
         )
@@ -273,6 +277,9 @@ def _prepare_cluster_labels(labels_true, labels_pred):
     # `np.unique` of the union, then `np.searchsorted`: the package-wide
     # order rule (`_labels.sorted_classes`, DEVIATION 2340) over the
     # concatenation and a dict lookup, O(rows) label loops (DEVIATION 2377).
+    fast = _native_union_codes(yt, yp)
+    if fast is not None:
+        return fast[0], fast[1], int(yt.shape[0]), 0, fast[2] - 1
     tl = yt.tolist()
     pl = yp.tolist()
     classes, _ = sorted_classes(tl + pl)
@@ -280,6 +287,44 @@ def _prepare_cluster_labels(labels_true, labels_pred):
     yt = Array.from_list([index[v] for v in tl], "<i4")
     yp = Array.from_list([index[v] for v in pl], "<i4")
     return yt, yp, len(tl), 0, len(classes) - 1
+
+
+#: DEVIATION 3107 (lane/python-hotpath, 2026-09-17). Below this many labels
+#: the Python label routines are the only path.
+_NATIVE_MIN_LABELS = 256
+
+
+def _native_union_codes(yt, yp):
+    """`(codes_true, codes_pred, n_classes)` over the sorted union of two
+    int32 label Arrays, as the Python lines below it in
+    `_prepare_cluster_labels` compute them, or None (DEVIATION 3107).
+
+    Each array is encoded by the native ORDER RULE encoder (DEVIATION 2500),
+    the two sorted class lists are merged in Python (classes, not rows) and
+    each array's dense codes are remapped onto the union by `gather_i32`.
+    Measured on the M4 at 1,000,000 rows: 627 ms in Python, five passes of
+    one object per row."""
+    from ._buffer import _native_optional
+    from ._labels import _encode_labels_native
+
+    if min(yt.size, yp.size) < _NATIVE_MIN_LABELS:
+        return None
+    gather = _native_optional("gather_i32")
+    if gather is None:
+        return None
+    true = _encode_labels_native(yt)
+    pred = _encode_labels_native(yp) if true is not None else None
+    if true is None or pred is None:
+        return None  # more distinct labels than the native encoder holds
+    union = sorted(set(true[0]) | set(pred[0]))
+    index = {c: i for i, c in enumerate(union)}
+    out = []
+    for classes, codes in (true, pred):
+        table = Array.from_list([index[c] for c in classes], "<i4")
+        mapped = empty((codes.size,), "<i4")
+        gather(_addr_ro(table), len(classes), _addr_ro(codes), codes.size, _addr(mapped))
+        out.append(mapped)
+    return out[0], out[1], len(union)
 
 
 # ===========================================================================
@@ -1024,18 +1069,107 @@ def _classification_labels(values, name, *, allow_empty=False):
                     "floating labels, missing labels and mixed types are unsupported")
 
 
+class _EncodedLabels:
+    """Integer labels held as `classes` (sorted distinct Python ints) and
+    `codes` (one int32 index into `classes` per row): what
+    `_classification_labels` returns as a list of n Python ints, without the
+    n objects (DEVIATION 3107). `len()` and iteration answer as that list
+    does, so a consumer that walks labels still works; the metric functions
+    below never walk it, they go through `_label_set` and `_label_map`."""
+
+    __slots__ = ("classes", "codes")
+
+    def __init__(self, classes, codes):
+        self.classes = classes
+        self.codes = codes
+
+    def __len__(self):
+        return int(self.codes.size)
+
+    def __iter__(self):
+        return map(self.classes.__getitem__, self.codes._values())
+
+
+def _classification_encoded(values, name, *, allow_empty=False):
+    """`_classification_labels`, with an integer or bool BUFFER of at least
+    `_NATIVE_MIN_LABELS` labels answered as `_EncodedLabels` through the
+    native encoder. Everything else (lists, str labels, float buffers and
+    their refusal, empty input and its refusal, more distinct labels than
+    the encoder holds) is `_classification_labels` itself."""
+    fast = _native_classification_labels(values)
+    if fast is not None:
+        return fast, "integer"
+    return _classification_labels(values, name, allow_empty=allow_empty)
+
+
+def _native_classification_labels(values):
+    from ._buffer import _has_buffer, hotpath_enabled
+    from ._labels import _encode_labels_native
+
+    if isinstance(values, (list, tuple, str, bytes)) or not hotpath_enabled():
+        return None
+    if not isinstance(values, Array) and not _has_buffer(values):
+        return None
+    if len(_shape_of(values)) != 1:
+        return None
+    try:
+        arr = _materialize(values, "input")[0]
+    except (TypeError, ValueError, OverflowError):
+        return None  # `_classification_labels` names the refusal
+    if arr.ndim != 1 or arr.size < _NATIVE_MIN_LABELS:
+        return None
+    if arr.dtype in ("<u2", "<i1"):
+        arr = arr.astype("<i4")  # exact; the encoder has no 8- or 16-bit arm
+    if arr.dtype not in ("<i4", "<i8", "<u4", "<u1"):
+        return None  # floats are refused by `_classification_labels`
+    try:
+        encoded = _encode_labels_native(arr)
+    except ImportError:
+        return None
+    if encoded is None:
+        return None
+    classes, codes = encoded
+    # a bool buffer's classes come back as bools; the list routine's are ints
+    return _EncodedLabels([int(c) for c in classes], codes)
+
+
+def _label_set(labels):
+    """`set(labels)`."""
+    if isinstance(labels, _EncodedLabels):
+        return set(labels.classes)
+    return set(labels)
+
+
+def _label_map(labels, fn):
+    """`Array.from_list([fn(v) for v in labels], '<i4')`, `fn` a pure
+    function of the label: evaluated once per CLASS and gathered per row for
+    `_EncodedLabels` (DEVIATION 3107), once per row for a list."""
+    if isinstance(labels, _EncodedLabels):
+        from ._buffer import _native_optional
+        gather = _native_optional("gather_i32")
+        table = [fn(c) for c in labels.classes]
+        if gather is not None:
+            table = Array.from_list(table, "<i4")
+            out = empty((len(labels),), "<i4")
+            gather(_addr_ro(table), len(labels.classes), _addr_ro(labels.codes),
+                   len(labels), _addr(out))
+            return out
+        return Array.from_list([table[c] for c in labels.codes._values()], "<i4")
+    return Array.from_list([fn(v) for v in labels], "<i4")
+
+
 def _classification_pair(y_true, y_pred, sample_weight):
     if sample_weight is not None:
         raise NotImplementedError("classification metrics do not yet support sample_weight")
-    true, kind = _classification_labels(y_true, "y_true")
-    pred, pred_kind = _classification_labels(y_pred, "y_pred")
+    true, kind = _classification_encoded(y_true, "y_true")
+    pred, pred_kind = _classification_encoded(y_pred, "y_pred")
     if len(true) != len(pred):
         raise ValueError("y_true and y_pred lengths differ")
     if kind != pred_kind:
         raise TypeError("y_true and y_pred must use the same label type")
     if len(true) > 2147483647:
         raise ValueError("classification counts require at most INT32_MAX rows")
-    return true, pred, kind, sorted(set(true) | set(pred))
+    return true, pred, kind, sorted(_label_set(true) | _label_set(pred))
 
 
 
@@ -1056,12 +1190,12 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
         raise NotImplementedError("log_loss does not yet support sample_weight")
     if not is_bool(normalize):
         raise ValueError("normalize must be a bool")
-    true, kind = _classification_labels(y_true, "y_true")
-    selected = _selected_labels(labels, kind, sorted(set(true)))
+    true, kind = _classification_encoded(y_true, "y_true")
+    selected = _selected_labels(labels, kind, sorted(_label_set(true)))
     if len(selected) < 2:
         raise ValueError("log_loss requires at least two labels; pass labels for one observed class")
     mapping = {label: i for i, label in enumerate(selected)}
-    if any(label not in mapping for label in true):
+    if any(label not in mapping for label in _label_set(true)):
         raise ValueError("y_true contains a label missing from labels")
     probabilities = _materialize(y_pred, "input")[0]
     if probabilities.dtype != "<f4":
@@ -1089,7 +1223,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
         raise ValueError("log_loss probabilities " + reasons.get(code, "failed native validation"))
     if binary:
         probabilities = packed
-    encoded = Array.from_list([mapping[label] for label in true], '<i4')
+    encoded = _label_map(true, mapping.__getitem__)
     probabilities = as_f32_c(probabilities, ndim=probabilities.ndim, name="probabilities")[0]
     result = empty(1, '<f4')
     _get_binding(numeric_mode).log_loss(
@@ -1102,8 +1236,8 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
 def _binary_ranking_inputs(y_true, y_score, sample_weight):
     if sample_weight is not None:
         raise NotImplementedError("binary ranking metrics do not yet support sample_weight")
-    true, kind = _classification_labels(y_true, "y_true")
-    classes = sorted(set(true))
+    true, kind = _classification_encoded(y_true, "y_true")
+    classes = sorted(_label_set(true))
     if len(classes) > 2:
         raise ValueError("binary ranking metrics support at most two observed classes")
     scores = _materialize(y_score, "input")[0]
@@ -1138,7 +1272,7 @@ def roc_auc_score(y_true, y_score, *, average="macro", sample_weight=None,
     true, _, classes, scores = _binary_ranking_inputs(y_true, y_score, sample_weight)
     if len(classes) != 2:
         raise ValueError("roc_auc_score requires both positive and negative classes")
-    encoded = Array.from_list([int(v == classes[1]) for v in true], '<i4')
+    encoded = _label_map(true, lambda v: int(v == classes[1]))
     result = empty(1, '<f4')
     _get_binding(numeric_mode).roc_auc_score(
         _addr_ro(encoded), _addr_ro(scores), _addr(result), [len(true)])
@@ -1172,7 +1306,7 @@ def precision_recall_curve(y_true, y_score, *, pos_label=None, sample_weight=Non
         if kind != positive_kind:
             raise ValueError("pos_label must use the same type as y_true")
         positive = values[0]
-    encoded = Array.from_list([int(v == positive) for v in true], '<i4')
+    encoded = _label_map(true, lambda v: int(v == positive))
     n = len(true)
     precision = empty(n + 1, '<f4')
     recall = empty(n + 1, '<f4')
@@ -1202,8 +1336,8 @@ def _selected_labels(labels, kind, observed):
 
 def _encode_classification(true, pred, labels):
     mapping = {label: i for i, label in enumerate(labels)}
-    return (Array.from_list([mapping.get(v, -1) for v in true], '<i4'),
-            Array.from_list([mapping.get(v, -1) for v in pred], '<i4'))
+    return (_label_map(true, lambda v: mapping.get(v, -1)),
+            _label_map(pred, lambda v: mapping.get(v, -1)))
 
 
 def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
@@ -1223,7 +1357,7 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
         raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
     true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
     selected = _selected_labels(labels, kind, observed)
-    if not set(selected).intersection(true):
+    if not set(selected).intersection(_label_set(true)):
         raise ValueError("At least one label specified must be in y_true")
     if len(selected) > 4096:
         raise ValueError("confusion_matrix supports at most 4096 output labels")

@@ -1879,6 +1879,21 @@ leg_mamba_artifacts() {
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         grep -q '^release_build_exit=0$' "$OUT/remote/leg.txt" || return 1
         grep -q '^release_tools_setup_exit=0$' "$OUT/remote/leg.txt" || return 1
+        if [ "$LEG_QUALIFY" = 1 ]; then
+            python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$QUAL_SHA" <<'RELEASE_QUALIFY_ADMIT'
+import json, pathlib, sys
+sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
+from verify_linux_surface_qualification import retained
+out=pathlib.Path(sys.argv[1]); arch, digest=sys.argv[2:]
+record, _ = retained(out)
+audit=json.loads((out / 'wheel-audit.json').read_text())
+if (record['vendor'] != 'cuda' or record['wheel_sha256'] != digest
+        or audit.get('sha256') != digest or audit.get('runtime_architecture') != arch):
+    raise SystemExit('Installed wheel/device witness mismatch')
+print('QUALIFIED_NOT_PUBLISHED: cuda/' + arch + ' wheel ' + digest)
+RELEASE_QUALIFY_ADMIT
+            return $?
+        fi
         python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$COMMIT" "$OUT/source_inventory_local.json" <<'RELEASE_ADMIT'
 import hashlib, json, pathlib, sys
 out=pathlib.Path(sys.argv[1]); arch, commit, inventory_path=sys.argv[2:]
@@ -1888,7 +1903,11 @@ if rows != [[n, '0'] for n in ('resource-prefix-tests','physical-source-prefligh
 proof=json.loads((out / 'build/build-provenance.json').read_text())
 before=json.loads((out / 'preflight.json').read_text())
 if proof.get('complete') is not True or proof.get('build_exit') != 0 or proof.get('source_commit') != commit: raise SystemExit('Invalid build proof')
-if before.get('device_architecture') != arch or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
+witness=before.get('device_architecture')
+# CUDA reports compute capability sm_90 for H100; its compiled target is
+# sm_90a. Match the remote build's existing Hopper rule, not an arbitrary suffix.
+architecture_matches = witness == arch or (witness, arch) == ('sm_90', 'sm_90a')
+if not architecture_matches or before.get('vendor') != 'cuda' or before.get('source_inventory') != proof.get('source_inventory'): raise SystemExit('Physical/source witness mismatch')
 if proof.get('source_inventory') != json.loads(pathlib.Path(inventory_path).read_text()): raise SystemExit('Local/archive/build source inventories differ')
 extensions=proof['extensions']
 sys.path.insert(0, str(pathlib.Path.cwd() / 'tools'))
@@ -3021,7 +3040,11 @@ RELEASE_TOOLS_SETUP
         fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
-    echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
+    if [ '@QUALIFY@' = 1 ]; then
+        echo 'scope=one actual CUDA architecture installed-wheel qualification; final combined admission still required' >> "$OUT/leg.txt"
+    else
+        echo 'scope=one actual CUDA architecture full46 build; no installed wheel qualification' >> "$OUT/leg.txt"
+    fi
     : > /root/gemm_leg.done
     echo REMOTE_BODY_DONE
     exit "$release_rc"
@@ -6251,9 +6274,15 @@ echo "  Results: $OUT/remote/layout-price"
 echo "  Admission requires layout_exit=0 and source parity."
 echo "  Mamba and UMAP checks were not requested by this payload."
 elif [ "$NVIDIA_CAMPAIGN" = 7 ]; then
+if [ "$LEG_QUALIFY" = 1 ]; then
+echo '== step 9: one-architecture installed qualification =='
+echo "  Retained evidence: $OUT/remote/release-build"
+echo '  All three architecture records must still pass final wheel admission.'
+else
 echo '== step 9: one-architecture release build =='
 echo "  Retained sets/proofs: $OUT/remote/release-build/build"
 echo '  BUILT_NOT_INSTALLED; no wheel or numerical admission.'
+fi
 elif [ "$NVIDIA_CAMPAIGN" = 6 ]; then
 echo "== step 9: compact $VENDOR resume diagnostic =="
 echo "  Raw results: $OUT/remote/byte-lm-resume; final local all-raw comparison mandatory."

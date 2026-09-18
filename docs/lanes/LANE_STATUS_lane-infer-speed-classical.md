@@ -344,9 +344,10 @@ The exact scripts run are `~/mojolearn-evidence/infer-speed-classical/pod/{setup
   the cuda column are here).
 - The spot check of the classical lanes whose GPU families were not built on
   this pod (list above); their source did not change.
-- A resident training set for KDE `score_samples` (the floor probe reads 27
-  ms of a 78 ms Istella-S call as per-call upload and validation) and for
-  SVC predict, the same door as DEVIATION 2921; not built here.
-- KNeighborsClassifier and KNeighborsRegressor call `knn_classify` /
-  `knn_regress`, which upload the index per call; the resident door is on
-  `NearestNeighbors.kneighbors` only.
+- A resident training set for SVC predict, the same door as DEVIATION 2921;
+  not built here. (The KDE `score_samples` half of this item was closed the
+  same day by lane/knn-tiled-distance as DEVIATION 3003: Istella-S 72.6 to
+  54.0 ms, taxi 47.5 to 40.9.)
+- (closed 2026-09-17 by lane/knn-tiled-distance, DEVIATION 3002)
+  KNeighborsClassifier and KNeighborsRegressor now predict through the
+  resident index; the label and target columns are still uploaded per call.
