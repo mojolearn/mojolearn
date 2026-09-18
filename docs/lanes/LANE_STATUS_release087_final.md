@@ -9,7 +9,9 @@ This supersedes the **freeze instructions** in
 `HANDOFF_2026-09-17_release_087.md`. That handoff's artifacts predate the CPU
 and verifier expansion and must not be published as this release.
 
-Native build source is `c9541a011402b8c1a3d625075754aec14834fdeb`.
+The previous native build source was `c9541a011402b8c1a3d625075754aec14834fdeb`.
+**It is superseded by the empty-Array compatibility fix below. Rebuild all
+three sets from the new freeze in external release-state.json before publishing.**
 Later tools/workflow changes preserve that native inventory. The clean Linux
 worktree is `~/mojolearn-wt/release-087-linux-final`; the Mac worktree is
 `~/mojolearn-wt/release-087-final`, branch `release/087-final`.
@@ -175,3 +177,22 @@ witness: the installed harness runs outside the checkout. The wrapper now
 passes the archived `commit.txt` (or local git HEAD), requiring a full 40-hex
 commit, before starting the installed harness. The refusal is retained; v3 is
 not a completed qualification. Check external state for verified teardown.
+
+
+H100 qualification v4 exposed a package defect on Python 3.10/NumPy 2.2.6:
+empty Array exports have a null array-interface address, interpreted as scalar
+conversion on Python versions without the Python-level buffer protocol. This
+caused 15 radius training cells and three additional property cells to refuse.
+Reproduced locally without a GPU. The fix uses a module-owned nonempty sentinel
+address ONLY for zero-element array-interface exports; the actual `_addr` and
+native zero-length buffer rules remain unchanged. Python 3.10 NumPy-free core
+tests pass (13). The test explicitly forces the array-interface path even on
+newer Python and covers every supported dtype, empty shapes and ragged rows.
+
+The 77,138,815-byte wheel (`faeaee79...`) is now diagnostic evidence only and
+MUST NOT be published. AMD v4 qualification passed completely and agrees with
+Apple on all 252 training cells, 378 inference/model, 198 batch and 90 RL-pair
+comparisons, but does not clear H100's compatibility failure. All v4 rentals
+are deleted (AMD 601625942 and H100 601626854, verified HTTP 404); L40S never
+started. Rebuild and requalify all artifacts from the repaired source; do not
+rewrite any old build proof to admit the Python change.

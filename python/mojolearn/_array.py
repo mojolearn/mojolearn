@@ -34,6 +34,13 @@ from __future__ import annotations
 import array
 import struct
 
+# NumPy's array-interface consumer on Python 3.10/3.11 interprets a null
+# data pointer as a request to convert the object as a scalar, even when
+# its shape is empty. Keep a real, never-resized address for zero-element
+# exports only. Native buffer access still uses the actual _addr.
+_EMPTY_ARRAY_INTERFACE_STORE = array.array("Q", [0])
+_EMPTY_ARRAY_INTERFACE_ADDR = _EMPTY_ARRAY_INTERFACE_STORE.buffer_info()[0]
+
 # typestr -> array.array typecode of the backing store
 _CODE = {
     "<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q",
@@ -373,7 +380,7 @@ class Array:
         return {
             "shape": self.shape,
             "typestr": self.dtype,
-            "data": (self._addr, bool(self._readonly)),
+            "data": (self._addr if self.size else _EMPTY_ARRAY_INTERFACE_ADDR, bool(self._readonly)),
             "strides": None if self.order == "C" else self.strides,
             "version": 3,
         }

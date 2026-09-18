@@ -20,6 +20,12 @@ This release expands native kernels, CPU host bindings, and the installed verifi
 It requires fresh wheels and installed-wheel qualification from the final release
 source; the earlier 0.8.7 packaging freeze does not qualify these changes.
 
+- Empty `Array` results now convert to NumPy correctly on Python 3.10 and
+  3.11, including radius-neighbor rows with no matches. Zero-element exports
+  use a valid array-interface address; native buffer access and numerical
+  values are unchanged. The regression also exercises the array-interface
+  path explicitly on newer Python versions.
+
 - The wheel verifier exposes 162 default CPU lanes, opt-in execution of pending
   CPU routes and 17 logical-shard drivers, and repeated portable saved-model
   checks (`verify --models-only`). Batch invariance and optional step/full,

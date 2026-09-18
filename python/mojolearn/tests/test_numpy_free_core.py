@@ -66,6 +66,25 @@ def _f32_boundary_block(rng, n):
 # --------------------------------------------------------------- zero-copy
 
 
+def test_empty_array_numpy_export_preserves_shape_and_dtype():
+    from mojolearn._array import SUPPORTED_DTYPES
+    for dtype in SUPPORTED_DTYPES:
+        for shape in ((0,), (0, 3), (2, 0), (2, 0, 3)):
+            value = Array(shape, dtype)
+            # Exercise the array-interface path on every Python version;
+            # Python 3.12+ otherwise prefers Array's buffer protocol.
+            class InterfaceOnly:
+                __array_interface__ = value.__array_interface__
+            for exported in (np.asarray(value), np.asarray(InterfaceOnly())):
+                assert exported.shape == shape and exported.dtype == np.dtype(dtype)
+                assert exported.size == 0 and exported.tobytes() == b""
+            assert value.__array_interface__["data"][0] != 0
+            assert value.size == 0 and value.nbytes == 0 and value.tobytes() == b""
+    # The mixed empty/nonempty rows that exposed this in radius verification.
+    rows = [Array.from_list([], "<i8"), Array.from_list([1, 3], "<i8")]
+    assert np.concatenate([np.asarray(row) for row in rows]).tolist() == [1, 3]
+
+
 def test_array_interface_is_zero_copy():
     a = _buffer.zeros((3, 2), "<f4")
     v = np.asarray(a)
