@@ -35,7 +35,7 @@ run build-base env MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=2 sh bindi
 for arm in base class; do
     for kind in pure timers; do
         EXTRA=
-        [ "$arm" != class ] || EXTRA='-D MOJOLEARN_GEMM_CLASS_FLUSH=1'
+        [ "$arm" != base ] || EXTRA='-D MOJOLEARN_GEMM_LEGACY_CLASS_FLUSH=1'
         [ "$kind" != timers ] || EXTRA="$EXTRA -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1"
         # All builds have the same source directory and compiler output path.
         run "build-$arm-$kind" pixi run mojo build -j 2 --emit shared-lib \

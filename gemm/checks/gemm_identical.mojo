@@ -1226,7 +1226,7 @@ def _tuned_loaded_operand(v: Float32) -> Float32:
 comptime TUNED_CLASS_FLUSH = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and lib_postround_class_flush_for[TARGET_COLUMN]()
-    and is_defined["MOJOLEARN_GEMM_CLASS_FLUSH"]()
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_CLASS_FLUSH"]()
 )
 
 
@@ -1252,6 +1252,8 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     value with hardware multiply-by-one. A single hardware FTZ FMA can
     flush before rounding at the smallest-normal boundary, unlike this
     two-instruction sequence. Inputs here are already flushed by callers.
+    AMD classifies the rounded FMA result and flushes only subnormals,
+    preserving their sign. This matches the software post-round flush.
     This matches the NVIDIA software seam; other columns' underlying FMA
     rounding at underflow boundaries remains a separate numerical audit.
     """

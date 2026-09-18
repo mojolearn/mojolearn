@@ -23,6 +23,12 @@ def equal(a, b, verbose=True):
         if verbose: print('MATCH', k, a[k], b[k])
 
 
+def dispatch(text, expected):
+    rows = re.findall(r'^CLASS_FLUSH enabled=(True|False)$', text, re.M)
+    print('MATCH class dispatch', rows, 'expected', expected)
+    assert rows == [expected], 'wrong, missing, or duplicate class dispatch'
+
+
 if __name__ == '__main__':
     paths = [Path(p) for p in sys.argv[1:]]
     assert paths, 'supply all base/class price logs on both columns'
@@ -34,6 +40,14 @@ if __name__ == '__main__':
         else: raise AssertionError('gate accepted changed digest')
     for p in paths:
         print('FILE', p)
+        if p.name.startswith(('price-legacy-', 'price-default-')):
+            expected = 'True' if p.name.startswith('price-default-') else 'False'
+            for bad in ('', 'CLASS_FLUSH enabled='+('False' if expected == 'True' else 'True'),
+                        ('CLASS_FLUSH enabled='+expected+'\n')*2):
+                try: dispatch(bad, expected)
+                except AssertionError as exc: print('EXPECTED FAIL', str(exc))
+                else: raise AssertionError('dispatch gate accepted sabotage')
+            dispatch(p.read_text(), expected)
         equal(baseline, read(p))
         for row in p.read_text().splitlines():
             if row.startswith(('STEP ', 'PRICE ')): print(row)

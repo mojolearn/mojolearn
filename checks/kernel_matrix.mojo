@@ -1197,7 +1197,13 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
 
 
 def lib_postround_class_flush_for[column: Int]() -> Bool:
-    """AMD class intrinsic capability; does not enable a production arm."""
+    """AMD post-round class flush, measured 2026-09-18.
+
+    Same 262,144-triple hash as shipped round-then-flush; 700-step loss and
+    final-state witnesses match NVIDIA on both corpora. The product seam
+    change reduces AMD's late step by 8.43% across those corpora. See
+    docs/lanes/LANE_STATUS_amd-gemm-class.md. Fold topology is unchanged.
+    """
     return column == COLUMN_AMD
 
 

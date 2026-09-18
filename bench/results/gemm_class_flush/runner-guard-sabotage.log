@@ -6,5 +6,5 @@ PAYLOAD_STARTED
 PASS STAGING CONTINUES
 POD NAMES ['mojolearn-gemm-nvidia-fixed', 'mojolearn-gemm-nvidia-fixed']
 EXPECTED FAIL recovery names collide
-POD NAMES ['mojolearn-gemm-nvidia-fixed-99148', 'mojolearn-gemm-nvidia-fixed-99149']
+POD NAMES ['mojolearn-gemm-nvidia-fixed-22602', 'mojolearn-gemm-nvidia-fixed-22603']
 PASS distinct recovery names in the same timestamp second

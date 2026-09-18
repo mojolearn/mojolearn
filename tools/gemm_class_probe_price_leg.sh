@@ -29,10 +29,10 @@ grep '^SEAM_DIFF shipped/class' "$OUT/sabotage.log" > "$OUT/sabotage-matches.txt
 build gemm/checks/gemm_seam_probe.mojo -o "$OUT/probe" > "$OUT/build-clean.log" 2>&1
 "$OUT/probe" > "$OUT/clean.log" 2>&1
 python3 tools/gemm_class_gate.py "$OUT/clean.log" > "$OUT/clean-gate.log" 2>&1
-# Only after the device proof do we build the opt-in production arm.
+# Only after the device proof do we compare legacy and production spellings.
 for arm in base class; do
     EXTRA=
-    [ "$arm" != class ] || EXTRA='-D MOJOLEARN_GEMM_CLASS_FLUSH=1'
+    [ "$arm" != base ] || EXTRA='-D MOJOLEARN_GEMM_LEGACY_CLASS_FLUSH=1'
     build $EXTRA -D MOJOLEARN_GEMM_ARM_TRIAL=1 bench/gemm_step_price_main.mojo \
         -o "$OUT/price" > "$OUT/build-price-$arm.log" 2>&1
     cp "$OUT/price" "$OUT/price-$arm"

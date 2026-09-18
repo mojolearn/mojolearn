@@ -1,5 +1,10 @@
 # LANE STATUS: `lane/gemm-next` (2026-09-17)
 
+**2026-09-18 AMD update:** the class spelling now has device proof and full
+700-step comparisons on both corpora and columns. AMD whole-step reduction
+is 8.43%; see [the measured follow-up](LANE_STATUS_amd-gemm-class.md). The
+8-slot shipped / 5-slot candidate wording below records the earlier state.
+
 Written for a reader with NO context. Branch `lane/gemm-next`, worktree
 `~/mojolearn-wt/gemm-next`, branched from `origin/main` at 712eedd16.
 
@@ -189,7 +194,9 @@ Four instructions plus a gfx9 hazard `s_nop` the scheduler can usually fill from
 another cell's chain. NVIDIA's seam is 2, so this closes a little over half the
 seam gap. The sameness is an ISA reading (class mask `0x90` is exactly "exponent
 0, mantissa non-zero"; signed zero, NaN and infinity are separate classes and are
-left alone as `ftz` leaves them), **not a measurement**. THE PROOF OWED is a
+left alone as `ftz` leaves them), **not a measurement at that date**. The device proof and prices below were
+subsequently completed on 2026-09-18; see the measured follow-up above.
+The historical proof requirement was a
 device run of this spelling as a probe lane on an MI300X hashing to
 `62a6b5621e27c707` with mismatch count 0 against `shipped`. Until that exists it
 is a candidate and no arm is built on it. It would live as a kernel-matrix
@@ -231,8 +238,9 @@ sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --minutes 60 \
 Then read `remote/gemm-kernel/price_tables.txt`, the `PHASE` lines for
 `proj_fwd`, `proj_dA`, `proj_dB`.
 
-**(b) DONE 2026-09-17: the cheap AMD `ftz` spelling is 5 slots against 8**
-(section 5, commit 19b6a9c7f). What is now owed on it is the DEVICE PROOF: add
+**(b) CLOSED 2026-09-18:** device proof, twelve-kind prices, and both
+700-step corpus comparisons passed; see `LANE_STATUS_amd-gemm-class.md`.
+The prior 2026-09-17 instructions are retained for provenance: add
 the `_ftz_class` spelling as a lane of `gemm/checks/gemm_seam_probe.mojo` (the
 harness already takes extra lanes, the `modeftz` lane was added the same day)
 and run it on an MI300X; it must hash `62a6b5621e27c707` and read mismatch 0

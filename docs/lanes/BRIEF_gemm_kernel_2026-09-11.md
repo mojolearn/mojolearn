@@ -1980,3 +1980,25 @@ seam spelling against shipped on the twelve calls with the existing harness.
    needing DIAG variants re-based on the shipped body.
 4. The Apple seam repair (section 19), which is Andrew's call and
    `lane/reference-regen`'s table.
+
+
+## 23. AMD post-round class flush measured (2026-09-18)
+
+The section 22.4 device-proof and price requirement is closed. On MI300X the
+class spelling hashes `62a6b5621e27c707` over all 262,144 triples, with zero
+shipped/class mismatches and boundary `00800000`. A deliberate one-bit device
+corruption is rejected. The twelve fixed-size GEMM prices fall 12.995%.
+
+At commit `283577480`, both columns ran 700 steps on enwik8 and Pile GitHub at
+the prescribed 162,147,840-parameter shape. AMD pure steps 501–700 fall
+861.667→791.067 ms and 793.606→724.909 ms: **8.425% of the AMD step** across
+corpora. All 700 loss hashes and final gradients/parameters/optimizer/flags
+match across arms and vendors. NVIDIA allocated sections match exactly and
+its timing is INERT. Full rates, shares, intervals, gates, lease outcomes and
+production-default qualification are recorded in
+[LANE_STATUS_amd-gemm-class.md](LANE_STATUS_amd-gemm-class.md).
+
+The permanent 33.5 TFLOP/s H100 contract ceiling is unchanged. The AMD flush
+remains post-round; no hardware-mode flush, scheduling arm, leaf change,
+fold-topology change or P=1 fold work was introduced. AMD already had gather
+staging in `kpack_hg`; its fold still uses software FTZ. Apple is unchanged.
