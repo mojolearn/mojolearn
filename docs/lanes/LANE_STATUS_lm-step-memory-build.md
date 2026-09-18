@@ -11,6 +11,80 @@ Every device number below is someone else's measurement and is attributed.
 
 ---
 
+## 0. CONFIRMED: the unexplained 2.03x is the eager attention fallback
+
+H100 sm_90a, pod 4tshk1f4ioag5k, commit 131568247, 2026-09-18, target shape
+(162,147,840 parameters, B1 L2048 V50257), enwik8 100,000,000 bytes staged
+from R2, 700 consecutive steps, one resident lean session.
+Evidence: `~/mojolearn-evidence/lm-step-memory-build/eager_hypothesis_CONFIRMED.md`
+and the filed leg directory.
+
+`lane/lm-training-shakedown` measured a run stepping from 16.949 to 34.397 GB
+of device memory and 0.207 to 0.44 s a step between steps 210 and 480, then
+plateauing, and recorded the cause as NOT ESTABLISHED. It is the eager
+attention fallback: the `[B, n_heads, L, S]` arrays growing one LAYER at a
+time and never being released.
+
+| step | s/step | device MB | layers grown fwd/bwd | `eager_bytes` |
+|---:|---:|---:|---:|---:|
+| 0 | 15.32 (setup) | 15,151 | 0 / 0 | 432 |
+| 69 | 0.5275 | | 1 / 1 | 1,442,840,972 |
+| 100 | 0.2057 | 16,431 | 1 / 1 | 1,442,840,972 |
+| 201 | 0.2330 | | 2 / 2 | 2,885,681,512 |
+| 219 | 0.2332 | | 6 / 6 | 8,657,043,672 |
+| 300 | 0.3090 | 27,439 | 9 / 9 | 12,985,565,292 |
+| 309 | 0.3918 | | 11 / 11 | 15,871,246,372 |
+| 509 | 0.4386 | | **12 / 12** | **17,314,086,912** |
+| 699 | 0.4646 | 31,535 | 12 / 12 | 17,314,086,912 |
+
+**THE PREDICTION WAS WRITTEN DOWN BEFORE THE RUN AND IT LANDED ON THE BYTE.**
+One layer's eager set is `3*B*H*L*S + L*S` floats forward (620,756,992 B) plus
+`4*B*H*L*S + L*S` backward (822,083,584 B). Twelve layers is
+**17,314,086,912 B**, registered before the leg started. The witness reads
+17,314,086,912. Not close: equal. Every increment is 1,442,840,540 B, one
+layer, and the 36 B shortfall against the formula is the nine one-element
+placeholders that stop counting once a layer has grown.
+
+**THE DEVICE AGREES INDEPENDENTLY.** 16,431 MB at one grown layer to 27,439 MB
+at nine is 11,008 MB over eight layers, 1,376 MB a layer; one layer's eager
+set is 1,376 MiB. Against the other lane's 17.448 GB step the sum is 0.77%
+low, the remainder being allocator and context overhead that device-wide
+sampling includes and a buffer-length sum does not. The step time lands too:
+0.2057 s in phase 1 against their 0.207, 0.4646 s at the end against their
+0.440 to 0.466 plateau.
+
+**THE COMPETING ARITHMETIC IS REFUTED, NOT MERELY OUTSCORED.** Counting all
+TEN arrays gives 19.730 GB, 13.1% ABOVE their step. `layers_full_aexp` reads
+**12 at step 0**, `forward_aexp_bytes` = 2,415,919,104 = 12 x 201,326,592:
+`aexp` is allocated full size from the first step by the DEVIATION 2652 exp
+stash and was never part of the growth. Reporting it apart from the other
+three is what made this legible; summed, step 0 would have read "2.4 GB of
+quadratic attention stages held" and looked like a fallback that had already
+happened.
+
+**THE TRIGGER IS DATA DEPENDENT AND THAT IS ITSELF THE FINDING.** The
+transition ran from step 69 to 309 here and from about 210 to about 480
+there: same mechanism, different step. The step at which a run doubles its
+memory and halves its speed is therefore NOT a property of the shape, so no
+fixed step budget can be relied on and no three-step cell can see it.
+
+**WHY IT COSTS 2.13x RATHER THAN THE EAGER PATH'S OWN SPEED.** On a
+non-`FUSED_RAN` status the fused kernel has ALREADY run and been paid for,
+and then `attention_eager_core` runs as well
+(`transformer/impl/llama/modeling_llama.mojo:3588-3592`). The step pays both.
+
+**WHAT IS STILL NOT MEASURED, AND IS NOT GUESSED AT HERE.** WHICH branch asks
+for the eager path. The regime bound cannot be it (`regime_product_ok` is
+`hd * a_max * b_max < 2^100`; a healthy run never approaches it). The
+candidate in the source is `FUSED_CORNER`
+(`transformer/impl/llama/fused_attention.mojo:1908-1910`), raised when an
+output context cell has the exact bits of `-0.0` while its row range does not
+cover the whole sequence. **This run does not show that.** It shows the
+arrays grew; it does not name the branch. Separating "the arrays are grown"
+from "the eager path ran this step" needs `stages.attn_materialized` on the
+report, a one-line addition, and it is OWED. The trigger itself lives in
+`lane/attention-speed`'s file.
+
 ## 1. The single most important thing this lane found
 
 **Rank 7 is ALREADY LANDED. Do not build it.** The task brief said
