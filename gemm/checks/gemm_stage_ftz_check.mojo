@@ -13,7 +13,7 @@ from max.gpu.host import DeviceContext
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_device_check import _run_device
-from gemm.checks.gemm_identical import GEMM_PLAN_COUNT, PLAN_FLAT, gemm_plan_name
+from gemm.checks.gemm_identical import GEMM_PLAN_COUNT, PLAN_FLAT, TUNED_STAGE_FTZ, gemm_plan_name
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
 
 
@@ -37,9 +37,19 @@ def _partner(outer: Int) -> Float32:
     return Float32(1)
 
 
+def _digest(values: List[Float32]) -> UInt64:
+    var h = UInt64(0xCBF29CE484222325)
+    for i in range(len(values)):
+        var word = UInt64(bitcast[DType.uint32](values[i]))
+        for b in range(4):
+            h = (h ^ ((word >> UInt64(8*b)) & UInt64(255))) * UInt64(0x100000001B3)
+    return h
+
+
 def main() raises:
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("gemm_stage_ftz_check requires IDENTICAL")
+    print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))
     var ks: List[Int] = [1, 3, 31, 32, 33, 129, 257]
     var m = 17
     var n = 33
@@ -89,5 +99,8 @@ def main() raises:
                                 raise Error(tag + " plan=" + gemm_plan_name(plan) + " cell=" + String(c) + " got=" + String(bitcast[DType.uint32](got[c])) + " flat=" + String(bitcast[DType.uint32](flat[c])) + " oracle=" + String(want))
                             words_checked += 1
                         cases += 1
+                        print("MATCH", tag, "plan=" + gemm_plan_name(plan),
+                              "got=" + hex(_digest(got)), "flat=" + hex(_digest(flat)),
+                              "oracle=" + hex(_digest(oracle)))
                     print(tag, "PASS", GEMM_PLAN_COUNT, "plans")
     print("gemm_stage_ftz_check PASS cases=", cases, "words=", words_checked)
