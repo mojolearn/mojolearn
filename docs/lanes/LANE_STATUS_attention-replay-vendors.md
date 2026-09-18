@@ -165,6 +165,11 @@ All 130 masked-tail MATCH lines and all tail-guard lines are byte-equal to
 the NVIDIA leg's (`tools/lm_attention_cross_vendor_check.py`, its two
 corruption controls fail first: apple_native/cross_vendor_nvidia_apple.log).
 
+Apple reduced training witness: attempt 1 (metal_train.sh) ran NO training:
+the worktree had no core `_mojolearn.so` ("base binding has no
+all_finite_f32"); nothing measured. Core binding building (one worker), then
+the same Metal job requeued.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
