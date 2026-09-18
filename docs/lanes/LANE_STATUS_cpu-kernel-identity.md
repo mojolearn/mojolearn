@@ -27,3 +27,33 @@ NVIDIA/AMD records plus installed-wheel qualification before default promotion.
 Plan and user direction also require merging completed work and removing only
 finished, clean, merged worktrees with no active dependent jobs. Preserve the
 release worktrees and unrelated owners' active work.
+
+## Checkpoint after native builds
+
+The initial direct compiler invocation failed before compilation because it
+lacked pixi's module-search environment (`unable to locate module std`). The
+full failed log is retained as `clean/bootstrap-failed.log`. Re-running inside
+`pixi run --manifest-path ../release-087-final/pixi.toml` succeeded: both clean
+and sabotage host bindings built in 13.24 seconds, one compiler worker. No
+algorithm fallback or accuracy condition was changed.
+
+Runtime job session **5999** is queued for a single slot; `runtime-tests.log`.
+It uses the new clean binding, with unchanged support bindings from the frozen
+release host directory. Twenty-four new route/runtime tests plus the existing
+CPU family tests are selected. Do not report a skip as numerical validation.
+
+Fresh Apple kernel-family compilation and the CPU/Apple/sabotage comparison
+are queued as session **63052**, execution cap 3600 seconds. External scripts:
+`build-apple-and-capture.sh` and `capture.py`; log `comparison-queue.log`.
+The driver stages current Python source, freshly builds the relevant Apple
+kernel binding, records all six new lanes on all nine fixtures twice on CPU
+and Apple, then requires every sabotage training cell to change. It retains
+all native hashes through the harness and explicitly labels reused unchanged
+support bindings. This is a source comparison, not installed-wheel or full
+cross-vendor qualification. On failure, inspect comparison-receipt.json and
+the per-lane log; repair and rerun into fresh output paths rather than erasing
+the failed evidence.
+
+Andrew explicitly requested periodic WIP commits in dedicated worktrees.
+Checkpoint commits may be unqualified; only tested implementation increments
+are merged to main. This branch's native implementation is still not merged.
