@@ -179,3 +179,22 @@ about **4% of the Apple GEMM sum** (the inline repair cost 136%). The
 norepair arm alone ranges 11.46 to 13.12 s over eight runs, so +/- 2 points
 on that 4% is honest. Still a GEMM sum, not a step: the step share is owed
 (binding builds queued, see bind/ in the evidence dir).
+
+## In flight (2026-09-18 ~12:00 ET) and how to resume
+- xasm: `~/mojolearn-evidence/apple-seam-repair-2026-09-18/xasm/xcheck.sh` in the
+  scratch worktree `~/mojolearn-wt/apple-seam-xasm` (detached; remove with
+  `git worktree remove` when done). Emits digests.txt: main vs branch asm of
+  five GEMM programs for sm_90a and gfx942 (must be equal) and one for
+  apple-m4 (must differ). ~6 min per compile at one core.
+- cpu_queue.sh (after xcheck): builds bench/rtf_pinned_price_main.mojo (pinned
+  kernels' price, 2 arms), bench/gemm_card_main.mojo (Apple GEMM identity card,
+  2 arms; run with MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_IDENTITY_TRACE=<card>),
+  then the byte-LM binding in both arms (bind/build.sh, pixi shim) for the step
+  share on enwik8 + Pile GitHub (corpus/ pulled from R2, sha256 verified).
+- Then Metal: pinned price, the two cards (compare with each other and with
+  the retained main card bench/results/e1g/2026-09-18_013251-nvidia-h100-gemm-proj-phase/local/apple.card),
+  LM lean steps (tools/lm_step_memory_probe.py --target --resident-lean
+  --witness-every-step) with each binding: witnesses give the LM-lane
+  prediction test, medians give the step price.
+- Then NVIDIA + AMD legs: tools/gemm_remote_leg.sh with
+  MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_rtf_leg.sh --local-card <branch apple card>.
