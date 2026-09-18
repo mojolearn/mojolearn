@@ -134,7 +134,7 @@ echo "verdict_1_written=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$ST"
 # per-step record in the .log even though result.json is never written.
 _t0=$(date +%s)
 _rc=0
-timeout "${MOJOLEARN_LM_BATCH_TIMEOUT:-900}" \
+timeout "${MOJOLEARN_LM_BATCH_TIMEOUT:-420}" \
     pixi run python tools/lm_ce_alias_probe.py --out "$OUT/batch4" \
     --shape $TARGET_B4 --steps "$BATCH_STEPS" --tail 0 \
     --smi-every 25 --witness-every 0 $CORPUS_ARG > "$OUT/batch4.log" 2>&1 || _rc=$?
