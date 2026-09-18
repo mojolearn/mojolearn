@@ -397,9 +397,10 @@ export PATH=/root/.pixi/bin:\$PATH
 command -v pixi >/dev/null || timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > /root/pixi_bootstrap.log 2>&1
 cd /root/mojolearn && $REMOTE_PY $LEG_GUARD --seconds $PREP_SECONDS --rss-gib 12 -- \
   pixi install --locked --environment default > /root/pixi_install.log 2>&1; echo PIXI_INSTALL_EXIT=\$?
-# Match the NVIDIA release builder: a private pinned wheel provides patchelf
-# when the image apt repositories fail. Keep it outside the locked Pixi env.
-if ! command -v patchelf >/dev/null; then
+# Match the NVIDIA release builder. Container reproducibility requires its
+# exact stager version even when apt successfully installs a newer patchelf.
+# Keep the private tool outside the locked Pixi environment.
+if [ '$UBUNTU22' = 1 ] || ! command -v patchelf >/dev/null; then
   tail -40 /root/apt.log
   .pixi/envs/default/bin/python -m venv /root/release-tools &&
   timeout -k 10 120 /root/release-tools/bin/python -m pip install --disable-pip-version-check --only-binary=:all: --retries 1 --timeout 20 patchelf==0.17.2.4
@@ -524,4 +525,19 @@ except Exception as exc:
     print('admission=REFUSED ' + str(exc))
 PY
 fi
+# RELEASE_ADMISSION_STATUS_BEGIN
+# A refusal in the retained-artifact report must also fail the controller.
+# Teardown still runs through the existing EXIT trap on either outcome.
+if [ "${BUILD_EXIT:-}" != 0 ]; then
+  log "remote work did not pass (exit ${BUILD_EXIT:-missing})"; exit 10
+fi
+if [ "$LEG_MODE" = qualify ]; then
+  grep -q '^qualify_admission=GREEN$' "$STATE" &&
+    ! grep -q '^qualify_admission=RED$' "$STATE" &&
+    [ "$(cat "$OUT/release-build/exit_code" 2>/dev/null)" = 0 ] || exit 10
+else
+  grep -q '^admission=BUILT_NOT_INSTALLED ' "$STATE" &&
+    ! grep -q '^admission=REFUSED' "$STATE" || exit 10
+fi
+# RELEASE_ADMISSION_STATUS_END
 log "done -- $OUT (leg.txt has the verdict; the droplet is destroyed by the EXIT trap next)"

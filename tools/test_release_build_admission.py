@@ -99,6 +99,26 @@ class InstalledAdmissionTests(unittest.TestCase):
 
 
 class PackagePreparationTests(unittest.TestCase):
+    def test_controller_refusals_and_supplemental_failures_return_nonzero(self):
+        source = (ROOT / 'tools/do_release061_leg.sh').read_text()
+        fragment = source.split('# RELEASE_ADMISSION_STATUS_BEGIN\n', 1)[1].split('# RELEASE_ADMISSION_STATUS_END', 1)[0]
+        cases = [('build', '0', 'admission=BUILT_NOT_INSTALLED hip/gfx942', '0', True),
+                 ('build', '0', 'admission=REFUSED missing proof', '0', False),
+                 ('build', '1', 'admission=BUILT_NOT_INSTALLED hip/gfx942', '0', False),
+                 ('qualify', '0', 'qualify_admission=GREEN', '0', True),
+                 ('qualify', '0', 'qualify_admission=GREEN', '1', False),
+                 ('qualify', '0', 'qualify_admission=RED', '0', False)]
+        for mode, work_exit, state, marker, passed in cases:
+            with self.subTest(mode=mode, state=state, marker=marker), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                (root / 'release-build').mkdir()
+                (root / 'release-build/exit_code').write_text(marker + '\n')
+                (root / 'leg.txt').write_text(state + '\n')
+                env = dict(os.environ, BUILD_EXIT=work_exit, LEG_MODE=mode,
+                           STATE=str(root / 'leg.txt'), OUT=str(root))
+                result = subprocess.run(['bash', '-c', 'log() { :; }\n' + fragment], env=env, timeout=10)
+                self.assertEqual(result.returncode == 0, passed)
+
     def test_index_lock_retries_and_failed_refresh_never_installs(self):
         source = (ROOT / 'tools/do_release061_leg.sh').read_text()
         fragment = source.split('  update_end=', 1)[1].split('\nfi\nexport PATH=', 1)[0]
