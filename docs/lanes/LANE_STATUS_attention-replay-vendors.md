@@ -230,15 +230,33 @@ key(s)"). Verified gone (GET 404, not listed) 15:34:52Z. Host verdict
 **AMD two-corpus late-step geomean: 1.2733x** (enwik8 1.3214x, Pile GitHub
 1.2268x). Both > 1.1x as registered.
 
+## AMD native gates, reduced witness, identity_break before/after: PASS
+
+DigitalOcean MI325X droplet 601730505 (gfx942, the AMD column; Hot Aisle had
+no stock), source 2e33978dd, R2 staged, DELETE 204 then GET 404 at 15:41Z.
+`amd_extra/remote/attn-replay-extra/`:
+- gates on the SHIPPED AMD default build: row-off control "INERT", SAB_Z /
+  SAB_DQ fused=0x80000000 eager=0x00000000, preserve corruptions
+  fused=0x00000000 eager=0x80000000, tail sabotage fails; clean masked-tail,
+  tail-guard and broad fused gates PASS. All 130 sites equal NVIDIA's
+  (amd_extra_sites_vs_nvidia.log, controls fail first).
+- reduced HD64 witness: amd_default and amd_legacy equal nvidia_default,
+  apple_default and apple_bswz on every loss and witness hash
+  (reduced_three_columns.log). Replay INERT at that shape (no corner).
+- identity_break, 9 neural lanes x 9 fixtures, before (main's source rebuilt
+  at the same path, host bindings cleared this time) vs after: train
+  IDENTICAL=81, infer/model 117 (N/A 45), batch 72, rlpair 72; zero
+  DIVERGENT/MOVED. GPU bindings really differ (byte_lm 69d1e715 -> 31b128c3,
+  transformer 910efe2f -> 15d4a2cd). These tiny-shape lanes do not reach the
+  HD64 fused kernels' corner, so for the replay they are INERT: they show the
+  flip moved no bit of the lanes that exist, not that the replay is right.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
 
-## Pods (live list, 15:27Z)
+## Pods (15:45Z)
 
-- Hot Aisle VM for amd_enwik8 (lane attn-replay-enwik8, created 14:53Z), running.
-- DigitalOcean droplet 601730505 (MI325X gfx942, amd_extra: gates, reduced
-  witness, identity_break before/after). Hot Aisle had no 13core stock for 30
-  min (refused_hotaisle_nostock/, nothing created).
-- Everything else rented by this lane is verified gone (ur4bbe8u4pe9wr,
-  uywfr8o08f4qeh, rf1ruxuaac3q5i: 404; Hot Aisle d89c0dc6: 404).
+- NONE. Every box this lane rented is verified gone: RunPod ur4bbe8u4pe9wr,
+  uywfr8o08f4qeh, rf1ruxuaac3q5i (404); Hot Aisle d89c0dc6, 1e44908b (404,
+  not listed); DigitalOcean 601730505 (404).

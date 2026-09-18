@@ -71,3 +71,26 @@
 
 == the work ==
 [11:27:27 amd/extra] remote pid 3399, bound 3095s; polling every 30s
+[11:40:54 amd/extra] the body finished (sentinel on the box)
+
+== fetch ==
+[11:40:56 amd/extra] fetched /root/gemm_leg_out -> /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/amd_extra/remote/ (141558 bytes)
+    GPU[0]		: GFX Version: 		gfx942
+    ==========================================================================================
+    ================================== End of ROCm SMI Log ===================================
+    -- free VRAM at acceptance --
+    REMOTE_BODY_DONE
+[11:40:57 amd/extra] source_sha256 agrees both ends (f35eef62e2b65391)
+[11:40:57 amd/extra]   pixi_install_exit=0
+[11:40:57 amd/extra]   device_check_exit=0
+[11:40:57 amd/extra]   card_exit=0
+[11:40:57 amd/extra]   extra_exit=0
+[11:40:58 amd/extra]   body_exit=0
+[11:40:58 amd/extra] leg done; destroying (EXIT trap)
+[11:40:58 amd/extra] teardown (exit 0)
+[11:41:02 amd/extra] DELETE droplet 601730505 -> HTTP 204
+[11:41:02 amd/extra] post-destroy GET droplet 601730505 -> HTTP 200
+[11:41:08 amd/extra] post-destroy GET droplet 601730505 -> HTTP 200
+[11:41:14 amd/extra] post-destroy GET droplet 601730505 -> HTTP 404
+[11:41:14 amd/extra] local dead-man cancelled (pid 10962)
+[11:41:14 amd/extra] released the shared GPU lock /tmp/mojolearn-do-gpu.lock
