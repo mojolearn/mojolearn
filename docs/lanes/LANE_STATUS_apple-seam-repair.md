@@ -228,3 +228,26 @@ the evidence dir).
   Recorded as a CANDIDATE (NaN canonicalization in the GEMM contract), not
   opened.
 - Queued on Metal (metal2.sh): Apple GEMM cards both arms; pinned price x4; LM lean steps (target shape, 5 steps, enwik8 + Pile GitHub, norepair/admit/admit/norepair) with private package copies ~/mojolearn-evidence/apple-seam-repair-2026-09-18/pkg-{norepair,admit} (byte_lm .so sha256 3c879da6863b8c82 / 3e882e32bf0b0f14). Hot Aisle MI300X AMD leg launched (console amd_hotaisle.console).
+
+## RESULT 7: Apple GEMM identity card and the pinned kernels' price (2026-09-18 11:30 ET)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-card-pinned/`.
+- Apple GEMM identity card (`bench/gemm_card_main.mojo`, device arm, 60
+  stages) built without and with the repair in one directory: the two cards
+  are byte-identical, and equal (stage hashes) to the retained main Apple
+  card `bench/results/e1g/2026-09-18_013251-nvidia-h100-gemm-proj-phase/local/apple.card`.
+  **INERT on every GEMM card cell**, as predicted. The H100 card of this
+  branch matched the same Apple card (RESULT 6).
+- Pinned one-cell-per-thread kernels (core/gemm.mojo, the classical
+  estimators' `gemm_nt` / `gemv_n` / `gemm_nt_gram`; they carry the INLINE
+  per-step repair, no block admission), runs norepair/admit/admit/norepair,
+  7 rounds each, output bits equal across arms:
+
+| call | no repair ms | repair ms | cost |
+|---|---:|---:|---:|
+| gemm_nt 1024x1024x512 | 12.60, 12.31 | 15.08, 15.09 | **+21%** |
+| gram 512x4096 | 24.36, 24.07 | 29.88, 29.64 | **+23%** |
+| gemv_n 1M x 64 | 3.52, 3.40 | 3.49, 3.66 | ~+2% (memory-bound) |
+
+  A real price on the classical GEMM paths, measured in isolation. Not yet
+  expressed as a share of any estimator's fit time (unmeasured).
