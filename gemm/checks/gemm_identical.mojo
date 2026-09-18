@@ -1309,6 +1309,20 @@ def _nz_exp_min[W: Int](v: SIMD[DType.float32, W], cur: UInt32) -> UInt32:
 
 
 @always_inline
+def _admit_track[
+    WA: Int, WB: Int
+](
+    pa: SIMD[DType.float32, WA],
+    pb: SIMD[DType.float32, WB],
+    mut emin_a: UInt32,
+    mut emin_b: UInt32,
+):
+    comptime if TUNED_BLOCK_ADMIT:
+        emin_a = _nz_exp_min(pa, emin_a)
+        emin_b = _nz_exp_min(pb, emin_b)
+
+
+@always_inline
 def _admission_holds(emin_a: UInt32, emin_b: UInt32) -> Bool:
     if emin_a == _EXP_NONE or emin_b == _EXP_NONE:
         return True
@@ -1908,11 +1922,12 @@ def identical_gemm_tuned_kernel[
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
         var chunk = win[1]
         var pgw = w % PAGES
-        comptime if TUNED_BLOCK_ADMIT:
-            # The window's operand words, exactly once each (see
-            # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
-            emin_a = _nz_exp_min(pa, emin_a)
-            emin_b = _nz_exp_min(pb, emin_b)
+        # The window's operand words, exactly once each (see
+        # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
+        # A helper and not an inline `comptime if`: an empty `comptime if`
+        # block inside this loop changed the gfx942 schedule of five tuned
+        # kernels (integer address arithmetic only, bisected 2026-09-18).
+        _admit_track(pa, pb, emin_a, emin_b)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES`.
         # The slot -> (row, column) expression is `_tuned_g2r`'s, in both
