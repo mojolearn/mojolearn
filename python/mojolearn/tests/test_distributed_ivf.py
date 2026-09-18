@@ -158,3 +158,44 @@ def test_native_fitted_index_uneven_tiles(pool, monkeypatch, rows, features):
             actual = distributed.search(x[:7])
             for a, b in zip(actual, expected):
                 assert a.tobytes() == b.tobytes()
+
+
+@pytest.mark.parametrize('fault', ['missing', 'shape', 'negative-count', 'large-count', 'invalid-id'])
+def test_invalid_shard_receipts_fail_closed(pool, monkeypatch, fault):
+    original_map = StoragePool.map
+    def corrupt(self, requests):
+        result = original_map(self, requests)
+        if requests[0][0] != 'ivf_search_stored':
+            return result
+        if fault == 'missing':
+            return result[:-1]
+        d, ix, count = result[0]
+        if fault == 'shape':
+            d = ar([[1]])
+        elif fault == 'negative-count':
+            count = ar([-1], '<i4')
+        elif fault == 'large-count':
+            count = ar([100], '<i4')
+        else:
+            ix = ar([[100, 0, 0, 0]], '<i4')
+        result[0] = (d, ix, count)
+        return result
+    monkeypatch.setattr(StoragePool, 'map', corrupt)
+    model = pi.DistributedIVFIndex.from_index(index())
+    with pytest.raises(ValueError):
+        model.search(ar([[0, 0]]))
+    assert model._closed and StoragePool.closed
+
+
+def test_duplicate_global_ids_rejected_before_partition(pool):
+    m = index()
+    m.list_indices_ = ar([1, 4, 6, 0, 2, 3, 1], '<i4')
+    with pytest.raises(ValueError, match='permutation'):
+        pi.DistributedIVFIndex.from_index(m)
+
+
+def test_store_failure_closes_workers(pool):
+    StoragePool.fail = True
+    with pytest.raises(RuntimeError, match='worker failed'):
+        pi.DistributedIVFIndex.from_index(index())
+    assert StoragePool.closed
