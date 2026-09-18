@@ -381,3 +381,62 @@ norepair / repair / repair / norepair; all witnesses equal across the four).
   Apple LM step** (6 s over a 26-38 s step), against the kNN precedent's
   39% on kNN (a different kernel; not a prediction for GEMM, and it was not
   one). The fixed-size GEMM sum on synthetic data understated it (+4%).
+
+## VERDICT (2026-09-18, for a session with no context)
+
+1. **Repaired: the whole GEMM family on Apple now computes round-then-flush.**
+   Seam probe: Apple shipped lane `62a6b5621e27c707` (rtf) over all 262,144
+   triples; the same session's unrepaired build `f269fc70e5625987` (fbr).
+   Whole-GEMM boundary check: 15 failing plan/case pairs unrepaired, 0
+   repaired, on five plans; Apple, NVIDIA and AMD device outputs now hash
+   the same on every separating fixture.
+   Sites: `_tuned_step` software branch and the TUNED/SPLIT kernel (exact
+   block admission + exact recompute), FLAT / TILE / LEAF kernels, core/gemm
+   pinned nt + gemv, core/gram_multi_gpu pinned gram, gemm_lowbit bf16w flat
+   (inline `rtf_mul_add`). Row `lib_zero_fma_repair_for` (Apple only).
+2. **Prediction: HELD, INERT on every existing cell checked.** Apple GEMM
+   identity card (60 stages) byte-identical before/after and equal to main's
+   retained card; LM lane 5-step witnesses (loss, gradients, parameters, m,
+   v, flags) identical across all 12 runs on enwik8 and Pile GitHub; pinned
+   kernels' outputs identical. No Apple cell moved. NOT checked: the full
+   Apple reference column (no full sweep, by rule); `verify_reference/table.json`
+   untouched (sole owner).
+3. **NVIDIA and AMD unmoved, proven two ways.** (a) Device code: sm_90a PTX
+   and gfx942 code objects of five GEMM programs byte-identical to main
+   (after the `_admit_track` fix; an empty in-loop `comptime if` had perturbed
+   the gfx942 schedule). (b) Hardware: H100 and MI300X seam probe shipped lane
+   rtf; GEMM identity card of this branch IDENTICAL to the Apple card on
+   both. `tools/identity_break.py` was NOT run on NVIDIA/AMD: with the device
+   code byte-identical to main it would re-measure main.
+4. **Price, measured:** GEMM ~36-42% of the Apple LM step; +6 s of GEMM per
+   step, ~+16% to +23% of the step, all in head_dA/head_dB whose tiles fail
+   the admission on real data. The per-step inline spelling (first attempt)
+   cost 2.36x on the GEMM sum and was rejected. Classical pinned kernels:
+   gemm_nt +21%, gram +23%, gemv ~+2% in isolation.
+5. **Unrepaired (named, sized; scope audit in the table above):**
+   - class 1 rtf-spelled device consumers outside GEMM/kNN: ~401 calls in 94
+     files minus the ~10 GEMM sites repaired here (mamba 104, training 48 incl.
+     optimizer 38, arima 29, transformer 26 incl. fused attention seams,
+     holtwinters 20, GP 19, decomposition 19, resample 16, hdbscan 10, umap
+     10, kernel_methods 11, cholesky 9, gbdt 8, glm 6, ...). Each takes
+     `rtf_mul_add` (correct, per-step price) or a kernel-level admission.
+   - class 2 no-flush device consumers (~20 real calls, ~10 files:
+     core/gram_splitk, core/column_stats xty, glm qn dense dot + softmax,
+     gbdt dynamic_boosting + add_model_value, RF/ET split gain objectives,
+     spectral Nystrom predict, umap optimizer): Apple flushes every subnormal
+     the other columns keep; the zero repair cannot fix this; needs a
+     contract decision (flush on every column or emulate subnormals) =
+     Andrew's.
+   - plain-op class (`ftz(x*y)`, `ftz(x/y)`, ~230 sites, 77 files): exposed
+     IF Metal's plain mul/div also flush before rounding (untested).
+   - trial-only kernels (step_arm / ksplit / kpack) use `_tuned_step` with
+     the inline repair: correct, slow, not Apple defaults.
+6. **Candidates (not opened):** finer admission for the tuned kernel (per
+   thread per k-chunk, two loop bodies) to cut the head-backward price;
+   NaN canonicalization in the GEMM contract (draw4: all three columns write
+   different default NaNs); measure the class-2 contract question.
+
+Pods: none left (4090 9rts6f6fpgw7fm 404, H100 2knce7572vc9k1 404, Hot Aisle
+VM 4875e63c 404). Cost: H100 ~5 min at $3.49/h (~$0.29), 4090 ready-timeout
+~10 min at $0.74/h (~$0.12), Hot Aisle $0.30; about $0.71. Apple Metal time
+~2.5 h (LM runs dominate), all through `mac_slot.sh metal`.
