@@ -208,3 +208,10 @@ Python `BpeVocabularyTrainer` (what `prepare()` with no `vocab` calls) recounts 
 merge in pure Python and is far slower (not measured at this size). The built-in default is
 correct but not practical at 50,256 ranks until the Mojo trainer is reachable from Python
 (candidate follow-up, not opened).
+
+GPU leg 3 (2026-09-18_150327, pod d8klbzo3aga6d6, 404-verified): the vocabulary staged from R2
+(sha verified on the box), but the tokenizer host build refused again, now on
+MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"), so prepare found no binding
+(extra_exit=5). Fixed with `env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu`, and this
+time the exact command was run locally under the pod's env first and built. All three pods so far
+(ph5zsazy7u4kxn, vn4vonca6du36q, d8klbzo3aga6d6) read HTTP 404 from the API.
