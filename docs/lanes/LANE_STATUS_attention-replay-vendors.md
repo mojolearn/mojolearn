@@ -129,6 +129,20 @@ bindings/build_byte_lm.sh for parallel training"); infer/model IDENTICAL=153,
 batch IDENTICAL=90, rlpair IDENTICAL=72; zero DIVERGENT/MOVED. INERT by
 construction: both rows answer False for COLUMN_CPU before and after.
 
+## NVIDIA identity_break before/after: nothing moved (pod uywfr8o08f4qeh, 404 verified)
+
+`nvidia_identity/remote/attn-replay-extra/`: 9 neural lanes x 9 fixtures,
+train IDENTICAL=81, infer/model IDENTICAL=117 (N/A=45), batch IDENTICAL=72,
+rlpair IDENTICAL=72; zero DIVERGENT/MOVED. The GPU bindings really were
+rebuilt from main's source: `_mojolearn_byte_lm.so` 8483a59c -> ab42c4c8 and
+`_mojolearn_transformer.so` ed88d286 -> 9d5b9046 (the plumbing is compiled
+into both; NVIDIA's rows are unchanged). DEFECT IN THAT LEG, stated: the
+before-side HOST builds refused ("output already exists") because the body
+cleared only python/mojolearn/identical, so the host lanes' "before" cells ran
+the after host bindings. Host lanes are CPU arithmetic whose rows answer
+False either way, and the CPU pod above rebuilt them properly. Body fixed
+(clears python/mojolearn/host too) before the AMD identity leg.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).

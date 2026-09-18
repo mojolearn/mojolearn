@@ -66,3 +66,90 @@
 [10:08:17 nvidia] starting the payload DETACHED on the box, then polling for it
     REMOTE_PID=682
 [10:08:21 nvidia]   remote pid 682; polling every 30s, giving up after 3212s
+[10:24:48 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    nvidia.card
+    pixi_env.log
+    gpu.txt
+    extra.log
+    device_check.log
+    pixi_install.log
+    pixi_which.txt
+    mojo_version.txt
+    leg.txt
+    nvidia.card.log
+    attn-replay-extra
+    card_driver.log
+
+== step 8: what came home ==
+  remote card: mode read back from the run itself = [IDENTICAL]
+  remote device check: mode read back from the run itself = [IDENTICAL]
+  source sha256 MATCHES on both ends (f35eef62e2b65391...)
+  gpu on the box:
+    NVIDIA H100 80GB HBM3, 580.126.09, 81559 MiB, 0 MiB, 81079 MiB
+    vendor=nvidia
+    commit=a9584a477cec456cdb64bc8c2eecfc647d21f07f
+    card_full=
+    trace_dump=
+    started=2026-09-18T14:08:21Z
+    pixi_install_exit=0
+    device_check_exit=0
+    card_exit=0
+    extra_exit=0
+    finished=2026-09-18T14:24:31Z
+  the device kernel's own gates: GREEN on this silicon
+
+== step 9: Apple vs NVIDIA ==
+    ==============================================================================
+    IDENTITY TRACE DIFF
+    ==============================================================================
+      APPLE = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.X921tv/blk_a.1
+      NVIDIA = /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/gemm-leg.X921tv/blk_b.1
+    
+    STEP 1 -- PARSE
+      APPLE: 60 record(s), 1 comment line(s), 1 blank line(s)
+      NVIDIA: 60 record(s), 1 comment line(s), 1 blank line(s)
+    
+    STEP 1b -- DUMP INTEGRITY (re-hash every .bin found)
+    
+    STEP 2 -- ALIGNMENT (tag sequence, computed BEFORE any hash compare)
+      matched stage pairs: 60
+      unmatched in APPLE: 0    unmatched in NVIDIA: 0
+      TAG SEQUENCES ARE IDENTICAL.
+    
+    STEP 3 -- HASH WALK over 60 matched pair(s)
+      All 60 matched pair(s) agree on dtype, count and hash.
+    
+    ==============================================================================
+    RESULT: IDENTICAL. Same stage sequence, same counts, same hashes.
+      Caveat: a matching hash means the buffers agreed at each
+      checkpoint, NOT that the computation was identical, and nothing
+      is known about whatever the trace did not checkpoint.
+    ==============================================================================
+
+  NO DIVERGENCE at any matched stage, in any of 1 block(s).
+  Read that as what it is: the two buffers held the same bits at
+  every checkpoint the card hashes. It is not proof the two
+  computations were identical, and anything not hashed is
+  invisible.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    uywfr8o08f4qeh: 41 minutes left of a 60-minute lease
+  terminating uywfr8o08f4qeh (layer two, from this machine)
+    DELETE /v1/pods/uywfr8o08f4qeh -> HTTP 204
+  VERIFIED: uywfr8o08f4qeh is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/nvidia_identity
+next: archive/evidence/gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into
+E1G_RESULTS.md before the pod's details are only in this scrollback.
+
+== teardown (exit 0) ==
+  lease at exit:
+    NO LEASE for uywfr8o08f4qeh -- it is unguarded.
+  dead-man cancelled (pid 46833)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-46455/gemm_remote_leg.sh: line 2538: 46833 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null

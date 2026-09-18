@@ -85,14 +85,14 @@ gates() {
 NEURAL=byte-lm,byte-lm-resident,byte-lm-host-infer,byte-lm-host-infer-threaded,byte-lm-host-train,transformer,transformer-window,samba,samba-untied-dropout-accum
 build_all() {
     tag=$1
-    rm -f python/mojolearn/identical/*.so
+    rm -f python/mojolearn/identical/*.so python/mojolearn/host/*.so
     for s in build build_byte_lm build_transformer build_training build_mamba; do
         run "${tag}_$s" env MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=8 sh "bindings/$s.sh"
     done
     for s in build_core_host build_byte_lm_host build_transformer_host build_training_host build_neural_host build_mamba_host; do
         run "${tag}_$s" env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=8 sh "bindings/$s.sh"
     done
-    sha256sum python/mojolearn/identical/*.so > "$OUT/${tag}_bindings.sha256" 2>&1
+    sha256sum python/mojolearn/identical/*.so python/mojolearn/host/*.so > "$OUT/${tag}_bindings.sha256" 2>&1
 }
 identity() {
     export PYTHONPATH="$ROOT/python"
