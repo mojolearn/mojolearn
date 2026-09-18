@@ -210,3 +210,29 @@ before renting AMD. Read external state/logs for live rentals. After all
 three builds, use `pack_final_linux_v2.py` and `linux-wheel-final-v2`; do not
 reuse the superseded wheel or its qualification receipts. Prepared current
 reference wiring remains uncommitted until new measured columns pass.
+
+Both v8 NVIDIA rebuilds now passed all four remote build checks and local
+verification of all 61 binary hashes. L40S pod `05nioaoah75ch0` and H100 pod
+`yfsosn1orr4lpf` were deleted with HTTP 404 verification. All 29 GPU and 32 CPU
+binaries on each architecture are byte-identical to its earlier build; the
+new source provenance includes the repaired Python empty-Array export.
+
+AMD v8 has started after both NVIDIA deletions; consult external
+`logs/hip-build-v8.log` for its live lease. `finish_linux_v8.py` is already
+waiting to pack `linux-wheel-final-v2`, run all three installed GPU
+qualifications into `qualification-final-v5`, and then run the installed CPU
+replay into `cpu-installed-final-v2`. Do not duplicate those jobs.
+
+`finish_references_v8.py` is also already waiting for fresh AMD and H100
+qualification receipts. It verifies and banks their original measurements,
+runs the actual current-reference CPU workflow preflight, then runs positive
+and planted-overread negative Mamba poison gates under the Mac slot. It
+retains captures and refuses missing/error hashes; it does not commit or
+publish. Review its results before committing the pending reference wiring.
+
+PyPI returned HTTP 404 for 0.8.7 at 2026-09-18 08:35 UTC. Publication and final
+main integration are still pending. The root checkout has meanwhile moved
+to another owner's `lane/lm-attention-fallback`; do not switch or reset it.
+Use a separate integration worktree from fresh `origin/main` when publication
+is complete, preserving newer main work. The current release branch merges
+cleanly in a dry run, but repeat against the then-current main at integration.
