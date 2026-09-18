@@ -1216,18 +1216,16 @@ def bwd_dq_kernel(
     CONTRACTED**: `dA` contracts over the OUTPUT WIDTH, and S11's output
     width is the KV AXIS. So the routed `dq` would be an `OP_NN` at
     `(l, hd, s)` with `k' = S`, and `P = f(S)` builds one tree at `S = 257`
-    and a different one at `S = 200`. The masked `+0.0` tail -- bitwise
-    inert in a serial ascending chain -- is NOT inert under a tree whose
-    shape changes with the length.
+    and a different one at `S = 200`. The masked signed-zero tail is NOT
+    inert under a tree whose shape changes with the length. Keep this
+    serial ascending eager chain as the oracle.
 
-    Under the chain it IS inert. At a masked `(t, j)` the gradient `dcell`
-    is a signed zero (the softmax's `y_j` is exactly `+0.0` there and the
-    mask backward is the identity), `fma(+-0.0, k, acc)` is `acc + (+-0.0)`,
-    and a `+0.0`-seeded chain never holds `-0.0`. **So `dq` is independent
-    of the kv length and a decode step's `dq` is the prefill's `dq` bit for
-    bit** -- the backward's clause (c) and clause (d), holding by
-    CONSTRUCTION, with the gate there to catch an execution plan violating
-    the construction.
+    Even in the chain, a masked term can change a preceding `-0.0` to
+    `+0.0`: RN-FMA followed by the FTZ-multiply seam can produce negative
+    zero from a negative subnormal intermediate. The fused dQ kernel must
+    replay that tail exactly or refuse; the +0 seed alone does not prove
+    masked-tail invariance. No fold or zero-sign canonicalization is
+    permitted to repair this discrepancy.
 
     Sabotage `B11_DQ_VIA_GEMM` lives in the launcher rather than here,
     because it is a different call graph and not a different branch. It is

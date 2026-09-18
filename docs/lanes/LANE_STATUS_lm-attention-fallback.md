@@ -1,4 +1,14 @@
-# Attention fallback: instrumentation first
+# Attention fallback: exact replay and bounded storage
+
+Current measured result: H100 enwik8 700-step replay trial matches every loss
+and checkpoint witness, removes all 3697 backward CORNER refusals, improves
+late median 0.456855 -> 0.199255 seconds, and lowers device use 31537 ->
+15153 MiB. NVIDIA and AMD match at all 130 explicit native repair/preservation
+sites, with observed failing controls. Apple has compile evidence only.
+The NVIDIA default is enabled on this branch; two-corpus final qualification
+and B4 2000-step endurance are running before main merge.
+
+## Initial registration (historical)
 
 Instrumentation branch lane/lm-attention-fallback at 576ee02bf. Main was
 3e8dabc37 when first inspected; concurrent checkout activity advanced the

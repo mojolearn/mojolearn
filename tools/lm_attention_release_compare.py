@@ -49,6 +49,13 @@ def main():
             assert str(e) == label, str(e)
             print('EXPECTED FAIL release', label)
         else: raise AssertionError('BLIND release ' + label)
+    broken = copy.deepcopy(b)
+    for row in broken['steps']: row['attention']['released_eager_bytes'] = 0
+    try: compare(a, broken)
+    except AssertionError as e:
+        assert str(e) == 'INERT release', str(e)
+        print('EXPECTED FAIL release activity')
+    else: raise AssertionError('BLIND release activity')
     compare(a, b, True)
 
 

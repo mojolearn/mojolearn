@@ -42,12 +42,16 @@ two conditions the host and the kernel check rather than assume:
   2. THE CORNER (kernel, per chain): a chain that holds `-0.0` when its
      visible run ends could be laundered to `+0.0` by a masked tail whose
      products are `+0.0` (a flushed subnormal product is how a chain
-     reaches `-0.0`). The kernel does not reason about the tail; it sets a
-     flag and the caller runs the eager path for the whole call.
+     reaches `-0.0`). The measured HD64 estash/preflushed path replays
+     those omitted zdot/dQ terms with the exact eager seams and order.
+     Other unresolved corners set a flag and take the eager path. The
+     joint r2 dk/dv guard only refuses when omitted terms actually remain;
+     a terminal negative zero with no tail is already the correct result.
 
 Both fallbacks are EXACT by construction (the eager path is the profile)
 and both are counted by the launcher's status, which the fused check
-asserts on: a case built to hit the corner must report it.
+asserts on: a case built to hit an unresolved corner must report it.
+Actual estash repairs are separately reported; a repaired launch returns RAN.
 
 WHAT IS NOT HERE. Plants (`transformer_fixture.ScorePlant`) are an eager
 feature; a planted call takes the eager path. `head_dim` outside
