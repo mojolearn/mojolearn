@@ -180,6 +180,34 @@ bindings, numerical behavior or verification protocol requires the affected
 checks again. Small targeted checks during development catch bugs before an
 expensive final frozen-artifact certification.
 
+The installed CLI defaults to a one-thread setting for supported CPU host and
+math libraries. To request up to five threads for an inference check:
+
+```sh
+python -m mojolearn verify --inference --cpu-threads 5
+```
+
+The request is clamped to at most the detected available logical CPU count
+minus one (minimum one). Process affinity is respected where available. Thread
+settings are applied in a fresh interpreter before native imports; numerical
+evidence records the selected verifier setting. This setting is not five
+parallel algorithm fits and is not an OS CPU/RAM limit. Internally parallel
+algorithms can have their own workers; a thread setting cannot guarantee that
+a large model fits memory. Start with inference or a named training lane on
+machines with limited resources. Read-only coverage/comparison commands do not
+launch another numerical process for these settings.
+
+There is no corresponding "five GPU cores" setting. GPU kernels are scheduled
+across the selected device by its runtime. Workload size, memory, selected GPU
+devices and concurrent jobs are the useful controls. Ordinary users need not
+run multi-GPU or large-capacity stress tests to check their installation.
+
+Small boundary fixtures remain valuable: duplicate/tied values, odd row counts,
+values near numerical limits, and sizes around kernel or batch boundaries.
+These can expose incorrect reductions or indexing that a large easy input
+misses. The planned small training profile needs independently recorded hashes;
+it is not implemented merely by lowering the old fixture size.
+
 ## What the CPU training bindings are for
 
 Every wheel since 2026-09-16 carries all thirty-two host (CPU) bindings, the

@@ -93,6 +93,17 @@ Existing parallel routes do not establish completion of these new scopes.
 
 ## Next steps, in execution order
 
+External-user resource follow-up: the CLI now defaults to one thread for
+supported CPU host/math libraries, with --cpu-threads 5 as an explicit request.
+Requests are clamped below detected available logical CPU capacity where
+possible; configuration is established before native imports in a fresh
+interpreter and recorded in numerical reports. This is not a hard memory/CPU
+limit or concurrent algorithm-worker count. GPU core counts are not an exposed
+resource control. Sixteen resource/CLI tests passed without native work.
+Small boundary cases remain required; a new lightweight training profile and
+its independent reference records are still to be implemented and qualified.
+This resource change is for main/next wheel, not the frozen 0.8.7 artifact.
+
 Latest user steering: independent architecture jobs should run in parallel.
 The matrix now allows three jobs, each with its existing two-shard cap (up to
 six numerical workers). No new Apple run was dispatched. Parallel scheduling

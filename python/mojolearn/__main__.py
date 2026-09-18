@@ -137,6 +137,8 @@ def build_parser():
                    help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
     scope.add_argument("--training", dest="training_only", action="store_true",
                    help="run fit-based algorithm verification and learned-model properties, excluding the separate bundled-model suite; narrow with --lanes and --fixtures")
+    v.add_argument("--cpu-threads", type=int, default=1, metavar="N",
+                   help="thread setting for supported CPU libraries (default: 1); capped below the available logical CPU count where possible; not a hard CPU or memory limit")
     v.add_argument("--quick", action="store_true",
                    help="implies --all: one lane per family on the base "
                         "fixture")
@@ -433,6 +435,13 @@ def main(argv=None):
         # asked for is how a green line ends up quoted out of context.
         parser.print_help()
         return _verify.EXIT_USAGE
+    from ._verify_resources import run_with_budget
+    try:
+        resource_exit = run_with_budget(args)
+    except ValueError as exc:
+        parser.error(str(exc))
+    if resource_exit is not None:
+        return resource_exit
     return args.func(args)
 
 
