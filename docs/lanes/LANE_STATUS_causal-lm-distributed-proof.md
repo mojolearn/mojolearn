@@ -76,3 +76,12 @@ unchanged). CPU13.28s, Metal6.25s, fault13.68s. Retained under
 Mamba2 missing-fixture debt above. NVIDIA/AMD and installed/physical multiGPU
 qualification remain explicitly open, as do real external checkpoint and long
 context/ragged/chunk-boundary coverage.
+
+Final retained AMD closure (no new hardware): existing AMD qualification VM
+captured v2 with the exact five-file c9c3b96b7 capsule over f771338c7 baseline.
+All144/144 parts match CPU and all144/144 match Apple across24 cases. Capsule
+file hashes verified against git; capture_commit remains null for the archive.
+Raw capture, capsule and detailed comparison retained in
+`bench/results/loaded_causal_lm/2026-09-18/v2/amd/`. This closes AMD tiny-profile
+numerical evidence; NVIDIA, installed-wheel and physical multi-GPU evidence
+remain owed. No additional build/rental/test sweep was launched.
