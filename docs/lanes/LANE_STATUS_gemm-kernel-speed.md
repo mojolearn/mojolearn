@@ -93,3 +93,36 @@ also receives actual sabotaged device output and must reject it.
 Experiment 2 (AMD) was already launched at 8c9c1cbf9 with its preregistered
 144 small ragged fixtures, no full-tile optimization. Experiment 3's expanded
 fixture is independent; no retrospective claim it ran on experiment 2.
+
+## Experiment 2 result; registered training qualification
+
+MI300X source 8c9c1cbf9 completed, body exit 0; VM
+86dc3471-c47c-4bee-bc3a-a56de6ea86dc deleted and verified 404/list absent.
+ABBA shipped-column weighted GEMM sums: legacy 488.722683 / 490.584033 ms,
+staged 380.639570 / 379.496331 ms. About 22.4% less GEMM time; >=3% hypothesis
+supported. All 12 cross-build output digests match at each pass; 144 transport
+fixtures pass on both explicit settings, actual omitted-flush defect fails
+(got 654311424, flat/oracle 0) and price sabotage moves 576 cells and is rejected.
+This is microbenchmark evidence, not a whole-training improvement yet.
+
+Before training rentals: 700 steps per arm per corpus on MI300X, B1 L2048
+DM768 H12 KV12 HD64 FF2048 layers12 V50257, seed20260917. Two independent
+one-corpus leases avoid placing four long runs against one 60-minute watchdog.
+R2 corpus/enwik8/input.txt (100000000 bytes, SHA256
+2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8) and
+corpus/pile_github/input.txt (97124565 bytes, SHA256
+52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df).
+Strict staging plus on-box --check; no origin downloads.
+
+Prediction: at least 10% lower last-200 median whole-step time on each corpus.
+Smaller falsifies this magnitude prediction; a regression on either corpus
+rejects the default flip. All 700 loss words, 6 endpoint state hashes at steps
+0 and699 and each step's complete attention witness must match exactly.
+Any bit difference rejects the optimization. Binary read-back must show
+stage_ftz False/True and different loaded binary hashes; same-arm comparisons
+are rejected. The comparator first corrupts each witness type and verifies
+the corresponding check fails. No component/step-share timing is performed.
+
+A historical attention result was used only to exercise the comparator with
+synthetic dispatch labels; all 13 intentional corruptions were rejected for
+their expected reasons. This is a harness test, not a new training result.
