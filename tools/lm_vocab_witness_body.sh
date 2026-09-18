@@ -9,7 +9,7 @@
 #   MOJOLEARN_GEMM_LEG_LOCAL_CARD=bench/results/e1g/2026-09-13_221244-nvidia-h100-feature-freq-2710/local/apple.card \
 #   MOJOLEARN_STAGE_KEYS="corpus/enwik8/input.txt corpus/pile_github/input.txt" MOJOLEARN_STAGE_STRICT=1 \
 #   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/tokenized-corpus-sep18/pod/<stamp> \
-#   sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --allow-concurrent --minutes 90
+#   sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --allow-concurrent --minutes 60
 #
 # In order, each step's exit code in status.txt, never `set -e`:
 #   1. build the IDENTICAL base and byte-LM bindings, the tokenizer host
@@ -17,20 +17,21 @@
 #   2. train a VOCAB-rank vocabulary (default 8192) with train_main on the
 #      first 10 MB of enwik8 (inside its train range) + the first 10 MB of
 #      pile_github, timed;
-#   3. prepare: tokenize ALL of enwik8 once with that vocabulary
-#      (tools/lm_train.py --prepare-only): the encode throughput;
-#   4. GRADIENT WITNESS, two arms at the SAME shape, seed and vocab_size
+#   3. GRADIENT WITNESS, two arms at the SAME shape, seed and vocab_size
 #      (1 256 64 4 2 16 128 2 n_vocab), two steps each, per-row gradient
 #      reduction of `embed` and `lm_head`:
 #        tokens  lm_train.py --vocab ranks: embedding rows >= 256 of ids that
 #                occurred must be NONZERO;
 #        bytes   lm_train.py --bytes (CorpusBatches): every embedding row
 #                >= 256 must be EXACTLY zero;
-#   5. BYTE PATH vs MAIN: tools/lm_step_memory_probe.py --corpus enwik8,
+#   4. BYTE PATH vs MAIN: tools/lm_step_memory_probe.py --corpus enwik8,
 #      2 steps, --witness-every-step, under this branch's python/ and under a
 #      copy whose _byte_lm_impl.py is rebuilt to main's exact bytes
 #      (tools/lm_byte_path_main_copy.py). The hashes must be equal; a third
-#      arm with another seed must DIFFER, or the comparison cannot fail.
+#      arm with another seed must DIFFER, or the comparison cannot fail;
+#   5. prepare: tokenize ALL of enwik8 once with that vocabulary
+#      (tools/lm_train.py --prepare-only): the encode throughput. The id
+#      array is deleted after (its manifest and sha256 come home).
 set -u
 ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out/lm-vocab-witness
@@ -102,20 +103,21 @@ RANKS="$OUT/vocab/mojolearn-bpe-$((VOCAB + 1)).ranks.tsv"
 [ -f "$RANKS" ] || { say "no ranks file; nothing more run"; exit 4; }
 sha256sum "$RANKS" >> "$OUT/binaries_sha256.txt"
 
-# 3. PREPARE: tokenize all of enwik8 once
+# 3. GRADIENT WITNESS, both arms at the same shape and seed. The tokens arm
+#    reads a 5 MB prefix of enwik8 as its own corpus (tokenized in seconds),
+#    so the witness does not wait on the full tokenization in step 5.
+head -c 5000000 "$ENW" > "$OUT/enwik8-head5M.txt"
 t0=$(date +%s)
-pixi run python tools/lm_train.py --corpus "$ENW" --vocab "$RANKS" --cache "$OUT/cache" \
-    --out "$OUT/prepare" --prepare-only > "$OUT/prepare.log" 2>&1
-say "prepare exit=$? secs=$(( $(date +%s) - t0 ))"
-NV=$(pixi run python -c "import json;print(json.load(open('$OUT/prepare/run.json'))['tokens_manifest']['vocabulary']['n_vocab'])" 2>/dev/null)
+pixi run python tools/lm_train.py --corpus "$OUT/enwik8-head5M.txt" --vocab "$RANKS" --cache "$OUT/cache" \
+    --out "$OUT/prepare-head5M" --prepare-only > "$OUT/prepare-head5M.log" 2>&1
+say "prepare head5M exit=$? secs=$(( $(date +%s) - t0 ))"
+NV=$(pixi run python -c "import json;print(json.load(open('$OUT/prepare-head5M/run.json'))['tokens_manifest']['vocabulary']['n_vocab'])" 2>/dev/null)
 say "n_vocab=$NV"
 [ -n "$NV" ] || { say "prepare gave no n_vocab; nothing more run"; exit 5; }
-
-# 4. GRADIENT WITNESS, both arms at the same shape and seed
 SHAPE="1 256 64 4 2 16 128 2 $NV"
 t0=$(date +%s)
 # shellcheck disable=SC2086
-pixi run python tools/lm_train.py --corpus "$ENW" --vocab "$RANKS" --cache "$OUT/cache" \
+pixi run python tools/lm_train.py --corpus "$OUT/enwik8-head5M.txt" --vocab "$RANKS" --cache "$OUT/cache" \
     --shape $SHAPE --steps 2 --witness-rows --out "$OUT/witness-tokens" > "$OUT/witness-tokens.log" 2>&1
 say "witness tokens exit=$? secs=$(( $(date +%s) - t0 ))"
 t0=$(date +%s)
@@ -124,7 +126,7 @@ pixi run python tools/lm_train.py --corpus "$ENW" --bytes \
     --shape $SHAPE --steps 2 --witness-rows --out "$OUT/witness-bytes" > "$OUT/witness-bytes.log" 2>&1
 say "witness bytes exit=$? secs=$(( $(date +%s) - t0 ))"
 
-# 5. BYTE PATH vs MAIN
+# 4. BYTE PATH vs MAIN
 pixi run python tools/lm_byte_path_main_copy.py python "$ROOT/python_main" > "$OUT/main_copy.log" 2>&1
 say "main copy exit=$?"
 for arm in branch main seed2; do
@@ -139,4 +141,12 @@ for arm in branch main seed2; do
         > "$OUT/bytepath-$arm.log" 2>&1
     say "bytepath $arm exit=$? secs=$(( $(date +%s) - t0 ))"
 done
+# 5. PREPARE: tokenize ALL of enwik8 once (the throughput number), last
+#    because it is the longest and nothing above depends on it.
+t0=$(date +%s)
+pixi run python tools/lm_train.py --corpus "$ENW" --vocab "$RANKS" --cache "$OUT/cache" \
+    --out "$OUT/prepare" --prepare-only > "$OUT/prepare.log" 2>&1
+say "prepare enwik8 exit=$? secs=$(( $(date +%s) - t0 ))"
+rm -f "$OUT/cache/tokens"/*/tokens.i32 "$OUT/enwik8-head5M.txt"
+
 say "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
