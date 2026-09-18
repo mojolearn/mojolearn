@@ -178,8 +178,11 @@ def _as_i32_1d(x, name):
             "adjusted_rand_index is the same code at a wider type and is "
             "not instantiated, metrics/NOT_IMPLEMENTED.tsv)"
         )
-    # int64 -> int32 is `array.array`'s C item loop (`Array.astype`), exact
-    # after the range check above; no Python loop.
+    # int64 -> int32 through `Array.astype`: the core helper `cast_elements`
+    # (DEVIATION 3100), else `array.array`'s item loop, which has no Python
+    # loop BODY but makes one Python int per element (69 ms per 1,000,000
+    # rows on an EPYC 7713 before the helper, 1.9 ms with it,
+    # docs/lanes/LANE_STATUS_python-hotpath.md). Exact after the range check.
     return a.astype("<i4")
 
 
