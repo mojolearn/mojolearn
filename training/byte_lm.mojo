@@ -79,7 +79,7 @@ from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
 from transformer.impl.llama.fused_attention import (
-    ATTN_BWD_KV_CORNER_GUARD, ATTN_STICKY,
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
 )
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
@@ -219,6 +219,16 @@ def byte_lm_attn_kv_corner_guard() -> Bool:
     comptime if ATTN_BWD_KV_CORNER_GUARD:
         return True
     return False
+
+
+def byte_lm_attn_bwd_corner_refuses() -> Bool:
+    """DEVIATION 3112: False in the MEASUREMENT build carrying
+    `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1`, whose backward does not refuse on a
+    corner. That build is never shipped and its only use is the bit
+    comparison against the refusing arm."""
+    comptime if ATTN_NO_BWD_CORNER:
+        return False
+    return True
 
 
 def byte_lm_fault_inject_available() -> Bool:

@@ -196,6 +196,12 @@ comptime FUSED_THREADS = 256
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
 
+comptime ATTN_NO_BWD_CORNER = is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"]()
+"""DEVIATION 3112, A MEASUREMENT ARM AND NEVER A SHIPPED BUILD: the backward
+launchers stop refusing on a corner. See the comment at their `return
+FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
+arm; on its own it proves nothing and could be silently wrong."""
+
 comptime ATTN_BWD_KV_CORNER_GUARD = not is_defined[
     "MOJOLEARN_ATTN_NO_KV_CORNER_GUARD"
 ]()
@@ -7452,7 +7458,18 @@ def fused_backward_launch_ran(
     _ = corner^
     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
     if hit:
-        return FUSED_CORNER
+        # DEVIATION 3112, MEASUREMENT ARM, NEVER ON A SHIPPED BUILD:
+        # `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1` makes the BACKWARD accept
+        # its own output on a corner instead of refusing to the eager
+        # path. It exists to answer the one question the guard of
+        # DEVIATION 3111 could not: are the remaining refusals REAL?
+        # Bit-compared against the refusing arm over 700 steps, EQUAL
+        # means every one of them was a false positive and the 2.13x is
+        # recoverable; DIFFERENT means the fallback is earning its cost
+        # and only the signed-zero repair can remove it. Either answer
+        # is the result. The default is unchanged.
+        comptime if not ATTN_NO_BWD_CORNER:
+            return FUSED_CORNER
     return FUSED_RAN
 
 
@@ -7732,7 +7749,18 @@ def fused_backward_launch_estash_ran(
             _ = corner^
             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
             if hit:
-                return FUSED_CORNER
+                # DEVIATION 3112, MEASUREMENT ARM, NEVER ON A SHIPPED BUILD:
+                # `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1` makes the BACKWARD accept
+                # its own output on a corner instead of refusing to the eager
+                # path. It exists to answer the one question the guard of
+                # DEVIATION 3111 could not: are the remaining refusals REAL?
+                # Bit-compared against the refusing arm over 700 steps, EQUAL
+                # means every one of them was a false positive and the 2.13x is
+                # recoverable; DIFFERENT means the fallback is earning its cost
+                # and only the signed-zero repair can remove it. Either answer
+                # is the result. The default is unchanged.
+                comptime if not ATTN_NO_BWD_CORNER:
+                    return FUSED_CORNER
             return FUSED_RAN
     return fused_backward_launch_ran(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,

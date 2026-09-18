@@ -49,7 +49,8 @@ from training.byte_lm import (
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
-    byte_attention_eager_cells, byte_lm_attn_kv_corner_guard,
+    byte_attention_eager_cells, byte_lm_attn_bwd_corner_refuses,
+    byte_lm_attn_kv_corner_guard,
     byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
@@ -744,6 +745,12 @@ def byte_lm_attn_sticky_fallback_binding() raises -> PythonObject:
     launch. The A/B that claims the latch moves no bit reads this to prove
     its two arms are two arms."""
     return PythonObject(byte_lm_attn_sticky_fallback())
+
+
+def byte_lm_attn_bwd_corner_refuses_binding() raises -> PythonObject:
+    """DEVIATION 3112: False in the measurement build carrying
+    -D MOJOLEARN_ATTN_NO_BWD_CORNER=1."""
+    return PythonObject(byte_lm_attn_bwd_corner_refuses())
 
 
 def byte_lm_attn_kv_corner_guard_binding() raises -> PythonObject:
@@ -1660,6 +1667,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
         module.def_function[byte_lm_attn_kv_corner_guard_binding]("byte_lm_attn_kv_corner_guard")
+        module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
