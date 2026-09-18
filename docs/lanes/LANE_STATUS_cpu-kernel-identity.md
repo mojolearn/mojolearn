@@ -72,3 +72,11 @@ The reused frozen estimators binary refused the new kernels. Its source also
 needed degree transport at both oracle call sites; that fix is checkpointed
 here and needs a fresh build plus runtime rerun before merging. Frozen release
 files remain unchanged. Do not erase the initial failed log.
+
+The saved-model rebuild/rerun is session 44239 under mac_slot, one compiler
+worker and a 900-second execution cap. Recipe build-estimators-and-test.sh is
+retained beside the witness records; external estimators-queue.log and
+runtime-tests-fresh-estimators.log record its outcome. The script builds fresh
+clean and sabotage estimators bindings, replaces only this evidence directory's
+symlinks, then runs the 31 selected kernel/family tests. It never writes into
+the frozen release. This checkpoint is WIP pending that job's actual result.
