@@ -1,5 +1,12 @@
 # LANE STATUS: lane/lm-step-memory-build, paused 2026-09-17
 
+**2026-09-18 follow-up:** the [attention-fallback lane](LANE_STATUS_lm-attention-fallback.md)
+measured the trigger as backward `FUSED_CORNER`, qualified exact masked-tail
+replay and eager-buffer release on NVIDIA, and completed B4 for 2000 steps.
+Paired 700-step enwik8/Pile GitHub speedups are 2.31x/1.92x with exact loss
+and state witnesses; same-H100 B4 adds 1.20x throughput. `aexp` remains
+separate. The record below preserves this lane's original investigation.
+
 Written for a session with NO CONTEXT. Branch `lane/lm-step-memory-build`,
 off `origin/main` at `712eedd16`. Two commits, both pushed. Worktree
 `~/mojolearn-wt/lm-step-memory-build`. Evidence

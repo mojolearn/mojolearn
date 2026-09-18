@@ -18,9 +18,17 @@ B4 enwik8 completed 2000 steps with finite losses and zero refusals in all
 24000 forward and 24000 backward observations. Last-200 median 0.664205971
 seconds (12333.5 tokens/s); sampled device peak and tail 38959 MiB. Eager
 storage stays 432 bytes; aexp stays 9663676416 bytes. dQ replay is active in
-13609 layer-steps; zdot replay is INERT in training. The separate same-device
-B1/B4 timing and B4 legacy-reference bit comparison is still running before
-main merge; do not infer its multiplier from these different pods.
+13609 layer-steps; zdot replay is INERT in training.
+
+The separate same-H100 B1/B4 comparison also completed 700 steps per arm.
+B4 legacy attention with bounded release and B4 default match every loss and
+all six state witnesses at steps 0 and 699. B4 backward CORNER 3172 → 0;
+actual dQ replay sites 2666. B4 tail 1.564467359 → 0.659652365 seconds
+(2.3717x), sampled device peak 50481 → 38961 MiB. On this SAME device,
+default B1 is 0.197901128 seconds (10348.6 tokens/s), default B4 is 12418.7
+tokens/s: **1.2000x additional throughput from batch 4**. The registered
+batch timing, memory, survival and multiplier predictions passed. Larger
+batches were not measured; no saturation or maximum-batch claim is made.
 
 The release-only English control also matches all 700 losses, each layer's
 original statuses, and all state hashes: tail 0.461724 seconds, sampled peak
@@ -33,8 +41,12 @@ with observed failing controls; both native broad gates pass 15 cases.
 Apple has compile and host-mock evidence only, no GPU run. Raw comparisons,
 negative controls, source hashes, stage logs and verified teardown records
 are under [the evidence directory](../../bench/results/lm_attention_fallback_2026-09-18/).
-The numerical implementation tested is source 57cf16d61; later edits so far
-are documentation, comparison tools and the probe metadata-label correction.
+The numerical implementation tested is source 57cf16d61; the same-device
+B4 comparison used f3eeb0c35 with the same numerical implementation. Later
+edits are documentation, comparison tools and the probe metadata-label
+correction. All rented test pods/VMs have verified teardown records. The
+mechanical verdict is [FLIP NVIDIA](../../bench/results/lm_attention_fallback_2026-09-18/default/flip_verdict.log);
+its deliberately doubled-time control returned NO FLIP first.
 
 ## Initial registration (historical)
 

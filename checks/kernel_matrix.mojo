@@ -1210,8 +1210,9 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
 def attn_masked_tail_replay_for[column: Int]() -> Bool:
     """Exact omitted-tail replay, measured H100 2026-09-18.
 
-    700 enwik8 steps: 3697 backward corner refusals become zero, all losses
-    and checkpoint hashes match, late median 0.456855 -> 0.199255 seconds.
+    Paired 700-step enwik8/Pile GitHub runs: 3697/1768 backward corner
+    refusals become zero; every loss and state witness matches. Late medians
+    0.455439 -> 0.197157 and 0.377134 -> 0.196831 seconds (geomean 2.1038x).
     Native HD64 repair/preservation gates pass on NVIDIA and AMD, including
     independently failing controls. Enable the measured NVIDIA schedule;
     other columns keep their existing paths pending training qualification.
@@ -1225,7 +1226,8 @@ def byte_lm_release_eager_for[column: Int]() -> Bool:
 
     The active 700-step eager lifetime arm matches all losses and checkpoint
     hashes and returns retained eager capacity to 432 bytes; aexp is kept
-    separately. This is a storage bound, not a speed claim.
+    separately. Automatic fused/eager switching matches too, with sampled
+    peak 31537 -> 18497 MiB. This is a storage bound, not a speed claim.
     """
     return column == COLUMN_NVIDIA
 
