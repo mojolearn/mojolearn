@@ -1,7 +1,7 @@
 # 2026-09-18: a real vocabulary on the LM training path, witnessed on an RTX 4090
 
 `tools/lm_vocab_witness_body.sh` via `tools/gemm_remote_leg.sh` (pod nqbmrf373yti99, RTX 4090
-sm_89, AMD EPYC 7B13, 404-verified), commit 12a4f7f3b-era branch head; see `status.txt` for per-step exits. R2-staged
+sm_89, AMD EPYC 7B13, 404-verified), source commit 59a640c36 (shipped by git archive); see `status.txt` for per-step exits. R2-staged
 enwik8, pile_github and `vocab/mojolearn-bpe-50257-v1/ranks.tsv` (sha 3d547b17..., 50,256 ranks,
 n_vocab 50,257).
 
