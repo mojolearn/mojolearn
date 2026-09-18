@@ -197,6 +197,7 @@ jobs:
             /bench/results/identity_break/2026-09-14_47-lanes/
             /bench/results/identity_break/2026-09-14_136-lanes/
             /bench/results/identity_break/2026-09-14_166-lanes/
+            /bench/results/identity_break/2026-09-18_release087-properties/
             /bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/
             /bench/results/identity_break/2026-09-15_embedding-sort/
             /bench/results/identity_break/2026-09-14_ivf-euclidean/
@@ -281,6 +282,7 @@ jobs:
             echo "SAVED_MODEL_RECORDED=$(python3 $manifest --saved-model-recorded)"
             echo "CLASSICAL_GPU_COLUMNS=$(python3 $manifest --classical-gpu-columns)"
             echo "GPU_COLUMNS=$(python3 $manifest --training-gpu-columns)"
+            echo "CURRENT_GPU_COLUMNS=bench/results/identity_break/2026-09-18_release087-properties/apple-m4.json bench/results/identity_break/2026-09-18_release087-properties/apple-m4-properties.json bench/results/identity_break/2026-09-18_release087-properties/apple-m4-neural.json bench/results/identity_break/2026-09-18_release087-properties/nvidia-h100-sm_90a.json bench/results/identity_break/2026-09-18_release087-properties/nvidia-h100-sm_90a-properties.json bench/results/identity_break/2026-09-18_release087-properties/amd-mi325x-gfx942.json bench/results/identity_break/2026-09-18_release087-properties/amd-mi325x-gfx942-properties.json"
             echo "RECORD_COVERED_LANES=$(python3 $manifest --record-covered-lanes)"
             echo "FIX_COVERED_LANES=$(python3 $manifest --fix-covered-lanes)"
             echo "FIX_COLUMNS=$(python3 $manifest --training-fix-columns)"
@@ -465,6 +467,39 @@ jobs:
       # also wrong on every column, DEVIATION 2716). These committed JSONs are
       # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
       # cells are the kmeans-sqrt fix record, asserted two steps below.
+
+      - name: Current property references require three independent GPU vendors
+        if: always() && env.FULL_CPU_VERIFY == 'true'
+        run: |
+          python3 - <<'PYCODE'
+          import json, os, re, sys
+          from pathlib import Path
+          sys.path.insert(0, 'tools')
+          import identity_break as identity
+          lanes = set('mamba1,mamba2,mamba2-dtlimit,mamba3,transformer,transformer-window,samba,samba-untied-dropout-accum,radius,radius-chebyshev,radius-manhattan,radius-minkowski-p3,dbscan,dbscan-brute-l1,dbscan-weighted,minmax-scaler,minmax-scaler-clip,standard-scaler-no-std,optim-sgd,spectral-precomputed,metrics-homogeneity-completeness,ordered-gradient-sum,mamba1-bf16w,mamba1-int8w,mlp-bf16w,mlp-int8w,samba-bf16w,samba-int8w'.split(','))
+          fixtures = {'base','ties','hashed','wide','denormal','denormal_ftz','dupes','odd','negative'}
+          expected = {lane+'/'+fixture for lane in lanes for fixture in fixtures}
+          paths = os.environ['CURRENT_GPU_COLUMNS'].split()
+          vendors = {vendor: set() for vendor in ('apple', 'nvidia', 'amd')}
+          for path in paths:
+              record = json.loads(Path(path).read_text())
+              vendor = record['vendor'].split('-')[0]
+              assert vendor in vendors and not record.get('host'), path
+              assert record['complete'] and record['repeats'] == 2 and record['mode'] == 'identical', path
+              assert not record.get('batch_sabotage') and not record.get('rlpair_sabotage'), path
+              assert not (set(identity.stale_revision_lanes(record)) & lanes), path
+              assert not (vendors[vendor] & record['cells'].keys()), 'Duplicate vendor cells: '+path
+              for key, cell in record['cells'].items():
+                  assert cell['verdict'] == 'STABLE' and len(cell['hashes']) == 2 and len(set(cell['hashes'])) == 1, (path,key)
+                  assert re.fullmatch('[0-9a-f]{16}', cell['hashes'][0]), (path,key)
+                  for part in ('infer','model','batch'):
+                      assert cell.get(part+'_verdict') in ('STABLE','N/A'), (path,key,part)
+              vendors[vendor].update(record['cells'])
+          assert all(cells == expected for cells in vendors.values()), 'Every cell requires Apple, NVIDIA and AMD'
+          assert identity.diff(paths, 3, sorted(lanes)) == 0
+          print('Current references: 252 cells per vendor, three independent GPU vendors, all compared parts agree')
+          PYCODE
+
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
@@ -586,6 +621,7 @@ jobs:
           # every column that has it (a recorded hash that differs is still
           # DIVERGENT, a REFUSED column still fails) and move under the
           # sabotage host set (the owed check in the sabotage step).
+          GPU_COLUMNS="$GPU_COLUMNS $CURRENT_GPU_COLUMNS"
           python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --require-columns 4 --lanes "$RECORD_COVERED_LANES" --owed-json "$GATE_OUT/owed_cells.json" \
             2>&1 | tee "$GATE_OUT/diff_four_columns.txt"
@@ -703,6 +739,7 @@ jobs:
             --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 2 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
             --sabotage --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+          GPU_COLUMNS="$GPU_COLUMNS $CURRENT_GPU_COLUMNS"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2

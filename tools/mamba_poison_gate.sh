@@ -20,7 +20,7 @@
 # the copy. Environment:
 #   MOJOLEARN_POISON_RECORD   record directory to diff against (default the
 #                             newest record whose three vendor columns carry
-#                             all four lanes: 2026-09-14_120-lanes-2711flip)
+#                             all four lanes: 2026-09-18_release087-properties)
 #   MOJOLEARN_BOX_LABEL       --vendor label for the column (default: the
 #                             harness's own default for this box)
 #   MOJOLEARN_POISON_KEEP=1   keep the package copy and the JSON
@@ -28,8 +28,11 @@ set -eu
 HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$HERE"
 LANES="mamba1,mamba2,mamba2-dtlimit,mamba3"
-RECORD="${MOJOLEARN_POISON_RECORD:-bench/results/identity_break/2026-09-14_120-lanes-2711flip}"
-COLUMNS="$RECORD/apple-m4.json $RECORD/nvidia-h100-sm_90a.json $RECORD/amd-mi300x-gfx942.json"
+RECORD="${MOJOLEARN_POISON_RECORD:-bench/results/identity_break/2026-09-18_release087-properties}"
+AMD_COLUMN="$RECORD/amd-mi325x-gfx942.json"
+# Preserve explicitly selected older MI300X records.
+[ -f "$AMD_COLUMN" ] || AMD_COLUMN="$RECORD/amd-mi300x-gfx942.json"
+COLUMNS="$RECORD/apple-m4.json $RECORD/nvidia-h100-sm_90a.json $AMD_COLUMN"
 for c in $COLUMNS; do [ -f "$c" ] || { echo "no record column at $c" >&2; exit 2; }; done
 # MOJOLEARN_MAMBA_POISON_SABOTAGE
 #   1  the fix removed: m2_ydiag_kernel reads X_d rows past T again

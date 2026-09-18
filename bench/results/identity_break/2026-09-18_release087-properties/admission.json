@@ -1,0 +1,63 @@
+{
+  "status": "PASSED",
+  "vendor_classes": [
+    "apple",
+    "nvidia",
+    "amd"
+  ],
+  "lanes": [
+    "dbscan",
+    "dbscan-brute-l1",
+    "dbscan-weighted",
+    "mamba1",
+    "mamba1-bf16w",
+    "mamba1-int8w",
+    "mamba2",
+    "mamba2-dtlimit",
+    "mamba3",
+    "metrics-homogeneity-completeness",
+    "minmax-scaler",
+    "minmax-scaler-clip",
+    "mlp-bf16w",
+    "mlp-int8w",
+    "optim-sgd",
+    "ordered-gradient-sum",
+    "radius",
+    "radius-chebyshev",
+    "radius-manhattan",
+    "radius-minkowski-p3",
+    "samba",
+    "samba-bf16w",
+    "samba-int8w",
+    "samba-untied-dropout-accum",
+    "spectral-precomputed",
+    "standard-scaler-no-std",
+    "transformer",
+    "transformer-window"
+  ],
+  "fixtures": [
+    "base",
+    "denormal",
+    "denormal_ftz",
+    "dupes",
+    "hashed",
+    "negative",
+    "odd",
+    "ties",
+    "wide"
+  ],
+  "stable_training_cells_per_vendor": 252,
+  "repeats": 2,
+  "source_files": {},
+  "scope": "Targeted current train/infer/model/batch/RL-pair references; no step/full flag in these captures",
+  "sha256": {
+    "apple-m4.json": "698546fb39bcb108b825718b0993a1470f39bdb831e1b47fc15de2da7f5b8619",
+    "apple-m4-properties.json": "119965c26485b80c2ea548cc590f063ad618d5dcba94433b6ab8b6b2de7270de",
+    "apple-m4-neural.json": "1ca2da7b93856c2b3b8c98b57f158fa0cf880970bac644568599f1b7f450e132",
+    "nvidia-h100-sm_90a.json": "9c80c74384ee5b1e1602c0d2f3f35a7ac41cf891b9d2f64b70695e20d0b4088c",
+    "nvidia-h100-sm_90a-properties.json": "8a086927b7be0b9b862e8848534ae6fd4478f41c65c08c6190a88b3f0ed75c4b",
+    "amd-mi325x-gfx942.json": "2ac0b39ec703c6665d3b6cf387751ca722c3fe68e325969ae5c9a54acdbc95b2",
+    "amd-mi325x-gfx942-properties.json": "5602552d1b24023b571b7ae76f7fc1879dbbcf9d2c6a2a0844221f067107ec2d"
+  },
+  "wheel_sha256": "d20e02f9665c46049dd4655304daae0f8eb897db3d90584295f0485d4c69ce4a"
+}
