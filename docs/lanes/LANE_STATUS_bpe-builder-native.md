@@ -132,7 +132,16 @@ source); after = b77a26e93 with its binding (`host/after_b77a26e93`).
   code). `--write` moved bpe-vocabulary's and tokenized-corpus's sabotage evidence to this
   record's `m4.trainer.sabotage-build.json`; `--check` then OK (236 lanes, 237 entries).
 
-### Step 5: the full-size job (PLANNED, pod not yet rented)
+### Step 3b: a standing gate for backend agreement
+
+`test_tokenizer_surface.py::test_trainer_mojo_backend_writes_the_python_reference_bytes`: the
+three reference fixtures plus an invalid-UTF-8 / all-256-bytes / empty-document corpus, Mojo
+backend vs Python backend, ranks + tokenizer.json + merges + ties equal, ties reached, and
+`auto` picks mojo. Clean binding: GREEN 23 of 24 (GPT-2 files skip). Binding built with
+-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1: `FAIL test_trainer_mojo_backend_writes_the_python_reference_bytes:
+AssertionError: ranks differ (vocab_size 512)`, RED 1 of 24.
+
+### Step 5: the full-size job (pod RENTED 2026-09-18 ~15:50 local, running)
 
 `tools/runpod_cpu_leg.sh` gained `--stage 'KEYS'` (tools/stage_from_r2.sh, strict; the CPU
 runner had no way to stage a corpus). Body `~/mojolearn-evidence/bpe-builder-native-sep18/pod/
