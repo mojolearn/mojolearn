@@ -149,11 +149,101 @@ written and the caller must run the eager path."""
 comptime FUSED_CORNER = 2
 """A chain ended its visible run holding `-0.0`; the caller must run the
 eager path."""
+comptime FUSED_SKIPPED_STICKY = 3
+"""DEVIATION 3110: this layer/direction refused once already, so the fused
+kernels were NOT launched at all and the eager path ran alone. Not a
+refusal: a refusal that has been REMEMBERED, so the step stops paying for
+a launch whose result is then thrown away."""
+
+
+# ===========================================================================
+# DEVIATION 3110: THE STICKY FALLBACK.
+#
+# `eager_attention_forward` and `llama_decoder_layer_backward_device` both
+# LAUNCH the fused kernels, synchronize to read the corner flag, and THEN,
+# on a non-`FUSED_RAN` status, run the whole eager path as well. The fused
+# work is already bought and is then discarded. Measured by
+# `lane/lm-step-memory-build` on an H100 at the byte-LM target shape: the
+# step goes from 0.207 s to 0.44 s, 2.13x, as layers cross over one at a
+# time and never come back.
+#
+# "NEVER COME BACK" IS THE WHOLE POINT. The refusal is a property of the
+# regime the layer's weights have reached, not of the individual step, so a
+# layer that refused once refuses again. This latch remembers that and stops
+# launching the fused kernels for that layer and direction. It can only ever
+# choose MORE of the eager path, which is the path the refusal mandates and
+# the path the identity contract is written against, so no output bit can
+# move; the A/B against `MOJOLEARN_ATTN_NO_STICKY=1` is what proves that
+# rather than this paragraph.
+#
+# MEASURED 2026-09-18, H100 sm_90a, 700 steps, byte-LM target shape: THE
+# LATCH IS A PESSIMIZATION AND IS THEREFORE OFF BY DEFAULT. The discarded
+# launch is worth 0.00237 s a step (the unlatched tail 0.45737 minus the
+# pure-eager tail 0.45500), 0.5% of the step and not the 2.13x the brief
+# attributed to it; and the refusal is NOT sticky in the data, the
+# post-first-refusal refusal rate running from 0.142 to 0.939 per (layer,
+# direction), so latching forces the 0.257 s eager path onto steps that would
+# have paid only the 0.0024 s launch. The latched tail is 0.47403 s against
+# 0.45737, 3.6% WORSE. It moves no bit (700 steps, 8 state anchors, 0
+# differing) and is kept as the arm that MEASURES the launch, not as a
+# default. `-D MOJOLEARN_ATTN_STICKY=1` turns it on.
+# ===========================================================================
+
+comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
+
+comptime ATTN_NO_BWD_CORNER = is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"]()
+"""DEVIATION 3112, A MEASUREMENT ARM AND NEVER A SHIPPED BUILD: the backward
+launchers stop refusing on a corner. See the comment at their `return
+FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
+arm; on its own it proves nothing and could be silently wrong."""
+
+comptime ATTN_BWD_KV_CORNER_GUARD = is_defined[
+    "MOJOLEARN_ATTN_KV_CORNER_GUARD"
+]()
+"""DEVIATION 3111: give the `dk`/`dv` corner test the SAME "is there a masked
+cell later in the chain" guard the forward's and the `dq`'s already carry.
+`-D MOJOLEARN_ATTN_KV_CORNER_GUARD=1` turns it on.
+
+**IT IS OFF BY DEFAULT AND THE REASON IS THE ASYMMETRY, NOT DOUBT ABOUT THE
+ARGUMENT.** MEASURED: it is bit-identical over 700 steps and 8 state anchors
+and it removes 248 of 3,697 refusals, which buys NO time and NO memory
+(tail 0.45707 against 0.45734, device peak 31,537 MB both ways). A guard that
+is WRONG suppresses a refusal that was needed and moves bits SILENTLY. Zero
+measured benefit against a silent-wrong-answer risk is not a trade worth
+taking by default, and this form has only ever been exercised at
+`window == 0` with `n_rep == 1` at scale; `n_rep == 2` reached it for exactly
+one step, in a control. Turning it on is for the lane that makes the whole
+predicate right, where it will be one piece of a change that does buy
+something and can be gated properly.
+
+WHY. `-0.0` in a fused accumulator is a refusal only because the EAGER chain
+folds the masked cells too and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s
+sign bit is clear. That laundering needs a masked cell AFTER the last visible
+one. The forward tests `rr[1] < s - 1` for exactly this (`:2031`) and so does
+the `dq` chain (`j_hi < s - 1`, `:2871`). The `dk`/`dv` chains test nothing.
+
+Their chains are over the QUERY axis, and `_key_query_range` returns
+`hi = l - 1` for EVERY key unless a sliding window is set. At the byte-LM
+target shape (`window == 0`, `n_rep == 1`) there is no masked tail at all, so
+every one of those refusals is a false positive. MEASURED on an H100,
+2026-09-18, 700 steps at that shape: the guarded FORWARD refused 0 times out
+of 8,400 observations and the unguarded BACKWARD refused 3,697 times out of
+8,400. That asymmetry is the whole of the 2.13x.
+
+The `hh + 1 < n_rep` term is the grouped-query case: under GQA the chain
+continues into the next head of the kv group, whose rows below `lo[u]` ARE
+masked cells that follow. It is INERT at `n_rep == 1`, and it is written
+because the kernel is not restricted to `n_rep == 1`.
+
+NOT COVERED, and said rather than counted: `fused_bwd_dkdv_tiled_kernel` and
+`fused_bwd_kvfold_r2_kernel` carry the same unguarded test and are NOT
+changed here. They are trial arms; the column default resolves to
+`fused_bwd_dkdv_r2_kernel`, which is the one measured."""
 
 comptime REGIME_BOUND: Float64 = 1267650600228229401496703205376.0
 """`2^100`. `head_dim * max|a| * max|b|` below this keeps every dot below
@@ -4806,12 +4896,21 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                             dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
             barrier()
         # The end of this head's visible run for every key this thread
-        # holds: a `-0.0` here could be laundered by the masked tail.
+        # holds: a `-0.0` here could be laundered by the masked tail --
+        # BUT ONLY IF THERE IS ONE. DEVIATION 3111, see
+        # `ATTN_BWD_KV_CORNER_GUARD`.
         comptime for i in range(RPT * CPT):
-            if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
-                hit = True
-            if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
-                hit = True
+            comptime u_i = i // CPT
+            var later_masked = True
+            comptime if ATTN_BWD_KV_CORNER_GUARD:
+                later_masked = hi[u_i] < Int32(l - 1) or (
+                    hh + 1 < n_rep and lo[u_i] > Int32(0)
+                )
+            if later_masked:
+                if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
+                if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
     comptime for u in range(RPT):
         var jc = j0 + tr + u * 16
         if jc < s:
@@ -7371,7 +7470,18 @@ def fused_backward_launch_ran(
     _ = corner^
     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
     if hit:
-        return FUSED_CORNER
+        # DEVIATION 3112, MEASUREMENT ARM, NEVER ON A SHIPPED BUILD:
+        # `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1` makes the BACKWARD accept
+        # its own output on a corner instead of refusing to the eager
+        # path. It exists to answer the one question the guard of
+        # DEVIATION 3111 could not: are the remaining refusals REAL?
+        # Bit-compared against the refusing arm over 700 steps, EQUAL
+        # means every one of them was a false positive and the 2.13x is
+        # recoverable; DIFFERENT means the fallback is earning its cost
+        # and only the signed-zero repair can remove it. Either answer
+        # is the result. The default is unchanged.
+        comptime if not ATTN_NO_BWD_CORNER:
+            return FUSED_CORNER
     return FUSED_RAN
 
 
@@ -7651,7 +7761,18 @@ def fused_backward_launch_estash_ran(
             _ = corner^
             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
             if hit:
-                return FUSED_CORNER
+                # DEVIATION 3112, MEASUREMENT ARM, NEVER ON A SHIPPED BUILD:
+                # `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1` makes the BACKWARD accept
+                # its own output on a corner instead of refusing to the eager
+                # path. It exists to answer the one question the guard of
+                # DEVIATION 3111 could not: are the remaining refusals REAL?
+                # Bit-compared against the refusing arm over 700 steps, EQUAL
+                # means every one of them was a false positive and the 2.13x is
+                # recoverable; DIFFERENT means the fallback is earning its cost
+                # and only the signed-zero repair can remove it. Either answer
+                # is the result. The default is unchanged.
+                comptime if not ATTN_NO_BWD_CORNER:
+                    return FUSED_CORNER
             return FUSED_RAN
     return fused_backward_launch_ran(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,

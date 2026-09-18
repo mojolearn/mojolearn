@@ -590,7 +590,14 @@ class SmallByteLanguageModelTrainer:
         cell; `layers_grown_forward`, `layers_grown_backward`,
         `layers_full_aexp`, `layers`; `eager_bytes` (forward eager +
         backward eager, the two that only the eager fallback grows) and
-        `total_bytes` (those plus `aexp`).
+        `total_bytes` (those plus `aexp`). New bindings also report per-layer
+        `forward_status`, `backward_status`, their named `*_counts`, and
+        `attn_materialized` after the latest step. Status -1 means not
+        attempted; 0 ran, 1 refused regime, 2 corner, 3 DEVIATION 3110's
+        latch (this layer refused before, so nothing was launched at all and
+        the eager path ran alone). Materialization may
+        have occurred during backward recomputation. Retained capacity does
+        not say which path ran this step.
 
         WHAT IT IS FOR. The ten `[B, n_heads, L, S]` attention arrays are
         allocated at ONE element for the fused path and GROW ON DEMAND the
@@ -609,8 +616,7 @@ class SmallByteLanguageModelTrainer:
         fused exp stash grows `aexp` alone on a call that refused
         nothing. `eager_bytes` excludes it for exactly that reason.
 
-        Host metadata only: every number is the length of a buffer the
-        trainer already owns. Nothing is launched, downloaded or
+        Host metadata only: buffer lengths and saved launcher statuses. Nothing is launched, downloaded or
         synchronized, and no step path calls this."""
         with self._lock:
             if not self._session_open or self._native_session is None:
@@ -619,7 +625,7 @@ class SmallByteLanguageModelTrainer:
             if len(info) < 10:
                 return None
             fwd, aexp, bwd = int(info[4]), int(info[5]), int(info[6])
-            return dict(forward_eager_cells=fwd, forward_aexp_cells=aexp,
+            report = dict(forward_eager_cells=fwd, forward_aexp_cells=aexp,
                         backward_eager_cells=bwd,
                         forward_eager_bytes=fwd * 4, forward_aexp_bytes=aexp * 4,
                         backward_eager_bytes=bwd * 4,
@@ -629,6 +635,22 @@ class SmallByteLanguageModelTrainer:
                         layers_grown_backward=int(info[8]),
                         layers_full_aexp=int(info[9]),
                         layers=state_shape(self._state).n_layers)
+            n = report['layers']
+            if len(info) >= 12:
+                report['stage_lists'] = (int(info[10]), int(info[11]))
+                n = min(n, int(info[10]), int(info[11]))
+            if len(info) >= 12 + 3 * n:
+                names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
+                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER',
+                         3: 'FUSED_SKIPPED_STICKY'}
+                for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
+                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
+                    report[key] = values
+                    report[key + '_counts'] = {name: values.count(code)
+                                              for code, name in names.items()}
+                report['attn_materialized'] = [bool(info[14 + 3 * layer])
+                                             for layer in range(n)]
+            return report
 
     def _export_state_impl(self):
         """Lock held, session open. Returns a validated state dict whose
