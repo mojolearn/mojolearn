@@ -220,12 +220,12 @@ def reduce_min_kernel(
                 ftz(ftz(x_norm_row) + ftz(y_norm.unsafe_load(col))),
             )
         )
-            # GEMM round-off can produce slightly negative expanded
-            # distances; clamp to zero. Theirs,
-            # `src/distance/detail/distance_ops/l2_exp.cuh:132`, minus the
-            # self-neighbor factor -- see the module docstring.
-            if dist <= Float32(0.0):
-                dist = Float32(0.0)
+        # GEMM round-off can produce slightly negative expanded distances;
+        # clamp to zero. Theirs,
+        # `src/distance/detail/distance_ops/l2_exp.cuh:132`, minus the
+        # self-neighbor factor -- see the module docstring.
+        if dist <= Float32(0.0):
+            dist = Float32(0.0)
 
         # Strict `<`, so within a thread the LOWEST column wins a tie. Half
         # of their `Reducer`'s total order lives here.
