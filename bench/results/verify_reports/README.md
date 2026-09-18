@@ -21,12 +21,16 @@ you have no second party. Then find one.
 
 | file | box | what it is |
 |---|---|---|
-| `verify-all.cpu-a.json.gz` | see the `device` block inside | `verify --all` on a CPU-only install |
+| `verify-all.cpu-a.json.gz` | AMD EPYC 4564P 16-Core | `verify --all` on a CPU-only install |
 | `verify-all.cpu-a.json.commitment` | | the commitment over that document |
-| `verify-all.cpu-b.json.gz` | a second CPU box | an independent run of the same thing |
-| `verify-all.cpu-b.json.commitment` | | |
-| `compare-cpu-a-vs-cpu-b.txt` | | what `verify --compare` says about the pair |
-| `compare-uncomputed-negative-control.txt` | | the same comparison BEFORE, when 90 cells ran on neither side |
+| `verify-all.cpu-b.json.gz` | AMD EPYC 7702P 64-Core | an independent run on DIFFERENT silicon |
+| `verify-all.cpu-b.json.commitment` | | the commitment over that one |
+| `verify-all.cpu-a.txt` `verify-all.cpu-b.txt` | | the human output of each run |
+| `self-test.cpu-a.txt` | | the verifier reproducing `ols/base` and then DETECTING a one-ULP perturbation, on the box that made the document |
+| `compare-cpu-a-vs-cpu-b.txt` | | **what `verify --compare` says about the published pair** |
+| `compare-uncomputed-negative-control.txt` | | the same comparison when 90 cells ran on neither side |
+| `compare-same-device-agree.txt` | | an earlier pair that landed on ONE processor model, kept for the warning it triggers |
+| `nvidia-hang/` | RTX 4090 | why there is no NVIDIA document |
 
 Gzipped because each document is about 15.8 MB and about 405 KB compressed,
 and `bench/results` is already the reason a push is slow. `gunzip -k` first;
@@ -37,21 +41,39 @@ document here. Do not read the pair below as cross-vendor evidence; it is not.
 The cross-vendor claim rests on the recorded columns under
 `bench/results/identity_break/`, not on these files.
 
+There is no NVIDIA document because `verify --all` DEADLOCKS on a CUDA
+install: it reaches `transformer-bf16w` and stops, GPU idle at 0 %, 195
+threads, `wchan: futex_wait_queue`. `nvidia-hang/` has the measurement. The
+fourteen low-bit weight lanes are public and a GPU install runs every lane, so
+this is user-facing and not merely our inconvenience.
+
 ## What the pair says, and what it does not
 
-    RESULT: AGREE. 5174 cell parts match across both documents, none
-    differ, and none is present in only one.
-    COMMITMENTS: both documents match a commitment published BEFORE the
-    exchange, so neither party could have copied the other's numbers.
+`compare-cpu-a-vs-cpu-b.txt`, in full, is the reason this directory exists:
 
-and, in the same output, the thing that keeps it honest:
+    cpu             AMD EPYC 4564P 16-Core   AMD EPYC 7702P 64-Core  <- differs
+    agree 5165   differ 0   self-contradicted 0   neither computed 0
 
-    WARNING: both documents describe the SAME device. Agreement then shows
-    repeatability, not cross-hardware identity, and proves much less.
+    RESULT: AGREE. 5165 cell parts match across both documents, none
+    differ, and none is present in only one. Neither machine trusted the
+    other, and neither had to trust us.
+    Both documents were committed to before either party saw the other's, so
+    neither set of numbers could have been copied from the other.
 
-Both rentals came back as an AMD EPYC 7713. So this pair is REPEATABILITY on
-one CPU model, not identity across hardware, and the comparer says so itself
-rather than leaving a reader to notice.
+Two different processors, 5,165 cell parts, not one of them different, and
+each machine bound to its own answer before it could see the other's.
+
+**And the limit, which the tool prints itself rather than leaving a reader to
+notice:**
+
+    NOTE: these documents share a device class. Agreement is weaker evidence
+    than two genuinely different vendors would give.
+
+Two x86 CPUs are not two vendors. `compare-same-device-agree.txt` is the
+weaker case still, kept on purpose: an earlier pair where both rentals came
+back as the SAME processor model, where the tool escalates to
+`WARNING: both documents describe the SAME device. Agreement then shows
+repeatability, not cross-hardware identity, and proves much less.`
 
 ## Three things that will make a comparison fail, none of them your machine
 

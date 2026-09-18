@@ -229,12 +229,20 @@ against, because `python/mojolearn/verify_reference/` holds only `models` and
 **DEVICE CLASSES: CPU ONLY.** No Apple, NVIDIA or AMD document exists. Do not
 read the published pair as cross-vendor evidence.
 
-**STILL OWED:** `cpu-b` at `b9c338384` (its leg was running when this was
-written; pod `lycvc7rkggap9r`, output lands under
-`bench/results/runpod_cpu/*refregen-rep6/remote/leg_out/verify-all.cpu6.json`)
-and the comparison of cpu-a against it. The two comparison transcripts above
-were taken from the EARLIER pair at `1863520e9` and prove the mechanism, not
-the published files.
+**DONE:** `cpu-b` landed on an AMD EPYC 7702P, DIFFERENT silicon from
+`cpu-a`'s EPYC 4564P, and the published pair compares:
+
+    agree 5165   differ 0   self-contradicted 0   neither computed 0
+    RESULT: AGREE ... Neither machine trusted the other, and neither had to
+    trust us. Both documents were committed to before either party saw the
+    other's.
+
+with the tool's own limit printed beside it: `NOTE: these documents share a
+device class. Agreement is weaker evidence than two genuinely different
+vendors would give.` Two x86 CPUs are not two vendors.
+
+**STILL OWED:** an Apple, NVIDIA or AMD document. NVIDIA is blocked on the
+deadlock below, not on a rental.
 
 ## THE HARNESS DIGEST MOVED TODAY, AND IT INVALIDATES OLDER DOCUMENTS
 
@@ -293,19 +301,16 @@ falls back to the checkout copy correctly. The fix is
 
 ## THE EXACT NEXT COMMAND
 
-When `rep6` lands, from `~/mojolearn-wt/reference-regen`:
+Nothing is owed for the CPU class. The next thing this directory needs is a
+document from a device class that is not CPU:
 
-    V=bench/results/verify_reports
-    D=$(ls -d bench/results/runpod_cpu/*refregen-rep6/remote/leg_out)
-    gzip -9 -c $D/verify-all.cpu6.json > $V/verify-all.cpu-b.json.gz
-    cp $D/verify-all.cpu6.json.commitment $V/verify-all.cpu-b.json.commitment
-    cd python && MOJOLEARN_NUMERIC_MODE=fast python3 -m mojolearn verify --compare \
-        ../bench/results/runpod_cpu/2026-09-18_084015-refregen-rep5/remote/leg_out/verify-all.cpu5.json \
-        $D/verify-all.cpu6.json \
-        --commitment-a <that file>.commitment --commitment-b <that file>.commitment \
-        > ../$V/compare-cpu-a-vs-cpu-b.txt
+  * NVIDIA is blocked by the `transformer-bf16w` deadlock above. Fix that
+    first; a document cannot be emitted from a run that does not finish.
+  * Apple is one machine and one GPU, and a full column is hours, so it
+    belongs to the release record rather than to a lane.
+  * AMD needs a rental and has no blocker known to this lane.
 
-Then update `$V/README.md` with the verdict and whether the two boxes were
-the same CPU model (`rep5` was an EPYC 4564P; if `rep6` differs, the pair is
-cross-hardware rather than repeatability, and the comparer prints a WARNING
-when they match).
+Re-emitting the CPU pair when the harness moves is one command per box:
+
+    python3 -m mojolearn verify --all --json-out verify-all.<class>.json
+    python3 -m mojolearn verify --commitment verify-all.<class>.json
