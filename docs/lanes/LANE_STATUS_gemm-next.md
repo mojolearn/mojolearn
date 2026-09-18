@@ -1,4 +1,4 @@
-# LANE STATUS: `lane/gemm-next` (2026-09-17)
+# LANE STATUS: `lane/gemm-next` (updated 2026-09-18)
 
 Written for a reader with NO context. Branch `lane/gemm-next`, worktree
 `~/mojolearn-wt/gemm-next`, branched from `origin/main` at 712eedd16.
@@ -17,7 +17,8 @@ in section 6 below. It would move bits.
 oldest unanswered thing this lane holds.
 
 The lane owns `gemm/` and `core/gemm.mojo`. It does NOT own
-`transformer/impl/llama/` or the fused attention (`lane/attention-speed`),
+`transformer/impl/llama/modeling_llama.mojo` or `fused_attention.mojo`
+(`lane/attention-fallback-fix`),
 `python/mojolearn/verify_reference/table.json` or `docs/VERIFY_EXTERNALLY.md`
 (`lane/reference-regen`), `bench/results/identity_break/` (`sabotage-sweep`), or
 the `--compare` path in `_verify_all.py` (`compare-commit-reveal`).
