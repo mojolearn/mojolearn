@@ -139,8 +139,9 @@ jobs:
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
-      # Keep release certification within two cloud numerical workers.
-      max-parallel: 1
+      # Independent architectures run together (user-approved parallelism).
+      # Each job retains its two-shard cap: at most six numerical workers.
+      max-parallel: 3
       matrix:
         # One CPU environment per OS/architecture. GPU release evidence is
         # separately one Apple, one AMD and one NVIDIA column.
@@ -158,7 +159,7 @@ jobs:
     # Both full-column sweeps have 50-minute step budgets, in addition to
     # binding builds and saved-model/property gates. The previous 90-minute
     # job cap cancelled hosted Apple run 35350125464 during its sabotage
-    # sweep. Preserve serial matrix execution and the two-worker shard cap;
+    # sweep. Preserve the per-job two-worker shard cap;
     # allow bounded time for both arms and artifact upload instead.
     timeout-minutes: 180
     permissions:
@@ -468,6 +469,14 @@ jobs:
       # also wrong on every column, DEVIATION 2716). These committed JSONs are
       # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
       # cells are the kmeans-sqrt fix record, asserted two steps below.
+      - name: Retain saved-models checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-saved-models-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
@@ -651,6 +660,14 @@ jobs:
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
+      - name: Retain clean-column checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-clean-column-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: Build the sabotage host set (MOJOLEARN_HOST_SABOTAGE)
         if: always()
         timeout-minutes: 20
@@ -734,6 +751,14 @@ jobs:
 
       # The same sabotage host set (built by the step above into host-sab)
       # must make the classical gate say so on every recording.
+      - name: Retain fault-column checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-fault-column-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: Classical host gate, the sabotage build must be caught
         if: always()
         env:

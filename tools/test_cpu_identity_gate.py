@@ -168,6 +168,48 @@ class GateTests(unittest.TestCase):
             self.assertEqual(len(seen), 2)
             self.assertTrue(all(cmd[-2:] == ['--repeats', '1'] for cmd in seen))
 
+    def test_resume_preserves_parts_but_never_reuses_merged_success(self):
+        out = self.root / 'resume.json'
+        out.write_text('old merged success')
+        part = self.root / 'resume.part0.json'
+        part.write_text('checkpoint to validate')
+        log = self.root / 'resume.part0.log'
+        log.write_text('previous attempt\n')
+        seen = []
+
+        def worker(cmd, stdout, stderr):
+            path = Path(cmd[cmd.index('--json') + 1])
+            seen.append(cmd)
+            if path == part:
+                self.assertEqual(path.read_text(), 'checkpoint to validate')
+                self.assertIn('--resume', cmd)
+            else:
+                self.assertNotIn('--resume', cmd)
+            path.write_text(json.dumps(record(cmd[cmd.index('--lanes') + 1].split(','))))
+            stdout.write('new attempt\n')
+            return SimpleNamespace(poll=lambda: 0)
+
+        def merge(cmd):
+            self.assertFalse(out.exists())
+            out.write_text('{}')
+            return SimpleNamespace(returncode=0)
+
+        args = SimpleNamespace(lanes='gemm-pinned,kde', shards=2, jobs=1,
+            json=str(out), extra=['--repeats', '2'], heartbeat=120, resume=True)
+        with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+             patch.object(gate.subprocess, 'run', side_effect=merge), \
+             patch.object(gate.time, 'sleep'):
+            self.assertEqual(gate.do_run_column(args), 0)
+        self.assertEqual(len(seen), 2)
+        self.assertEqual(log.read_text(), 'previous attempt\nnew attempt\n')
+
+    def test_forwarded_resume_is_rejected_before_deleting_evidence(self):
+        out = self.root / 'preserve.json'
+        out.write_text('evidence')
+        args = SimpleNamespace(extra=['--resume'], json=str(out))
+        self.assertEqual(gate.do_run_column(args), 2)
+        self.assertEqual(out.read_text(), 'evidence')
+
     def test_merge_rejects_machine_build_fixture_and_commit_changes(self):
         spec = importlib.util.spec_from_file_location('identity_gate_test', Path(__file__).with_name('identity_break.py'))
         identity = importlib.util.module_from_spec(spec)

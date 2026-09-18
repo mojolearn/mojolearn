@@ -372,6 +372,7 @@ def _device_block(ml, harness):
         vendor=vendor, device_class=vref.VENDOR_CLASS.get(vendor),
         device=_verify.describe_device(), cpu_model=harness.cpu_model(),
         requested_parallel_devices=list(harness._par_devices()),
+        verifier_cpu_threads=os.environ.get('MOJOLEARN_VERIFY_CPU_THREADS'),
         platform=platform.platform(), python=platform.python_version(),
         numpy=__import__("numpy").__version__,
     )
