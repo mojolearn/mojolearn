@@ -59,3 +59,12 @@ Metal parts; faultmoves45/45 floating parts, greedyIDs unchanged9/9. Evidence in
 `bench/results/loaded_causal_lm/2026-09-18/native-fault-comparison.json` and paired
 captures/buildwitness. Earlier nativefault OWED statements are superseded for
 this exact scope. NVIDIA/AMD, installedwheel and physicalmultiGPU remain owed.
+
+Profile v2 expands the scope to all seven supported config families: Llama
+(tied+untied), Mistral with window3 crossing its ring, Qwen2 with nonzero QKV
+biases, Qwen3 with nontrivial Q/K normalization weights, Phi3 fused QKV/gate-up
+checkpoint mapping, Mamba1 and Mamba2. All FP32/BF16/int8 variants make24 cases.
+Native CPU initial capture passes all checks in11.8seconds. Fixture tests verify
+exact planned checkpoint-name coverage and exercise family-specific options.
+77 loader, transport and verifier tests pass. V1 evidence remains unchanged;
+v2 vendor comparisons are being captured separately.
