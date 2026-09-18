@@ -1,0 +1,3 @@
+et-reg-bootstrap-parallel: clean
+et-reg-bootstrap-parallel: sabotage
+et-reg-bootstrap-parallel: 9/9 controls; passed=True

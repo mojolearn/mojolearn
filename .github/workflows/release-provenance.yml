@@ -112,6 +112,14 @@ jobs:
     timeout-minutes: 90
     env:
       MOJOLEARN_PACKAGE_BYTE_LM: '1'
+      MOJOLEARN_BUILD_JOBS: '1'
+      MOJOLEARN_COMPILE_JOBS: '1'
+      MOJOLEARN_CPU_THREADS: '1'
+      OMP_NUM_THREADS: '1'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+      NUMEXPR_NUM_THREADS: '1'
+      VECLIB_MAXIMUM_THREADS: '1'
       ACTIONS_ARTIFACT_UPLOAD_CONCURRENCY: '1'
       ACTIONS_ARTIFACT_UPLOAD_TIMEOUT_MS: '1200000'
     permissions:
@@ -275,6 +283,28 @@ jobs:
           if-no-files-found: ignore
           retention-days: 30
 
+      - name: Qualify the installed verifier and portable CPU models
+        run: |
+          set -eu
+          set -- python/dist/mojolearn-*.whl
+          test "$#" -eq 1
+          wheel="$1"
+          set --
+          if [ -n "${MOJOLEARN_QUALIFICATION_WHEELHOUSE:-}" ]; then
+            set -- --wheelhouse "$MOJOLEARN_QUALIFICATION_WHEELHOUSE"
+          fi
+          python3 tools/qualify_verifier_wheel.py "$wheel" "$@" \
+            --output "$RUNNER_TEMP/verifier-qualification-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+
+      - name: Retain installed verifier qualification
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verifier-wheel-qualification
+          path: ${{ runner.temp }}/verifier-qualification-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: ignore
+          retention-days: 30
+
       # THE LINUX WHEEL IS NOT BUILT HERE AND CANNOT BE. It is compiled on a
       # rented CUDA box and a rented HIP box (`packaging/linux/leg.sh`),
       # packed on the Mac by `packaging/linux/pack_wheel.py`, and retagged by
@@ -333,9 +363,32 @@ jobs:
             *-manylinux_*_x86_64.whl) ;;
             *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
           esac
-          python3 tools/check_linux_release_qualification.py "$WHL" \
+          # The Mac build stages generated Python harness copies in its
+          # package directory. Admit Linux against this exact committed
+          # source, without counting those build products as native inputs.
+          source_dir=$(mktemp -d "$RUNNER_TEMP/linux-admission-source.XXXXXX")
+          trap 'rm -rf "$source_dir"' EXIT
+          git archive HEAD -- . ':!bench/results' | tar -x -C "$source_dir"
+          # Corpus operands are tracked but export-ignored. Restore only the
+          # qualification cases from the same commit, never the working tree.
+          python3 - "$source_dir" <<'PY'
+          import pathlib, subprocess, sys
+          root = pathlib.Path(sys.argv[1])
+          sys.path.insert(0, str(root / 'tools'))
+          from verify_linux_surface_qualification import CORPUS_CASES
+          for case in CORPUS_CASES:
+              prefix = 'mamba/corpus/' + case
+              names = subprocess.check_output(['git', 'ls-tree', '-rz', '--name-only', 'HEAD', '--', prefix])
+              for name in names.decode().split('\0'):
+                  if not name:
+                      continue
+                  target = root / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(subprocess.check_output(['git', 'show', 'HEAD:' + name]))
+          PY
+          python3 "$source_dir/tools/check_linux_release_qualification.py" "$WHL" \
             --qualification-root "$DIR/qualification" \
-            --source-root "$GITHUB_WORKSPACE"
+            --source-root "$source_dir" --profile release-linux3
           cp "$WHL" python/dist/
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"
@@ -370,7 +423,7 @@ jobs:
           rm -rf "${RUNNER_TEMP:-/tmp}/isa" && mkdir -p "${RUNNER_TEMP:-/tmp}/isa"
           python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
             "$WHL" "${RUNNER_TEMP:-/tmp}/isa"
-          docker run --rm --cpus 2 --platform linux/amd64 \
+          docker run --rm --cpus 1 --platform linux/amd64 \
             -v "${RUNNER_TEMP:-/tmp}/isa:/w:ro" \
             -v "$PWD/packaging/linux:/g:ro" \
             "${MOJOLEARN_AUDIT_IMAGE:-quay.io/pypa/manylinux_2_28_x86_64}" \

@@ -246,6 +246,19 @@ if has_phase setup; then
     ) &
     (
         _t0=$(date +%s)
+        # DEVIATION 2704: the staged npz IS the taxi dataset. Every arm reads
+        # `taxi_speed.npz`; the two parquet months exist only to decode into
+        # it. The istella half of this fetcher has tested for its npz since
+        # 2026-09-13 and the taxi half never did, so a box that had already
+        # received 419 MB of verified taxi from R2 went on to pull 2024-01 and
+        # 2024-02 from d37ci6vzurychx.cloudfront.net -- the one dataset every
+        # runner stages BY DEFAULT, and the one re-download that printed no
+        # R2_STAGING_MISSED line anywhere.
+        if [ -f "$GBM_BENCH_DATA/taxi/taxi_speed.npz" ]; then
+            echo "taxi=staged npz present (R2), parquet months not fetched" >> "$OUT/fetch.txt"
+            : > "$OUT/fetch_taxi.done"
+            exit 0
+        fi
         for m in 2024-01 2024-02; do
             _f="$GBM_BENCH_DATA/taxi/yellow_tripdata_$m.parquet"
             [ -f "$_f" ] || { timeout -k 10 600 curl -fsSL --retry 3 -A "$UA" -o "$_f.part" -w '%{http_code}' \

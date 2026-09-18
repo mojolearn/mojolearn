@@ -1,0 +1,6 @@
+lane=verification-neural
+commit=dcddb834572fd3b93cd9d26b943161921016b52b
+dirty_tracked=0
+worktree=/Users/andrewhendel/mojolearn-wt/cpu-verification-completion
+source=2924	19194391	e3364a71fc079eaf41a3e9b721a8ee5f6d3383954277180e02fa7b71ce04c21b
+box_clock_minus_mac=0

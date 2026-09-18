@@ -1,0 +1,979 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-5.15.0-94-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9754-128-core-processor",
+ "commit": "f0d53b4ed2480b17670a543deb90c24b803b899d",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-nan-modes/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "78578cb9693251c7",
+    "78578cb9693251c7"
+   ],
+   "parts": [
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    },
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    }
+   ],
+   "infer": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "21e4e8ab2f27b32b",
+    "21e4e8ab2f27b32b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "batch": [
+    "534ddd7d50c9f4b2",
+    "534ddd7d50c9f4b2"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.097626939415932,
+    "stages": {
+     "repeat=1/train": 4.314173877239227,
+     "repeat=1/infer-save-reload": 0.039083823561668396,
+     "repeat=1/batch": 0.15588658303022385,
+     "repeat=2/train": 4.392348878085613,
+     "repeat=2/infer-save-reload": 0.03313572704792023,
+     "repeat=2/batch": 0.162542425096035
+    }
+   }
+  },
+  "gbdt-nan-modes/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "473ca4ed2836ef3a",
+    "473ca4ed2836ef3a"
+   ],
+   "parts": [
+    {
+     "min": "13cc3194def6ba8a",
+     "max": "ebe6c62a716f1e48"
+    },
+    {
+     "min": "13cc3194def6ba8a",
+     "max": "ebe6c62a716f1e48"
+    }
+   ],
+   "infer": [
+    "dc93d7ad50635245",
+    "dc93d7ad50635245"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dcc75fe82d85d709",
+    "dcc75fe82d85d709"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "dc93d7ad50635245",
+    "dc93d7ad50635245"
+   ],
+   "batch": [
+    "1ae697f9ec19d9e2",
+    "1ae697f9ec19d9e2"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.56626831740141,
+    "stages": {
+     "repeat=1/train": 4.560832217335701,
+     "repeat=1/infer-save-reload": 0.023791976273059845,
+     "repeat=1/batch": 0.13087081164121628,
+     "repeat=2/train": 4.691945165395737,
+     "repeat=2/infer-save-reload": 0.024065740406513214,
+     "repeat=2/batch": 0.13432901352643967
+    }
+   }
+  },
+  "gbdt-nan-modes/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "383cedfee6421501",
+    "383cedfee6421501"
+   ],
+   "parts": [
+    {
+     "min": "f73018929c188417",
+     "max": "5c690fb375214219"
+    },
+    {
+     "min": "f73018929c188417",
+     "max": "5c690fb375214219"
+    }
+   ],
+   "infer": [
+    "7f875fc223318225",
+    "7f875fc223318225"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e187cf6bf073919c",
+    "e187cf6bf073919c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7f875fc223318225",
+    "7f875fc223318225"
+   ],
+   "batch": [
+    "bab4a9b02d290463",
+    "bab4a9b02d290463"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 10.6139792278409,
+    "stages": {
+     "repeat=1/train": 5.316438138484955,
+     "repeat=1/infer-save-reload": 0.04130735993385315,
+     "repeat=1/batch": 0.17821437865495682,
+     "repeat=2/train": 4.895476765930653,
+     "repeat=2/infer-save-reload": 0.033346086740493774,
+     "repeat=2/batch": 0.14874204993247986
+    }
+   }
+  },
+  "gbdt-nan-modes/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e5e2cdf50c1b2db",
+    "2e5e2cdf50c1b2db"
+   ],
+   "parts": [
+    {
+     "min": "06b5d515d833b61b",
+     "max": "6d19cf352d1593e7"
+    },
+    {
+     "min": "06b5d515d833b61b",
+     "max": "6d19cf352d1593e7"
+    }
+   ],
+   "infer": [
+    "08a019b1c4705959",
+    "08a019b1c4705959"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f69d17b62cb5c317",
+    "f69d17b62cb5c317"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "08a019b1c4705959",
+    "08a019b1c4705959"
+   ],
+   "batch": [
+    "68bb5939b6a78d3f",
+    "68bb5939b6a78d3f"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.673024892807007,
+    "stages": {
+     "repeat=1/train": 4.9004863277077675,
+     "repeat=1/infer-save-reload": 0.034937240183353424,
+     "repeat=1/batch": 0.15850520879030228,
+     "repeat=2/train": 4.397634617984295,
+     "repeat=2/infer-save-reload": 0.03308020532131195,
+     "repeat=2/batch": 0.14795643836259842
+    }
+   }
+  },
+  "gbdt-nan-modes/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "78578cb9693251c7",
+    "78578cb9693251c7"
+   ],
+   "parts": [
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    },
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    }
+   ],
+   "infer": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1f58631b241667c",
+    "d1f58631b241667c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "batch": [
+    "534ddd7d50c9f4b2",
+    "534ddd7d50c9f4b2"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.312439113855362,
+    "stages": {
+     "repeat=1/train": 4.380143545567989,
+     "repeat=1/infer-save-reload": 0.030073553323745728,
+     "repeat=1/batch": 0.15393047779798508,
+     "repeat=2/train": 4.550082787871361,
+     "repeat=2/infer-save-reload": 0.03629106283187866,
+     "repeat=2/batch": 0.16147381067276
+    }
+   }
+  },
+  "gbdt-nan-modes/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "78578cb9693251c7",
+    "78578cb9693251c7"
+   ],
+   "parts": [
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    },
+    {
+     "min": "5d7ce7cc59e261b0",
+     "max": "e57525a0fb5169d2"
+    }
+   ],
+   "infer": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d1f58631b241667c",
+    "d1f58631b241667c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "07bb5e7debc63359",
+    "07bb5e7debc63359"
+   ],
+   "batch": [
+    "534ddd7d50c9f4b2",
+    "534ddd7d50c9f4b2"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 10.007298402488232,
+    "stages": {
+     "repeat=1/train": 4.767851904034615,
+     "repeat=1/infer-save-reload": 0.035759337246418,
+     "repeat=1/batch": 0.1603187844157219,
+     "repeat=2/train": 4.837529391050339,
+     "repeat=2/infer-save-reload": 0.03571757674217224,
+     "repeat=2/batch": 0.16964033991098404
+    }
+   }
+  },
+  "gbdt-nan-modes/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2819efc041a7fccc",
+    "2819efc041a7fccc"
+   ],
+   "parts": [
+    {
+     "min": "ca1a067b4a87c5fe",
+     "max": "e57525a0fb5169d2"
+    },
+    {
+     "min": "ca1a067b4a87c5fe",
+     "max": "e57525a0fb5169d2"
+    }
+   ],
+   "infer": [
+    "36b195ad8ace6ae0",
+    "36b195ad8ace6ae0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b7ff451e59cef440",
+    "b7ff451e59cef440"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36b195ad8ace6ae0",
+    "36b195ad8ace6ae0"
+   ],
+   "batch": [
+    "608a61488ae0f625",
+    "608a61488ae0f625"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 10.629286758601665,
+    "stages": {
+     "repeat=1/train": 5.262302592396736,
+     "repeat=1/infer-save-reload": 0.03126566857099533,
+     "repeat=1/batch": 0.1446276605129242,
+     "repeat=2/train": 5.0046976283192635,
+     "repeat=2/infer-save-reload": 0.031148888170719147,
+     "repeat=2/batch": 0.15481051802635193
+    }
+   }
+  },
+  "gbdt-nan-modes/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1b040fd66f8a289c",
+    "1b040fd66f8a289c"
+   ],
+   "parts": [
+    {
+     "min": "9dfd010df838667f",
+     "max": "970e4742a0b39b76"
+    },
+    {
+     "min": "9dfd010df838667f",
+     "max": "970e4742a0b39b76"
+    }
+   ],
+   "infer": [
+    "e39662abe465f955",
+    "e39662abe465f955"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "24590817955c4ec7",
+    "24590817955c4ec7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e39662abe465f955",
+    "e39662abe465f955"
+   ],
+   "batch": [
+    "3d98f9fe5b3c32af",
+    "3d98f9fe5b3c32af"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.240860410034657,
+    "stages": {
+     "repeat=1/train": 4.3905914053320885,
+     "repeat=1/infer-save-reload": 0.023825213313102722,
+     "repeat=1/batch": 0.10627014935016632,
+     "repeat=2/train": 4.590268015861511,
+     "repeat=2/infer-save-reload": 0.02380036562681198,
+     "repeat=2/batch": 0.10568482428789139
+    }
+   }
+  },
+  "gbdt-nan-modes/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "60bb648530ab6b1f",
+    "60bb648530ab6b1f"
+   ],
+   "parts": [
+    {
+     "min": "85b31578f0f57530",
+     "max": "68ee75afe6295f7b"
+    },
+    {
+     "min": "85b31578f0f57530",
+     "max": "68ee75afe6295f7b"
+    }
+   ],
+   "infer": [
+    "9e042bbace89b0eb",
+    "9e042bbace89b0eb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ec244b1becb8f01a",
+    "ec244b1becb8f01a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9e042bbace89b0eb",
+    "9e042bbace89b0eb"
+   ],
+   "batch": [
+    "dc3e7c604ea6921d",
+    "dc3e7c604ea6921d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 9.304736144840717,
+    "stages": {
+     "repeat=1/train": 4.460900314152241,
+     "repeat=1/infer-save-reload": 0.0333353653550148,
+     "repeat=1/batch": 0.1607699617743492,
+     "repeat=2/train": 4.443565562367439,
+     "repeat=2/infer-save-reload": 0.03956408053636551,
+     "repeat=2/batch": 0.16616906225681305
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "host": {
+  "cpu_model": "AMD EPYC 9754 128-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "kmeans-cosine",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "be7428da7d16cdb056d63b2f0567d9d1208cd3b6145f7929b42c0d9a386977aa",
+    "size": 618960,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "cc86acdaabcfb6151c7955d2de2af57c4dd7f21a25a2273c6634734a8f933f8c",
+    "size": 687000,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "d4ac0a83c665a5e2178b9e322943859ae93cb4ce73861d54451e9bdc8d76afad",
+    "size": 1527864,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "77cd20b77f878da355b217a6bcc4b58275ca8084a566bb8e3e160c7f305f89d2",
+    "size": 446400,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "26ab2c06bd94253c49ab59577c912d60bf9ee47149797309e808ef304954c5de",
+    "size": 827144,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "d62b751ad307aa32dcb17bad66054c1d8a6f6b4c55c7de8065271a08f9617729",
+    "size": 542792,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "1267a5896e5c8415d72a01b155a775ed79fd491384dc4b3fc8fdfc43db03ba42",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "lanes": "gbdt-nan-modes",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "a16825d9bd4667e680f98aa4ed8c304db4d67e5b6c1e32f276dae1f32d91f5bb",
+  "provenance": {
+   "commit": "f0d53b4ed2480b17670a543deb90c24b803b899d",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-9754-128-core-processor",
+   "platform": "Linux-5.15.0-94-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

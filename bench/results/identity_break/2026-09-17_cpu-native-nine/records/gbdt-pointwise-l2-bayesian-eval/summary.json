@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "gbdt-pointwise-l2-bayesian-eval": {
+      "cells": [
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/base",
+          "context_matches": true,
+          "clean": "2ac238ddce22e2ef",
+          "sabotage": "2fd132f6a668f2f8",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/denormal",
+          "context_matches": true,
+          "clean": "2ac238ddce22e2ef",
+          "sabotage": "2fd132f6a668f2f8",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/denormal_ftz",
+          "context_matches": true,
+          "clean": "2ac238ddce22e2ef",
+          "sabotage": "2fd132f6a668f2f8",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/dupes",
+          "context_matches": true,
+          "clean": "86fffcdb2023b393",
+          "sabotage": "5c46a7e225bc3c71",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/hashed",
+          "context_matches": true,
+          "clean": "d9ff6008c1161f15",
+          "sabotage": "f27948a8714b22f4",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/negative",
+          "context_matches": true,
+          "clean": "4d75d6379c698eb9",
+          "sabotage": "5fde91a37267b2c3",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/odd",
+          "context_matches": true,
+          "clean": "59cf66d7ddc936b4",
+          "sabotage": "31528916f39b7a39",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/ties",
+          "context_matches": true,
+          "clean": "84ba6825b4967e89",
+          "sabotage": "20342f764998f708",
+          "detected": true
+        },
+        {
+          "cell": "gbdt-pointwise-l2-bayesian-eval/wide",
+          "context_matches": true,
+          "clean": "b677c76dcdb5e233",
+          "sabotage": "87589106ac81ac98",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

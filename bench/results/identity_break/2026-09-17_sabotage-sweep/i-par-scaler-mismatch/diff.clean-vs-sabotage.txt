@@ -1,0 +1,29 @@
+NOTE: column cpu-amd-epyc-9655-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_preprocessing_host'] commit=4f7c54c7da21883fe286b4e55b49bcefa4fdf9b8
+NOTE: column cpu-amd-epyc-9655-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_preprocessing_host'] commit=4f7c54c7da21883fe286b4e55b49bcefa4fdf9b8
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655-96-core-processor | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| par-scaler-minmax/base       | DIVERGENT  | parts differ: min,transform,inverse; agree: data_min,data_max,scale | DIVERGENT        |
+| par-scaler-minmax/ties       | DIVERGENT  | parts differ: min,transform,inverse; agree: data_min,data_max,scale | f1d79cc1bb919200 |
+| par-scaler/base              | DIVERGENT  | parts differ: mean,var,transform,inverse; agree: - | DIVERGENT        |
+| par-scaler/ties              | DIVERGENT  | parts differ: var,transform; agree: mean,inverse | DIVERGENT        |
+
+summary: DIVERGENT=4
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655-96-core-processor | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-scaler-minmax/base       | infer  | DIVERGENT    | 5b934842e164f80f | DIVERGENT        |
+| par-scaler-minmax/base       | model  | DIVERGENT    | 24956a7dff42ccef | DIVERGENT        |
+| par-scaler-minmax/base       | batch  | DIVERGENT    | bdcf978b59eaee06 | DIVERGENT        |
+| par-scaler-minmax/ties       | infer  | DIVERGENT    | 6717b6636f5595fc | 8a49b2ac919a0249 |
+| par-scaler-minmax/ties       | model  | DIVERGENT    | 6c83436d35af2540 | cb03a9242c0b3bba |
+| par-scaler-minmax/ties       | batch  | DIVERGENT    | af35d3cfeccf029b | 85244210a629709c |
+| par-scaler/base              | infer  | DIVERGENT    | fa0fbdef7ccae250 | DIVERGENT        |
+| par-scaler/base              | model  | DIVERGENT    | 3adc4c98c02a61b6 | DIVERGENT        |
+| par-scaler/base              | batch  | DIVERGENT    | 917ae37b02618ab5 | DIVERGENT        |
+| par-scaler/ties              | infer  | DIVERGENT    | 4c66195589867f60 | DIVERGENT        |
+| par-scaler/ties              | model  | DIVERGENT    | b10d8fc2c81e61e7 | DIVERGENT        |
+| par-scaler/ties              | batch  | DIVERGENT    | 789ad47ddd5c18b0 | DIVERGENT        |
+
+summary (infer/model): DIVERGENT=8
+summary (batch): DIVERGENT=4
+summary (rlpair): 

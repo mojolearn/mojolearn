@@ -1,0 +1,5 @@
+pod=0krigxfoki5p54
+name=mojolearn-cpu-verification-classical-20260917-190826
+terminated_verified=1
+exit=1
+at=2026-09-17T19:32:15Z

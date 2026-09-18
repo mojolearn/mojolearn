@@ -171,7 +171,7 @@ if [ $RENT = 0 ]; then
 if [ "$LEG_MODE" = qualify ]; then
   WOULD_RUN="  upload   $QUAL_WHEEL
            + $(ls "$QUAL_PROOFS"/*.json 2>/dev/null | wc -l | tr -d ' ') build proofs -> /root/proofs/
-  qualify  bash tools/linux_surface_qualification.sh qualify-release-linux3 \\
+  qualify  bash tools/release_installed_checks.sh qualify-release-linux3 \\
              /root/$(basename "$QUAL_WHEEL") <sha256> $LEG_VENDOR \$REMOTE_OUT /root/proofs $LEG_ARCH"
 else
   WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
@@ -402,7 +402,7 @@ if [ "$LEG_MODE" = qualify ]; then
   # so it cannot be talked into agreeing with us.
   $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
     MOJOLEARN_EXPECT_VENDOR=$LEG_VENDOR \
-    timeout -k 20 $((WORK_SECONDS + 40)) bash tools/linux_surface_qualification.sh qualify-release-linux3 \
+    timeout -k 20 $((WORK_SECONDS + 40)) bash tools/release_installed_checks.sh qualify-release-linux3 \
       /root/$QUAL_BASE $QUAL_SHA $LEG_VENDOR $REMOTE_OUT /root/proofs $LEG_ARCH > $REMOTE_LOG 2>&1; \
     echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the qualification"; exit 9; }
 else

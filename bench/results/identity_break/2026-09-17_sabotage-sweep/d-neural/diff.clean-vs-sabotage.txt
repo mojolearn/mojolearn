@@ -1,0 +1,229 @@
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_neural_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-7702p-64-core-processor is a CPU column: cpu_model='AMD EPYC 7702P 64-Core Processor' column=cpu families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_neural_host', '_mojolearn_training_host', '_mojolearn_transformer_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|------------|------------------|------------------|
+| byte-lm-host-infer-threaded/base | DIVERGENT  | parts differ: logits; agree: loss_bits,next | cef60cc7eccb44ae |
+| byte-lm-host-infer-threaded/ties | DIVERGENT  | parts differ: logits; agree: loss_bits,next | 0bd663ffd5ec7071 |
+| byte-lm-host-infer/base      | DIVERGENT  | parts differ: loss_bits,logits; agree: next | 251324faeed2bc25 |
+| byte-lm-host-infer/ties      | DIVERGENT  | parts differ: loss_bits,logits; agree: next | 1cf17f3ba4e4f4c1 |
+| byte-lm-host-train/base      | DIVERGENT  | parts differ: loss_bits,params,m; agree: - | 3029f86c359a5fe1 |
+| byte-lm-host-train/ties      | DIVERGENT  | parts differ: loss_bits,params,m; agree: - | 2efae291ec47d3c8 |
+| byte-lm-resident/base        | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | 6f60e4469f3ef2c7 |
+| byte-lm-resident/ties        | DIVERGENT  | parts differ: loss,params,grads,logits; agree: - | a0bc9c97c66e9de5 |
+| byte-lm/base                 | DIVERGENT  | parts differ: loss,params,logits; agree: - | 542fa3c2a5ae94ff |
+| byte-lm/ties                 | DIVERGENT  | parts differ: loss,params,logits; agree: - | 00aecc60a9d3bfe5 |
+| cross-entropy-arms/base      | DIVERGENT  | parts differ: none,sum,smooth,dsmooth,masked,dmasked; agree: - | af89b597ab2b50d0 |
+| cross-entropy-arms/ties      | DIVERGENT  | parts differ: none,sum,smooth,dsmooth,masked,dmasked; agree: - | 631104dfff219cbb |
+| mamba1-bf16w/base            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 0146008e1249eb6c |
+| mamba1-bf16w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | a0f820fe068d4f5b |
+| mamba1-int8w/base            | DIVERGENT  | parts differ: forward,prefill,backward; agree: step | 8fd3d29efc02e59b |
+| mamba1-int8w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 45b29d9b8474d1aa |
+| mamba2-bf16w/base            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 1548489de4b2f5b4 |
+| mamba2-bf16w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 2f3cf42d9e3216f4 |
+| mamba2-int8w/base            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 86022d5be0f4994d |
+| mamba2-int8w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 417a2c725a17ef49 |
+| mamba3-bf16w/base            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 93bdd0be85f69adf |
+| mamba3-bf16w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 0b948c9e2cf5d8d2 |
+| mamba3-int8w/base            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 8baaefc0a5012bc3 |
+| mamba3-int8w/ties            | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | bff86b4b9439d2ac |
+| mlp-bf16w/base               | DIVERGENT  | parts differ: logits; agree: weights | 3687a8774b7cfa2a |
+| mlp-bf16w/ties               | DIVERGENT  | parts differ: logits; agree: weights | 80f2afd9eeaeb738 |
+| mlp-int8w/base               | DIVERGENT  | parts differ: logits; agree: weights | 3687a8774b7cfa2a |
+| mlp-int8w/ties               | DIVERGENT  | parts differ: logits; agree: weights | 80f2afd9eeaeb738 |
+| mlp/base                     | DIVERGENT  | parts differ: loss,weights,logits; agree: - | 84363101501ed7ab |
+| mlp/ties                     | DIVERGENT  | parts differ: loss,weights,logits; agree: - | 77308331eefc9742 |
+| optim-adam-clip/base         | DIVERGENT  | parts differ: adam,adam_norms; agree: adamw0,adamw0_norm,clip_norm,clipped | 276d9cd887e9b417 |
+| optim-adam-clip/ties         | DIVERGENT  | parts differ: adam,adam_norms; agree: adamw0,adamw0_norm,clip_norm,clipped | 276d9cd887e9b417 |
+| optim-sgd/base               | DIVERGENT  | parts differ: nesterov,nesterov_norms; agree: dampening,dampening_norms | bbc92c9904d81873 |
+| optim-sgd/ties               | DIVERGENT  | parts differ: nesterov,nesterov_norms; agree: dampening,dampening_norms | bbc92c9904d81873 |
+| ordered-gradient-sum/base    | IDENTICAL x2 | a742b6c812b94347 | a742b6c812b94347 |
+| ordered-gradient-sum/ties    | IDENTICAL x2 | e625f92c8f010b8b | e625f92c8f010b8b |
+| par-mlp/base                 | DIVERGENT  | parts differ: weights,logits; agree: shards | 6a9d8ec4587e383b |
+| par-mlp/ties                 | DIVERGENT  | parts differ: weights,logits; agree: shards | a227cd40c0126a8a |
+| samba-bf16w/base             | DIVERGENT  | parts differ: logits; agree: - | 651c0b044ab54de4 |
+| samba-bf16w/ties             | DIVERGENT  | parts differ: logits; agree: - | fc727e4a36c91704 |
+| samba-int8w/base             | DIVERGENT  | parts differ: logits; agree: - | 8ac882f1c0194c42 |
+| samba-int8w/ties             | DIVERGENT  | parts differ: logits; agree: - | 0c59ec7e137a2d22 |
+| training-primitives/base     | DIVERGENT  | parts differ: drms,lin,dlin; agree: emb,demb,rms | 7eafc69253bb9ff7 |
+| training-primitives/ties     | DIVERGENT  | parts differ: drms,lin,dlin; agree: emb,demb,rms | cc711e81395b5aa3 |
+| transformer-bf16w/base       | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 06d974dee6ff6793 |
+| transformer-bf16w/ties       | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 8695a54cba4f307f |
+| transformer-int8w/base       | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 4e35624ad75aaf25 |
+| transformer-int8w/ties       | DIVERGENT  | parts differ: forward,prefill,step,backward; agree: - | 2df674d0aff997ef |
+
+summary: DIVERGENT=46, IDENTICAL=2
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-7702p-64-core-processor | cpu-amd-epyc-7702p-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| byte-lm-host-infer-threaded/base | infer  | DIVERGENT    | b67a1f3d482ffaca | bc7c587232b8fdad |
+| byte-lm-host-infer-threaded/base | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-infer-threaded/base | batch  | DIVERGENT    | 2eccb20888ca5cee | 01593cee4cd7709a |
+| byte-lm-host-infer-threaded/base | rlpair | RLPAIR_MOVED | 22f7e367585a569c | RLPAIR_MOVED     |
+| byte-lm-host-infer-threaded/ties | infer  | DIVERGENT    | 8ac5fad2d951d6cb | b9a7b4068fd16b51 |
+| byte-lm-host-infer-threaded/ties | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-infer-threaded/ties | batch  | DIVERGENT    | 4247444b5e741c45 | fe0cb575f54877ff |
+| byte-lm-host-infer-threaded/ties | rlpair | RLPAIR_MOVED | 839a8419ba0bb3f8 | RLPAIR_MOVED     |
+| byte-lm-host-infer/base      | infer  | DIVERGENT    | b67a1f3d482ffaca | 2d87a9b89bfa7a32 |
+| byte-lm-host-infer/base      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-infer/base      | batch  | DIVERGENT    | 2eccb20888ca5cee | f87007aa04d6e767 |
+| byte-lm-host-infer/base      | rlpair | RLPAIR_MOVED | 22f7e367585a569c | RLPAIR_MOVED     |
+| byte-lm-host-infer/ties      | infer  | DIVERGENT    | 8ac5fad2d951d6cb | 7fecc02bb898fffb |
+| byte-lm-host-infer/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-infer/ties      | batch  | DIVERGENT    | 4247444b5e741c45 | 8197a53376eb2c5e |
+| byte-lm-host-infer/ties      | rlpair | RLPAIR_MOVED | 839a8419ba0bb3f8 | RLPAIR_MOVED     |
+| byte-lm-host-train/base      | infer  | DIVERGENT    | 6a8e53d94e8b1afa | 72642c281df64929 |
+| byte-lm-host-train/base      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-train/base      | batch  | N/A          | n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it) | n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it) |
+| byte-lm-host-train/ties      | infer  | DIVERGENT    | ddfcbd65895588a5 | d5b40f99e9b03d98 |
+| byte-lm-host-train/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| byte-lm-host-train/ties      | batch  | N/A          | n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it) | n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it) |
+| byte-lm-resident/base        | infer  | DIVERGENT    | ffeae35e1b813aeb | 8b4a40814b577286 |
+| byte-lm-resident/base        | model  | DIVERGENT    | c73f66c106f2d61a | 2b5841406ce943f8 |
+| byte-lm-resident/base        | batch  | DIVERGENT    | ee2a9214267587a0 | 0ae2b2467bd4a688 |
+| byte-lm-resident/base        | rlpair | RLPAIR_MOVED | 665252bdfe8f1ea6 | RLPAIR_MOVED     |
+| byte-lm-resident/ties        | infer  | DIVERGENT    | f277350668fee3ff | 0f40f2e5a37152b9 |
+| byte-lm-resident/ties        | model  | DIVERGENT    | 0ed59c7e6ce30e78 | 921bd6796a053596 |
+| byte-lm-resident/ties        | batch  | DIVERGENT    | f5f52b3359601e15 | acefc16b37a2a4af |
+| byte-lm-resident/ties        | rlpair | RLPAIR_MOVED | a64f5ddbde30a180 | RLPAIR_MOVED     |
+| byte-lm/base                 | infer  | DIVERGENT    | 5ad307a9540b63c0 | 67d6d666ecf96e47 |
+| byte-lm/base                 | model  | DIVERGENT    | 92c66e6649ba21b6 | 8c337f6e7f27a7d3 |
+| byte-lm/base                 | batch  | DIVERGENT    | 82e157389c3e9d81 | ef6354789fa7ca0f |
+| byte-lm/base                 | rlpair | RLPAIR_MOVED | 08f09a8b13bfc90e | RLPAIR_MOVED     |
+| byte-lm/ties                 | infer  | DIVERGENT    | 5456539596680f83 | 5d96a9f914ab7274 |
+| byte-lm/ties                 | model  | DIVERGENT    | 7e7b43cb0b019c83 | cc70b2d13f896235 |
+| byte-lm/ties                 | batch  | DIVERGENT    | 45142717240656ba | deb2ee0894739ff8 |
+| byte-lm/ties                 | rlpair | RLPAIR_MOVED | 02801728d29dbb60 | RLPAIR_MOVED     |
+| cross-entropy-arms/base      | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-entropy-arms/base      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-entropy-arms/base      | batch  | DIVERGENT    | baeb27de8f9d5d4e | 8eaf4070cdde5085 |
+| cross-entropy-arms/ties      | infer  | N/A          | n/a:function     | n/a:function     |
+| cross-entropy-arms/ties      | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| cross-entropy-arms/ties      | batch  | DIVERGENT    | 71e2174735fef8f2 | a038806dac414756 |
+| mamba1-bf16w/base            | infer  | DIVERGENT    | 8feeb9c461557f5e | 53111d5a2be23615 |
+| mamba1-bf16w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba1-bf16w/base            | batch  | DIVERGENT    | b0e3c410ad70f0d1 | f374fb53d90108cd |
+| mamba1-bf16w/base            | rlpair | DIVERGENT    | 072fa93cce8433d3 | a16654be61c8c44d |
+| mamba1-bf16w/ties            | infer  | DIVERGENT    | bc8f877befb93f61 | 8f01254a543aea6a |
+| mamba1-bf16w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba1-bf16w/ties            | batch  | DIVERGENT    | ddb6aa95d06d5741 | 1ef0e480ba3efb80 |
+| mamba1-bf16w/ties            | rlpair | DIVERGENT    | b1b958ab30e6fd3e | 41164203a661ca2e |
+| mamba1-int8w/base            | infer  | DIVERGENT    | d84c782cb645f49b | 40b61c128f9e51bc |
+| mamba1-int8w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba1-int8w/base            | batch  | DIVERGENT    | 09c7cc69c84a6f13 | b8327ad77b7074fc |
+| mamba1-int8w/base            | rlpair | DIVERGENT    | b1881cceb4dd1ece | 02f71a906a5ebfa0 |
+| mamba1-int8w/ties            | infer  | DIVERGENT    | 23a01a8dfa1b98be | 6e5b6b8858e61e77 |
+| mamba1-int8w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba1-int8w/ties            | batch  | DIVERGENT    | 88053a4c43e5e835 | 49c93832736ee528 |
+| mamba1-int8w/ties            | rlpair | DIVERGENT    | e0cd3b45b1524f1e | 12601dcad9c5052b |
+| mamba2-bf16w/base            | infer  | DIVERGENT    | 5cae7295a36713bf | 1ee02503de073b9d |
+| mamba2-bf16w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2-bf16w/base            | batch  | DIVERGENT    | a7e2a0b6c7ed964d | 9689dbf431579a25 |
+| mamba2-bf16w/base            | rlpair | DIVERGENT    | bc4da5388be1c862 | e3071413b5041af4 |
+| mamba2-bf16w/ties            | infer  | DIVERGENT    | 7db99b24cea235e6 | 4db28243082db6a8 |
+| mamba2-bf16w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2-bf16w/ties            | batch  | DIVERGENT    | 63f827f0a586bce3 | 4419a099f17d071f |
+| mamba2-bf16w/ties            | rlpair | DIVERGENT    | 9734d6a22cb250d0 | 2b729aacb1cf109a |
+| mamba2-int8w/base            | infer  | DIVERGENT    | 403884646dc80124 | bd56bb796dc8d826 |
+| mamba2-int8w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2-int8w/base            | batch  | DIVERGENT    | d22b275b9c7eb3e5 | 99a1b978d5aa170d |
+| mamba2-int8w/base            | rlpair | DIVERGENT    | d05cadfab274cfac | e3af21eec40138db |
+| mamba2-int8w/ties            | infer  | DIVERGENT    | 8d3a5dfdd518ea58 | 3856f6eee6f0e5db |
+| mamba2-int8w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba2-int8w/ties            | batch  | DIVERGENT    | 37f3de328f3979c0 | 0d1bba87485d24a1 |
+| mamba2-int8w/ties            | rlpair | DIVERGENT    | 221f0c014b44cef7 | fd0e17454cd18599 |
+| mamba3-bf16w/base            | infer  | DIVERGENT    | cbc6288e8b94fad2 | b0b82b751246f6c3 |
+| mamba3-bf16w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba3-bf16w/base            | batch  | DIVERGENT    | 08d14d79e96c938b | b2b50543412ed479 |
+| mamba3-bf16w/base            | rlpair | DIVERGENT    | 59d1771ff80a816a | 94fd54fbf434dfdd |
+| mamba3-bf16w/ties            | infer  | DIVERGENT    | 670338ffb561acef | 225dc555c1582bc0 |
+| mamba3-bf16w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba3-bf16w/ties            | batch  | DIVERGENT    | 6681e7dea57df968 | 53b33e4d42b75096 |
+| mamba3-bf16w/ties            | rlpair | DIVERGENT    | dcb84817a5576408 | 384fdf177785fa9c |
+| mamba3-int8w/base            | infer  | DIVERGENT    | fc039f179e70ef6e | c3b85ccdf9399146 |
+| mamba3-int8w/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba3-int8w/base            | batch  | DIVERGENT    | 5354254438309c94 | 7dba64f2ac2cdcec |
+| mamba3-int8w/base            | rlpair | DIVERGENT    | de9921e68783e5e9 | 991cc9c02de6fe51 |
+| mamba3-int8w/ties            | infer  | DIVERGENT    | f033b95ade381e90 | df12fbb50482af57 |
+| mamba3-int8w/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| mamba3-int8w/ties            | batch  | DIVERGENT    | ea7f199f372f143e | 3609e0139be4438e |
+| mamba3-int8w/ties            | rlpair | DIVERGENT    | 0be7f3f5429c9a76 | 81670810987655a0 |
+| mlp-bf16w/base               | infer  | DIVERGENT    | aba80ad4b3c4a002 | 7f842e10fdd5259b |
+| mlp-bf16w/base               | model  | IDENTICAL x2 | 10959ca81118cc10 | 10959ca81118cc10 |
+| mlp-bf16w/base               | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| mlp-bf16w/ties               | infer  | DIVERGENT    | 12bafc468c183329 | 79f9e1a1ad0b4f8d |
+| mlp-bf16w/ties               | model  | IDENTICAL x2 | 10959ca81118cc10 | 10959ca81118cc10 |
+| mlp-bf16w/ties               | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| mlp-int8w/base               | infer  | DIVERGENT    | aba80ad4b3c4a002 | 7f842e10fdd5259b |
+| mlp-int8w/base               | model  | IDENTICAL x2 | 10959ca81118cc10 | 10959ca81118cc10 |
+| mlp-int8w/base               | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| mlp-int8w/ties               | infer  | DIVERGENT    | 12bafc468c183329 | 79f9e1a1ad0b4f8d |
+| mlp-int8w/ties               | model  | IDENTICAL x2 | 10959ca81118cc10 | 10959ca81118cc10 |
+| mlp-int8w/ties               | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| mlp/base                     | infer  | DIVERGENT    | 8579effb0c3bce0c | f0291d2d7d64ffa3 |
+| mlp/base                     | model  | DIVERGENT    | dc9325976836b5a7 | 2159cb2c42ddd79e |
+| mlp/base                     | batch  | DIVERGENT    | 9cfded25366f6c85 | f047301bd649281a |
+| mlp/ties                     | infer  | DIVERGENT    | 24de7ab7c4fa8961 | 68f5187fa315b3bf |
+| mlp/ties                     | model  | DIVERGENT    | 59bc3962a0a7dff3 | 37dc684b5912d606 |
+| mlp/ties                     | batch  | DIVERGENT    | fbee294ec77e1424 | 4d7fbc4db23a2aea |
+| optim-adam-clip/base         | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-adam-clip/base         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-adam-clip/base         | batch  | IDENTICAL x2 | aa5a11a285278688 | aa5a11a285278688 |
+| optim-adam-clip/ties         | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-adam-clip/ties         | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-adam-clip/ties         | batch  | IDENTICAL x2 | aa5a11a285278688 | aa5a11a285278688 |
+| optim-sgd/base               | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-sgd/base               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-sgd/base               | batch  | IDENTICAL x2 | b5720e41044285cc | b5720e41044285cc |
+| optim-sgd/ties               | infer  | N/A          | n/a:function     | n/a:function     |
+| optim-sgd/ties               | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| optim-sgd/ties               | batch  | IDENTICAL x2 | b5720e41044285cc | b5720e41044285cc |
+| ordered-gradient-sum/base    | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/base    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/base    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/ties    | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/ties    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/ties    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| par-mlp/base                 | infer  | DIVERGENT    | b7659ff90ae1ea39 | fa5ee5db3a83344d |
+| par-mlp/base                 | model  | DIVERGENT    | fb3977c1ab222cea | ca1f0710c5fdfca7 |
+| par-mlp/base                 | batch  | DIVERGENT    | 16eaba30f0eb372d | 09c2e1f62d53b97f |
+| par-mlp/ties                 | infer  | DIVERGENT    | e1e5086334bdb736 | 41d7501abf5bd1da |
+| par-mlp/ties                 | model  | DIVERGENT    | 49ac83c7d65f98af | d003150542a8673a |
+| par-mlp/ties                 | batch  | DIVERGENT    | 1eed5a0469fcbc24 | c956bc9b220d4e75 |
+| samba-bf16w/base             | infer  | DIVERGENT    | e7f99e1388ad7a50 | 616dc3230ec2aaeb |
+| samba-bf16w/base             | model  | IDENTICAL x2 | 4c577f4f184b9549 | 4c577f4f184b9549 |
+| samba-bf16w/base             | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| samba-bf16w/ties             | infer  | DIVERGENT    | 4b2990b4b8d74d01 | a111ed39fb75be8b |
+| samba-bf16w/ties             | model  | IDENTICAL x2 | 4c577f4f184b9549 | 4c577f4f184b9549 |
+| samba-bf16w/ties             | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| samba-int8w/base             | infer  | DIVERGENT    | 02bbf130a2e3fd19 | 76c89fc8c5852846 |
+| samba-int8w/base             | model  | IDENTICAL x2 | 53ee77438e2ae664 | 53ee77438e2ae664 |
+| samba-int8w/base             | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| samba-int8w/ties             | infer  | DIVERGENT    | 42a7251ef519aa1b | 58bcfbc401c21686 |
+| samba-int8w/ties             | model  | IDENTICAL x2 | 53ee77438e2ae664 | 53ee77438e2ae664 |
+| samba-int8w/ties             | batch  | N/A          | n/a:weight-format lane; the batch part is measured on its base lane | n/a:weight-format lane; the batch part is measured on its base lane |
+| training-primitives/base     | infer  | DIVERGENT    | 6980d705b0918f94 | 1f3f002ca17f5553 |
+| training-primitives/base     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| training-primitives/base     | batch  | DIVERGENT    | 0885e6867f268221 | 4e84ebe693874553 |
+| training-primitives/ties     | infer  | DIVERGENT    | 540263f57c3d33e0 | 6f91de129c492206 |
+| training-primitives/ties     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| training-primitives/ties     | batch  | DIVERGENT    | 037afef1c391f67d | e6e4f722564946ef |
+| transformer-bf16w/base       | infer  | DIVERGENT    | 1b8c18bb76edd4eb | 169fecc965a95ab1 |
+| transformer-bf16w/base       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer-bf16w/base       | batch  | DIVERGENT    | 1811d6265f7ed086 | 58af5131650b4464 |
+| transformer-bf16w/base       | rlpair | DIVERGENT    | ccafc15f46b4efee | ab50d89237a8fb20 |
+| transformer-bf16w/ties       | infer  | DIVERGENT    | 0023de6f3b74f961 | dbeda049dcf8f274 |
+| transformer-bf16w/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer-bf16w/ties       | batch  | DIVERGENT    | 30c86c7226ba2cae | bf2b70547fd226a0 |
+| transformer-bf16w/ties       | rlpair | DIVERGENT    | d403199a00d918fb | 546040d29a923b96 |
+| transformer-int8w/base       | infer  | DIVERGENT    | 23581663b1989f16 | bacbb991194f0027 |
+| transformer-int8w/base       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer-int8w/base       | batch  | DIVERGENT    | 292a5694c2563481 | 18ff415eca68f1b9 |
+| transformer-int8w/base       | rlpair | DIVERGENT    | b1492d4d8b9cf1dd | 55b178e9f241d142 |
+| transformer-int8w/ties       | infer  | DIVERGENT    | bf4a6fed5e580d63 | 4213915944b39d40 |
+| transformer-int8w/ties       | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| transformer-int8w/ties       | batch  | DIVERGENT    | fdcc3b15fba3e380 | a029375dbdba5cbd |
+| transformer-int8w/ties       | rlpair | DIVERGENT    | ad108ff4cf3d53c9 | 760be08629d9984e |
+
+summary (infer/model): DIVERGENT=48, IDENTICAL=8, N/A=40
+summary (batch): DIVERGENT=32, IDENTICAL=4, N/A=12
+summary (rlpair): DIVERGENT=16, RLPAIR_MOVED=8

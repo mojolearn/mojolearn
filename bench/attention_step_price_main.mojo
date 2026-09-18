@@ -175,6 +175,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_fwd_rows,
     fused_attention_kv_keys,
     fused_attention_zdot_rows,
+    fused_attention_bswz_name,
     fused_attention_estash_name,
     fused_attention_zsched_name,
     fused_attn_forward_r2_kernel,
@@ -259,6 +260,7 @@ def _path_line(role: String, arm: Int) -> String:
         + " kv_keys=" + kv + " kv_split=" + String((arm & ATTN_ARM_BWD_KVSPLIT) != 0)
         + " zsched=" + fused_attention_zsched_name(arm)
         + " estash=" + fused_attention_estash_name(arm)
+        + " bswz=" + fused_attention_bswz_name(arm)
     )
 
 
@@ -944,11 +946,11 @@ def _res_zdot_sched_pf[LAG: Bool](ctx: DeviceContext, label: String) raises:
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
-def _res_zdot_estash[DRES: Bool](ctx: DeviceContext, label: String) raises:
+def _res_zdot_estash[DRES: Bool, SWZ: Bool = False](ctx: DeviceContext, label: String) raises:
     """DEVIATIONS 2650 and 2651's zdot kernel: 8 rows x 32 keys per block,
     one dy chain per thread (1 accumulator, 3 operand registers), the dctx
     row in registers (64 floats) or, under DRES, in the shared page."""
-    comptime kern = fused_bwd_zdot_estash_kernel[ATTN_STASH_HD, ATTN_ES_TQ, DRES, False]
+    comptime kern = fused_bwd_zdot_estash_kernel[ATTN_STASH_HD, ATTN_ES_TQ, DRES, False, SWZ]
     comptime local_floats = 0 if DRES else 64
     comptime page = 12480 if DRES else 10432
     _res_begin(label, "rows=8 keys_per_iteration=32", 1, 3, local_floats, page, 2)
@@ -961,7 +963,7 @@ def _res_zdot_estash[DRES: Bool](ctx: DeviceContext, label: String) raises:
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
-def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool](ctx: DeviceContext, label: String) raises:
+def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool, SWZ: Bool = False](ctx: DeviceContext, label: String) raises:
     """DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
     sections 4 and 7): the SECOND-ROUND FORWARD kernel's own attributes. It
     is the one attention kernel of the step that no readback has ever
@@ -980,7 +982,7 @@ def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool](ctx: DeviceContext, label: String
     count is `_launch_fwd_r2`'s own score and exp scratch; the caller's
     corner flag and, under `_estash`, the kept buffer are not counted here.
     Launches nothing."""
-    comptime kern = fused_attn_forward_r2_kernel[ATTN_STASH_HD, TQ, QRES, PF, False]
+    comptime kern = fused_attn_forward_r2_kernel[ATTN_STASH_HD, TQ, QRES, PF, False, SWZ]
     comptime acc = TQ // 16 + 1 + (TQ // 16) * 4
     comptime operands = (TQ // 16) * 2 + TQ // 16 + 2
     _res_begin(
@@ -998,9 +1000,8 @@ def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool](ctx: DeviceContext, label: String
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
-def _res_dq_tiled_pf(ctx: DeviceContext) raises:
-    comptime kern = fused_bwd_dq_tiled_pf_kernel[ATTN_STASH_HD]
-    var label = String("dq_tiled_pf")
+def _res_dq_tiled_pf[SWZ: Bool = False](ctx: DeviceContext, label: String) raises:
+    comptime kern = fused_bwd_dq_tiled_pf_kernel[ATTN_STASH_HD, SWZ]
     _res_begin(label, "rows=64 keys_per_tile=16", 16, 5, 0, 8448, 3)
     var f = ctx.compile_function[kern]()
     print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
@@ -1051,8 +1052,8 @@ def _res_dkdv_tiled_pf(ctx: DeviceContext) raises:
     print("RESOURCES label=", label, " blocks_per_sm_256=", f.occupancy_max_active_blocks_per_multiprocessor(256, 0), sep="")
 
 
-def _res_dkdv_r2[BJ: Int](ctx: DeviceContext, label: String) raises:
-    comptime kern = fused_bwd_dkdv_r2_kernel[ATTN_STASH_HD, BJ, False]
+def _res_dkdv_r2[BJ: Int, SWZ: Bool = False](ctx: DeviceContext, label: String) raises:
+    comptime kern = fused_bwd_dkdv_r2_kernel[ATTN_STASH_HD, BJ, False, SWZ]
     _res_begin(label, "keys=" + String(BJ) + " queries_per_tile=16", 2 * (BJ // 16) * 4, 10, 0, (2048 + 32 * BJ) * 4, 4)
     var f = ctx.compile_function[kern]()
     print("RESOURCES label=", label, " regs=", f.get_attribute(Attribute.NUM_REGS), sep="")
@@ -1105,6 +1106,25 @@ def run_resources(ctx: DeviceContext) raises:
             _res_zdot_estash[True](ctx, String("zdot_estash_dres_pf"))
         except e:
             print("RESOURCES_ERROR label=zdot_estash_dres_pf error=", e, sep="")
+        # DEVIATION 2900: the same four kernels under the causal block-index
+        # map, so a register or occupancy regression from the index math is
+        # read back and not assumed away.
+        try:
+            _res_zdot_estash[True, True](ctx, String("zdot_estash_dres_pf_bswz"))
+        except e:
+            print("RESOURCES_ERROR label=zdot_estash_dres_pf_bswz error=", e, sep="")
+        try:
+            _res_fwd_r2[32, True, True, True](ctx, String("fwd_r2_r32_qres_pf_bswz"))
+        except e:
+            print("RESOURCES_ERROR label=fwd_r2_r32_qres_pf_bswz error=", e, sep="")
+        try:
+            _res_dq_tiled_pf[True](ctx, String("dq_tiled_pf_bswz"))
+        except e:
+            print("RESOURCES_ERROR label=dq_tiled_pf_bswz error=", e, sep="")
+        try:
+            _res_dkdv_r2[32, True](ctx, String("kvgrid_r32_bswz"))
+        except e:
+            print("RESOURCES_ERROR label=kvgrid_r32_bswz error=", e, sep="")
     comptime if ATTN_ARM_TRIAL:
         # DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
         # section 7): the second-round forward, the NVIDIA default's
@@ -1136,7 +1156,7 @@ def run_resources(ctx: DeviceContext) raises:
         except e:
             print("RESOURCES_ERROR label=fwd_r2_r64 error=", e, sep="")
     try:
-        _res_dq_tiled_pf(ctx)
+        _res_dq_tiled_pf(ctx, String("dq_tiled_pf"))
     except e:
         print("RESOURCES_ERROR label=dq_tiled_pf error=", e, sep="")
     try:

@@ -1,0 +1,209 @@
+1412 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b4d00000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:25:00  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START transformer-int8w/base repeat=1/train
+# DONE transformer-int8w/base repeat=1/train 0.031s
+# START transformer-int8w/base repeat=1/infer-save-reload
+# DONE transformer-int8w/base repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/base repeat=1/batch
+# DONE transformer-int8w/base repeat=1/batch 0.110s
+# START transformer-int8w/base repeat=1/stepfull
+# DONE transformer-int8w/base repeat=1/stepfull 0.018s
+# START transformer-int8w/base repeat=1/rlpair
+# DONE transformer-int8w/base repeat=1/rlpair 0.206s
+# START transformer-int8w/base repeat=2/train
+# DONE transformer-int8w/base repeat=2/train 0.030s
+# START transformer-int8w/base repeat=2/infer-save-reload
+# DONE transformer-int8w/base repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/base repeat=2/batch
+# DONE transformer-int8w/base repeat=2/batch 0.108s
+# START transformer-int8w/base repeat=2/stepfull
+# DONE transformer-int8w/base repeat=2/stepfull 0.018s
+# START transformer-int8w/base repeat=2/rlpair
+# DONE transformer-int8w/base repeat=2/rlpair 0.208s
+# CELL transformer-int8w/base STABLE 0.739s
+# START transformer-int8w/ties repeat=1/train
+# DONE transformer-int8w/ties repeat=1/train 0.030s
+# START transformer-int8w/ties repeat=1/infer-save-reload
+# DONE transformer-int8w/ties repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/ties repeat=1/batch
+# DONE transformer-int8w/ties repeat=1/batch 0.111s
+# START transformer-int8w/ties repeat=1/stepfull
+# DONE transformer-int8w/ties repeat=1/stepfull 0.018s
+# START transformer-int8w/ties repeat=1/rlpair
+# DONE transformer-int8w/ties repeat=1/rlpair 0.206s
+# START transformer-int8w/ties repeat=2/train
+# DONE transformer-int8w/ties repeat=2/train 0.030s
+# START transformer-int8w/ties repeat=2/infer-save-reload
+# DONE transformer-int8w/ties repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/ties repeat=2/batch
+# DONE transformer-int8w/ties repeat=2/batch 0.117s
+# START transformer-int8w/ties repeat=2/stepfull
+# DONE transformer-int8w/ties repeat=2/stepfull 0.019s
+# START transformer-int8w/ties repeat=2/rlpair
+# DONE transformer-int8w/ties repeat=2/rlpair 0.215s
+# CELL transformer-int8w/ties STABLE 0.757s
+# START transformer-int8w/hashed repeat=1/train
+# DONE transformer-int8w/hashed repeat=1/train 0.033s
+# START transformer-int8w/hashed repeat=1/infer-save-reload
+# DONE transformer-int8w/hashed repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/hashed repeat=1/batch
+# DONE transformer-int8w/hashed repeat=1/batch 0.108s
+# START transformer-int8w/hashed repeat=1/stepfull
+# DONE transformer-int8w/hashed repeat=1/stepfull 0.017s
+# START transformer-int8w/hashed repeat=1/rlpair
+# DONE transformer-int8w/hashed repeat=1/rlpair 0.207s
+# START transformer-int8w/hashed repeat=2/train
+# DONE transformer-int8w/hashed repeat=2/train 0.029s
+# START transformer-int8w/hashed repeat=2/infer-save-reload
+# DONE transformer-int8w/hashed repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/hashed repeat=2/batch
+# DONE transformer-int8w/hashed repeat=2/batch 0.107s
+# START transformer-int8w/hashed repeat=2/stepfull
+# DONE transformer-int8w/hashed repeat=2/stepfull 0.018s
+# START transformer-int8w/hashed repeat=2/rlpair
+# DONE transformer-int8w/hashed repeat=2/rlpair 0.207s
+# CELL transformer-int8w/hashed STABLE 0.737s
+# START transformer-int8w/wide repeat=1/train
+# DONE transformer-int8w/wide repeat=1/train 0.031s
+# START transformer-int8w/wide repeat=1/infer-save-reload
+# DONE transformer-int8w/wide repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/wide repeat=1/batch
+# DONE transformer-int8w/wide repeat=1/batch 0.107s
+# START transformer-int8w/wide repeat=1/stepfull
+# DONE transformer-int8w/wide repeat=1/stepfull 0.018s
+# START transformer-int8w/wide repeat=1/rlpair
+# DONE transformer-int8w/wide repeat=1/rlpair 0.205s
+# START transformer-int8w/wide repeat=2/train
+# DONE transformer-int8w/wide repeat=2/train 0.029s
+# START transformer-int8w/wide repeat=2/infer-save-reload
+# DONE transformer-int8w/wide repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/wide repeat=2/batch
+# DONE transformer-int8w/wide repeat=2/batch 0.108s
+# START transformer-int8w/wide repeat=2/stepfull
+# DONE transformer-int8w/wide repeat=2/stepfull 0.018s
+# START transformer-int8w/wide repeat=2/rlpair
+# DONE transformer-int8w/wide repeat=2/rlpair 0.206s
+# CELL transformer-int8w/wide STABLE 0.732s
+# START transformer-int8w/denormal repeat=1/train
+# DONE transformer-int8w/denormal repeat=1/train 0.030s
+# START transformer-int8w/denormal repeat=1/infer-save-reload
+# DONE transformer-int8w/denormal repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/denormal repeat=1/batch
+# DONE transformer-int8w/denormal repeat=1/batch 0.108s
+# START transformer-int8w/denormal repeat=1/stepfull
+# DONE transformer-int8w/denormal repeat=1/stepfull 0.018s
+# START transformer-int8w/denormal repeat=1/rlpair
+# DONE transformer-int8w/denormal repeat=1/rlpair 0.204s
+# START transformer-int8w/denormal repeat=2/train
+# DONE transformer-int8w/denormal repeat=2/train 0.030s
+# START transformer-int8w/denormal repeat=2/infer-save-reload
+# DONE transformer-int8w/denormal repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/denormal repeat=2/batch
+# DONE transformer-int8w/denormal repeat=2/batch 0.113s
+# START transformer-int8w/denormal repeat=2/stepfull
+# DONE transformer-int8w/denormal repeat=2/stepfull 0.019s
+# START transformer-int8w/denormal repeat=2/rlpair
+# DONE transformer-int8w/denormal repeat=2/rlpair 0.206s
+# CELL transformer-int8w/denormal STABLE 0.739s
+# START transformer-int8w/denormal_ftz repeat=1/train
+# DONE transformer-int8w/denormal_ftz repeat=1/train 0.031s
+# START transformer-int8w/denormal_ftz repeat=1/infer-save-reload
+# DONE transformer-int8w/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/denormal_ftz repeat=1/batch
+# DONE transformer-int8w/denormal_ftz repeat=1/batch 0.109s
+# START transformer-int8w/denormal_ftz repeat=1/stepfull
+# DONE transformer-int8w/denormal_ftz repeat=1/stepfull 0.017s
+# START transformer-int8w/denormal_ftz repeat=1/rlpair
+# DONE transformer-int8w/denormal_ftz repeat=1/rlpair 0.201s
+# START transformer-int8w/denormal_ftz repeat=2/train
+# DONE transformer-int8w/denormal_ftz repeat=2/train 0.030s
+# START transformer-int8w/denormal_ftz repeat=2/infer-save-reload
+# DONE transformer-int8w/denormal_ftz repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/denormal_ftz repeat=2/batch
+# DONE transformer-int8w/denormal_ftz repeat=2/batch 0.108s
+# START transformer-int8w/denormal_ftz repeat=2/stepfull
+# DONE transformer-int8w/denormal_ftz repeat=2/stepfull 0.018s
+# START transformer-int8w/denormal_ftz repeat=2/rlpair
+# DONE transformer-int8w/denormal_ftz repeat=2/rlpair 0.202s
+# CELL transformer-int8w/denormal_ftz STABLE 0.726s
+# START transformer-int8w/dupes repeat=1/train
+# DONE transformer-int8w/dupes repeat=1/train 0.031s
+# START transformer-int8w/dupes repeat=1/infer-save-reload
+# DONE transformer-int8w/dupes repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/dupes repeat=1/batch
+# DONE transformer-int8w/dupes repeat=1/batch 0.109s
+# START transformer-int8w/dupes repeat=1/stepfull
+# DONE transformer-int8w/dupes repeat=1/stepfull 0.018s
+# START transformer-int8w/dupes repeat=1/rlpair
+# DONE transformer-int8w/dupes repeat=1/rlpair 0.200s
+# START transformer-int8w/dupes repeat=2/train
+# DONE transformer-int8w/dupes repeat=2/train 0.030s
+# START transformer-int8w/dupes repeat=2/infer-save-reload
+# DONE transformer-int8w/dupes repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/dupes repeat=2/batch
+# DONE transformer-int8w/dupes repeat=2/batch 0.109s
+# START transformer-int8w/dupes repeat=2/stepfull
+# DONE transformer-int8w/dupes repeat=2/stepfull 0.017s
+# START transformer-int8w/dupes repeat=2/rlpair
+# DONE transformer-int8w/dupes repeat=2/rlpair 0.200s
+# CELL transformer-int8w/dupes STABLE 0.725s
+# START transformer-int8w/odd repeat=1/train
+# DONE transformer-int8w/odd repeat=1/train 0.032s
+# START transformer-int8w/odd repeat=1/infer-save-reload
+# DONE transformer-int8w/odd repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/odd repeat=1/batch
+# DONE transformer-int8w/odd repeat=1/batch 0.109s
+# START transformer-int8w/odd repeat=1/stepfull
+# DONE transformer-int8w/odd repeat=1/stepfull 0.018s
+# START transformer-int8w/odd repeat=1/rlpair
+# DONE transformer-int8w/odd repeat=1/rlpair 0.198s
+# START transformer-int8w/odd repeat=2/train
+# DONE transformer-int8w/odd repeat=2/train 0.031s
+# START transformer-int8w/odd repeat=2/infer-save-reload
+# DONE transformer-int8w/odd repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/odd repeat=2/batch
+# DONE transformer-int8w/odd repeat=2/batch 0.109s
+# START transformer-int8w/odd repeat=2/stepfull
+# DONE transformer-int8w/odd repeat=2/stepfull 0.018s
+# START transformer-int8w/odd repeat=2/rlpair
+# DONE transformer-int8w/odd repeat=2/rlpair 0.197s
+# CELL transformer-int8w/odd STABLE 0.723s
+# START transformer-int8w/negative repeat=1/train
+# DONE transformer-int8w/negative repeat=1/train 0.032s
+# START transformer-int8w/negative repeat=1/infer-save-reload
+# DONE transformer-int8w/negative repeat=1/infer-save-reload 0.005s
+# START transformer-int8w/negative repeat=1/batch
+# DONE transformer-int8w/negative repeat=1/batch 0.109s
+# START transformer-int8w/negative repeat=1/stepfull
+# DONE transformer-int8w/negative repeat=1/stepfull 0.018s
+# START transformer-int8w/negative repeat=1/rlpair
+# DONE transformer-int8w/negative repeat=1/rlpair 0.205s
+# START transformer-int8w/negative repeat=2/train
+# DONE transformer-int8w/negative repeat=2/train 0.034s
+# START transformer-int8w/negative repeat=2/infer-save-reload
+# DONE transformer-int8w/negative repeat=2/infer-save-reload 0.005s
+# START transformer-int8w/negative repeat=2/batch
+# DONE transformer-int8w/negative repeat=2/batch 0.110s
+# START transformer-int8w/negative repeat=2/stepfull
+# DONE transformer-int8w/negative repeat=2/stepfull 0.018s
+# START transformer-int8w/negative repeat=2/rlpair
+# DONE transformer-int8w/negative repeat=2/rlpair 0.177s
+# CELL transformer-int8w/negative STABLE 0.713s
+| transformer-int8w      | 4e35624ad75aaf25 | 2df674d0aff997ef | 025c30a9452b6226 | 689393ed62cf5260 | 0f249ca06189dc7c | 0f249ca06189dc7c | 603a8eec173b0dd5 | 4e35624ad75aaf25 | 6e555ad849782a0d |
+| transformer-int8w infer | bacbb991194f0027 | 4213915944b39d40 | 2db14859a0681bcf | d89378ef43a146bd | 78cea53d83e7321f | 78cea53d83e7321f | 661cc4b1274fdcf7 | bacbb991194f0027 | 4fd0fce2b9bdbff8 |
+| transformer-int8w batch | 18ff415eca68f1b9 | a029375dbdba5cbd | 7ca9989f56e9e6a9 | c130384d312ae75c | 0f11a40d0009f782 | 0f11a40d0009f782 | 642597ff19111b3f | 18ff415eca68f1b9 | 851af2f2b8ff95dc |
+| transformer-int8w rlpair | 55b178e9f241d142 | 760be08629d9984e | e8d8aae69329c330 | 09f871829d55363a | 917dace9961c3f15 | 3383f4d0c4420a54 | 55b178e9f241d142 | 55b178e9f241d142 | 3c6f0b0e8ba9babe |
+| transformer-int8w stepfull | 58a6a3c83afbf36a | 87af17354a00e97f | a0a9f40f689c5d16 | 6b4f10690f525e75 | 06dfea76c18fbe26 | 06dfea76c18fbe26 | daf52ec1541fb55b | 58a6a3c83afbf36a | dcc43561f0443a55 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+rlpair: stable=9
+stepfull: stable=9
+n/a: transformer-int8w model n/a:no-save
+wrote /root/leg_out/records/transformer-int8w/transformer-int8w/cpu-sabotage.json

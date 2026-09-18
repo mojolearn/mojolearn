@@ -102,7 +102,11 @@ same define also perturbs a VALUE each metric reads:
                            label of the same array's range
                            (`host_sabotage_label0`); homogeneity,
                            completeness and v-measure reach it through
-                           entropy and mutual information.
+                           entropy and mutual information. A constant label
+                           array cannot move under an in-range label change:
+                           homogeneity's zero-entropy branch also returns the
+                           deliberately wrong 0.0 instead of 1.0 under the
+                           define. This reaches the all-negative H/C/V fixture.
   `host_r2_score`          every prediction is read as `y_hat + 1 + |y|`,
                            so the residual outgrows the scale of `y`.
   `host_silhouette`        row 0 is read shifted by `1 + |x|` in every
@@ -647,6 +651,11 @@ def host_homogeneity_score(
     var computed_entropy = host_entropy(truth, size, lower, upper)
     if computed_entropy != 0.0:
         return computed_mi / computed_entropy
+    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+        # A constant partition has no alternate in-range label. Changing
+        # label 0 cannot test this branch; intentionally break its perfect
+        # homogeneity convention instead (CPU H/C/V, negative fixture).
+        return 0.0
     return 1.0
 
 

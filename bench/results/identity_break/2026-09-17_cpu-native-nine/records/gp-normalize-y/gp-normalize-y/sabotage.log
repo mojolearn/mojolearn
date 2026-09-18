@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:39:57  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gp-normalize-y/base repeat=1/train
+# DONE gp-normalize-y/base repeat=1/train 0.030s
+# START gp-normalize-y/base repeat=1/infer-save-reload
+# DONE gp-normalize-y/base repeat=1/infer-save-reload 0.018s
+# START gp-normalize-y/base repeat=1/batch
+# DONE gp-normalize-y/base repeat=1/batch 0.020s
+# START gp-normalize-y/base repeat=1/stepfull
+# DONE gp-normalize-y/base repeat=1/stepfull 0.000s
+# START gp-normalize-y/base repeat=2/train
+# DONE gp-normalize-y/base repeat=2/train 0.029s
+# START gp-normalize-y/base repeat=2/infer-save-reload
+# DONE gp-normalize-y/base repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/base repeat=2/batch
+# DONE gp-normalize-y/base repeat=2/batch 0.019s
+# START gp-normalize-y/base repeat=2/stepfull
+# DONE gp-normalize-y/base repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/base STABLE 0.133s
+# START gp-normalize-y/ties repeat=1/train
+# DONE gp-normalize-y/ties repeat=1/train 0.031s
+# START gp-normalize-y/ties repeat=1/infer-save-reload
+# DONE gp-normalize-y/ties repeat=1/infer-save-reload 0.018s
+# START gp-normalize-y/ties repeat=1/batch
+# DONE gp-normalize-y/ties repeat=1/batch 0.021s
+# START gp-normalize-y/ties repeat=1/stepfull
+# DONE gp-normalize-y/ties repeat=1/stepfull 0.000s
+# START gp-normalize-y/ties repeat=2/train
+# DONE gp-normalize-y/ties repeat=2/train 0.031s
+# START gp-normalize-y/ties repeat=2/infer-save-reload
+# DONE gp-normalize-y/ties repeat=2/infer-save-reload 0.018s
+# START gp-normalize-y/ties repeat=2/batch
+# DONE gp-normalize-y/ties repeat=2/batch 0.020s
+# START gp-normalize-y/ties repeat=2/stepfull
+# DONE gp-normalize-y/ties repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/ties STABLE 0.139s
+# START gp-normalize-y/hashed repeat=1/train
+# DONE gp-normalize-y/hashed repeat=1/train 0.028s
+# START gp-normalize-y/hashed repeat=1/infer-save-reload
+# DONE gp-normalize-y/hashed repeat=1/infer-save-reload 0.016s
+# START gp-normalize-y/hashed repeat=1/batch
+# DONE gp-normalize-y/hashed repeat=1/batch 0.018s
+# START gp-normalize-y/hashed repeat=1/stepfull
+# DONE gp-normalize-y/hashed repeat=1/stepfull 0.000s
+# START gp-normalize-y/hashed repeat=2/train
+# DONE gp-normalize-y/hashed repeat=2/train 0.028s
+# START gp-normalize-y/hashed repeat=2/infer-save-reload
+# DONE gp-normalize-y/hashed repeat=2/infer-save-reload 0.016s
+# START gp-normalize-y/hashed repeat=2/batch
+# DONE gp-normalize-y/hashed repeat=2/batch 0.018s
+# START gp-normalize-y/hashed repeat=2/stepfull
+# DONE gp-normalize-y/hashed repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/hashed STABLE 0.125s
+# START gp-normalize-y/wide repeat=1/train
+# DONE gp-normalize-y/wide repeat=1/train 0.028s
+# START gp-normalize-y/wide repeat=1/infer-save-reload
+# DONE gp-normalize-y/wide repeat=1/infer-save-reload 0.017s
+# START gp-normalize-y/wide repeat=1/batch
+# DONE gp-normalize-y/wide repeat=1/batch 0.019s
+# START gp-normalize-y/wide repeat=1/stepfull
+# DONE gp-normalize-y/wide repeat=1/stepfull 0.000s
+# START gp-normalize-y/wide repeat=2/train
+# DONE gp-normalize-y/wide repeat=2/train 0.028s
+# START gp-normalize-y/wide repeat=2/infer-save-reload
+# DONE gp-normalize-y/wide repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/wide repeat=2/batch
+# DONE gp-normalize-y/wide repeat=2/batch 0.019s
+# START gp-normalize-y/wide repeat=2/stepfull
+# DONE gp-normalize-y/wide repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/wide STABLE 0.128s
+# START gp-normalize-y/denormal repeat=1/train
+# DONE gp-normalize-y/denormal repeat=1/train 0.028s
+# START gp-normalize-y/denormal repeat=1/infer-save-reload
+# DONE gp-normalize-y/denormal repeat=1/infer-save-reload 0.017s
+# START gp-normalize-y/denormal repeat=1/batch
+# DONE gp-normalize-y/denormal repeat=1/batch 0.019s
+# START gp-normalize-y/denormal repeat=1/stepfull
+# DONE gp-normalize-y/denormal repeat=1/stepfull 0.000s
+# START gp-normalize-y/denormal repeat=2/train
+# DONE gp-normalize-y/denormal repeat=2/train 0.029s
+# START gp-normalize-y/denormal repeat=2/infer-save-reload
+# DONE gp-normalize-y/denormal repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/denormal repeat=2/batch
+# DONE gp-normalize-y/denormal repeat=2/batch 0.019s
+# START gp-normalize-y/denormal repeat=2/stepfull
+# DONE gp-normalize-y/denormal repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/denormal STABLE 0.128s
+# START gp-normalize-y/denormal_ftz repeat=1/train
+# DONE gp-normalize-y/denormal_ftz repeat=1/train 0.028s
+# START gp-normalize-y/denormal_ftz repeat=1/infer-save-reload
+# DONE gp-normalize-y/denormal_ftz repeat=1/infer-save-reload 0.017s
+# START gp-normalize-y/denormal_ftz repeat=1/batch
+# DONE gp-normalize-y/denormal_ftz repeat=1/batch 0.019s
+# START gp-normalize-y/denormal_ftz repeat=1/stepfull
+# DONE gp-normalize-y/denormal_ftz repeat=1/stepfull 0.000s
+# START gp-normalize-y/denormal_ftz repeat=2/train
+# DONE gp-normalize-y/denormal_ftz repeat=2/train 0.029s
+# START gp-normalize-y/denormal_ftz repeat=2/infer-save-reload
+# DONE gp-normalize-y/denormal_ftz repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/denormal_ftz repeat=2/batch
+# DONE gp-normalize-y/denormal_ftz repeat=2/batch 0.018s
+# START gp-normalize-y/denormal_ftz repeat=2/stepfull
+# DONE gp-normalize-y/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/denormal_ftz STABLE 0.128s
+# START gp-normalize-y/dupes repeat=1/train
+# DONE gp-normalize-y/dupes repeat=1/train 0.030s
+# START gp-normalize-y/dupes repeat=1/infer-save-reload
+# DONE gp-normalize-y/dupes repeat=1/infer-save-reload 0.017s
+# START gp-normalize-y/dupes repeat=1/batch
+# DONE gp-normalize-y/dupes repeat=1/batch 0.019s
+# START gp-normalize-y/dupes repeat=1/stepfull
+# DONE gp-normalize-y/dupes repeat=1/stepfull 0.000s
+# START gp-normalize-y/dupes repeat=2/train
+# DONE gp-normalize-y/dupes repeat=2/train 0.028s
+# START gp-normalize-y/dupes repeat=2/infer-save-reload
+# DONE gp-normalize-y/dupes repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/dupes repeat=2/batch
+# DONE gp-normalize-y/dupes repeat=2/batch 0.019s
+# START gp-normalize-y/dupes repeat=2/stepfull
+# DONE gp-normalize-y/dupes repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/dupes STABLE 0.129s
+# START gp-normalize-y/odd repeat=1/train
+# DONE gp-normalize-y/odd repeat=1/train 0.029s
+# START gp-normalize-y/odd repeat=1/infer-save-reload
+# DONE gp-normalize-y/odd repeat=1/infer-save-reload 0.017s
+# START gp-normalize-y/odd repeat=1/batch
+# DONE gp-normalize-y/odd repeat=1/batch 0.019s
+# START gp-normalize-y/odd repeat=1/stepfull
+# DONE gp-normalize-y/odd repeat=1/stepfull 0.000s
+# START gp-normalize-y/odd repeat=2/train
+# DONE gp-normalize-y/odd repeat=2/train 0.029s
+# START gp-normalize-y/odd repeat=2/infer-save-reload
+# DONE gp-normalize-y/odd repeat=2/infer-save-reload 0.016s
+# START gp-normalize-y/odd repeat=2/batch
+# DONE gp-normalize-y/odd repeat=2/batch 0.018s
+# START gp-normalize-y/odd repeat=2/stepfull
+# DONE gp-normalize-y/odd repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/odd STABLE 0.128s
+# START gp-normalize-y/negative repeat=1/train
+# DONE gp-normalize-y/negative repeat=1/train 0.028s
+# START gp-normalize-y/negative repeat=1/infer-save-reload
+# DONE gp-normalize-y/negative repeat=1/infer-save-reload 0.016s
+# START gp-normalize-y/negative repeat=1/batch
+# DONE gp-normalize-y/negative repeat=1/batch 0.018s
+# START gp-normalize-y/negative repeat=1/stepfull
+# DONE gp-normalize-y/negative repeat=1/stepfull 0.000s
+# START gp-normalize-y/negative repeat=2/train
+# DONE gp-normalize-y/negative repeat=2/train 0.029s
+# START gp-normalize-y/negative repeat=2/infer-save-reload
+# DONE gp-normalize-y/negative repeat=2/infer-save-reload 0.017s
+# START gp-normalize-y/negative repeat=2/batch
+# DONE gp-normalize-y/negative repeat=2/batch 0.019s
+# START gp-normalize-y/negative repeat=2/stepfull
+# DONE gp-normalize-y/negative repeat=2/stepfull 0.000s
+# CELL gp-normalize-y/negative STABLE 0.128s
+| gp-normalize-y         | 043a748442e6e335 | c740a60b02462016 | 2f65e3b3b87ab12b | 7cf6c7dcf9c432f6 | bf56e185a01c8ce6 | bf56e185a01c8ce6 | e7a1e552ac6f4eec | 2bf8d76ccc320d32 | 64930a1e91db4fa8 |
+| gp-normalize-y infer   | eb6fa792d89c866a | 5034caaab702e5d4 | 837dac3873e66e36 | 2b8a211a6833e351 | 6e686e39792c8556 | 6e686e39792c8556 | d9f6561346211056 | 5bbb04096d26be70 | 428a0c35c4ba9fff |
+| gp-normalize-y model   | 20a0103122abfd63 | 98704c7053668983 | 140910e091153649 | 4936d8b6003025d9 | d376cf3295f58d8d | 78329d1f0e0ca608 | e4b0f9f02ef85ec6 | b514850c178f902e | 37d66c9430edfad4 |
+| gp-normalize-y batch   | 79691eb508e9a37a | 8f8c4d3e2f2ae267 | cb3e578eaa94988f | 27f83cf3e27d755a | 32493a065feb4b4b | 32493a065feb4b4b | 21fc507070358b1c | 15ec722d3a65eda1 | 9314cd9e09b49f6c |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gp-normalize-y stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gp-normalize-y/gp-normalize-y/cpu-sabotage.json

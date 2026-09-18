@@ -1,0 +1,171 @@
+3090 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ba380000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:54:45  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gpc/base repeat=1/train
+# DONE gpc/base repeat=1/train 0.247s
+# START gpc/base repeat=1/infer-save-reload
+# DONE gpc/base repeat=1/infer-save-reload 0.122s
+# START gpc/base repeat=1/batch
+# DONE gpc/base repeat=1/batch 0.052s
+# START gpc/base repeat=1/stepfull
+# DONE gpc/base repeat=1/stepfull 0.000s
+# START gpc/base repeat=2/train
+# DONE gpc/base repeat=2/train 0.248s
+# START gpc/base repeat=2/infer-save-reload
+# DONE gpc/base repeat=2/infer-save-reload 0.112s
+# START gpc/base repeat=2/batch
+# DONE gpc/base repeat=2/batch 0.047s
+# START gpc/base repeat=2/stepfull
+# DONE gpc/base repeat=2/stepfull 0.000s
+# CELL gpc/base STABLE 0.831s
+# START gpc/ties repeat=1/train
+# DONE gpc/ties repeat=1/train 0.247s
+# START gpc/ties repeat=1/infer-save-reload
+# DONE gpc/ties repeat=1/infer-save-reload 0.113s
+# START gpc/ties repeat=1/batch
+# DONE gpc/ties repeat=1/batch 0.050s
+# START gpc/ties repeat=1/stepfull
+# DONE gpc/ties repeat=1/stepfull 0.000s
+# START gpc/ties repeat=2/train
+# DONE gpc/ties repeat=2/train 0.254s
+# START gpc/ties repeat=2/infer-save-reload
+# DONE gpc/ties repeat=2/infer-save-reload 0.127s
+# START gpc/ties repeat=2/batch
+# DONE gpc/ties repeat=2/batch 0.056s
+# START gpc/ties repeat=2/stepfull
+# DONE gpc/ties repeat=2/stepfull 0.000s
+# CELL gpc/ties STABLE 0.849s
+# START gpc/hashed repeat=1/train
+# DONE gpc/hashed repeat=1/train 0.247s
+# START gpc/hashed repeat=1/infer-save-reload
+# DONE gpc/hashed repeat=1/infer-save-reload 0.111s
+# START gpc/hashed repeat=1/batch
+# DONE gpc/hashed repeat=1/batch 0.047s
+# START gpc/hashed repeat=1/stepfull
+# DONE gpc/hashed repeat=1/stepfull 0.000s
+# START gpc/hashed repeat=2/train
+# DONE gpc/hashed repeat=2/train 0.241s
+# START gpc/hashed repeat=2/infer-save-reload
+# DONE gpc/hashed repeat=2/infer-save-reload 0.110s
+# START gpc/hashed repeat=2/batch
+# DONE gpc/hashed repeat=2/batch 0.047s
+# START gpc/hashed repeat=2/stepfull
+# DONE gpc/hashed repeat=2/stepfull 0.000s
+# CELL gpc/hashed STABLE 0.805s
+# START gpc/wide repeat=1/train
+# DONE gpc/wide repeat=1/train 0.134s
+# START gpc/wide repeat=1/infer-save-reload
+# DONE gpc/wide repeat=1/infer-save-reload 0.111s
+# START gpc/wide repeat=1/batch
+# DONE gpc/wide repeat=1/batch 0.051s
+# START gpc/wide repeat=1/stepfull
+# DONE gpc/wide repeat=1/stepfull 0.000s
+# START gpc/wide repeat=2/train
+# DONE gpc/wide repeat=2/train 0.143s
+# START gpc/wide repeat=2/infer-save-reload
+# DONE gpc/wide repeat=2/infer-save-reload 0.116s
+# START gpc/wide repeat=2/batch
+# DONE gpc/wide repeat=2/batch 0.048s
+# START gpc/wide repeat=2/stepfull
+# DONE gpc/wide repeat=2/stepfull 0.000s
+# CELL gpc/wide STABLE 0.604s
+# START gpc/denormal repeat=1/train
+# DONE gpc/denormal repeat=1/train 0.277s
+# START gpc/denormal repeat=1/infer-save-reload
+# DONE gpc/denormal repeat=1/infer-save-reload 0.118s
+# START gpc/denormal repeat=1/batch
+# DONE gpc/denormal repeat=1/batch 0.049s
+# START gpc/denormal repeat=1/stepfull
+# DONE gpc/denormal repeat=1/stepfull 0.000s
+# START gpc/denormal repeat=2/train
+# DONE gpc/denormal repeat=2/train 0.278s
+# START gpc/denormal repeat=2/infer-save-reload
+# DONE gpc/denormal repeat=2/infer-save-reload 0.113s
+# START gpc/denormal repeat=2/batch
+# DONE gpc/denormal repeat=2/batch 0.047s
+# START gpc/denormal repeat=2/stepfull
+# DONE gpc/denormal repeat=2/stepfull 0.000s
+# CELL gpc/denormal STABLE 0.883s
+# START gpc/denormal_ftz repeat=1/train
+# DONE gpc/denormal_ftz repeat=1/train 0.288s
+# START gpc/denormal_ftz repeat=1/infer-save-reload
+# DONE gpc/denormal_ftz repeat=1/infer-save-reload 0.121s
+# START gpc/denormal_ftz repeat=1/batch
+# DONE gpc/denormal_ftz repeat=1/batch 0.049s
+# START gpc/denormal_ftz repeat=1/stepfull
+# DONE gpc/denormal_ftz repeat=1/stepfull 0.000s
+# START gpc/denormal_ftz repeat=2/train
+# DONE gpc/denormal_ftz repeat=2/train 0.280s
+# START gpc/denormal_ftz repeat=2/infer-save-reload
+# DONE gpc/denormal_ftz repeat=2/infer-save-reload 0.112s
+# START gpc/denormal_ftz repeat=2/batch
+# DONE gpc/denormal_ftz repeat=2/batch 0.047s
+# START gpc/denormal_ftz repeat=2/stepfull
+# DONE gpc/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gpc/denormal_ftz STABLE 0.898s
+# START gpc/dupes repeat=1/train
+# DONE gpc/dupes repeat=1/train 0.242s
+# START gpc/dupes repeat=1/infer-save-reload
+# DONE gpc/dupes repeat=1/infer-save-reload 0.111s
+# START gpc/dupes repeat=1/batch
+# DONE gpc/dupes repeat=1/batch 0.047s
+# START gpc/dupes repeat=1/stepfull
+# DONE gpc/dupes repeat=1/stepfull 0.000s
+# START gpc/dupes repeat=2/train
+# DONE gpc/dupes repeat=2/train 0.240s
+# START gpc/dupes repeat=2/infer-save-reload
+# DONE gpc/dupes repeat=2/infer-save-reload 0.121s
+# START gpc/dupes repeat=2/batch
+# DONE gpc/dupes repeat=2/batch 0.051s
+# START gpc/dupes repeat=2/stepfull
+# DONE gpc/dupes repeat=2/stepfull 0.000s
+# CELL gpc/dupes STABLE 0.813s
+# START gpc/odd repeat=1/train
+# DONE gpc/odd repeat=1/train 0.287s
+# START gpc/odd repeat=1/infer-save-reload
+# DONE gpc/odd repeat=1/infer-save-reload 0.124s
+# START gpc/odd repeat=1/batch
+# DONE gpc/odd repeat=1/batch 0.057s
+# START gpc/odd repeat=1/stepfull
+# DONE gpc/odd repeat=1/stepfull 0.001s
+# START gpc/odd repeat=2/train
+# DONE gpc/odd repeat=2/train 0.300s
+# START gpc/odd repeat=2/infer-save-reload
+# DONE gpc/odd repeat=2/infer-save-reload 0.124s
+# START gpc/odd repeat=2/batch
+# DONE gpc/odd repeat=2/batch 0.053s
+# START gpc/odd repeat=2/stepfull
+# DONE gpc/odd repeat=2/stepfull 0.000s
+# CELL gpc/odd STABLE 0.947s
+# START gpc/negative repeat=1/train
+# DONE gpc/negative repeat=1/train 0.299s
+# START gpc/negative repeat=1/infer-save-reload
+# DONE gpc/negative repeat=1/infer-save-reload 0.117s
+# START gpc/negative repeat=1/batch
+# DONE gpc/negative repeat=1/batch 0.049s
+# START gpc/negative repeat=1/stepfull
+# DONE gpc/negative repeat=1/stepfull 0.000s
+# START gpc/negative repeat=2/train
+# DONE gpc/negative repeat=2/train 0.289s
+# START gpc/negative repeat=2/infer-save-reload
+# DONE gpc/negative repeat=2/infer-save-reload 0.116s
+# START gpc/negative repeat=2/batch
+# DONE gpc/negative repeat=2/batch 0.048s
+# START gpc/negative repeat=2/stepfull
+# DONE gpc/negative repeat=2/stepfull 0.000s
+# CELL gpc/negative STABLE 0.919s
+| gpc                    | 4b0bcba6ef95bbf8 | 95a3e76407b9f12d | d315a7adf15fac28 | f7a515e17f3bf408 | b9761ec07f026697 | b9761ec07f026697 | 4b0bcba6ef95bbf8 | 2eb0637ee096fc56 | a8ad7797440677db |
+| gpc infer              | dc2bf8ac35dedd6b | 6037010a59f6ef2b | 0d38c2a68d9c0512 | ef9df22dd248d65e | c640e76fec56e45b | c640e76fec56e45b | dc2bf8ac35dedd6b | b47e86345bd524fc | cf3500e789877b0d |
+| gpc model              | eee601635b759e33 | a3ba57782816225c | b5ab58b1c08c0ecf | 27f7e2cdf34ad66b | a625a350314422af | 96da420e55024c4a | eee601635b759e33 | 5fb153fa0210fa97 | 93073b53e02e7c8d |
+| gpc batch              | db45fc5e4d28c2eb | 10a3bb9dbf689ab4 | bf8959bb971afeef | 17c96b8373445ce0 | 045ad63b2205029b | 045ad63b2205029b | db45fc5e4d28c2eb | 72f3fff5ab4fda6f | e43186ded76a1a67 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gpc stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gpc/gpc/cpu-sabotage.json

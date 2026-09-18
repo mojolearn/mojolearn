@@ -1,0 +1,168 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:30:18  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START cross-val/base repeat=1/train
+# DONE cross-val/base repeat=1/train 0.351s
+# START cross-val/base repeat=1/infer-save-reload
+# DONE cross-val/base repeat=1/infer-save-reload 0.000s
+# START cross-val/base repeat=1/batch
+# DONE cross-val/base repeat=1/batch 0.348s
+# START cross-val/base repeat=1/stepfull
+# DONE cross-val/base repeat=1/stepfull 0.000s
+# START cross-val/base repeat=2/train
+# DONE cross-val/base repeat=2/train 0.371s
+# START cross-val/base repeat=2/infer-save-reload
+# DONE cross-val/base repeat=2/infer-save-reload 0.000s
+# START cross-val/base repeat=2/batch
+# DONE cross-val/base repeat=2/batch 0.356s
+# START cross-val/base repeat=2/stepfull
+# DONE cross-val/base repeat=2/stepfull 0.000s
+# CELL cross-val/base STABLE 1.426s
+# START cross-val/ties repeat=1/train
+# DONE cross-val/ties repeat=1/train 0.371s
+# START cross-val/ties repeat=1/infer-save-reload
+# DONE cross-val/ties repeat=1/infer-save-reload 0.000s
+# START cross-val/ties repeat=1/batch
+# DONE cross-val/ties repeat=1/batch 0.423s
+# START cross-val/ties repeat=1/stepfull
+# DONE cross-val/ties repeat=1/stepfull 0.000s
+# START cross-val/ties repeat=2/train
+# DONE cross-val/ties repeat=2/train 0.380s
+# START cross-val/ties repeat=2/infer-save-reload
+# DONE cross-val/ties repeat=2/infer-save-reload 0.000s
+# START cross-val/ties repeat=2/batch
+# DONE cross-val/ties repeat=2/batch 0.432s
+# START cross-val/ties repeat=2/stepfull
+# DONE cross-val/ties repeat=2/stepfull 0.000s
+# CELL cross-val/ties STABLE 1.607s
+# START cross-val/hashed repeat=1/train
+# DONE cross-val/hashed repeat=1/train 0.351s
+# START cross-val/hashed repeat=1/infer-save-reload
+# DONE cross-val/hashed repeat=1/infer-save-reload 0.000s
+# START cross-val/hashed repeat=1/batch
+# DONE cross-val/hashed repeat=1/batch 0.342s
+# START cross-val/hashed repeat=1/stepfull
+# DONE cross-val/hashed repeat=1/stepfull 0.000s
+# START cross-val/hashed repeat=2/train
+# DONE cross-val/hashed repeat=2/train 0.374s
+# START cross-val/hashed repeat=2/infer-save-reload
+# DONE cross-val/hashed repeat=2/infer-save-reload 0.000s
+# START cross-val/hashed repeat=2/batch
+# DONE cross-val/hashed repeat=2/batch 0.366s
+# START cross-val/hashed repeat=2/stepfull
+# DONE cross-val/hashed repeat=2/stepfull 0.000s
+# CELL cross-val/hashed STABLE 1.434s
+# START cross-val/wide repeat=1/train
+# DONE cross-val/wide repeat=1/train 0.364s
+# START cross-val/wide repeat=1/infer-save-reload
+# DONE cross-val/wide repeat=1/infer-save-reload 0.000s
+# START cross-val/wide repeat=1/batch
+# DONE cross-val/wide repeat=1/batch 0.349s
+# START cross-val/wide repeat=1/stepfull
+# DONE cross-val/wide repeat=1/stepfull 0.000s
+# START cross-val/wide repeat=2/train
+# DONE cross-val/wide repeat=2/train 0.355s
+# START cross-val/wide repeat=2/infer-save-reload
+# DONE cross-val/wide repeat=2/infer-save-reload 0.000s
+# START cross-val/wide repeat=2/batch
+# DONE cross-val/wide repeat=2/batch 0.356s
+# START cross-val/wide repeat=2/stepfull
+# DONE cross-val/wide repeat=2/stepfull 0.000s
+# CELL cross-val/wide STABLE 1.425s
+# START cross-val/denormal repeat=1/train
+# DONE cross-val/denormal repeat=1/train 0.361s
+# START cross-val/denormal repeat=1/infer-save-reload
+# DONE cross-val/denormal repeat=1/infer-save-reload 0.000s
+# START cross-val/denormal repeat=1/batch
+# DONE cross-val/denormal repeat=1/batch 0.203s
+# START cross-val/denormal repeat=1/stepfull
+# DONE cross-val/denormal repeat=1/stepfull 0.000s
+# START cross-val/denormal repeat=2/train
+# DONE cross-val/denormal repeat=2/train 0.360s
+# START cross-val/denormal repeat=2/infer-save-reload
+# DONE cross-val/denormal repeat=2/infer-save-reload 0.000s
+# START cross-val/denormal repeat=2/batch
+# DONE cross-val/denormal repeat=2/batch 0.228s
+# START cross-val/denormal repeat=2/stepfull
+# DONE cross-val/denormal repeat=2/stepfull 0.000s
+# CELL cross-val/denormal STABLE 1.153s
+# START cross-val/denormal_ftz repeat=1/train
+# DONE cross-val/denormal_ftz repeat=1/train 0.380s
+# START cross-val/denormal_ftz repeat=1/infer-save-reload
+# DONE cross-val/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START cross-val/denormal_ftz repeat=1/batch
+# DONE cross-val/denormal_ftz repeat=1/batch 0.217s
+# START cross-val/denormal_ftz repeat=1/stepfull
+# DONE cross-val/denormal_ftz repeat=1/stepfull 0.000s
+# START cross-val/denormal_ftz repeat=2/train
+# DONE cross-val/denormal_ftz repeat=2/train 0.367s
+# START cross-val/denormal_ftz repeat=2/infer-save-reload
+# DONE cross-val/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START cross-val/denormal_ftz repeat=2/batch
+# DONE cross-val/denormal_ftz repeat=2/batch 0.213s
+# START cross-val/denormal_ftz repeat=2/stepfull
+# DONE cross-val/denormal_ftz repeat=2/stepfull 0.000s
+# CELL cross-val/denormal_ftz STABLE 1.178s
+# START cross-val/dupes repeat=1/train
+# DONE cross-val/dupes repeat=1/train 0.345s
+# START cross-val/dupes repeat=1/infer-save-reload
+# DONE cross-val/dupes repeat=1/infer-save-reload 0.000s
+# START cross-val/dupes repeat=1/batch
+# DONE cross-val/dupes repeat=1/batch 0.345s
+# START cross-val/dupes repeat=1/stepfull
+# DONE cross-val/dupes repeat=1/stepfull 0.000s
+# START cross-val/dupes repeat=2/train
+# DONE cross-val/dupes repeat=2/train 0.324s
+# START cross-val/dupes repeat=2/infer-save-reload
+# DONE cross-val/dupes repeat=2/infer-save-reload 0.000s
+# START cross-val/dupes repeat=2/batch
+# DONE cross-val/dupes repeat=2/batch 0.329s
+# START cross-val/dupes repeat=2/stepfull
+# DONE cross-val/dupes repeat=2/stepfull 0.000s
+# CELL cross-val/dupes STABLE 1.344s
+# START cross-val/odd repeat=1/train
+# DONE cross-val/odd repeat=1/train 0.291s
+# START cross-val/odd repeat=1/infer-save-reload
+# DONE cross-val/odd repeat=1/infer-save-reload 0.000s
+# START cross-val/odd repeat=1/batch
+# DONE cross-val/odd repeat=1/batch 0.377s
+# START cross-val/odd repeat=1/stepfull
+# DONE cross-val/odd repeat=1/stepfull 0.000s
+# START cross-val/odd repeat=2/train
+# DONE cross-val/odd repeat=2/train 0.281s
+# START cross-val/odd repeat=2/infer-save-reload
+# DONE cross-val/odd repeat=2/infer-save-reload 0.000s
+# START cross-val/odd repeat=2/batch
+# DONE cross-val/odd repeat=2/batch 0.357s
+# START cross-val/odd repeat=2/stepfull
+# DONE cross-val/odd repeat=2/stepfull 0.000s
+# CELL cross-val/odd STABLE 1.306s
+# START cross-val/negative repeat=1/train
+# DONE cross-val/negative repeat=1/train 0.368s
+# START cross-val/negative repeat=1/infer-save-reload
+# DONE cross-val/negative repeat=1/infer-save-reload 0.000s
+# START cross-val/negative repeat=1/batch
+# DONE cross-val/negative repeat=1/batch 0.359s
+# START cross-val/negative repeat=1/stepfull
+# DONE cross-val/negative repeat=1/stepfull 0.000s
+# START cross-val/negative repeat=2/train
+# DONE cross-val/negative repeat=2/train 0.349s
+# START cross-val/negative repeat=2/infer-save-reload
+# DONE cross-val/negative repeat=2/infer-save-reload 0.000s
+# START cross-val/negative repeat=2/batch
+# DONE cross-val/negative repeat=2/batch 0.350s
+# START cross-val/negative repeat=2/stepfull
+# DONE cross-val/negative repeat=2/stepfull 0.000s
+# CELL cross-val/negative STABLE 1.426s
+| cross-val              | b2fdf1f50bf4c89a | 274de5ea7441d6ac | 5f66aca6dc6b2a3a | 74ace7ceff4f3f9c | bc2c785a08838cb7 | bc2c785a08838cb7 | 46cc9eae6bc88253 | c2d79851d9be64e6 | c3bce63513677e76 |
+| cross-val batch        | eb370fca368a0681 | 38aedcbfef09cd20 | 0709185aed49d777 | c346b6aacfdb77a2 | e89cc6eddb875a01 | e89cc6eddb875a01 | 258cd9b37c6a6694 | 4a1ee58c7f33dac1 | ced9f7d3a1535f58 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: cross-val infer n/a:function, cross-val model n/a:no-save, cross-val stepfull n/a:no-decode-state
+wrote /root/leg_out/records/cross-val/cross-val/cpu-clean.json

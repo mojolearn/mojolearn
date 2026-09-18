@@ -1,0 +1,25 @@
+# DONE par-scaler-minmax/ties repeat=1/train 0.251s
+# START par-scaler-minmax/ties repeat=1/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=1/infer-save-reload 0.002s
+# START par-scaler-minmax/ties repeat=1/batch
+# DONE par-scaler-minmax/ties repeat=1/batch 0.002s
+# START par-scaler-minmax/ties repeat=2/train
+# DONE par-scaler-minmax/ties repeat=2/train 0.256s
+# START par-scaler-minmax/ties repeat=2/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=2/infer-save-reload 0.001s
+# START par-scaler-minmax/ties repeat=2/batch
+# DONE par-scaler-minmax/ties repeat=2/batch 0.001s
+# CELL par-scaler-minmax/ties STABLE 0.513s
+| par-scaler-minmax      | DIVERGENT        | f1d79cc1bb919200 |
+| par-scaler-minmax infer | REFUSED          | 8a49b2ac919a0249 |
+| par-scaler-minmax model | REFUSED          | cb03a9242c0b3bba |
+| par-scaler-minmax batch | REFUSED          | 85244210a629709c |
+
+cells=4 stable=1 moved=3 refused=0
+infer: stable=1
+model: stable=1
+batch: stable=1
+MOVED   par-scaler/base: ['20fb67a0e5b04ad2', '20fb67a0e5b04ad2']
+MOVED   par-scaler/ties: ['da4acec3c37a4c16', 'da4acec3c37a4c16']
+MOVED   par-scaler-minmax/base: ['b7c8442880f1de0a', 'b7c8442880f1de0a']
+wrote /root/leg_out/cpu-x86.sabotage.json

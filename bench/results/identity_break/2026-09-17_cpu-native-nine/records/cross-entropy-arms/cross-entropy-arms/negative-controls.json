@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "cross-entropy-arms/base",
+      "context_matches": true,
+      "clean": "f470c4b3d4c6ffff",
+      "sabotage": "af89b597ab2b50d0",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/denormal",
+      "context_matches": true,
+      "clean": "429f088f51a53a35",
+      "sabotage": "aa05b4e7046273d0",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/denormal_ftz",
+      "context_matches": true,
+      "clean": "412f826cd71cca6f",
+      "sabotage": "eed577c6e3cc3750",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/dupes",
+      "context_matches": true,
+      "clean": "cabc7904a8f0a565",
+      "sabotage": "cc99f4dc2e352567",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/hashed",
+      "context_matches": true,
+      "clean": "66e041daff67a439",
+      "sabotage": "f6aa2340559d1a3b",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/negative",
+      "context_matches": true,
+      "clean": "3e7ba0104afe7528",
+      "sabotage": "bc9a9fc0f740aa6f",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/odd",
+      "context_matches": true,
+      "clean": "f470c4b3d4c6ffff",
+      "sabotage": "af89b597ab2b50d0",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/ties",
+      "context_matches": true,
+      "clean": "2c784ce0dc69e248",
+      "sabotage": "631104dfff219cbb",
+      "detected": true
+    },
+    {
+      "cell": "cross-entropy-arms/wide",
+      "context_matches": true,
+      "clean": "000019b5210227ff",
+      "sabotage": "1b8ffbb968f37cbe",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

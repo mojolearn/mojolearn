@@ -1,0 +1,49 @@
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_preprocessing_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_preprocessing_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_trees_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+| lane/fixture                 | verdict    | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| ordered-gradient-sum/base    | IDENTICAL x2 | a742b6c812b94347 | a742b6c812b94347 |
+| ordered-gradient-sum/denormal | IDENTICAL x2 | a742b6c812b94347 | a742b6c812b94347 |
+| ordered-gradient-sum/denormal_ftz | IDENTICAL x2 | f177e887cf2c4061 | f177e887cf2c4061 |
+| ordered-gradient-sum/dupes   | IDENTICAL x2 | a742b6c812b94347 | a742b6c812b94347 |
+| ordered-gradient-sum/hashed  | IDENTICAL x2 | 46ae184b0eb32ecd | 46ae184b0eb32ecd |
+| ordered-gradient-sum/negative | IDENTICAL x2 | 868313e90eef7ea7 | 868313e90eef7ea7 |
+| ordered-gradient-sum/odd     | IDENTICAL x2 | 415e287d325868c6 | 415e287d325868c6 |
+| ordered-gradient-sum/ties    | IDENTICAL x2 | e625f92c8f010b8b | e625f92c8f010b8b |
+| ordered-gradient-sum/wide    | IDENTICAL x2 | a742b6c812b94347 | a742b6c812b94347 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9654-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| ordered-gradient-sum/base    | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/base    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/base    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/denormal | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/denormal | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/denormal | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/denormal_ftz | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/denormal_ftz | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/denormal_ftz | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/dupes   | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/dupes   | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/dupes   | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/hashed  | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/hashed  | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/hashed  | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/negative | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/negative | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/negative | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/odd     | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/odd     | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/odd     | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/ties    | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/ties    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/ties    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+| ordered-gradient-sum/wide    | infer  | N/A          | n/a:function     | n/a:function     |
+| ordered-gradient-sum/wide    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| ordered-gradient-sum/wide    | batch  | N/A          | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) |
+
+summary (infer/model): N/A=18
+summary (batch): N/A=9
+summary (rlpair): 

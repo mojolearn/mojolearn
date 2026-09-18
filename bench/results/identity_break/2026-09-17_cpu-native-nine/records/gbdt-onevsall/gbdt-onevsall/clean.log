@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:36:23  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-onevsall/base repeat=1/train
+# DONE gbdt-onevsall/base repeat=1/train 0.705s
+# START gbdt-onevsall/base repeat=1/infer-save-reload
+# DONE gbdt-onevsall/base repeat=1/infer-save-reload 0.059s
+# START gbdt-onevsall/base repeat=1/batch
+# DONE gbdt-onevsall/base repeat=1/batch 0.230s
+# START gbdt-onevsall/base repeat=1/stepfull
+# DONE gbdt-onevsall/base repeat=1/stepfull 0.000s
+# START gbdt-onevsall/base repeat=2/train
+# DONE gbdt-onevsall/base repeat=2/train 0.802s
+# START gbdt-onevsall/base repeat=2/infer-save-reload
+# DONE gbdt-onevsall/base repeat=2/infer-save-reload 0.060s
+# START gbdt-onevsall/base repeat=2/batch
+# DONE gbdt-onevsall/base repeat=2/batch 0.207s
+# START gbdt-onevsall/base repeat=2/stepfull
+# DONE gbdt-onevsall/base repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/base STABLE 2.064s
+# START gbdt-onevsall/ties repeat=1/train
+# DONE gbdt-onevsall/ties repeat=1/train 0.920s
+# START gbdt-onevsall/ties repeat=1/infer-save-reload
+# DONE gbdt-onevsall/ties repeat=1/infer-save-reload 0.036s
+# START gbdt-onevsall/ties repeat=1/batch
+# DONE gbdt-onevsall/ties repeat=1/batch 0.185s
+# START gbdt-onevsall/ties repeat=1/stepfull
+# DONE gbdt-onevsall/ties repeat=1/stepfull 0.000s
+# START gbdt-onevsall/ties repeat=2/train
+# DONE gbdt-onevsall/ties repeat=2/train 0.919s
+# START gbdt-onevsall/ties repeat=2/infer-save-reload
+# DONE gbdt-onevsall/ties repeat=2/infer-save-reload 0.037s
+# START gbdt-onevsall/ties repeat=2/batch
+# DONE gbdt-onevsall/ties repeat=2/batch 0.179s
+# START gbdt-onevsall/ties repeat=2/stepfull
+# DONE gbdt-onevsall/ties repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/ties STABLE 2.277s
+# START gbdt-onevsall/hashed repeat=1/train
+# DONE gbdt-onevsall/hashed repeat=1/train 0.916s
+# START gbdt-onevsall/hashed repeat=1/infer-save-reload
+# DONE gbdt-onevsall/hashed repeat=1/infer-save-reload 0.065s
+# START gbdt-onevsall/hashed repeat=1/batch
+# DONE gbdt-onevsall/hashed repeat=1/batch 0.249s
+# START gbdt-onevsall/hashed repeat=1/stepfull
+# DONE gbdt-onevsall/hashed repeat=1/stepfull 0.000s
+# START gbdt-onevsall/hashed repeat=2/train
+# DONE gbdt-onevsall/hashed repeat=2/train 0.915s
+# START gbdt-onevsall/hashed repeat=2/infer-save-reload
+# DONE gbdt-onevsall/hashed repeat=2/infer-save-reload 0.065s
+# START gbdt-onevsall/hashed repeat=2/batch
+# DONE gbdt-onevsall/hashed repeat=2/batch 0.237s
+# START gbdt-onevsall/hashed repeat=2/stepfull
+# DONE gbdt-onevsall/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/hashed STABLE 2.448s
+# START gbdt-onevsall/wide repeat=1/train
+# DONE gbdt-onevsall/wide repeat=1/train 0.799s
+# START gbdt-onevsall/wide repeat=1/infer-save-reload
+# DONE gbdt-onevsall/wide repeat=1/infer-save-reload 0.061s
+# START gbdt-onevsall/wide repeat=1/batch
+# DONE gbdt-onevsall/wide repeat=1/batch 0.218s
+# START gbdt-onevsall/wide repeat=1/stepfull
+# DONE gbdt-onevsall/wide repeat=1/stepfull 0.000s
+# START gbdt-onevsall/wide repeat=2/train
+# DONE gbdt-onevsall/wide repeat=2/train 0.813s
+# START gbdt-onevsall/wide repeat=2/infer-save-reload
+# DONE gbdt-onevsall/wide repeat=2/infer-save-reload 0.062s
+# START gbdt-onevsall/wide repeat=2/batch
+# DONE gbdt-onevsall/wide repeat=2/batch 0.220s
+# START gbdt-onevsall/wide repeat=2/stepfull
+# DONE gbdt-onevsall/wide repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/wide STABLE 2.174s
+# START gbdt-onevsall/denormal repeat=1/train
+# DONE gbdt-onevsall/denormal repeat=1/train 0.801s
+# START gbdt-onevsall/denormal repeat=1/infer-save-reload
+# DONE gbdt-onevsall/denormal repeat=1/infer-save-reload 0.061s
+# START gbdt-onevsall/denormal repeat=1/batch
+# DONE gbdt-onevsall/denormal repeat=1/batch 0.219s
+# START gbdt-onevsall/denormal repeat=1/stepfull
+# DONE gbdt-onevsall/denormal repeat=1/stepfull 0.000s
+# START gbdt-onevsall/denormal repeat=2/train
+# DONE gbdt-onevsall/denormal repeat=2/train 0.810s
+# START gbdt-onevsall/denormal repeat=2/infer-save-reload
+# DONE gbdt-onevsall/denormal repeat=2/infer-save-reload 0.060s
+# START gbdt-onevsall/denormal repeat=2/batch
+# DONE gbdt-onevsall/denormal repeat=2/batch 0.206s
+# START gbdt-onevsall/denormal repeat=2/stepfull
+# DONE gbdt-onevsall/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/denormal STABLE 2.157s
+# START gbdt-onevsall/denormal_ftz repeat=1/train
+# DONE gbdt-onevsall/denormal_ftz repeat=1/train 0.809s
+# START gbdt-onevsall/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-onevsall/denormal_ftz repeat=1/infer-save-reload 0.061s
+# START gbdt-onevsall/denormal_ftz repeat=1/batch
+# DONE gbdt-onevsall/denormal_ftz repeat=1/batch 0.231s
+# START gbdt-onevsall/denormal_ftz repeat=1/stepfull
+# DONE gbdt-onevsall/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-onevsall/denormal_ftz repeat=2/train
+# DONE gbdt-onevsall/denormal_ftz repeat=2/train 0.810s
+# START gbdt-onevsall/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-onevsall/denormal_ftz repeat=2/infer-save-reload 0.061s
+# START gbdt-onevsall/denormal_ftz repeat=2/batch
+# DONE gbdt-onevsall/denormal_ftz repeat=2/batch 0.222s
+# START gbdt-onevsall/denormal_ftz repeat=2/stepfull
+# DONE gbdt-onevsall/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/denormal_ftz STABLE 2.195s
+# START gbdt-onevsall/dupes repeat=1/train
+# DONE gbdt-onevsall/dupes repeat=1/train 0.775s
+# START gbdt-onevsall/dupes repeat=1/infer-save-reload
+# DONE gbdt-onevsall/dupes repeat=1/infer-save-reload 0.056s
+# START gbdt-onevsall/dupes repeat=1/batch
+# DONE gbdt-onevsall/dupes repeat=1/batch 0.220s
+# START gbdt-onevsall/dupes repeat=1/stepfull
+# DONE gbdt-onevsall/dupes repeat=1/stepfull 0.000s
+# START gbdt-onevsall/dupes repeat=2/train
+# DONE gbdt-onevsall/dupes repeat=2/train 0.769s
+# START gbdt-onevsall/dupes repeat=2/infer-save-reload
+# DONE gbdt-onevsall/dupes repeat=2/infer-save-reload 0.056s
+# START gbdt-onevsall/dupes repeat=2/batch
+# DONE gbdt-onevsall/dupes repeat=2/batch 0.213s
+# START gbdt-onevsall/dupes repeat=2/stepfull
+# DONE gbdt-onevsall/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/dupes STABLE 2.090s
+# START gbdt-onevsall/odd repeat=1/train
+# DONE gbdt-onevsall/odd repeat=1/train 0.898s
+# START gbdt-onevsall/odd repeat=1/infer-save-reload
+# DONE gbdt-onevsall/odd repeat=1/infer-save-reload 0.050s
+# START gbdt-onevsall/odd repeat=1/batch
+# DONE gbdt-onevsall/odd repeat=1/batch 0.198s
+# START gbdt-onevsall/odd repeat=1/stepfull
+# DONE gbdt-onevsall/odd repeat=1/stepfull 0.000s
+# START gbdt-onevsall/odd repeat=2/train
+# DONE gbdt-onevsall/odd repeat=2/train 0.860s
+# START gbdt-onevsall/odd repeat=2/infer-save-reload
+# DONE gbdt-onevsall/odd repeat=2/infer-save-reload 0.049s
+# START gbdt-onevsall/odd repeat=2/batch
+# DONE gbdt-onevsall/odd repeat=2/batch 0.208s
+# START gbdt-onevsall/odd repeat=2/stepfull
+# DONE gbdt-onevsall/odd repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/odd STABLE 2.264s
+# START gbdt-onevsall/negative repeat=1/train
+# DONE gbdt-onevsall/negative repeat=1/train 0.864s
+# START gbdt-onevsall/negative repeat=1/infer-save-reload
+# DONE gbdt-onevsall/negative repeat=1/infer-save-reload 0.062s
+# START gbdt-onevsall/negative repeat=1/batch
+# DONE gbdt-onevsall/negative repeat=1/batch 0.238s
+# START gbdt-onevsall/negative repeat=1/stepfull
+# DONE gbdt-onevsall/negative repeat=1/stepfull 0.000s
+# START gbdt-onevsall/negative repeat=2/train
+# DONE gbdt-onevsall/negative repeat=2/train 0.837s
+# START gbdt-onevsall/negative repeat=2/infer-save-reload
+# DONE gbdt-onevsall/negative repeat=2/infer-save-reload 0.063s
+# START gbdt-onevsall/negative repeat=2/batch
+# DONE gbdt-onevsall/negative repeat=2/batch 0.230s
+# START gbdt-onevsall/negative repeat=2/stepfull
+# DONE gbdt-onevsall/negative repeat=2/stepfull 0.000s
+# CELL gbdt-onevsall/negative STABLE 2.294s
+| gbdt-onevsall          | 8055b03a6a9b2693 | 76e0dd66a5092560 | 3a0ffe510b1e3750 | 8055b03a6a9b2693 | cecda816b6db2fbc | cecda816b6db2fbc | a2662afbac988373 | d1c61adcfae95dc8 | 24da4621316bd507 |
+| gbdt-onevsall infer    | 9ebe038b917dc3d0 | 597fa19abb40fb1d | c986dbf1c26dfe95 | 9ebe038b917dc3d0 | 8a1fb012333c53d5 | 8a1fb012333c53d5 | 1f29a1feb66272bd | df5d7b6325bd9ba1 | 5b97a98afcadd0df |
+| gbdt-onevsall model    | 66c3cd878ec16470 | ad927470625838f6 | ebd62ad3a989bcd1 | 3698dee2844353e1 | a1deef011e0cae28 | a1deef011e0cae28 | 62ad097bcfe17797 | bb3d93d69eb06198 | 73f14bdaa5eef824 |
+| gbdt-onevsall batch    | 795bf20d55943289 | 72bbd68979455f8c | f9708964880adaaa | 795bf20d55943289 | bdcf7a3b6634a1ee | bdcf7a3b6634a1ee | 9e06e6167e26ccc4 | 245742ae15a8bcb1 | 7d7195d49610c291 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-onevsall stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-onevsall/gbdt-onevsall/cpu-clean.json

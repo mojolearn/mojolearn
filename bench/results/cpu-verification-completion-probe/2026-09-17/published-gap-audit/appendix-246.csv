@@ -1,0 +1,247 @@
+id,title,lanes,parts,candidate_cpu_status,native_control_fixture_gaps,nvidia_multi_gpu_inventory,amd_multi_gpu_inventory,pypi_0_8_5_new_verifier
+appendix-001,byte-level BPE tokenizer training,bpe-trainer,train,available,bpe-trainer/train: 2/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-002,byte LM trainer,byte-lm,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-003,byte LM forward pass on its reference path (inference),byte-lm-host-infer,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-004,byte LM forward pass on its threaded path (inference),byte-lm-host-infer-threaded,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-005,published byte LM host training step,byte-lm-host-train,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-006,byte LM trainer on its resident session,byte-lm-resident,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-007,byte LM training over ordered gradient shards,par-byte-lm,train,parallel_excluded,par-byte-lm/train: 0/9,recorded,missing,absent
+appendix-008,byte LM training with a pooled model,par-byte-lm-model-pool,train,parallel_excluded,par-byte-lm-model-pool/train: 0/9,recorded,missing,absent
+appendix-009,byte LM training with parameter offload,par-byte-lm-offload,train,parallel_excluded,par-byte-lm-offload/train: 0/9,recorded,missing,absent
+appendix-010,"byte-level BPE tokenizer (inference, host integers)",tokenizer,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-011,cross-entropy loss arms,cross-entropy-arms,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-012,Embedding layer,embedding,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-013,Embedding layer on its sorted execution plan,embedding-sort,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-014,Mamba-1 block,mamba1,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-015,Mamba-2 block,mamba2,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-016,Mamba-2 block with an active dt clamp,mamba2-dtlimit,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-017,Mamba-3 block,mamba3,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-018,small MLP,mlp,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-019,Adam and AdamW with the gradient clip and accumulation,optim-adam-clip,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-020,"SGD with momentum, Nesterov and dampening",optim-sgd,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-021,small MLP trained over ordered logical gradient shards,par-mlp,train,parallel_excluded,par-mlp/train: 2/9,recorded,missing,absent
+appendix-022,Samba stack trained over ordered logical gradient shards,par-samba,train,parallel_excluded,,recorded,missing,absent
+appendix-023,Samba stack trained over ordered logical gradient shards under a global norm clip,par-samba-clip,train,parallel_excluded,,recorded,missing,absent
+appendix-024,Samba stack,samba,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-025,"Samba stack with untied embeddings, dropout, accumulation, clipping and a cosine schedule",samba-untied-dropout-accum,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-026,"embedding, RMSNorm and linear training primitives",training-primitives,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-027,Transformer block,transformer,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-028,sliding-window Transformer block,transformer-window,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-029,MLP inference,mlp,"infer,model,batch",available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-030,Transformer block inference,transformer,"infer,model,batch",withheld,transformer/model: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-031,Mamba-1 block inference,mamba1,"infer,model,batch",available,mamba1/infer: 8/9; mamba1/model: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-032,Mamba-2 block inference,mamba2,"infer,model,batch",available,mamba2/model: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-033,Mamba-3 block inference,mamba3,"infer,model,batch",withheld,mamba3/model: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-034,Samba inference,samba,"infer,model,batch",withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-035,Mamba-1 stateful decode,mamba1,stepfull,available,mamba1/stepfull: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-036,Mamba-2 stateful decode,mamba2,stepfull,available,mamba2/stepfull: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-037,Mamba-3 stateful decode,mamba3,stepfull,withheld,mamba3/stepfull: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-038,transformer stateful decode,transformer,stepfull,withheld,transformer/stepfull: 0/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-039,cross-validation of gradient boosting,cross-val,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-040,cross-validation fold assignment,cross-val-folds,train,available,cross-val-folds/train: 2/9,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-041,gradient boosting classifier,gbdt-adapter-clf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-042,gradient boosting regressor,gbdt-adapter-reg,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-043,weighted scores of the gradient boosting classifier and regressor,gbdt-adapter-score-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-044,gradient boosting with one-hot categorical columns,gbdt-categorical-ctr,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-045,predictions of Metal-saved gradient boosting models with CTR tables (inference),gbdt-categorical-ctr-tables,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-046,gradient boosting on depthwise trees with the Logloss loss,gbdt-depthwise,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-047,gradient boosting with Exact leaves and the Poisson bootstrap,gbdt-exact-mae,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-048,two-level FeatureFreq estimator,gbdt-feature-freq,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-049,gradient boosting on lossguide trees with the Logloss loss,gbdt-lossguide,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-050,gradient boosting on lossguide trees with the NewtonCosine score and the searcher options,gbdt-lossguide-newtoncosine,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-051,multiclass gradient boosting,gbdt-multiclass,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-052,gradient boosting with the Min and Max NaN modes,gbdt-nan-modes,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-053,one-vs-all gradient boosting,gbdt-onevsall,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-054,ordered boosting with the RMSE loss (OrderedRMSE),gbdt-ordered-rmse,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-055,gradient boosting with the PairLogit ranking loss on generated and explicit pairs,gbdt-pair-logit,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-056,"gradient boosting with the Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq, Expectile, Tweedie, Huber and CrossEntropy losses",gbdt-parametric-losses,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-057,"gradient boosting with the pointwise searcher, L2 scores, the Bayesian bootstrap and an eval set",gbdt-pointwise-l2-bayesian-eval,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-058,gradient boosting with the QueryRMSE ranking loss on query groups,gbdt-query-rmse,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-059,gradient boosting on symmetric trees with the RMSE loss,gbdt-rmse,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-060,gradient boosting on symmetric trees with the Logloss loss,gbdt-symmetric,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-061,predictions of Metal-saved gradient boosting models with tensor CTRs (inference),gbdt-tensor-ctr-tables,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-062,gradient boosting with the YetiRank ranking loss on query groups,gbdt-yeti-rank,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-063,gradient boosting over ordered gradient shards,par-boosting,train,parallel_excluded,par-boosting/train: 0/9,recorded,missing,absent
+appendix-064,gradient boosting classifier over ordered gradient shards,par-boosting-clf,train,parallel_excluded,par-boosting-clf/train: 0/9,missing,missing,absent
+appendix-065,pointwise gradient boosting over ordered gradient shards,par-boosting-pointwise,train,parallel_excluded,par-boosting-pointwise/train: 0/9,recorded,missing,absent
+appendix-066,gradient boosting regressor over ordered gradient shards,par-boosting-reg,train,parallel_excluded,par-boosting-reg/train: 0/9,missing,missing,absent
+appendix-067,two-level feature-frequency estimator over shards,par-feature-freq,train,parallel_excluded,par-feature-freq/train: 0/9,recorded,missing,absent
+appendix-068,ordered boosting over shards,par-ordered-rmse,train,parallel_excluded,par-ordered-rmse/train: 0/9,recorded,missing,absent
+appendix-069,saved gradient boosting models on a CPU (HostGBDT),,"model,batch",separate_saved_model_gate,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-070,Extra Trees classifier,et-clf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-071,best-first Extra Trees classifier with entropy splits,et-clf-entropy-bestfirst,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-072,Extra Trees regressor,et-reg,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-073,bootstrapped Extra Trees regressor with the parallel groves engine,et-reg-bootstrap-parallel,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-074,isolation forest,iforest,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-075,tuned isolation forest,iforest-tuned,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-076,tree-range-sharded random forest classifier,par-forest,train,parallel_excluded,par-forest/train: 2/9,recorded,recorded,absent
+appendix-077,tree-range-sharded Extra Trees regressor,par-forest-et,train,parallel_excluded,par-forest-et/train: 2/9,recorded,missing,absent
+appendix-078,Extra Trees classifier over tree-range shards,par-forest-et-clf,train,parallel_excluded,par-forest-et-clf/train: 0/9,missing,missing,absent
+appendix-079,forest training with a pooled tree set,par-forest-pool,train,parallel_excluded,par-forest-pool/train: 0/9,recorded,recorded,absent
+appendix-080,random forest regressor over tree-range shards,par-forest-reg,train,parallel_excluded,par-forest-reg/train: 0/9,missing,missing,absent
+appendix-081,isolation forest over tree shards,par-iforest,train,parallel_excluded,par-iforest/train: 0/9,recorded,missing,absent
+appendix-082,random forest classifier,rf-clf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-083,class-weighted random forest classifier with the parallel groves engine,rf-clf-balanced-parallel,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-084,"random forest classifier with entropy splits, log2 features and no bootstrap",rf-clf-entropy-log2-noboot,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-085,random forest regressor,rf-reg,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-086,random forest regressor with the gamma and inverse Gaussian criteria,rf-reg-gamma-ig,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-087,random forest regressor with the Poisson criterion,rf-reg-poisson,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-088,weighted scores of the random forest classifier and regressor,rf-score-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-089,saved forests on a CPU (HostForest),,"model,batch",separate_saved_model_gate,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-090,agglomerative clustering,agglomerative,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-091,DBSCAN,dbscan,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-092,brute-force DBSCAN under manhattan distance,dbscan-brute-l1,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-093,weighted DBSCAN,dbscan-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-094,Gaussian mixture,gmm,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-095,Gaussian mixture with a random start,gmm-random-init,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-096,samples from the Gaussian mixture with a random start,gmm-random-init-sample,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-097,samples from the Gaussian mixture,gmm-sample,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-098,HDBSCAN,hdbscan,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-099,HDBSCAN with leaf selection,hdbscan-leaf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-100,k-means,kmeans,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-101,k-means from given centroids,kmeans-array,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-102,k-means from the classic k-means++ start,kmeans-classic-pp,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-103,k-means with a random start,kmeans-random,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-104,k-means under the rooted euclidean metric,kmeans-sqrt,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-105,weighted k-means,kmeans-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-106,DBSCAN over query shards,par-dbscan,train,parallel_excluded,par-dbscan/train: 0/9,recorded,missing,absent
+appendix-107,Gaussian mixture over row shards,par-gmm,train,parallel_excluded,par-gmm/train: 0/9,recorded,recorded,absent
+appendix-108,agglomerative clustering over graph shards,par-graph-agglomerative,train,parallel_excluded,par-graph-agglomerative/train: 0/9,recorded,missing,absent
+appendix-109,spectral clustering over graph shards,par-graph-spectral,train,parallel_excluded,par-graph-spectral/train: 0/9,recorded,missing,absent
+appendix-110,HDBSCAN over row shards,par-hdbscan,train,parallel_excluded,par-hdbscan/train: 0/9,recorded,recorded,absent
+appendix-111,k-means over row shards,par-kmeans,train,parallel_excluded,par-kmeans/train: 0/9,recorded,missing,absent
+appendix-112,spectral clustering,spectral,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-113,spectral clustering on a precomputed affinity,spectral-precomputed,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-114,IVF-Flat index,ivf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-115,IVF-Flat index under euclidean distance,ivf-euclidean,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-116,extending a built IVF-Flat index,ivf-extend,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-117,kernel density,kde,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-118,kernel density with the cosine kernel under minkowski distance,kde-cosine-minkowski,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-119,kernel density with the Epanechnikov kernel under manhattan distance,kde-epanechnikov-l1,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-120,kernel density with the exponential kernel under chebyshev distance,kde-exponential-chebyshev,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-121,kernel density with the linear kernel under cosine distance,kde-linear-cosine,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-122,kernel density with the tophat kernel under squared euclidean distance,kde-tophat-sqeuclidean,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-123,weighted kernel density,kde-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-124,nearest neighbors,knn,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-125,nearest neighbors under chebyshev distance,knn-chebyshev,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-126,k-NN classifier,knn-clf,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-127,distance-weighted k-NN classifier,knn-clf-distance,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-128,nearest neighbors under cosine distance,knn-cosine,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-129,nearest neighbors under manhattan distance,knn-manhattan,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-130,nearest neighbors under minkowski distance at p 3,knn-minkowski-p3,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-131,nearest neighbors over the random ball cover,knn-rbc,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-132,k-NN regressor,knn-reg,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-133,distance-weighted k-NN regressor,knn-reg-distance,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-134,nearest neighbors under squared euclidean distance,knn-sqeuclidean,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-135,query-sharded kernel density,par-queries-kde,train,parallel_excluded,par-queries-kde/train: 2/9,recorded,missing,absent
+appendix-136,query-sharded k-NN classification,par-queries-knn,train,parallel_excluded,par-queries-knn/train: 2/9,recorded,missing,absent
+appendix-137,nearest neighbors over query shards,par-queries-nn,train,parallel_excluded,par-queries-nn/train: 0/9,missing,missing,absent
+appendix-138,query-sharded radius neighbors,par-queries-radius,train,parallel_excluded,par-queries-radius/train: 2/9,recorded,missing,absent
+appendix-139,reference-sharded k-NN classification,par-reference-knn,train,parallel_excluded,par-reference-knn/train: 1/9,recorded,missing,absent
+appendix-140,reference-sharded k-NN regression,par-reference-knn-reg,train,parallel_excluded,par-reference-knn-reg/train: 1/9,recorded,missing,absent
+appendix-141,radius neighbors,radius,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-142,radius neighbors under chebyshev distance,radius-chebyshev,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-143,radius neighbors under manhattan distance,radius-manhattan,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-144,radius neighbors under minkowski distance at p 3,radius-minkowski-p3,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-145,HDBSCAN approximate predict,hdbscan,infer,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-146,HDBSCAN membership vector,hdbscan,infer,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-147,HDBSCAN all-points membership,hdbscan,infer,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-148,elasticnet,elasticnet,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-149,elasticnet at the l2 end without an intercept,elasticnet-l2end-no-intercept,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-150,kernel ridge,kernel-ridge,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-151,lasso,lasso,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-152,logistic regression,logistic,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-153,elasticnet-penalized logistic regression,logistic-elasticnet,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-154,l1-penalized logistic regression,logistic-l1,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-155,multiclass logistic regression,logistic-multiclass,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-156,unpenalized logistic regression without an intercept,logistic-unpenalized-no-intercept,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-157,linear regression,ols,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-158,linear regression without an intercept,ols-no-intercept,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-159,weighted linear regression,ols-weighted,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-160,coordinate descent over column shards,par-cd,train,parallel_excluded,par-cd/train: 0/9,recorded,missing,absent
+appendix-161,elastic net over column shards,par-cd-elasticnet,train,parallel_excluded,par-cd-elasticnet/train: 0/9,missing,missing,absent
+appendix-162,Gram product over row shards,par-gram,train,parallel_excluded,par-gram/train: 0/9,recorded,missing,absent
+appendix-163,least squares over row-sharded Gram,par-gram-ols,train,parallel_excluded,par-gram-ols/train: 0/9,missing,missing,absent
+appendix-164,kernel ridge over tile shards,par-kernel-ridge,train,parallel_excluded,par-kernel-ridge/train: 0/9,recorded,recorded,absent
+appendix-165,logistic regression over row shards,par-logistic,train,parallel_excluded,par-logistic/train: 0/9,recorded,missing,absent
+appendix-166,ridge,ridge,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-167,ridge without an intercept,ridge-no-intercept,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-168,Gaussian process with an RBF kernel,gp,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-169,Gaussian process with a Matern kernel at nu 0.5,gp-matern12,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-170,Gaussian process with a Matern kernel at nu 1.5,gp-matern32,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-171,Gaussian process with an ARD Matern kernel at nu 2.5,gp-matern52-ard,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-172,Gaussian process with normalized targets,gp-normalize-y,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-173,posterior draws from the Gaussian process,gp-sample-y,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-174,posterior draws from the Gaussian process with normalized targets,gp-sample-y-normalize,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-175,binary Gaussian process classifier,gpc,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-176,one-vs-rest Gaussian process classifier,gpc-multiclass,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-177,Nystroem kernel approximation,nystroem,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-178,Gaussian process over tile shards,par-gp,train,parallel_excluded,par-gp/train: 0/9,recorded,missing,absent
+appendix-179,Nystroem over row shards,par-nystroem,train,parallel_excluded,par-nystroem/train: 0/9,recorded,recorded,absent
+appendix-180,random Fourier features over row shards,par-rbf-sampler,train,parallel_excluded,par-rbf-sampler/train: 0/9,recorded,recorded,absent
+appendix-181,SVC over row shards,par-svm,train,parallel_excluded,par-svm/train: 0/9,recorded,missing,absent
+appendix-182,SVR over row shards,par-svm-svr,train,parallel_excluded,par-svm-svr/train: 0/9,missing,missing,absent
+appendix-183,random Fourier features,rbf-sampler,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-184,SVC,svc,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-185,linear SVC,svc-linear,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-186,polynomial SVC,svc-poly,train,withheld,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-187,SVR,svr,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-188,linear SVR,svr-linear,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-189,PCA over row-sharded Gram,par-gram-pca,train,parallel_excluded,par-gram-pca/train: 0/9,missing,missing,absent
+appendix-190,truncated SVD over row-sharded Gram,par-gram-tsvd,train,parallel_excluded,par-gram-tsvd/train: 0/9,missing,missing,absent
+appendix-191,UMAP over graph shards,par-graph-umap,train,parallel_excluded,par-graph-umap/train: 0/9,recorded,missing,absent
+appendix-192,PCA,pca,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-193,whitened PCA through the full SVD,pca-full-whiten,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-194,whitened PCA,pca-whiten,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-195,truncated SVD,tsvd,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-196,UMAP,umap,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-197,bootstrap,bootstrap,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-198,min-max scaler,minmax-scaler,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-199,clipped min-max scaler,minmax-scaler-clip,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-200,Monte Carlo integration,monte-carlo,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-201,resampling over draw shards,par-resample,train,parallel_excluded,par-resample/train: 0/9,recorded,recorded,absent
+appendix-202,column-sharded standard scaler,par-scaler,train,parallel_excluded,par-scaler/train: 0/9,recorded,missing,absent
+appendix-203,min-max scaler over column shards,par-scaler-minmax,train,parallel_excluded,par-scaler-minmax/train: 0/9,missing,missing,absent
+appendix-204,permutation test,permutation-test,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-205,standard scaler,standard-scaler,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-206,standard scaler without centering,standard-scaler-no-mean,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-207,standard scaler without scaling,standard-scaler-no-std,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-208,ARIMA,arima,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-209,differenced ARIMA,arima-011,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-210,ARIMA with exogenous regressors,arima-exog,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-211,differenced seasonal ARIMA with exogenous regressors,arima-exog-seasonal,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-212,seasonal ARIMA,arima-seasonal-c,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-213,Holt-Winters,holtwinters,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-214,multiplicative Holt-Winters,holtwinters-multiplicative,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-215,KPSS stationarity test,kpss,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-216,series-sharded ARIMA,par-arima,train,parallel_excluded,par-arima/train: 2/9,recorded,missing,absent
+appendix-217,series-sharded Holt-Winters,par-holtwinters,train,parallel_excluded,par-holtwinters/train: 2/9,recorded,missing,absent
+appendix-218,seasonal-difference selection,select-d,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-219,Cholesky factorization and solve,cholesky,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-220,pinned GEMM,gemm-pinned,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-221,transposed GEMM ops,gemm-transposed,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-222,Cholesky over tile shards,par-cholesky,train,parallel_excluded,par-cholesky/train: 0/9,recorded,recorded,absent
+appendix-223,accuracy score,metrics,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-224,adjusted rand score,metrics,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-225,entropy,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-226,mutual info score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-227,homogeneity score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-228,completeness score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-229,v measure score,metrics,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-230,r2 score,metrics,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-231,silhouette score,metrics,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-232,silhouette samples,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-233,rand score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-234,precision score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-235,recall score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-236,f1 score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-237,log loss,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-238,roc auc score,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-239,confusion matrix,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-240,precision recall curve,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-241,mean squared error,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-242,mean absolute error,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-243,root mean squared error,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-244,kl divergence,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-245,trustworthiness,metrics-classification,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent
+appendix-246,fowlkes mallows score,metrics-fowlkes-mallows,train,available,,not_a_parallel_entry,not_a_parallel_entry,absent

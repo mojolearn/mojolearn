@@ -1,0 +1,3 @@
+knn-manhattan: clean
+knn-manhattan: sabotage
+knn-manhattan: 9/9 controls; passed=True

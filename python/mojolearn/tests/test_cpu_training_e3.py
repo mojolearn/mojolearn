@@ -72,11 +72,11 @@ def test_binding_registers_the_gpu_names():
     src = _read(host_surface.binding_source("rf"))
     exports = host_surface.family("rf")["exports"]
     for name in FIT_NAMES + ("forest_export", "forest_export_legacy", "forest_export_release",
-                             "rf_predict_proba", "rf_predict_reg", "rf_vendor", "rf_numeric_mode"):
+                             "rf_predict_proba", "rf_predict_reg", "rf_vendor", "rf_numeric_mode",
+                             "rf_classifier_fit_shard", "rf_regressor_fit_shard"):
         assert f'("{name}")' in src, f"the rf host binding does not register {name}"
         assert name in exports, f"the manifest does not list {name} for rf"
-    for absent in ("rf_classifier_fit_shard", "rf_regressor_fit_shard",
-                   "rf_predict_proba_gpu_parallel", "rf_predict_reg_gpu_parallel",
+    for absent in ("rf_predict_proba_gpu_parallel", "rf_predict_reg_gpu_parallel",
                    "forest_predict_resident_gpu", "forest_predict_resident_into_gpu"):
         assert f'("{absent}")' not in src, f"{absent} must stay absent so it refuses by name"
 
