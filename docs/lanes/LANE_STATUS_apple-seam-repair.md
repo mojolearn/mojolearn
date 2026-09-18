@@ -86,3 +86,21 @@ PRESERVE subnormals, which its FMA does not do natively.
   If the session dies mid-run, restore with `git checkout HEAD -- <file>` for
   checks/kernel_matrix.mojo core/gemm.mojo core/gram_multi_gpu.mojo
   gemm/checks/gemm_identical.mojo gemm/checks/gemm_lowbit.mojo (all committed).
+
+## RESULT 1: the seam probe, Apple M4 (2026-09-18, one Metal slot, 0.82 s of GPU)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-probe/`. Both arms
+built from the same source in the same directory; the control arm adds
+`-D MOJOLEARN_NO_ZERO_FMA_REPAIR=1`. Host reference `tools/gemm_seam_probe_reference.py`.
+
+| arm | shipped lane | nativefix lane | boundary a=3f7fffff b=00800000 acc=0 |
+|---|---|---|---|
+| no repair (control) | `f269fc70e5625987` -> fbr | fbr | shipped=00000000 |
+| repair | **`62a6b5621e27c707` -> rtf** | **`62a6b5621e27c707` -> rtf** | shipped=00800000 |
+
+All 262,144 triples. `shipped/swrtf` mismatches 315 in the repaired arm (the
+unrepaired software lane is still fbr in the same binary), 0 in the control.
+The check fails when it should: the control arm reads fbr. `nativefix` (the
+native Apple FMA, NO software ftz, plus the zero repair) ALSO hashes rtf: on
+Apple the software `ftz` after the FMA is redundant over these triples, a
+candidate cheaper spelling.
