@@ -215,3 +215,18 @@ MOJOLEARN_GPU_ARCHS ("a CPU build takes no MOJOLEARN_GPU_ARCHS"), so prepare fou
 (extra_exit=5). Fixed with `env -u MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN=cpu`, and this
 time the exact command was run locally under the pod's env first and built. All three pods so far
 (ph5zsazy7u4kxn, vn4vonca6du36q, d8klbzo3aga6d6) read HTTP 404 from the API.
+
+## GPU leg 4: DONE (2026-09-18_151432, RTX 4090 pod nqbmrf373yti99, 404-verified)
+
+Record: `bench/results/lm_vocab_witness/2026-09-18_rtx4090/` (README has the table). With the
+50,257-id vocabulary from R2, same shape/seed/initial weights:
+- tokens arm: embedding rows >= 256 nonzero 57 (step 0) and 62 (step 1), exactly the distinct
+  ids >= 256 in each batch; max |g| 2.8e-3 / 6.8e-3.
+- bytes arm (CorpusBatches): embedding rows >= 256 nonzero 0 and 0, max |g| exactly 0.0.
+- lm_head: all 50,001 rows >= 256 nonzero in BOTH arms (softmax), 5e-7 under bytes vs 3e-3 under
+  tokens. The brief's "99.5% of those rows would finish training at init" holds for the
+  EMBEDDING only; the unembedding rows do train under bytes (pushed down, never up).
+- byte path vs main: EQUAL sha256 for loss, gradients, parameters, m, v, flags at both steps
+  (branch python vs main's exact `_byte_lm_impl.py`); seed-2 arm DIFFERS (the check can fail).
+- enwik8 tokenized on the x86 box: SAME sha256 2ad0c690... as the M4; 2.35 M ids/s one core
+  (EPYC 7B13), so 25B tokens = 2.95 core-hours there (5.9 on the M4).
