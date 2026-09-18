@@ -153,6 +153,23 @@ beside `lm_corpus.prepare()` on all of enwik8 (the built-in default). Pod: 8 vCP
 flavors (>= 32 GB), lease 175 min. PREDICTIONS for it: A and B ranks sha 3d547b17...; A peak
 < 1 GB; old peak ~20.2 GB (VmHWM ~ 19.7 GiB); A wall well under the M4's 4,274 s.
 
+LEG 1 (pod c2fj95nckg26vq, 8 vCPU cpu memory flavor, 64 GB cgroup limit, AMD EPYC 7713P,
+$0.44/hr; R2 staged 2 keys in 13 s, strict; heads matched the M4 recipe):
+- A (new CLI) and C's old CLI DID NOT RUN: the body called bare `mojo build`, which finds no
+  `std` outside `pixi run` (build_new.log / build_old.log). Fixed in body2 (`pixi run
+  --manifest-path ... mojo build`, rehearsed on the live pod: built).
+- **B, the PUBLIC DOOR `BpeVocabularyTrainer(vocab_size=50256, min_frequency=2,
+  backend="mojo")` on the two 10 MB heads: ranks sha256
+  3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d and tokenizer.json
+  7ae8b893219619cf73e64b262367cc6e6d2f9f1aa9c1a32b8fb7e3cb84d972e9 -- BOTH EQUAL to the
+  M4 dense-table run's files.** 50,256 tokens, 50,000 merges, 47,825 ties, 220,165 groups
+  (all equal to the M4 log). Wall 2,532.9 s, one core, EPYC 7713P. Peak RSS of the WHOLE
+  Python process (interpreter + numpy + both documents + trainer) 156,880 KiB = 153 MiB
+  (ru_maxrss; VmHWM sampler agrees). The dense-table trainer allocated 20.2 GB on the same job.
+- C's `lm_corpus.prepare()` on all of enwik8 is running on leg 1.
+Legs B (new CLI alone) and C (old CLI alone, bounded 9,600 s) go to two more pods so the old
+arm's 20 GB and the new arm's timing do not share a box.
+
 ## Candidates (not opened)
 
 (none yet)
