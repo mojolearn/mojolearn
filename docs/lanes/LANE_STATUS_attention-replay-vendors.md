@@ -143,6 +143,28 @@ the after host bindings. Host lanes are CPU arithmetic whose rows answer
 False either way, and the CPU pod above rebuilt them properly. Body fixed
 (clears python/mojolearn/host too) before the AMD identity leg.
 
+## APPLE native corner fixtures on Metal: PASS, every control watched FAIL
+
+One Metal job through mac_slot.sh metal (admitted after 1085 s queue, 5.5 s
+run). `apple_native/gates_verdict.txt`, default Apple build (no REPAIR define:
+the matrix row itself turns replay on):
+- row-off control (LEGACY_CORNER): "masked-tail repair disabled: INERT".
+- zdot, chain at -0 at its visible-run end, masked tail launders to +0:
+  replay disabled (SAB_Z) -> "zdot repair differs: fused=0x80000000
+  eager=0x00000000"; clean -> "MATCH zdot fused=0x00000000 eager=0x00000000".
+- dQ, same corner, all 64 cells: SAB_DQ -> "dq repair differs:
+  fused=0x80000000 eager=0x00000000"; clean -> 64 x fused=eager=0x00000000.
+- preservation (the -0 must survive a negative masked term): corrupting the
+  fused output to +0 fails for zdot and dQ; clean -> fused=eager=0x80000000.
+- joint dk/dv (r2): no_tail accepted with dk=-0 == eager; masked_suffix and
+  next_head_prefix REFUSE (corner=True) and "masked cells change dk" (the
+  eager path is what runs there); tail sabotage fails "no_tail accepted dk
+  differs at 0 fused=0x00000000 eager=0x80000000".
+- broad transformer_fused_check on Apple's default arm: PASS.
+All 130 masked-tail MATCH lines and all tail-guard lines are byte-equal to
+the NVIDIA leg's (`tools/lm_attention_cross_vendor_check.py`, its two
+corruption controls fail first: apple_native/cross_vendor_nvidia_apple.log).
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).

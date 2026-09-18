@@ -1,0 +1,10 @@
+masked_rowoff	1	0
+masked_sab_z	1	0
+masked_sab_dq	1	1
+masked_corrupt_z	1	0
+masked_corrupt_dq	1	2
+tail_sab	1	0
+masked_clean	0	1
+tail_clean	0	0
+fused_default	0	1
+METAL-DONE
