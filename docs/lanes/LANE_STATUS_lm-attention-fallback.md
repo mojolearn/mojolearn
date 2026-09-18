@@ -225,3 +225,15 @@ sequence, 432 eager bytes, 9663676416 aexp bytes; sampled device peak below
 B1 default on the same corpus; <=1.1x falsifies that multiplier prediction.
 B4 failure or OOM is a failed endurance prediction, never a shorter pass.
 The final runs will finish even if an early timing observation loses.
+
+Before the same-H100 batch comparison: run B4 legacy arithmetic with bounded
+release for 700 steps, then default B1 and B4 for 700 steps each on one
+device. This directly checks B4 bits against eager fallback while keeping
+its memory bounded, and avoids attributing a cross-pod timing difference
+to batch size. Predict the B4 loss/state hashes match exactly, legacy
+release actually executes and keeps 432 retained eager bytes, default B4
+has zero refusals and active replay. Timing predictions remain B1 0.18–0.27s,
+B4 0.55–0.90s, same-device throughput multiplier 1.1–1.5. A mismatch rejects
+the candidate; an INERT arm proves nothing about that mechanism. This
+700-step comparison is separate from the already-running 2000-step B4
+endurance obligation, which will finish.

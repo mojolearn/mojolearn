@@ -10,8 +10,8 @@ from pathlib import Path
 HASHES = ('loss', 'gradients', 'parameters', 'm', 'v', 'flags')
 
 
-def compare(a, b, verbose=True):
-    assert a['shape'] == b['shape'] == [1,2048,768,12,12,64,2048,12,50257] and a['seed'] == b['seed'], 'inputs'
+def compare(a, b, verbose=True, batch=1):
+    assert a['shape'] == b['shape'] == [batch,2048,768,12,12,64,2048,12,50257] and a['seed'] == b['seed'], 'inputs'
     assert a['corpus']['sha256'] == b['corpus']['sha256'], 'corpus'
     assert len(a['steps']) == len(b['steps']) == 700, 'coverage'
     for x, y in zip(a['steps'], b['steps']):
@@ -29,12 +29,12 @@ def compare(a, b, verbose=True):
                     print('MATCH step', x['step'], key, x[key])
 
 
-def default_capacity(r):
+def default_capacity(r, batch=1):
     for row in r['steps']:
         a = row['attention']
         assert a['release_eager'] is True and a['sticky_eager'] is False, 'default storage policy'
         assert a['eager_bytes'] == 432, 'eager capacity'
-        assert a['forward_aexp_bytes'] == 2415919104, 'aexp capacity'
+        assert a['forward_aexp_bytes'] == batch * 2415919104, 'aexp capacity'
         assert len(a['backward_repair_sites']) == 12 and all(v in (0, 1, 2, 3) for v in a['backward_repair_sites']), 'repair coverage'
 
 
