@@ -103,6 +103,7 @@ from gemm.checks.gemm_identical import (
     GEMM_KSPLIT_DEFAULT_S,
     GEMM_KSPLIT_S,
     TUNED_CLASS_FLUSH,
+    TUNED_STAGE_FTZ,
     choose_gemm_plan,
     gemm_plan_name,
     gemm_shipped_dispatch_name,
@@ -418,6 +419,8 @@ def main() raises:
         + " shipped=[" + gemm_step_geometry_name(GEMM_GEOM_SHIPPED) + "]"
     )
     print("CLASS_FLUSH enabled=" + String(TUNED_CLASS_FLUSH))
+    print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))
+    print("GATHER_FULL enabled=" + String(is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]()))
     print("PLANLABEL arm=" + name + " label=" + gemm_step_arm_plan_label(arm))
     # Brief section 11: one CALLER shape's dispatch on this build under this
     # arm, host only (no DeviceContext), so a classical A/B leg records which
