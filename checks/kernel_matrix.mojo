@@ -1217,8 +1217,10 @@ def attn_masked_tail_replay_for[column: Int]() -> Bool:
     independently failing controls. Enable the measured NVIDIA schedule;
     other columns keep their existing paths pending training qualification.
     See docs/lanes/LANE_STATUS_lm-attention-fallback.md.
+    WIP lane/attention-replay-vendors: AMD and Apple enabled, qualification
+    owed (docs/lanes/LANE_STATUS_attention-replay-vendors.md).
     """
-    return column == COLUMN_NVIDIA
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
 
 
 def byte_lm_release_eager_for[column: Int]() -> Bool:
@@ -1228,8 +1230,10 @@ def byte_lm_release_eager_for[column: Int]() -> Bool:
     hashes and returns retained eager capacity to 432 bytes; aexp is kept
     separately. Automatic fused/eager switching matches too, with sampled
     peak 31537 -> 18497 MiB. This is a storage bound, not a speed claim.
+    WIP lane/attention-replay-vendors: AMD and Apple enabled, qualification
+    owed (docs/lanes/LANE_STATUS_attention-replay-vendors.md).
     """
-    return column == COLUMN_NVIDIA
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
 
 
 def attn_zdot_rows_per_block_for[column: Int]() -> Int:
