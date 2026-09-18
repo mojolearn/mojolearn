@@ -248,6 +248,13 @@ def _commit_time(root, commit, cache):
 def admit(j, path):
     """None when the column is admissible, else the reason it is not."""
     low = path.lower()
+    # This particular incident directory was explicitly quarantined by its
+    # contemporaneous README. Stable repetitions inside a faulty-device run
+    # do not make its cells admissible. Keep the raw records for diagnosis;
+    # do not infer a general exception for Apple or disagreeing columns.
+    normalized = "/" + low.replace("\\", "/").lstrip("/")
+    if "/2026-09-15_gp-sample-y/metal-transient/" in normalized:
+        return "quarantined Metal incident (2026-09-15_gp-sample-y/README.md)"
     base = os.path.basename(low)
     if any(tok in low for tok in _EXCLUDED_PATH_TOKENS) or any(
             tok in base for tok in _EXCLUDED_BASENAME_TOKENS):

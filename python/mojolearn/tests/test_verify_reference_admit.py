@@ -106,6 +106,18 @@ def test_probe_directory_is_still_refused():
     assert vref.admit(clean_column(), path) is not None
 
 
+def test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records():
+    import json
+    from pathlib import Path
+    incident = Path(__file__).resolve().parents[3] / RECORDS / "2026-09-15_gp-sample-y" / "metal-transient"
+    for path in incident.glob("*.json"):
+        column = json.loads(path.read_text())
+        assert "quarantined Metal incident" in vref.admit(column, str(path))
+    assert (incident / "apple-m4.merged-rerun1.json").is_file()
+    assert vref.admit(clean_column(), str(incident.parent / "apple-m4.json")) is None
+    assert vref.admit(clean_column(), "other-record/metal-transient/apple-m4.json") is None
+
+
 def test_partial_and_smoke_directories_are_still_refused():
     for token in ("partial", "post-merge-smoke"):
         path = f"{RECORDS}/2026-09-14_{token}-run/apple-m4.json"

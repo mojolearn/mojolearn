@@ -54,6 +54,14 @@ The active tiled-GEMM work in the original checkout was not changed.
 
 ## Next coverage work
 
+Subsequent continuation: see `LANE_STATUS_verifier-installed-continuation.md`.
+All 23 routes now passed watched installed development CPU core replay, as did
+all 58 bundled models and the 24-case whole-loaded-model proof. The historical
+Apple GP discrepancies were traced to explicitly quarantined incident records;
+scoped replacement with existing clean installed captures changes no reference
+hashes. Fresh native release qualification and hardware debt remain outstanding.
+The paragraph below records the state before this continuation.
+
 The expanded handoff remains authoritative for numerical debt: 23 ordinary
 holds have AMD captures; NVIDIA, watched installed replay, rebuilt exact-wheel
 qualification and physical two-GPU evidence remain owed. The two historical
