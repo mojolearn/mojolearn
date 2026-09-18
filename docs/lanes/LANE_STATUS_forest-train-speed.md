@@ -163,3 +163,45 @@ above), so a 100-tree fit is about 30 s on this box.
 3. The attribution table of AFTER (stage ledger and nsys).
 4. Apple and AMD columns: owed at the next release, not taken now (the flip is
    NVIDIA only; `checks/kernel_matrix.mojo` rows unchanged).
+
+## The resume pod (2026-09-18 01:37Z to 03:15Z, RTX 4090; landed by the orchestrator)
+
+The agent that ran this pod stalled before writing these in; the orchestrator
+read them from `~/mojolearn-evidence/forest-train-speed/leg_out2/`
+(`resume.out`, `rab_*/summary.txt`, `rab_et.before-arm-missing/`). The pod is
+reaped. The lane is landed at `f1fe7057c`; commit `70797b6cf` (DEVIATION 3023,
+the regression score pass at width 4) was NEVER BUILT OR RUN and stays on
+`lane/forest-train-speed` as a candidate.
+
+**Owed item 1, the 100-tree ET A/B at full size: INCOMPLETE.** The AFTER and
+AFTER-FAST arms ran five rounds each on Istella-S 2,000,000 x 220
+(`rab_et.before-arm-missing/`): after 4530.3 ms (4514.1..4783.0, spread
+1.060), after-FAST 4443.0 (4435.0..4530.6, 1.022), model hashes equal across
+the ten fits. The BEFORE arm did not run (its build was missing in that
+stage), the three-arm rerun (`resume2.out`) was in flight when the agent
+stalled, and the pod ended. For scale: the 2026-09-12 H100 board fitted the
+same ET classifier on Istella-S in 9291 ms and this box's main took 28.4 s
+at 16 trees (single process, above). The BEFORE-vs-AFTER ratios of record
+stay the ones above (200,000 x 16 rows at 100 trees, 0.067; 4,000,000 x 16
+at 16 trees, 0.105; hashes equal), plus the single-process 16-tree samples on
+both datasets.
+
+**Owed item 2, the cost of pinning (`rab_rf_pin`, `rab_etreg_pin`, 5 rounds
+of one fit per process, full-size warmup):**
+
+| cell | IDENTICAL ms (spread) | FAST ms (spread) | FAST / IDENTICAL | hashes |
+|---|---:|---:|---:|---|
+| rf-clf taxi 4.0M x 16, 100 trees | 2837.3 (1.002) | 2823.3 (1.020) | 0.995 | equal |
+| rf-clf Istella-S 2.0M x 220 | 3762.3 (1.052) | 3705.6 (1.052) | 0.985 | equal |
+| rf-reg taxireg 4.0M x 16 | 6291.0 (1.005) | 6276.0 (1.063) | 0.998 | differ (FAST RF keeps its own hash) |
+| rf-reg Istella-S 2.0M x 220 | 41727.5 (1.099) | 41059.0 (1.102 u) | not quoted | differ |
+| et-reg taxireg 4.0M x 16, 16 trees | 4661.3 (1.001) | 4664.0 (1.001) | 1.001 | equal |
+| et-reg Istella-S 2.0M x 220, 16 trees | 27065.4 (1.001) | 27047.4 (1.004) | 0.999 | equal |
+
+FAST is IDENTICAL within noise on every forest cell. The ceiling if every
+pinned seam cost zero is therefore about 1.0x: the pinning is not where the
+time is, and a FAST tree tier can only gain by a different algorithm, not by
+relaxing the pins. Same verdict as lane/gbdt-train-speed for boosting.
+
+**Owed item 3, the AFTER attribution:** the `nsys` and stage-ledger profiles
+ran (`profile*/`, `prof_*.out`); they are pulled and not tabulated here.
