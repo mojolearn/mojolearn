@@ -23,7 +23,7 @@ ede6f6243.
   (failed_runpod_no_stock/, nothing rented). A first Hot Aisle launch was
   refused locally for a dirty tree (refused_dirty_tree/, nothing rented).
 - Apple: native gate binaries built (one worker; ~/mojolearn-evidence/
-  attention-replay-vendors/apple-native/bin), bswz/legacy bindings building,
+  attention-replay-vendors/apple-native/bin), bswz/legacy bindings BUILT (exit 0),
   then ONE Metal job queued through mac_slot.sh metal behind the release
   runner and two apple-seam tickets (scripts in apple_scripts/).
 - Local: Apple byte-LM binding with the flip + plumbing compiled, one worker,
