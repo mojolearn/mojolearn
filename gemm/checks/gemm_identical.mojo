@@ -155,6 +155,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
     lib_gemm_stage_ftz_for,
+    lib_gemm_group_workspace_reuse_for,
     lib_postround_class_flush_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
@@ -3712,7 +3713,8 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
 comptime GEMM_REUSE_GROUP_WS = (
-    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
+    (lib_gemm_group_workspace_reuse_for[TARGET_COLUMN]()
+     or is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]())
     and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
 )
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an

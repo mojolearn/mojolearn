@@ -1196,6 +1196,17 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
+def lib_gemm_group_workspace_reuse_for[column: Int]() -> Bool:
+    """Reuse caller scratch for the same grouped GEMM and fold kernels.
+
+    H100 700-step enwik8/Pile runs reduce late time 0.98%/0.44%; exact
+    loss/state witnesses, up to 1024 MiB more retained session memory.
+    The larger speed predictions were falsified; this is a modest host
+    overhead saving. Other columns keep the allocating path.
+    """
+    return column == COLUMN_NVIDIA
+
+
 def lib_gemm_stage_ftz_for[column: Int]() -> Bool:
     """Flush input operands once before shared staging, preserving their bits.
 

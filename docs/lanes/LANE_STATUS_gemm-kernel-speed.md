@@ -231,3 +231,40 @@ its existing enabled path; Apple/RDNA/other columns stay unchanged. The
 actual default is now subject to the preregistered all-plan/gather device
 gates and ABBA prices before integration. Evidence: amd-training/ under
 bench/results/gemm_kernel_speed_2026-09-18.
+
+## NVIDIA pipeline result and bounded default qualification
+
+Source 06dee7da6 completed all four 700-step runs. Last-200 medians:
+enwik8 0.1968112644 -> 0.1948784720 s (0.9901794627); Pile GitHub
+0.1965412674 -> 0.1956763240 s (0.9955991762). Geomean 0.9928856215:
+**0.7114% lower step time**, a modest result. The >=3% pipeline prediction
+is falsified, as the earlier >=5% microbenchmark prediction was. Neither
+large-magnitude hypothesis is rescued by bit equality. The smaller measured
+win on both corpora and repeated ~1% microbenchmark difference support the
+repository's two-corpus default rule, subject to final capacity qualification.
+
+All 700 loss words, all six endpoint witnesses and all per-step attention
+reports match. All 19 comparator defects reject first. Peak sampled device
+MiB: enwik8 15153 -> 16177 (+1024), Pile 15681 -> 16177 (+496). The
+registered <=1024 MiB increase holds, at its bound on enwik8. All 700 losses
+and endpoint states also match the AMD staged run on both corpora, after
+15 cross-vendor negative controls per corpus. Pod 8dqkcbscpgbqu2 completed,
+was deleted (204) and verified absent (404).
+
+Enable the NVIDIA workspace row on this branch for final qualification.
+Before the next H100 rental: actual-default dedicated reuse and undersized
+buffer gate, real omitted-fold and price defects must fail, clean full outputs
+must match. ABBA fixed-call prices must reproduce >=0.5% lower weighted time
+in both pairs, a replication of the measured small effect, not a revision of
+the falsified >=5% prediction. Then default B4 target, pinned R2 enwik8, 2000
+steps, per-step attention witness. Predict all 2000 finite losses, eager
+capacity 432 B, aexp separately 9663676416 B, sampled peak <=45000 MiB.
+Compare all 2000 loss words to the committed prior B4 endurance record; any
+bit movement is a defect. Timing versus that older rental is descriptive,
+not an isolated speed comparison. Batch 4 is a tested survivor, not a claim
+of the maximum batch boundary. Failure rejects the default before main.
+
+FLIP decision on this branch: NVIDIA workspace reuse; geomean 0.9928856215,
+quality witnesses identical, with the explicit memory tradeoff above. AMD
+workspace default remains off. Full-tile bounds remains off (INERT for its
+registered >=2% hypothesis). Apple remains unmeasured and unchanged.
