@@ -1,5 +1,20 @@
 # GPT-3 Small under the IDENTICAL contract: NOT READY, and here is the list
 
+> **UPDATED after leg 2, which made the case worse in three places and better
+> in one.** Read `MEASURED.md` section 9 with this file.
+>
+> * **Batch 4 OOMs at step 211**, the same index at which batch 1's memory
+>   starts climbing. The batch sweep below describes the first 210 steps and
+>   nothing longer, and **batch 1 is the only batch proven to survive**.
+> * **Rebuilding the resident session does not fix the 2.1x drift** (median
+>   0.440323 s with a rebuild every 250 steps against 0.440543 s without), so
+>   the optimistic column of the recosting is NOT available and the honest
+>   number for 10BT is **597.5 H100-hours**, not 222.9.
+> * The drift **replicated on a second physical H100**.
+> * Better: **`logical_shards` runs at 162M**, K up to 64, no refusal, flat
+>   throughput. At K=64 a 25B-token run is 190,735 optimizer steps against the
+>   999,999 ceiling, so blocker 1 is solvable without touching a guard.
+
 Lane `lane/lm-training-shakedown`, 2026-09-17. Evidence in this directory;
 leg 1 ran on a RunPod NVIDIA H100 80GB HBM3 at commit 025910137.
 

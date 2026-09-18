@@ -294,3 +294,78 @@ path and does not occur here.
 The loss is doing what training looks like: 10.903 at step 1 (ln(50257) =
 10.825, an untrained uniform model), a minimum of 0.606, 200 distinct values in
 the last 200 steps, and not one NaN or inf in 2,000 optimizer steps.
+
+## 9. LEG 2: the mitigation fails, batch 4 dies, and shards work
+
+Second H100 (RunPod pod `pibjrl033kw6oj`, a different physical card from leg
+1), commit 672122dd1, same shape, same corpus.
+`bench/results/e1g/2026-09-17_203231-nvidia-h100-lm-shakedown-drift/`.
+
+### 9a. The drift replicates on a second card
+
+| arm | steps | fastest decile | median | max |
+|---|---|---|---|---|
+| leg 1, one session | 2,000 | 0.206500 | 0.440630 | 0.518579 |
+| leg 2 straight, one session | 1,500 | 0.206852 | 0.440543 | 0.518579 |
+
+Two different H100s, two different commits, the same two numbers. Section 6 is
+not one box having a bad day.
+
+### 9b. Rebuilding the session does NOT reset it
+
+The recycle arm tore the resident session down and rebuilt it from
+`export_state()` every 250 steps -- a rebuild section 5 proved is bit exact at
+this shape.
+
+| arm | steps | fastest decile | median | rebuild cost |
+|---|---|---|---|---|
+| straight (no rebuild) | 1,500 | 0.206852 | **0.440543** | - |
+| recycle every 250 | 1,808 | 0.206550 | **0.440323** | 26.03 s median, 182.9 s over 7 |
+
+**The medians are indistinguishable.** Rebuilding is strictly worse: the same
+steady state plus 26 s a rebuild plus a 12.18 s first step afterwards while the
+device session reopens. Section 7's optimistic column is therefore NOT
+available by recycling, and whatever causes the transition survives a complete
+session teardown and rebuild inside the same process.
+
+### 9c. BATCH 4 OOMs AT STEP 211, which kills section 1's conclusion
+
+A 700-step batch-4 run died at **exactly 210 completed steps** with
+
+    Exception: At max/mojo/max/gpu/host/device_context.mojo:4073:35:
+    CUDA call failed: CUDA_ERROR_OUT_OF_MEMORY (out of memory)
+
+inside `byte_lm_session_step`, with the allocator reporting `in_use=71.49GB`.
+Its step time had already stepped 0.654 -> 0.752 s around step 61 and was at
+0.969 s by step 210.
+
+**Step 210 is the same index at which batch 1's memory begins to climb.** The
+onset does not move with batch; the consequence does. Batch 1 has 68 GB of
+headroom and survives the doubling. Batch 4 starts at 45.94 GB and does not.
+
+So the section 1 table is a measurement of the first 210 steps and **batch 4 is
+not the operating point after all**. Batch 1 is the only batch this lane has
+run past 210 steps. Batch 2 needs about 54 GB after the transition and should
+fit, and is UNTESTED.
+
+### 9d. `logical_shards` runs at 162M, and it clears the step cap
+
+`ParallelByteLanguageModelTrainer(devices=(0,), logical_shards=K)` at the target
+shape, three steps an arm, **no refusal at any K**:
+
+| K | tokens per optimizer step | median s | tokens/s |
+|---|---|---|---|
+| 1 | 2,048 | 0.21787 | 9,400.3 |
+| 4 | 8,192 | 0.82071 | 9,981.7 |
+| 16 | 32,768 | 3.26304 | 10,042.2 |
+| 64 | 131,072 | 13.05164 | 10,042.6 |
+
+Throughput is flat in K, which is what the component timing predicted:
+`step.optimizer` is 1.7 ms of a 236 ms step, so there is almost nothing for K
+shards to amortize. **The value of shards is not speed, it is the step cap.** At
+K=64, 25B tokens is 190,735 optimizer steps against a ceiling of 999,999, and
+10B tokens is 76,294. Blocker A is solvable without raising a single guard.
+
+Two caveats: three steps an arm, so this is phase 1 again and nothing is known
+about shards past step 210; and the device sampler returned `unavailable` for
+per-process memory in that run, so the memory cost of K is still unmeasured.
