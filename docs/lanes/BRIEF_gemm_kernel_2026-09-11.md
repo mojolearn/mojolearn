@@ -1876,7 +1876,26 @@ it is a measurement, not an arm.
 
 ## 22. The `proj` fold, isolated; and the AMD column, itemized for the first time (2026-09-18)
 
-### 22.1 The `proj` gap of 21.3 has a cause, and the contract already names it
+### 22.1 RETRACTED 2026-09-18. THE CONCLUSION OF THIS SECTION IS WRONG. See 23.
+
+**`group_leaves` IS NOT `P`.** This section read the `PHASE` line's
+`group_leaves=1` as the contract's `P == 1` and concluded that the `proj` fold
+performs no arithmetic and can be fused away for 4.0 percent of the step. That
+is false. `_ksplit_resolve_leaves(group_leaves, p_count)` returns
+`(group_leaves, ceil(p_count / group_leaves))`, so `group_leaves = 1` means ONE
+LEAF PER GROUP, which is the MAXIMUM number of groups, the exact opposite of
+`P == 1`. For `proj` at `k = 768` the contract's own `contract_leaf_count` gives
+`P = 6`, which is what the same `PHASE` line prints as `groups=6`, and
+`proj_dB` at `k = 2048` gives `P = 16`, printed as `groups=16`. The fold sums
+six (or sixteen) real partials per cell through
+`identical_gemm_fold_kernel`'s level-by-level tree. **Removing it would move
+bits.** No call in the step has a `P == 1` fold, so contract 7.3 never applies
+here and the proposed change has zero applicability.
+
+The measurements below are correct and are kept. Only the reading of them was
+wrong. Section 23 has the right one.
+
+#### 22.1 as written (measurements correct, conclusion retracted)
 
 Evidence: `bench/results/e1g/2026-09-18_013251-nvidia-h100-gemm-proj-phase/remote/gemm-kernel/price_tables.txt`
 (RunPod H100 80GB HBM3, pod 20usq6mvqsq2u5 terminated and verified gone,
@@ -1905,23 +1924,12 @@ section 7.3 is titled "`P == 1` performs NO fold addition" and says: "The tree
 over one node has no internal node. The single leaf partial reaches the output
 through seam 5g and through nothing else."
 
-At 144 `proj` calls per step the fold costs `48 * (0.0606 + 0.0602 + 0.0512)` =
-**8.3 ms, 4.0 percent of the 207 ms step, and it performs no arithmetic.** That
-independently reproduces the 4.0 to 5.7 percent estimated in 21.3 from the rate
-gap alone, by a different route.
+~~At 144 `proj` calls per step the fold costs 8.3 ms, 4.0 percent of the step,
+and it performs no arithmetic.~~ **RETRACTED: it performs five additions per
+cell at `proj` and fifteen at `proj_dB`. See 23.**
 
-**Say the change precisely, because 7.3's next clause matters.** The `P == 1`
-fold is NOT a no-op: it applies seam 5g and copies the partial to `c`
-(`c.unsafe_store(cell, ftz(v))`). So the change is not "skip the launch". It is
-**"when `leaves == 1`, have the GROUP kernel apply 5g and write `c` directly
-instead of writing a partial to the workspace for a second kernel to flush and
-copy"**, which is bit-preserving because `ftz` is applied to the same binary32
-word either way, in the same order, at the same address.
-
-It is **not a ninth scheduling arm**: no plan, no geometry, no group rule and no
-leaf boundary moves, and the kernel-matrix rows are untouched. It is the same
-class of change as the wait removal that already landed. UNBUILT AND UNPRICED;
-the estimate above is a fold-launch sum, not a measured flip.
+~~The change is to have the group kernel apply 5g and write `c` directly when
+`leaves == 1`.~~ **RETRACTED. There is no such call. See 23.**
 
 ### 22.2 AMD, itemized: the step is 81 percent GEMM
 
@@ -1971,8 +1979,9 @@ seam spelling against shipped on the twelve calls with the existing harness.
 
 ### 22.4 The ranking after both legs
 
-1. **`proj` fold fusion, NVIDIA, about 4.0 percent of the step**, cause
-   isolated, bit-preserving by contract 7.3, not an arm. Build it.
+1. ~~`proj` fold fusion, NVIDIA, about 4.0 percent of the step.~~ **RETRACTED
+   2026-09-18, see 23: there is no `P == 1` fold anywhere in the step and the
+   `proj` gap is structural, not waste. DO NOT BUILD IT.**
 2. **The AMD seam spelling, 8 slots to 5**, on 81 percent of the AMD step. Needs
    the device proof of 19b6a9c7f first (the probe lane hashing `rtf`), which is
    ten seconds, and then a price leg.
@@ -1980,3 +1989,105 @@ seam spelling against shipped on the twelve calls with the existing harness.
    needing DIAG variants re-based on the shipped body.
 4. The Apple seam repair (section 19), which is Andrew's call and
    `lane/reference-regen`'s table.
+
+## 23. The `proj` fold is REAL, the gap is STRUCTURAL, and 22.1 is retracted (2026-09-18)
+
+### 23.1 The error, named exactly
+
+Section 22.1 read `group_leaves=1` off a `PHASE` line as the contract's
+`P == 1` and concluded the `proj` fold adds nothing. **They are different
+numbers.**
+
+`gemm/checks/gemm_identical.mojo::_ksplit_resolve_leaves(group_leaves, p_count)`
+returns `(group_leaves, ceil(p_count / group_leaves))`. `group_leaves` is
+LEAVES PER GROUP. `group_leaves = 1` is therefore the MAXIMUM number of groups,
+which is the opposite of one leaf overall. `P` is `contract_leaf_count(k)`, and
+at the contract's `L = 128`:
+
+| call | `k` | `P = ceil(k/L)` | the `PHASE` line's `groups` |
+|---|---:|---:|---:|
+| `proj_fwd`, `proj_dA` | 768 | **6** | 6 |
+| `proj_dB` | 2048 | **16** | 16 |
+
+The printed `groups` IS `P` whenever `group_leaves = 1`, which is the arithmetic
+that should have been done before the claim. `identical_gemm_fold_kernel` then
+folds those six (or sixteen) partials level by level through contract 7.2's
+tree, so the `proj` fold performs **five real additions per cell**, and fifteen
+at `proj_dB`. Contract 7.3 never applies: **no call in the step has `P == 1`.**
+Removing or fusing that fold WOULD MOVE BITS. The proposed change has zero
+applicability and must not be built.
+
+`[[absence-in-one-file-is-not-never-measured]]` and
+`[[measure-before-attributing]]` both cover this: the reading came from one
+printed token and not from the function that produces it.
+
+### 23.2 What the same evidence actually says, and it is a complete explanation
+
+The `PHASE` lines split every call into its group phase and its fold phase.
+Three arms of the same leg, medians over 7 rounds:
+
+| call | output cells | `P` | `group_ms` | `fold_ms` | fold share | **group-only TFLOP/s** | whole-call TFLOP/s |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `proj_fwd` | 1,572,864 | 6 | 0.1939 | 0.0606 | 23.6% | **12.46** | 9.38 |
+| `proj_dA` | 1,572,864 | 6 | 0.1939 | 0.0602 | 23.4% | **12.46** | 9.38 |
+| `proj_dB` | 589,824 | 16 | 0.1955 | 0.0512 | 20.5% | **12.36** | 9.66 |
+| `gateup_dA` | 1,572,864 | 8 | 0.4430 | 0.0703 | 13.6% | **14.54** | 12.48 |
+| `gateup_dB` | 1,572,864 | 8 | 0.4404 | 0.0698 | 13.6% | **14.63** | 12.56 |
+| `down_fwd` | 1,572,864 | 8 | 0.4459 | 0.0704 | 13.6% | **14.45** | 12.40 |
+| `down_dB` | 1,572,864 | 8 | 0.4355 | 0.0696 | 13.7% | **14.79** | 12.68 |
+| `head_dA` | 1,572,864 | 7 | 11.5375 | 0.0672 | 0.6% | **13.70** | 13.62 |
+
+**Two facts, and together they close the question 21.3 opened.**
+
+1. **`fold_ms` tracks the OUTPUT SIZE and not `P`.** Every call with 1,572,864
+   cells folds in 0.067 to 0.070 ms whether it has 6, 7 or 8 partials, and
+   `proj_dB`, which has the MOST partials (16) and the FEWEST cells (589,824),
+   is the FASTEST fold of the eight at 0.0512 ms. The fold is an output-sized
+   pass, near-independent of the partial count. That is why it looked
+   "constant" in 22.1 and it is not evidence of a launch that does nothing.
+2. **With the fold excluded, the rate is UNIFORM across every kind:
+   12.36 to 14.80 TFLOP/s, including `proj`.** The `proj` kernel is not slow.
+
+So the `proj` "rate gap" of 21.3 is **entirely the fold's share, and the fold's
+share is large for `proj` because `proj` does the least arithmetic per output
+cell of any call in the step**: `k = 768` into 1,572,864 cells, against `k =
+2048` into the same cells for `gateup` and `down`, and `k = 768` into 102.9
+million cells for `head_fwd`. Every call pays a fold sized by its OUTPUT; `proj`
+amortizes that fixed cost over 2.7x less work than `gateup` does. **That is
+structural, not waste, and there is nothing to remove.**
+
+### 23.3 The one thing still worth checking, and why the 8.3 ms was an upper bound anyway
+
+`fold_ms` is measured with the phase HOST-SYNCHRONIZED, as the `PHASE` line's
+own trailer says. So it is a launch plus a full host round trip, and an H100
+launch-plus-sync is itself in the tens of microseconds. The fold's traffic is
+about 44 MB for a 1.57M-cell, 6-partial call, which at HBM speed is roughly
+15 us against the 60 us measured. **So a large part of the measured `fold_ms`
+may be the instrumentation's own sync rather than the shipped path's cost**, and
+22.1's 8.3 ms was an upper bound in two independent ways before its reasoning
+was even wrong.
+
+Whether the shipped path pays a real 0.06 ms per call is answerable and is NOT
+answerable from `PHASE` lines, which sync by construction. It needs the step
+breakdown's `launches_per_step` and `syncs_per_step` for the `gemm.*` leaves,
+which this lane already found unusable in the 2026-09-17 leg (`gemm.down_dA`
+reads 0.0 launches for 12 calls). Fixing that counter is a smaller and more
+honest item than any arm, and it is what a future lane should do first.
+
+### 23.4 The ranking, corrected
+
+1. **The AMD seam spelling, 8 issue slots to 5** (19b6a9c7f), on the 81.3
+   percent of the AMD step that is GEMM (22.2). Device proof first: the probe
+   lane hashing `62a6b5621e27c707`, ten seconds of MI300X.
+2. The NVIDIA barrier skew and staging-head global loads, still unsized, needing
+   DIAG variants re-based on the shipped `kpack_hg` body.
+3. The Apple seam repair (19), Andrew's call, `lane/reference-regen`'s table.
+4. Fix the `gemm.*` launch and sync counters so a fold's real cost can be read
+   without a synchronizing harness (23.3).
+
+**There is no cheap certain NVIDIA win left.** 22.1 appeared to be one for a few
+hours and was not. The honest statement of where the NVIDIA column stands is
+21.2's: GEMM is 57.7 percent of the step at 38.3 percent of its contract
+ceiling, the ceiling is worth 35.2 percent of the step and is unreachable, and a
+clean rewrite bounded at 60 to 70 percent of it is worth 20.6 to 25.8 percent.
+Nothing smaller than that is now known to be available on this column.
