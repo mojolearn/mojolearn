@@ -525,4 +525,19 @@ except Exception as exc:
     print('admission=REFUSED ' + str(exc))
 PY
 fi
+# RELEASE_ADMISSION_STATUS_BEGIN
+# A refusal in the retained-artifact report must also fail the controller.
+# Teardown still runs through the existing EXIT trap on either outcome.
+if [ "${BUILD_EXIT:-}" != 0 ]; then
+  log "remote work did not pass (exit ${BUILD_EXIT:-missing})"; exit 10
+fi
+if [ "$LEG_MODE" = qualify ]; then
+  grep -q '^qualify_admission=GREEN$' "$STATE" &&
+    ! grep -q '^qualify_admission=RED$' "$STATE" &&
+    [ "$(cat "$OUT/release-build/exit_code" 2>/dev/null)" = 0 ] || exit 10
+else
+  grep -q '^admission=BUILT_NOT_INSTALLED ' "$STATE" &&
+    ! grep -q '^admission=REFUSED' "$STATE" || exit 10
+fi
+# RELEASE_ADMISSION_STATUS_END
 log "done -- $OUT (leg.txt has the verdict; the droplet is destroyed by the EXIT trap next)"
