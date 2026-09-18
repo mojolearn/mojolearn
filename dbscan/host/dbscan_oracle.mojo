@@ -115,10 +115,10 @@ NOT RESTATED, REFUSED BY NAME: an explicit `max_mbytes_per_batch` (the host
 runs one batch and says so rather than pretending to size a device).
 
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` (the routed families'
-one define) shifts the core test to `vd >= min_pts + 1`, so every fixture
-with a row at exactly `min_pts` neighbors relabels; a fold sabotage would
-move a label only at an ulp boundary, which no fixture is guaranteed to
-sit on. Read back by `estimators_host_sabotage`.
+one define) increments the first final label, including noise (-1 to 0).
+The earlier min_pts + 1 control missed all-noise fixtures: both thresholds
+returned the same labels. This native output corruption changes a measured
+label on every nonempty fit. Read back by `estimators_host_sabotage`.
 
 The restatement is a prediction until measured. The CPU identity gate
 (`tools/identity_break.py --diff <3 GPU columns> <cpu json> --lanes dbscan
@@ -622,10 +622,6 @@ def host_dbscan_fit(
     # row itself included, its distance being zero).
     var core = List[UInt8](length=n_rows, fill=UInt8(0))
     var min_pts = min_samples
-    comptime if DBSCAN_ORACLE_HOST_SABOTAGE:
-        # THE SABOTAGE ARM: one neighbor more to be a core point. Wrong on
-        # purpose; see the module docstring.
-        min_pts = min_samples + 1
     if has_weights:
         # `core_points_weighted_kernel`: the float compared directly.
         for i in range(n_rows):
@@ -638,4 +634,8 @@ def host_dbscan_fit(
     var labels = List[Int32](length=n_rows, fill=MAX_LABEL)
     var passes = host_weak_cc(labels, row_ptr, col_ind, core, n_rows, cap)
     host_make_monotonic(labels, n_rows)
+    comptime if DBSCAN_ORACLE_HOST_SABOTAGE:
+        # Corrupt an actual native label, even when every row is noise.
+        # Production labels are -1 or at most n_rows - 1, so this fits Int32.
+        labels[0] += 1
     return DBSCANHostFit(labels^, passes, core^)

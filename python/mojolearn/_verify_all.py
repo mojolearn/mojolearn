@@ -123,7 +123,13 @@ def load_harness(path=None):
                         "one-device record. Unset it.")
     if path is None:
         path, _ = harness_path()
-    return _load_by_path("mojolearn_verify_all_harness", path)
+    try:
+        return _load_by_path("mojolearn_verify_all_harness", path)
+    except ModuleNotFoundError as exc:
+        if exc.name != "numpy":
+            raise
+        raise CannotRun("Verification requires NumPy. Install it with: "
+                        "python -m pip install numpy") from exc
 
 
 def family_map(lanes):
@@ -142,7 +148,7 @@ def family_map(lanes):
     return out
 
 
-def select_lanes(harness, table, vendor_class, depth, asked):
+def select_lanes(harness, table, vendor_class, depth, asked, include_pending=False):
     """(lanes, fixtures) for this run, or raises ValueError naming the problem."""
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
@@ -150,9 +156,9 @@ def select_lanes(harness, table, vendor_class, depth, asked):
         public = surface.public_reference_lanes()
         # A user may explicitly exercise a declared CPU route before its
         # reference is ready. Its results read OWED, never VERIFIED.
-        eligible = (set(public) | set(surface.covered_lanes())) if asked else set(public)
+        eligible = (set(public) | set(surface.covered_lanes())) if asked or include_pending else set(public)
         allowed = [l for l in harness.LANES if l in eligible
-                   and not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES)]
+                   and (include_pending or not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES))]
     else:
         allowed = all_lanes
     if asked:
@@ -289,7 +295,7 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
-def run_models(harness, ml, table, pkg_dir=None, log=None):
+def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=False):
     """The portable models: for each saved model the file's hash against the
     table's model reference, then the harness's batch part of the LOADED
     model against the table's batch reference. Returns result rows."""
@@ -320,21 +326,26 @@ def run_models(harness, ml, table, pkg_dir=None, log=None):
             continue
         rows.append(dict(lane=key, fixture=fixture, part="model", value=file_hash, error=None,
                          reference_part=("model", lane)))
-        try:
-            # a CPU-only install loads a saved model through the documented
-            # CPU door, `mojolearn.host_model(path)`; a GPU install through
-            # the class's own `load`
-            if ml.vendor() == "cpu":
-                est = ml.host_model(path)
-            else:
-                est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
-            if fixture not in held_cache:
-                held_cache[fixture] = harness.heldout(fixture)
-            fit = harness.Fit({})
-            fit.est = est
-            batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
-        except Exception as exc:
-            batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+        values, errors = [], []
+        for _ in range(max(1, repeats)):
+            try:
+                # --models-only explicitly exercises the CPU saved-model door,
+                # even when the process also has GPU bindings.
+                if host_only or ml.vendor() == "cpu":
+                    est = ml.host_model(path)
+                else:
+                    est = getattr(getattr(ml, m["class"]), m.get("load", "load"))(path)
+                if fixture not in held_cache:
+                    held_cache[fixture] = harness.heldout(fixture)
+                fit = harness.Fit({})
+                fit.est = est
+                batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
+            except Exception as exc:
+                batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+            values.append(batch)
+            if berr:
+                errors.append(berr)
+        batch, berr = _collapse(values, errors)
         rows.append(dict(lane=key, fixture=fixture, part="batch", value=batch, error=berr,
                          reference_part=("batch", lane)))
         log(f"  {key:<34} {fixture:<8} {time.time() - t0:6.1f}s")
@@ -1806,13 +1817,14 @@ def lanes_line(report):
 
 
 
-def judge_rows(raw, table, families=None):
+def judge_rows(raw, table, families=None, unreferenced_lanes=()):
     """Attach state, detail and reference columns to raw result rows."""
     out = []
     for r in raw:
         part, lane = r["part"], r["lane"]
         ref_part, ref_lane = r.get("reference_part") or (part, lane)
-        ent = vref.entry(table, ref_lane, r["fixture"], ref_part)
+        ent = (None if ref_lane in unreferenced_lanes else
+               vref.entry(table, ref_lane, r["fixture"], ref_part))
         state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
                         detail=detail, reference=(ent or {}).get("ref"),
@@ -1896,6 +1908,9 @@ def format_human(report):
 def _depth(args):
     if getattr(args, "quick", False) and getattr(args, "full", False):
         raise ValueError("--quick and --full are exclusive")
+    if getattr(args, "models_only", False) and any(getattr(args, flag, False)
+            for flag in ("no_models", "lanes", "fixtures", "include_pending", "batch_checks", "quick")):
+        raise ValueError("--models-only cannot be combined with lane, fixture, pending, batch, quick or no-models selection")
     return "quick" if getattr(args, "quick", False) else "full"
 
 
@@ -1989,8 +2004,12 @@ def cmd_verify_all(args):
         return EXIT_VERIFIED  # successful inspection, explicitly not execution
 
     asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    include_pending = getattr(args, "include_pending", False)
+    models_only = getattr(args, "models_only", False)
     try:
-        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked)
+        lanes, fixtures = select_lanes(harness, table, vclass, depth, asked, include_pending)
+        if models_only:
+            lanes, fixtures = [], []
     except ValueError as exc:
         _emit(f"USAGE: {exc}", sys.stderr)
         return EXIT_USAGE
@@ -2033,7 +2052,7 @@ def cmd_verify_all(args):
     # comparison and named, so the run is short of coverage (which the
     # verdict reflects) rather than quietly wrong.
     stale = [l for l in vref.stale_reference_lanes(table, harness) if l in lanes]
-    if stale:
+    if stale and not include_pending:
         log(f"# STALE REFERENCE, not compared ({len(stale)}): {', '.join(stale)}")
         log("#   their fixture moved (identity_break LANE_REVISIONS) past the reference this table "
             "carries; the next release record regenerates it")
@@ -2068,8 +2087,8 @@ def cmd_verify_all(args):
                                     seconds=cell_seconds[(lane, f)]))
             lane_seconds[lane] = round(time.time() - t0, 3)
             log(f"  {lane:<34} {families[lane]:<16} {lane_seconds[lane]:6.1f}s")
-    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log)
-    rows = judge_rows(raw + model_rows, table, families)
+    model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log, repeats=repeats, host_only=models_only)
+    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale)
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
     fams = []
@@ -2081,7 +2100,16 @@ def cmd_verify_all(args):
     # cannot hide withheld CPU routes or lanes dropped for stale references.
     withheld = {name: row["reason"] for name, row in coverage_report["lanes"].items()
                 if row["status"] == "withheld"}
-    scope_gaps = dict(withheld) if not asked and depth == "full" else {}
+    scope_gaps = dict(withheld) if not asked and depth == "full" and not models_only else {}
+    if include_pending:
+        scope_gaps.update({name: withheld[name] for name in lanes if name in withheld})
+        if vclass == "cpu":
+            # A CPU checks the driver's logical shards, never physical GPU communication.
+            scope_gaps.update({name: "CPU logical-shard replay; physical multi-GPU qualification pending"
+                               for name in lanes if name.startswith("par-")})
+            if not asked and depth == "full":
+                scope_gaps.update({name: row["reason"] for name, row in coverage_report["lanes"].items()
+                                   if name not in lanes and row["status"] in ("excluded", "unavailable")})
     scope_gaps.update({name: "stale reference" for name in stale})
     code, headline = verdict(counts, scope_gaps)
     detail = detail_line(counts)
@@ -2098,6 +2126,8 @@ def cmd_verify_all(args):
         counts=counts, families=fams, cells=rows,
         lane_seconds=lane_seconds,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
+        selection=dict(include_pending=include_pending, models_only=models_only,
+                       cpu_logical_shard_lanes=[name for name in lanes if vclass == "cpu" and name.startswith("par-")]),
         properties={part: {state: sum(r["part"] == part and r["state"] == state for r in rows)
                            for state in vref.STATES} for part in tuple(vref.PARTS) + extra_parts},
     )
@@ -2128,7 +2158,9 @@ def cmd_verify_all(args):
     report["lanes_summary"] = lane_counts(rows, lanes, stale)
     report["reference_evidence"] = reference_evidence(rows)
     try:
-        report["self_test"] = self_test(harness, ml, table)
+        report["self_test"] = (dict(passed=None, ran=False,
+            reason="models-only does not train; run verify --self-test separately")
+            if models_only else self_test(harness, ml, table))
     except Exception as exc:
         report["self_test"] = dict(passed=None, error=f"{type(exc).__name__}: {exc}"[:200])
 
@@ -2207,8 +2239,9 @@ def lane_counts(rows, lanes, stale=()):
     """Lanes checked, lanes skipped and why. Kept apart from the cell-part
     counts so `39 of 39 lanes` and `1065 of 1412 parts` cannot be confused.
 
-    `stale` are lanes DROPPED before the run because their fixture moved past
-    the reference this table carries (lane/identity-fixtures-light). They are
+    `stale` are lanes whose fixture moved past the reference this table
+    carries. They are dropped by default or executed without references
+    under --include-pending. They are
     logged by `cmd_verify_all`, but a lane that silently vanished from the
     comparison is precisely what this block exists to surface, so they are
     named here too.
@@ -2242,9 +2275,10 @@ def lane_counts(rows, lanes, stale=()):
     checked, skipped = classify(lane_names)
     m_checked, m_skipped = classify(model_names)
     stale_note = "fixture moved past the reference this table carries; not comparable"
-    return dict(requested=len(asked) + len(stale), checked=len(checked), checked_lanes=checked,
-                skipped=len(skipped) + len(stale),
-                skipped_lanes=dict(skipped, **{l: stale_note for l in stale}),
+    skipped.update({l: stale_note for l in stale})
+    return dict(requested=len(asked | set(stale)), checked=len(checked), checked_lanes=checked,
+                attempted=len(lane_names), attempted_lanes=sorted(lane_names),
+                skipped=len(skipped), skipped_lanes=skipped,
                 stale_references=sorted(stale),
                 not_run=sorted(asked - lane_names),
                 portable_models=dict(checked=len(m_checked), checked_models=m_checked,

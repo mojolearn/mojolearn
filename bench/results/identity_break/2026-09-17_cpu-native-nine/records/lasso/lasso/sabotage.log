@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:20  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START lasso/base repeat=1/train
+# DONE lasso/base repeat=1/train 0.021s
+# START lasso/base repeat=1/infer-save-reload
+# DONE lasso/base repeat=1/infer-save-reload 0.003s
+# START lasso/base repeat=1/batch
+# DONE lasso/base repeat=1/batch 0.002s
+# START lasso/base repeat=1/stepfull
+# DONE lasso/base repeat=1/stepfull 0.000s
+# START lasso/base repeat=2/train
+# DONE lasso/base repeat=2/train 0.019s
+# START lasso/base repeat=2/infer-save-reload
+# DONE lasso/base repeat=2/infer-save-reload 0.002s
+# START lasso/base repeat=2/batch
+# DONE lasso/base repeat=2/batch 0.002s
+# START lasso/base repeat=2/stepfull
+# DONE lasso/base repeat=2/stepfull 0.000s
+# CELL lasso/base STABLE 0.050s
+# START lasso/ties repeat=1/train
+# DONE lasso/ties repeat=1/train 0.024s
+# START lasso/ties repeat=1/infer-save-reload
+# DONE lasso/ties repeat=1/infer-save-reload 0.002s
+# START lasso/ties repeat=1/batch
+# DONE lasso/ties repeat=1/batch 0.002s
+# START lasso/ties repeat=1/stepfull
+# DONE lasso/ties repeat=1/stepfull 0.000s
+# START lasso/ties repeat=2/train
+# DONE lasso/ties repeat=2/train 0.024s
+# START lasso/ties repeat=2/infer-save-reload
+# DONE lasso/ties repeat=2/infer-save-reload 0.002s
+# START lasso/ties repeat=2/batch
+# DONE lasso/ties repeat=2/batch 0.002s
+# START lasso/ties repeat=2/stepfull
+# DONE lasso/ties repeat=2/stepfull 0.000s
+# CELL lasso/ties STABLE 0.056s
+# START lasso/hashed repeat=1/train
+# DONE lasso/hashed repeat=1/train 0.019s
+# START lasso/hashed repeat=1/infer-save-reload
+# DONE lasso/hashed repeat=1/infer-save-reload 0.001s
+# START lasso/hashed repeat=1/batch
+# DONE lasso/hashed repeat=1/batch 0.002s
+# START lasso/hashed repeat=1/stepfull
+# DONE lasso/hashed repeat=1/stepfull 0.000s
+# START lasso/hashed repeat=2/train
+# DONE lasso/hashed repeat=2/train 0.020s
+# START lasso/hashed repeat=2/infer-save-reload
+# DONE lasso/hashed repeat=2/infer-save-reload 0.002s
+# START lasso/hashed repeat=2/batch
+# DONE lasso/hashed repeat=2/batch 0.002s
+# START lasso/hashed repeat=2/stepfull
+# DONE lasso/hashed repeat=2/stepfull 0.000s
+# CELL lasso/hashed STABLE 0.046s
+# START lasso/wide repeat=1/train
+# DONE lasso/wide repeat=1/train 0.031s
+# START lasso/wide repeat=1/infer-save-reload
+# DONE lasso/wide repeat=1/infer-save-reload 0.001s
+# START lasso/wide repeat=1/batch
+# DONE lasso/wide repeat=1/batch 0.002s
+# START lasso/wide repeat=1/stepfull
+# DONE lasso/wide repeat=1/stepfull 0.000s
+# START lasso/wide repeat=2/train
+# DONE lasso/wide repeat=2/train 0.031s
+# START lasso/wide repeat=2/infer-save-reload
+# DONE lasso/wide repeat=2/infer-save-reload 0.002s
+# START lasso/wide repeat=2/batch
+# DONE lasso/wide repeat=2/batch 0.002s
+# START lasso/wide repeat=2/stepfull
+# DONE lasso/wide repeat=2/stepfull 0.000s
+# CELL lasso/wide STABLE 0.069s
+# START lasso/denormal repeat=1/train
+# DONE lasso/denormal repeat=1/train 0.019s
+# START lasso/denormal repeat=1/infer-save-reload
+# DONE lasso/denormal repeat=1/infer-save-reload 0.001s
+# START lasso/denormal repeat=1/batch
+# DONE lasso/denormal repeat=1/batch 0.002s
+# START lasso/denormal repeat=1/stepfull
+# DONE lasso/denormal repeat=1/stepfull 0.000s
+# START lasso/denormal repeat=2/train
+# DONE lasso/denormal repeat=2/train 0.019s
+# START lasso/denormal repeat=2/infer-save-reload
+# DONE lasso/denormal repeat=2/infer-save-reload 0.002s
+# START lasso/denormal repeat=2/batch
+# DONE lasso/denormal repeat=2/batch 0.002s
+# START lasso/denormal repeat=2/stepfull
+# DONE lasso/denormal repeat=2/stepfull 0.000s
+# CELL lasso/denormal STABLE 0.046s
+# START lasso/denormal_ftz repeat=1/train
+# DONE lasso/denormal_ftz repeat=1/train 0.019s
+# START lasso/denormal_ftz repeat=1/infer-save-reload
+# DONE lasso/denormal_ftz repeat=1/infer-save-reload 0.002s
+# START lasso/denormal_ftz repeat=1/batch
+# DONE lasso/denormal_ftz repeat=1/batch 0.002s
+# START lasso/denormal_ftz repeat=1/stepfull
+# DONE lasso/denormal_ftz repeat=1/stepfull 0.000s
+# START lasso/denormal_ftz repeat=2/train
+# DONE lasso/denormal_ftz repeat=2/train 0.019s
+# START lasso/denormal_ftz repeat=2/infer-save-reload
+# DONE lasso/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START lasso/denormal_ftz repeat=2/batch
+# DONE lasso/denormal_ftz repeat=2/batch 0.002s
+# START lasso/denormal_ftz repeat=2/stepfull
+# DONE lasso/denormal_ftz repeat=2/stepfull 0.000s
+# CELL lasso/denormal_ftz STABLE 0.046s
+# START lasso/dupes repeat=1/train
+# DONE lasso/dupes repeat=1/train 0.020s
+# START lasso/dupes repeat=1/infer-save-reload
+# DONE lasso/dupes repeat=1/infer-save-reload 0.002s
+# START lasso/dupes repeat=1/batch
+# DONE lasso/dupes repeat=1/batch 0.002s
+# START lasso/dupes repeat=1/stepfull
+# DONE lasso/dupes repeat=1/stepfull 0.000s
+# START lasso/dupes repeat=2/train
+# DONE lasso/dupes repeat=2/train 0.019s
+# START lasso/dupes repeat=2/infer-save-reload
+# DONE lasso/dupes repeat=2/infer-save-reload 0.001s
+# START lasso/dupes repeat=2/batch
+# DONE lasso/dupes repeat=2/batch 0.002s
+# START lasso/dupes repeat=2/stepfull
+# DONE lasso/dupes repeat=2/stepfull 0.000s
+# CELL lasso/dupes STABLE 0.047s
+# START lasso/odd repeat=1/train
+# DONE lasso/odd repeat=1/train 0.013s
+# START lasso/odd repeat=1/infer-save-reload
+# DONE lasso/odd repeat=1/infer-save-reload 0.001s
+# START lasso/odd repeat=1/batch
+# DONE lasso/odd repeat=1/batch 0.002s
+# START lasso/odd repeat=1/stepfull
+# DONE lasso/odd repeat=1/stepfull 0.000s
+# START lasso/odd repeat=2/train
+# DONE lasso/odd repeat=2/train 0.013s
+# START lasso/odd repeat=2/infer-save-reload
+# DONE lasso/odd repeat=2/infer-save-reload 0.001s
+# START lasso/odd repeat=2/batch
+# DONE lasso/odd repeat=2/batch 0.003s
+# START lasso/odd repeat=2/stepfull
+# DONE lasso/odd repeat=2/stepfull 0.000s
+# CELL lasso/odd STABLE 0.034s
+# START lasso/negative repeat=1/train
+# DONE lasso/negative repeat=1/train 0.020s
+# START lasso/negative repeat=1/infer-save-reload
+# DONE lasso/negative repeat=1/infer-save-reload 0.002s
+# START lasso/negative repeat=1/batch
+# DONE lasso/negative repeat=1/batch 0.002s
+# START lasso/negative repeat=1/stepfull
+# DONE lasso/negative repeat=1/stepfull 0.000s
+# START lasso/negative repeat=2/train
+# DONE lasso/negative repeat=2/train 0.020s
+# START lasso/negative repeat=2/infer-save-reload
+# DONE lasso/negative repeat=2/infer-save-reload 0.002s
+# START lasso/negative repeat=2/batch
+# DONE lasso/negative repeat=2/batch 0.002s
+# START lasso/negative repeat=2/stepfull
+# DONE lasso/negative repeat=2/stepfull 0.000s
+# CELL lasso/negative STABLE 0.048s
+| lasso                  | b255dedbef18ac88 | 28f369f3bea8386a | 04b8f8475c5efbc4 | dcf12bd4341a1976 | 360c43783ae25f6d | 360c43783ae25f6d | bdf02922d6956332 | 7ee89732e10df6c4 | 86d7c6ac10b92e33 |
+| lasso infer            | 1d35efbb4da50fe8 | 1b71d455bddbeaca | f6bfbc9b22ea20f6 | a868c00c01649ac1 | d44b05d56602ffc2 | d44b05d56602ffc2 | cba6727069347d20 | b9a141645c072cea | 58bcb14058a9503b |
+| lasso model            | 5f2199f559b42785 | ce457e1a2385c276 | a4d4361ba240ab37 | 6e074f7a451e11de | 21897ae68060cfc2 | 21897ae68060cfc2 | da009c717db15e96 | eade3fdaf8792566 | 1fc2c35717181ad3 |
+| lasso batch            | 36b31fab2e5e2b51 | 8863b7fb4f8e9cac | b523ab3190d97972 | e7067634bd7116a5 | ab38af8040c8282a | ab38af8040c8282a | a95496b3fb35bd9c | 45613100e065d631 | a1812dcc23cd42f7 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: lasso stepfull n/a:no-decode-state
+wrote /root/leg_out/records/lasso/lasso/cpu-sabotage.json

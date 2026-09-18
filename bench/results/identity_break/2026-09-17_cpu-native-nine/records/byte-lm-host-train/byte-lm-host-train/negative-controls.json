@@ -1,0 +1,76 @@
+{
+  "cells": [
+    {
+      "cell": "byte-lm-host-train/base",
+      "context_matches": true,
+      "clean": "04d7452abeb7ae7a",
+      "sabotage": "3029f86c359a5fe1",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/denormal",
+      "context_matches": true,
+      "clean": "5dacd27d99b63ea8",
+      "sabotage": "ab35965cca2d66ce",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/denormal_ftz",
+      "context_matches": true,
+      "clean": "ce4b89211b242e2a",
+      "sabotage": "20b5ab11759e216e",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/dupes",
+      "context_matches": true,
+      "clean": "3e3bf4a1d2093466",
+      "sabotage": "246b4aed6a398f27",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/hashed",
+      "context_matches": true,
+      "clean": "915a8a6b7e5f5bf3",
+      "sabotage": "f77fb136ab782b8e",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/negative",
+      "context_matches": true,
+      "clean": "c2e69d5d4aba426e",
+      "sabotage": "cd9f2ffdc22cb790",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/odd",
+      "context_matches": true,
+      "clean": "04d7452abeb7ae7a",
+      "sabotage": "3029f86c359a5fe1",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/ties",
+      "context_matches": true,
+      "clean": "5ac1bffdd360961f",
+      "sabotage": "2efae291ec47d3c8",
+      "detected": true
+    },
+    {
+      "cell": "byte-lm-host-train/wide",
+      "context_matches": true,
+      "clean": "1d86e5f486b3cb10",
+      "sabotage": "8681d47d50e89693",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "clean_failures": [],
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

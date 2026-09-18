@@ -1,0 +1,170 @@
+2813 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7801c0000000, nodemask=2)
+# vendor=cpu-amd-epyc-7713-64-core-processor commit=1d7fc53fe9ee5406bd42b4641324fb864ccba6de (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 7713 64-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_svm_host', '_mojolearn_training_host', '_mojolearn_transformer_host']
+# identity_break  mode=identical  2026-09-17 20:53:25  Linux-6.17.0-35-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START mlp-int8w/base repeat=1/train
+# DONE mlp-int8w/base repeat=1/train 0.004s
+# START mlp-int8w/base repeat=1/infer-save-reload
+# DONE mlp-int8w/base repeat=1/infer-save-reload 0.010s
+# START mlp-int8w/base repeat=1/batch
+# DONE mlp-int8w/base repeat=1/batch 0.001s
+# START mlp-int8w/base repeat=1/stepfull
+# DONE mlp-int8w/base repeat=1/stepfull 0.000s
+# START mlp-int8w/base repeat=2/train
+# DONE mlp-int8w/base repeat=2/train 0.003s
+# START mlp-int8w/base repeat=2/infer-save-reload
+# DONE mlp-int8w/base repeat=2/infer-save-reload 0.009s
+# START mlp-int8w/base repeat=2/batch
+# DONE mlp-int8w/base repeat=2/batch 0.000s
+# START mlp-int8w/base repeat=2/stepfull
+# DONE mlp-int8w/base repeat=2/stepfull 0.000s
+# CELL mlp-int8w/base STABLE 0.030s
+# START mlp-int8w/ties repeat=1/train
+# DONE mlp-int8w/ties repeat=1/train 0.003s
+# START mlp-int8w/ties repeat=1/infer-save-reload
+# DONE mlp-int8w/ties repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/ties repeat=1/batch
+# DONE mlp-int8w/ties repeat=1/batch 0.000s
+# START mlp-int8w/ties repeat=1/stepfull
+# DONE mlp-int8w/ties repeat=1/stepfull 0.000s
+# START mlp-int8w/ties repeat=2/train
+# DONE mlp-int8w/ties repeat=2/train 0.003s
+# START mlp-int8w/ties repeat=2/infer-save-reload
+# DONE mlp-int8w/ties repeat=2/infer-save-reload 0.007s
+# START mlp-int8w/ties repeat=2/batch
+# DONE mlp-int8w/ties repeat=2/batch 0.000s
+# START mlp-int8w/ties repeat=2/stepfull
+# DONE mlp-int8w/ties repeat=2/stepfull 0.000s
+# CELL mlp-int8w/ties STABLE 0.023s
+# START mlp-int8w/hashed repeat=1/train
+# DONE mlp-int8w/hashed repeat=1/train 0.002s
+# START mlp-int8w/hashed repeat=1/infer-save-reload
+# DONE mlp-int8w/hashed repeat=1/infer-save-reload 0.006s
+# START mlp-int8w/hashed repeat=1/batch
+# DONE mlp-int8w/hashed repeat=1/batch 0.000s
+# START mlp-int8w/hashed repeat=1/stepfull
+# DONE mlp-int8w/hashed repeat=1/stepfull 0.000s
+# START mlp-int8w/hashed repeat=2/train
+# DONE mlp-int8w/hashed repeat=2/train 0.002s
+# START mlp-int8w/hashed repeat=2/infer-save-reload
+# DONE mlp-int8w/hashed repeat=2/infer-save-reload 0.011s
+# START mlp-int8w/hashed repeat=2/batch
+# DONE mlp-int8w/hashed repeat=2/batch 0.000s
+# START mlp-int8w/hashed repeat=2/stepfull
+# DONE mlp-int8w/hashed repeat=2/stepfull 0.000s
+# CELL mlp-int8w/hashed STABLE 0.023s
+# START mlp-int8w/wide repeat=1/train
+# DONE mlp-int8w/wide repeat=1/train 0.004s
+# START mlp-int8w/wide repeat=1/infer-save-reload
+# DONE mlp-int8w/wide repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/wide repeat=1/batch
+# DONE mlp-int8w/wide repeat=1/batch 0.000s
+# START mlp-int8w/wide repeat=1/stepfull
+# DONE mlp-int8w/wide repeat=1/stepfull 0.000s
+# START mlp-int8w/wide repeat=2/train
+# DONE mlp-int8w/wide repeat=2/train 0.004s
+# START mlp-int8w/wide repeat=2/infer-save-reload
+# DONE mlp-int8w/wide repeat=2/infer-save-reload 0.009s
+# START mlp-int8w/wide repeat=2/batch
+# DONE mlp-int8w/wide repeat=2/batch 0.000s
+# START mlp-int8w/wide repeat=2/stepfull
+# DONE mlp-int8w/wide repeat=2/stepfull 0.000s
+# CELL mlp-int8w/wide STABLE 0.027s
+# START mlp-int8w/denormal repeat=1/train
+# DONE mlp-int8w/denormal repeat=1/train 0.004s
+# START mlp-int8w/denormal repeat=1/infer-save-reload
+# DONE mlp-int8w/denormal repeat=1/infer-save-reload 0.010s
+# START mlp-int8w/denormal repeat=1/batch
+# DONE mlp-int8w/denormal repeat=1/batch 0.000s
+# START mlp-int8w/denormal repeat=1/stepfull
+# DONE mlp-int8w/denormal repeat=1/stepfull 0.000s
+# START mlp-int8w/denormal repeat=2/train
+# DONE mlp-int8w/denormal repeat=2/train 0.004s
+# START mlp-int8w/denormal repeat=2/infer-save-reload
+# DONE mlp-int8w/denormal repeat=2/infer-save-reload 0.010s
+# START mlp-int8w/denormal repeat=2/batch
+# DONE mlp-int8w/denormal repeat=2/batch 0.000s
+# START mlp-int8w/denormal repeat=2/stepfull
+# DONE mlp-int8w/denormal repeat=2/stepfull 0.000s
+# CELL mlp-int8w/denormal STABLE 0.029s
+# START mlp-int8w/denormal_ftz repeat=1/train
+# DONE mlp-int8w/denormal_ftz repeat=1/train 0.004s
+# START mlp-int8w/denormal_ftz repeat=1/infer-save-reload
+# DONE mlp-int8w/denormal_ftz repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/denormal_ftz repeat=1/batch
+# DONE mlp-int8w/denormal_ftz repeat=1/batch 0.000s
+# START mlp-int8w/denormal_ftz repeat=1/stepfull
+# DONE mlp-int8w/denormal_ftz repeat=1/stepfull 0.000s
+# START mlp-int8w/denormal_ftz repeat=2/train
+# DONE mlp-int8w/denormal_ftz repeat=2/train 0.004s
+# START mlp-int8w/denormal_ftz repeat=2/infer-save-reload
+# DONE mlp-int8w/denormal_ftz repeat=2/infer-save-reload 0.009s
+# START mlp-int8w/denormal_ftz repeat=2/batch
+# DONE mlp-int8w/denormal_ftz repeat=2/batch 0.000s
+# START mlp-int8w/denormal_ftz repeat=2/stepfull
+# DONE mlp-int8w/denormal_ftz repeat=2/stepfull 0.000s
+# CELL mlp-int8w/denormal_ftz STABLE 0.027s
+# START mlp-int8w/dupes repeat=1/train
+# DONE mlp-int8w/dupes repeat=1/train 0.004s
+# START mlp-int8w/dupes repeat=1/infer-save-reload
+# DONE mlp-int8w/dupes repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/dupes repeat=1/batch
+# DONE mlp-int8w/dupes repeat=1/batch 0.000s
+# START mlp-int8w/dupes repeat=1/stepfull
+# DONE mlp-int8w/dupes repeat=1/stepfull 0.000s
+# START mlp-int8w/dupes repeat=2/train
+# DONE mlp-int8w/dupes repeat=2/train 0.004s
+# START mlp-int8w/dupes repeat=2/infer-save-reload
+# DONE mlp-int8w/dupes repeat=2/infer-save-reload 0.008s
+# START mlp-int8w/dupes repeat=2/batch
+# DONE mlp-int8w/dupes repeat=2/batch 0.000s
+# START mlp-int8w/dupes repeat=2/stepfull
+# DONE mlp-int8w/dupes repeat=2/stepfull 0.000s
+# CELL mlp-int8w/dupes STABLE 0.026s
+# START mlp-int8w/odd repeat=1/train
+# DONE mlp-int8w/odd repeat=1/train 0.003s
+# START mlp-int8w/odd repeat=1/infer-save-reload
+# DONE mlp-int8w/odd repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/odd repeat=1/batch
+# DONE mlp-int8w/odd repeat=1/batch 0.000s
+# START mlp-int8w/odd repeat=1/stepfull
+# DONE mlp-int8w/odd repeat=1/stepfull 0.000s
+# START mlp-int8w/odd repeat=2/train
+# DONE mlp-int8w/odd repeat=2/train 0.004s
+# START mlp-int8w/odd repeat=2/infer-save-reload
+# DONE mlp-int8w/odd repeat=2/infer-save-reload 0.009s
+# START mlp-int8w/odd repeat=2/batch
+# DONE mlp-int8w/odd repeat=2/batch 0.000s
+# START mlp-int8w/odd repeat=2/stepfull
+# DONE mlp-int8w/odd repeat=2/stepfull 0.000s
+# CELL mlp-int8w/odd STABLE 0.026s
+# START mlp-int8w/negative repeat=1/train
+# DONE mlp-int8w/negative repeat=1/train 0.004s
+# START mlp-int8w/negative repeat=1/infer-save-reload
+# DONE mlp-int8w/negative repeat=1/infer-save-reload 0.009s
+# START mlp-int8w/negative repeat=1/batch
+# DONE mlp-int8w/negative repeat=1/batch 0.000s
+# START mlp-int8w/negative repeat=1/stepfull
+# DONE mlp-int8w/negative repeat=1/stepfull 0.000s
+# START mlp-int8w/negative repeat=2/train
+# DONE mlp-int8w/negative repeat=2/train 0.004s
+# START mlp-int8w/negative repeat=2/infer-save-reload
+# DONE mlp-int8w/negative repeat=2/infer-save-reload 0.009s
+# START mlp-int8w/negative repeat=2/batch
+# DONE mlp-int8w/negative repeat=2/batch 0.000s
+# START mlp-int8w/negative repeat=2/stepfull
+# DONE mlp-int8w/negative repeat=2/stepfull 0.000s
+# CELL mlp-int8w/negative STABLE 0.026s
+| mlp-int8w              | 6168adc1058c1d59 | a526a2fbf8e24965 | cbdcd379bd21c77f | 42b44d55a8a8bb42 | daf3efb00851fcf8 | daf3efb00851fcf8 | 6168adc1058c1d59 | 18adffd7558f9e58 | 344e2fd2a628967a |
+| mlp-int8w infer        | aba80ad4b3c4a002 | 12bafc468c183329 | cdb6dde10999c281 | af6d475c3ec7f2d3 | efc4ef9136e09f0a | efc4ef9136e09f0a | aba80ad4b3c4a002 | f627b0a604e01d4c | 4dd61170bc007017 |
+| mlp-int8w model        | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 | 10959ca81118cc10 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: n/a=9
+stepfull: n/a=9
+n/a: mlp-int8w batch n/a:weight-format lane; the batch part is measured on its base lane, mlp-int8w stepfull n/a:no-decode-state
+wrote /root/leg_out/records/mlp-int8w/mlp-int8w/cpu-clean.json

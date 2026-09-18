@@ -592,6 +592,27 @@ THIS TABLE DOES NOT INCLUDE THE STEP GLUE FLIP. The pod ran commit
 geomean 0.9723 on its own leg). The next pod that measures this table should
 read a smaller cell for ours again.
 
+OUR CELL IS STALE BY TWO MORE FLIPS AND THE 0.2326 ABOVE MUST NOT BE QUOTED
+AS CURRENT (added 2026-09-17, lane `lane/attention-speed`). Since bb679f19 our
+own lean step at this exact shape has moved twice, each measured on its own
+pod against its own same-pod baseline:
+
+| flip | leg | our lean step, enwik8 / Pile GitHub |
+|---|---|---|
+| this table, bb679f19 | e1g/2026-09-12_133007-nvidia-h100-owed-rest | 0.2326 / 0.2309 |
+| DEVIATION 2707, GEMM `kpack_hg` | e1g/2026-09-13_183737-nvidia-h100-gemm-hg-flip | 0.2106 (enwik8) |
+| DEVIATION 2900, attention `_bswz` | e1g/2026-09-17_201140-nvidia-h100-attention-bswz | 0.19786 / 0.19827 |
+
+NO RATIO AGAINST ANY TORCH COLUMN IS IMPLIED BY THOSE THREE ROWS AND NONE MAY
+BE COMPUTED FROM THEM. Neither of the two later legs ran torch at all, and
+the two columns that would carry a ratio drift in opposite ways pod to pod
+(the paragraph above measured `compile_bf16` moving 9 to 12 percent between
+physical H100s while `eager_fp32` held to half a percent). Dividing today's
+number for ours by a torch cell measured on a pod that died in September
+would be exactly the arithmetic this file exists to prevent. The next leg
+that measures BOTH cells on ONE pod writes the next table; until then the
+table above stands as what it is, a paired measurement at bb679f19.
+
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`

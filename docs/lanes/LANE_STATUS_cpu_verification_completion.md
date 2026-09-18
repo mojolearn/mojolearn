@@ -1,123 +1,142 @@
-# CPU verification completion — active work
+# CPU verification completion — active checkpoint
 
-Started 2026-09-17 from main `32acd33d8`, following the user's explicit request
-to continue to every exposed algorithm and ship verification in the wheel.
-Worktree: `~/mojolearn-wt/cpu-verification-completion`.
-Evidence: `~/mojolearn-evidence/cpu-verification-completion`.
-This is an active checkpoint, not final release qualification. No PyPI upload.
+Updated 2026-09-17. User asks to finish coverage of every exposed algorithm
+and expose honest verification in the installed wheel. Standing workflow:
+**use a separate worktree, commit coherent verified batches, push and merge
+them into main**. This preference persists for future work.
 
-Baseline: 128 available CPU lanes, 51 withheld, 50 parallel exclusions. The
-51 were 27 missing references, five stale references, five held for separate
-records, two unwatched, and 12 awaiting additional vendor evidence. Historical
-native controls covered every mapped lane/part for 52/246 appendix entries
-on at least one fixture, not all-fixture/current-artifact qualification.
+Worktree: `~/mojolearn-wt/cpu-verification-completion`, branch
+`fix/cpu-verification-completion`. External evidence:
+`~/mojolearn-evidence/cpu-verification-completion/`.
+No PyPI upload or final release qualification is claimed.
 
-At `0dcf5b5a0`, candidate availability is 142, with 37 withheld. Historical
-native-control entry coverage is 60/246. All available lanes now have core
-references on all nine fixtures (including N/A where actually applicable).
-The installed candidate passed the 16 changed/reference-filled lanes: 423
-IDENTICAL, 297 N/A, zero DIVERGENT, REFUSED or OWED. The comparator self-test
-passed; receipts and reports are in the CPU completion probe directory.
+## Current counts
 
-## Implemented and observed
+Baseline: 128 CPU lanes available, 51 withheld, 50 parallel exclusions.
+Now: **162 available, 17 withheld, 50 excluded**, out of 229 harness lanes.
+The appendix has 246 entries; source API entries are a different inventory.
 
-- `tools/verify_cpu_batch.py` runs bounded per-lane clean/native sabotage arms,
-  preserves incomplete records, checks source/input/device context, and requires
-  all nine training controls. Step/full is recorded by default; `--properties`
-  additionally records gradient, batch-size and ragged checks.
-- Scoped strict reference generation: `verify --all --lanes ...
-  --reference-table BASE --emit-reference CANDIDATE`. Missing/conflicting parts
-  and incomplete checkpoints refuse. Unselected cells/indices and the legacy
-  table policy stay unchanged. Coverage exposes each updated lane's policy.
-- `embedding`, `embedding-sort`, `ivf-euclidean`: installed CPU development-wheel
-  replay passed 90 IDENTICAL, 45 N/A, no missing/refused/divergent parts; all-nine
-  historical training controls are present. Legacy `identity` remains limited
-  to its own fixed record, so promoted lanes cannot compare pre-fix answers.
-- `ivf` remains withheld: its ties training control still owes a qualifying
-  fresh pair. The native value perturbation already exists; rerun before adding
-  a new fault. The first four-lane installed assertion failed here and is retained.
-- BPE training and fold construction: their already-public host routes now have
-  references from repeated all-nine CPU records. These are Python algorithms;
-  no native-control or final-release claim is made for them.
-- H/C/V metric: Linux source `f0d53b4ed` moved eight fixtures, but not negative.
-  Its constant-label branch ignored an in-range label fault. Sabotage builds now
-  return the deliberately wrong zero from that zero-entropy branch. Production
-  arithmetic is unchanged. Fresh Mac builds at `b9902bb46` detected all nine.
-- Ten classical lanes at `f0d53b4ed`: weighted GBDT and RF scores, GBDT NaN modes,
-  parametric losses, Newton-cosine, pair-logit, YetiRank, both HDBSCAN variants,
-  and kmeans-sqrt. All 90 native training controls passed; all clean core parts
-  are stable or legitimately N/A. Complete source/native provenance and failures
-  are committed under `identity_break/2026-09-17_cpu-classical-completion/`.
-  Native controls use the combined sabotage set, not one fault at a time.
-- No preexisting numerical reference hash was replaced. Kmeans-sqrt's 18 changed
-  values were old `n/a:no-save` / `n/a:no-predict` entries replaced by newly
-  observed numerical results. Unrelated cells remain unchanged.
+All **176 numerical non-parallel lanes** now have historical native training
+controls on all nine fixtures. This excludes the Python BPE/fold functions
+and kmeans-cosine's expected-refusal contract. It does not claim every optional
+property, one-fault localization, current-wheel sabotage or GPU qualification.
 
-278 focused tests passed after the classical additions. The local neural
-extended-property preflight hit its explicit 300-second limit during
-mamba2-dtlimit batch-size checks. Four cells completed (byte-lm, mamba3,
-transformer, samba), but the whole checkpoint is incomplete and NOT admitted.
-No fixture floors or repetitions were reduced. No Metal run.
+Remaining CPU holds:
 
-## Cloud and restart
+- Five ordinary neural lanes: mamba3, transformer, transformer-window, samba,
+  samba-untied-dropout-accum. Qualifying current references are CPU-only;
+  mamba3, samba and samba-untied-dropout-accum also have missing parts. Preserve
+  the holds until complete independent device-class references are recorded.
+- Twelve vendor-held lanes: gp-optimize, gp-optimize-restarts, svc-poly,
+  gbdt-query-rmse, gmm-random-init-sample, gmm-sample, gp-normalize-y,
+  gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, ivf-extend.
+  CPU clean/native-control records pass. NVIDIA/AMD evidence remains required.
 
-First pod `0krigxfoki5p54` is VERIFIED DELETED. Two vCPUs, $0.06/hr,
-376 seconds building, 901 seconds executing, total cost $0.0238. Overall exit
-1 correctly retains the original metric control failure; the ten passing lanes
-are admitted separately. Results: `cloud-classical/remote/leg_out/`.
+Public CPU training outside verification still refuses. Physical device-use
+attestation, multi-GPU pairs, other interpreters, older macOS and full frozen
+release qualification remain owed. Never flip release_qualified to hide gaps.
 
-In flight: second RunPod CPU pod `4018mzhxmp3prb`, source `dcddb8345`, two vCPUs,
-60-minute watchdog and external dead-man, $0.06/hr. SSH was
-`-p 39596 root@38.80.152.147`. It builds ten production and eight sabotage
-families and runs 25 lanes: IVF, corrected metric, ordered gradient sum,
-14 low-bit lanes, and eight neural/reference-stale lanes. Budget 600 seconds
-per arm, two repetitions, all nine fixtures, step/full where applicable.
-Logs: `cloud-neural-run.log`; results will be in
-`cloud-neural/remote/leg_out/`. Root exec session was 5651. Do not kill an owed
-run merely to start another pod. Verify deletion even if the command fails.
+## Installed artifact evidence
 
-Only one cloud job (two vCPUs) plus one local single-thread numerical/compiler
-worker may run. Use mac_slot.py, numerical thread limits one, compiler at most
-two cloud workers or one local worker. Cloud runners use R2-backed caches.
+All 32 Mac host families were freshly built from 7f5b786ae with Mojo 1.0.0,
+then runtime-staged and checked for every manifest export. Build receipts and
+warnings are retained in probe fresh-host-build. A missing-NumPy run is
+retained; the verifier now explains the optional dependency rather than
+printing a traceback.
 
-Next: finish installed replay (`check_installed.py ... classical` under the
-external evidence directory), retain its receipts, integrate the completed
-batch, and inspect/recover the neural cloud run. Still owed: UMAP, the 12
-vendor-held candidates, all other missing native/property coverage, hardware
-and multi-GPU pairs, and final artifact qualification. The development wheels
-reuse Mac bindings except the freshly compiled metrics binding; their receipts
-must not be treated as certification of all current native sources.
+The initial 150-lane installed replay completed: 121 passed, 29 OWED, zero
+DIVERGENT/REFUSED. Full reports reconstruct byte-for-byte from probe
+fresh-cpu-wheel-initial. Strict source admission repaired 249 numeric gaps:
+all equal the independent frozen Mac wheel, no existing numeric reference
+changed. Five new complete clean source records supplement older records.
 
-## Additional completed work at `5e5e0a84c`
+Installed candidate a44a6e2f9, same exact 32 native bindings, all nine fixtures
+twice with default core and step/full checks:
 
-UMAP and ordered gradient sum now have all-nine strict references and native
-controls, bringing availability to 144 and withholding to 35. UMAP uses the
-fresh metrics builds and passes held-out, saved model and batch checks. Ordered
-sum needed a native accumulation fault: reversing two addends cannot change an
-addition. Sabotage now zeros the first accumulated result; production is
-unchanged. The independent oracle catches all nine wrong outputs. The harness
-retains repeated measured hashes as DIVERGENT, still exits one, and never admits
-those failed results as references. Ordinary exceptions remain REFUSED.
+- Twelve low-bit lanes: 396 IDENTICAL, 144 N/A.
+- Twenty-nine repaired lanes: 954 IDENTICAL, 351 N/A.
 
-The CPU batch runner now rejects clean property failures even when the training
-control moved. The in-flight pod used the earlier runner: its reported training
-successes must be reevaluated. Its Mamba/Samba stepfull properties currently
-refuse because the build list omitted the neural binding. Keep these failures;
-rerun affected lanes with the full native dependency set. The original ordered
-sum native control was unchanged and remains a failed control.
+Both groups have zero DIVERGENT/OWED/REFUSED, pass the verifier self-test,
+execute outside the checkout from site-packages without path overrides, and
+are included in default CPU selection. Probe installed-162 contains full
+compressed reports, scripts and receipts. This proves the 41 changed lanes
+on one updated wheel; a single all-162 final-artifact replay is not claimed.
+Binaries are archived externally under wheel-artifacts/<sha256>/.
 
-307 focused tests pass. The next installed development artifact adds the freshly
-built training binding alongside metrics; all other Mac bindings remain reused.
+## Native-control audit and retained failures
 
-Installed follow-up `b74de8f54` passes UMAP and ordered sum: 45 IDENTICAL,
-45 N/A, no DIVERGENT/REFUSED/OWED, current coverage snapshot, all-nine historical
-controls, default selection and comparator self-test. Receipts are committed in
-the completion probe directory. A bounded single-thread local Mamba2 clean
-record is now running with all native dependencies to fill the missing stepfull
-property; external `mamba2-complete-clean.json`, root session 28100.
+The 99-lane Linux audit at 763565275 built all 32 production and 32 sabotage
+families, used two single-thread workers, all nine fixtures, two repeats and
+saved CTR assets. Every clean property is STABLE/N/A. Original batch: 90 pass.
+Corrected exit classification: 93 pass. Both byte-LM inference lanes and Adam
+clip already changed training bytes on all nine fixtures; repeated explicit
+RLPAIR_MOVED/BATCH_MOVED properly explains their negative-arm exit 1.
+Original and reevaluated results remain separate. The validator still rejects
+refusals, exceptions, repeat instability, missing samples and unexplained exits.
 
-Oracle diff follow-up: equally wrong numerical outputs remain DIVERGENT when
-compared to each other. A regression exercises the recorder and diff together;
-37 runtime/control tests pass. This small fix was isolated in
-`~/mojolearn-wt/cpu-oracle-diff-fix` while the Mamba2 record retained its frozen
-source worktree for safe checkpoint resumption.
+Five real numerical gaps were fixed: DBSCAN's core-threshold fault missed
+all-noise fixtures; it now increments the first actual native label, including
+noise. MinMaxScaler's offset sign fault missed zero minima; it now corrupts
+that fitted offset too. Only compile-time sabotage branches change.
+The frozen-source repair pair at 544605965 passes all 45 training controls;
+all 180 clean core parts equal the installed-wheel references. An earlier
+pair rejected for mismatched commit witnesses is preserved outside admission.
+Kmeans-cosine's unchanged expected refusal is retained, not called a numerical
+native fault. Combined native faults do not localize individual operations.
+
+Records: identity_break/2026-09-17_cpu-native-nine and
+identity_break/2026-09-17_cpu-native-control-repairs. The earlier classical,
+neural and complete-dependency batches retain all failures, including omitted
+transitive dependencies and inert faults. Concurrent reference-regen and
+sabotage-sweep branches are integrated; our measured ordered-sum zero fault
+and explicit numerical-error CI gate remain active.
+
+## Resources and next steps
+
+**No cloud rental remains active from this lane.** All four pods verified
+deleted: 0krigxfoki5p54, 4018mzhxmp3prb, 17o53wuev9wtbr, l521898scta1lj.
+Last audit: 681s build, 1246s run, 2070s billed, $0.0345; DELETE 204,
+GET 404 and absence from fleet recorded in teardown.txt. Failed 40GB create
+request allocated no pod. Do not touch other owners' pods or worktrees.
+
+Resource cap: two cloud vCPUs plus one local single-thread worker, max three
+cores total. Local numerical/compiler work uses nice 19 and mac_slot.py;
+all numerical thread variables one. Every rental needs watchdog plus external
+dead-man and verified teardown; preserve failures. No new unrelated lane.
+
+Next: record the missing current neural parts and independent GPU columns,
+then continue vendor/device and optional-property qualification. Keep all
+holds until independently measured. Never silently replace references to
+make a disagreement disappear. This completed batch is committed and pushed
+from the isolated worktree, with main integration as the final workflow step.
+
+
+## Validation checkpoint
+
+372 focused tests pass, including live base-fixture parity between the source
+harness and verifier across all public CPU lanes. Updated evidence reports
+176 non-parallel numerical lanes with all-nine historical native training
+controls. The strict five-neural admission audit retains missing parts and
+single-class references; no new lane is promoted by this audit. Evidence and
+counts are being checked in the refreshed installed wheel before main merge.
+
+
+## Final installed evidence check
+
+The refreshed f41682fb2 wheel passes the five repaired-control lanes: 180
+IDENTICAL, 45 N/A, zero DIVERGENT/OWED/REFUSED over nine fixtures twice.
+Installed coverage shows 162 available / 17 withheld / 50 excluded and all
+176 numerical non-parallel lanes with historical all-nine native training
+controls. All release_qualified flags remain false. Bytewise comparison with
+the passing 41-lane wheel shows only evidence metadata, COMMIT and wheel
+RECORD changed; every numerical code/reference/model/native byte is identical.
+Probe native-nine-installed retains full reports and receipts. No local job
+or cloud rental remains active from this lane. No PyPI publication occurred.
+
+
+## Follow-up: broader runnable scope
+
+See [the broad verifier checkpoint](LANE_STATUS_verifier_broad_scope.md).
+Pending CPU lanes and 17 CPU logical-shard drivers now have an opt-in execution
+mode; HostForest/HostGBDT have an installed saved-model-only command. These
+changes broaden runnable coverage while retaining the qualification holds.

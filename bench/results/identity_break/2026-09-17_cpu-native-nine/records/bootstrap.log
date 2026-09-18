@@ -1,0 +1,3 @@
+bootstrap: clean
+bootstrap: sabotage
+bootstrap: 9/9 controls; passed=True

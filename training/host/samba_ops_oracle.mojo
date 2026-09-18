@@ -55,7 +55,7 @@ entry in front of it:
                                    `ftz(fma(1, ftz(left), ftz(right)))` per
                                    cell, until one piece remains.
 
-THE NEGATIVE CONTROL. `gemm_oracle` walks every leaf DESCENDING under
+THE NEGATIVE CONTROL. `gemm_oracle` flips a VALUE in every leaf under
 `-D MOJOLEARN_HOST_SABOTAGE=1` (`GEMM_ORACLE_HOST_SABOTAGE`), which moves the
 linear forward and backward and the RMSNorm weight gradient. The embedding
 gather has no arm of its own. Accumulation corrupts its first output to zero:

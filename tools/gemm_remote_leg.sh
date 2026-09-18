@@ -1356,6 +1356,11 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # pinned commit; do not replace it with a working-tree tar.
 LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
+# Campaign 7 carries the complete release sources and verifier assets, not
+# only a Mamba certificate. Keep that payload bounded separately.
+if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then
+    LEG_MAMBA_ARCHIVE_MAX_BYTES=16777216
+fi
 if [ "$KNN_LAYOUT_ONLY" = 1 ]; then
     _layout_paths="bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh"
     LEG_SOURCE_PATHS_MAMBA="$LEG_SOURCE_PATHS_MAMBA $_layout_paths"
@@ -3001,7 +3006,7 @@ RELEASE_TOOLS_SETUP
             # THIS device. The driver refuses an architecture override and
             # records the device it actually found.
             MOJOLEARN_EXPECT_VENDOR=cuda \
-              timeout -k 20 "$work_remaining" bash tools/linux_surface_qualification.sh \
+              timeout -k 20 "$work_remaining" bash tools/release_installed_checks.sh \
                 qualify-release-linux3 "/root/@QUALWHEEL@" '@QUALSHA@' cuda \
                 "$OUT/release-build" /root/proofs '@GPUARCHS@' \
                 > "$OUT/release-build-console.log" 2>&1

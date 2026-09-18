@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:30:53  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START dbscan/base repeat=1/train
+# DONE dbscan/base repeat=1/train 0.231s
+# START dbscan/base repeat=1/infer-save-reload
+# DONE dbscan/base repeat=1/infer-save-reload 0.041s
+# START dbscan/base repeat=1/batch
+# DONE dbscan/base repeat=1/batch 0.013s
+# START dbscan/base repeat=1/stepfull
+# DONE dbscan/base repeat=1/stepfull 0.000s
+# START dbscan/base repeat=2/train
+# DONE dbscan/base repeat=2/train 0.226s
+# START dbscan/base repeat=2/infer-save-reload
+# DONE dbscan/base repeat=2/infer-save-reload 0.040s
+# START dbscan/base repeat=2/batch
+# DONE dbscan/base repeat=2/batch 0.012s
+# START dbscan/base repeat=2/stepfull
+# DONE dbscan/base repeat=2/stepfull 0.000s
+# CELL dbscan/base STABLE 0.564s
+# START dbscan/ties repeat=1/train
+# DONE dbscan/ties repeat=1/train 0.142s
+# START dbscan/ties repeat=1/infer-save-reload
+# DONE dbscan/ties repeat=1/infer-save-reload 0.071s
+# START dbscan/ties repeat=1/batch
+# DONE dbscan/ties repeat=1/batch 0.021s
+# START dbscan/ties repeat=1/stepfull
+# DONE dbscan/ties repeat=1/stepfull 0.000s
+# START dbscan/ties repeat=2/train
+# DONE dbscan/ties repeat=2/train 0.146s
+# START dbscan/ties repeat=2/infer-save-reload
+# DONE dbscan/ties repeat=2/infer-save-reload 0.071s
+# START dbscan/ties repeat=2/batch
+# DONE dbscan/ties repeat=2/batch 0.021s
+# START dbscan/ties repeat=2/stepfull
+# DONE dbscan/ties repeat=2/stepfull 0.000s
+# CELL dbscan/ties STABLE 0.474s
+# START dbscan/hashed repeat=1/train
+# DONE dbscan/hashed repeat=1/train 0.134s
+# START dbscan/hashed repeat=1/infer-save-reload
+# DONE dbscan/hashed repeat=1/infer-save-reload 0.046s
+# START dbscan/hashed repeat=1/batch
+# DONE dbscan/hashed repeat=1/batch 0.014s
+# START dbscan/hashed repeat=1/stepfull
+# DONE dbscan/hashed repeat=1/stepfull 0.000s
+# START dbscan/hashed repeat=2/train
+# DONE dbscan/hashed repeat=2/train 0.132s
+# START dbscan/hashed repeat=2/infer-save-reload
+# DONE dbscan/hashed repeat=2/infer-save-reload 0.045s
+# START dbscan/hashed repeat=2/batch
+# DONE dbscan/hashed repeat=2/batch 0.014s
+# START dbscan/hashed repeat=2/stepfull
+# DONE dbscan/hashed repeat=2/stepfull 0.000s
+# CELL dbscan/hashed STABLE 0.386s
+# START dbscan/wide repeat=1/train
+# DONE dbscan/wide repeat=1/train 1.025s
+# START dbscan/wide repeat=1/infer-save-reload
+# DONE dbscan/wide repeat=1/infer-save-reload 0.054s
+# START dbscan/wide repeat=1/batch
+# DONE dbscan/wide repeat=1/batch 0.016s
+# START dbscan/wide repeat=1/stepfull
+# DONE dbscan/wide repeat=1/stepfull 0.000s
+# START dbscan/wide repeat=2/train
+# DONE dbscan/wide repeat=2/train 0.968s
+# START dbscan/wide repeat=2/infer-save-reload
+# DONE dbscan/wide repeat=2/infer-save-reload 0.052s
+# START dbscan/wide repeat=2/batch
+# DONE dbscan/wide repeat=2/batch 0.015s
+# START dbscan/wide repeat=2/stepfull
+# DONE dbscan/wide repeat=2/stepfull 0.000s
+# CELL dbscan/wide STABLE 2.131s
+# START dbscan/denormal repeat=1/train
+# DONE dbscan/denormal repeat=1/train 0.469s
+# START dbscan/denormal repeat=1/infer-save-reload
+# DONE dbscan/denormal repeat=1/infer-save-reload 0.059s
+# START dbscan/denormal repeat=1/batch
+# DONE dbscan/denormal repeat=1/batch 0.018s
+# START dbscan/denormal repeat=1/stepfull
+# DONE dbscan/denormal repeat=1/stepfull 0.000s
+# START dbscan/denormal repeat=2/train
+# DONE dbscan/denormal repeat=2/train 0.471s
+# START dbscan/denormal repeat=2/infer-save-reload
+# DONE dbscan/denormal repeat=2/infer-save-reload 0.058s
+# START dbscan/denormal repeat=2/batch
+# DONE dbscan/denormal repeat=2/batch 0.017s
+# START dbscan/denormal repeat=2/stepfull
+# DONE dbscan/denormal repeat=2/stepfull 0.000s
+# CELL dbscan/denormal STABLE 1.093s
+# START dbscan/denormal_ftz repeat=1/train
+# DONE dbscan/denormal_ftz repeat=1/train 0.458s
+# START dbscan/denormal_ftz repeat=1/infer-save-reload
+# DONE dbscan/denormal_ftz repeat=1/infer-save-reload 0.050s
+# START dbscan/denormal_ftz repeat=1/batch
+# DONE dbscan/denormal_ftz repeat=1/batch 0.016s
+# START dbscan/denormal_ftz repeat=1/stepfull
+# DONE dbscan/denormal_ftz repeat=1/stepfull 0.000s
+# START dbscan/denormal_ftz repeat=2/train
+# DONE dbscan/denormal_ftz repeat=2/train 0.480s
+# START dbscan/denormal_ftz repeat=2/infer-save-reload
+# DONE dbscan/denormal_ftz repeat=2/infer-save-reload 0.052s
+# START dbscan/denormal_ftz repeat=2/batch
+# DONE dbscan/denormal_ftz repeat=2/batch 0.016s
+# START dbscan/denormal_ftz repeat=2/stepfull
+# DONE dbscan/denormal_ftz repeat=2/stepfull 0.000s
+# CELL dbscan/denormal_ftz STABLE 1.072s
+# START dbscan/dupes repeat=1/train
+# DONE dbscan/dupes repeat=1/train 0.240s
+# START dbscan/dupes repeat=1/infer-save-reload
+# DONE dbscan/dupes repeat=1/infer-save-reload 0.043s
+# START dbscan/dupes repeat=1/batch
+# DONE dbscan/dupes repeat=1/batch 0.012s
+# START dbscan/dupes repeat=1/stepfull
+# DONE dbscan/dupes repeat=1/stepfull 0.000s
+# START dbscan/dupes repeat=2/train
+# DONE dbscan/dupes repeat=2/train 0.224s
+# START dbscan/dupes repeat=2/infer-save-reload
+# DONE dbscan/dupes repeat=2/infer-save-reload 0.040s
+# START dbscan/dupes repeat=2/batch
+# DONE dbscan/dupes repeat=2/batch 0.013s
+# START dbscan/dupes repeat=2/stepfull
+# DONE dbscan/dupes repeat=2/stepfull 0.000s
+# CELL dbscan/dupes STABLE 0.571s
+# START dbscan/odd repeat=1/train
+# DONE dbscan/odd repeat=1/train 0.218s
+# START dbscan/odd repeat=1/infer-save-reload
+# DONE dbscan/odd repeat=1/infer-save-reload 0.041s
+# START dbscan/odd repeat=1/batch
+# DONE dbscan/odd repeat=1/batch 0.012s
+# START dbscan/odd repeat=1/stepfull
+# DONE dbscan/odd repeat=1/stepfull 0.000s
+# START dbscan/odd repeat=2/train
+# DONE dbscan/odd repeat=2/train 0.228s
+# START dbscan/odd repeat=2/infer-save-reload
+# DONE dbscan/odd repeat=2/infer-save-reload 0.045s
+# START dbscan/odd repeat=2/batch
+# DONE dbscan/odd repeat=2/batch 0.014s
+# START dbscan/odd repeat=2/stepfull
+# DONE dbscan/odd repeat=2/stepfull 0.000s
+# CELL dbscan/odd STABLE 0.558s
+# START dbscan/negative repeat=1/train
+# DONE dbscan/negative repeat=1/train 0.433s
+# START dbscan/negative repeat=1/infer-save-reload
+# DONE dbscan/negative repeat=1/infer-save-reload 0.050s
+# START dbscan/negative repeat=1/batch
+# DONE dbscan/negative repeat=1/batch 0.015s
+# START dbscan/negative repeat=1/stepfull
+# DONE dbscan/negative repeat=1/stepfull 0.000s
+# START dbscan/negative repeat=2/train
+# DONE dbscan/negative repeat=2/train 0.434s
+# START dbscan/negative repeat=2/infer-save-reload
+# DONE dbscan/negative repeat=2/infer-save-reload 0.049s
+# START dbscan/negative repeat=2/batch
+# DONE dbscan/negative repeat=2/batch 0.015s
+# START dbscan/negative repeat=2/stepfull
+# DONE dbscan/negative repeat=2/stepfull 0.000s
+# CELL dbscan/negative STABLE 0.998s
+| dbscan                 | e2b3394562b83950 | ec2438017a859bb8 | d17808b4b9261d5d | d17808b4b9261d5d | 05fe17333152c5b3 | 05fe17333152c5b3 | e2b3394562b83950 | 33230fdea7a59577 | bb6bd31e075693e9 |
+| dbscan infer           | 667a03ee6768952d | d100f8d65d4858c8 | dab6c104519fb920 | dab6c104519fb920 | dab6c104519fb920 | dab6c104519fb920 | 667a03ee6768952d | 922755b8e5a09115 | dab6c104519fb920 |
+| dbscan model           | 58f1f199fb7dc351 | c2c80212b0badb4b | 22074f6988a2878e | 12450128a5b4be8b | 6608f3625f54d8dd | bf5e188ea1f93f89 | 58f1f199fb7dc351 | 997042f44b174ce5 | aca6e6276afdb4c4 |
+| dbscan batch           | eaf8c25b605ec157 | e6653b9d575c68ce | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 | eaf8c25b605ec157 | 217b0d0a0a236de3 | a2740d2ed4d74812 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: dbscan stepfull n/a:no-decode-state
+wrote /root/leg_out/records/dbscan/dbscan/cpu-sabotage.json

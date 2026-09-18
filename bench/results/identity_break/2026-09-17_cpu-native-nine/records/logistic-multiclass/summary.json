@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "logistic-multiclass": {
+      "cells": [
+        {
+          "cell": "logistic-multiclass/base",
+          "context_matches": true,
+          "clean": "b197f3db38cd7fab",
+          "sabotage": "197b03cb5418887f",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/denormal",
+          "context_matches": true,
+          "clean": "ae4add4de101fdc6",
+          "sabotage": "ea0b1d13a19a0888",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/denormal_ftz",
+          "context_matches": true,
+          "clean": "ae4add4de101fdc6",
+          "sabotage": "ea0b1d13a19a0888",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/dupes",
+          "context_matches": true,
+          "clean": "92b880ec6b23a858",
+          "sabotage": "212adffca5aec194",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/hashed",
+          "context_matches": true,
+          "clean": "453f615cf761f515",
+          "sabotage": "2fb0239b531a3cf4",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/negative",
+          "context_matches": true,
+          "clean": "c8b3e52326ea542d",
+          "sabotage": "abd67ce5ec8a4021",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/odd",
+          "context_matches": true,
+          "clean": "237ff4f174ec0bbb",
+          "sabotage": "6a55cd0efe0e450e",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/ties",
+          "context_matches": true,
+          "clean": "083b19eb8c842f52",
+          "sabotage": "154556987fbaef22",
+          "detected": true
+        },
+        {
+          "cell": "logistic-multiclass/wide",
+          "context_matches": true,
+          "clean": "d15222ad5dfec54f",
+          "sabotage": "4a43d8ad454ed732",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

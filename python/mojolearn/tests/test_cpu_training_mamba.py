@@ -65,7 +65,12 @@ def test_host_binding_registers_every_gpu_entry():
     gpu = _registered(_read("bindings/_mojolearn_mamba.mojo"))
     host = _registered(_read("bindings/_mojolearn_mamba_host.mojo"))
     assert gpu, "no def_function found in the GPU binding"
-    missing = sorted(gpu - host)
+    # Resident sessions own GPU buffers; CPU blocks expose ordinary stateful
+    # inference instead and decode_session explicitly refuses this GPU API.
+    resident = {"mamba1_session_" + name for name in
+                ("create", "open", "step", "export_state", "load_state", "info", "close")}
+    assert resident <= gpu and not resident & host
+    missing = sorted(gpu - resident - host)
     assert not missing, f"the host binding lacks {missing}"
     assert host == set(_family()["exports"]), sorted(host ^ set(_family()["exports"]))
 

@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:09  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START mlp/base repeat=1/train
+# DONE mlp/base repeat=1/train 0.006s
+# START mlp/base repeat=1/infer-save-reload
+# DONE mlp/base repeat=1/infer-save-reload 0.005s
+# START mlp/base repeat=1/batch
+# DONE mlp/base repeat=1/batch 0.004s
+# START mlp/base repeat=1/stepfull
+# DONE mlp/base repeat=1/stepfull 0.000s
+# START mlp/base repeat=2/train
+# DONE mlp/base repeat=2/train 0.006s
+# START mlp/base repeat=2/infer-save-reload
+# DONE mlp/base repeat=2/infer-save-reload 0.004s
+# START mlp/base repeat=2/batch
+# DONE mlp/base repeat=2/batch 0.004s
+# START mlp/base repeat=2/stepfull
+# DONE mlp/base repeat=2/stepfull 0.000s
+# CELL mlp/base STABLE 0.029s
+# START mlp/ties repeat=1/train
+# DONE mlp/ties repeat=1/train 0.006s
+# START mlp/ties repeat=1/infer-save-reload
+# DONE mlp/ties repeat=1/infer-save-reload 0.004s
+# START mlp/ties repeat=1/batch
+# DONE mlp/ties repeat=1/batch 0.004s
+# START mlp/ties repeat=1/stepfull
+# DONE mlp/ties repeat=1/stepfull 0.000s
+# START mlp/ties repeat=2/train
+# DONE mlp/ties repeat=2/train 0.005s
+# START mlp/ties repeat=2/infer-save-reload
+# DONE mlp/ties repeat=2/infer-save-reload 0.004s
+# START mlp/ties repeat=2/batch
+# DONE mlp/ties repeat=2/batch 0.004s
+# START mlp/ties repeat=2/stepfull
+# DONE mlp/ties repeat=2/stepfull 0.000s
+# CELL mlp/ties STABLE 0.027s
+# START mlp/hashed repeat=1/train
+# DONE mlp/hashed repeat=1/train 0.006s
+# START mlp/hashed repeat=1/infer-save-reload
+# DONE mlp/hashed repeat=1/infer-save-reload 0.004s
+# START mlp/hashed repeat=1/batch
+# DONE mlp/hashed repeat=1/batch 0.004s
+# START mlp/hashed repeat=1/stepfull
+# DONE mlp/hashed repeat=1/stepfull 0.000s
+# START mlp/hashed repeat=2/train
+# DONE mlp/hashed repeat=2/train 0.005s
+# START mlp/hashed repeat=2/infer-save-reload
+# DONE mlp/hashed repeat=2/infer-save-reload 0.004s
+# START mlp/hashed repeat=2/batch
+# DONE mlp/hashed repeat=2/batch 0.007s
+# START mlp/hashed repeat=2/stepfull
+# DONE mlp/hashed repeat=2/stepfull 0.000s
+# CELL mlp/hashed STABLE 0.031s
+# START mlp/wide repeat=1/train
+# DONE mlp/wide repeat=1/train 0.005s
+# START mlp/wide repeat=1/infer-save-reload
+# DONE mlp/wide repeat=1/infer-save-reload 0.006s
+# START mlp/wide repeat=1/batch
+# DONE mlp/wide repeat=1/batch 0.004s
+# START mlp/wide repeat=1/stepfull
+# DONE mlp/wide repeat=1/stepfull 0.000s
+# START mlp/wide repeat=2/train
+# DONE mlp/wide repeat=2/train 0.005s
+# START mlp/wide repeat=2/infer-save-reload
+# DONE mlp/wide repeat=2/infer-save-reload 0.004s
+# START mlp/wide repeat=2/batch
+# DONE mlp/wide repeat=2/batch 0.004s
+# START mlp/wide repeat=2/stepfull
+# DONE mlp/wide repeat=2/stepfull 0.000s
+# CELL mlp/wide STABLE 0.029s
+# START mlp/denormal repeat=1/train
+# DONE mlp/denormal repeat=1/train 0.006s
+# START mlp/denormal repeat=1/infer-save-reload
+# DONE mlp/denormal repeat=1/infer-save-reload 0.004s
+# START mlp/denormal repeat=1/batch
+# DONE mlp/denormal repeat=1/batch 0.004s
+# START mlp/denormal repeat=1/stepfull
+# DONE mlp/denormal repeat=1/stepfull 0.000s
+# START mlp/denormal repeat=2/train
+# DONE mlp/denormal repeat=2/train 0.006s
+# START mlp/denormal repeat=2/infer-save-reload
+# DONE mlp/denormal repeat=2/infer-save-reload 0.005s
+# START mlp/denormal repeat=2/batch
+# DONE mlp/denormal repeat=2/batch 0.004s
+# START mlp/denormal repeat=2/stepfull
+# DONE mlp/denormal repeat=2/stepfull 0.000s
+# CELL mlp/denormal STABLE 0.028s
+# START mlp/denormal_ftz repeat=1/train
+# DONE mlp/denormal_ftz repeat=1/train 0.006s
+# START mlp/denormal_ftz repeat=1/infer-save-reload
+# DONE mlp/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START mlp/denormal_ftz repeat=1/batch
+# DONE mlp/denormal_ftz repeat=1/batch 0.004s
+# START mlp/denormal_ftz repeat=1/stepfull
+# DONE mlp/denormal_ftz repeat=1/stepfull 0.000s
+# START mlp/denormal_ftz repeat=2/train
+# DONE mlp/denormal_ftz repeat=2/train 0.005s
+# START mlp/denormal_ftz repeat=2/infer-save-reload
+# DONE mlp/denormal_ftz repeat=2/infer-save-reload 0.004s
+# START mlp/denormal_ftz repeat=2/batch
+# DONE mlp/denormal_ftz repeat=2/batch 0.004s
+# START mlp/denormal_ftz repeat=2/stepfull
+# DONE mlp/denormal_ftz repeat=2/stepfull 0.000s
+# CELL mlp/denormal_ftz STABLE 0.029s
+# START mlp/dupes repeat=1/train
+# DONE mlp/dupes repeat=1/train 0.006s
+# START mlp/dupes repeat=1/infer-save-reload
+# DONE mlp/dupes repeat=1/infer-save-reload 0.005s
+# START mlp/dupes repeat=1/batch
+# DONE mlp/dupes repeat=1/batch 0.004s
+# START mlp/dupes repeat=1/stepfull
+# DONE mlp/dupes repeat=1/stepfull 0.000s
+# START mlp/dupes repeat=2/train
+# DONE mlp/dupes repeat=2/train 0.006s
+# START mlp/dupes repeat=2/infer-save-reload
+# DONE mlp/dupes repeat=2/infer-save-reload 0.005s
+# START mlp/dupes repeat=2/batch
+# DONE mlp/dupes repeat=2/batch 0.004s
+# START mlp/dupes repeat=2/stepfull
+# DONE mlp/dupes repeat=2/stepfull 0.000s
+# CELL mlp/dupes STABLE 0.029s
+# START mlp/odd repeat=1/train
+# DONE mlp/odd repeat=1/train 0.006s
+# START mlp/odd repeat=1/infer-save-reload
+# DONE mlp/odd repeat=1/infer-save-reload 0.005s
+# START mlp/odd repeat=1/batch
+# DONE mlp/odd repeat=1/batch 0.004s
+# START mlp/odd repeat=1/stepfull
+# DONE mlp/odd repeat=1/stepfull 0.000s
+# START mlp/odd repeat=2/train
+# DONE mlp/odd repeat=2/train 0.005s
+# START mlp/odd repeat=2/infer-save-reload
+# DONE mlp/odd repeat=2/infer-save-reload 0.004s
+# START mlp/odd repeat=2/batch
+# DONE mlp/odd repeat=2/batch 0.003s
+# START mlp/odd repeat=2/stepfull
+# DONE mlp/odd repeat=2/stepfull 0.000s
+# CELL mlp/odd STABLE 0.027s
+# START mlp/negative repeat=1/train
+# DONE mlp/negative repeat=1/train 0.005s
+# START mlp/negative repeat=1/infer-save-reload
+# DONE mlp/negative repeat=1/infer-save-reload 0.004s
+# START mlp/negative repeat=1/batch
+# DONE mlp/negative repeat=1/batch 0.004s
+# START mlp/negative repeat=1/stepfull
+# DONE mlp/negative repeat=1/stepfull 0.000s
+# START mlp/negative repeat=2/train
+# DONE mlp/negative repeat=2/train 0.005s
+# START mlp/negative repeat=2/infer-save-reload
+# DONE mlp/negative repeat=2/infer-save-reload 0.004s
+# START mlp/negative repeat=2/batch
+# DONE mlp/negative repeat=2/batch 0.004s
+# START mlp/negative repeat=2/stepfull
+# DONE mlp/negative repeat=2/stepfull 0.000s
+# CELL mlp/negative STABLE 0.027s
+| mlp                    | 84363101501ed7ab | 77308331eefc9742 | c302eada8acc2917 | 7ee83ee6896c3a6f | 983b4426d7d888a3 | 983b4426d7d888a3 | 84363101501ed7ab | cf6fd6bc3db8aa69 | 0246556df0aae962 |
+| mlp infer              | f0291d2d7d64ffa3 | 68f5187fa315b3bf | 1049d13337024680 | 7e82178fe8b6ac1b | 598e6a83480aa453 | 598e6a83480aa453 | f0291d2d7d64ffa3 | dd139a285e8f9f64 | c935bd045d374f89 |
+| mlp model              | 2159cb2c42ddd79e | 37dc684b5912d606 | 91f3718670963c36 | 13f08837540f6fd0 | d3679629f21a807d | d3679629f21a807d | 2159cb2c42ddd79e | f51d6c2a4bf6c7ef | 20fef948ef9ff374 |
+| mlp batch              | f047301bd649281a | 4d7fbc4db23a2aea | ad3e78d18b174b3d | 2d760f64f74a349c | 82b4147747674f27 | 82b4147747674f27 | f047301bd649281a | 98efee53c23fa629 | 1ee6416004823898 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: mlp stepfull n/a:no-decode-state
+wrote /root/leg_out/records/mlp/mlp/cpu-sabotage.json

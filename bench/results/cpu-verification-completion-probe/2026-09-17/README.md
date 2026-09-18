@@ -26,3 +26,22 @@ The follow-up wheel at `b74de8f54` also passes UMAP and ordered sum: 45 IDENTICA
 35 withheld. Its training binding is freshly compiled as well as metrics;
 other bindings remain reused. `completion-*` files record this separate artifact.
 307 focused tests passed. No final release or PyPI upload is claimed.
+
+The five-lane wheel replay at `91fdf2387` passes IVF, both low-bit GEMMs,
+byte-lm and byte-lm-resident: 126 IDENTICAL, 99 N/A, zero failures or owed
+references; coverage is 150 available, 29 withheld, 50 parallel exclusions.
+The first artifact refused both low-bit GEMMs because its reused Mac linalg
+binding lacked the low-bit API. That failure and artifact identity are retained
+in `neural-five-old-linalg-*`. A fresh linalg binding fixes the installed replay.
+Metrics, training and linalg are fresh; other native bindings remain reused.
+`neural-five-wheel-receipt.json` identifies the successful artifact and runtime
+closure; wheel binaries are archived externally by SHA-256. The post-merge
+focused suite passes 336 tests. This remains scoped development-wheel evidence.
+
+The 32-family export audit initially found stale forest and GBDT bindings.
+Fresh builds remove all missing exports. The wheel at `7f5b786ae` then passes
+seven affected tree lanes: 198 IDENTICAL, 117 N/A, zero failures or owed parts.
+`host-export-*` receipts/logs and `installed-exports-*` audits retain both
+outcomes. Mac and Linux packaging gates now require callable manifest exports;
+167 packaging/manifest tests pass. Five families are freshly built at this
+point; the subsequent frozen all-family rebuild is separate work.

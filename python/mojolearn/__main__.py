@@ -76,6 +76,8 @@ def _wants_suite(args):
                 or getattr(args, "commitment_a", None)
                 or getattr(args, "commitment_b", None)
                 or getattr(args, "coverage", False)
+                or getattr(args, "include_pending", False)
+                or getattr(args, "models_only", False)
                 or getattr(args, "batch_checks", False))
 
 
@@ -125,6 +127,10 @@ def build_parser():
                    help="also run gradient, batch-size, ragged and sampler/replay probes; missing references read OWED")
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
+    v.add_argument("--include-pending", action="store_true",
+                   help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
+    v.add_argument("--models-only", action="store_true",
+                   help="check bundled GPU-trained models through the saved-model loader, including HostForest and HostGBDT, without training")
     v.add_argument("--quick", action="store_true",
                    help="implies --all: one lane per family on the base "
                         "fixture")

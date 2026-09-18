@@ -1,0 +1,25 @@
+# CELL par-reference-knn-reg/base STABLE 1.685s
+# START par-reference-knn-reg/ties repeat=1/train
+# DONE par-reference-knn-reg/ties repeat=1/train 0.213s
+# START par-reference-knn-reg/ties repeat=1/infer-save-reload
+# DONE par-reference-knn-reg/ties repeat=1/infer-save-reload 0.387s
+# START par-reference-knn-reg/ties repeat=1/batch
+# DONE par-reference-knn-reg/ties repeat=1/batch 0.390s
+# START par-reference-knn-reg/ties repeat=2/train
+# DONE par-reference-knn-reg/ties repeat=2/train 0.211s
+# START par-reference-knn-reg/ties repeat=2/infer-save-reload
+# DONE par-reference-knn-reg/ties repeat=2/infer-save-reload 0.389s
+# START par-reference-knn-reg/ties repeat=2/batch
+# DONE par-reference-knn-reg/ties repeat=2/batch 0.410s
+# CELL par-reference-knn-reg/ties STABLE 2.000s
+| par-reference-knn-reg  | 33e7da5c3fdd343c | 556283a80ad1e387 |
+| par-reference-knn-reg infer | 12b3c8b2763ae645 | fcbc1a112c60d1d0 |
+| par-reference-knn-reg model | 7404b5d0a3a97d83 | 059724706575c43d |
+| par-reference-knn-reg batch | 74278bda8031c8f1 | 82302d325c95041c |
+
+cells=104 stable=104 moved=0 refused=0
+infer: stable=102 n/a=2
+model: stable=102 n/a=2
+batch: stable=102 n/a=2
+n/a: kmeans-cosine batch n/a:fit-refused, kmeans-cosine infer n/a:function, kmeans-cosine model n/a:no-save
+wrote /root/leg_out/cpu-x86.json

@@ -1,6 +1,24 @@
 import copy
+from pathlib import Path
 import pytest
-from verify_cpu_batch import evaluate_pair, expected_oracle_failure
+from verify_cpu_batch import arm_environment, evaluate_pair, expected_oracle_failure
+
+
+def test_direct_loaders_use_the_selected_arm_and_clean_clears_sabotage_permissions():
+    original = {'MOJOLEARN_FOREST_HOST_BINARY': '/old/forest.so',
+                'MOJOLEARN_BYTE_LM_HOST_BINARY': '/old/byte.so',
+                'MOJOLEARN_HOST_ALLOW_SABOTAGE': '1',
+                'MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE': '1',
+                'MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE': '1'}
+    for sabotage in (False, True):
+        env = arm_environment(original, Path('/selected'), sabotage)
+        assert env['MOJOLEARN_HOST_DIR'] == '/selected'
+        for family in ('FOREST', 'BYTE_LM'):
+            assert env[f'MOJOLEARN_{family}_HOST_BINARY'] == f'/selected/_mojolearn_{family.lower()}_host.so'
+        for key in original:
+            if key.endswith('ALLOW_SABOTAGE'):
+                assert (env.get(key) == '1') == sabotage
+    assert original['MOJOLEARN_FOREST_HOST_BINARY'] == '/old/forest.so'
 
 
 def records():
@@ -16,6 +34,35 @@ def records():
 
 def test_stable_changed_native_result_passes():
     assert evaluate_pair(*records(), 'x', ['base'])['passed']
+
+
+@pytest.mark.parametrize('part,verdict', [('rlpair', 'RLPAIR_MOVED'), ('batch', 'BATCH_MOVED')])
+def test_repeated_property_mismatch_explains_nonzero_native_control_exit(part, verdict):
+    clean, bad = records()
+    cell = bad['cells']['x/base']
+    cell.update({part: [verdict + ':measured 0x3f800000 vs 0x3f800001'] * 2,
+                 part + '_verdict': verdict})
+    assert expected_oracle_failure(bad)
+    assert evaluate_pair(clean, bad, 'x', ['base'])['passed']
+    other = copy.deepcopy(cell)
+    other.pop(part)
+    other.pop(part + '_verdict')
+    bad['cells']['x/other'] = other
+    assert expected_oracle_failure(bad), 'stable cells may share the same shard'
+    for mutation in ('unstable', 'missing', 'refused', 'exception', 'wrong-kind'):
+        record = copy.deepcopy(bad)
+        cell = record['cells']['x/base']
+        if mutation == 'unstable':
+            cell[part][1] += ' different'
+        elif mutation == 'missing':
+            cell[part].pop()
+        elif mutation == 'refused':
+            cell[part + '_verdict'] = 'REFUSED'
+        elif mutation == 'exception':
+            cell[part + '_error'] = 'missing binding'
+        else:
+            cell[part + '_verdict'] = 'MOVED'
+        assert not expected_oracle_failure(record), mutation
 
 
 def test_only_repeated_explicit_oracle_failures_allow_nonzero_sabotage_exit():

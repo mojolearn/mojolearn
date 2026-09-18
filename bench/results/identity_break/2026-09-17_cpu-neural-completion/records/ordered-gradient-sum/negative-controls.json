@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "ordered-gradient-sum/base",
+      "context_matches": true,
+      "clean": "a742b6c812b94347",
+      "sabotage": "a742b6c812b94347",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/denormal",
+      "context_matches": true,
+      "clean": "a742b6c812b94347",
+      "sabotage": "a742b6c812b94347",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/denormal_ftz",
+      "context_matches": true,
+      "clean": "f177e887cf2c4061",
+      "sabotage": "f177e887cf2c4061",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/dupes",
+      "context_matches": true,
+      "clean": "a742b6c812b94347",
+      "sabotage": "a742b6c812b94347",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/hashed",
+      "context_matches": true,
+      "clean": "46ae184b0eb32ecd",
+      "sabotage": "46ae184b0eb32ecd",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/negative",
+      "context_matches": true,
+      "clean": "868313e90eef7ea7",
+      "sabotage": "868313e90eef7ea7",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/odd",
+      "context_matches": true,
+      "clean": "415e287d325868c6",
+      "sabotage": "415e287d325868c6",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/ties",
+      "context_matches": true,
+      "clean": "e625f92c8f010b8b",
+      "sabotage": "e625f92c8f010b8b",
+      "detected": false
+    },
+    {
+      "cell": "ordered-gradient-sum/wide",
+      "context_matches": true,
+      "clean": "a742b6c812b94347",
+      "sabotage": "a742b6c812b94347",
+      "detected": false
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": false,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

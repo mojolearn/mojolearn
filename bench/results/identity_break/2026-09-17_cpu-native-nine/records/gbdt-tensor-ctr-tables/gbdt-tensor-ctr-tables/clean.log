@@ -1,0 +1,169 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:39:48  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-tensor-ctr-tables/base repeat=1/train
+# DONE gbdt-tensor-ctr-tables/base repeat=1/train 0.013s
+# START gbdt-tensor-ctr-tables/base repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/base repeat=1/infer-save-reload 0.018s
+# START gbdt-tensor-ctr-tables/base repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/base repeat=1/batch 0.078s
+# START gbdt-tensor-ctr-tables/base repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/base repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/base repeat=2/train
+# DONE gbdt-tensor-ctr-tables/base repeat=2/train 0.011s
+# START gbdt-tensor-ctr-tables/base repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/base repeat=2/infer-save-reload 0.018s
+# START gbdt-tensor-ctr-tables/base repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/base repeat=2/batch 0.085s
+# START gbdt-tensor-ctr-tables/base repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/base repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/base STABLE 0.223s
+# START gbdt-tensor-ctr-tables/ties repeat=1/train
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/train 0.008s
+# START gbdt-tensor-ctr-tables/ties repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/infer-save-reload 0.014s
+# START gbdt-tensor-ctr-tables/ties repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/batch 0.071s
+# START gbdt-tensor-ctr-tables/ties repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/ties repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/ties repeat=2/train
+# DONE gbdt-tensor-ctr-tables/ties repeat=2/train 0.008s
+# START gbdt-tensor-ctr-tables/ties repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/ties repeat=2/infer-save-reload 0.015s
+# START gbdt-tensor-ctr-tables/ties repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/ties repeat=2/batch 0.070s
+# START gbdt-tensor-ctr-tables/ties repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/ties repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/ties STABLE 0.187s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/train
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/train 0.010s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/batch 0.080s
+# START gbdt-tensor-ctr-tables/hashed repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/hashed repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/hashed repeat=2/train
+# DONE gbdt-tensor-ctr-tables/hashed repeat=2/train 0.010s
+# START gbdt-tensor-ctr-tables/hashed repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/hashed repeat=2/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/hashed repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/hashed repeat=2/batch 0.071s
+# START gbdt-tensor-ctr-tables/hashed repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/hashed STABLE 0.206s
+# START gbdt-tensor-ctr-tables/wide repeat=1/train
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/train 0.010s
+# START gbdt-tensor-ctr-tables/wide repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/wide repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/batch 0.081s
+# START gbdt-tensor-ctr-tables/wide repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/wide repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/wide repeat=2/train
+# DONE gbdt-tensor-ctr-tables/wide repeat=2/train 0.010s
+# START gbdt-tensor-ctr-tables/wide repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/wide repeat=2/infer-save-reload 0.018s
+# START gbdt-tensor-ctr-tables/wide repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/wide repeat=2/batch 0.071s
+# START gbdt-tensor-ctr-tables/wide repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/wide repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/wide STABLE 0.208s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/train
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/train 0.011s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/batch 0.081s
+# START gbdt-tensor-ctr-tables/denormal repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/denormal repeat=2/train
+# DONE gbdt-tensor-ctr-tables/denormal repeat=2/train 0.011s
+# START gbdt-tensor-ctr-tables/denormal repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal repeat=2/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/denormal repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/denormal repeat=2/batch 0.070s
+# START gbdt-tensor-ctr-tables/denormal repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/denormal STABLE 0.207s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/train
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/train 0.010s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/batch 0.082s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=2/train
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=2/train 0.010s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=2/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=2/batch 0.071s
+# START gbdt-tensor-ctr-tables/denormal_ftz repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/denormal_ftz STABLE 0.209s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/train
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/train 0.010s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/batch 0.070s
+# START gbdt-tensor-ctr-tables/dupes repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/dupes repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/dupes repeat=2/train
+# DONE gbdt-tensor-ctr-tables/dupes repeat=2/train 0.010s
+# START gbdt-tensor-ctr-tables/dupes repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/dupes repeat=2/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/dupes repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/dupes repeat=2/batch 0.079s
+# START gbdt-tensor-ctr-tables/dupes repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/dupes STABLE 0.203s
+# START gbdt-tensor-ctr-tables/odd repeat=1/train
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/train 0.007s
+# START gbdt-tensor-ctr-tables/odd repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/infer-save-reload 0.011s
+# START gbdt-tensor-ctr-tables/odd repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/batch 0.044s
+# START gbdt-tensor-ctr-tables/odd repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/odd repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/odd repeat=2/train
+# DONE gbdt-tensor-ctr-tables/odd repeat=2/train 0.007s
+# START gbdt-tensor-ctr-tables/odd repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/odd repeat=2/infer-save-reload 0.011s
+# START gbdt-tensor-ctr-tables/odd repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/odd repeat=2/batch 0.044s
+# START gbdt-tensor-ctr-tables/odd repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/odd repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/odd STABLE 0.125s
+# START gbdt-tensor-ctr-tables/negative repeat=1/train
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/train 0.011s
+# START gbdt-tensor-ctr-tables/negative repeat=1/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/infer-save-reload 0.018s
+# START gbdt-tensor-ctr-tables/negative repeat=1/batch
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/batch 0.082s
+# START gbdt-tensor-ctr-tables/negative repeat=1/stepfull
+# DONE gbdt-tensor-ctr-tables/negative repeat=1/stepfull 0.000s
+# START gbdt-tensor-ctr-tables/negative repeat=2/train
+# DONE gbdt-tensor-ctr-tables/negative repeat=2/train 0.010s
+# START gbdt-tensor-ctr-tables/negative repeat=2/infer-save-reload
+# DONE gbdt-tensor-ctr-tables/negative repeat=2/infer-save-reload 0.017s
+# START gbdt-tensor-ctr-tables/negative repeat=2/batch
+# DONE gbdt-tensor-ctr-tables/negative repeat=2/batch 0.071s
+# START gbdt-tensor-ctr-tables/negative repeat=2/stepfull
+# DONE gbdt-tensor-ctr-tables/negative repeat=2/stepfull 0.000s
+# CELL gbdt-tensor-ctr-tables/negative STABLE 0.209s
+| gbdt-tensor-ctr-tables | 7cc167fbb56c972e | a57c449ae1a19b4e | 1da6ad28d961ad35 | 89d3d2eb687d4002 | 1489a9f5968cb79d | 1489a9f5968cb79d | a972ee33b2bbafec | 7377ac4d24ab4fc7 | 0619163e8b8f3fc5 |
+| gbdt-tensor-ctr-tables infer | 18c29c1d0b000438 | 1659c6bbc45fd69d | 19da48b6c3ba9d2c | 3073c208310a28ff | 39133503b753ec5d | 39133503b753ec5d | 431c16487b4df475 | b6a857464e3fc541 | 4fbfc6dcd6ae0bc5 |
+| gbdt-tensor-ctr-tables batch | c14b5f2874153914 | c648d9eb03bb1455 | 23554a4fe59a1961 | 1ca38d2db239a5c8 | ddf0cf2c0e19ff1d | ddf0cf2c0e19ff1d | 577fb834656d49e9 | 3de632fb4d411bcf | af1429b2866dde66 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-tensor-ctr-tables model n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none), gbdt-tensor-ctr-tables stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-tensor-ctr-tables/gbdt-tensor-ctr-tables/cpu-clean.json

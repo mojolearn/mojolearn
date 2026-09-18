@@ -1,0 +1,25 @@
+# DONE par-holtwinters/ties repeat=1/infer-save-reload 0.003s
+# START par-holtwinters/ties repeat=1/batch
+# DONE par-holtwinters/ties repeat=1/batch 0.001s
+# START par-holtwinters/ties repeat=2/train
+# DONE par-holtwinters/ties repeat=2/train 0.216s
+# START par-holtwinters/ties repeat=2/infer-save-reload
+# DONE par-holtwinters/ties repeat=2/infer-save-reload 0.003s
+# START par-holtwinters/ties repeat=2/batch
+# DONE par-holtwinters/ties repeat=2/batch 0.001s
+# CELL par-holtwinters/ties STABLE 0.443s
+| par-holtwinters        | a4b27ebeb851b152 | de1d353be7981daa |
+| par-holtwinters infer  | fdc6682860bfe97d | e66a92dca55861e7 |
+| par-holtwinters model  | 56d1635396e8df19 | c3c57e1494e608bd |
+| par-holtwinters batch  | 1bc02c26fbd01f84 | 69c24c9925635381 |
+
+cells=50 stable=46 moved=0 refused=4
+infer: stable=28 n/a=18
+model: stable=28 n/a=18
+batch: stable=32 n/a=14
+n/a: bootstrap infer n/a:function, bootstrap model n/a:no-save, gemm-bf16 batch n/a:profile lane; the products are hashed whole, gemm-bf16 infer n/a:function, gemm-bf16 model n/a:no-save, gemm-int8 batch n/a:profile lane; the products are hashed whole, gemm-int8 infer n/a:function, gemm-int8 model n/a:no-save, gemm-pinned infer n/a:function, gemm-pinned model n/a:no-save, gemm-transposed infer n/a:function, gemm-transposed model n/a:no-save, gmm-random-init-sample batch n/a:no-batch-axis (GaussianMixture.sample takes no input rows), gmm-sample batch n/a:no-batch-axis (GaussianMixture.sample takes no input rows), gp-sample-y batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), metrics batch n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the per-sample silhouette_samples is asked on metrics-classification), metrics infer n/a:function, metrics model n/a:no-save, metrics-classification infer n/a:function, metrics-classification model n/a:no-save, monte-carlo batch n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form folded over [i_first, i_first + n_samples) by the pinned chunk tree, python/mojolearn/resample.py:196; no per-sample output exists to compare an i_first range against), monte-carlo infer n/a:function, monte-carlo model n/a:no-save, permutation-test infer n/a:function, permutation-test model n/a:no-save
+REFUSED gp-normalize-y/base: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_arima_host, _mojolearn_core_host, _mojolearn_estimators_hos
+REFUSED gp-normalize-y/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_arima_host, _mojolearn_core_host, _mojolearn_estimators_hos
+REFUSED gp-sample-y-normalize/base: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_arima_host, _mojolearn_core_host, _mojolearn_estimators_hos
+REFUSED gp-sample-y-normalize/ties: ImportError: mojolearn: no CPU implementation of _mojolearn_preprocessing.preprocessing_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_preprocessing; host bindings built here: _mojolearn_arima_host, _mojolearn_core_host, _mojolearn_estimators_hos
+wrote /root/leg_out/cpu-x86.sabotage.json
