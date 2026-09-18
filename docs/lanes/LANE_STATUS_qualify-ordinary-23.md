@@ -71,3 +71,9 @@ retaining its first evidence. Default total body budget is 2400 seconds (pass
 a typical 60-minute rental guard. `MOJOLEARN_ORDINARY_LANES=kernel-ridge-poly,...`
 selects any validated subset; unused families are not built. Missing/failed
 families leave exit_code=1 while subsequent independent groups can still run.
+
+The mocked remote-body regression confirms kernel capture occurs before GP
+compilation, unused neural builds are skipped for a subset, GP build failure
+still allows independent SVC capture, and the final receipt remains failed.
+Combined capture/gate suite: 49 tests passed; these mocks are orchestration tests,
+not additional GPU evidence.
