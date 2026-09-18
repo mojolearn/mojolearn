@@ -249,3 +249,130 @@ Summaries are committed under `bench/results/forest_deadlock_2026-09-18/`.
 - The multi-GPU `PooledForest.__deinit__` drain is COMPILED and never RUN:
   `forest_device_count() > 1` needs a second device and this pod had one.
   Report it as unexercised, not as verified.
+## HANDOFF, for a session with no context (2026-09-18 09:0xZ)
+
+**State: the forest hang is ISOLATED, FIXED, GATED and PUSHED. One of the
+three reported manifestations is NOT explained and I could not reproduce
+it.**
+
+### What is settled
+
+Releasing a resident forest and preparing another hung the process on main.
+Cause: `ResidentForest.close` synchronized BEFORE its ten releases and
+destroyed the `DeviceContext` immediately after them, so the context died
+with their buffer frees in flight and the MAX runtime allocator's lock
+stayed held for the whole process. That is DEVIATION 2520, already
+isolated by lane/byte-lm-lifetime on 2026-09-11 with a native backtrace;
+the resident structs never got its drain. Watched hanging on origin/main
+(11 minutes, 130 of 132 threads in `futex_wait_queue`, GPU idle, native
+stack identical to 2520's) and passing with the drain, same box, minutes
+apart. 70 forest/GBDT/KDE cells bitwise IDENTICAL across the change, 0
+moved, 0 refused.
+
+### Manifestation 2: the two `-parallel` identity_break lanes ARE unblocked
+
+Measured, above. On main they cannot produce a CUDA column at all; with the
+drain they run the full protocol on one GPU. Both `SKIP_CUDA` defaults are
+now empty.
+
+### Manifestation 3: `verify --all` at `transformer-bf16w` is NOT EXPLAINED
+
+lane/reference-regen's `verify --all` hung on NVIDIA at `transformer-bf16w`
+after 47 clean lanes, 195 threads in `futex_wait`, 0 percent CPU, GPU idle
+(`~/mojolearn-evidence/reference-regen/nvidia-hang/`). That is the same
+SIGNATURE, and a signature is not a cause.
+
+I found a real instance of the proven defect on that path and fixed it:
+`bindings/_mojolearn_transformer.mojo`'s two STATELESS entries destroyed
+their context right after destroying `w`, `kv`, `rope`, `stages` and `dx`,
+and the backward one had the resident forest's exact misplaced
+`synchronize()`. Both now drain. Bitwise gated: `transformer` alone
+IDENTICAL=1, `transformer` + `transformer-bf16w` IDENTICAL=2.
+
+**BUT I COULD NOT REPRODUCE THE HANG, so that fix is NOT shown to cure it.**
+Four attempts, all on `/root/ml-before` (origin/main byte for byte) on the
+RTX 4090 with driver 580.159.04, all PASSED:
+
+1. `identity_break --lanes transformer,transformer-bf16w --repeats 1 --no-batch` -> 2 cells stable, 3 s
+2. the same with all 9 fixtures and every part (`--batch-grad --batch-scale --ragged --step-full`) -> 18 cells stable
+3. `python -m mojolearn verify --all --lanes transformer,transformer-bf16w` -> 3.2 s, and NOTE `transformer` itself was SKIPPED as "stale reference, not compared", so the suspected culprit lane never ran
+4. a 29-lane prefix of the verify order (rf/trees/gbdt/core/estimators/metrics/mamba/transformer) in one process -> no hang
+
+So the two-lane sequence is NOT sufficient. Whatever wedges the
+reference-regen run needs something in the 47-lane prefix I have not
+replicated. **Do not write "same bug" into anything until it reproduces.**
+
+### THE EXACT NEXT COMMAND
+
+A fifth attempt was RUNNING when this was written and its result is not in
+this file. The three `byte-lm` lanes ran immediately before mamba/transformer
+in the reference-regen log, byte-LM is where DEVIATION 2520 was originally
+found, and `training/byte_lm_model_pool.mojo:139` and
+`training/byte_lm_offload.mojo:172` are the two remaining undrained sites
+of this class. So the next prefix includes them:
+
+```sh
+ssh -o StrictHostKeyChecking=no -p 52583 root@213.181.111.2
+cd /root/ml-before
+export PATH=$HOME/.pixi/bin:$PATH PYTHONPATH=python \
+       MOJOLEARN_NUMERIC_MODE=identical PYTHONUNBUFFERED=1 \
+       MOJOLEARN_COMMIT=3e8dabc3776a8b22ccbc15c444b1dda4a27e6ca7
+L="rf-clf,rf-reg,et-clf,et-reg,gbdt-symmetric,gbdt-depthwise,gbdt-lossguide,gbdt-rmse,kmeans,knn,knn-clf,knn-reg,dbscan,pca,pca-whiten,tsvd,ols,ridge,logistic,kde,metrics,gbdt-ordered-rmse,gbdt-feature-freq,mlp,byte-lm,byte-lm-host-infer,byte-lm-host-train,mamba1,mamba2,mamba3,transformer,transformer-bf16w"
+timeout -k 20 900 pixi run python3 tools/identity_break.py --lanes "$L" \
+  --repeats 1 --vendor cuda-4090 --json /root/fd_out/before/before-prefix2.json \
+  > /root/prefix2_before.log 2>&1; echo "rc=$?"
+```
+
+`rc=124` with the log stopping inside `transformer-bf16w` is the repro. Then
+re-run the same command in `/root/ml-after` (which carries the drain) and
+read the difference. If it does NOT hang, the next thing to add is the
+families still missing from the prefix: `solver`, `svm`, `tsa`, `arima`,
+`gp`, `preprocessing` (their bindings are NOT built on that pod yet), or
+give up on the prefix and build all 24 bindings and run the real
+`verify --all`.
+
+### The class is much bigger than these fixes
+
+A tree-wide scan for a `DeviceContext` destroyed after buffer releases with
+no `synchronize()` between them returns **127 sites** outside `bench/`:
+`bindings/_mojolearn_mamba.mojo` (3), `_mojolearn_rf.mojo`,
+`_mojolearn_trees.mojo`, `_mojolearn_hdbscan.mojo`, `metrics/estimator.mojo`
+(19), `mixture/estimator.mojo`, `gaussian_process/*`, `svm/estimator.mojo`
+(5), `preprocessing/estimator.mojo` (4), `arima`, `tsa`, plus ~80 check
+drivers. The scan is CRUDE and both over- and under-counts: it would have
+MISSED the forest bug, because there the `synchronize()` was present but in
+the wrong place. THIS IS NOT A LANE I OPENED (Andrew: no new lanes). It is
+reported so the next person does not think DEVIATION 3010 closed the class.
+
+### Pods
+
+- `s14hskn0y3jorl`, RTX 4090 driver 580.159.04, $0.74/h, ssh
+  `-p 52583 root@213.181.111.2`. **STILL RUNNING and NOT covered by a
+  deadman.** `/root/ml-before` (origin/main) and `/root/ml-after` (this
+  branch) with 10 bindings each, `/root/fd_out` with every result. Reap it
+  with a DELETE to `https://rest.runpod.io/v1/pods/s14hskn0y3jorl` using
+  the key in `~/.mojolearn_runpod_key`; confirm DELETE 204 then GET 404.
+- `uywhryt7b9vtz4` (the kNN pod) and `dgh8ghg5fu7iro` (a first forest pod
+  whose driver was too old): both TERMINATED, DELETE 204 / GET 404.
+
+### The kNN pod: done, filed, merged
+
+Pod `uywhryt7b9vtz4` finished its own finish sequence at 07:30:25Z. Its
+tip's identity, sabotage and k race are in
+`docs/lanes/LANE_STATUS_knn-selector-speed.md` and
+`bench/results/knn_selector_finish_2026-09-18/`, raw under
+`~/mojolearn-evidence/knn-selector-speed/finish-2026-09-18/`. DEVIATIONs
+3060 and 3061 move no bit (IDENTICAL=75/150/75 against the base AND against
+the CPU column), both sabotage arms bite, the race is 0.38x to 0.95x with
+digests equal. Five of its six diffs had died with `FileNotFoundError` and
+printed an EMPTY summary that reads like a pass; they were re-run on the
+pod with the right filenames before it was reaped. **lane/knn-selector-speed
+is merged to main and pushed.** Nothing is owed there but the Apple and AMD
+columns at the next release record.
+
+### Evidence
+
+`~/mojolearn-evidence/forest-deadlock/pod1/` -- the whole `fd_out` tree,
+the driver scripts, the setup log, and the two `HANG_*` captures with the
+native stack. Summaries committed under
+`bench/results/forest_deadlock_2026-09-18/`.
