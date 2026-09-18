@@ -145,7 +145,7 @@ from gemm.checks.gemm_oracle import (
     fold_node_total,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
-from checks.rtf_seam import rtf_mul_add
+from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     PINNED_ACC_COLS_PER_TH,
@@ -1267,6 +1267,92 @@ def _tuned_step(a: Float32, b: Float32, acc: Float32) -> Float32:
     return rtf_mul_add(a, b, acc)
 
 
+#: lane/apple-seam-repair, 2026-09-18. The per-step repair inlined into the
+#: tuned kernel's 64-cell register tile made the Apple metallib 10x larger and
+#: the Apple GEMM sum ~2.4x slower (LANE_STATUS_apple-seam-repair.md). The
+#: tuned kernel therefore takes an EXACT block admission instead: while
+#: staging, each thread keeps the minimum biased exponent of the NONZERO
+#: operand words it loaded (A and B separately); the block reduces them once
+#: after the last window. If `minA + minB >= 151` (in exponent-field units),
+#: every product of two nonzero flushed operands this block can form has its
+#: lowest bit at or above 2^-149, every flushed accumulator is a multiple of
+#: 2^-149, so every exact step result is a multiple of 2^-149 and none lies in
+#: the window [2^-126 - 2^-150, 2^-126): the fast step's bits ARE rtf. Blocks
+#: that fail admission recompute each of their cells with the exact repaired
+#: step (`rtf_mul_add`) in the contract's order and fold. Price arm
+#: `-D MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR` keeps the per-step repair.
+comptime TUNED_BLOCK_ADMIT = (
+    RTF_REPAIR and not is_defined["MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR"]()
+)
+
+comptime _EXP_NONE = UInt32(0x7F800000)
+
+
+@always_inline
+def _tuned_step_admitted(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """The tuned kernel's step: without the inline repair when the block
+    admission is compiled in (it then proves or repairs the block)."""
+    comptime if TUNED_BLOCK_ADMIT:
+        return ftz(identical_mul_add(a, b, acc))
+    return _tuned_step(a, b, acc)
+
+
+@always_inline
+def _nz_exp_min[W: Int](v: SIMD[DType.float32, W], cur: UInt32) -> UInt32:
+    """Minimum exponent field over the words of `v` that flush to a NONZERO
+    value (exponent field nonzero); zeros and subnormals flush to zero and
+    constrain nothing. Inf/NaN read 0x7F800000, the no-constraint value."""
+    var e = bitcast[DType.uint32](v) & SIMD[DType.uint32, W](0x7F800000)
+    var z = e.eq(SIMD[DType.uint32, W](0))
+    var ez = z.select(SIMD[DType.uint32, W](0x7F800000), e)
+    return min(cur, ez.reduce_min())
+
+
+@always_inline
+def _admission_holds(emin_a: UInt32, emin_b: UInt32) -> Bool:
+    if emin_a == _EXP_NONE or emin_b == _EXP_NONE:
+        return True
+    return emin_a + emin_b >= UInt32(151 << 23)
+
+
+@always_inline
+def _rtf_leaf_partial(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    i: Int, j: Int, t: Int, p_count: Int, leaf: Int, k: Int,
+    a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
+) -> Float32:
+    """One logical leaf of cell (i, j), the exact rtf step, contract 7.1."""
+    var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
+    var acc = Float32(0.0)
+    for p in range(bounds[0], bounds[1]):
+        acc = rtf_mul_add(
+            ftz(a.unsafe_load(i * a_si + p * a_sp)),
+            ftz(b.unsafe_load(p * b_sp + j * b_sj)),
+            acc,
+        )
+    return ftz(acc)
+
+
+@always_inline
+def _rtf_cell(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    i: Int, j: Int, p_count: Int, leaf: Int, k: Int,
+    a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
+) -> Float32:
+    """Cell (i, j) exactly as `identical_gemm_flat_kernel` computes it (every
+    leaf, then the contract's fold tree), with the exact rtf step."""
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for t in range(p_count):
+        var part = _rtf_leaf_partial(
+            a, b, i, j, t, p_count, leaf, k, a_si, a_sp, b_sp, b_sj
+        )
+        _ = _fold_push(stack, occ, part)
+    return ftz(_fold_drain(stack, occ))
+
+
 
 # ===========================================================================
 # THE SCHEDULING CONSTANTS, ALL FROM `checks/kernel_matrix.mojo`
@@ -1782,6 +1868,8 @@ def identical_gemm_tuned_kernel[
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
     var occ = 0
     var serial = SIMD[DType.float32, NCELL](0.0)
+    var emin_a = _EXP_NONE
+    var emin_b = _EXP_NONE
 
     if p_count <= 0:
         # `k == 0`, contract section 8: every cell is `+0.0`, and the
@@ -1820,6 +1908,11 @@ def identical_gemm_tuned_kernel[
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
         var chunk = win[1]
         var pgw = w % PAGES
+        comptime if TUNED_BLOCK_ADMIT:
+            # The window's operand words, exactly once each (see
+            # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
+            emin_a = _nz_exp_min(pa, emin_a)
+            emin_b = _nz_exp_min(pb, emin_b)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES`.
         # The slot -> (row, column) expression is `_tuned_g2r`'s, in both
@@ -1918,7 +2011,7 @@ def identical_gemm_tuned_kernel[
                             # 4 (one fused rounding) and 5c (the accumulator
                             # flushed after EVERY step). 5c is per cell per
                             # step and is NOT hoisted, because it cannot be.
-                            acc[u2 * CPT + v3] = _tuned_step(
+                            acc[u2 * CPT + v3] = _tuned_step_admitted(
                                 afl, bfl[v3], acc[u2 * CPT + v3]
                             )
         else:
@@ -1936,7 +2029,7 @@ def identical_gemm_tuned_kernel[
                         as_.unsafe_load(abase + u3 * TR * SSTRIDE + cc)
                     )
                     comptime for v5 in range(NCOL):
-                        acc[u3 * CPT + v5] = _tuned_step(
+                        acc[u3 * CPT + v5] = _tuned_step_admitted(
                             afl2, bfl2[v5], acc[u3 * CPT + v5]
                         )
 
@@ -2001,6 +2094,56 @@ def identical_gemm_tuned_kernel[
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+
+    comptime if TUNED_BLOCK_ADMIT:
+        comptime assert (NTH & (NTH - 1)) == 0, "block admission: NTH power of two"
+        # Every thread is here (the early returns above are block-uniform).
+        # The shared pages are free once every thread has left the last
+        # window's compute.
+        barrier()
+        as_.unsafe_store(tid, bitcast[DType.float32](emin_a))
+        bs_.unsafe_store(tid, bitcast[DType.float32](emin_b))
+        barrier()
+        var half = NTH // 2
+        while half > 0:
+            if tid < half:
+                var xa = bitcast[DType.uint32](as_.unsafe_load(tid))
+                var ya = bitcast[DType.uint32](as_.unsafe_load(tid + half))
+                as_.unsafe_store(tid, bitcast[DType.float32](min(xa, ya)))
+                var xb = bitcast[DType.uint32](bs_.unsafe_load(tid))
+                var yb = bitcast[DType.uint32](bs_.unsafe_load(tid + half))
+                bs_.unsafe_store(tid, bitcast[DType.float32](min(xb, yb)))
+            barrier()
+            half = half // 2
+        var admitted = _admission_holds(
+            bitcast[DType.uint32](as_.unsafe_load(0)),
+            bitcast[DType.uint32](bs_.unsafe_load(0)),
+        )
+        comptime if is_defined["MOJOLEARN_GEMM_ADMIT_NEVER"]():
+            admitted = False  # test arm: every block takes the exact path
+        if not admitted:
+            comptime for ur in range(NR):
+                comptime for vr in range(NCOL):
+                    var ri = i0 + accrow + ur * TR
+                    var rj = j0 + acccol + vr * TC
+                    if ri < m and rj < n:
+                        comptime if SPLIT:
+                            c.unsafe_store(
+                                t_pos * (m * n) + ri * n + rj,
+                                _rtf_leaf_partial(
+                                    a, b, ri, rj, t_pos, p_count, leaf, k,
+                                    a_si, a_sp, b_sp, b_sj,
+                                ),
+                            )
+                        else:
+                            c.unsafe_store(
+                                ri * n + rj,
+                                _rtf_cell(
+                                    a, b, ri, rj, p_count, leaf, k,
+                                    a_si, a_sp, b_sp, b_sj,
+                                ),
+                            )
+            return
 
     comptime if SPLIT:
         # Every partial is in the workspace; the fold is the next launch.
