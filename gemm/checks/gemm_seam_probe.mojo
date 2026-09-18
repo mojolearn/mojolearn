@@ -18,11 +18,14 @@ whose seam IS the native instruction costs ONE instruction per step on
 every column and closes the Apple gap. This probe measures each column's
 native FMA; it changes no shipped line.
 
-WHAT IT PRINTS, per triple set, four lanes:
+WHAT IT PRINTS, per triple set, five lanes:
   shipped   `_tuned_step(ftz(a), ftz(b), ftz(acc))`, the column's shipped seam
   fma       `identical_mul_add(...)`, the column's native FMA, NO flush after
   hwftz     NVIDIA: `llvm.nvvm.fma.rn.ftz.f`; other columns: the `fma` lane again
   swrtf     `ftz(identical_mul_add(...))`, the software round-then-flush spelling
+  class     post-round AMD class flush; software spelling on other columns
+The closed wave-mode experiment is not launched. `class_shipped` reports
+whether this build enables the class spelling in the production seam.
 and for each lane an FNV-1a 64-bit hash over the 262,144 result words in
 triple order, plus pairwise mismatch counts and the first differing triples
 as hex. `tools/gemm_seam_probe_reference.py` recomputes the three candidate
@@ -40,13 +43,14 @@ line on the NVIDIA column.
 from std.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_name
-from gemm.checks.gemm_identical import _tuned_step, TUNED_HW_FTZ_FMA
+from gemm.checks.gemm_identical import _tuned_step, _ftz_class, TUNED_HW_FTZ_FMA, TUNED_CLASS_FLUSH
 from transformer.impl.llama.modeling_llama import _upload, _download, _zeros
 
-comptime LANES = 4
+comptime LANES = 5
 
 #: DEVIATION 2701, extended 2026-09-17 (lane `lane/gemm-next`, brief section
 #: 14.5 point 2 and section 20). A FIFTH lane, in its own kernel and its own
@@ -115,6 +119,11 @@ def seam_kernel(
     results.unsafe_store(LANES * i + 1, identical_mul_add(a, b, acc))
     results.unsafe_store(LANES * i + 2, _native_ftz_fma(a, b, acc))
     results.unsafe_store(LANES * i + 3, ftz(identical_mul_add(a, b, acc)))
+    var class_value = _ftz_class(identical_mul_add(a, b, acc))
+    comptime if is_defined["MOJOLEARN_CLASS_PROBE_SABOTAGE"]():
+        if i == 400:
+            class_value = bitcast[DType.float32](bitcast[DType.uint32](class_value) ^ UInt32(1))
+    results.unsafe_store(LANES * i + 4, class_value)
 
 
 def _hex(w: UInt32) -> String:
@@ -163,7 +172,8 @@ def main() raises:
         values.append(bitcast[DType.float32](words[i]))
         wline += " " + _hex(words[i])
     print("SEAM_PROBE column=" + column_name(TARGET_COLUMN) + " hwftz=" + String(TUNED_HW_FTZ_FMA)
-          + " lanes=shipped,fma,hwftz,swrtf")
+          + " class_shipped=" + String(TUNED_CLASS_FLUSH)
+          + " lanes=shipped,fma,hwftz,swrtf,class")
     print(wline)
     var ctx = DeviceContext()
     var inputs = _upload(ctx, values)
@@ -177,26 +187,11 @@ def main() raises:
     ctx.synchronize()
     var actual = _download(ctx, result, LANES * n)
     print("SEAM_N " + String(n))
-    var names: List[String] = ["shipped", "fma", "hwftz", "swrtf"]
+    var names: List[String] = ["shipped", "fma", "hwftz", "swrtf", "class"]
     for lane in range(LANES):
         print("SEAM_HASH lane=" + names[lane] + " fnv1a64=" + _hex64(_fnv1a(actual, n, lane)))
 
-    # THE FIFTH LANE, its own kernel and its own buffer, launched after the
-    # four above are already downloaded so no mode change can reach them.
-    var mode_result = _zeros(ctx, n)
-    ctx.enqueue_function[mode_seam_kernel](
-        mode_result.unsafe_ptr(), inputs.unsafe_ptr(), Int32(count),
-        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
-    )
-    ctx.synchronize()
-    var mode_actual = _download(ctx, mode_result, n)
-    var mode_name = "modeftz" if MODE_LANE else "modeftz_NOT_SET_ON_THIS_COLUMN"
-    print("SEAM_HASH lane=" + mode_name + " fnv1a64=" + _hex64(_fnv1a(mode_actual, n, 0, 1)))
-    print(
-        "SEAM_MODE column=" + column_name(TARGET_COLUMN) + " mode_set=" + String(MODE_LANE)
-        + " boundary=" + _hex(bitcast[DType.uint32](mode_actual[16 + count * 6]))
-        + " (the contract reads 00800000 here; 00000000 is flush-before-round)"
-    )
+    # The closed wave-mode experiment is deliberately not launched here.
     # The literal boundary triple: a=0x3f7fffff (index 16), b=0x00800000 (6), acc=+0 (0).
     var boundary = 16 + count * 6
     var bl = String("SEAM_BOUNDARY a=3f7fffff b=00800000 acc=00000000")
@@ -204,8 +199,8 @@ def main() raises:
         bl += " " + names[lane] + "=" + _hex(bitcast[DType.uint32](actual[LANES * boundary + lane]))
     print(bl)
     # Pairwise mismatches, the first 24 of each as hex triples.
-    var pairs_a: List[Int] = [0, 1, 0, 1]
-    var pairs_b: List[Int] = [3, 2, 1, 3]
+    var pairs_a: List[Int] = [0, 1, 0, 1, 0]
+    var pairs_b: List[Int] = [3, 2, 1, 3, 4]
     for p in range(len(pairs_a)):
         var la = pairs_a[p]
         var lb = pairs_b[p]

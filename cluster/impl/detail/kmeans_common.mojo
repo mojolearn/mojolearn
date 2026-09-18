@@ -23,7 +23,6 @@ The reference decisions this file matches exactly:
 """
 
 from cluster.impl.kmeans_params import (
-    METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
 )
@@ -43,6 +42,17 @@ def is_fused(metric: Int) -> Bool:
     It has one visible consequence their own code calls out: on the fused arm
     `dataBatchSize` is forced to `n_samples` (`:380`), so `batch_samples` is
     inert for the metrics k-means actually uses.
+
+    THIS FUNCTION HAS NO PRODUCTION CALLER (noted 2026-09-18,
+    lane/kmeans-cosine-capability). `min_cluster_and_distance_compute` takes
+    the fused arm unconditionally, without consulting it, and the only callers
+    of the unfused driver are the differential checks in
+    `cluster/checks/kmeans_check.mojo`. That is not currently a defect,
+    because the two metrics the tree admits are exactly the two this predicate
+    returns true for, so an unconsulted selector and a consulted one would
+    dispatch identically. It becomes the first thing to wire if a third metric
+    is ever admitted, and it is INERT until then. Reported as inert rather
+    than as coverage.
     """
     return metric == METRIC_L2_EXPANDED or metric == METRIC_L2_SQRT_EXPANDED
 
@@ -142,9 +152,31 @@ def centroid_norms_take_sqrt(metric: Int) -> Bool:
     """The centroid `rowNorm` at `kmeans_common.cuh:385-389`.
 
     Theirs takes no square root there (`rowNorm<L2Norm, true>`, where the
-    `true` is row-major, not sqrt), which is right for the L2 branches. Cosine
-    is ours: it needs `sqrt` of the centroid norms because its branch DIVIDES
-    by `||x|| ||y||`; the L2 branches subtract `2 x.c` from squared norms and
-    must not.
+    `true` is row-major, not sqrt), which is right for both surviving branches.
+
+    DO NOT SIMPLIFY THIS AWAY, AND DO NOT INVERT IT. It returns False for
+    every metric this tree admits, and that is the ANSWER, not an accident
+    waiting to be folded into the call sites. It is kept as a named function
+    with the measurement attached because the flag it feeds is exactly where
+    a measured defect already lived once.
+
+    DEVIATION 2716 (`cluster/estimator.mojo`). The flag used to follow
+    `metric_is_sqrt`, so under L2SqrtExpanded the final assignment computed
+    `||x|| + ||c||^2 - 2 x.c`: the row constant was wrong, the value went
+    negative wherever `||x||^2` exceeded `||x||`, the clamp made it 0, and the
+    tie went to the lowest key. Measured on the M4 at 1eea14f80: 9,675 of
+    20,000 `labels_` on the `wide` fixture and 4 on `base` were not the argmin
+    to the returned centers, ON EVERY COLUMN ALIKE, so the record read
+    IDENTICAL on a wrong answer. Bitwise identity cannot catch this; only an
+    argmin check can.
+
+    The rooted arm existed for a cosine metric, which DIVIDES by `||x|| ||y||`.
+    That metric was deleted on 2026-09-18 (lane/kmeans-cosine-capability)
+    because cuVS refuses it too (`kmeans_common.cuh:320`, `RAFT_FAIL`) and
+    because the arithmetic mean does not minimize cosine distance, so the fit
+    did not descend. With it gone, both remaining metrics want SQUARED norms:
+    cuVS takes `raft::linalg::norm<L2Norm>` (squared) for L2Expanded AND
+    L2SqrtExpanded (`detail/kmeans.cuh:141-144`, `:1082-1085`). The root
+    belongs to the reduction's OUTPUT alone, which is `metric_is_sqrt`.
     """
-    return metric == METRIC_COSINE_EXPANDED
+    return False

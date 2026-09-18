@@ -289,6 +289,16 @@ def min_cluster_and_distance_compute_unfused(
 
     Their selector picks between these; keeping both means a disagreement
     between them is findable, which is worth more than the file it costs.
+
+    CALLER CONTRACT, and it is not decorative: `dist_buf` must hold
+    `get_data_batch_size(batch_samples, n_samples) *
+    get_centroids_batch_size(batch_centroids, n_clusters)` floats for the
+    `n_clusters` OF THIS CALL, not for the fit's `params.n_clusters`. cuVS
+    resizes the buffer inside the function for exactly this reason
+    (`L2NormBuf_OR_DistBuf.resize(dataBatchSize * centroidsBatchSize, stream)`,
+    `kmeans_common.cuh:394`), because k-means|| grows its candidate set well
+    past `n_clusters`. Every caller today is `cluster/checks/kmeans_check.mojo`,
+    which sizes `n * k` and passes its own `k`.
     """
     var data_batch = get_data_batch_size(batch_samples, n_samples)
     var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
@@ -324,7 +334,6 @@ def min_cluster_and_distance_compute_unfused(
                 x_norm.unsafe_ptr().unsafe_offset(d_idx),
                 centroid_norm.unsafe_ptr().unsafe_offset(c_idx),
                 Int32(nc),
-                Int32(metric),
                 is_sqrt,
                 Int32(1 if c_idx == 0 else 0),
                 Int32(c_idx),

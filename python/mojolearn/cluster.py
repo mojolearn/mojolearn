@@ -20,7 +20,6 @@ INIT_ARRAY = 2
 
 METRIC_L2_EXPANDED = 0
 METRIC_L2_SQRT_EXPANDED = 1
-METRIC_COSINE_EXPANDED = 2
 
 _INIT_NAMES = {
     "k-means++": INIT_KMEANS_PLUS_PLUS,
@@ -39,17 +38,21 @@ _INIT_SAVED = {
 #: cuVS's `DistanceType` members the kernel knows, by cuVS's own names
 #: (lowercased) and by the scikit-learn spellings a caller expects.
 #: `L2Expanded` is squared Euclidean, cuVS's default and the only metric
-#: every recorded cell was measured at. `CosineExpanded` is REFUSED BY NAME
-#: on the Mojo host (`cluster/impl/kmeans_params.mojo::validate`, ours, not
-#: cuVS's) because only the fused L2 arm is implemented there; the name is
-#: routed so the refusal is reachable and the claim is honest, not so a
-#: cosine fit runs.
+#: every recorded cell was measured at.
+#:
+#: `CosineExpanded` WAS routed here and refused by name on the Mojo host. It
+#: was deleted on 2026-09-18 (lane/kmeans-cosine-capability) rather than
+#: implemented, for two measured reasons: cuVS refuses it too (their
+#: `pairwise_distance_kmeans` ends in `RAFT_FAIL`, `kmeans_common.cuh:320`,
+#: so the refusal was never a gap against the reference), and the arithmetic
+#: mean does not minimize cosine distance, so a cosine fit built on this
+#: update step does not descend its own objective. A name absent from this
+#: table is still refused BY NAME by `_metric_code` below, which is the
+#: property the routing existed to provide.
 _METRIC_NAMES = {
     "euclidean": METRIC_L2_EXPANDED,
     "l2_expanded": METRIC_L2_EXPANDED,
     "l2_sqrt_expanded": METRIC_L2_SQRT_EXPANDED,
-    "cosine": METRIC_COSINE_EXPANDED,
-    "cosine_expanded": METRIC_COSINE_EXPANDED,
 }
 
 #: metric code -> the name `save` writes for it. `euclidean` and
@@ -58,7 +61,6 @@ _METRIC_NAMES = {
 _METRIC_SAVED = {
     METRIC_L2_EXPANDED: "euclidean",
     METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
-    METRIC_COSINE_EXPANDED: "cosine",
 }
 
 
@@ -92,18 +94,17 @@ class KMeans(NumericModeMixin):
     tol : float, default 1e-4
     random_state : int, default 0
         cuVS's `seed`.
-    metric : {'euclidean', 'l2_expanded', 'l2_sqrt_expanded', 'cosine',
-              'cosine_expanded'}, default 'euclidean'
+    metric : {'euclidean', 'l2_expanded', 'l2_sqrt_expanded'}, default
+             'euclidean'
         cuVS's `DistanceType`. 'euclidean' and 'l2_expanded' are
         `L2Expanded` (squared distances in `inertia_`, the default every
         recorded cell was measured at); 'l2_sqrt_expanded' takes the root
         of each reduced distance (`metric_is_sqrt`, so a different
         `inertia_`; each label is still the nearest center, and `sum_scale_`, which
-        depends on `X` alone, is the same). 'cosine' and 'cosine_expanded' are routed and
-        REFUSED BY NAME on the Mojo host (`kmeans_params.mojo::validate`):
-        the kernel has code for the cosine norm rule and no fused
-        assignment arm for it, so the refusal is ours, not cuVS's. Routed
-        2026-09-14 (workstream D).
+        depends on `X` alone, is the same). Any other value is refused by
+        name. 'cosine' was routed and refused here until 2026-09-18 and is
+        now simply not a metric this estimator has; cuVS refuses it too
+        (`kmeans_common.cuh:320`).
     oversampling_factor : float, default 2.0
         cuVS's, and an ALGORITHM SWITCH rather than a knob: `0.0` selects
         the classic sequential k-means++ seeding, anything positive the
@@ -307,9 +308,9 @@ class KMeans(NumericModeMixin):
         assignment (`cluster/estimator.mojo::kmeans_predict`, host
         `kmeans_oracle.mojo::host_kmeans_predict`), so `predict` on the
         training rows returns `labels_` bit for bit, and a tie goes to the
-        lowest center index. A cosine metric is refused by name here as it
-        is at fit. CPU `predict` is public inference and is served by the
-        core host binding on a CPU-only install.
+        lowest center index. An unsupported metric is refused by name here
+        as it is at fit. CPU `predict` is public inference and is served by
+        the core host binding on a CPU-only install.
         """
         x, c, metric_code = self._inference_inputs(X)
         n, d = x.shape
@@ -340,7 +341,7 @@ class KMeans(NumericModeMixin):
         (`cluster/impl/detail/kmeans_transform.mojo`, host
         `kmeans_oracle.mojo::host_kmeans_transform`), so
         `transform(X)[i, predict(X)[i]]` is the minimum of row `i` bit for
-        bit. A cosine metric is refused by name, as it is at fit. CPU
+        bit. An unsupported metric is refused by name, as it is at fit. CPU
         `transform` is public inference, served by the core host binding on
         a CPU-only install.
         """

@@ -45,10 +45,30 @@ which is a different sentence and `ivf/NOT_IMPLEMENTED.tsv` says which is which.
 from std.memory import bitcast
 
 from cluster.impl.kmeans_params import (
-    METRIC_COSINE_EXPANDED,
     METRIC_L2_EXPANDED,
     METRIC_L2_SQRT_EXPANDED,
 )
+
+
+comptime METRIC_COSINE_EXPANDED = 2
+"""`cuvs::distance::DistanceType::CosineExpanded`, IVF's OWN copy of the code.
+
+IT USED TO BE IMPORTED FROM `cluster/impl/kmeans_params.mojo`, which deleted
+it on 2026-09-18 (lane/kmeans-cosine-capability). IVF DOES NOT FOLLOW, and the
+difference is real rather than bookkeeping:
+
+  * k-means's cosine was deleted because cuVS refuses cosine k-means too
+    (`pairwise_distance_kmeans` ends in `RAFT_FAIL`, `kmeans_common.cuh:320`),
+    so there was no reference arm and nothing to be a gap against.
+  * IVF's cosine is a GENUINE unimplemented arm of a reference that HAS one:
+    `search_impl`'s switch (`ivf_flat_search.cuh:109-146`) gives CosineExpanded
+    its own arm. Refusing it BY NAME is therefore an honest statement about
+    this tree, and the code has to exist for the refusal to name it.
+
+So this constant is reachable here and only here, through `ivf_metric_name`,
+`ivf_metric_from_name` and `ivf_index_params_validate` below. Deleting it
+would turn a named refusal into a silently accepted metric.
+"""
 
 
 comptime IVF_GROUP_SIZE = 32
