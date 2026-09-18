@@ -1,6 +1,6 @@
 # LANE STATUS: bpe-builder-native (lane/bpe-builder-native)
 
-**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes DONE; full-size job DONE (ranks 3d547b17 reproduced by the new CLI and the door). Merging to main.**
+**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes DONE; full-size job DONE (ranks 3d547b17 reproduced by the new CLI and the door). MERGED to main (1cc13335d). No pods live (API listing []).**
 
 Worktree `~/mojolearn-wt/bpe-builder-native`, branch `lane/bpe-builder-native`, cut from
 origin/main 0e4715f7c. Evidence goes under `~/mojolearn-evidence/bpe-builder-native-sep18/`,
