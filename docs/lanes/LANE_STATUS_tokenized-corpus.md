@@ -170,3 +170,16 @@ of base (85 s) and byte_lm (206 s) OK; the tokenizer host refused `MOJOLEARN_TAR
 (it is a CPU-column binding) and train_main then lacked the generated Unicode table, so no
 vocabulary and nothing after ran (extra_exit=4). Fixed in the body (CPU column for the tokenizer
 build, explicit gen_unicode_table.sh). Relaunched.
+
+VOCAB JOB OUTCOME (pid 95203, finished 10:38 local): `real 4274.27 s` (71.2 min), user 4083 s,
+M4 one core nice 19. 50,256 tokens (50,000 merges) from 220,165 pre-token groups, 47,825 ties
+broken, despite the 20 GB dense count table (it compressed). Files in
+`~/mojolearn-evidence/tokenized-corpus-sep18/vocab/`:
+`mojolearn-bpe-50257-v1.ranks.tsv` sha256 3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d
+(967,306 bytes, 50,256 lines), `.tokenizer.json` sha256
+7ae8b893219619cf73e64b262367cc6e6d2f9f1aa9c1a32b8fb7e3cb84d972e9. Not in the repo (derived from
+third-party text).
+
+GPU leg 2 (2026-09-18_140910, pod vn4vonca6du36q): the box went network-unreachable a few
+minutes into the payload ("neutral hosts DO answer ... the BOX is the silent end"); nothing came
+home. Infra failure, not a result. Lease self-kill at 60 min; 404 to be verified.
