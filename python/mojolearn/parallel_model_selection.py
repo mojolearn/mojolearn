@@ -60,7 +60,10 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
                 requests.append(('cross_val_fold', _clone(prototype),
                                  (_take_rows(X, train), _take_rows(y, train),
                                   _take_rows(X, test), _take_rows(y, test), scoring)))
-            scores.extend(pool.map(requests))
+            results = pool.map(requests)
+            if len(results) != len(requests):
+                raise ValueError("cross-validation workers returned an incomplete fold batch")
+            scores.extend(results)
     finally:
         pool.close()
     return Array.from_list(scores, '<f8')

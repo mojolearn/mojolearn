@@ -119,3 +119,44 @@ $2.18/h secure list); root approved L40S under a total ~$8 cap. Dry run at
 3805c5840 was GREEN. Evidence/logs are in
 `/Users/andrewhendel/mojolearn-evidence/classical-distributed/nvidia-two-gpu-*`.
 Actual rental/capture/deletion outcome will be appended after the guarded leg.
+
+## NVIDIA leg interrupted before numerical capture
+
+Pod `tf8js1s1lk0lp9`, two L40S, was created at 18:02:00Z on September18.
+Actual provider price was $2.18/hour. Distinct GPU UUIDs and driver580.126.09
+were observed. The on-pod55-minute lease was armed at18:02:51Z with deadline
+18:57:51Z; the pre-create local deadman was also live. Generic controller gates
+passed and the base binding built in53s. GBDT was still compiling at the last
+successful observation; no CV or classical numerical capture was retrieved.
+
+SSH then closed/refused, and provider GET returned HTTP404 at18:12:16Z before
+this lane requested termination. The local controller still had45minutes left
+on its lease. It was stopped after confirming404, verified DELETE/GET404 in
+teardown, and cancelled its deadman. No owned pod remains. Cause of the early
+provider disappearance is not established. A different NVIDIA A100 controller
+was concurrently active from shared checkout `lane/lm-attention-fallback`, PID
+44327, writing `runpod.log`; its pod `t1651ftuj2mlgd` was created at18:11:05Z.
+It was neither modified nor terminated by this lane. Shared-prefix/ownership
+coordination is required before another rental; root is coordinating it.
+
+NsightSystems installation was attempted once under a120s cap and timed out;
+no kernel-trace qualification is claimed. Supplemental capsule revisions
+b369aca91 and0a7779f40 were committed and uploaded before the extra body began,
+with old/newSHA256 and commit receipts. Numerical source remained a305218e9.
+The revised capsule includes the six kernel reference/replay group and the
+preprocessing dependency for normalized GP routes. Remote artifacts disappeared
+with the pod before final fetch; local lifecycle/API404 receipts are retained in
+`/Users/andrewhendel/mojolearn-evidence/classical-distributed/nvidia-two-gpu-leg`.
+
+## Resilience and CV transport follow-up
+
+CV now rejects missing or excess fold responses before returning scores and
+closes its pool on that error. New `tools/parallel_capture_fetch.py` is a read-only
+sidecar for the next guarded leg: it snapshots only capture data plus leg/device
+metadata every20seconds, requires the expected full source commit in every
+accepted archive, bounds individual fetches, and preserves completed snapshots
+through connection loss. It provisions/deletes nothing and changes no lease.
+Start it after SSH/arming and stop it when the owner finishes.76 focused tests
+pass, including failure cleanup, incorrect source, unsafe archive member,
+connection failure and interrupted fetch cases. No incomplete hardware result
+has been promoted to qualification.

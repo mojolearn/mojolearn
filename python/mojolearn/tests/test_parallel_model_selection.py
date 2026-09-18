@@ -214,3 +214,19 @@ def test_physical_alias_refused_before_fits_and_pool_closed(setup, monkeypatch):
     with pytest.raises(RuntimeError, match='repeated physical device'):
         parallel.cross_val_score(Estimator(), X, y, devices=(0, 1))
     assert pools[-1].closed and not pools[-1].widths
+
+
+@pytest.mark.parametrize('extra', [False, True])
+def test_incomplete_or_excess_fold_batch_closes_pool(setup, monkeypatch, extra):
+    X, y, instances = setup
+    original = parallel.DevicePool
+    class CorruptPool(original):
+        def map(self, requests):
+            result = super().map(requests)
+            if requests[0][0] == 'cross_val_fold':
+                return result + [1.0] if extra else result[:-1]
+            return result
+    monkeypatch.setattr(parallel, 'DevicePool', CorruptPool)
+    with pytest.raises(ValueError, match='incomplete fold batch'):
+        parallel.cross_val_score(Estimator(), X, y, devices=(0, 1), cv=5)
+    assert instances[-1].closed
