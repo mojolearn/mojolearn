@@ -42,7 +42,15 @@ def pinned_gemm_nt_kernel(
     n_in: Int32,
     k_in: Int32,
 ):
-    """`z[m x n] = x[m x k] ."""
+    """`z[m x n] = x[m x k] .
+
+    ML-Sys Note (2026-09-18): 
+    Attempts to vectorize this kernel using `SIMD[DType.float32, 4]` loads and
+    FMAs resulted in a 15+ minute compiler hang on the NVPTX backend (NVIDIA A100/A6000). 
+    Because GPUs lack native 128-bit SIMD ALUs akin to CPU AVX, the LLVM backend 
+    attempts pathological register unrolling to emulate the vectors, breaking the build.
+    Bitwise determinism must be achieved via strictly scalar exact-order accumulation.
+    """
     var m = Int(m_in)
     var n = Int(n_in)
     var k = Int(k_in)
@@ -52,28 +60,7 @@ def pinned_gemm_nt_kernel(
     var i = cell // n
     var j = cell % n
     var acc = Float32(0.0)
-    
-    from checks.numerics import identical_mul_add_simd, ftz_simd
-    
-    var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
-    var p = 0
-    while p <= k - GEMM_VECLEN:
-        var xv = x.load[width=GEMM_VECLEN](i * k + p)
-        var yv = y.load[width=GEMM_VECLEN](j * k + p)
-        acc_v = ftz_simd[GEMM_VECLEN](
-            identical_mul_add_simd[GEMM_VECLEN](
-                ftz_simd[GEMM_VECLEN](xv),
-                ftz_simd[GEMM_VECLEN](yv),
-                acc_v,
-            )
-        )
-        p += GEMM_VECLEN
-
-    # Strict horizontal reduction across the vector to maintain deterministic order
-    for v_idx in range(GEMM_VECLEN):
-        acc = ftz(acc + ftz(acc_v[v_idx]))
-        
-    while p < k:
+    for p in range(k):
         acc = ftz(
             identical_mul_add(
                 ftz(x.unsafe_load(i * k + p)),
@@ -81,7 +68,6 @@ def pinned_gemm_nt_kernel(
                 acc,
             )
         )
-        p += 1
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
@@ -101,34 +87,12 @@ def pinned_gemv_n_kernel(
     if i >= m:
         return
     var acc = Float32(0.0)
-
-    from checks.numerics import identical_mul_add_simd, ftz_simd
-    
-    var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
-    var p = 0
-    while p <= k - GEMM_VECLEN:
-        var xv = x.load[width=GEMM_VECLEN](i * k + p)
-        var yv = y.load[width=GEMM_VECLEN](p)
-        acc_v = ftz_simd[GEMM_VECLEN](
-            identical_mul_add_simd[GEMM_VECLEN](
-                ftz_simd[GEMM_VECLEN](xv),
-                ftz_simd[GEMM_VECLEN](yv),
-                acc_v,
-            )
-        )
-        p += GEMM_VECLEN
-
-    # Strict horizontal reduction across the vector to maintain deterministic order
-    for v_idx in range(GEMM_VECLEN):
-        acc = ftz(acc + ftz(acc_v[v_idx]))
-        
-    while p < k:
+    for p in range(k):
         acc = ftz(
             identical_mul_add(
                 ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
             )
         )
-        p += 1
     z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 

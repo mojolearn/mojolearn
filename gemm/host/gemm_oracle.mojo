@@ -318,22 +318,22 @@ def oracle_leaf_partial(
     p_end)`, seeded `+0.0`, one `identical_mul_add` per step, every seam
     flushed.
 
-    This loop's mathematical reduction order is character for character what
-    `core/gemm.mojo::pinned_gemm_nt_kernel`'s SIMD loop computes. Contract
-    sections 4 (multiply-add), 5 (flush) and 7 (ordering).
+    This loop is character for character `core/gemm.mojo::
+    pinned_gemm_nt_kernel`'s, on purpose: a second spelling of the same
+    arithmetic is a second thing that can be wrong. Contract sections 4
+    (multiply-add), 5 (flush) and 7 (ordering).
 
     The `+0.0` seed is contract section 9's first half. It is what makes a
     leaf of all-zero products return `+0.0` and never `-0.0`, at every leaf
     length, on every vendor: `fma(x, +-0, +0.0)` is `+-0.0 + (+0.0)`, and a
     sum of two zeros of opposite sign is `+0` in round-to-nearest.
     """
-    var acc_v = SIMD[DType.float32, 4](0.0)
+    var acc = Float32(0.0)
     comptime if GEMM_ORACLE_SABOTAGE_ORDER_ARM:
         # THE OLD ORDER ARM, compiled only as a witness: the same leaf walked
         # DESCENDING. Inert wherever the leaf adds exactly, `ties` included,
         # which is the whole reason it is no longer the arm. See
         # GEMM_ORACLE_SABOTAGE_LEGACY_ORDER.
-        var acc = Float32(0.0)
         for q in range(p_end - p_begin):
             var p = p_end - 1 - q
             acc = ftz(
@@ -343,27 +343,8 @@ def oracle_leaf_partial(
                     acc,
                 )
             )
-        comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
-            return gemm_oracle_sabotage_value_flip(ftz(acc))
-        return ftz(acc)
     else:
-        var p = p_begin
-        while p <= p_end - 4:
-            for v_idx in range(4):
-                acc_v[v_idx] = ftz(
-                    identical_mul_add(
-                        ftz(_a_at(a, op, i, p + v_idx, m, k)),
-                        ftz(_b_at(b, op, p + v_idx, j, n, k)),
-                        acc_v[v_idx],
-                    )
-                )
-            p += 4
-
-        var acc = Float32(0.0)
-        for v_idx in range(4):
-            acc = ftz(acc + ftz(acc_v[v_idx]))
-            
-        while p < p_end:
+        for p in range(p_begin, p_end):
             acc = ftz(
                 identical_mul_add(
                     ftz(_a_at(a, op, i, p, m, k)),
@@ -371,19 +352,17 @@ def oracle_leaf_partial(
                     acc,
                 )
             )
-            p += 1
-
-        # The seam a real split-K kernel writes the partial through. Bitwise a
-        # no-op given the flush inside the loop; here because the contract names
-        # it as a seam and a reader should not have to derive that it is
-        # redundant.
-        comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
-            # THE SABOTAGE ARM: this leaf's own arithmetic, then a value whose
-            # bits differ from it on EVERY fixture, exact ones included. The flip
-            # is applied after the seam so no `ftz` can fold it back. See
-            # GEMM_ORACLE_HOST_SABOTAGE.
-            return gemm_oracle_sabotage_value_flip(ftz(acc))
-        return ftz(acc)
+    # The seam a real split-K kernel writes the partial through. Bitwise a
+    # no-op given the flush inside the loop; here because the contract names
+    # it as a seam and a reader should not have to derive that it is
+    # redundant.
+    comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
+        # THE SABOTAGE ARM: this leaf's own arithmetic, then a value whose
+        # bits differ from it on EVERY fixture, exact ones included. The flip
+        # is applied after the seam so no `ftz` can fold it back. See
+        # GEMM_ORACLE_HOST_SABOTAGE.
+        return gemm_oracle_sabotage_value_flip(ftz(acc))
+    return ftz(acc)
 
 
 
