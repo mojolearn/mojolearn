@@ -1,0 +1,73 @@
+{
+  "status": "SCOPED_REFERENCE_ADMITTED_NOT_DEFAULT_PROMOTED",
+  "lanes": [
+    "kernel-ridge-poly",
+    "kernel-ridge-sigmoid",
+    "kernel-ridge-laplacian",
+    "nystroem-poly",
+    "nystroem-sigmoid",
+    "nystroem-laplacian"
+  ],
+  "classes": [
+    "cpu",
+    "apple",
+    "amd"
+  ],
+  "cells_changed": 54,
+  "numeric_parts": 216,
+  "parts": {
+    "batch": 54,
+    "batchgrad": 54,
+    "batchscale": 54,
+    "infer": 54,
+    "model": 54,
+    "ragged": 54,
+    "stepfull": 54,
+    "train": 54
+  },
+  "unchanged_other_cells": 2070,
+  "missing": [
+    "NVIDIA property/model recordings",
+    "installed CPU verifier replay"
+  ],
+  "log": [
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-laplacian.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-poly.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-sigmoid.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-laplacian.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-poly.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-sigmoid.json: class apple, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-laplacian.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-poly.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-sigmoid.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-laplacian.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-poly.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-sigmoid.json: class cpu, commit 3f778b7fe, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-laplacian.json: class amd, commit f771338c7, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-poly.json: class amd, commit f771338c7, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-sigmoid.json: class amd, commit f771338c7, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-laplacian.json: class amd, commit f771338c7, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-poly.json: class amd, commit f771338c7, 72 cell parts",
+    "use  /Users/andrewhendel/mojolearn-wt/qualify-ordinary-23/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-sigmoid.json: class amd, commit f771338c7, 72 cell parts"
+  ],
+  "source_files": {
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-poly.json": "5d7b6c2e5ca164b5587d212b652cc9880f8d00255540794e91df290539aa91dd",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-sigmoid.json": "62612c1516efa86d371af3511c8bbe13173a637322e3b47de29a61b639387cdd",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-laplacian.json": "796b8a2e59efaee399265e9c1826461164dbbc5a37f4542aadbb7d11ec1d3039",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-poly.json": "0f84f0ee922c1bd6a7adf68d6ccede29e8eb02d0bbae0b120b216b3cc0aac1b2",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-sigmoid.json": "9b361d3ac0152a81e07ce6921350fa9224cddc3fdffa99b896a5659ff73ddbe5",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-laplacian.json": "f51ed9e5f23ed15f80794191965bc618b63df1fc48dc34af11fbb3b7b3ad9016",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-poly.json": "facfa585933fc1eb2c8bebaab529eb30c2eeaf6959da93dbf638509d15eecc89",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-sigmoid.json": "a97205ee65198a36a9fc1f2dc70a0ceb51a0a6f005ce92af7028ae17cc0875ea",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-laplacian.json": "0ee3628c99455a951f50f32f33fe88deb58de081ac79f347616deac5f7a005a9",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-poly.json": "e46a58a2fe6625f023f94d81b2be0849c9bf9d3b00a110e747961c961f46b2f3",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-sigmoid.json": "a5de2412260149f48fba49b6075f637f9bb6aa27bce049e3be20b1fa65cab764",
+    "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-laplacian.json": "a2fe173dcd2ccee9392572834ce77f0194af9bdd9c3254f056fab24e56846982",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-poly.json": "e5597fa951098e1c523b69b91d55d8f2d09e42c94cf6e725fcfd74cc8a606573",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-sigmoid.json": "f5d1776c611ce46996fcf106a1d261e3453dbe5b753a0f2510b92f7d225940b2",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/kernel-ridge-laplacian.json": "66e5e128a6a2cef19658af2f34a1c96c09387beb3a4291e52e36864da602cba0",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-poly.json": "b5392954b03e0406151bbc84ab586169292a0d67fb8ad282d8824616f84b9144",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-sigmoid.json": "ebfc19f393d2e01f17eca5df55e7446318dbd20ff9b672f3eb7fbd08d1b203cd",
+    "bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/nystroem-laplacian.json": "235496c245425b514a37b3d7cfe713237baed7070077f169f34bdcc8549d47d2"
+  }
+}
