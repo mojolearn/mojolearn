@@ -1,7 +1,7 @@
 import copy
 import unittest
 
-from qualify_verifier_wheel import admit
+from qualify_verifier_wheel import admit, expanded_checks
 
 
 class VerifierAdmissionTests(unittest.TestCase):
@@ -65,6 +65,83 @@ class VerifierAdmissionTests(unittest.TestCase):
         doc.update(exit=0, verdict="VERIFIED")
         with self.assertRaises(AssertionError):
             admit("extended", doc, [])
+
+
+class ExpandedWheelTests(unittest.TestCase):
+    def run_scope(self, scope='expanded', vendor='cuda', devices=None, fail=None):
+        from pathlib import Path
+        calls = []
+        def run(name, command, cwd, json_output=False):
+            calls.append((name, command))
+            if name == fail:
+                raise RuntimeError('simulated installed failure')
+            return {'native': 'checked'} if json_output else None
+        result = expanded_checks(run, '/installed/python', Path('/external'), Path('/results'),
+                                 vendor=vendor, scope=scope, devices=devices)
+        return result, calls
+
+    def test_default_requires_native_entries_and_loaded_cpu_gpu_proof(self):
+        result, calls = self.run_scope()
+        self.assertEqual([n for n, _ in calls], ['expanded-api', 'loaded-lm-cpu', 'loaded-lm-gpu',
+                                               'loaded-lm-cpu-gpu-compare'])
+        self.assertEqual(result['multi_gpu'], 'OWED')
+        self.assertFalse(result['release_qualified'])
+        self.assertIn('ivf_flat_partial_search', calls[0][1][-1])
+        self.assertIn('ivf_finalize_distances', calls[0][1][-1])
+
+    def test_cpu_scope_is_explicit_and_does_not_claim_gpu_proof(self):
+        result, calls = self.run_scope(scope='cpu-only', vendor='cpu')
+        self.assertEqual([n for n, _ in calls], ['loaded-lm-cpu'])
+        self.assertEqual(result['scope'], 'cpu-only')
+        self.assertFalse(result['release_qualified'])
+        with self.assertRaises(RuntimeError): self.run_scope(vendor='cpu')
+        with self.assertRaises(RuntimeError): self.run_scope(vendor='metal', devices=(0,1))
+
+    def test_two_gpu_scope_requires_both_layer_orders_and_installed_distributed_gate(self):
+        result, calls = self.run_scope(devices=(2,0))
+        commands = dict(calls)
+        self.assertIn('--require-installed', commands['distributed'])
+        self.assertIn('--require-installed', commands['cross-validation'])
+        self.assertIn('--require-backend', commands['cross-validation'])
+        self.assertEqual(commands['distributed'][commands['distributed'].index('--devices')+1], '2,0')
+        for name, expected in [('split',['2','0']), ('reversed',['0','2'])]:
+            command = commands['loaded-lm-'+name]
+            at = command.index('--layer-devices')
+            self.assertEqual(command[at+1:at+3], expected)
+            self.assertIn('loaded-lm-'+name+'-compare', commands)
+        self.assertFalse(result['release_qualified'])
+        self.assertEqual(result['physical_execution_trace'], 'OWED')
+
+    def test_candidate_source_pin_mismatch_refuses_before_install(self):
+        import json, tempfile, zipfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); wheel=root/'mojolearn-0.8.7-py3-none-any.whl'
+            with zipfile.ZipFile(wheel,'w') as archive:
+                archive.writestr('mojolearn/verify_reference/models/models.json',json.dumps({'models':[]}))
+                archive.writestr('mojolearn/identity_columns/COMMIT','a'*40)
+            argv=['qualifier',str(wheel),'--output',str(root/'out'),'--expected-source-commit','b'*40]
+            with patch('sys.argv',argv), patch('subprocess.Popen') as spawn:
+                with self.assertRaises(SystemExit): main()
+                spawn.assert_not_called()
+
+    def test_optimized_interpreter_cannot_disable_admission_checks(self):
+        import os, subprocess, sys
+        from pathlib import Path
+        script = Path(__file__).with_name('qualify_verifier_wheel.py')
+        result = subprocess.run([sys.executable, '-O', str(script), '--help'],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Python -O is refused', result.stderr)
+
+    def test_every_expanded_stage_failure_propagates(self):
+        _, calls = self.run_scope(devices=(0,1))
+        for name, _ in calls:
+            with self.subTest(name=name):
+                with self.assertRaises(RuntimeError):
+                    self.run_scope(devices=(0,1), fail=name)
 
 
 if __name__ == "__main__":

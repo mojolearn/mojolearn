@@ -46,13 +46,100 @@ def admit(kind, doc, models):
                     row["part"] for row in cells.values()}
 
 
+EXPANDED_API_GUARD = """import hashlib,importlib,json,pathlib
+from mojolearn import _backend
+apis = {
+    'mojolearn.models': ['CausalLM', 'ParallelCausalLM'],
+    'mojolearn.parallel_ivf': ['DistributedIVFIndex'],
+    'mojolearn.parallel_model_selection': ['cross_val_score'],
+    'mojolearn.parallel_gaussian_process': ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier'],
+    'mojolearn.parallel_forecasting': ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing', 'forecast_exponential_smoothing'],
+}
+for name, symbols in apis.items():
+    module = importlib.import_module(name)
+    for symbol in symbols:
+        if not callable(getattr(module, symbol, None)):
+            raise RuntimeError(name + '.' + symbol + ' is unavailable')
+native = _backend.binding('_mojolearn_ivf', 'identical')
+symbols = ['ivf_flat_partial_search', 'ivf_finalize_distances']
+for symbol in symbols:
+    if not callable(getattr(native, symbol, None)):
+        raise RuntimeError('rebuild IVF binding: missing ' + symbol)
+gbdt = _backend.binding('_mojolearn_gbdt', 'identical')
+if not callable(getattr(gbdt, 'gbdt_fit', None)):
+    raise RuntimeError('GBDT binding has no fit entry for cross-validation')
+gbdt_path = pathlib.Path(gbdt.__file__).resolve()
+path = pathlib.Path(native.__file__).resolve()
+print(json.dumps(dict(apis=apis, ivf_symbols=symbols, gbdt_symbols=['gbdt_fit'],
+                     gbdt_binding=str(gbdt_path), gbdt_sha256=hashlib.sha256(gbdt_path.read_bytes()).hexdigest(),
+                     binding=str(path),
+                     binding_sha256=hashlib.sha256(path.read_bytes()).hexdigest())))
+"""
+
+
+def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
+    """Use the public installed CLI; every successful command is checkpointed."""
+    full = scope == 'expanded'
+    if full and vendor not in ('metal', 'cuda', 'hip'):
+        raise RuntimeError('expanded scope requires a physical GPU backend')
+    if devices and (not full or vendor not in ('cuda', 'hip')):
+        raise RuntimeError('multi-GPU qualification requires expanded CUDA/HIP scope')
+    report = dict(scope=scope, release_qualified=False,
+                  physical_execution_trace='OWED', native_fault_controls='SEPARATE_GATE',
+                  cross_validation='OWED',
+                  multi_gpu='NOT_APPLICABLE' if vendor == 'metal' else 'OWED')
+    if full:
+        report['apis'] = run('expanded-api', [python, '-c', EXPANDED_API_GUARD], work, True)
+    for device in (('cpu', 'gpu') if full else ('cpu',)):
+        run('loaded-lm-' + device, [python, '-m', 'mojolearn', 'verify-causal-lm',
+            '--device', device, '--formats', 'float32', 'bfloat16', 'int8',
+            '--output', str(output / ('loaded-lm-' + device + '-capture.json'))], work)
+    if full:
+        run('loaded-lm-cpu-gpu-compare', [python, '-m', 'mojolearn', 'verify-causal-lm',
+            '--compare', str(output / 'loaded-lm-cpu-capture.json'),
+            str(output / 'loaded-lm-gpu-capture.json')], work)
+    if devices:
+        run('distributed', [python, '-m', 'mojolearn', 'verify-distributed',
+            '--devices', ','.join(map(str, devices)), '--require-installed',
+            '--out', str(output / 'distributed-capture.json')], work)
+        run('cross-validation', [python, '-m', 'mojolearn', 'verify-cross-validation',
+            '--devices', ','.join(map(str, devices)), '--require-backend', vendor, '--require-installed',
+            '--out', str(output / 'cross-validation')], work)
+        report['cross_validation'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'
+        for name, selected in [('split', devices), ('reversed', tuple(reversed(devices)))]:
+            path = output / ('loaded-lm-' + name + '-capture.json')
+            run('loaded-lm-' + name, [python, '-m', 'mojolearn', 'verify-causal-lm',
+                '--device', 'gpu', '--formats', 'float32', 'bfloat16', 'int8',
+                '--layer-devices', *map(str, selected), '--output', str(path)], work)
+            run('loaded-lm-' + name + '-compare', [python, '-m', 'mojolearn', 'verify-causal-lm',
+                '--compare', str(output / 'loaded-lm-gpu-capture.json'), str(path)], work)
+        report['multi_gpu'] = dict(classical='NUMERICS_AND_PLACEMENT_CHECKED',
+                                   loaded_lm='SPLIT_AND_REVERSED_NUMERICS_CHECKED_PLACEMENT_TRACE_OWED')
+    return report
+
+
 def main():
+    if not __debug__:
+        raise RuntimeError('qualification requires assertions enabled; Python -O is refused')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--python", default="python3.12")
     parser.add_argument("--wheelhouse", type=Path)
+    parser.add_argument('--scope', choices=('expanded', 'cpu-only'), default='expanded')
+    parser.add_argument('--multi-gpu-devices', help='optional two distinct indices, e.g. 0,1')
+    parser.add_argument('--expected-source-commit', help='full commit recorded inside the candidate wheel')
     args = parser.parse_args()
+    devices = None
+    if args.multi_gpu_devices:
+        try:
+            devices = tuple(int(x) for x in args.multi_gpu_devices.split(','))
+        except ValueError:
+            parser.error('multi-gpu-devices must contain integer indices')
+        if len(devices) != 2 or len(set(devices)) != 2 or min(devices) < 0 or args.scope != 'expanded':
+            parser.error('two distinct nonnegative device indices require expanded scope')
+    if args.expected_source_commit and not re.fullmatch('[0-9a-f]{40}', args.expected_source_commit):
+        parser.error('expected-source-commit must be a full lowercase SHA')
     wheel, output = args.wheel.resolve(), args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
     receipt = output / "results.json"
@@ -61,17 +148,25 @@ def main():
     digest = hashlib.sha256(wheel.read_bytes()).hexdigest()
     with zipfile.ZipFile(wheel) as archive:
         models = json.loads(archive.read("mojolearn/verify_reference/models/models.json"))["models"]
+        source_commit = archive.read('mojolearn/identity_columns/COMMIT').decode().strip()
+        if not re.fullmatch('[0-9a-f]{40}', source_commit):
+            parser.error('wheel has no valid packaged source commit')
+        if args.expected_source_commit and source_commit != args.expected_source_commit:
+            parser.error('wheel source commit differs from requested expanded candidate')
     manifest = dict(wheel=str(wheel), wheel_sha256=digest, status="INCOMPLETE", jobs=[],
-                    scope="installed CLI, portable CPU models, one GPU lane with batch checks, self-test")
+                    scope=args.scope, source_commit=source_commit, release_qualified=False,
+                    expanded=None)
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith("MOJOLEARN_") and k not in ("PYTHONPATH", "PYTHONHOME")}
+           if not k.startswith("MOJOLEARN_") and k not in ("PYTHONPATH", "PYTHONHOME", "PYTHONOPTIMIZE")}
     env.update(MOJOLEARN_NUMERIC_MODE="identical", PYTHONNOUSERSITE="1")
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "MOJOLEARN_CPU_THREADS"):
         env[name] = "1"
 
     def save():
-        receipt.write_text(json.dumps(manifest, indent=2) + "\n")
+        temporary = receipt.with_suffix(".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2) + "\n")
+        temporary.replace(receipt)
 
     def run(name, command, cwd, json_output=False, allowed_exits=(0,)):
         path = output / (name + (".json" if json_output else ".log"))
@@ -114,6 +209,11 @@ print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojole
                 "extended": ["--lanes", "knn", "--fixtures", "base", "--repeats", "2", "--batch-checks", "--no-models"],
                 "self-test": ["--self-test"],
             }
+            if args.scope == 'cpu-only':
+                commands = {name: flags for name, flags in commands.items() if name in ('coverage', 'models')}
+            manifest['expanded'] = expanded_checks(run, python, work, output,
+                vendor=manifest['installed']['vendor'], scope=args.scope, devices=devices)
+            save()
             for kind, flags in commands.items():
                 doc = run(kind, [python, "-m", "mojolearn", "verify", *flags, "--json"], work, True,
                           (0, 5) if kind == "extended" else (0,))
@@ -125,12 +225,12 @@ print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojole
                         dict(lane=r["lane"], fixture=r["fixture"], part=r["part"], state=r["state"])
                         for r in doc["cells"] if r["state"] == "OWED"]
             assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest, "wheel changed"
-            manifest["status"] = "PASSED"
+            manifest["status"] = "PASSED" if args.scope == "expanded" else "PASSED_CPU_ONLY"
     except Exception as exc:
         manifest.update(status="FAILED", reason=repr(exc))
     save()
     print(json.dumps(manifest, indent=2))
-    return 0 if manifest["status"] == "PASSED" else 1
+    return 0 if manifest["status"] in ("PASSED", "PASSED_CPU_ONLY") else 1
 
 
 if __name__ == "__main__":
