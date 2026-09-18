@@ -135,3 +135,11 @@ and both GMM columns captured successfully. The family body now builds
 preprocessing before GP capture, and its ordering regression checks that
 requirement. Initial refusal records remain retained; same-VM recovery is being
 prepared rather than relabeling them as passes.
+
+All six kernel variants now additionally have a direct saved-GPU-model native
+CPU inference fault witness: 54/54 unchanged AMD models produced different CPU
+outputs under the retained compiled estimators sabotage binding. Strict
+`--every-fixture` passed with zero unmoved cells, in 0.61 seconds under the local
+slot. Binding digest and raw report are committed beside AMD evidence. This
+covers native CPU training (prior 54/54) and saved-model inference (new 54/54);
+it is not an AMD GPU native-fault claim or a final-wheel fault certificate.

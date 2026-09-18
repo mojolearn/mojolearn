@@ -23,3 +23,13 @@ The six routes now have real diagnostic verifier references. They remain
 qualification-pending, **not default promoted**: NVIDIA property/model evidence
 and installed CPU verifier replay remain owed. This is source qualification,
 not a final 0.8.7 wheel or a full current four-vendor certificate.
+
+## Independent native inference control
+
+A compiled CPU estimators sabotage binding was used to load the **unchanged AMD
+GPU saved models**. `classical_host_gate.py check --expect-mismatch
+--every-fixture` observed changed numerical CPU outputs in **54/54 fixtures**,
+with zero unmoved cases. Runtime 0.61 seconds under the local slot, one worker.
+The binding SHA, exact command, report and log are under cpu-saved-model-fault.
+This is in addition to the prior 54/54 native CPU training controls. No fresh
+AMD GPU fault build or complete release-artifact fault certificate is claimed.
