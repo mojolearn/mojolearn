@@ -1,1 +1,6 @@
-RunPod upye8nr41f4rxm: DELETE HTTP 204; verified gone HTTP 404.
+pod=upye8nr41f4rxm
+armed=1
+terminated=1
+deadman_pid=38213
+exit=0
+at=2026-09-18T09:07:48Z

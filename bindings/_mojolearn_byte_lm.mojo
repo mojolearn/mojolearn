@@ -1056,7 +1056,9 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     positions 0 to 3 and are unaffected; nothing here launches, downloads
     or synchronizes. Open trainers additionally append one triple per layer:
     forward launch status, backward launch status, current materialization.
-    Status -1 means no fused attempt, otherwise the actual FUSED_* code."""
+    Status -1 means no fused attempt, otherwise the actual FUSED_* code.
+    Policy flags, released cells and repair-site masks follow these triples;
+    byte_attention_eager_cells documents their append-only ordering."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var completed = -1
     var grad_step = -1

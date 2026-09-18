@@ -237,3 +237,29 @@ B4 0.55–0.90s, same-device throughput multiplier 1.1–1.5. A mismatch rejects
 the candidate; an INERT arm proves nothing about that mechanism. This
 700-step comparison is separate from the already-running 2000-step B4
 endurance obligation, which will finish.
+
+## Probe metadata erratum
+
+The historical probe hardcoded `run_metadata.data_schedule.batches` to
+"synthetic uniform token ids, no corpus", including when its `--corpus`
+argument loaded CorpusBatches. This is a label bug: run_steps passes the
+loaded corpus to ids_for, which returns corpus.ids(index); every raw result's
+outer `corpus` field holds the actual digest and schedule, and `ids` says
+"pinned corpus". Strict R2 stage logs and on-box checksum checks independently
+verify those bytes. Preserve the original evidence, including that incorrect
+inner label. The probe now passes the corpus description into trainer metadata
+at construction. No training inputs or numerical operations change. All
+experiments through source f3eeb0c35 used the old label.
+
+Per-layer three-arm attribution now checks the actual tuples, not only their
+counts: 248 legacy CORNERs disappear under the dk/dv guard alone, and all
+remaining 3449 guarded CORNERs correspond to dQ replay sites in the accepted
+repair arm. Zero zdot sites in training: INERT. The checker prints each
+matched step/layer, rejects missing dQ activity, invented zdot attribution,
+a missing layer, blind head_dim=8, and each corrupted checkpoint hash.
+This identifies guards/replay activity, not how many individual zero signs
+changed in training. Native fixtures separately prove both sign outcomes.
+
+Host-only compatibility check: 44 byte-LM surface tests pass in 0.89s, using
+the freshly compiled Apple binding only for import and mocked training.
+No Apple GPU execution.

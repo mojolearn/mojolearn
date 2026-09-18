@@ -1,1 +1,6 @@
-RunPod 1gzni9b2arvi9l: DELETE HTTP 204; verified gone HTTP 404. See orchestration log.
+pod=1gzni9b2arvi9l
+armed=1
+terminated=1
+deadman_pid=11281
+exit=0
+at=2026-09-18T08:39:44Z

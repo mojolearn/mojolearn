@@ -6,8 +6,9 @@ that has to separate before the CE aliasing may be believed.
 Public API only (`LanguageModelConfig`, `LanguageModelTrainer`,
 `parameter_registry`, `train_step`, `export_state`, `export_gradients`,
 `run_metadata`, `attention_stage_report`, `export_checkpoint_binary`,
-`from_checkpoint_binary`, `close`). Nothing here is a timing sample: the
-seconds are reported so a run can be sized, and the claim is about BITS.
+`from_checkpoint_binary`, `close`). Full-step wall times are recorded before
+optional state export; they are session measurements, not isolated-kernel
+benchmarks. Exact witnesses qualify the compared arithmetic.
 
 Modes:
 
@@ -82,7 +83,7 @@ def rss_bytes():
         return None
 
 
-def build(args):
+def build(args, corpus=None):
     import numpy as np
     from mojolearn import LanguageModelTrainer as Trainer, LanguageModelConfig as Shape
     shape = Shape(*args.shape)
@@ -93,7 +94,8 @@ def build(args):
             weights[entry['offset']:entry['offset'] + entry['size']] += np.float32(1)
     trainer = Trainer(weights, shape=shape, resident=True, step_result='lean',
                       data_schedule={'fixture': 'lm ce alias probe', 'seed': args.seed,
-                                     'batches': 'synthetic uniform token ids, no corpus'})
+                                     'batches': corpus.describe() if corpus is not None else
+                                                'synthetic uniform token ids, no corpus'})
     return trainer, shape
 
 
@@ -205,7 +207,7 @@ def main():
         resumed_at = trainer.state_dict()['completed_steps']
         run_steps(trainer, shape, args, resumed_at, args.tail, records, corpus)
     else:
-        trainer, shape = build(args)
+        trainer, shape = build(args, corpus)
         run_steps(trainer, shape, args, 0, args.steps, records, corpus)
         if args.mode == 'checkpoint':
             t0 = time.perf_counter()

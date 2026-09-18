@@ -757,6 +757,13 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
         4  layers grown backward   layers whose len(d_attn_weights) > 1
         5  layers with a full aexp layers whose len(aexp) > 1
 
+    Then one (forward status, backward status, materialized) triple per
+    layer; exact-tail-guard flag; release flag; released eager cells;
+    sticky-routing flag; one prefer-eager flag per layer; replay flag;
+    one actual estash repair-site bitmask per layer (1 zdot, 2 dQ).
+    The binding prepends its original four session fields. Keep append-only
+    layout compatibility with attention_stage_report() in the Python wrapper.
+
     `aexp` IS REPORTED APART FROM THE OTHER THREE ON PURPOSE. Two
     different mechanisms grow it and they mean opposite things: the eager
     fallback grows all four together
@@ -769,15 +776,15 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     section 1.5 says these ten arrays are allocated at ONE element and
     grow on demand, that the growth is data dependent per layer and per
     step (`regime_product_ok`, `regime_finite`, or a `FUSED_CORNER` hit),
-    and that once grown they are **never released within a session**. So
+    and that under the legacy policy they never leave the session. So
     the device footprint of a long run is not a property of its shape: a
     session can double its device memory at some step nobody chose, and
     every capacity number taken in the first few steps is then wrong for
     the rest of the run. Nothing reported that growth, so a run that had
     it and a run that did not looked the same from outside.
 
-    NO ARITHMETIC AND NO DEVICE WORK. Every term is `len()` of a buffer
-    the trainer already owns, which is host metadata; nothing is
+    NO ARITHMETIC AND NO DEVICE WORK. Counts use `len()` of owned buffers;
+    path fields are saved host metadata. Nothing is
     launched, downloaded or synchronized, and no step path calls this.
     It is read between steps.
     """
