@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The tokenizer's Python door.
 
-`GPT2Tokenizer` through the built `_mojolearn_tokenizer_host` binding. mojolearn
+`BpeTokenizer` through the built `_mojolearn_tokenizer_host` binding. mojolearn
 ships no vocabulary (2026-09-15), so the vocabulary here is the synthetic one
 `mojolearn/_tokenizer_synthetic.py` trains itself, and every expected id comes
 from that module's second, pure Python encoder of the same algorithm: exact id
@@ -31,7 +31,7 @@ try:
 except ImportError:  # the module run needs no pytest
     pytest = None
 
-from mojolearn import GPT2Tokenizer
+from mojolearn import BpeTokenizer
 from mojolearn import _tokenizer_synthetic as syn
 
 ENCODER_ENV = "MOJOLEARN_GPT2_ENCODER_JSON"
@@ -55,7 +55,7 @@ def _skip(why):
 
 def _tokenizer():
     try:
-        return GPT2Tokenizer._synthetic()
+        return BpeTokenizer._synthetic()
     except ImportError as exc:
         if pytest is not None:
             pytest.skip(f"tokenizer host binding not built: {exc}")
@@ -271,7 +271,7 @@ def test_ranks_file_matches_token_bytes(tok):
     d = tempfile.mkdtemp()
     path = os.path.join(d, "ranks.tsv")
     syn.write_ranks(_vocab(), path)
-    other = GPT2Tokenizer.from_ranks_file(path)
+    other = BpeTokenizer.from_ranks_file(path)
     text = "".join(t for _, t, _ in syn.cases()).encode("utf-8")
     assert other.n_vocab == tok.n_vocab
     assert other.encode_bytes(text, allow_endoftext=True) == tok.encode_bytes(text, allow_endoftext=True)
@@ -301,7 +301,7 @@ def test_from_files_spelled_vocabulary(tok):
                 break
     with open(os.path.join(d, "vocab.bpe"), "w", encoding="utf-8") as fh:
         fh.write("\n".join(lines) + "\n")
-    other = GPT2Tokenizer.from_files(os.path.join(d, "encoder.json"), os.path.join(d, "vocab.bpe"))
+    other = BpeTokenizer.from_files(os.path.join(d, "encoder.json"), os.path.join(d, "vocab.bpe"))
     text = "".join(t for _, t, _ in syn.cases()).encode("utf-8")
     assert other.n_vocab == tok.n_vocab
     assert other.encode_bytes(text, allow_endoftext=True) == tok.encode_bytes(text, allow_endoftext=True)
@@ -313,7 +313,7 @@ def test_user_supplied_gpt2_files():
     enc, merges = os.environ.get(ENCODER_ENV, ""), os.environ.get(MERGES_ENV, "")
     if not (enc and merges and os.path.isfile(enc) and os.path.isfile(merges)):
         _skip(f"{ENCODER_ENV} and {MERGES_ENV} do not name the GPT-2 files")
-    tok = GPT2Tokenizer.from_files(enc, merges)
+    tok = BpeTokenizer.from_files(enc, merges)
     with open(enc, "r", encoding="utf-8") as fh:
         encoder = json.load(fh)
     assert tok.n_vocab == len(encoder)
@@ -330,20 +330,20 @@ def test_user_supplied_gpt2_files():
 
 def test_refuses_no_vocabulary_by_name():
     """Resolved before the binding is loaded, so this needs no build."""
-    _raises(lambda: GPT2Tokenizer(), ValueError, "GPT2Tokenizer needs a vocabulary, and mojolearn ships none")
-    _raises(lambda: GPT2Tokenizer(), ValueError, "GPT2Tokenizer.from_files(encoder_json, vocab_bpe)")
-    _raises(lambda: GPT2Tokenizer(), ValueError, "OpenAI publishes with its GPT-2 release")
+    _raises(lambda: BpeTokenizer(), ValueError, "BpeTokenizer needs a vocabulary, and mojolearn ships none")
+    _raises(lambda: BpeTokenizer(), ValueError, "BpeTokenizer.from_files(encoder_json, vocab_bpe)")
+    _raises(lambda: BpeTokenizer(), ValueError, "OpenAI publishes with its GPT-2 release")
     missing = os.path.join(tempfile.mkdtemp(), "ranks.tsv")
-    _raises(lambda: GPT2Tokenizer.from_ranks_file(missing), FileNotFoundError, "does not exist")
+    _raises(lambda: BpeTokenizer.from_ranks_file(missing), FileNotFoundError, "does not exist")
 
 
 def test_refuses_bad_token_bytes():
     """Refused in Python before any binding is loaded."""
     full = [bytes([b]) for b in range(256)]
-    _raises(lambda: GPT2Tokenizer.from_token_bytes(full[:255]), ValueError, "lacks 1 of the 256 single-byte tokens")
-    _raises(lambda: GPT2Tokenizer.from_token_bytes(full + [b"ab", b"ab"]), ValueError, "token 257 repeats token 256")
-    _raises(lambda: GPT2Tokenizer.from_token_bytes(full + [b""]), ValueError, "token 256 is empty")
-    _raises(lambda: GPT2Tokenizer.from_token_bytes(b"abc"), TypeError, "tokens must be a sequence of bytes")
+    _raises(lambda: BpeTokenizer.from_token_bytes(full[:255]), ValueError, "lacks 1 of the 256 single-byte tokens")
+    _raises(lambda: BpeTokenizer.from_token_bytes(full + [b"ab", b"ab"]), ValueError, "token 257 repeats token 256")
+    _raises(lambda: BpeTokenizer.from_token_bytes(full + [b""]), ValueError, "token 256 is empty")
+    _raises(lambda: BpeTokenizer.from_token_bytes(b"abc"), TypeError, "tokens must be a sequence of bytes")
 
 
 TESTS = [(name, fn) for name, fn in sorted(globals().items()) if name.startswith("test_") and callable(fn)]
@@ -355,7 +355,7 @@ def main(argv=None):
     _MODULE_RUN = True
     out = sys.stdout
     try:
-        tok = GPT2Tokenizer._synthetic()
+        tok = BpeTokenizer._synthetic()
     except ImportError as exc:
         out.write(f"test_tokenizer_surface: NOT RUN. {exc}\n")
         return 2

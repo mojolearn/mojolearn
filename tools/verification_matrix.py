@@ -342,6 +342,16 @@ def package_index():
                   and isinstance(node.targets[0], ast.Name)
                   and isinstance(node.value, ast.Name)):
                 aliases.setdefault(node.targets[0].id, node.value.id)
+            elif (isinstance(node, ast.Assign) and len(node.targets) == 1
+                  and isinstance(node.targets[0], ast.Name)
+                  and node.targets[0].id == "_DEPRECATED_ALIASES"):
+                # A renamed class kept importable through a module
+                # __getattr__ that warns (tokenizer.py: GPT2Tokenizer ->
+                # BpeTokenizer, 2026-09-18): the same kind of alias, spelled
+                # as a {old: new} literal because a plain assignment could
+                # not warn.
+                for old, new in ast.literal_eval(node.value).items():
+                    aliases.setdefault(old, new)
     return kinds, aliases
 
 

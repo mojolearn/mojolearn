@@ -27,8 +27,8 @@ The four kinds, for one lane:
 ## The numbers
 
 - Lanes: **228** (178 single-device, 50 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **224**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **163** of 224.
+- Source public API entries enumerated from the public API: **225**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **164** of 225.
 - Source public API entries with NO IDENTITY LANE AT ALL: **19**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
@@ -37,10 +37,10 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 197 | 27 |
-| cpu verifier | 167 | 57 |
-| sabotage seen to move a build | 169 | 55 |
-| batch part or named n/a | 203 | 21 |
+| gpu column | 198 | 27 |
+| cpu verifier | 168 | 57 |
+| sabotage seen to move a build | 170 | 55 |
+| batch part or named n/a | 204 | 21 |
 
 Per kind, over the lanes:
 
@@ -125,6 +125,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `AgglomerativeClustering` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `BpeTokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ByteLanguageModelConfig` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ConstantKernel` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -135,7 +136,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `ExponentialSmoothing` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExtraTreesClassifier` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExtraTreesRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GPT2Tokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GPT2Tokenizer` (alias of `BpeTokenizer`) | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessClassifier` | 2 | apple | training | seen(build) | part | yes |
 | `GaussianProcessRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -320,8 +321,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `resample.monte_carlo_integrate` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `resample.permutation_test` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `select_d` | 1 |  | training | seen(build) | part | NO |
+| `tokenizer.BpeTokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeVocabularyTrainer` | 1 |  |  | seen(build) | n/a | NO |
-| `tokenizer.GPT2Tokenizer` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.TrainedBpeVocabulary` | **0** |  |  |  |  | NO |
 | `training.Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |

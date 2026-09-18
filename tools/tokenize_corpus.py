@@ -93,7 +93,7 @@ def sha256_bytes(data):
 
 def read_ranks(path):
     """`(n_ranks, sha256, bytes)` of a `rank<TAB>hex` file, checked for the
-    shape `GPT2Tokenizer.from_ranks_file` needs: ascending ranks from 0."""
+    shape `BpeTokenizer.from_ranks_file` needs: ascending ranks from 0."""
     raw = Path(path).read_bytes()
     lines = raw.decode("ascii").split("\n")
     if lines and lines[-1] == "":
@@ -140,7 +140,7 @@ def documents(data, manifest, document_bytes):
 def tokenize(corpus_path, ranks_path, out_dir, vocabulary_name, vocabulary_extra,
              document_bytes, batch_documents, limit_bytes=None, write=True, progress=None):
     sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "python"))
-    from mojolearn.tokenizer import GPT2Tokenizer
+    from mojolearn.tokenizer import BpeTokenizer
 
     corpus_path = Path(corpus_path)
     source_manifest_path = corpus_path.with_name("manifest.json")
@@ -155,7 +155,7 @@ def tokenize(corpus_path, ranks_path, out_dir, vocabulary_name, vocabulary_extra
         data = data[:limit_bytes]
 
     n_ranks, ranks_sha, ranks_bytes = read_ranks(ranks_path)
-    tok = GPT2Tokenizer.from_ranks_file(os.fspath(ranks_path))
+    tok = BpeTokenizer.from_ranks_file(os.fspath(ranks_path))
     if tok.n_vocab != n_ranks + 1:
         raise ValueError("ranks file has %d ranks but the tokenizer reports n_vocab %d" % (n_ranks, tok.n_vocab))
 
@@ -218,7 +218,7 @@ def tokenize(corpus_path, ranks_path, out_dir, vocabulary_name, vocabulary_extra
                     source_url=source_manifest.get("source_url"),
                     manifest_sha256=sha256_bytes(source_manifest_path.read_bytes())),
         vocabulary=vocabulary,
-        encoder="mojolearn.tokenizer.GPT2Tokenizer.encode_batch through the host binding "
+        encoder="mojolearn.tokenizer.BpeTokenizer.encode_batch through the host binding "
                 "_mojolearn_tokenizer_host (tokenizer/encoding.mojo); integers and tables only",
         endoftext="not inserted and not recognized (allow_endoftext=False); the byte corpora are "
                   "continuous streams and the byte path inserts no separator either",
