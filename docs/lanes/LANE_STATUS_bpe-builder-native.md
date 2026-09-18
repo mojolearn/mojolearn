@@ -127,7 +127,10 @@ source); after = b77a26e93 with its binding (`host/after_b77a26e93`).
   ran the MOJO trainer.
 - before vs env MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (clean binding): `DIVERGENT=27, IDENTICAL=9`,
   same pattern.
-- `tools/verification_matrix.py --check` OK after the lane docstring edit.
+- `tools/verification_matrix.py --check` read STALE after the record landed (d8be5d5f0 said OK;
+  that line was written before the check's output was read -- the `&&` chain ran on `tail`'s exit
+  code). `--write` moved bpe-vocabulary's and tokenized-corpus's sabotage evidence to this
+  record's `m4.trainer.sabotage-build.json`; `--check` then OK (236 lanes, 237 entries).
 
 ## Candidates (not opened)
 
