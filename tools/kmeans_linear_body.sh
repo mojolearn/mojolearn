@@ -9,6 +9,13 @@
 #   sh tools/kmeans_linear_body.sh diff LABEL A.json B.json ...   identity_break --diff into /root/kls_out/diff.LABEL.txt
 #   sh tools/kmeans_linear_body.sh identity NAME    cuda column of every reached lane on arm NAME
 #   sh tools/kmeans_linear_body.sh identity_cpu NAME   cpu column with /root/hostbins/NAME
+#   sh tools/kmeans_linear_body.sh identity2 NAME       cuda column of the other lanes that reach the Lloyd loop
+#   sh tools/kmeans_linear_body.sh identity2_cpu NAME   cpu column of the same
+#   sh tools/kmeans_linear_body.sh ab AFTER BEFORE [rounds] [lanes] [datasets]   the interleaved A/B
+#
+# KLS_SRC names the source tree an `arm` stage builds from (default /root/mojolearn,
+# the shipped branch); the resumed pod (2026-09-17 evening) unpacks origin/main into
+# /root/mainsrc and builds the `base` arm from it.
 #
 # Every stage writes under /root/kls_out/<stage>[-NAME]; pull the directory home.
 set -u
@@ -22,6 +29,7 @@ export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
 export GBM_BENCH_DATA=/root/datasets/gbm-bench
 export MOJOLEARN_COMPILE_JOBS=16 MOJOLEARN_BUILD_JOBS=16
 P=$R/.pixi/envs/default/bin/python3
+SRC=${KLS_SRC:-$R}
 DATA=/root/ctd-data
 ARCH=${KLS_GPU_ARCH:-sm_89}
 note() { echo "$* $(date -u +%H:%M:%S)" | tee -a "$OUT/progress.txt"; }
@@ -39,16 +47,20 @@ FIX5="base,ties,odd,dupes,wide"
 # The other families whose fits run `kmeans_fit_main_traced` or `kmeans_fit`
 # (spectral in the core binding; GaussianMixture's k-means init; the IVF
 # coarse quantizer; the parallel k-means and GMM drivers).
-LANES2="spectral,spectral-precomputed,gmm,gmm-sample,ivf,ivf-euclidean,ivf-extend,par-kmeans,par-gmm"
+# Resumed 2026-09-17 evening: plus the lanes that fit a KMeans or a
+# SpectralClustering inside another cell (metrics, metrics-classification,
+# par-graph-spectral). Spectral needs the metrics binding (arm_extra builds it).
+LANES2="spectral,spectral-precomputed,gmm,gmm-sample,ivf,ivf-euclidean,ivf-extend,par-kmeans,par-gmm,metrics,metrics-classification,par-graph-spectral"
 
 case "$STAGE" in
 _build_core)
-    ( cd "$R" && MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$3" bash bindings/build.sh ) || exit 1
-    mkdir -p "/root/gpubins/$2" && cp "$R/python/mojolearn/identical/_mojolearn.so" "/root/gpubins/$2/"
+    [ -e "$SRC/.pixi" ] || ln -s "$R/.pixi" "$SRC/.pixi"
+    ( cd "$SRC" && MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$3" bash bindings/build.sh ) || exit 1
+    mkdir -p "/root/gpubins/$2" && cp "$SRC/python/mojolearn/identical/_mojolearn.so" "/root/gpubins/$2/"
     ;;
 _build_est)
-    ( cd "$R" && MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$3" bash bindings/build_estimators.sh ) || exit 1
-    mkdir -p "/root/gpubins/$2" && cp "$R/python/mojolearn/identical/_mojolearn_estimators.so" "/root/gpubins/$2/"
+    ( cd "$SRC" && MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$3" bash bindings/build_estimators.sh ) || exit 1
+    mkdir -p "/root/gpubins/$2" && cp "$SRC/python/mojolearn/identical/_mojolearn_estimators.so" "/root/gpubins/$2/"
     ;;
 setup)
     note start branch="$(cat "$R/SHIPPED_COMMIT.txt")"
@@ -68,23 +80,25 @@ arm)
     step build_core 2400 sh "$0" _build_core "$NAME" "$DEFS"
     step build_est 2400 sh "$0" _build_est "$NAME" "$DEFS"
     rm -rf "/root/t-$NAME" && mkdir -p "/root/t-$NAME"
-    ( cd "$R" && tar cf - --exclude=.pixi --exclude='*.so' . ) | ( cd "/root/t-$NAME" && tar xf - )
+    ( cd "$SRC" && tar cf - --exclude=.pixi --exclude='*.so' . ) | ( cd "/root/t-$NAME" && tar xf - )
     mkdir -p "/root/t-$NAME/python/mojolearn/identical"
     cp /root/gpubins/"$NAME"/*.so "/root/t-$NAME/python/mojolearn/identical/"
-    ( cd "/root/t-$NAME" && stat -c '%y %n' python/mojolearn/identical/*.so cluster/impl/detail/kmeans.mojo glm/impl/ols.mojo ) > "$OUT/mtimes.txt" 2>&1
+    ( cd "/root/t-$NAME" && stat -c '%y %n' python/mojolearn/identical/*.so cluster/impl/detail/kmeans.mojo cluster/estimator.mojo cluster/checks/reduce_by_key.mojo glm/impl/ols.mojo ) > "$OUT/mtimes.txt" 2>&1
     sha256sum /root/gpubins/"$NAME"/*.so > "$OUT/so_sha256.txt"
     echo "$DEFS" > "$OUT/defines.txt"
+    echo "$SRC $(cat "$SRC/SHIPPED_COMMIT.txt" 2>/dev/null)" > "$OUT/source.txt"
     ( cd "/root/t-$NAME" && PYTHONPATH="/root/t-$NAME/python" "$P" -c "import mojolearn as ml; print('import OK', ml.vendor(), ml.numeric_mode())" ) > "$OUT/import.txt" 2>&1
     note arm_done
     : > "$OUT/arm.done"
     ;;
 arm_extra)
-    # The ivf and mixture bindings of arm NAME, into its gpubins and its tree.
+    # The ivf, mixture and metrics bindings of arm NAME, into its gpubins and
+    # its tree (metrics: the spectral lanes refuse to import without it).
     DEFS=${3:-}
-    cd "$R" || exit 9
-    for fam in ivf mixture; do
+    cd "$SRC" || exit 9
+    for fam in ivf mixture metrics; do
         step build_$fam 2400 env MOJOLEARN_GPU_ARCHS=$ARCH MOJOLEARN_BUILD_EXTRA_DEFINES="$DEFS" bash bindings/build_$fam.sh
-        cp "$R/python/mojolearn/identical/_mojolearn_$fam.so" "/root/gpubins/$NAME/" && cp "/root/gpubins/$NAME/_mojolearn_$fam.so" "/root/t-$NAME/python/mojolearn/identical/"
+        cp "$SRC/python/mojolearn/identical/_mojolearn_$fam.so" "/root/gpubins/$NAME/" && cp "/root/gpubins/$NAME/_mojolearn_$fam.so" "/root/t-$NAME/python/mojolearn/identical/"
     done
     sha256sum /root/gpubins/"$NAME"/*.so > "$OUT/so_sha256.txt"
     : > "$OUT/arm_extra.done"
@@ -104,6 +118,10 @@ host)
     cd "$T" || exit 9
     MOJOLEARN_HOST_OUTDIR=/root/hostbins/$NAME step host_core 2400 sh bindings/build_core_host.sh
     MOJOLEARN_HOST_OUTDIR=/root/hostbins/$NAME step host_est 2400 sh bindings/build_estimators_host.sh
+    # The families the second lane set's cpu column loads.
+    for fam in metrics mixture mixture_infer ivf ivf_search; do
+        MOJOLEARN_HOST_OUTDIR=/root/hostbins/$NAME step host_$fam 2400 sh bindings/build_${fam}_host.sh
+    done
     sha256sum /root/hostbins/"$NAME"/*.so > "$OUT/so_sha256.txt" 2>&1
     : > "$OUT/host.done"
     ;;
@@ -124,6 +142,13 @@ identity_cpu)
     step identity_cpu 5400 env PYTHONPATH="/root/cpu-$NAME/python:/root/cpu-$NAME/tools" MOJOLEARN_HOST_DIR="/root/hostbins/$NAME" "$P" tools/identity_break.py \
         --require-backend cpu --lanes "$LANES" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
     : > "$OUT/identity_cpu.done"
+    ;;
+identity2_cpu)
+    cd "/root/cpu-$NAME" || exit 9
+    MOJOLEARN_COMMIT=$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt"); export MOJOLEARN_COMMIT
+    step identity2_cpu 5400 env PYTHONPATH="/root/cpu-$NAME/python:/root/cpu-$NAME/tools" MOJOLEARN_HOST_DIR="/root/hostbins/$NAME" "$P" tools/identity_break.py \
+        --require-backend cpu --lanes "$LANES2" --fixtures "$FIX5" --repeats 2 --json "$OUT/identity.json"
+    : > "$OUT/identity2_cpu.done"
     ;;
 ab)
     # sh tools/kmeans_linear_body.sh ab AFTER BEFORE [rounds] [lanes] [datasets]
