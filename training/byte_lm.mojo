@@ -81,6 +81,9 @@ from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_T
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
+from transformer.impl.llama.fused_attention import (
+    ATTN_BWD_KV_CORNER_GUARD, ATTN_NO_BWD_CORNER, ATTN_STICKY,
+)
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
@@ -194,6 +197,42 @@ def byte_lm_ce_aliased() -> Bool:
     witness, building the same arm twice and comparing it with itself reads
     exactly like a passed identity gate."""
     comptime if BYTE_LM_CE_UNALIASED:
+        return False
+    return True
+
+
+def byte_lm_attn_sticky_fallback() -> Bool:
+    """DEVIATION 3110: TRUE only in a build carrying
+    `-D MOJOLEARN_ATTN_STICKY=1`, which stops relaunching the fused attention
+    kernels for a layer that has already refused. The default is FALSE and
+    relaunches, because the latch measured 3.6% SLOWER.
+
+    The A/B that claims the latch moves no bit reads this from INSIDE the
+    process that loaded the binding. A `.so` digest cannot answer it: the
+    define gates a single runtime branch on a comptime constant, so the two
+    builds differ by about one byte and are the same size."""
+    comptime if not ATTN_STICKY:
+        return False
+    return True
+
+
+def byte_lm_attn_kv_corner_guard() -> Bool:
+    """Whether the exact masked-tail predicate guards dk/dv negative zeros.
+
+    Enabled by the qualified replay column or either explicit guard define.
+    Read this inside the loaded binding to distinguish experimental arms.
+    """
+    comptime if ATTN_BWD_KV_CORNER_GUARD:
+        return True
+    return False
+
+
+def byte_lm_attn_bwd_corner_refuses() -> Bool:
+    """DEVIATION 3112: False in the MEASUREMENT build carrying
+    `-D MOJOLEARN_ATTN_NO_BWD_CORNER=1`, whose backward does not refuse on a
+    corner. That build is never shipped and its only use is the bit
+    comparison against the refusing arm."""
+    comptime if ATTN_NO_BWD_CORNER:
         return False
     return True
 
@@ -757,12 +796,12 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
         4  layers grown backward   layers whose len(d_attn_weights) > 1
         5  layers with a full aexp layers whose len(aexp) > 1
 
-    Then one (forward status, backward status, materialized) triple per
-    layer; exact-tail-guard flag; release flag; released eager cells;
+    Then forward/backward stage-list lengths and one
+    (forward status, backward status, materialized) triple per paired layer; exact-tail-guard flag; release flag; released eager cells;
     sticky-routing flag; one prefer-eager flag per layer; replay flag;
     one actual estash repair-site bitmask per layer (1 zdot, 2 dQ).
-    The binding prepends its original four session fields. Keep append-only
-    layout compatibility with attention_stage_report() in the Python wrapper.
+    The binding prepends its original four session fields. The two list
+    lengths precede all variable-length fields; Python reads min(lengths).
 
     `aexp` IS REPORTED APART FROM THE OTHER THREE ON PURPOSE. Two
     different mechanisms grow it and they mean opposite things: the eager
@@ -794,7 +833,18 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     var grown_fwd = 0
     var grown_bwd = 0
     var grown_aexp = 0
-    for layer in range(tr.config.n_layers):
+    # DEVIATION 3110: BOUND BY THE LIST, NOT BY `n_layers`. The backward
+    # loop `pop`s each layer's stages out of `tr.forward` and `tr.backward`
+    # and reinserts them (`:1169-1170`), so a step that raises inside a
+    # backward call leaves the lists SHORT. Reading `n_layers` entries out of
+    # an 11-entry list then aborts the process with an out-of-bounds assert
+    # instead of reporting anything, which is how the batch-4 arm of the
+    # 2026-09-18 H100 leg died at step ~320: not an OOM, this. The counts are
+    # reported so a short list is VISIBLE rather than fatal.
+    var n_fwd = len(tr.forward)
+    var n_bwd = len(tr.backward)
+    var n = n_fwd if n_fwd < n_bwd else n_bwd
+    for layer in range(n):
         fwd_eager += len(tr.forward[layer].scores)
         fwd_eager += len(tr.forward[layer].masked)
         fwd_eager += len(tr.forward[layer].weights)
@@ -818,8 +868,10 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(grown_fwd)
     out.append(grown_bwd)
     out.append(grown_aexp)
+    out.append(n_fwd)
+    out.append(n_bwd)
     # Triples in layer order: actual launch statuses and current materialization.
-    for layer in range(tr.config.n_layers):
+    for layer in range(n):
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))
@@ -827,10 +879,10 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(Int(BYTE_LM_RELEASE_EAGER))
     out.append(tr.released_eager_cells)
     out.append(Int(BYTE_LM_STICKY_EAGER))
-    for layer in range(tr.config.n_layers):
+    for layer in range(n):
         out.append(Int(tr.forward[layer].attn_prefer_eager))
     out.append(Int(ATTN_REPAIR_MASKED_TAIL))
-    for layer in range(tr.config.n_layers):
+    for layer in range(n):
         out.append(tr.backward[layer].attn_repaired)
     return out^
 

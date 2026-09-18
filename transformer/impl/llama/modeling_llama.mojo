@@ -322,8 +322,10 @@ from mamba.impl.modeling.modeling_mamba import (
 
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
+    FUSED_SKIPPED_STICKY,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
@@ -1538,6 +1540,10 @@ struct LlamaDeviceStages(Movable):
     var gemm_workspace: GemmWorkspace
     var attn_prefer_eager: Bool  # byte-LM auto policy; explicit fused overrides
     var attn_forward_status: Int  # -1 not attempted; otherwise FUSED_* for last forward
+    var attn_fused_off: Bool
+    """DEVIATION 3110: this layer's fused FORWARD refused once, so it is not
+    launched again for the life of this struct. Latched, never cleared by a
+    step; `reset` clears it because that is a fresh fixture."""
     var attn_materialized: Bool
     """Whether the LAST call's eager softmax weights are valid for backward.
     The eager path sets it; fused clears it. The byte trainer may release
@@ -1644,6 +1650,7 @@ struct LlamaDeviceStages(Movable):
         self.qk_sumsq = _zeros[False](ctx, m * nh)
         self.attn_prefer_eager = False
         self.attn_forward_status = -1
+        self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
 
@@ -1723,6 +1730,7 @@ struct LlamaDeviceStages(Movable):
         self.qk_sumsq.enqueue_fill(Float32(0))
         self.attn_prefer_eager = False
         self.attn_forward_status = -1
+        self.attn_fused_off = False
         self.attn_materialized = False
         self.attn_estash_cells = 0
         step_count_sync()
@@ -3565,7 +3573,28 @@ def eager_attention_forward(
             ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
             plant_idx, plant_bits, trace, prefix, softcap,
         )
-    if choice != ATTN_PATH_EAGER:
+    # DEVIATION 3110: a layer that refused once is not launched again. The
+    # eager path below is the one the refusal mandates; skipping the launch
+    # removes the discarded fused kernel and its synchronize, nothing else.
+    #
+    # `not need_eager` CONFINES THE LATCH TO THE TRACE-OFF TRAINER PATH. With
+    # the trace on, the eager kernels run and record S11-S18 and then the
+    # fused kernels rewrite `ctxv` so `attn.ctx` is recorded FROM THE FUSED
+    # OUTPUT, which is what gates the fused path at every fixture. Latching
+    # there would record `attn.ctx` from the eager output instead on the call
+    # after a refusal, which is a different card. Under `need_eager` this
+    # whole branch reduces to the code that was here before, so the identity
+    # card is untouched by this commit and the measured path is the one that
+    # was measured.
+    if (choice != ATTN_PATH_EAGER and stages.attn_fused_off
+            and ATTN_STICKY and not need_eager):
+        status = FUSED_SKIPPED_STICKY
+        if not need_eager:
+            attention_eager_core(
+                ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,
+                plant_idx, plant_bits, trace, prefix, softcap,
+            )
+    elif choice != ATTN_PATH_EAGER:
         var kept_estash = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
             # DEVIATION 2652 (brief section 20.3): under an `_estash` arm,
@@ -3593,6 +3622,8 @@ def eager_attention_forward(
                 dims.head_dim, s, pos0, key_lo, window,
                 llama_attention_scale(dims.head_dim),
             )
+        if status != FUSED_RAN and not need_eager:
+            stages.attn_fused_off = True
         if status != FUSED_RAN and not need_eager:
             attention_eager_core(
                 ctx, stages, b, l, s, pos0, key_lo, window, dims, plant_at,

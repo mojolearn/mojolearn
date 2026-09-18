@@ -136,6 +136,34 @@ def aliasing_witness(trainer):
     return None if entry is None else bool(entry())
 
 
+def sticky_witness():
+    """DEVIATION 3110's `byte_lm_attn_sticky_fallback()` straight off the
+    loaded binding. False means the build relaunches a refused layer's fused
+    kernels and discards them; None means a binding that predates the flag."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_sticky_fallback', None)
+    return None if entry is None else bool(entry())
+
+
+def kv_guard_witness():
+    """DEVIATION 3111's `byte_lm_attn_kv_corner_guard()` off the loaded
+    binding. False means the dk/dv corner fires on any -0.0."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_kv_corner_guard', None)
+    return None if entry is None else bool(entry())
+
+
+def bwd_corner_witness():
+    """DEVIATION 3112's `byte_lm_attn_bwd_corner_refuses()` off the loaded
+    binding. False means this build's backward never refuses."""
+    from mojolearn import _backend
+    binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    entry = getattr(binding, 'byte_lm_attn_bwd_corner_refuses', None)
+    return None if entry is None else bool(entry())
+
+
 def run_steps(trainer, shape, args, start_index, count, records, corpus=None):
     """One step, then the cheap witnesses; the expensive ones only if asked."""
     for offset in range(count):
@@ -228,11 +256,17 @@ def main():
                   corpus=(corpus.describe() if corpus is not None else None),
                   ids='pinned corpus' if corpus is not None else 'synthetic uniform token ids',
                   ce_aliased=aliasing_witness(trainer),
+                  attn_sticky_fallback=sticky_witness(),
+                  attn_kv_corner_guard=kv_guard_witness(),
+                  attn_bwd_corner_refuses=bwd_corner_witness(),
                   run_metadata=trainer.run_metadata(),
                   steps=records, started=started, finished=time.time())
     (args.out / 'result.json').write_text(json.dumps(result, indent=1, allow_nan=False))
     trainer.close()
     print(json.dumps(dict(event='done', out=str(args.out), ce_aliased=result['ce_aliased'],
+                          attn_sticky_fallback=result['attn_sticky_fallback'],
+                          attn_kv_corner_guard=result['attn_kv_corner_guard'],
+                          attn_bwd_corner_refuses=result['attn_bwd_corner_refuses'],
                           steps=len(records))), flush=True)
 
 

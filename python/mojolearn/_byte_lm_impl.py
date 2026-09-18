@@ -593,7 +593,9 @@ class SmallByteLanguageModelTrainer:
         `total_bytes` (those plus `aexp`). New bindings also report per-layer
         `forward_status`, `backward_status`, their named `*_counts`, and
         `attn_materialized` after the latest step. Status -1 means not
-        attempted; 0 ran, 1 refused regime, 2 corner. Materialization may
+        attempted; 0 ran, 1 refused regime, 2 corner, 3 DEVIATION 3110's
+        latch (this layer refused before, so nothing was launched at all and
+        the eager path ran alone). Materialization may
         have occurred during backward recomputation. Retained capacity does
         not say which path ran this step.
 
@@ -642,28 +644,31 @@ class SmallByteLanguageModelTrainer:
                         layers_full_aexp=int(info[9]),
                         layers=state_shape(self._state).n_layers)
             n = report['layers']
-            if len(info) >= 10 + 3 * n:
+            if len(info) >= 12:
+                report['stage_lists'] = (int(info[10]), int(info[11]))
+                n = min(n, int(info[10]), int(info[11]))
+            if len(info) >= 12 + 3 * n:
                 names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
-                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER'}
+                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER', 3: 'FUSED_SKIPPED_STICKY'}
                 for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
-                    values = [int(info[10 + 3 * layer + offset]) for layer in range(n)]
+                    values = [int(info[12 + 3 * layer + offset]) for layer in range(n)]
                     report[key] = values
                     report[key + '_counts'] = {name: values.count(code)
                                               for code, name in names.items()}
-                report['attn_materialized'] = [bool(info[12 + 3 * layer])
+                report['attn_materialized'] = [bool(info[14 + 3 * layer])
                                              for layer in range(n)]
-            if len(info) > 10 + 3 * n:
-                report['exact_tail_guard'] = bool(info[10 + 3 * n])
             if len(info) > 12 + 3 * n:
-                report['release_eager'] = bool(info[11 + 3 * n])
-                report['released_eager_bytes'] = int(info[12 + 3 * n]) * 4
-            if len(info) >= 14 + 4 * n:
-                report['sticky_eager'] = bool(info[13 + 3 * n])
-                report['layers_prefer_eager'] = [bool(info[14 + 3 * n + layer])
+                report['exact_tail_guard'] = bool(info[12 + 3 * n])
+            if len(info) > 14 + 3 * n:
+                report['release_eager'] = bool(info[13 + 3 * n])
+                report['released_eager_bytes'] = int(info[14 + 3 * n]) * 4
+            if len(info) >= 16 + 4 * n:
+                report['sticky_eager'] = bool(info[15 + 3 * n])
+                report['layers_prefer_eager'] = [bool(info[16 + 3 * n + layer])
                                                for layer in range(n)]
-            if len(info) >= 15 + 5 * n:
-                report['repair_masked_tail'] = bool(info[14 + 4 * n])
-                report['backward_repair_sites'] = [int(info[15 + 4 * n + layer])
+            if len(info) >= 17 + 5 * n:
+                report['repair_masked_tail'] = bool(info[16 + 4 * n])
+                report['backward_repair_sites'] = [int(info[17 + 4 * n + layer])
                                                   for layer in range(n)]
             return report
 

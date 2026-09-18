@@ -97,7 +97,8 @@ kernels otherwise. Rebuilt on the same pod with NO defines as
 - `tools/identity_break.py`, nine forest lanes (rf-clf, rf-reg, et-clf,
   et-reg, rf-clf-entropy-log2-noboot, rf-reg-poisson, rf-reg-gamma-ig,
   et-clf-entropy-bestfirst, rf-score-weighted; the two `-parallel` lanes
-  skipped, they hang a one-GPU box), five fixtures, two repeats, cuda
+  skipped at the time, because they hung a one-GPU box; DEVIATION 3010
+  unblocked them on 2026-09-18), five fixtures, two repeats, cuda
   column: default vs final IDENTICAL=45 train, IDENTICAL=80 infer/model
   (N/A=10), IDENTICAL=40 batch (N/A=5). Nothing moved.
 - Confirmation timing, two processes each (`final_confirmation.txt`): taxi RF
@@ -124,8 +125,8 @@ kernels otherwise. Rebuilt on the same pod with NO defines as
   fit took 377.8 s on taxireg (5.25M x 16) and 179.0 s on Year where the RF
   classifiers take 1 to 5 s and RF regressors 8 to 37 s: reported to
   lane/forest-train-speed, not touched here.
-- The deadlock in `tools/forest_groves_identity.py large` (below) is reported,
-  not fixed.
+- The deadlock in `tools/forest_groves_identity.py large` (below) was
+  reported here and FIXED on 2026-09-18 by DEVIATION 3010.
 
 ## A deadlock on main, found on the way
 
@@ -161,8 +162,15 @@ snapshot is released (`resident_release`, `ResidentForest.close`, its
 `DeviceContext` dropped), the next `resident_prepare` in the same process
 never returns. Two live snapshots are fine. Any program that fits or loads a
 second groves forest after the first was collected hits this, which is what
-`tools/forest_groves_identity.py large` does between models. The suspect is
-the teardown order in `core/forest_inference_model.mojo` (`ResidentForest.close`
-and `__deinit__` against the context's pending stream) or the Mojo runtime's
-handling of a destroyed `DeviceContext`. NOT fixed here (no new lanes); the
-reproduction is two commands on any one-GPU CUDA pod.
+`tools/forest_groves_identity.py large` does between models. **FIXED 2026-09-18 by DEVIATION 3010
+(lane/forest-deadlock).** The suspect named here was right, and the
+mechanism was already on record as DEVIATION 2520: `ResidentForest.close`
+synchronized BEFORE its ten releases and destroyed the context immediately
+after them, so the context died with their buffer frees in flight and the
+MAX runtime allocator's lock stayed held for the whole PROCESS (which is
+also why a live snapshot's next allocation can block). Watched failing and
+then passing on an RTX 4090 with a native backtrace, 70 forest/GBDT/KDE
+cells bitwise identical across the change, and the two `-parallel`
+identity_break lanes now run the full protocol on one GPU. See
+`docs/lanes/LANE_STATUS_lane-forest-deadlock.md`; the reproduction is
+`tools/forest_release_prepare_repro.py`, which needs no dataset.

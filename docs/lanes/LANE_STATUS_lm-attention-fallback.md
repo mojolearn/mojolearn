@@ -303,3 +303,27 @@ changed in training. Native fixtures separately prove both sign outcomes.
 Host-only compatibility check: 44 byte-LM surface tests pass in 0.89s, using
 the freshly compiled Apple binding only for import and mocked training.
 No Apple GPU execution.
+
+
+## Final main integration: registered before the run
+
+Main 5025376d5 independently merged the initial status instrumentation and
+three disabled research arms. Preserve those arms and their loaded-binding
+witnesses; preserve its safe partial-stage reporting after a failed backward.
+The canonical session-info layout now includes both list lengths before the
+triples, followed by the qualified policy/replay fields. The actual Python
+method passes full/short/empty-list fixtures, after old-offset, missing-bound
+and wrong-repair-offset mutations fail. Main's historical scripts explicitly
+disable later defaults when reproducing their original arms. Their source
+records remain intact. No repair kernel arithmetic or fold order changed.
+
+Prediction: the merged-source default on strict R2 enwik8, seed 20260917,
+HD64 target B1, 700 steps, matches all 700 saved legacy losses and six state
+hashes at steps 0/699. All 8400 forward/backward statuses remain RAN; the
+per-step repair masks match source 57cf16d61 exactly (3449 dQ, zero zdot).
+Eager capacity remains 432 B, aexp 2415919104 B. Expected tail median
+0.19–0.23 s and sampled device footprint below 16000 MiB. A single different
+bit, status or replay-site observation falsifies numerical integration;
+exceeding either timing/memory bound falsifies retained-performance prediction.
+Commit/push this merged source before renting. Native replay sabotage must
+fail for both sites, then the clean native gate and the 700-step run complete.

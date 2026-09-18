@@ -152,7 +152,7 @@ comptime ATTN_REPAIR_MASKED_TAIL = (
 ) and not is_defined["MOJOLEARN_ATTN_LEGACY_CORNER"]()
 comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
 comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
-comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]()
+comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]() or is_defined["MOJOLEARN_ATTN_KV_CORNER_GUARD"]()
 comptime ATTN_TAIL_GUARD_SABOTAGE = is_defined["MOJOLEARN_ATTN_TAIL_GUARD_SABOTAGE"]()
 
 comptime FUSED_RAN = 0
@@ -163,11 +163,64 @@ written and the caller must run the eager path."""
 comptime FUSED_CORNER = 2
 """A chain ended its visible run holding `-0.0`; the caller must run the
 eager path."""
+comptime FUSED_SKIPPED_STICKY = 3
+"""DEVIATION 3110: this layer/direction refused once already, so the fused
+kernels were NOT launched at all and the eager path ran alone. Not a
+refusal: a refusal that has been REMEMBERED, so the step stops paying for
+a launch whose result is then thrown away."""
+
+
+# ===========================================================================
+# DEVIATION 3110: experimental direction-specific sticky fallback, default OFF.
+# The 700-step H100 control found refusals are intermittent and the latch
+# regresses throughput by 3.6%. It remains available to reproduce that trial.
+# The qualified default instead replays omitted masked terms with exact bits.
+# See docs/lanes/LANE_STATUS_lm-attention-fallback.md and the earlier
+# LANE_STATUS_attention-fallback-fix.md for the separate measured records.
+# ===========================================================================
+
+comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
+
+comptime ATTN_NO_BWD_CORNER = is_defined["MOJOLEARN_ATTN_NO_BWD_CORNER"]()
+"""DEVIATION 3112, A MEASUREMENT ARM AND NEVER A SHIPPED BUILD: the backward
+launchers stop refusing on a corner. See the comment at their `return
+FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
+arm; on its own it proves nothing and could be silently wrong."""
+
+comptime ATTN_BWD_KV_CORNER_GUARD = ATTN_EXACT_TAIL_GUARD
+"""Exact dk/dv corner predicate, shared by the qualified replay and old
+experimental guard names. The old guard-only trial removed 248/3697 refusals
+without a measurable speed or memory win. The full replay is independently
+qualified; native tests include sliding-window/GQA tails and signed zeros.
+
+WHY. `-0.0` in a fused accumulator is a refusal only because the EAGER chain
+folds the masked cells too and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s
+sign bit is clear. That laundering needs a masked cell AFTER the last visible
+one. The forward tests `rr[1] < s - 1` for exactly this (`:2031`) and so does
+the `dq` chain (`j_hi < s - 1`, `:2871`). The `dk`/`dv` chains test nothing.
+
+Their chains are over the QUERY axis, and `_key_query_range` returns
+`hi = l - 1` for EVERY key unless a sliding window is set. At the byte-LM
+target shape (`window == 0`, `n_rep == 1`) there is no masked tail at all, so
+every one of those refusals is a false positive. MEASURED on an H100,
+2026-09-18, 700 steps at that shape: the guarded FORWARD refused 0 times out
+of 8,400 observations and the unguarded BACKWARD refused 3,697 times out of
+8,400. That asymmetry is the whole of the 2.13x.
+
+The `hh + 1 < n_rep` term is the grouped-query case: under GQA the chain
+continues into the next head of the kv group, whose rows below `lo[u]` ARE
+masked cells that follow. It is INERT at `n_rep == 1`, and it is written
+because the kernel is not restricted to `n_rep == 1`.
+
+NOT COVERED, and said rather than counted: `fused_bwd_dkdv_tiled_kernel` and
+`fused_bwd_kvfold_r2_kernel` carry the same unguarded test and are NOT
+changed here. They are trial arms; the column default resolves to
+`fused_bwd_dkdv_r2_kernel`, which is the one measured."""
 
 comptime REGIME_BOUND: Float64 = 1267650600228229401496703205376.0
 """`2^100`. `head_dim * max|a| * max|b|` below this keeps every dot below
@@ -4852,7 +4905,9 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                             dv_acc[u * CPT + v] = _step_preflushed(yv, da[v], dv_acc[u * CPT + v])
             barrier()
         # The end of this head's visible run for every key this thread
-        # holds: a `-0.0` here could be laundered by the masked tail.
+        # holds: a `-0.0` here could be laundered by the masked tail --
+        # BUT ONLY IF THERE IS ONE. DEVIATION 3111, see
+        # `ATTN_BWD_KV_CORNER_GUARD`.
         comptime for i in range(RPT * CPT):
             var may_launder = True
             comptime if ATTN_EXACT_TAIL_GUARD:
@@ -7453,7 +7508,11 @@ def fused_backward_launch_ran(
     _ = corner^
     _attn_tick(ctx, ton, tk, "bwd_corner_flag")
     if hit:
-        return FUSED_CORNER
+        # Experimental bypass, default OFF. Model-state equality alone
+        # does not establish intermediate signed-zero identity. Native
+        # repair/preservation gates establish why exact replay is needed.
+        comptime if not ATTN_NO_BWD_CORNER:
+            return FUSED_CORNER
     return FUSED_RAN
 
 
@@ -7772,7 +7831,11 @@ def fused_backward_launch_estash_report(
             _ = corner^
             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
             if hit:
-                return FUSED_CORNER
+                # Experimental bypass, default OFF. Model-state equality alone
+                # does not establish intermediate signed-zero identity. Native
+                # repair/preservation gates establish why exact replay is needed.
+                comptime if not ATTN_NO_BWD_CORNER:
+                    return FUSED_CORNER
             return FUSED_RAN
     return fused_backward_launch_ran(
         ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,

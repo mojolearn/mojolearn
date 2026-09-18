@@ -42,9 +42,11 @@ export GBM_BENCH_DATA=/root/datasets/gbm-bench
 export PYTHONUNBUFFERED=1
 LANES="rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-clf-balanced-parallel,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,et-reg-bootstrap-parallel,rf-score-weighted"
 FIXTURES="base,ties,odd,dupes,wide"
-# The two parallel lanes' batch part hung the one-GPU box on main
-# (lane/infer-speed-trees, 2026-09-17); the CPU columns carry them.
-SKIP_CUDA="${SKIP_CUDA:-rf-clf-balanced-parallel,et-reg-bootstrap-parallel}"
+# The two parallel lanes hung the one-GPU box on main (lane/infer-speed-trees,
+# 2026-09-17). FIXED by DEVIATION 3010 on 2026-09-18 and no longer skipped:
+# the cause was the resident forest's teardown, not the batch protocol
+# (docs/lanes/LANE_STATUS_lane-forest-deadlock.md).
+SKIP_CUDA="${SKIP_CUDA:-}"
 VARIANTS="${VARIANTS:-pinned:-D MOJOLEARN_FOREST_PINNED_STAGE=1|packed:-D MOJOLEARN_FOREST_PACKED_NODES=1|shared:-D MOJOLEARN_FOREST_SHARED_ROWS=1|profile:-D MOJOLEARN_FOREST_PROFILE=1}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }
