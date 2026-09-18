@@ -153,6 +153,33 @@ with how much of the run was actually checked, as in `verified 44 of 332 cell
 parts (0 divergent, 0 owed, 288 refused, 0 n/a)`, so a run that mostly refused
 cannot be misread as a run that passed.
 
+## Choose the verification cost and scope
+
+Release certification builds native bindings and runs clean and injected-fault
+sweeps on several architectures. It is a maintainer workflow, not a requirement
+for each user installation. Choose a narrower installed-package command:
+
+```sh
+python -m mojolearn verify --coverage                    # inspect scope; no fits
+python -m mojolearn verify --inference                   # bundled saved models; no fits
+python -m mojolearn verify --training --lanes ols --fixtures base --repeats 2
+python -m mojolearn verify --training                    # all available fit-based routes
+python -m mojolearn verify --all --batch-checks --repeats 2 # comprehensive suite
+```
+
+`--inference` is an alias for `--models-only`. It covers the bundled models,
+not every possible inference API or input. `--training` excludes that separate
+bundled-model suite, but still checks applicable inference/reload/batch properties
+of the models it fits. These scopes are mutually exclusive. `--quick` selects
+one fit-based route per family; it is smaller, but it still performs training
+and is not guaranteed to finish in seconds on every CPU.
+
+Evidence applies to the tested artifact, implementation, inputs, properties and
+hardware. Unchanged compatible results can be retained; changing native code,
+bindings, numerical behavior or verification protocol requires the affected
+checks again. Small targeted checks during development catch bugs before an
+expensive final frozen-artifact certification.
+
 ## What the CPU training bindings are for
 
 Every wheel since 2026-09-16 carries all thirty-two host (CPU) bindings, the

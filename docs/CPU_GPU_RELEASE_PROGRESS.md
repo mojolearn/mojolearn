@@ -93,6 +93,44 @@ Existing parallel routes do not establish completion of these new scopes.
 
 ## Next steps, in execution order
 
+Latest user steering: independent architecture jobs should run in parallel.
+The matrix now allows three jobs, each with its existing two-shard cap (up to
+six numerical workers). No new Apple run was dispatched. Parallel scheduling
+can reduce matrix wall time from the sum of job times to the longest job, at
+best about 3x for three equally long jobs; it does not reduce individual fit
+time or total numerical work. Earlier serial-worker notes above are historical.
+
+Measured hosted Apple costs: 7.4 minutes production build, 46.1 minutes clean
+full-column sweep, 5.1 minutes fault-build compilation, then an unfinished fault
+sweep before the job timeout. Default fixture dimensions are 20,000 rows by
+16 columns (many lanes slice smaller inputs), with nine variants and repeats.
+This is maintainer coverage, not an appropriate default lightweight install
+test. Next design work: a separate small training-identity profile with pinned
+per-lane edge cases and explicitly generated CPU/GPU references; preserve the
+broad profile for release/regression work. Do not reduce existing fixture sizes
+in place or compare small inputs against large-input reference hashes. Measure
+the slowest lanes before choosing sizes, preserving the boundary/bug cases.
+
+Update after user review: hold another Apple certification run while checkpointing
+and CPU implementation work proceed. The workflow now uploads intermediate
+saved-model, clean-column and fault-column reports before the final upload.
+These preserve finished stages if a later stage fails; they are not automatic
+cross-run restore, nor do they preserve every cell if a running stage is killed.
+run-column --resume now preserves local shard checkpoints and delegates reuse
+validation to the harness (source/binary bytes, environment, machine provenance
+and protocol must match). It deletes and recomputes the merged verdict, retains
+logs, and starts missing shards fresh. Existing failed cells stay failed.
+Changing checkpoint locations or environment can intentionally refuse reuse.
+Automatic artifact restore and safe stage-selection remain follow-up work.
+
+The installed CLI now exposes --inference (the bundled saved-model suite,
+alias of --models-only) and --training (fit-based routes and their properties,
+excluding the separate bundled-model suite). Existing flags retain behavior.
+These clearer names are on main for the next wheel; frozen-release proof fixes
+remain separate. Consolidate remaining CPU implementation work with targeted
+tests, then perform broad final qualification rather than repeating the whole
+architecture matrix for each small edit.
+
 1. Retain and inspect the remaining x86 old-source results. Resolve failures
    individually; do not reuse a timeout or refusal as proof of agreement.
 2. Finish the UMAP evidence repair: fresh NVIDIA/AMD captures after the

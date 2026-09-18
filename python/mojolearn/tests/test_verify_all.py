@@ -792,6 +792,22 @@ def test_flags_route_to_the_suite_or_the_card():
     assert va.cmd_verify_all(args) == va.EXIT_USAGE
 
 
+def test_explicit_training_and_inference_scopes(monkeypatch):
+    parser = cli.build_parser()
+    observed = []
+    monkeypatch.setattr(va, 'cmd_verify_all', lambda args: observed.append(args) or 0)
+    training = parser.parse_args(['verify', '--training', '--lanes', 'ols', '--fixtures', 'base'])
+    assert cli._verify_dispatch(training) == 0
+    assert observed[-1].no_models and not observed[-1].models_only
+    assert observed[-1].lanes == 'ols' and observed[-1].fixtures == 'base'
+    for flag in ('--inference', '--models-only'):
+        inference = parser.parse_args(['verify', flag])
+        assert cli._verify_dispatch(inference) == 0
+        assert observed[-1].models_only and not observed[-1].no_models
+    with pytest.raises(SystemExit):
+        parser.parse_args(['verify', '--training', '--inference'])
+
+
 def test_harness_overrides_are_refused(monkeypatch):
     monkeypatch.setenv("MOJOLEARN_IDENTITY_N", "40000")
     with pytest.raises(va.CannotRun):
