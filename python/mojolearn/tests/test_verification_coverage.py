@@ -35,6 +35,10 @@ def test_all_246_appendix_entries_are_preserved_and_resolve():
         assert entry['lanes'] or entry.get('alternative_gate')
         assert set(entry['lanes']) <= set(h.LANES), entry
     report = coverage.inventory(h, vr.load_table(), 'cpu')
+    stale = set(vr.stale_reference_lanes(vr.load_table(), h))
+    for name, row in report['lanes'].items():
+        if row['reason'] == 'stale reference':
+            assert name in stale
     mapped = {l for e in ENTRIES for l in e['lanes']}
     assert set(report['additional_lanes']) == set(h.LANES) - mapped
     assert report['execution'] == 'not run'

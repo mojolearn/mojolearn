@@ -74,6 +74,10 @@ def inventory(harness, table, vendor_class):
                 status, reason = "unavailable", "no declared public CPU verification route"
         if status == "available" and name in stale:
             status, reason = "withheld", "stale reference"
+        elif reason == "stale reference" and name not in stale:
+            # A fresh CPU recording can repair the revision before independent
+            # GPU qualification closes the explicit hold in host_surface.
+            reason = "reference qualification pending"
         properties = {"batch": declaration(getattr(harness, "BATCH", {}).get(name))}
         for part, (specs, default, *_rest) in getattr(harness, "EXTRA_PARTS", {}).items():
             properties[part] = declaration(specs.get(name, default))
