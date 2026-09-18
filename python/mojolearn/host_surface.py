@@ -304,6 +304,13 @@ FOREST_RECORDED_ROOT = "bench/results/forest_host"
 #: The identity_break lanes with a CPU TRAINING path, in the gate's order,
 #: with the name the docs use for each.
 TRAINING_LANE_NAMES = {
+    "kernel-ridge-poly": "kernel ridge poly kernel variant",
+    "kernel-ridge-sigmoid": "kernel ridge sigmoid kernel variant",
+    "kernel-ridge-laplacian": "kernel ridge laplacian kernel variant",
+    "nystroem-poly": "nystroem poly kernel variant",
+    "nystroem-sigmoid": "nystroem sigmoid kernel variant",
+    "nystroem-laplacian": "nystroem laplacian kernel variant",
+
     # Logical row shards; pending independent reference qualification.
     "par-rbf-sampler": "the row-sharded random Fourier feature transform",
     "select-d": "ordinary differencing order selection",
@@ -1686,8 +1693,8 @@ FAMILIES = (
         # family's host binding. It routes `_mojolearn_kernel_methods` on a
         # CPU-only install with the GPU binding's fit, predict and transform
         # names for KernelRidge, Nystroem and RBFSampler at the linear and
-        # rbf kernels; the polynomial, sigmoid and laplacian kernels refuse
-        # by name, and kernel_methods_rows_parallel_available stays absent,
+        # rbf kernels and now polynomial, sigmoid and Laplacian;
+        # kernel_methods_rows_parallel_available stays absent,
         # so cooperative kernel-method drivers refuse by name. The RBF sampler
         # transform splits whole rows in Python and uses the ordinary host
         # transform per shard; its non-cooperative CPU route is declared here.
@@ -1696,7 +1703,8 @@ FAMILIES = (
         routes="_mojolearn_kernel_methods",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler"),
+        training_lanes=("rbf-sampler", "kernel-ridge", "nystroem", "par-rbf-sampler",
+                        "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian", "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("KernelRidge", "Nystroem", "RBFSampler"),
@@ -2506,6 +2514,13 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    "kernel-ridge-poly": "no reference",
+    "kernel-ridge-sigmoid": "no reference",
+    "kernel-ridge-laplacian": "no reference",
+    "nystroem-poly": "no reference",
+    "nystroem-sigmoid": "no reference",
+    "nystroem-laplacian": "no reference",
+
     # mamba2-dtlimit regained all-nine references at its corrected clamp;
     # see the CPU verification completion records (2026-09-17).
     # lane/dead-arms, 2026-09-16: THESE THREE WERE PUBLIC UNTIL TODAY. Their
@@ -2703,7 +2718,14 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: dispatches is also a declared, gated and recorded inference lane; it does
 #: NOT mean nothing is left to implement. A new `save` that ships without a
 #: recording belongs here, with the reason, rather than nowhere.
-SAVED_MODEL_INFERENCE_OWED = {}
+SAVED_MODEL_INFERENCE_OWED = {
+    "kernel-ridge-poly": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "kernel-ridge-sigmoid": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "kernel-ridge-laplacian": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "nystroem-poly": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "nystroem-sigmoid": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+    "nystroem-laplacian": "The existing serialization format is implemented for this kernel variant; independent GPU saved-model recordings are still owed.",
+}
 
 
 def public_reference_candidates():

@@ -3779,6 +3779,54 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:64, :4]),))
 
 
+def _kernel_variant(ml, X, yr, Xh, family, kernel):
+    # Fixed power-of-two input scaling keeps the polynomial matrix bounded
+    # while preserving fixture ties and denormal/FTZ distinctions.
+    x = np.ascontiguousarray(X[:48, :4] * np.float32(0.125))
+    test = np.ascontiguousarray(X[48:64, :4] * np.float32(0.125))
+    held = np.ascontiguousarray(Xh[:64, :4] * np.float32(0.125))
+    kw = dict(kernel=kernel, gamma=0.5, coef0=0.25, degree=3)
+    if family == "kernel-ridge":
+        m = ml.KernelRidge(alpha=64.0, **kw).fit(x, yr[:48])
+        return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)),
+                         predict=_h(m.predict(test))), m, lambda e: (e.predict(held),))
+    m = ml.Nystroem(n_components=8, random_state=7, **kw).fit(x)
+    return _fit(dict(components=_h(m.components_), indices=_h(m.component_indices_),
+                     normalization=_h(m.normalization_), eigenvalues=_h(m.eigenvalues_),
+                     eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
+                     transform=_h(m.transform(test))), m, lambda e: (e.transform(held),))
+
+
+@lane("kernel-ridge-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "poly")
+
+
+@lane("kernel-ridge-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "sigmoid")
+
+
+@lane("kernel-ridge-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "laplacian")
+
+
+@lane("nystroem-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "poly")
+
+
+@lane("nystroem-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "sigmoid")
+
+
+@lane("nystroem-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "laplacian")
+
+
 @lane("rbf-sampler")
 def _(ml, X, yc, yr, Xh=None):
     """RBFSampler with 64 random Fourier features over the 16 fixture
@@ -5705,6 +5753,14 @@ def _batch_par_graph_umap(ml, e, Xh):
 
 _batch_decl(_batch_umap, "umap")
 _batch_decl(_batch_par_graph_umap, "par-graph-umap")
+def _kernel_variant_rows(X):
+    return np.ascontiguousarray(X[:64, :4] * np.float32(0.125))
+
+
+_batch_decl(_rows_calls("predict", prep=_kernel_variant_rows),
+            "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian")
+_batch_decl(_rows_calls("transform", prep=_kernel_variant_rows),
+            "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")
