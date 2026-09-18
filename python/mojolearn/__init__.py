@@ -303,10 +303,14 @@ from .model_pool_training import PooledByteLanguageModelTrainer
 from .offload_training import OffloadedByteLanguageModelTrainer
 from . import parallel_forecasting
 from . import parallel_gaussian_process
+from . import parallel_ivf
+from .parallel_ivf import DistributedIVFIndex
 
 __all__ = [
     "parallel_forecasting",
     "parallel_gaussian_process",
+    "parallel_ivf",
+    "DistributedIVFIndex",
     "ParallelByteLanguageModelTrainer",
     "ParallelNeuralTrainer",
     "PooledByteLanguageModelTrainer",
