@@ -135,3 +135,27 @@ and both GMM columns captured successfully. The family body now builds
 preprocessing before GP capture, and its ordering regression checks that
 requirement. Initial refusal records remain retained; same-VM recovery is being
 prepared rather than relabeling them as passes.
+
+All six kernel variants now additionally have a direct saved-GPU-model native
+CPU inference fault witness: 54/54 unchanged AMD models produced different CPU
+outputs under the retained compiled estimators sabotage binding. Strict
+`--every-fixture` passed with zero unmoved cells, in 0.61 seconds under the local
+slot. Binding digest and raw report are committed beside AMD evidence. This
+covers native CPU training (prior 54/54) and saved-model inference (new 54/54);
+it is not an AMD GPU native-fault claim or a final-wheel fault certificate.
+
+## Shipped inference coverage expanded
+
+The portable model bundle now includes the exact 54 AMD-recorded kernel model
+files (all six variants, all nine fixtures) in addition to its prior four base
+models. Every file matches the admitted model reference and has a real batch
+reference, which is the existing `_cmd_emit_models` admission policy. The
+manifest records actual CPU/Apple/AMD agreement and source-record hashes; it
+does not invent NVIDIA agreement. This makes all six variants useful in the
+installed `verify --inference`/`--models-only` path independently of their
+training holds. Both wheel builders already include this tracked directory.
+
+Source CPU validation with two repeats: **116/116 numerical model/batch parts
+IDENTICAL**, zero divergent, owed, refused or N/A, in 1.4 seconds (slot1.74s).
+The total 58-model bundle is 342,951 bytes. Installed development-wheel replay
+is next; final expanded 0.8.7 native artifact qualification remains separate.
