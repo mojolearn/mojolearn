@@ -113,3 +113,18 @@ claim independent physical kernel execution or native arithmetic sabotage.
 CLI/resource/coverage integration: 46 tests passed. Wheel import inventory:
 103 package modules, all reachable. New artifacts still require an expanded
 0.8.7 build and installed hardware replay before publication.
+
+## CV integration and NVIDIA infrastructure interruption
+
+Merged CV through `0ff8d0a30`, preserving both worker inventory and fold execution
+dispatch. Added public `parallel_model_selection` exposure. Combined scheduler,
+driver-witness, distributed verifier, capture-source and recovery tests: 99 passed.
+The separate distributed API suite also passed 91 tests with 14 native IVF tests
+skipped outside their dedicated native job.
+
+The first NVIDIA two-L40S pod disappeared before CV capture; provider GET returned
+404 while its lease still had about 45 minutes remaining. Its owner stopped
+polling, verified absence and cancelled its local watchdog. Another GEMM lane's
+NVIDIA pod is active and was untouched. The deletion cause is unproven; no NVIDIA
+numerical pass is claimed. Replacement awaits ownership coordination. AMD and
+local installed-wheel preparation continue independently.

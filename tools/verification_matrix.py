@@ -382,6 +382,7 @@ EXTRA_PUBLIC_MODULES = (
     "parallel_forecasting",
     "parallel_gaussian_process",
     "parallel_ivf",
+    "parallel_model_selection",
 )
 
 

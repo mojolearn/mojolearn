@@ -304,12 +304,14 @@ from .offload_training import OffloadedByteLanguageModelTrainer
 from . import parallel_forecasting
 from . import parallel_gaussian_process
 from . import parallel_ivf
+from . import parallel_model_selection
 from .parallel_ivf import DistributedIVFIndex
 
 __all__ = [
     "parallel_forecasting",
     "parallel_gaussian_process",
     "parallel_ivf",
+    "parallel_model_selection",
     "DistributedIVFIndex",
     "ParallelByteLanguageModelTrainer",
     "ParallelNeuralTrainer",
