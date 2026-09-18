@@ -294,3 +294,19 @@ Evidence `bench/results/e1g/2026-09-18_153549-amd-mi300x-hotaisle-apple-seam-rep
 So after the repair, Apple, NVIDIA and AMD agree bit for bit on every
 fixture that separates flush-before-round from round-then-flush, on the GEMM
 identity card, and (seam probe) on all 262,144 triples of the shipped seam.
+
+## RESULT 10: AMD byte-identity restored (bisected, 2026-09-18)
+
+Bisect on gfx942 gemm_device_check sidecars (xasm/gcn3.sh, variants v1-v6):
+reverting the call-site wrapper (v1) or the admission register declaration
+(v2) did not restore identity; restoring the tuned kernel text (v4) did;
+removing ONLY the empty-on-AMD `comptime if TUNED_BLOCK_ADMIT` block inside
+the window loop (v5) did; removing the post-loop admission block (v6) did
+not. Fix (commit after 2b-ish WIP, `_admit_track` helper): the in-loop update
+is a helper call whose body is the comptime-if. Result (xasm/gcn4.sh):
+- gfx942: all 68 kernels of gemm_device_check byte-identical to main.
+- sm_90a: every PTX module identical to main.
+- apple-m4: every device module byte-identical to the previous branch build,
+  so every Apple measurement above (probe, boundary check, prices, card)
+  holds for the new spelling unchanged.
+AMD re-check of all five programs running (xasm/xcheck2.sh).
