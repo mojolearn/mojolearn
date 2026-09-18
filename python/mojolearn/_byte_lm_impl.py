@@ -593,7 +593,9 @@ class SmallByteLanguageModelTrainer:
         `total_bytes` (those plus `aexp`). New bindings also report per-layer
         `forward_status`, `backward_status`, their named `*_counts`, and
         `attn_materialized` after the latest step. Status -1 means not
-        attempted; 0 ran, 1 refused regime, 2 corner. Materialization may
+        attempted; 0 ran, 1 refused regime, 2 corner, 3 DEVIATION 3110's
+        latch (this layer refused before, so nothing was launched at all and
+        the eager path ran alone). Materialization may
         have occurred during backward recomputation. Retained capacity does
         not say which path ran this step.
 
@@ -636,7 +638,8 @@ class SmallByteLanguageModelTrainer:
             n = report['layers']
             if len(info) >= 10 + 3 * n:
                 names = {-1: 'NOT_ATTEMPTED', 0: 'FUSED_RAN',
-                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER'}
+                         1: 'FUSED_REFUSED_REGIME', 2: 'FUSED_CORNER',
+                         3: 'FUSED_SKIPPED_STICKY'}
                 for offset, key in ((0, 'forward_status'), (1, 'backward_status')):
                     values = [int(info[10 + 3 * layer + offset]) for layer in range(n)]
                     report[key] = values

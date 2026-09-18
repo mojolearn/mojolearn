@@ -78,6 +78,7 @@ from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
+from transformer.impl.llama.fused_attention import ATTN_NO_STICKY
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
@@ -185,6 +186,21 @@ def byte_lm_ce_aliased() -> Bool:
     witness, building the same arm twice and comparing it with itself reads
     exactly like a passed identity gate."""
     comptime if BYTE_LM_CE_UNALIASED:
+        return False
+    return True
+
+
+def byte_lm_attn_sticky_fallback() -> Bool:
+    """DEVIATION 3110: False in a build carrying
+    `-D MOJOLEARN_ATTN_NO_STICKY=1`, which relaunches the fused attention
+    kernels on every call even for a layer that has already refused, and then
+    throws that launch away and runs the eager path anyway.
+
+    The A/B that claims the latch moves no bit reads this from INSIDE the
+    process that loaded the binding. A `.so` digest cannot answer it: the
+    define gates a single runtime branch on a comptime constant, so the two
+    builds differ by about one byte and are the same size."""
+    comptime if ATTN_NO_STICKY:
         return False
     return True
 

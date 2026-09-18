@@ -50,8 +50,10 @@ from checks.numerics import (
 )
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
+    ATTN_NO_STICKY,
     ATTN_SHIPPED_BWD_ESTASH,
     FUSED_RAN,
+    FUSED_SKIPPED_STICKY,
     device_first_nonfinite,
     fused_attention_arm_estash_runs,
     fused_attention_arm_from_env,
@@ -1822,6 +1824,9 @@ struct LlamaBackwardStages(Movable):
     var head_a: DeviceBuffer[DType.float32]  # [L, head_dim]
     var head_b: DeviceBuffer[DType.float32]  # [s_max, head_dim]
     var attn_backward_status: Int  # -1 not attempted; otherwise FUSED_*
+    var attn_bwd_fused_off: Bool
+    """DEVIATION 3110: this layer's fused BACKWARD refused once, so it is not
+    launched again for the life of this struct."""
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
     def __init__(
@@ -1918,6 +1923,7 @@ struct LlamaBackwardStages(Movable):
         self.head_a = _zeros[False](ctx, l * hd)
         self.head_b = _zeros[False](ctx, s_max * hd)
         self.attn_backward_status = -1
+        self.attn_bwd_fused_off = False
         self.head_c = _zeros[False](ctx, head_c_n)
 
         # All fill targets are fields of self and remain alive through this
@@ -3075,7 +3081,19 @@ def llama_decoder_layer_backward_device(
             ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
             trace, prefix,
         )
-    if choice != ATTN_PATH_EAGER:
+    # DEVIATION 3110: see fused_attention.mojo. A backward refusal is worse
+    # than a forward one -- `bwd_attention_eager_stages` calls
+    # `ensure_attention_materialized`, which recomputes this layer's whole
+    # EAGER FORWARD as well -- so the discarded launch is paid on top of two
+    # eager passes. The latch removes the launch.
+    if choice != ATTN_PATH_EAGER and bst.attn_bwd_fused_off and not ATTN_NO_STICKY:
+        bst.attn_backward_status = FUSED_SKIPPED_STICKY
+        if not need_eager:
+            bwd_attention_eager_stages(
+                ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,
+                trace, prefix,
+            )
+    elif choice != ATTN_PATH_EAGER:
         var status = -1
         var estash_done = False
         comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
@@ -3104,6 +3122,8 @@ def llama_decoder_layer_backward_device(
                 fwd.denom, b, l, nh, nkv, hd, s, pos0, key_lo, window, scale,
             )
         bst.attn_backward_status = status
+        if status != FUSED_RAN:
+            bst.attn_bwd_fused_off = True
         if status != FUSED_RAN and not need_eager:
             bwd_attention_eager_stages(
                 ctx, bst, fwd, b, l, s, pos0, key_lo, window, dims, scale,

@@ -49,7 +49,7 @@ from training.byte_lm import (
     byte_eval_loss, byte_eval_loss_resident, byte_rollback,
     byte_validate_state, byte_validate_optimizer,
     byte_validate_tokens, byte_lm_fault_inject_available,
-    byte_attention_eager_cells, byte_lm_ce_aliased,
+    byte_attention_eager_cells, byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
 from training.byte_lm_model_pool import ByteModelPool
@@ -734,6 +734,15 @@ def byte_lm_ce_aliased_binding() raises -> PythonObject:
     The A/B that claims aliasing moves no bit reads this to prove its two
     arms are two arms."""
     return PythonObject(byte_lm_ce_aliased())
+
+
+def byte_lm_attn_sticky_fallback_binding() raises -> PythonObject:
+    """DEVIATION 3110: False in a build carrying
+    -D MOJOLEARN_ATTN_NO_STICKY=1, which relaunches the fused attention
+    kernels for a layer that has already refused and then discards the
+    launch. The A/B that claims the latch moves no bit reads this to prove
+    its two arms are two arms."""
+    return PythonObject(byte_lm_attn_sticky_fallback())
 
 
 def byte_lm_session_open_binding(session: PythonObject, addresses: PythonObject,
@@ -1642,6 +1651,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
+        module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).

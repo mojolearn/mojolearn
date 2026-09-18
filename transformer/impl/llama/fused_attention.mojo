@@ -149,6 +149,38 @@ written and the caller must run the eager path."""
 comptime FUSED_CORNER = 2
 """A chain ended its visible run holding `-0.0`; the caller must run the
 eager path."""
+comptime FUSED_SKIPPED_STICKY = 3
+"""DEVIATION 3110: this layer/direction refused once already, so the fused
+kernels were NOT launched at all and the eager path ran alone. Not a
+refusal: a refusal that has been REMEMBERED, so the step stops paying for
+a launch whose result is then thrown away."""
+
+
+# ===========================================================================
+# DEVIATION 3110: THE STICKY FALLBACK.
+#
+# `eager_attention_forward` and `llama_decoder_layer_backward_device` both
+# LAUNCH the fused kernels, synchronize to read the corner flag, and THEN,
+# on a non-`FUSED_RAN` status, run the whole eager path as well. The fused
+# work is already bought and is then discarded. Measured by
+# `lane/lm-step-memory-build` on an H100 at the byte-LM target shape: the
+# step goes from 0.207 s to 0.44 s, 2.13x, as layers cross over one at a
+# time and never come back.
+#
+# "NEVER COME BACK" IS THE WHOLE POINT. The refusal is a property of the
+# regime the layer's weights have reached, not of the individual step, so a
+# layer that refused once refuses again. This latch remembers that and stops
+# launching the fused kernels for that layer and direction. It can only ever
+# choose MORE of the eager path, which is the path the refusal mandates and
+# the path the identity contract is written against, so no output bit can
+# move; the A/B against `MOJOLEARN_ATTN_NO_STICKY=1` is what proves that
+# rather than this paragraph.
+#
+# `-D MOJOLEARN_ATTN_NO_STICKY=1` restores the launch-then-discard behavior
+# so the two arms exist in one tree.
+# ===========================================================================
+
+comptime ATTN_NO_STICKY = is_defined["MOJOLEARN_ATTN_NO_STICKY"]()
 
 comptime FUSED_THREADS = 256
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
