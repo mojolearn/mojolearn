@@ -315,7 +315,54 @@ kernel drains faster than the release, which is a race, not a fix"). A
 shorter prefix is not evidence of a cure, and no arm of this lane treats
 it as one.
 
-**WHETHER THE DRAIN CURES IT WAS STILL RUNNING when this was written.**
+**THE DRAIN DOES NOT CURE IT. Measured, not assumed.** The identical lane
+list on `/root/ml-after`, whose binding set is diff-equal to
+`/root/ml-before`'s and which carries BOTH the resident-forest drain and
+the transformer's two stateless drains, hangs in exactly the same place:
+
+| tree | cells completed | stopped at | threads |
+|---|---|---|---|
+| ml-before (origin/main) | 279 | `transformer-bf16w/base repeat=1/train` | 129 of 131 in `futex_wait_queue`, GPU 0% |
+| ml-after (DEVIATION 3010) | 279 | `transformer-bf16w/base repeat=1/train` | 129 of 131 in `futex_wait_queue`, GPU 0% |
+
+Same cell count, same lane, same part, same signature. So:
+
+**MANIFESTATIONS 1 AND 2 ARE ONE BUG AND ARE FIXED. MANIFESTATION 3 IS A
+DIFFERENT DEFECT THAT SHARES THE SIGNATURE, AND THIS LANE DID NOT FIX IT.**
+
+The transformer stateless drain is therefore INERT against this hang. It is
+REACHED (the `transformer` lane runs all nine of its fixtures on the fixed
+tree, through the patched binding) and it does not change the outcome. It
+is kept because it removes a real instance of the proven defect -- the
+backward entry had the resident forest's exact misplaced `synchronize()` --
+and because it is bitwise inert on output (`transformer` alone IDENTICAL=1,
+the pair IDENTICAL=2). It is NOT a fix for anything observed, and nothing
+here should be read as one.
+
+What this rules out for the next session, all by measurement:
+
+- NOT the resident forest (`verify` and these lanes use the SEQUENTIAL
+  engine and never construct a `ResidentForest`).
+- NOT the transformer binding's four teardowns. All four now drain: the two
+  stateless entries (patched here), `TransformerSession.__deinit__`/`clear`
+  and `TransformerDecodeSession.release` (which already did). The hang
+  survives all four.
+- NOT the two-lane sequence: `transformer` then `transformer-bf16w` alone
+  passes at one fixture, at nine fixtures with every part, and under
+  `verify --all --lanes`.
+
+What is still open: the culprit is some OTHER teardown among the lanes in
+that prefix. `bindings/_mojolearn_mamba.mojo` has three undrained stateless
+sites (`:380`, `:916`, `:1183`) and mamba1/2/3 run immediately before
+`transformer`; `metrics/estimator.mojo` has nineteen; `mlp` pulls in
+`training` and `linalg`, and adding `mlp` to the prefix is what made the
+hang appear. It may also not be this class at all -- 129 threads in
+`futex_wait` is the Mojo async runtime's pool, and only a native backtrace
+of the hung thread will say which lock it is. THE NEXT STEP IS THAT
+BACKTRACE, not another guess: build `tools/native_stack_dump.c`, run the
+prefix with it preloaded and `MOJOLEARN_NATIVE_STACK_FILE` set, and
+`kill -USR2` the hung pid from outside, exactly as this lane did for the
+forest hang.
 Four attempts, all on `/root/ml-before` (origin/main byte for byte) on the
 RTX 4090 with driver 580.159.04, all PASSED:
 
