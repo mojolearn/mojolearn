@@ -166,6 +166,27 @@ ab)
     stat -c '%y %n' "/root/t-$NAME"/python/mojolearn/identical/*.so "/root/t-$BEFORE"/python/mojolearn/identical/*.so "/root/t-$NAME/cluster/estimator.mojo" "/root/t-$NAME/cluster/checks/reduce_by_key.mojo" > "$OUT/mtimes.txt" 2>&1
     : > "$OUT/ab.done"
     ;;
+opponent)
+    # sh tools/kmeans_linear_body.sh opponent NAME [rounds] [lanes] [datasets]
+    # ONCE per lane (bench/OPPONENT_REFERENCE.md's rule): cuML 26.8.0 in the
+    # image's own Python, raced against tree /root/t-NAME, the rows for the
+    # table's RTX 4090 section. No row existed for k-means, OLS or PCA on an
+    # RTX 4090 when this was written (2026-09-17 evening).
+    ROUNDS=${3:-5}; ABL=${4:-kmeans,ols,pca}; ABD=${5:-taxi,istella}
+    SYSPY=$(command -v python3)
+    OUT=/root/kls_out/opponent-$NAME; mkdir -p "$OUT/logs"
+    step pip_cuml 1800 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuml-cu12==26.8.0
+    "$SYSPY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    cd "/root/t-$NAME" || exit 9
+    for ds in $(echo "$ABD" | tr , ' '); do for ln in $(echo "$ABL" | tr , ' '); do
+        step "race_${ln}_${ds}" 3600 env MOJOLEARN_REPO_COMMIT="$(cat "/root/t-$NAME/SHIPPED_COMMIT.txt")" "$SYSPY" tools/classical_two_datasets.py race \
+            --lane "$ln" --dataset "$ds" --data "$DATA" --out "$OUT" --work "/root/ctd-work-opp-$NAME" --root "/root/t-$NAME" \
+            --rounds "$ROUNDS" --arms ours,cuml-gpu --ours-python "$P" --theirs-python "$SYSPY"
+    done; done
+    "$P" tools/classical_two_datasets.py summary --out "$OUT" > "$OUT/summary.txt" 2>&1
+    nvidia-smi --query-gpu=name,driver_version --format=csv,noheader > "$OUT/gpu.txt" 2>&1
+    : > "$OUT/opponent.done"
+    ;;
 diff)
     # sh tools/kmeans_linear_body.sh diff LABEL A.json B.json [...]
     shift 2
