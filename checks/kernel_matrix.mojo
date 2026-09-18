@@ -1234,6 +1234,8 @@ def attn_masked_tail_replay_for[column: Int]() -> Bool:
     and 0.773939 -> 0.630843 seconds (1.3214x / 1.2268x, geomean 1.2733x).
     AMD's default arm has no estash zdot kernel, so its zdot keeps refusing
     on a corner (zero in training on either corpus).
+    Merged with AMD GEMM operand staging, an MI325X enwik8 pair again equals
+    NVIDIA everywhere: 0.762693 -> 0.550012 seconds (1.3867x).
 
     Apple: the Metal corner fixtures (zdot, 64 dQ cells, dk/dv) equal eager
     bit for bit, the replay-disabled arms differ (0x80000000 vs 0x00000000),
