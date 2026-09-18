@@ -28,8 +28,8 @@ driver's probe (`parallel_classical.fit_kernel_method`).
 WHAT IS REFUSED BELOW THE PYTHON SURFACE, BY NAME: everything the device
 entries refuse (non-finite inputs, a non-positive gamma, a negative or NaN
 alpha, a kernel matrix that does not factor, an unconverged Jacobi,
-n_components out of range), plus the polynomial, sigmoid and laplacian
-kernels, which the host does not implement.
+n_components out of range). All five implemented kernel kinds are replayed
+on the host; precomputed kernels remain refused.
 
 The sabotage arm (`kernel_methods_host_sabotage`) is
 `gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE`
@@ -107,13 +107,14 @@ def _kernel_ridge_fit_run(
     d: Int,
     t: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     alpha: Float32,
     dp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises -> Int:
-    var dual = kmh_kernel_ridge_fit(x, y, n, d, t, kernel, gamma, coef0, alpha)
+    var dual = kmh_kernel_ridge_fit(x, y, n, d, t, kernel, degree, gamma, coef0, alpha)
     for i in range(n * t):
         dp.unsafe_store(i, dual[i])
     sp.unsafe_store(0, Float64(0))
@@ -146,6 +147,7 @@ def kernel_ridge_fit_binding(
     var d = Int(py=params[1])
     var t = Int(py=params[2])
     var kernel = Int(py=params[3])
+    var degree = Int(py=params[4])
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var alpha = Float32(Float64(py=params[7]))
@@ -154,7 +156,7 @@ def kernel_ridge_fit_binding(
     var info = 0
     with GILReleased(Python()):
         info = _kernel_ridge_fit_run(
-            x, y, n, d, t, kernel, gamma, coef0, alpha, dp, sp
+            x, y, n, d, t, kernel, degree, gamma, coef0, alpha, dp, sp
         )
     _ = x^
     _ = y^
@@ -184,6 +186,7 @@ def kernel_ridge_predict_binding(
     var d = Int(py=params[1])
     var t = Int(py=params[2])
     var kernel = Int(py=params[3])
+    var degree = Int(py=params[4])
     var gamma = Float64(py=params[5])
     var coef0 = Float64(py=params[6])
     var q = Int(py=params[9])
@@ -192,7 +195,7 @@ def kernel_ridge_predict_binding(
     var x_new = read_f32(Int(py=addrs[2]), max(0, q * d))
     with GILReleased(Python()):
         var out = kmh_kernel_ridge_predict(
-            x_fit, dual, n, d, t, kernel, gamma, coef0, x_new, q
+            x_fit, dual, n, d, t, kernel, degree, gamma, coef0, x_new, q
         )
         for i in range(q * t):
             op.unsafe_store(i, out[i])
@@ -213,6 +216,7 @@ def _nystroem_fit_run(
     n: Int,
     d: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     q: Int,
@@ -224,7 +228,7 @@ def _nystroem_fit_run(
     ecp: MutPointer[Float32, MutUntrackedOrigin],
     sp: MutPointer[Float64, MutUntrackedOrigin],
 ) raises -> Int:
-    var model = kmh_nystroem_fit(x, n, d, kernel, gamma, coef0, q, seed)
+    var model = kmh_nystroem_fit(x, n, d, kernel, degree, gamma, coef0, q, seed)
     for i in range(q * d):
         cp.unsafe_store(i, model.components[i])
     for i in range(q):
@@ -268,6 +272,7 @@ def nystroem_fit_binding(
     var n = Int(py=params[0])
     var d = Int(py=params[1])
     var kernel = Int(py=params[2])
+    var degree = Int(py=params[3])
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var q = Int(py=params[6])
@@ -276,7 +281,7 @@ def nystroem_fit_binding(
     var sweeps = 0
     with GILReleased(Python()):
         sweeps = _nystroem_fit_run(
-            x, n, d, kernel, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
+            x, n, d, kernel, degree, gamma, coef0, q, seed, cp, ip, np_, evp, ecp, sp
         )
     _ = x^
     return PythonObject(sweeps)
@@ -305,6 +310,7 @@ def nystroem_transform_binding(
     var q = Int(py=params[0])
     var d = Int(py=params[1])
     var kernel = Int(py=params[2])
+    var degree = Int(py=params[3])
     var gamma = Float64(py=params[4])
     var coef0 = Float64(py=params[5])
     var m = Int(py=params[8])
@@ -314,7 +320,7 @@ def nystroem_transform_binding(
     var op = f32_ptr(Int(py=addrs[6]))
     with GILReleased(Python()):
         var out = kmh_nystroem_transform(
-            components, normalization, q, d, kernel, gamma, coef0, x, m
+            components, normalization, q, d, kernel, degree, gamma, coef0, x, m
         )
         for i in range(m * q):
             op.unsafe_store(i, out[i])
