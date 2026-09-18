@@ -39,6 +39,7 @@ exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus 2 --memory 16g \
         [[ $(gcc -dumpfullversion) = 11.4.0 ]]
         [[ $(ld --version | head -1) = "GNU ld (GNU Binutils for Ubuntu) 2.38" ]]
         patchelf --version
+        [[ $(patchelf --version) = "patchelf 0.17.2" ]]
         # A small real binding proves the complete compiler/linker/stager
         # combination agrees with NVIDIA before spending a full build lease.
         probe=/root/release-toolchain-probe
