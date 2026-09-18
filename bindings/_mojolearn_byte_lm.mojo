@@ -755,7 +755,7 @@ def byte_lm_attn_bwd_corner_refuses_binding() raises -> PythonObject:
 
 def byte_lm_attn_kv_corner_guard_binding() raises -> PythonObject:
     """DEVIATION 3111: False in a build carrying
-    -D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1."""
+    -D MOJOLEARN_ATTN_KV_CORNER_GUARD=1; the default is False."""
     return PythonObject(byte_lm_attn_kv_corner_guard())
 
 

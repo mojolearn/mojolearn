@@ -209,8 +209,9 @@ def byte_lm_attn_sticky_fallback() -> Bool:
 
 def byte_lm_attn_kv_corner_guard() -> Bool:
     """DEVIATION 3111: False in a build carrying
-    `-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1`, whose `dk`/`dv` corner test
-    fires on any `-0.0` whether or not a masked cell follows it in the chain.
+    `-D MOJOLEARN_ATTN_KV_CORNER_GUARD=1`. The DEFAULT is False: the shipped
+    `dk`/`dv` corner test fires on any `-0.0` whether or not a masked cell
+    follows it in the chain.
 
     An A/B that cannot tell its two arms apart is not an A/B, and here the
     dangerous failure is the one that LOOKS LIKE A WIN: if the define reached

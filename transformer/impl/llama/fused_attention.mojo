@@ -202,12 +202,24 @@ launchers stop refusing on a corner. See the comment at their `return
 FUSED_CORNER`. Its whole purpose is to be bit-compared against the refusing
 arm; on its own it proves nothing and could be silently wrong."""
 
-comptime ATTN_BWD_KV_CORNER_GUARD = not is_defined[
-    "MOJOLEARN_ATTN_NO_KV_CORNER_GUARD"
+comptime ATTN_BWD_KV_CORNER_GUARD = is_defined[
+    "MOJOLEARN_ATTN_KV_CORNER_GUARD"
 ]()
 """DEVIATION 3111: give the `dk`/`dv` corner test the SAME "is there a masked
 cell later in the chain" guard the forward's and the `dq`'s already carry.
-`-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1` restores the unguarded test.
+`-D MOJOLEARN_ATTN_KV_CORNER_GUARD=1` turns it on.
+
+**IT IS OFF BY DEFAULT AND THE REASON IS THE ASYMMETRY, NOT DOUBT ABOUT THE
+ARGUMENT.** MEASURED: it is bit-identical over 700 steps and 8 state anchors
+and it removes 248 of 3,697 refusals, which buys NO time and NO memory
+(tail 0.45707 against 0.45734, device peak 31,537 MB both ways). A guard that
+is WRONG suppresses a refusal that was needed and moves bits SILENTLY. Zero
+measured benefit against a silent-wrong-answer risk is not a trade worth
+taking by default, and this form has only ever been exercised at
+`window == 0` with `n_rep == 1` at scale; `n_rep == 2` reached it for exactly
+one step, in a control. Turning it on is for the lane that makes the whole
+predicate right, where it will be one piece of a change that does buy
+something and can be gated properly.
 
 WHY. `-0.0` in a fused accumulator is a refusal only because the EAGER chain
 folds the masked cells too and `fma(+0.0, x, -0.0)` is `+0.0` whenever `x`'s

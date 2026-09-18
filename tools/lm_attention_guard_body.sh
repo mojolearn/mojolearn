@@ -7,11 +7,12 @@
 # eager path itself, and the only way to stop paying it is to stop refusing.
 #
 # ARMS:
-#   unguarded  `-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1`, today's kernel. It
+#   unguarded  the default kernel (the guard is OPT IN). It
 #              must REPRODUCE 3,697 backward refusals and a 0.457 s tail; if
 #              it does not, the box or the data changed and nothing else here
 #              is comparable.
-#   guarded    the default. Predicted 0 refusals, `eager_bytes` still 432 at
+#   guarded    `-D MOJOLEARN_ATTN_KV_CORNER_GUARD=1`. Predicted 0 refusals,
+#              `eager_bytes` still 432 at
 #              step 699, tail = head.
 #   BITS       every step's loss and 8 full state anchors, both ways. THE
 #              GUARD IS A CHANGE TO A BIT-EQUALITY TEST, so a single differing
@@ -93,12 +94,12 @@ if ! pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1; then
     pixi run python -m pip install numpy >> "$OUT/numpy.log" 2>&1
 fi
 
-build_byte_lm unguarded "-D MOJOLEARN_ATTN_NO_KV_CORNER_GUARD=1"
+build_byte_lm unguarded ""
 probe unguarded --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
     --smi-every 10 --witness-every 100 $CORPUS_ARG
 probe unguarded-forced-fused --shape $CONTROL --steps 1 --tail 0 --attention-path fused || true
 
-build_byte_lm guarded ""
+build_byte_lm guarded "-D MOJOLEARN_ATTN_KV_CORNER_GUARD=1"
 probe guarded --shape $TARGET --steps "$WITNESS_STEPS" --tail 0 \
     --smi-every 10 --witness-every 100 $CORPUS_ARG
 probe guarded-forced-eager --shape $CONTROL --steps 1 --tail 0 --attention-path eager || true

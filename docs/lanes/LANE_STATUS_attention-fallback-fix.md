@@ -315,6 +315,50 @@ refusals are real rather than tightening another predicate.
 
 ---
 
+# WHAT MERGES, AND WHY MAIN'S BEHAVIOR IS UNCHANGED
+
+**Every behavior change in this lane is OFF BY DEFAULT.** What merges is the
+instrumentation, the three measurement arms, the evidence and this document.
+The 2.298x is proven to EXIST and is not proven to be SAFE TO SHIP, and those
+are different claims.
+
+    DEVIATION 3110  the latch                 OFF  -D MOJOLEARN_ATTN_STICKY=1
+    DEVIATION 3111  the dk/dv corner guard    OFF  -D MOJOLEARN_ATTN_KV_CORNER_GUARD=1
+    DEVIATION 3112  the backward never refuses OFF -D MOJOLEARN_ATTN_NO_BWD_CORNER=1
+
+3110 is off because it is MEASURED 3.6% slower. 3112 is off because it deletes
+a safety check rather than fixing it, and one shape's 700 steps is not a
+licence to stop checking. 3111 is off for the asymmetry: it buys NOTHING
+measurable (248 of 3,697 refusals, 1.0006x, 0 MB) while a guard that is wrong
+suppresses a needed refusal and moves bits SILENTLY, and its general form has
+only ever run at `window == 0` with `n_rep == 1` at scale.
+
+**What DOES merge as a default change: nothing in the kernels.** The
+instrumentation is host metadata (`len()` of buffers the trainer owns plus
+saved launcher return codes), and the one real bug fix is the out-of-bounds in
+`byte_attention_eager_cells` described in section 5.
+
+# THE NEXT LANE'S JOB, NOW WORTH A MEASURED 2.298x
+
+Make the backward's corner predicate RIGHT, so it refuses when the laundering
+actually changes a bit and not otherwise. Leg 3 says the whole 2.13x and
+16,384 MB are on the other side of that. Three things are known and should not
+be rediscovered:
+
+1. **It is not `dk`/`dv`.** DEVIATION 3111 already guards those and it only
+   moved 248 of 3,697. The remaining refusals are the `zdot` or `dq` chains.
+   **The cheapest next measurement is to give each of the three backward
+   kernels its own corner flag word** so the report names which chain fires.
+   That is a one-word change and one 700-step run, and it is where to start.
+2. **The forward is the worked example.** Its predicate is `-0.0 AND
+   rr[1] < s - 1` and it refused 0 times out of 8,400 on the same data in the
+   same steps. The derivation of exactly when a `-0.0` matters is below.
+3. **The repair below needs no quadratic buffer at all**: a suffix scan of
+   SIGN BITS over the trailing operand, 1.6 MB at this shape, against the
+   620,756,992-byte eager stage set the fallback allocates instead.
+
+---
+
 # DEVIATION 3111: the guard the backward `dk`/`dv` corner never had
 
 Section 1 says the guarded forward refused 0 times and the unguarded backward
