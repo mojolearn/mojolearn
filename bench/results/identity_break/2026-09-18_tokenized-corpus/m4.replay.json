@@ -1,0 +1,1447 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "081e14fa9da0f5413aa557af52852f092a307eb4",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "bpe-vocabulary/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302",
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10054329199920176,
+    "stages": {
+     "repeat=1/train": 0.050496458999987226,
+     "repeat=1/infer-save-reload": 2.4291999579872936e-05,
+     "repeat=1/batch": 0.0002237090011476539,
+     "repeat=2/train": 0.04922570800408721,
+     "repeat=2/infer-save-reload": 1.5334000636357814e-05,
+     "repeat=2/batch": 0.0002197499998146668
+    }
+   }
+  },
+  "bpe-vocabulary/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "377756b17a7d25ef",
+    "377756b17a7d25ef"
+   ],
+   "parts": [
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "identity": "0dcd935583ee5fe3",
+     "ids": "5524efea7dec2bde",
+     "decoded": "1801b04fd35666a1",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "identity": "0dcd935583ee5fe3",
+     "ids": "5524efea7dec2bde",
+     "decoded": "1801b04fd35666a1",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.05088558299758006,
+    "stages": {
+     "repeat=1/train": 0.02596970800368581,
+     "repeat=1/infer-save-reload": 1.8874998204410076e-05,
+     "repeat=1/batch": 0.0002361250008107163,
+     "repeat=2/train": 0.024167916002625134,
+     "repeat=2/infer-save-reload": 1.941599475685507e-05,
+     "repeat=2/batch": 0.00018258300406159833
+    }
+   }
+  },
+  "bpe-vocabulary/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ceba105a1d56a94b",
+    "ceba105a1d56a94b"
+   ],
+   "parts": [
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "identity": "63c408dab81d7396",
+     "ids": "f674f19737c5c97a",
+     "decoded": "6efad01f0e84ff17",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "identity": "63c408dab81d7396",
+     "ids": "f674f19737c5c97a",
+     "decoded": "6efad01f0e84ff17",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.11162866599624977,
+    "stages": {
+     "repeat=1/train": 0.05463358300039545,
+     "repeat=1/infer-save-reload": 1.591700129210949e-05,
+     "repeat=1/batch": 6.32499941275455e-05,
+     "repeat=2/train": 0.0564579159981804,
+     "repeat=2/infer-save-reload": 1.7666003259364516e-05,
+     "repeat=2/batch": 0.0001768750007613562
+    }
+   }
+  },
+  "bpe-vocabulary/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e5784e8510c4fc65",
+    "e5784e8510c4fc65"
+   ],
+   "parts": [
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "identity": "d0c2adf17fe29c8a",
+     "ids": "1adcdd4e92998d09",
+     "decoded": "6e70c922a53f3a6d",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "identity": "d0c2adf17fe29c8a",
+     "ids": "1adcdd4e92998d09",
+     "decoded": "6e70c922a53f3a6d",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07262137500219978,
+    "stages": {
+     "repeat=1/train": 0.036916249999194406,
+     "repeat=1/infer-save-reload": 1.383299968438223e-05,
+     "repeat=1/batch": 6.787500024074689e-05,
+     "repeat=2/train": 0.035362292001082096,
+     "repeat=2/infer-save-reload": 1.2167001841589808e-05,
+     "repeat=2/batch": 6.329100142465904e-05
+    }
+   }
+  },
+  "bpe-vocabulary/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "29ca89044830a85f",
+    "29ca89044830a85f"
+   ],
+   "parts": [
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "identity": "52c762ba21d072b5",
+     "ids": "2642b8d543acd7b5",
+     "decoded": "ab30200095e80263",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "identity": "52c762ba21d072b5",
+     "ids": "2642b8d543acd7b5",
+     "decoded": "ab30200095e80263",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10509345899481559,
+    "stages": {
+     "repeat=1/train": 0.05162308400031179,
+     "repeat=1/infer-save-reload": 1.6999998479150236e-05,
+     "repeat=1/batch": 9.004199819173664e-05,
+     "repeat=2/train": 0.052944041999580804,
+     "repeat=2/infer-save-reload": 1.4666002243757248e-05,
+     "repeat=2/batch": 0.00017174999811686575
+    }
+   }
+  },
+  "bpe-vocabulary/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a785f5969fb257f2",
+    "a785f5969fb257f2"
+   ],
+   "parts": [
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "identity": "8ae287188e26bca4",
+     "ids": "9ca1ca858615a0b0",
+     "decoded": "d79dd0f9e3dcad7a",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "identity": "8ae287188e26bca4",
+     "ids": "9ca1ca858615a0b0",
+     "decoded": "d79dd0f9e3dcad7a",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09538624999549938,
+    "stages": {
+     "repeat=1/train": 0.04729454100015573,
+     "repeat=1/infer-save-reload": 1.3584001862909645e-05,
+     "repeat=1/batch": 0.00017729100363794714,
+     "repeat=2/train": 0.04756641700078035,
+     "repeat=2/infer-save-reload": 1.5249999705702066e-05,
+     "repeat=2/batch": 8.77920028869994e-05
+    }
+   }
+  },
+  "bpe-vocabulary/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "173e1bde0f84a4ec",
+    "173e1bde0f84a4ec"
+   ],
+   "parts": [
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "identity": "fda24323326979da",
+     "ids": "a978a736ec2d641d",
+     "decoded": "9b40a069bcb9d6a7",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "identity": "fda24323326979da",
+     "ids": "a978a736ec2d641d",
+     "decoded": "9b40a069bcb9d6a7",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0941101249991334,
+    "stages": {
+     "repeat=1/train": 0.046844500000588596,
+     "repeat=1/infer-save-reload": 1.733399403747171e-05,
+     "repeat=1/batch": 0.00023229100042954087,
+     "repeat=2/train": 0.046584916999563575,
+     "repeat=2/infer-save-reload": 1.649999467190355e-05,
+     "repeat=2/batch": 0.0001434580044588074
+    }
+   }
+  },
+  "bpe-vocabulary/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302",
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10610974999872269,
+    "stages": {
+     "repeat=1/train": 0.05151033299625851,
+     "repeat=1/infer-save-reload": 1.2958000297658145e-05,
+     "repeat=1/batch": 4.1332998080179095e-05,
+     "repeat=2/train": 0.0541775840029004,
+     "repeat=2/infer-save-reload": 1.3749995559919626e-05,
+     "repeat=2/batch": 0.00015041699953144416
+    }
+   }
+  },
+  "bpe-vocabulary/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cc0f30dc6d3e929b",
+    "cc0f30dc6d3e929b"
+   ],
+   "parts": [
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "identity": "581c697b6fd58ce8",
+     "ids": "96ff8817ef1b4463",
+     "decoded": "64d2d241bfb1b540",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "identity": "581c697b6fd58ce8",
+     "ids": "96ff8817ef1b4463",
+     "decoded": "64d2d241bfb1b540",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.047182582995446865,
+    "stages": {
+     "repeat=1/train": 0.024021249999350403,
+     "repeat=1/infer-save-reload": 1.637499372009188e-05,
+     "repeat=1/batch": 0.000173833999724593,
+     "repeat=2/train": 0.022670750004181173,
+     "repeat=2/infer-save-reload": 1.2459000572562218e-05,
+     "repeat=2/batch": 6.65420011500828e-05
+    }
+   }
+  },
+  "tokenized-corpus/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01",
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5113779160019476,
+    "stages": {
+     "repeat=1/train": 0.3373469579964876,
+     "repeat=1/infer-save-reload": 1.6749996575526893e-05,
+     "repeat=1/batch": 0.000224959003389813,
+     "repeat=2/train": 0.1733107079999172,
+     "repeat=2/infer-save-reload": 1.6749996575526893e-05,
+     "repeat=2/batch": 0.0002058750033029355
+    }
+   }
+  },
+  "tokenized-corpus/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ae1f351ccc072ed4",
+    "ae1f351ccc072ed4"
+   ],
+   "parts": [
+    {
+     "tokens": "904190b383b57a1f",
+     "identity": "809d9887392d488e",
+     "batches": "388571ba350e36bf",
+     "schedule": "857a72df02ea9ae8",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "904190b383b57a1f",
+     "identity": "809d9887392d488e",
+     "batches": "388571ba350e36bf",
+     "schedule": "857a72df02ea9ae8",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16635883300477872,
+    "stages": {
+     "repeat=1/train": 0.08217024999612477,
+     "repeat=1/infer-save-reload": 1.554099435452372e-05,
+     "repeat=1/batch": 6.524999480461702e-05,
+     "repeat=2/train": 0.08367683299729833,
+     "repeat=2/infer-save-reload": 1.462499494664371e-05,
+     "repeat=2/batch": 0.00015979199815774336
+    }
+   }
+  },
+  "tokenized-corpus/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "775ab845193498f0",
+    "775ab845193498f0"
+   ],
+   "parts": [
+    {
+     "tokens": "bdf2f9ecc4cc17d3",
+     "identity": "854bb3952a12b619",
+     "batches": "aec7bcef1f01aa9e",
+     "schedule": "983ddea91a391024",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "bdf2f9ecc4cc17d3",
+     "identity": "854bb3952a12b619",
+     "batches": "aec7bcef1f01aa9e",
+     "schedule": "983ddea91a391024",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.33326491699699545,
+    "stages": {
+     "repeat=1/train": 0.1720220409988542,
+     "repeat=1/infer-save-reload": 1.383299968438223e-05,
+     "repeat=1/batch": 6.041699816705659e-05,
+     "repeat=2/train": 0.16085854200355243,
+     "repeat=2/infer-save-reload": 1.5083001926541328e-05,
+     "repeat=2/batch": 6.82500030961819e-05
+    }
+   }
+  },
+  "tokenized-corpus/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "959cb78ae887b9c0",
+    "959cb78ae887b9c0"
+   ],
+   "parts": [
+    {
+     "tokens": "35662d24c6737efd",
+     "identity": "d770edf4debe2aa0",
+     "batches": "b03b4fe8e778fc64",
+     "schedule": "9c9bb827fbb9f834",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "35662d24c6737efd",
+     "identity": "d770edf4debe2aa0",
+     "batches": "b03b4fe8e778fc64",
+     "schedule": "9c9bb827fbb9f834",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.35132508399692597,
+    "stages": {
+     "repeat=1/train": 0.1725130420018104,
+     "repeat=1/infer-save-reload": 1.3582997780758888e-05,
+     "repeat=1/batch": 5.966699973214418e-05,
+     "repeat=2/train": 0.17846166600065771,
+     "repeat=2/infer-save-reload": 1.3666998711414635e-05,
+     "repeat=2/batch": 5.804200191050768e-05
+    }
+   }
+  },
+  "tokenized-corpus/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79821375c8f5a221",
+    "79821375c8f5a221"
+   ],
+   "parts": [
+    {
+     "tokens": "47e79b47c91a1d14",
+     "identity": "f61937f940ec392f",
+     "batches": "de55e70bccc8ccc5",
+     "schedule": "92ba895b37e160be",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "47e79b47c91a1d14",
+     "identity": "f61937f940ec392f",
+     "batches": "de55e70bccc8ccc5",
+     "schedule": "92ba895b37e160be",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.35628062499745283,
+    "stages": {
+     "repeat=1/train": 0.18008529199869372,
+     "repeat=1/infer-save-reload": 1.570799940964207e-05,
+     "repeat=1/batch": 7.120900409063324e-05,
+     "repeat=2/train": 0.17562870799883967,
+     "repeat=2/infer-save-reload": 1.6457997844554484e-05,
+     "repeat=2/batch": 0.00021941599698038772
+    }
+   }
+  },
+  "tokenized-corpus/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cb4a54b07b2acfcb",
+    "cb4a54b07b2acfcb"
+   ],
+   "parts": [
+    {
+     "tokens": "86555be593f61f74",
+     "identity": "f584ae38e5e8ed55",
+     "batches": "ce94986e9f620677",
+     "schedule": "419569c4af55eb72",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "86555be593f61f74",
+     "identity": "f584ae38e5e8ed55",
+     "batches": "ce94986e9f620677",
+     "schedule": "419569c4af55eb72",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.32162974999664584,
+    "stages": {
+     "repeat=1/train": 0.15802712499862537,
+     "repeat=1/infer-save-reload": 1.4666999049950391e-05,
+     "repeat=1/batch": 0.00018345800344832242,
+     "repeat=2/train": 0.16290570899582235,
+     "repeat=2/infer-save-reload": 1.4833996829111129e-05,
+     "repeat=2/batch": 0.00021662499784724787
+    }
+   }
+  },
+  "tokenized-corpus/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "41542aee2d840085",
+    "41542aee2d840085"
+   ],
+   "parts": [
+    {
+     "tokens": "c132dfe8206a69b2",
+     "identity": "de7d8bf820adeb85",
+     "batches": "60ef5ae3b02ca571",
+     "schedule": "a89e3d7e0d7569cf",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "c132dfe8206a69b2",
+     "identity": "de7d8bf820adeb85",
+     "batches": "60ef5ae3b02ca571",
+     "schedule": "a89e3d7e0d7569cf",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.33296541599702323,
+    "stages": {
+     "repeat=1/train": 0.16328125000291038,
+     "repeat=1/infer-save-reload": 1.5415993402712047e-05,
+     "repeat=1/batch": 0.00019537500338628888,
+     "repeat=2/train": 0.16902408299938543,
+     "repeat=2/infer-save-reload": 1.6666999727021903e-05,
+     "repeat=2/batch": 0.00018770799943013117
+    }
+   }
+  },
+  "tokenized-corpus/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01",
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.34592895800597034,
+    "stages": {
+     "repeat=1/train": 0.17199170900130412,
+     "repeat=1/infer-save-reload": 1.420799526385963e-05,
+     "repeat=1/batch": 4.4665997847914696e-05,
+     "repeat=2/train": 0.17347500000323635,
+     "repeat=2/infer-save-reload": 1.6583995602559298e-05,
+     "repeat=2/batch": 0.0001273340021725744
+    }
+   }
+  },
+  "tokenized-corpus/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9d903acaa22028ed",
+    "9d903acaa22028ed"
+   ],
+   "parts": [
+    {
+     "tokens": "794f53d794a1bc17",
+     "identity": "4d06d459289a0f8d",
+     "batches": "d7b56471fe1bd1a4",
+     "schedule": "c5c6af0d1e9f48db",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "794f53d794a1bc17",
+     "identity": "4d06d459289a0f8d",
+     "batches": "d7b56471fe1bd1a4",
+     "schedule": "c5c6af0d1e9f48db",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.269784541997069,
+    "stages": {
+     "repeat=1/train": 0.13625679199321894,
+     "repeat=1/infer-save-reload": 1.4582998119294643e-05,
+     "repeat=1/batch": 8.883300324669108e-05,
+     "repeat=2/train": 0.13292929199815262,
+     "repeat=2/infer-save-reload": 1.7833001038525254e-05,
+     "repeat=2/batch": 0.0002127920015482232
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.13.15",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w"
+  ],
+  "families": {
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "b97b1f9f564ff742dca5f0339f683099d50ce7ebc91eebbccd3770a55a9a9cd6",
+    "size": 370416,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.7",
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/tokenized-corpus/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.13.15",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "14fea28817e1df1bb76a9573192c774387e5785a850fa78bce00665752f32174",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "lanes": "bpe-vocabulary,tokenized-corpus",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "732a8b3b9120417e64bfe6772ce4706b2312176cf6d71b37eb082c4d0d0039a0",
+  "provenance": {
+   "commit": "081e14fa9da0f5413aa557af52852f092a307eb4",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.13.15",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

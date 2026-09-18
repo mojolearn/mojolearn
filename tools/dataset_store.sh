@@ -48,6 +48,14 @@
 #   gbm-bench/year/year_speed.npz               187,586,070   (decoded 515,345 x 90 float32; skips the 211 MB zip)
 #   corpus/enwik8/input.txt                     100,000,000   (neural, English kind)
 #   corpus/pile_github/input.txt                 97,124,565   (neural, source-code kind)
+#   vocab/mojolearn-bpe-50257-v1/ranks.tsv          967,306   (OUR 50,256-rank BPE vocabulary, trained by
+#   vocab/mojolearn-bpe-50257-v1/tokenizer.json   1,977,368    tokenizer/train/train_main.mojo on the first
+#                                                               10 MB of enwik8 + pile_github; derived from
+#                                                               third-party text, so R2 only, never shipped;
+#                                                               lane/tokenized-corpus 2026-09-18)
+#   corpus/enwik8/tokens/mojolearn-bpe-50257-v1/tokens.i32   107,336,408   (enwik8 tokenized ONCE with it:
+#   corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json               26,834,102 int32 ids, schema
+#                                                               mojolearn.byte-lm.tokens.v1, mojolearn.lm_corpus)
 #
 # And one MULTI-SHARD group, whose members are keys in their own right:
 #   corpus/fineweb-edu-10BT/NNN_00000.parquet  28,518,193,415 total, 14 shards
@@ -83,6 +91,10 @@ gbm-bench/covtype/covtype_speed.npz	HOME/datasets/gbm-bench/covtype/covtype_spee
 gbm-bench/year/year_speed.npz	HOME/datasets/gbm-bench/year/year_speed.npz
 corpus/enwik8/input.txt	ROOT/training/corpus/enwik8/input.txt
 corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
+vocab/mojolearn-bpe-50257-v1/ranks.tsv	HOME/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.ranks.tsv
+vocab/mojolearn-bpe-50257-v1/tokenizer.json	HOME/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.tokenizer.json
+corpus/enwik8/tokens/mojolearn-bpe-50257-v1/tokens.i32	HOME/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576/tokens.i32
+corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json	HOME/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576/manifest.json
 EOF
 }
 

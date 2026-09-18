@@ -87,6 +87,34 @@ class _Entries:
         return getattr(self._module, name)
 
 
+VOCABULARY_SCHEMA = "mojolearn.bpe-vocabulary.v1"
+
+
+def _identity_from_tokens_text(text, n_ranks):
+    import hashlib
+    return dict(schema=VOCABULARY_SCHEMA, sha256=hashlib.sha256(text.encode("ascii")).hexdigest(),
+                n_ranks=n_ranks, n_vocab=n_ranks + 1, endoftext_id=n_ranks)
+
+
+def _identity_of_ranks_file(path):
+    """`_identity_from_tokens_text` over the canonical rendering of a rank
+    file. The binding is what refuses a malformed file; this reads only what
+    it needs to canonicalize and leaves a line it cannot read to the loader."""
+    with open(path, "rb") as fh:
+        raw = fh.read()
+    lines = raw.decode("ascii", errors="replace").splitlines()
+    while lines and not lines[-1].strip():
+        lines.pop()
+    out = []
+    for k, line in enumerate(lines):
+        _rank, _, hx = line.strip().partition("\t")
+        try:
+            out.append(f"{k}\t{bytes.fromhex(hx).hex()}\n")
+        except ValueError:
+            out.append(f"{k}\t{hx}\n")
+    return _identity_from_tokens_text("".join(out), len(lines))
+
+
 def _binding():
     return _Entries(_backend.load_host_module(_EXTENSION))
 
@@ -133,6 +161,7 @@ class BpeTokenizer:
         if not os.path.isfile(path):
             raise FileNotFoundError(f"mojolearn: BpeTokenizer rank file {path} does not exist")
         self._source = path
+        self._identity = _identity_of_ranks_file(path)
         self._m = _binding()
         self._handle = self._m.bpe_load(path)
         self._n_vocab = int(self._m.bpe_n_vocab(self._handle))
@@ -264,6 +293,18 @@ class BpeTokenizer:
     @property
     def vocabulary_source(self):
         return self._source
+
+    @property
+    def identity(self):
+        """What names this vocabulary, whatever file it came from:
+        `dict(schema, sha256, n_ranks, n_vocab, endoftext_id)`, `sha256` being
+        over the CANONICAL rank file (`rank<TAB>lowercase hex` per line, the
+        text `TrainedBpeVocabulary.render_ranks` writes). The same table read
+        from a rank file, from `encoder.json` + `vocab.bpe` or from a trained
+        vocabulary has the same identity. A model trained on ids carries this
+        (`mojolearn.lm_corpus`), so its ids are never decoded with another
+        table."""
+        return dict(self._identity)
 
     # ------------------------------------------------------------ encode
 
@@ -462,6 +503,11 @@ class TrainedBpeVocabulary:
     def write_tokenizer_json(self, path):
         _bpe_trainer.write_tokenizer_json(self.tokens, self.merges, path)
         return path
+
+    @property
+    def identity(self):
+        """`BpeTokenizer.identity` of this vocabulary, without loading it."""
+        return _identity_from_tokens_text(self.render_ranks(), self.n_tokens)
 
     def tokenizer(self):
         """A `BpeTokenizer` over this vocabulary, so a freshly trained table

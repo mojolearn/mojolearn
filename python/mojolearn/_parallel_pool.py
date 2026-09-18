@@ -43,10 +43,14 @@ from concurrent.futures import ThreadPoolExecutor
 #: Since lane/cpu-training-samba (2026-09-15) the training, mamba and
 #: transformer host bindings serve every call SambaStack makes, so both
 #: requests run the same host arithmetic the covered `samba` lane does.
+#: Random Fourier feature transforms also shard whole rows in Python. Each
+#: worker receives identical fitted weights/offsets and uses the kernel_methods
+#: host transform; ordered assembly in transform_rbf_sampler is unchanged.
+#: This is a logical-shard CPU route, not physical multi-GPU qualification.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
-    'forest_fit', 'mlp_gradient', 'samba_gradient',
+    'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
 ))
 
 #: The cooperative operations the CPU route admits, and only from a
@@ -125,9 +129,15 @@ class DevicePool:
                 for name in names:
                     visible = os.environ.get(name)
                     if visible is not None:
-                        ids = visible.split(',')
-                        if max(group) >= len(ids) or any(not ids[d] for d in group):
+                        ids = [token.strip() for token in visible.split(',')]
+                        if max(self.devices) >= len(ids) or any(not ids[d] for d in self.devices):
                             raise ValueError('device index outside ' + name)
+                        # Validate the entire pool before its first worker:
+                        # distinct logical indices can repeat the same visible
+                        # token. This catches duplicate masks, not UUID aliases;
+                        # physical qualification still needs device witnesses.
+                        if len({ids[d] for d in self.devices}) != len(self.devices):
+                            raise ValueError('selected devices repeat an identifier in ' + name)
                         env[name] = ','.join(ids[d] for d in group)
                     else:
                         env[name] = ','.join(str(d) for d in group)

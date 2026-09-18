@@ -395,20 +395,17 @@ class HostLasso(_HostCD, Lasso):
 
 
 class _HostKernelMethod(_HostBound):
-    """The kernel methods' host classes. The host restatement serves the
-    linear and rbf kernels; a model saved with another kernel is refused by
-    name at load, not at the first predict."""
+    """Saved kernel models on the host, with native parameter validation."""
 
     _BINDING = "_mojolearn_kernel_methods"
 
     def _host_refusals(self):
-        from .kernel_methods import KERNEL_LINEAR, KERNEL_RBF
+        from .kernel_methods import (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
+                                     KERNEL_SIGMOID, KERNEL_LAPLACIAN)
         kernel = self._kernel_params[0]
-        if kernel not in (KERNEL_LINEAR, KERNEL_RBF):
-            raise ImportError(
-                f"mojolearn: no CPU implementation of {type(self).__name__} with "
-                f"kernel code {kernel}; the host serves the linear and rbf kernels only"
-            )
+        if kernel not in (KERNEL_LINEAR, KERNEL_RBF, KERNEL_POLYNOMIAL,
+                          KERNEL_SIGMOID, KERNEL_LAPLACIAN):
+            raise ImportError(f"mojolearn: unsupported saved kernel code {kernel}")
 
 
 class HostKernelRidge(_HostKernelMethod, KernelRidge):

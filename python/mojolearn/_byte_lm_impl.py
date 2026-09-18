@@ -92,6 +92,23 @@ def _canonical(value):
                       ensure_ascii=True, allow_nan=False).encode('ascii')
 
 
+def _require_schedule_vocabulary(descriptor, shape):
+    """The ONE field of `data_schedule` that is checked (2026-09-18,
+    lane/tokenized-corpus): a schedule that names its vocabulary
+    (`mojolearn.lm_corpus.TokenBatches.data_schedule`) must name one of this
+    model's size, or the ids index rows of a different table. A schedule
+    with no `vocabulary` key (every byte run) is not affected."""
+    v = descriptor.get('vocabulary')
+    if v is None:
+        return
+    if not isinstance(v, dict) or type(v.get('n_vocab')) is not int or type(v.get('sha256')) is not str:
+        raise ValueError("SmallByteLanguageModelTrainer data_schedule['vocabulary'] must carry "
+                         "an int n_vocab and a str sha256 (mojolearn.lm_corpus)")
+    if v['n_vocab'] != shape.vocab_size:
+        raise ValueError(f"vocabulary mismatch: data_schedule names vocabulary {v['sha256']} with n_vocab "
+                         f"{v['n_vocab']}, and this model's vocab_size is {shape.vocab_size}")
+
+
 def _schedule(value):
     if not isinstance(value, dict) or not value:
         raise ValueError('SmallByteLanguageModelTrainer data_schedule must be a nonempty JSON object')
@@ -500,6 +517,7 @@ class SmallByteLanguageModelTrainer:
         flat = _parameters(parameters, shape)
         config = _configuration(lr, betas, eps, weight_decay)
         descriptor = _schedule(data_schedule)
+        _require_schedule_vocabulary(descriptor, shape)
         _mode()
         self._lock = threading.RLock()
         self._runtime = None
@@ -513,6 +531,13 @@ class SmallByteLanguageModelTrainer:
                            config=config, data_schedule=descriptor)
         if shape.profile != PROFILE:
             self._state['model_shape'] = shape.to_dict()
+
+    @property
+    def data_schedule(self):
+        """A copy of the caller's `data_schedule` descriptor, as every
+        checkpoint of this trainer keeps it (`mojolearn.lm_corpus.
+        tokenizer_for` reads its `vocabulary`)."""
+        return json.loads(json.dumps(self._state['data_schedule']))
 
     @staticmethod
     def parameter_registry(shape=None):

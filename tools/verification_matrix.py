@@ -121,7 +121,11 @@ NOT_ALGORITHMS = frozenset({
     "linalg.numeric_mode", "linalg.require_identical", "linalg.profile",
     "linalg.PROFILE", "linalg.PROFILE_FAMILY", "linalg.PROFILE_VERSION",
     "linalg.PROFILE_BF16", "linalg.PROFILE_INT8", "lowbit.FORMATS",
-    "lowbit.BF16Weight", "lowbit.Int8Weight", "tokenizer.TrainedBpeVocabulary",
+    "lowbit.BF16Weight", "lowbit.Int8Weight",
+    # tokenizer.TrainedBpeVocabulary left this list 2026-09-18
+    # (lane/tokenized-corpus): its render_* and write_* produce the two files a
+    # user ships beside a model, and tokenizer() builds the encoder, so it is
+    # counted, and the bpe-vocabulary lane covers it.
     "training.numeric_mode_used", "training.vendor_used",
     "resample.BootstrapResult", "resample.PermutationTestResult",
     "resample.MonteCarloResult", "resample.STATISTICS", "resample.METHODS",
@@ -322,14 +326,16 @@ def module_all(path):
         tree = ast.parse(Path(path).read_text())
     except (OSError, SyntaxError):
         return []
+    names = []
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets):
+                isinstance(t, ast.Name) and t.id in ("__all__", "_DEPRECATED_ALIASES")
+                for t in node.targets):
             try:
-                return list(ast.literal_eval(node.value))
-            except ValueError:
-                return []
-    return []
+                names.extend(ast.literal_eval(node.value))
+            except (ValueError, TypeError):
+                continue
+    return list(dict.fromkeys(names))
 
 
 def package_index():

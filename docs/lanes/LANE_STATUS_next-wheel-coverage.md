@@ -77,3 +77,99 @@ wheels, tag successful source and merge release into then-current main without
 discarding newer work. New pending-route records still require independent
 NVIDIA/AMD/CPU comparisons and negative controls before promotion. Physical
 parallel claims require real one-vs-two-GPU records on NVIDIA and AMD.
+
+Concurrent main change `5bde47f20` was merged during the final integration:
+`BpeTokenizer` is the new canonical spelling and `GPT2Tokenizer` remains a
+deprecated alias. Re-audit now counts 286 public names / 231 callable entries /
+183 implementation symbols. Only `BpeTokenizer` and `tokenizer.BpeTokenizer`
+are absent from frozen 0.8.7; its old tokenizer implementation is present.
+The scanner now includes declared deprecated imports outside `__all__` too.
+49 targeted tests passed after integrating the tokenizer changes. The earlier
+284-name comparison above remains evidence for its explicitly pinned snapshot.
+
+
+## Row-sharded RBF sampler CPU follow-up
+
+The next-wheel worktree adds `rbf_sampler_rows` to the non-cooperative CPU
+pool and declares `par-rbf-sampler` on the kernel_methods host family. No
+native arithmetic changes: the existing driver splits whole rows and rejoins
+in order, and the existing CPU transform supplies each shard. Remains excluded
+by default; `--include-pending --lanes par-rbf-sampler` now selects it. Counts
+become 18 logical CPU drivers / 32 GPU-required parallel drivers on this tree.
+
+209 source/inventory/selection tests passed. Five numerical tests (four shard
+sizes and a reordered-result negative control), plus the selection regression,
+are queued under a single Metal slot, session **90053**. Log:
+`~/mojolearn-evidence/next-wheel-coverage/cpu-par-rbf-tests.log`.
+Execution timeout 300 seconds, queue timeout 7200; one numerical worker at a
+time, CPU binding directory from release-087-final. A skip does NOT establish
+numerical coverage. Check all six pass before reporting runtime validation.
+This is source execution, not an installed wheel qualification. Still needs
+full nine-fixture repeated CPU capture and fresh independent GPU qualification.
+
+
+## Andrew's clarified priority (2026-09-18)
+
+Public CPU inference coverage is wanted. Parallel CPU implementation is NOT a
+completion goal: Andrew cares about actual multi-GPU execution. Finish checking
+the already-merged RBF route, but do not spend further work chasing the 32
+GPU-required parallel routes' CPU equivalents. Prioritize actual GPU partitions,
+physical one-vs-two-device qualification, and meaningful capacity/scaling.
+
+Current source audit found a concrete public CPU inference gap:
+`_classical_host._HostKernelMethod._host_refusals` permits only linear/RBF for
+KernelRidge and Nystroem; polynomial/sigmoid/laplacian saved models are refused.
+An empty SAVED_MODEL_INFERENCE_OWED registry does not mean all configurations
+are supported. Loaded CausalLM CPU inference exists but needs whole-model
+verifier coverage; individual block witnesses do not establish that. UMAP's
+current saved-model gate has stale expectations, as recorded above.
+
+GPU priorities: finish current artifact qualification for existing drivers;
+IVF search/index partitioning and generic loaded-model multi-GPU inference;
+then GPC, distributed forecasting, and existing family configuration gaps
+(ARIMA exog, wide full PCA, laplacian kernel rows). Cross-validation fold
+scheduling is useful independent-job parallelism, not a distributed fit.
+Historical one-vs-two-device evidence exists for 31 parallel lanes in the
+166-lane record plus eight in 2026-09-15_par-lanes-new on NVIDIA and AMD; it
+must not be mistaken for certification of every current lane/artifact.
+
+
+## Completion plan
+
+Andrew requested a CPU identity backlog and an implementation plan for six GPU
+gaps. See [CPU identity and useful multi-GPU completion plan](../CPU_IDENTITY_AND_MULTI_GPU_PLAN.md).
+It defines CPU qualification, the physical GPU gate, scopes/dependencies for
+loaded CausalLM, IVF storage/search, GPC, forecasting, cross-validation and GEMM,
+and installed-wheel acceptance. No GPU feature is claimed implemented by this
+planning change; parallel CPU expansion is explicitly out of scope.
+
+Status refresh: release run 35350125464's Mac build job succeeded at
+14:12:49 UTC, and its ephemeral runner exited/removed registration. ARM64 CPU
+certification is running the sabotage stage after the UMAP saved-model failure.
+The RBF regression and fresh Apple capture remain queued behind another lane's
+Metal work. Do not interfere with that lane's lease.
+
+
+## Execution progress, 2026-09-18
+
+- All six queued RBF CPU tests passed in 1.95 seconds, including real native
+  host execution and the reordered-worker negative control. This is source
+  runtime validation; installed-wheel/cross-device qualification remains owed.
+- All 19 installed Apple captures completed (17 ordinary holds + UMAP/PCA),
+  nine fixtures, two repeats, all extra property flags. Raw records passed
+  `admit()`. Against current main's table: 846 numerical values match, zero
+  differ, zero are missing; 567 N/A values excluded from numerical counts.
+  Evidence is committed under 2026-09-18_installed-apple-properties.
+- Fresh 18 UMAP/PCA saved models passed all CPU inference checks and are banked
+  under classical_host/2026-09-18-apple-m4-umap-pca. Release gate refresh still
+  needs explicit supersession and current independent NVIDIA/AMD columns.
+- Kernel CPU implementation is checkpointed on lane/cpu-kernel-identity,
+  worktree cpu-kernel-identity, commit 0b2115bdd. Six pending variant lanes,
+  degree transport and native arithmetic; 164 static checks pass. Do not merge
+  until compilation and numerical comparisons pass. The first build command
+  lacked pixi's standard-library environment; its failed log is retained.
+  Corrected isolated build queue is session 36017, clean/sabotage, one compiler.
+- Removed only clean, merged, inactive cpu-public-promotion, release087-coverage
+  and verification-evidence-audit worktrees. Their branches remain. Skipped
+  cpu-verification-completion because it retains binary/build evidence.
+  Receipt: external next-wheel-coverage/worktree-cleanup.json.

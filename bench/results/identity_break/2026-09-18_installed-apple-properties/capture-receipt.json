@@ -1,0 +1,104 @@
+{
+  "status": "PASSED",
+  "wheel": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/mojolearn-0.8.7-py3-none-macosx_11_0_arm64.whl",
+  "sha256": "fa6f290e295a4e5d14995542b6bdf69ead7ddf1c135f8ac8066587cf5e728372",
+  "commit": "aff968968f3ffc45844e36f3fd6260391eb829e5",
+  "records": [
+    {
+      "lane": "umap",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/umap.json",
+      "sha256": "ac2d3de760ef853f660c68bc23cf8384e9b975dcfaf761ef02ad1495dd43f12b"
+    },
+    {
+      "lane": "pca-full-whiten",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/pca-full-whiten.json",
+      "sha256": "8f734476ea603c643495247a88203a4bf29f306117f97655ddb27a9f0a7da02b"
+    },
+    {
+      "lane": "mamba3",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/mamba3.json",
+      "sha256": "3fdeb7225fd091928ee46ca94341dff1faa2173f3d4918ed23a3cc95f5ccf77a"
+    },
+    {
+      "lane": "transformer",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/transformer.json",
+      "sha256": "da076242cfca995c9bccdfe6d3cd7c83d9441b4d35af879e4da04d9d17cb9dcc"
+    },
+    {
+      "lane": "transformer-window",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/transformer-window.json",
+      "sha256": "d6c9bdfe4e17312ce1da2837009f7ada4d6f9ed82ee25cae1a1a6e15834f508c"
+    },
+    {
+      "lane": "samba",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/samba.json",
+      "sha256": "cd72d8cd913d05ecfb96a62648d928adcbf8fb0d050ef3111af489c1b8573121"
+    },
+    {
+      "lane": "samba-untied-dropout-accum",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/samba-untied-dropout-accum.json",
+      "sha256": "7f5c0d95492175a21172d36b341c26b0fd51e3893ed2a4b93f14593731ab01b8"
+    },
+    {
+      "lane": "gp-optimize",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gp-optimize.json",
+      "sha256": "75a2ba636e82b9ebd43bb315b6f658328672d45cd7e0e2056f63cabb3f11fd5f"
+    },
+    {
+      "lane": "gp-optimize-restarts",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gp-optimize-restarts.json",
+      "sha256": "e2f8a1efe867fad6458d69eeae1fccbb11a38655b40b7ee812d552c4ea2e1a93"
+    },
+    {
+      "lane": "svc-poly",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/svc-poly.json",
+      "sha256": "bbaa526b0c5d4c9d8c281abd993b2a325b204ba8c8b3ea00f5ff98f05472ad93"
+    },
+    {
+      "lane": "gbdt-query-rmse",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gbdt-query-rmse.json",
+      "sha256": "6d656924557ae257f92d4c421a384898fd95a52488c71704f30eab3eb606f94a"
+    },
+    {
+      "lane": "gmm-random-init-sample",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gmm-random-init-sample.json",
+      "sha256": "3d6f21962666a2b66eef93d55154c7a690263f690486d7b5808f6146248b88a7"
+    },
+    {
+      "lane": "gmm-sample",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gmm-sample.json",
+      "sha256": "cd274efc428ce336d8e5f8a3649339bcd69a22f720c4fa83895465e895d3be44"
+    },
+    {
+      "lane": "gp-normalize-y",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gp-normalize-y.json",
+      "sha256": "cbcf4f5df2487838cea0c0b55a64d85e6dde2edd61f2d331dfef9644adc7e60f"
+    },
+    {
+      "lane": "gp-sample-y",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gp-sample-y.json",
+      "sha256": "0b87f6d59b31030fd155c200f3c07ec76383e1dab87a1f990b43415e54fd8058"
+    },
+    {
+      "lane": "gp-sample-y-normalize",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gp-sample-y-normalize.json",
+      "sha256": "d8b491c1decf5906a35548156a342e4a41b7607836e285107010d697f34ef945"
+    },
+    {
+      "lane": "gpc",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gpc.json",
+      "sha256": "3ca1075ffed652d309a2799e8156a449f13938d5a31afceff75549a53d8700fa"
+    },
+    {
+      "lane": "gpc-multiclass",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/gpc-multiclass.json",
+      "sha256": "6a37dc4b7d1434a23bad225136f3a6a8f596b6fcfda996c6f33bec3e39b10898"
+    },
+    {
+      "lane": "ivf-extend",
+      "file": "/Users/andrewhendel/mojolearn-evidence/next-wheel-coverage/apple-installed-reference-capture/ivf-extend.json",
+      "sha256": "0dd6eb19556370ab410a0b078bbd0674823c05046d1460faa7afebc5f0b1cb59"
+    }
+  ],
+  "scope": "Measured records only; no automatic table admission or lane promotion"
+}

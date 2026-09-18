@@ -13,7 +13,8 @@ the kernel_methods CPU host binding serves the three estimators on a
 CPU-only install. Every stage names the device line it mirrors:
 
     the kernel matrix       kernel_methods/checks/kernel_matrix.mojo::
-                            km_kernel_matrix at LINEAR and RBF: the squared row
+                            km_kernel_matrix at LINEAR and RBF (plus polynomial,
+                            sigmoid and ascending L1 Laplacian epilogues): the squared row
                             norms (svm row_norm_l2sq_kernel, an ascending
                             ftz(identical_mul_add(v, v, acc)) chain), the
                             product at OP_NT through the gemm profile's
@@ -55,12 +56,10 @@ WHAT IS REFUSED, BY NAME, AS ON THE DEVICE: non-finite or mis-shaped inputs,
 a non-positive gamma where the kernel reads one, a NaN or negative alpha, a
 ridged kernel matrix that does not factor (DEVIATION 1662), an unconverged
 Jacobi, n_components above n_samples or above KM_MAX_BASIS_POOL rows, and a
-non-positive gamma or n_components for the sampler. WHAT THE HOST DOES NOT
-IMPLEMENT, AND REFUSES BY NAME: the polynomial, sigmoid and laplacian
-kernels. No identity lane exercises them, so no CPU column could be diffed
-against a GPU column on them.
+non-positive gamma or n_components for the sampler. Precomputed kernels remain refused, matching the device surface. Polynomial
+degree is passed through and bounded to the same 0..32 interval as the device.
 
-THE SABOTAGE. This file carries no arm of its own. Under
+THE SABOTAGE. Laplacian reverses its L1 feature chain. Under
 `-D MOJOLEARN_HOST_SABOTAGE=1` every GEMM leaf walks descending
 (`gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE`), which moves every
 kernel matrix, the Cholesky trailing update, the normalization, the
@@ -68,6 +67,8 @@ embedding and the random feature map.
 """
 
 from std.memory import bitcast
+from std.math import abs
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -77,6 +78,7 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_sqrt,
+    identical_tanh,
 )
 from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_solve
 from decomposition.host.pca_oracle import (
@@ -102,6 +104,8 @@ comptime KMH_KERNEL_RBF = 2
 comptime KMH_KERNEL_SIGMOID = 3
 comptime KMH_KERNEL_PRECOMPUTED = 4
 comptime KMH_KERNEL_LAPLACIAN = 5
+# Same bound as impl/distance/kernel_matrices.mojo, without importing GPU code.
+comptime KMH_MAX_DEGREE = 32
 
 
 def kmh_kernel_name(kernel: Int) -> String:
@@ -163,46 +167,24 @@ def kmh_validate_matrix(
 
 
 def kmh_validate_kernel(
-    kernel: Int, gamma: Float64, coef0: Float64, what: String
+    kernel: Int, degree: Int, gamma: Float64, coef0: Float64, what: String
 ) raises:
-    """`km_validate_kernel_params` for the two kernels the host implements,
-    and the refusal of the other three BY NAME."""
+    """The device's five kernel kinds and polynomial degree contract."""
     if kernel == KMH_KERNEL_PRECOMPUTED:
-        raise Error(
-            what
-            + ": kernel='precomputed' is refused by name (DEVIATION 1683;"
-            " kernel_methods/NOT_IMPLEMENTED.tsv carries the row)"
-        )
-    if (
-        kernel == KMH_KERNEL_POLYNOMIAL
-        or kernel == KMH_KERNEL_SIGMOID
-        or kernel == KMH_KERNEL_LAPLACIAN
-    ):
-        raise Error(
-            what
-            + ": the "
-            + kmh_kernel_name(kernel)
-            + " kernel has no CPU implementation; the kernel_methods host"
-            " binding restates the linear and rbf kernels only, the two an"
-            " identity lane diffs against the GPU columns. Run it on a GPU"
-            " binding"
-        )
-    if kernel != KMH_KERNEL_LINEAR and kernel != KMH_KERNEL_RBF:
-        raise Error(
-            what
-            + ": kernel value "
-            + String(kernel)
-            + " is not one of the five this lane implements (linear=0,"
-            " polynomial=1, rbf=2, sigmoid=3, laplacian=5)"
-        )
+        raise Error(what + ": kernel='precomputed' is refused by name (DEVIATION 1683)")
+    if kernel < 0 or kernel > KMH_KERNEL_LAPLACIAN:
+        raise Error(what + ": unknown kernel value " + String(kernel))
+    if kernel == KMH_KERNEL_POLYNOMIAL:
+        if degree < 0 or degree > KMH_MAX_DEGREE:
+            raise Error(what + ": polynomial degree must be between 0 and " + String(KMH_MAX_DEGREE))
     if gamma != gamma:
         raise Error(what + ": gamma is NaN")
     if coef0 != coef0:
         raise Error(what + ": coef0 is NaN")
-    if kernel == KMH_KERNEL_RBF and not (gamma > 0.0):
+    if kernel != KMH_KERNEL_LINEAR and not (gamma > 0.0):
         raise Error(
             what
-            + ": the rbf kernel needs a POSITIVE gamma; got a value that is"
+            + ": the " + kmh_kernel_name(kernel) + " kernel needs a POSITIVE gamma; got a value that is"
             " not greater than zero"
         )
 
@@ -221,35 +203,61 @@ def kmh_row_norms(x: List[Float32], n_rows: Int, k: Int) -> List[Float32]:
 
 def kmh_kernel_matrix(
     kernel: Int,
+    degree: Int,
     gamma: Float64,
+    coef0: Float64,
     a: List[Float32],
     b: List[Float32],
     m: Int,
     n: Int,
     k: Int,
 ) raises -> List[Float32]:
-    """`km_kernel_matrix` at LINEAR and RBF: `out[m x n] = K(a_i, b_j)`,
-    row-major. The dot is `kernel_op`'s `identical_gemm_into` at OP_NT; the
-    RBF cell is `rbf_kernel_expanded_kernel`'s IDENTICAL arm."""
+    """Replay the five device kernels, preserving each cell's operation order.
+
+    Polynomial/tanh mirror impl/distance/kernel_matrices.mojo; Laplacian
+    mirrors the ascending L1 chain and checks/kernel_matrix.mojo epilogue.
+    """
+    kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel matrix")
+    if kernel == KMH_KERNEL_LAPLACIAN:
+        var out = List[Float32]()
+        var gain = Float32(-gamma)
+        for i in range(m):
+            for j in range(n):
+                var acc = Float32(0.0)
+                for pos in range(k):
+                    var c = pos
+                    comptime if is_defined["MOJOLEARN_HOST_SABOTAGE"]():
+                        c = k - 1 - pos
+                    acc = ftz(acc + abs(ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))))
+                out.append(ftz(identical_exp(ftz(identical_mul(gain, acc)))))
+        return out^
     var dot = gemm_oracle(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
         return dot^
-    if kernel != KMH_KERNEL_RBF:
-        raise Error(
-            "kmh_kernel_matrix: the " + kmh_kernel_name(kernel)
-            + " kernel has no CPU implementation"
-        )
-    var na = kmh_row_norms(a, m, k)
-    var nb = kmh_row_norms(b, n, k)
+    if kernel == KMH_KERNEL_RBF:
+        var na = kmh_row_norms(a, m, k)
+        var nb = kmh_row_norms(b, n, k)
+        var gain = Float32(gamma)
+        for i in range(m):
+            for j in range(n):
+                var t = i * n + j
+                var s = ftz(
+                    ftz(ftz(na[i]) + ftz(nb[j])) - ftz(Float32(2.0) * ftz(dot[t]))
+                )
+                var e = ftz((-gain) * s)
+                dot[t] = ftz(identical_exp(e))
+        return dot^
     var gain = Float32(gamma)
-    for i in range(m):
-        for j in range(n):
-            var t = i * n + j
-            var s = ftz(
-                ftz(ftz(na[i]) + ftz(nb[j])) - ftz(Float32(2.0) * ftz(dot[t]))
-            )
-            var e = ftz((-gain) * s)
-            dot[t] = ftz(identical_exp(e))
+    var offset = Float32(coef0)
+    for t in range(m * n):
+        var base = ftz(identical_mul_add(gain, ftz(dot[t]), offset))
+        if kernel == KMH_KERNEL_SIGMOID:
+            dot[t] = ftz(identical_tanh(base))
+        else:
+            var acc = Float32(1.0)
+            for _ in range(degree):
+                acc = ftz(identical_mul(acc, base))
+            dot[t] = acc
     return dot^
 
 
@@ -265,6 +273,7 @@ def kmh_kernel_ridge_fit(
     d: Int,
     t: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     alpha: Float32,
@@ -274,7 +283,7 @@ def kmh_kernel_ridge_fit(
     `info` by name (DEVIATION 1662)."""
     kmh_validate_matrix(x, n, d, "kernel_ridge X")
     kmh_validate_matrix(y, n, t, "kernel_ridge y")
-    kmh_validate_kernel(kernel, gamma, coef0, "kernel_ridge")
+    kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
     if alpha != alpha:
         raise Error("kernel_ridge_fit_host: alpha is NaN; refused by name")
     if alpha < Float32(0.0):
@@ -283,7 +292,7 @@ def kmh_kernel_ridge_fit(
             " negative value. scikit-learn's own parameter constraint is"
             " Interval(Real, 0, None, closed='left'). DEVIATION 1686"
         )
-    var k = kmh_kernel_matrix(kernel, gamma, x, x, n, n, d)
+    var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x, x, n, n, d)
     # add_ridge_diag_kernel
     for i in range(n):
         var dv = ftz(k[i * n + i])
@@ -318,6 +327,7 @@ def kmh_kernel_ridge_predict(
     d: Int,
     t: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     x_new: List[Float32],
@@ -326,8 +336,8 @@ def kmh_kernel_ridge_predict(
     """`kernel_ridge_predict_host`: `K(X, X_fit) . dual` at OP_NN
     (DEVIATION 1680). `q x t` row-major."""
     kmh_validate_matrix(x_new, q, d, "predict X")
-    kmh_validate_kernel(kernel, gamma, coef0, "kernel_ridge")
-    var k = kmh_kernel_matrix(kernel, gamma, x_new, x_fit, q, n, d)
+    kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel_ridge")
+    var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x_new, x_fit, q, n, d)
     return gemm_oracle(k, dual, OP_NN, q, t, n)
 
 
@@ -382,6 +392,7 @@ def kmh_nystroem_fit(
     n: Int,
     d: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     q: Int,
@@ -389,7 +400,7 @@ def kmh_nystroem_fit(
 ) raises -> KmhNystroem:
     """`nystroem_fit_host`, step for step."""
     kmh_validate_matrix(x, n, d, "nystroem X")
-    kmh_validate_kernel(kernel, gamma, coef0, "nystroem")
+    kmh_validate_kernel(kernel, degree, gamma, coef0, "nystroem")
 
     var basis = km_basis_indices(seed, n, q)
     var comp = List[Float32]()
@@ -398,7 +409,7 @@ def kmh_nystroem_fit(
         for f in range(d):
             comp.append(x[srow * d + f])
 
-    var raw = kmh_kernel_matrix(kernel, gamma, comp, comp, q, q, d)
+    var raw = kmh_kernel_matrix(kernel, degree, gamma, coef0, comp, comp, q, q, d)
     var jac = host_jacobi_eigh(raw, q, JACOBI_SWEEPS, Float32(JACOBI_TOL))
     var vecs = jac.vectors.copy()
     host_sign_flip(vecs, q)
@@ -466,6 +477,7 @@ def kmh_nystroem_transform(
     q: Int,
     d: Int,
     kernel: Int,
+    degree: Int,
     gamma: Float64,
     coef0: Float64,
     x: List[Float32],
@@ -474,8 +486,8 @@ def kmh_nystroem_transform(
     """`nystroem_transform_host`: `K(X, components) @ normalization.T`
     (DEVIATION 1674). `m x q` row-major."""
     kmh_validate_matrix(x, m, d, "nystroem transform X")
-    kmh_validate_kernel(kernel, gamma, coef0, "nystroem")
-    var k = kmh_kernel_matrix(kernel, gamma, x, components, m, q, d)
+    kmh_validate_kernel(kernel, degree, gamma, coef0, "nystroem")
+    var k = kmh_kernel_matrix(kernel, degree, gamma, coef0, x, components, m, q, d)
     return gemm_oracle(k, normalization, OP_NT, m, q, q)
 
 
