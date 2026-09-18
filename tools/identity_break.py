@@ -1383,16 +1383,32 @@ def _(ml, X, yc, yr, Xh=None):
                                       "forecast(h, index=0)", e.forecast(FORECAST_HORIZON, index=0)))
 
 
+def _mismatch_bytes(name_a, a, name_b, b):
+    """`_same_bytes`'s comparison WITHOUT the raise: the message when the two
+    disagree, None when they agree.
+
+    A lane that has parts to hand should raise `NumericalMismatch` with them
+    rather than a bare exception, or a negative control that WORKS is recorded
+    as a refusal and a refusal is not a catch (lane/sabotage-sweep, 2026-09-17:
+    `par-scaler`'s sabotage arm fired and the cell read REFUSED on both
+    fixtures, so the lane stayed `declared` in the matrix while its arm was
+    doing its job)."""
+    ba, bb = np.asarray(a).ravel().tobytes(), np.asarray(b).ravel().tobytes()
+    if ba == bb:
+        return None
+    n = sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
+    return f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}"
+
+
 def _same_bytes(name_a, a, name_b, b):
     """The forecasters' infer probe: two public entries the estimator
     documents as the same answer. Returns both for hashing when their bytes
     agree; raises, naming the pair and the byte count, when they do not, so
     the infer column reads REFUSED with the message instead of a hash that
     hides which of the two moved."""
-    ba, bb = np.asarray(a).ravel().tobytes(), np.asarray(b).ravel().tobytes()
-    if ba != bb:
-        n = sum(x != y for x, y in zip(ba, bb)) + abs(len(ba) - len(bb))
-        raise ValueError(f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}")
+    message = _mismatch_bytes(name_a, a, name_b, b)
+    if message is not None:
+        raise ValueError(message)
     return a, b
 
 
@@ -4337,15 +4353,26 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-scaler")
 def _(ml, X, yc, yr, Xh=None):
     """fit_scaler and transform_scaler with four columns per shard, so the
-    16-column fixture is four shards, held to the plain scaler."""
+    16-column fixture is four shards, held to the plain scaler.
+
+    The disagreement is raised as `NumericalMismatch` CARRYING the parts, not
+    as a bare ValueError. Measured 2026-09-17 (lane/sabotage-sweep,
+    `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/`):
+    under the preprocessing family's sabotage build this lane raised
+    `transform_scaler and plain transform differ: 2847 bytes of 16384` and the
+    cell read REFUSED, so a negative control that was WORKING was recorded as
+    a refusal, and a refusal is not a catch. The clean cell is unchanged: the
+    same parts in the same order whenever the two agree."""
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
     par = fit_scaler(ml.StandardScaler(), X, devices=_par_devices(), columns_per_shard=4)
     plain = ml.StandardScaler().fit(X)
     t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    return _fit(dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
-                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    parts = dict(mean=_h(par.mean_), var=_h(par.var_), transform=_h(t),
+                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4, inverse=True)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-arima")
@@ -5132,17 +5159,22 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """fit_scaler and transform_scaler on the minmax-scaler lane's
     MinMaxScaler with four columns per shard, the second class the column
-    driver admits. Its five fitted statistics are the plain lane's."""
+    driver admits. Its five fitted statistics are the plain lane's.
+
+    `NumericalMismatch` rather than a bare raise, for `par-scaler`'s reason
+    above; the clean cell is unchanged."""
     from mojolearn.parallel_preprocessing import fit_scaler, transform_scaler
     par = fit_scaler(ml.MinMaxScaler(), X, devices=_par_devices(), columns_per_shard=4)
     plain = ml.MinMaxScaler().fit(X)
     t = transform_scaler(par, X[:256], devices=_par_devices(), columns_per_shard=4)
-    _same_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
-    return _fit(dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
-                     min=_h(par.min_), transform=_h(t),
-                     inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
-                                                 inverse=True))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("transform_scaler", t, "plain transform", plain.transform(X[:256]))
+    parts = dict(data_min=_h(par.data_min_), data_max=_h(par.data_max_), scale=_h(par.scale_),
+                 min=_h(par.min_), transform=_h(t),
+                 inverse=_h(transform_scaler(par, t, devices=_par_devices(), columns_per_shard=4,
+                                             inverse=True)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-queries-nn")
