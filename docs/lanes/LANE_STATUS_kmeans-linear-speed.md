@@ -165,6 +165,29 @@ postdate their sources (`arm-*/mtimes.txt`, `arm-*/source.txt`).
 The three checks pass again on this pod (`checks/checks.txt`): blocked (2112 + 64 cells,
 sabotage moved 99), scale (48 of 48 certified), privatized.
 
+### Identity, cuda column, the other lanes that reach the Lloyd loop (second pod)
+
+Lanes spectral, spectral-precomputed, gmm, gmm-sample, ivf, ivf-euclidean, ivf-extend,
+par-kmeans, par-gmm, metrics, metrics-classification, par-graph-spectral (60 fit cells;
+the spectral cells REFUSED on the first pod because `_mojolearn_metrics.so` was not built,
+now built by `arm_extra`). Which seam each lane reaches, from the code: `ivf` calls
+`kmeans_fit_main_traced` directly with its own scale (3080 only); GaussianMixture's
+k-means init, SpectralClustering's assignment, the metrics lanes' `KMeans(n_clusters=4)`
+and the parallel drivers go through `kmeans_fit` (3080 and 3081). Of those, only the
+KMeans lanes and `par-kmeans` RECORD centroids; GMM, spectral and the metrics lanes
+consume the labels alone.
+
+| diff | verdict |
+|---|---|
+| base vs off vs blk vs both | IDENTICAL x4 on all 60 fit cells; infer/model 90 IDENTICAL + 30 n/a; batch 45 + 15 n/a (`diff.cuda2.base-off-blk-both.txt`) |
+| sabotage 3080 (both vs sabo80) | DIVERGENT 45 of 60: gmm, gmm-sample, ivf, ivf-euclidean, ivf-extend, metrics, metrics-classification, par-gmm, par-kmeans, every fixture. IDENTICAL 15: spectral, spectral-precomputed, par-graph-spectral (reached; the dropped rows move the embedding's centroids without moving the recorded labels) |
+| sabotage 3081 (both vs sabo81) | DIVERGENT 4 of 60: par-kmeans base, dupes, odd, wide (ties inert as in the KMeans lanes). IDENTICAL 56: every lane that records labels only, and ivf, which never takes the 3081 path |
+
+So across both sets 3080 is seen DIVERGENT on 75 of the 90 cells that fit a k-means (30
+of 30 in the first set, kmeans-cosine's five cells refuse a fit; 45 of 60 in the second)
+and 3081 on 30 of the 35 that record centroids (the five `ties` cells inert); the rest are
+reached by code path and inert on their recorded parts.
+
 ### Interleaved A/B, second pod, 7 rounds, arms rotated (all output digests equal across arms)
 
 | lane / dataset | before arm | before ms med (min..max, spread) | after arm | after ms med (min..max, spread) | note |
