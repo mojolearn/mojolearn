@@ -119,6 +119,16 @@ forward/backward status RAN, zero replay sites: the replay is INERT at this
 shape (no corner occurs). It is a cross-column fused-HD64 witness, not a
 replay witness; the replay's own evidence is the native fixtures.
 
+## CPU column identity_break before/after: nothing moved (pod rf1ruxuaac3q5i, 404 verified, $0.05)
+
+`cpu_identity/remote/leg_out/`: after = branch, before = main's source rebuilt
+at the same path (before_apply.log prints the two reverted rows). 14 neural
+lanes x 9 fixtures: train column IDENTICAL=99, REFUSED=27 in BOTH (the three
+par-byte-lm lanes need the GPU byte-LM binding; a CPU pod has none: "rebuild
+bindings/build_byte_lm.sh for parallel training"); infer/model IDENTICAL=153,
+batch IDENTICAL=90, rlpair IDENTICAL=72; zero DIVERGENT/MOVED. INERT by
+construction: both rows answer False for COLUMN_CPU before and after.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
