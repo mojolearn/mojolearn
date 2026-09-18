@@ -3,10 +3,38 @@
 Written for a reader with NO context. Branch `lane/gemm-next`, worktree
 `~/mojolearn-wt/gemm-next`, branched from `origin/main` at 712eedd16.
 
-**NO PODS ARE OUT.** All four legs this lane ran finished, and every box was
-terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
+## THE EXACT NEXT COMMAND
+
+Prove the AMD `v_cmp_class_f32` seam spelling on a device before any arm is
+built on it (section 5). Add `_ftz_class` as a lane of
+`gemm/checks/gemm_seam_probe.mojo` exactly as the `modeftz` lane was added, then:
+
+```sh
+cd ~/mojolearn-wt/gemm-next
+MOJOLEARN_HOTAISLE_KEY_FILE=$HOME/.mojolearn_hotaisle_key \
+MOJOLEARN_HOTAISLE_SPEC=8core MOJOLEARN_GPU_ARCHS=gfx942 \
+MOJOLEARN_STAGE_KEYS="" \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_seam_probe_column_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-ftz-class-proof \
+bash tools/hotaisle_leg.sh amd --rent --minutes 30 --skip-gates
+```
+PASS is the new lane hashing `62a6b5621e27c707` (`rtf`, the contract) with
+mismatch count 0 against `shipped`. Anything else and the spelling is dead, the
+way the wave-mode arm died. Build and run took 7 s last time; the whole leg was
+about three minutes and $0.10.
+
+---
+
+**NO PODS ARE OUT FOR THIS LANE.** All four legs it ran finished, and every box
+was terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
 `20usq9mvqsq2u5`, Hot Aisle VMs `7a1b7c34` and `7c0350cd`, all HTTP 404
-confirmed). Nothing is billing.
+confirmed). No leg process of this lane is alive. Nothing here is billing.
+
+**TWO LIVE H100s ARE NOT THIS LANE'S: `5guu23hvyqj7tg` and `upye8nr41f4rxm`**
+(created 2026-09-18 09:01 and 08:44 UTC). They carry the `mojolearn-gemm-nvidia-`
+prefix because every lane that calls `tools/gemm_remote_leg.sh` gets that name,
+not because they are this lane's; neither appears anywhere in this worktree's
+`bench/results/e1g/*/pod_id.txt` or its leases. **DO NOT REAP THEM.**
 
 **READ THIS FIRST IF YOU WERE TOLD TO BUILD THE `proj` FOLD FUSION: DO NOT. IT
 WAS THIS LANE'S OWN ERROR AND IT IS RETRACTED.** Brief section 23, and item (a)
