@@ -194,7 +194,10 @@ def main(argv=None):
     for key in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS'):
         os.environ[key] = '1'
     os.environ['MOJOLEARN_NUMERIC_MODE'] = 'identical'
-    import numpy as np
+    try:
+        import numpy as np
+    except ImportError:
+        ap.error("distributed capture requires NumPy; install the optional mojolearn[test] extra")
     import mojolearn as ml
     from mojolearn import _backend
     from mojolearn._parallel_pool import DevicePool

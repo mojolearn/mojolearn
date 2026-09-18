@@ -804,7 +804,8 @@ release artifacts; the ordinary verifier self-test is not a substitute.
 
 ### Two-GPU distributed checks in the installed package
 
-The expanded 0.8.7 candidate includes a separate, opt-in command:
+The expanded 0.8.7 candidate includes a separate, opt-in command. Its fixture
+generator requires NumPy, available through the optional `mojolearn[test]` extra:
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-distributed --devices 0,1 --out distributed.json --require-installed
