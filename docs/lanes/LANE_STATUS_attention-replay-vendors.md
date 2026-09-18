@@ -207,6 +207,29 @@ gone (GET 404, not listed) 14:52:43Z. Host verdict
   and step: the allocator reservation, not live arrays. Not a measurement of
   the storage bound; eager_bytes is.
 
+## AMD enwik8: PASS, bits and routing equal to NVIDIA at every step and layer
+
+Hot Aisle MI300X VM 1e44908b, source 608e2fa95 (numerical source identical
+to dac7749a1; later commits are tools/docs), strict R2 staging ("R2 STAGED 1
+key(s)"). Verified gone (GET 404, not listed) 15:34:52Z. Host verdict
+`amd_enwik8_vs_nvidia.log` (22 corruption controls failed first):
+- all 700 losses, six hashes at 0 and 699, per-step per-layer statuses and
+  replay sites EQUAL to NVIDIA's for both arms; AMD legacy == repaired bits.
+  Step 699: loss 1d383a22..., gradients 978787f7..., parameters 745dabc4...,
+  m 91dc9edd..., v b0c5fc9b..., flags 360d579d....
+- legacy backward RAN 4703 / CORNER 3697; repaired RAN 8400 / CORNER 0;
+  replay sites dQ 3449, zdot 0 (INERT); forward RAN 8400. All as predicted.
+- eager_bytes 17314086912 -> 432; aexp 2415919104.
+- late median legacy 0.835384 s -> repaired 0.632183 s: **1.3214x**
+  (head 0.625 / 0.627 s).
+- release-only control (released_legacy, legacy arithmetic + bounded
+  storage): every loss, hash and routing vector equals legacy
+  (`amd_enwik8_release.log`, 12 controls fail first); eager_bytes 432 after
+  every step, release active on 499 steps; tail 0.837907 s (storage, not speed).
+
+**AMD two-corpus late-step geomean: 1.2733x** (enwik8 1.3214x, Pile GitHub
+1.2268x). Both > 1.1x as registered.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
