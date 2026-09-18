@@ -227,3 +227,4 @@ the evidence dir).
   printed; that all 3,078 are NaN-payload cells is inferred, not listed.
   Recorded as a CANDIDATE (NaN canonicalization in the GEMM contract), not
   opened.
+- Queued on Metal (metal2.sh): Apple GEMM cards both arms; pinned price x4; LM lean steps (target shape, 5 steps, enwik8 + Pile GitHub, norepair/admit/admit/norepair) with private package copies ~/mojolearn-evidence/apple-seam-repair-2026-09-18/pkg-{norepair,admit} (byte_lm .so sha256 3c879da6863b8c82 / 3e882e32bf0b0f14). Hot Aisle MI300X AMD leg launched (console amd_hotaisle.console).
