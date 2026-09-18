@@ -75,6 +75,7 @@ from training.checks.optimizer import (
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
+from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
@@ -805,6 +806,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
         out.append(tr.forward[layer].attn_forward_status)
         out.append(tr.backward[layer].attn_backward_status)
         out.append(Int(tr.forward[layer].attn_materialized))
+    out.append(Int(ATTN_EXACT_TAIL_GUARD))
     return out^
 
 

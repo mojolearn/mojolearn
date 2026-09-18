@@ -644,6 +644,8 @@ class SmallByteLanguageModelTrainer:
                                               for code, name in names.items()}
                 report['attn_materialized'] = [bool(info[12 + 3 * layer])
                                              for layer in range(n)]
+            if len(info) > 10 + 3 * n:
+                report['exact_tail_guard'] = bool(info[10 + 3 * n])
             return report
 
     def _export_state_impl(self):

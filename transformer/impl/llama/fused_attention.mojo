@@ -141,6 +141,10 @@ from checks.numerics import (
 # STATUS CODES AND LIMITS
 # ===========================================================================
 
+# Trial until the 700-step differential run and adversarial gates qualify it.
+comptime ATTN_EXACT_TAIL_GUARD = is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]()
+comptime ATTN_TAIL_GUARD_SABOTAGE = is_defined["MOJOLEARN_ATTN_TAIL_GUARD_SABOTAGE"]()
+
 comptime FUSED_RAN = 0
 """The fused kernels produced the output."""
 comptime FUSED_REFUSED_REGIME = 1
@@ -4808,10 +4812,24 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
         # The end of this head's visible run for every key this thread
         # holds: a `-0.0` here could be laundered by the masked tail.
         comptime for i in range(RPT * CPT):
-            if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
-                hit = True
-            if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
-                hit = True
+            var may_launder = True
+            comptime if ATTN_EXACT_TAIL_GUARD:
+                # The eager chain runs heads ascending, then all query rows.
+                # A skipped initial prefix starts from +0 and cannot change it.
+                # At the end of this visible interval, a negative zero matters
+                # only if a masked suffix or the next head's prefix follows.
+                # Never canonicalize zero: preserve the computed sign exactly.
+                comptime U = i // CPT
+                may_launder = Int(hi[U]) < l - 1 or (hh < n_rep - 1 and Int(lo[U]) > 0)
+            if may_launder:
+                if bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
+                if bitcast[DType.uint32](dv_acc[i]) == NEG_ZERO_BITS:
+                    hit = True
+            comptime if ATTN_TAIL_GUARD_SABOTAGE:
+                # Deliberate defect: erase a negative zero the clean arm keeps.
+                if not may_launder and bitcast[DType.uint32](dk_acc[i]) == NEG_ZERO_BITS:
+                    dk_acc[i] = Float32(0.0)
     comptime for u in range(RPT):
         var jc = j0 + tr + u * 16
         if jc < s:

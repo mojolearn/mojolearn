@@ -1,6 +1,12 @@
 # Attention fallback: instrumentation first
 
-Branch lane/lm-attention-fallback, from main 3e8dabc37. No optimization yet.
+Instrumentation branch lane/lm-attention-fallback at 576ee02bf. Main was
+3e8dabc37 when first inspected; concurrent checkout activity advanced the
+actual parent to 1863520e9 (which contains that main). Continued work is
+isolated at ~/mojolearn-wt/lm-attention-fallback on
+lane/lm-attention-fallback-work. Keep any eventual merge limited to this
+work; unrelated reference-regeneration changes are not part of the task.
+No optimization yet.
 
 Registered before the first run: H100 80GB HBM3, seed 20260917, pinned R2
 enwik8 (100000000 bytes, SHA256
@@ -27,3 +33,48 @@ MOJOLEARN_STAGE_STRICT=1 and inspect stage.log for successful R2 staging.
 Controls at HD64 force eager (-1) and fused (0); the validator deliberately
 corrupts coverage, counts, status and sequence and must reject each by name.
 No identity claim is made by these metadata checks.
+
+Local compile: PASS, Mojo one worker (`MOJOLEARN_COMPILE_JOBS=1`), nice 19,
+no GPU execution. Output /tmp/mojolearn-attention-trigger-compile.
+Host report extraction: MATCH forward [0,1], backward [2,0], materialized
+[true,false], eager_bytes 72, aexp_bytes 800. Deliberately changing the
+forward status to [2,1] failed the equality check as expected. Historical
+ten-field bindings omit the unavailable status fields. This is metadata
+validation, not a numerical identity result.
+
+First leg: pod 13velviiqay5hu, 60-minute guarded lease, source 576ee02bf.
+R2 stage.log confirms 100000000 bytes and the registered SHA256, one key
+staged and one linked. Baseline and forced controls remain owed until the
+remote result files complete.
+
+## Trigger measured, step 1 complete
+
+700 completed steps on H100: forward 8400 RAN; backward 4703 RAN and 3697
+CORNER; zero REFUSED_REGIME in either direction. Per-layer counts and first
+refusals are printed in trigger/verdict.log. First refusal step69; all twelve
+layers grown by step456. Head median (steps1–50) 0.198942478s; tail50 median
+0.458373688s. Device samples 15151→31535 MiB. Eager 432→17314086912 bytes;
+aexp constant 2415919104. Six deliberate corruptions failed the report
+validator, and forced HD64 eager/fused controls printed [-1,-1]/[0,0] in
+both directions. The completed pod was deleted and verified gone.
+
+## Step 2 trial: exact masked-tail guard, predictions before running
+
+The hd64 r2 joint dk/dv kernel flags every negative zero, even after the
+last head with no masked suffix. Trial MOJOLEARN_ATTN_EXACT_TAIL_GUARD
+restricts that flag to hi < L-1 OR (a next head exists AND lo > 0).
+The initial skipped prefix starts at +0 and cannot change that seed; later
+head prefixes may change a preceding -0, so those retain the refusal.
+No zero canonicalization, arithmetic, leaf or fold changes. Other kernels
+retain their original conservative guards. Do not attribute the measured
+CORNERs to this site until the intervention discriminates.
+
+Predict, at the registered 700-step target and seed: all 700 loss values and
+six final-step hashes equal the legacy arm; guard runtime witness false vs
+true; backward CORNER count falls below 370 (90% of 3697 removed); tail median
+below 0.26s if these conservative flags dominate. More than 370 refusals or a
+slower tail falsifies the performance prediction; any unequal bit rejects
+the trial. A remaining fallback is not proof this site accounts for it.
+Adversarial checks must retain real masked-tail refusals and detect deliberately
+canonicalizing a final negative-zero dk cell to positive zero. Any inert
+sabotage will be reported INERT and the fixture improved before trusting it.
