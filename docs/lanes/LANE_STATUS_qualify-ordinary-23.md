@@ -77,3 +77,11 @@ compilation, unused neural builds are skipped for a subset, GP build failure
 still allows independent SVC capture, and the final receipt remains failed.
 Combined capture/gate suite: 49 tests passed; these mocks are orchestration tests,
 not additional GPU evidence.
+
+Inventory follow-up: all six new selectable saved-model gates now appear in
+`host_surface.inference_lanes()`. The inference registry test evaluates the
+binding-free gate registry; its former literal-key regex missed generated lane
+families. The separate debt registry continues to name outstanding NVIDIA/AMD
+and installed qualification even though Apple models are recorded. Tests require
+all nine real saved-model records for declared lanes retaining that qualification
+debt. All 157 host-surface source tests passed.
