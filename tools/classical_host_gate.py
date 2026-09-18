@@ -653,8 +653,14 @@ def sabotage_verdict(verdict_ok, moved, unmoved, every_lane=False, every_fixture
     2026-09-15): every fixture of every lane must differ, except that a lane
     named in `lane_rule_only` keeps the --every-lane rule, by name. Returns
     (verdict, exit code, lines to print)."""
-    verdict = 'EXPECTED MISMATCH SEEN' if not verdict_ok else 'SABOTAGE NOT CAUGHT'
-    code = 0 if not verdict_ok else 1
+    # verdict_ok also includes optional GPU-column comparisons. A stale or
+    # disagreeing column alone cannot demonstrate a changed CPU prediction.
+    # Only differences from this saved model's own recorded outputs populate
+    # moved; require that concrete evidence even under the plain any-fixture
+    # rule. An empty run is never a successful negative control either.
+    caught = bool(moved) and not verdict_ok
+    verdict = 'EXPECTED MISMATCH SEEN' if caught else 'SABOTAGE NOT CAUGHT'
+    code = 0 if caught else 1
     lines = []
     if not (every_lane or every_fixture):
         return verdict, code, lines
