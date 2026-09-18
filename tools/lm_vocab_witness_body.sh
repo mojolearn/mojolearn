@@ -7,16 +7,16 @@
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/lm_vocab_witness_body.sh \
 #   MOJOLEARN_GEMM_LEG_LOCAL_CARD=bench/results/e1g/2026-09-13_221244-nvidia-h100-feature-freq-2710/local/apple.card \
-#   MOJOLEARN_STAGE_KEYS="corpus/enwik8/input.txt corpus/pile_github/input.txt" MOJOLEARN_STAGE_STRICT=1 \
+#   MOJOLEARN_STAGE_KEYS="corpus/enwik8/input.txt corpus/pile_github/input.txt vocab/mojolearn-bpe-50257-v1/ranks.tsv" MOJOLEARN_STAGE_STRICT=1 \
 #   MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/tokenized-corpus-sep18/pod/<stamp> \
 #   sh tools/gemm_remote_leg.sh nvidia --payload gemm --rent --allow-concurrent --minutes 60
 #
 # In order, each step's exit code in status.txt, never `set -e`:
 #   1. build the IDENTICAL base and byte-LM bindings, the tokenizer host
 #      binding and tokenizer/train/train_main;
-#   2. train a VOCAB-rank vocabulary (default 8192) with train_main on the
-#      first 10 MB of enwik8 (inside its train range) + the first 10 MB of
-#      pile_github, timed;
+#   2. the 50,257-id vocabulary staged from R2, or (not staged) train a
+#      VOCAB-rank one (default 8192) with train_main on the first 10 MB of
+#      enwik8 + the first 10 MB of pile_github, timed;
 #   3. GRADIENT WITNESS, two arms at the SAME shape, seed and vocab_size
 #      (1 256 64 4 2 16 128 2 n_vocab), two steps each, per-row gradient
 #      reduction of `embed` and `lm_head`:
@@ -94,16 +94,25 @@ if ! pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1; then
 fi
 sha256sum python/mojolearn/host/*.so python/mojolearn/identical/*.so build/train_main > "$OUT/binaries_sha256.txt" 2>&1
 
-# 2. VOCABULARY
+# 2. VOCABULARY. The 50,256-rank one trained on the Mac (R2 key
+#    vocab/mojolearn-bpe-50257-v1/ranks.tsv, pinned in
+#    bench/results/dataset_store/manifest.tsv) when it was staged; otherwise
+#    train a VOCAB-rank one here with train_main, timed.
 mkdir -p "$OUT/vocab"
-head -c 10000000 "$ENW" > "$OUT/vocab/enwik8-head10M.txt"
-head -c 10000000 "$PILE" > "$OUT/vocab/pile_github-head10M.txt" 2>/dev/null
-t0=$(date +%s)
-build/train_main "$OUT/vocab/mojolearn-bpe-$((VOCAB + 1))" "$VOCAB" 2 \
-    "$OUT/vocab/enwik8-head10M.txt" "$OUT/vocab/pile_github-head10M.txt" > "$OUT/vocab/train.log" 2>&1
-say "train_main vocab=$VOCAB exit=$? secs=$(( $(date +%s) - t0 ))"
-rm -f "$OUT/vocab/enwik8-head10M.txt" "$OUT/vocab/pile_github-head10M.txt"
-RANKS="$OUT/vocab/mojolearn-bpe-$((VOCAB + 1)).ranks.tsv"
+STAGED=/root/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.ranks.tsv
+if [ -f "$STAGED" ] && [ "$(sha256sum "$STAGED" | cut -c1-64)" = 3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d ]; then
+    RANKS="$STAGED"
+    say "vocabulary: staged mojolearn-bpe-50257-v1 (sha256 3d547b17...)"
+else
+    head -c 10000000 "$ENW" > "$OUT/vocab/enwik8-head10M.txt"
+    head -c 10000000 "$PILE" > "$OUT/vocab/pile_github-head10M.txt" 2>/dev/null
+    t0=$(date +%s)
+    build/train_main "$OUT/vocab/mojolearn-bpe-$((VOCAB + 1))" "$VOCAB" 2 \
+        "$OUT/vocab/enwik8-head10M.txt" "$OUT/vocab/pile_github-head10M.txt" > "$OUT/vocab/train.log" 2>&1
+    say "train_main vocab=$VOCAB exit=$? secs=$(( $(date +%s) - t0 ))"
+    rm -f "$OUT/vocab/enwik8-head10M.txt" "$OUT/vocab/pile_github-head10M.txt"
+    RANKS="$OUT/vocab/mojolearn-bpe-$((VOCAB + 1)).ranks.tsv"
+fi
 [ -f "$RANKS" ] || { say "no ranks file; nothing more run"; exit 4; }
 sha256sum "$RANKS" >> "$OUT/binaries_sha256.txt"
 

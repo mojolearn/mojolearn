@@ -183,3 +183,28 @@ third-party text).
 GPU leg 2 (2026-09-18_140910, pod vn4vonca6du36q): the box went network-unreachable a few
 minutes into the payload ("neutral hosts DO answer ... the BOX is the silent end"); nothing came
 home. Infra failure, not a result. Lease self-kill at 60 min; 404 to be verified.
+
+## THROUGHPUT (measured, M4 one core nice 19, 2026-09-18 11:00)
+
+`tools/lm_train.py --corpus training/corpus/enwik8/input.txt --vocab mojolearn-bpe-50257-v1.ranks.tsv
+--prepare-only` (`encode_batch`, 16 documents of <= 1 MiB per call, 96 documents):
+100,000,000 bytes -> 26,834,102 ids (3.727 bytes/id) in 22.93 s of encode, 24.05 s tokenize,
+25.9 s end to end: 4.36 MB/s = 1.170 M ids/s on ONE core. 25B tokens / 1.170 M/s = 21,370 s =
+5.9 core-hours (~93 GB of text at this ratio); documents are encoded alone, so it splits across
+cores with no change in ids (96 vCPUs: ~4 minutes). NOT slow enough to matter; not optimized.
+Cache reuse: 1.3 s (re-hash of the 107 MB id array). A second tokenization into a fresh cache gave
+the same sha256 2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253.
+ids above 255: 21,609,992 of 26,834,102 (80.5%); max id 50,253. Token ranges: train
+[0, 24,141,115), validation [24,141,115, 25,479,817), test [25,479,817, 26,834,102).
+
+R2 (pinned in bench/results/dataset_store/manifest.tsv, pulled back and re-hashed OK):
+  vocab/mojolearn-bpe-50257-v1/ranks.tsv        967,306  3d547b17...4122d
+  vocab/mojolearn-bpe-50257-v1/tokenizer.json 1,977,368  7ae8b893...972e9
+  corpus/enwik8/tokens/mojolearn-bpe-50257-v1/tokens.i32   107,336,408  2ad0c690...2c253
+  corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json      1,773  51898a61...74d9a
+
+Trainer cost for comparison: the Mojo trainer took 71.2 min for 50,000 merges on 20 MB; the
+Python `BpeVocabularyTrainer` (what `prepare()` with no `vocab` calls) recounts every pair per
+merge in pure Python and is far slower (not measured at this size). The built-in default is
+correct but not practical at 50,256 ranks until the Mojo trainer is reachable from Python
+(candidate follow-up, not opened).
