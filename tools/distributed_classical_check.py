@@ -79,7 +79,7 @@ def main(argv=None):
         receipt['bindings'][name] = dict(path=str(p), sha256=hashlib.sha256(p.read_bytes()).hexdigest(),
                                           vendor=_backend.read_vendor(native))
     from mojolearn._verify import _git_commit
-    receipt['source_commit'] = _git_commit()
+    receipt['source_commit'] = _git_commit(package)
     original_call = DevicePool._call
     def observe(worker, request):
         answer = original_call(worker, request)
