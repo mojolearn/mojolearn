@@ -169,3 +169,13 @@ norepair arm alone spans 11.9 to 13.1 s across four runs (~10%), so these
 two pairs do NOT resolve the admission's price; no conclusion drawn. More
 alternations queued (price/run3.sh). What IS resolved: the admission is not
 the inline repair's 2.36x.
+
+## RESULT 5: price of the block admission on the Apple GEMM sum (six interleaved pairs)
+
+Same evidence dir, `summary.txt`. Eight more runs (7 rounds each) added to
+RESULT 4's four. Adjacent admit/norepair pairs: 1.107, 1.021, 1.043, 1.043,
+0.994, 1.057; **geomean 1.043, 5 of 6 pairs positive**. The admission costs
+about **4% of the Apple GEMM sum** (the inline repair cost 136%). The
+norepair arm alone ranges 11.46 to 13.12 s over eight runs, so +/- 2 points
+on that 4% is honest. Still a GEMM sum, not a step: the step share is owed
+(binding builds queued, see bind/ in the evidence dir).
