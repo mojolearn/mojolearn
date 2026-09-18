@@ -144,6 +144,14 @@ def execute(request):
         X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
+    if operation == 'gpc_class_fit':
+        from ._gpc_impl import _kernel_arrays
+        x, y01 = args
+        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
+    if operation == 'gpc_class_predict':
+        fit, q, want_proba = args
+        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)
+        return probability if want_proba else mean
     if operation == 'forecast_predict':
         method, positional = args
         if method != 'predict':
