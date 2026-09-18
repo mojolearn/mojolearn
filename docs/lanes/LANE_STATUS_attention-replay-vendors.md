@@ -165,10 +165,20 @@ All 130 masked-tail MATCH lines and all tail-guard lines are byte-equal to
 the NVIDIA leg's (`tools/lm_attention_cross_vendor_check.py`, its two
 corruption controls fail first: apple_native/cross_vendor_nvidia_apple.log).
 
-Apple reduced training witness: attempt 1 (metal_train.sh) ran NO training:
-the worktree had no core `_mojolearn.so` ("base binding has no
-all_finite_f32"); nothing measured. Core binding building (one worker), then
-the same Metal job requeued.
+Apple reduced training witness: attempt 1 ran NO training (no core
+`_mojolearn.so` in the worktree: "base binding has no all_finite_f32").
+Attempt 2 (core built, one worker, 38 s; Metal run 21 s total, ~0.06 s/step):
+shape [1,256,128,2,2,64,256,2,256], seed 20260917, enwik8, 100 steps,
+witnesses at 0/25/50/75/99. apple_default, apple_bswz (NVIDIA schedule
+define, reaches dq_tiled_pf/zdot_estash/dkdv_r2 on Metal) and apple_legacy
+ALL EQUAL nvidia_default on every loss and every witness hash
+(apple_native/reduced_vs_nvidia.log; 6 corruption controls and the blind
+head_dim-8 control fail first). Step 99: loss eb0baf9c..., gradients
+7eacbaf2..., parameters 5c4f10b6..., m e268e153..., v 92db0481..., flags
+5b6fb58e.... Every forward/backward status RAN, zero replay sites: at this
+shape no corner occurs, so the witness is INERT for the replay itself (it
+covers the fused HD64 path and the flipped build); the replay's Metal
+evidence is the corner fixtures above.
 
 ## AMD Pile GitHub: PASS, bits and routing equal to NVIDIA at every step and layer
 
