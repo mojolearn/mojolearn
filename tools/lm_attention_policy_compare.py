@@ -32,6 +32,21 @@ def compare(a, b, policy, release, verbose=True):
                     print('MATCH step', i, key, x[key])
 
 
+def routing(result):
+    previous = [False] * 12
+    for row in result['steps']:
+        a = row['attention']
+        assert len(a['layers_prefer_eager']) == len(a['forward_status']) == len(a['backward_status']) == 12, 'routing layer coverage'
+        for layer, preferred in enumerate(a['layers_prefer_eager']):
+            f, b = a['forward_status'][layer], a['backward_status'][layer]
+            if previous[layer]:
+                assert preferred and f == b == -1, 'pre-launch routing'
+            elif preferred:
+                assert f == 2 or b == 2, 'observed corner trigger'
+        previous = a['layers_prefer_eager']
+    assert all(previous), 'all layers exercised'
+
+
 def main():
     root = Path(sys.argv[1])
     a = json.loads((root / 'baseline/result.json').read_text())
@@ -70,7 +85,22 @@ def main():
                 else:
                     raise AssertionError('BLIND ' + field)
             assert any(row['attention']['released_eager_bytes'] > 0 for row in b['steps']), 'INERT release'
-        assert any(any(row['attention']['layers_prefer_eager']) for row in b['steps']), 'INERT policy'
+        routing(b)
+        for reason in ('pre-launch routing', 'observed corner trigger', 'routing layer coverage'):
+            broken = copy.deepcopy(b)
+            if reason == 'pre-launch routing':
+                broken['steps'][-1]['attention']['forward_status'][0] = 0
+            elif reason == 'observed corner trigger':
+                broken['steps'][0]['attention']['layers_prefer_eager'][0] = True
+            else:
+                broken['steps'][0]['attention']['layers_prefer_eager'].pop()
+            try:
+                routing(broken)
+            except AssertionError as e:
+                assert str(e) == reason, str(e)
+                print('EXPECTED FAIL', reason)
+            else:
+                raise AssertionError('BLIND routing checker')
     for arm in ('baseline','sticky','released'):
         r = json.loads((root / arm / 'result.json').read_text())
         rows = r['steps']

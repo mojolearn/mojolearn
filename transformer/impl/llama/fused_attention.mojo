@@ -142,7 +142,10 @@ from checks.numerics import (
 # ===========================================================================
 
 # Trial until the 700-step differential run and adversarial gates qualify it.
-comptime ATTN_EXACT_TAIL_GUARD = is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]()
+comptime ATTN_REPAIR_MASKED_TAIL = is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"]()
+comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
+comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
+comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]()
 comptime ATTN_TAIL_GUARD_SABOTAGE = is_defined["MOJOLEARN_ATTN_TAIL_GUARD_SABOTAGE"]()
 
 comptime FUSED_RAN = 0
@@ -4346,6 +4349,20 @@ def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
             zdot.unsafe_store(row, zf)
 
 
+def _masked_tail_dy[HD: Int](
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    rowbase: Int, kvbase: Int, j: Int,
+) -> Float32:
+    """The eager dW GEMM's single HD<=128 leaf, same ascending RN-FMA/FTZ
+    seams. Only needed for a masked term after an actual negative zero."""
+    var dy = Float32(0.0)
+    comptime for p in range(HD):
+        dy = _step_preflushed(ftz(dctx.unsafe_load(rowbase + p)),
+                             ftz(v_cache.unsafe_load(kvbase + j * HD + p)), dy)
+    return ftz(dy)
+
+
 def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4362,6 +4379,8 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     key_lo_in: Int32,
     window_in: Int32,
     scale_in: Float32,
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
 ):
     """`fused_bwd_dq_tiled_kernel` (clean) with the dq fold stepped by
     `_step_preflushed` (DEVIATION 2533): `dcell` is a `_pmul` output and the
@@ -4473,7 +4492,23 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
             comptime for v in range(CPT):
                 var x = acc[u * CPT + v]
                 if bitcast[DType.uint32](x) == NEG_ZERO_BITS and Int(hi[u]) < s - 1:
-                    corner.unsafe_store(0, Float32(1.0))
+                    comptime if ATTN_REPAIR_MASKED_TAIL:
+                        corner.unsafe_store(2, Float32(1.0))
+                        comptime if not ATTN_REPAIR_SAB_DQ:
+                            # Replay the omitted eager terms, not a zero-sign
+                            # guess. Once +0 is reached, all remaining finite
+                            # signed-zero products leave it +0 exactly.
+                            var rowbase = (bb * l + t) * nh * HD + h * HD
+                            var z = ftz(zs.unsafe_load(tr + u * 16))
+                            for j in range(Int(hi[u]) + 1, s):
+                                var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                                var ds = _pmul(Float32(0.0), ftz(dy - z))
+                                var dcell = _pmul(ftz(ds), scale_in)
+                                x = _step_preflushed(dcell, ftz(k_cache.unsafe_load(kvbase + j * HD + tc + v * 16)), x)
+                                if bitcast[DType.uint32](x) != NEG_ZERO_BITS:
+                                    break
+                    else:
+                        corner.unsafe_store(0, Float32(1.0))
                 dq.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
 
 
@@ -5667,7 +5702,16 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     if valid and kj == 0:
         var zf = ftz(z)
         if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
-            corner.unsafe_store(0, Float32(1.0))
+            comptime if ATTN_REPAIR_MASKED_TAIL:
+                corner.unsafe_store(1, Float32(1.0))
+                comptime if not ATTN_REPAIR_SAB_Z:
+                    for j in range(j_hi + 1, s):
+                        var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                        zf = _step_preflushed(dy, Float32(0.0), zf)
+                        if bitcast[DType.uint32](zf) != NEG_ZERO_BITS:
+                            break
+            else:
+                corner.unsafe_store(0, Float32(1.0))
         comptime if SABN:
             if row % 2 == 0:
                 zdot.unsafe_store(row, _flip_ulp(zf))
@@ -5683,11 +5727,11 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
 # ===========================================================================
 
 
-def _read_flag(
+def _read_flags(
     ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]
-) raises -> Bool:
+) raises -> Tuple[Bool, Int]:
     step_count_host_alloc()
-    var host = ctx.enqueue_create_host_buffer[DType.float32](1)
+    var host = ctx.enqueue_create_host_buffer[DType.float32](len(flag))
     step_count_sync()
     ctx.synchronize()
     step_count_d2h()
@@ -5695,13 +5739,22 @@ def _read_flag(
     step_count_sync()
     ctx.synchronize()
     var v = host.unsafe_ptr().unsafe_load(0)
+    var repaired = 0
+    if len(flag) >= 3:
+        if host.unsafe_ptr().unsafe_load(1) != Float32(0.0):
+            repaired += 1
+        if host.unsafe_ptr().unsafe_load(2) != Float32(0.0):
+            repaired += 2
     _ = host^
-    return v != Float32(0.0)
+    return (v != Float32(0.0), repaired)
+
+def _read_flag(ctx: DeviceContext, mut flag: DeviceBuffer[DType.float32]) raises -> Bool:
+    return _read_flags(ctx, flag)[0]
 
 
 def _zero_flag(ctx: DeviceContext) raises -> DeviceBuffer[DType.float32]:
     step_count_device_alloc()
-    var f = ctx.enqueue_create_buffer[DType.float32](1)
+    var f = ctx.enqueue_create_buffer[DType.float32](3 if ATTN_REPAIR_MASKED_TAIL else 1)
     step_count_launch()
     f.enqueue_fill(Float32(0.0))
     step_count_sync()
@@ -6258,6 +6311,7 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6428,6 +6482,7 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6803,6 +6858,7 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
         dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
         Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
         Int32(pos0), Int32(key_lo), Int32(window), scale,
+        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
         grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
     )
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -6897,6 +6953,7 @@ def _launch_bwd_ztiled[HD: Int, TQZ: Int, ZSAB: Bool, PF: Bool](
             dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
             Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
             Int32(pos0), Int32(key_lo), Int32(window), scale,
+            dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
             grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
         )
         _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
@@ -7546,6 +7603,42 @@ def fused_backward_launch_estash_ran(
     arm: Int,
     mut ran: Int,
 ) raises -> Int:
+    var repaired = 0
+    return fused_backward_launch_estash_report(
+        ctx, zdot, dq, dk, dv, q_rope, dctx, k_cache, v_cache, amax, denom,
+        kept, kept_cells, b, l, nh, nkv, hd, s, pos0, key_lo, window,
+        scale, arm, ran, repaired,
+    )
+
+
+def fused_backward_launch_estash_report(
+    ctx: DeviceContext,
+    mut zdot: DeviceBuffer[DType.float32],
+    mut dq: DeviceBuffer[DType.float32],
+    mut dk: DeviceBuffer[DType.float32],
+    mut dv: DeviceBuffer[DType.float32],
+    mut q_rope: DeviceBuffer[DType.float32],
+    mut dctx: DeviceBuffer[DType.float32],
+    mut k_cache: DeviceBuffer[DType.float32],
+    mut v_cache: DeviceBuffer[DType.float32],
+    mut amax: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut kept: DeviceBuffer[DType.float32],
+    kept_cells: Int,
+    b: Int,
+    l: Int,
+    nh: Int,
+    nkv: Int,
+    hd: Int,
+    s: Int,
+    pos0: Int,
+    key_lo: Int,
+    window: Int,
+    scale: Float32,
+    arm: Int,
+    mut ran: Int,
+    mut repaired: Int,
+) raises -> Int:
     """`fused_backward_launch_ran`, and under an `_estash` arm this build
     runs (`fused_attention_arm_estash_runs`, head_dim 64) with a VALID kept
     stash (`kept_cells` equal to this call's `B * n_heads * L * S`, set by
@@ -7557,6 +7650,7 @@ def fused_backward_launch_estash_ran(
     With no valid kept stash the plain launcher runs, unchanged, and `ran`
     says so (no estash bit). The regime scans and the corner flag are the
     plain launcher's."""
+    repaired = 0
     comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD and kept_cells > 0 and kept_cells == b * nh * l * s:
             ran = ATTN_ARM_BASELINE
@@ -7665,7 +7759,9 @@ def fused_backward_launch_estash_ran(
                 ran = ran | ATTN_ARM_BSWZ
             step_count_sync()
             ctx.synchronize()
-            var hit = _read_flag(ctx, corner)
+            var flags = _read_flags(ctx, corner)
+            var hit = flags[0]
+            repaired = flags[1]
             _ = corner^
             _attn_tick(ctx, ton, tk, "bwd_corner_flag")
             if hit:

@@ -76,7 +76,7 @@ from training.checks.optimizer import (
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
-from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER
+from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
 )
@@ -329,7 +329,7 @@ def _require_profile() raises:
         raise Error("byte LM: training requires IDENTICAL")
     comptime if (GEMM_SABOTAGE or GEMM_BWD_SABOTAGE or ANY_EMB_SABOTAGE
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
-                 or BLOCK_ANY_SABOTAGE or ATTN_TAIL_GUARD_SABOTAGE):
+                 or BLOCK_ANY_SABOTAGE or ATTN_TAIL_GUARD_SABOTAGE or ATTN_REPAIR_SAB_Z or ATTN_REPAIR_SAB_DQ):
         raise Error("byte LM: numerical sabotage build refused")
 
 
@@ -819,6 +819,9 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(Int(BYTE_LM_STICKY_EAGER))
     for layer in range(tr.config.n_layers):
         out.append(Int(tr.forward[layer].attn_prefer_eager))
+    out.append(Int(ATTN_REPAIR_MASKED_TAIL))
+    for layer in range(tr.config.n_layers):
+        out.append(tr.backward[layer].attn_repaired)
     return out^
 
 

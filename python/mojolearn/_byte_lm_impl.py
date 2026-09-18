@@ -658,6 +658,10 @@ class SmallByteLanguageModelTrainer:
                 report['sticky_eager'] = bool(info[13 + 3 * n])
                 report['layers_prefer_eager'] = [bool(info[14 + 3 * n + layer])
                                                for layer in range(n)]
+            if len(info) >= 15 + 5 * n:
+                report['repair_masked_tail'] = bool(info[14 + 4 * n])
+                report['backward_repair_sites'] = [int(info[15 + 4 * n + layer])
+                                                  for layer in range(n)]
             return report
 
     def _export_state_impl(self):

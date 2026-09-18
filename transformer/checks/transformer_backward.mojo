@@ -57,6 +57,7 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_from_env,
     fused_backward_launch,
     fused_backward_launch_estash_ran,
+    fused_backward_launch_estash_report,
 )
 from transformer.impl.llama.modeling_llama import (
     ATTN_PATH_AUTO,
@@ -1822,6 +1823,7 @@ struct LlamaBackwardStages(Movable):
     var gemm_workspace: GemmWorkspace
     var head_a: DeviceBuffer[DType.float32]  # [L, head_dim]
     var head_b: DeviceBuffer[DType.float32]  # [s_max, head_dim]
+    var attn_repaired: Int  # bit 0 zdot; bit 1 dq; actual masked-tail replay
     var attn_backward_status: Int  # -1 not attempted; otherwise FUSED_*
     var head_c: DeviceBuffer[DType.float32]  # [L, s_max]
 
@@ -1918,6 +1920,7 @@ struct LlamaBackwardStages(Movable):
         self.tmp2 = _zeros[False](ctx, m * wide)
         self.head_a = _zeros[False](ctx, l * hd)
         self.head_b = _zeros[False](ctx, s_max * hd)
+        self.attn_repaired = 0
         self.attn_backward_status = -1
         self.head_c = _zeros[False](ctx, head_c_n)
 
@@ -3068,6 +3071,7 @@ def llama_decoder_layer_backward_device(
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
     timing_tick(ctx, ton, tk, "bwd.before_attention")
+    bst.attn_repaired = 0
     bst.attn_backward_status = -1
     var choice = attention_path_choice(PLANT_AT_NONE)
     if choice == ATTN_PATH_AUTO and fwd.attn_prefer_eager:
@@ -3093,11 +3097,11 @@ def llama_decoder_layer_backward_device(
             if fused_attention_arm_estash_runs(arm):
                 var kept_cells = fwd.attn_estash_cells
                 var ran = 0
-                status = fused_backward_launch_estash_ran(
+                status = fused_backward_launch_estash_report(
                     ctx, bst.attn_zdot, bst.d_q_rope, bst.d_k_cache, bst.d_v_cache,
                     fwd.q_rope, bst.d_attn_ctx, fwd.k_cache, fwd.v_cache, fwd.amax,
                     fwd.denom, fwd.aexp, kept_cells, b, l, nh, nkv, hd, s, pos0,
-                    key_lo, window, scale, arm, ran,
+                    key_lo, window, scale, arm, ran, bst.attn_repaired,
                 )
                 estash_done = True
         if not estash_done:

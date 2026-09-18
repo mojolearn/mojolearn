@@ -139,3 +139,30 @@ means backward weights are valid; it becomes false after backward release.
 Predict release eager_bytes=432 after EVERY step, aexp=2415919104, positive
 released bytes on exercised steps, and device tail <21000MiB. Higher device
 memory falsifies the footprint prediction even if the buffer lengths shrink.
+
+## Policy/release result and registered masked-tail replay trial
+
+H100 policy run completed all three 700-step arms. All losses and six full
+checkpoint hashes at steps 0 and 699 match. Baseline/sticky/released tail medians
+were 0.457512557 / 0.455645248 / 0.462906826 seconds; device tail was
+31537 / 31281 / 21809 MiB. Sticky statuses exactly matched the registered
+3012 forward RAN, 3000 backward RAN, 12 backward CORNER, and 5388 skipped
+launches in each direction. This disproves the predicted throughput benefit
+of sticky routing on this workload. Release returns eager storage to 432 B
+every step, but its device prediction <21000 MiB failed (allocator retains
+more than live arrays). aexp stays separate at 2415919104 B.
+
+Before running the next experiment: replay omitted masked-tail operations only
+when the fused zdot or dq fold ends at negative zero. Preserve the original
+ascending RN-FMA then FTZ-multiply chain; stop replay only after +0, which
+remaining finite signed-zero terms cannot change. Do not canonicalize signs.
+Prediction at the same seed and target shape over 700 steps: 8400 forward and
+8400 backward RAN statuses, zero refusals, at least one reported repair site;
+eager storage 432 B, aexp 2415919104 B, tail median 0.18–0.27 seconds. Any
+refusal falsifies the zero-refusal prediction; no repair observed is INERT.
+Any differing loss/checkpoint bit rejects the arm. Independently skip the zdot
+and dq replay and require each adversarial native HD64 gate to fail with the
+expected differing zero bits before accepting the clean gate. Existing dk/dv
+masked suffix and grouped-prefix cases must still refuse. Run baseline and
+repair arms for 700 steps each on one strictly R2-staged H100. Sticky and
+release remain OFF to isolate this repair.
