@@ -52,7 +52,28 @@ def pinned_gemm_nt_kernel(
     var i = cell // n
     var j = cell % n
     var acc = Float32(0.0)
-    for p in range(k):
+    
+    from checks.numerics import identical_mul_add_simd, ftz_simd
+    
+    var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
+    var p = 0
+    while p <= k - GEMM_VECLEN:
+        var xv = x.unsafe_ptr().load[width=GEMM_VECLEN](i * k + p)
+        var yv = y.unsafe_ptr().load[width=GEMM_VECLEN](j * k + p)
+        acc_v = ftz_simd[GEMM_VECLEN](
+            identical_mul_add_simd[GEMM_VECLEN](
+                ftz_simd[GEMM_VECLEN](xv),
+                ftz_simd[GEMM_VECLEN](yv),
+                acc_v,
+            )
+        )
+        p += GEMM_VECLEN
+
+    # Strict horizontal reduction across the vector to maintain deterministic order
+    for v_idx in range(GEMM_VECLEN):
+        acc = ftz(acc + ftz(acc_v[v_idx]))
+        
+    while p < k:
         acc = ftz(
             identical_mul_add(
                 ftz(x.unsafe_load(i * k + p)),
@@ -60,6 +81,7 @@ def pinned_gemm_nt_kernel(
                 acc,
             )
         )
+        p += 1
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
@@ -79,12 +101,34 @@ def pinned_gemv_n_kernel(
     if i >= m:
         return
     var acc = Float32(0.0)
-    for p in range(k):
+
+    from checks.numerics import identical_mul_add_simd, ftz_simd
+    
+    var acc_v = SIMD[DType.float32, GEMM_VECLEN](0.0)
+    var p = 0
+    while p <= k - GEMM_VECLEN:
+        var xv = x.unsafe_ptr().load[width=GEMM_VECLEN](i * k + p)
+        var yv = y.unsafe_ptr().load[width=GEMM_VECLEN](p)
+        acc_v = ftz_simd[GEMM_VECLEN](
+            identical_mul_add_simd[GEMM_VECLEN](
+                ftz_simd[GEMM_VECLEN](xv),
+                ftz_simd[GEMM_VECLEN](yv),
+                acc_v,
+            )
+        )
+        p += GEMM_VECLEN
+
+    # Strict horizontal reduction across the vector to maintain deterministic order
+    for v_idx in range(GEMM_VECLEN):
+        acc = ftz(acc + ftz(acc_v[v_idx]))
+        
+    while p < k:
         acc = ftz(
             identical_mul_add(
                 ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
             )
         )
+        p += 1
     z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 
 
@@ -244,11 +288,7 @@ def gemm_tn_identical_v1(
     if need <= k * m:
         identical_gemm_into(ctx, z, x, x2, scratch, m, m, k, OP_TN)
         return
-    var ws = ctx.enqueue_create_buffer[DType.float32](need)
-    ctx.synchronize()
-    identical_gemm_into(ctx, z, x, x2, ws, m, m, k, OP_TN)
-    ctx.synchronize()
-    _ = ws^
+    raise Error("gemm_tn_identical_v1: scratch buffer too small for plan workspace.")
 
 
 def gemm_tn_via_transpose(

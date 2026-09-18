@@ -32,7 +32,28 @@ def pinned_gemm_nt_gram_kernel(
     var i = global_cell // n
     var j = global_cell % n
     var acc = Float32(0.0)
-    for p in range(k):
+
+    from checks.numerics import identical_mul_add_simd, ftz_simd
+    
+    var acc_v = SIMD[DType.float32, 4](0.0)
+    var p = 0
+    while p <= k - 4:
+        var xv = x.unsafe_ptr().load[width=4](i * k + p)
+        var yv = x.unsafe_ptr().load[width=4](j * k + p)
+        acc_v = ftz_simd[4](
+            identical_mul_add_simd[4](
+                ftz_simd[4](xv),
+                ftz_simd[4](yv),
+                acc_v,
+            )
+        )
+        p += 4
+
+    # Strict horizontal reduction across the vector to maintain deterministic order
+    for v_idx in range(4):
+        acc = ftz(acc + ftz(acc_v[v_idx]))
+
+    while p < k:
         acc = ftz(
             identical_mul_add(
                 ftz(x.unsafe_load(i * k + p)),
@@ -40,6 +61,7 @@ def pinned_gemm_nt_gram_kernel(
                 acc,
             )
         )
+        p += 1
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
 
