@@ -891,3 +891,20 @@ two H100s and two MI300X at one commit
 (`bench/results/multi_gpu/2026-09-15/kernel-methods-cholesky-final/`) pass the
 native and public gates, fail under sabotage builds, and are equal across the
 two vendors.
+
+### Independent cross-validation folds
+
+```python
+from mojolearn.parallel_model_selection import cross_val_score
+scores = cross_val_score(estimator, X, y, devices=(0, 1), cv=5)
+```
+
+The scheduler clones a fresh estimator per fold, sends only that fold's data to
+its worker, and returns scores in fold order. Fits run in bounded waves with at
+most one fit per selected CUDA/HIP device. Every individual fit must fit on one
+GPU. Estimators and custom scorers must be pickleable and importable by fresh
+workers; dense inputs and `error_score='raise'` match the supported serial scope.
+Failed or incomplete worker responses raise and close the pool.
+
+Software contracts are tested. NVIDIA/AMD execution evidence and release-wheel
+qualification remain pending; the interrupted NVIDIA build produced no CV result.
