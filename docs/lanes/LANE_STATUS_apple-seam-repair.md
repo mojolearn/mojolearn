@@ -104,3 +104,36 @@ The check fails when it should: the control arm reads fbr. `nativefix` (the
 native Apple FMA, NO software ftz, plus the zero repair) ALSO hashes rtf: on
 Apple the software `ftz` after the FMA is redundant over these triples, a
 candidate cheaper spelling.
+
+## RESULT 2: price of the PER-STEP inline repair on Apple (REJECTED as the spelling)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-price-inline/`.
+`bench/gemm_step_price_main.mojo`, arm `shipped`, the twelve LM GEMM calls
+at target shape (all TUNED 128x128 reg8x8 KS=16 on Apple), 11 rounds, runs
+interleaved norepair / repair / repair / norepair, one Metal slot. A GEMM
+SUM weighted by per-step counts, not a step time.
+
+| run | arm | GEMM sum ms |
+|---|---|---:|
+| 1 | no repair | 12,476.965 |
+| 2 | inline repair | 29,954.621 |
+| 3 | inline repair | 30,421.764 |
+| 4 | no repair | 13,041.771 |
+
+The per-step inline repair costs **2.36x on the Apple GEMM sum (+136%)**,
+every call about equally. Metallib 33.8 MB vs 3.1 MB: the integer repair is
+inlined into all 64 cells of the reg8x8 tile per step. This is NOT the
+shipped spelling; it survives only as the test arm
+`-D MOJOLEARN_GEMM_INLINE_ZERO_FMA_REPAIR=1`. The kNN precedent's 39% is not
+comparable (different kernel, different tile).
+
+Replacement (committed, being measured): EXACT BLOCK ADMISSION in the tuned
+kernel (`TUNED_BLOCK_ADMIT`): fast step; per window each thread folds the
+minimum nonzero exponent of the operand words it staged; one block
+reduction after the last window; `minA + minB >= 151` proves every exact
+step result is a multiple of 2^-149, hence outside the window, hence the fast
+bits ARE rtf; otherwise the block recomputes its cells with `rtf_mul_add`
+in the contract order and fold (`_rtf_cell`, `_rtf_leaf_partial`). Test arm
+`-D MOJOLEARN_GEMM_ADMIT_NEVER=1` forces every block onto the exact path.
+New check `gemm/checks/gemm_rtf_boundary_check.mojo` compares whole device
+GEMMs on adversarial-word matrices with the host oracle (rtf), five plans.
