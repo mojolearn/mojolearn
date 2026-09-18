@@ -468,6 +468,14 @@ jobs:
       # also wrong on every column, DEVIATION 2716). These committed JSONs are
       # the 1eea14f80 bytes and keep their count; the kmeans lanes' current
       # cells are the kmeans-sqrt fix record, asserted two steps below.
+      - name: Retain saved-models checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-saved-models-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
@@ -651,6 +659,14 @@ jobs:
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
+      - name: Retain clean-column checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-clean-column-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: Build the sabotage host set (MOJOLEARN_HOST_SABOTAGE)
         if: always()
         timeout-minutes: 20
@@ -734,6 +750,14 @@ jobs:
 
       # The same sabotage host set (built by the step above into host-sab)
       # must make the classical gate say so on every recording.
+      - name: Retain fault-column checkpoint
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cpu-identity-${{ matrix.slot }}-fault-column-${{ github.run_attempt }}
+          path: cpu-identity-gate-out/
+          if-no-files-found: warn
+
       - name: Classical host gate, the sabotage build must be caught
         if: always()
         env:
