@@ -15,3 +15,11 @@ excerpt identifies both problems; full external log is arm64-certification.log.
 
 Reporting regression tests use mocked computations; they do not constitute a
 fresh native sabotage run. No release qualification or publication is claimed.
+
+Fresh targeted native confirmation now passes: clean ties fixture twice for
+both neighbor routes and byte-LM inference; intentionally faulty core bindings
+retain repeatable DIVERGENT bytes, and byte-LM catches an RLPAIR_MOVED mismatch.
+The strict sabotage-column validator passes. See native-control-receipt.json.
+This closes the demonstrated local reporting/wiring bugs, not full release
+recertification. Missing infer/model/batch entries after a training oracle
+failure are unexecuted probes, not qualified inference evidence.

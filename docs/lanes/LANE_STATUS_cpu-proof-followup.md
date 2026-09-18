@@ -38,3 +38,12 @@ forecasting/CV, loaded-LM and IVF capacity, GPC splitting, and distributed GEMM.
 Validation: 85 reporting/orchestration tests passed in 1.80 seconds. These
 include all nine new neighbor reporting cases; no native execution is claimed
 from this mocked regression suite.
+
+Native targeted rerun PASSED on Apple M4 at 49b747897: all three clean ties
+cells were STABLE twice. Fresh native core sabotage gave repeated DIVERGENT
+hashes for both sharded-neighbor lanes; fresh native byte-LM sabotage loaded
+with the explicit opt-in and triggered RLPAIR_MOVED. The strict sabotage
+column checker accepted the recorded controls with zero failures. Raw records,
+logs, binding digests, recipe and receipt are committed. No full-fixture or
+Linux release recertification is claimed. Session 69681 finished successfully;
+all native artifacts remain externally retained after worktree cleanup.

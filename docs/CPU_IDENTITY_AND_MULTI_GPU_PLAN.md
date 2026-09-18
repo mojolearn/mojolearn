@@ -275,3 +275,24 @@ the wheel, run the installed artifact, and only then mark it release-qualified.
 Overall completion means the stated six scopes and CPU evidence backlog meet
 these gates. It does not mean every possible parameter, topology, GPU model,
 checkpoint architecture or input size has been verified.
+
+## Execution update: 2026-09-18
+
+- Kernel CPU implementation merged at bd0533295: six new polynomial/sigmoid/
+  Laplacian KernelRidge/Nystroem routes, including public saved-model inference.
+  31 runtime checks passed, 216 applicable CPU/Apple properties matched, and
+  54 training sabotage cells moved. Independent NVIDIA/AMD and installed-wheel
+  qualification remain owed; these six routes are still pending by design.
+- Main now declares 234 harness routes: 161 default public CPU, 23 ordinary
+  pending (17 prior + six new kernels), and 50 parallel routes. This is route
+  inventory, not a count of distinct algorithms or complete proofs. The 18
+  logical CPU parallel routes are not 18 physical GPU certifications.
+- ARM64 clean release sweep passed. Classical UMAP expectations and sabotage
+  certification failed. The byte-LM sabotage loader opt-in and sharded-neighbor
+  numerical mismatch reporting are repaired and confirmed by targeted native
+  controls on Apple M4. Full release certification must still be repeated with
+  correct current GPU references and compatible qualification witnesses.
+- Whole loaded-CausalLM proof, vendor admission for pending lanes, and the six
+  GPU capabilities remain open. No new multi-GPU capability is claimed here.
+
+Details and retained evidence: docs/lanes/LANE_STATUS_cpu-proof-followup.md.
