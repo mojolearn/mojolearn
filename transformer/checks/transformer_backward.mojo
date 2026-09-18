@@ -1032,19 +1032,14 @@ def bwd_softmax_zdot_kernel(
     """`z = sum_j dy_j * y_j`, a SERIAL ASCENDING CHAIN over the ABSOLUTE
     key index from `+0.0`, FUSED. One thread per `(batch, head, query)`.
 
-    **THE `z` FOLD FOLLOWS CONTRACT 5.3's ARGUMENT AND IT CARRIES, BUT IT
-    NEEDED CHECKING RATHER THAN ASSUMING, BECAUSE THE TERMS ARE DIFFERENT
-    TERMS.** At a masked cell `y_j` is exactly `+0.0` (contract 7.1) while
-    `dy_j` is an ordinary nonzero number, so the term is
-    `fma(dy_j, +0.0, acc) = acc + (+-0.0) = acc`, provided `acc` is not
-    `-0.0`. A `+0.0`-seeded fma chain never holds `-0.0`: `fma` returns a
-    negative zero only when the exact `a*b + acc` is a zero of NEGATIVE
-    SIGN, which under round-to-nearest needs BOTH addends to be `-0.0` (an
-    exact cancellation of two nonzero opposites gives `+0.0`), and the seed
-    forbids it. **So the masked tail is bitwise inert and `z` -- and every
-    activation gradient downstream of it -- is independent of the kv
-    length.** That is the theorem the backward's length clause rests on and
-    it is contract 7.1 pointed the other way.
+    Masked cells have exactly `y_j = +0.0`, but omitting them is NOT
+    always bitwise inert. The RN-FMA then FTZ-multiply seam can flush a
+    negative subnormal result to `-0.0`, even from a `+0.0` seed. A later
+    masked term with positive dy changes that accumulator to `+0.0`.
+    This full ascending chain is the oracle: fused kernels must either
+    replay the omitted tail when the visible chain ends at negative zero,
+    or refuse and use this eager path. A blanket zero-sign canonicalization
+    is also wrong when all remaining terms preserve negative zero.
 
     **`core/pinned_reduce.mojo::pinned_block_sum` MAY NOT BE USED**, for the
     third time in this profile and for the same reason: it is a halving
