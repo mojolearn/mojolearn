@@ -68,3 +68,11 @@ Native CPU initial capture passes all checks in11.8seconds. Fixture tests verify
 exact planned checkpoint-name coverage and exercise family-specific options.
 77 loader, transport and verifier tests pass. V1 evidence remains unchanged;
 v2 vendor comparisons are being captured separately.
+
+V2 complete locally:24 cases,144/144 CPU/Metal part hashes match; all properties
+pass; native fault readbackTrue and120/120 floating parts move (greedy24/24
+unchanged). CPU13.28s, Metal6.25s, fault13.68s. Retained under
+`bench/results/loaded_causal_lm/2026-09-18/v2/`, sourcec9c3b96b7. This supersedes
+Mamba2 missing-fixture debt above. NVIDIA/AMD and installed/physical multiGPU
+qualification remain explicitly open, as do real external checkpoint and long
+context/ragged/chunk-boundary coverage.
