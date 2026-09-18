@@ -116,3 +116,56 @@ new Python/native source.
 Validation:13 release-qualifier/shell orchestration tests and8 public CLI tests
 pass on the integrated source. No expanded candidate wheel has been built or
 installed by this lane; these tests validate gating/orchestration, not hardware.
+
+## Deferred local build: measured budget and exact launch recipe
+
+New user instruction: commit/push progress, merge good work, no new pods; usage
+budget is nearly exhausted. **Do not start this build now.** No fresh macOS build
+was started during this lane.
+
+The retained log at
+`/Users/andrewhendel/mojolearn-evidence/release-087-final/logs/macos-build-full.log`
+records61 fresh extension builds (29 GPU tier outputs and32 host families), one
+at a time, followed by all five interpreter gates, completed in1175.24seconds
+(19.6minutes). That is an observed earlier 0.8.7 build, not a timing guarantee
+for the expanded source. A40-minute execution bound provides margin; expanded
+loaded-model installed proof adds roughly20seconds on this machine, with other
+qualification stages budgeted separately. No90-minute CPU certification matrix
+is implied by the wheel build.
+
+When resumed, first choose the final merged source pin including the CV CLI and
+portable-model bundle, create a fresh dedicated build worktree, and verify it
+contains no native output. The current `pixi.toml`/`pixi.lock` match the retained
+release worktree's pinned toolchain at audit time. Prepare default/pkg/test
+environments from that lock or deliberately link the verified existing pinned
+environments; do not copy any old package `.so` artifacts. The builder needs
+`.pixi/envs/default/lib` and the five claimed Python interpreters. Check these
+before taking the shared slot.
+
+With `ART` set to a new external artifact directory, create `ART/tmp` first,
+then run from the fresh pinned worktree:
+
+```sh
+python3 tools/mac_slot.py --timeout 2400 --wait-timeout 600 \
+  --timing-json "$ART/mac-slot.json" metal nice -n 19 \
+  env -u PYTHONPATH -u PYTHONHOME -u MOJOLEARN_HOST_DIR \
+      -u MOJOLEARN_BUILD_EXTRA_DEFINES -u MOJOLEARN_HOST_ALLOW_SABOTAGE \
+      -u MACOSX_DEPLOYMENT_TARGET \
+      MOJOLEARN_PACKAGE_BYTE_LM=1 MOJOLEARN_BUILD_JOBS=1 \
+      MOJOLEARN_COMPILE_JOBS=1 MOJOLEARN_CPU_THREADS=1 \
+      OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 \
+      NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1 \
+      TMPDIR="$ART/tmp/" \
+      bash packaging/macos/build_release_wheel.sh \
+      > "$ART/build.log" 2>&1
+```
+
+The shared slot avoids overlap with the independent GEMM lane. One compiler and
+math-thread settings constrain concurrency; they are not an OS hard RSS/CPU
+limit. The full builder has its own fresh-output timestamp, native code,
+runtime closure, ISA, packaging and installed-interpreter gates. A timeout keeps
+per-extension logs under the external TMPDIR and does not produce a qualified
+release. Do not weaken its fresh-build gates to resume with unwitnessed binaries.
+Copy the completed wheel/API audit into ART, record SHA256, then run the expanded
+installed qualifier with the same expected source SHA when budget allows. No
+publication is authorized merely by successful local wheel construction.
