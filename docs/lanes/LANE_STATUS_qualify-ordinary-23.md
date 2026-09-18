@@ -85,3 +85,45 @@ families. The separate debt registry continues to name outstanding NVIDIA/AMD
 and installed qualification even though Apple models are recorded. Tests require
 all nine real saved-model records for declared lanes retaining that qualification
 debt. All 157 host-surface source tests passed.
+
+## Fresh AMD references admitted, default promotion still pending
+
+Single guarded MI300X 8-core run at `f771338c7`: all six kernel columns, all nine
+fixtures twice, passed. All 216 numerical parts agree with retained CPU and
+Apple columns. All 54 new AMD saved-model records replay exactly on the freshly
+built independent CPU estimators binding. Evidence was fetched before the later
+families finished; the active rental's final deletion receipt is still owed.
+
+Strict scoped table admission changed only 54 selected lane/fixture cells; all
+2,070 other cells remained identical. Each admitted cell has eight retained
+parts with three agreeing classes: four numerical and four explicit N/A. These
+classical lanes do not declare rlpair. Detailed source hashes and admission
+checks are in `2026-09-18-ordinary-holds-amd-kernels/admission.json`.
+
+The six lanes moved from `no reference` to qualification-pending candidates.
+Default availability is unchanged; the holds are not removed. NVIDIA evidence
+and installed CPU verifier replay remain owed. Source records are now usable
+by diagnostic `--include-pending` verification rather than returning OWED for
+all their numerical parts.
+
+### Promotion policy versus release certification
+
+- `_verify_reference.build_table` admits repeated current input/protocol/revision
+  witnesses and preserves per-class disagreement. It does not, by itself,
+  impose a hardware quorum or certify a wheel. This admission additionally
+  required all CPU/Apple/AMD values to agree for every selected part.
+- The five neural `one column` holds describe the absence of any second device
+  class. Adding one agreeing GPU class clears that particular static reason,
+  but still requires watched installed CPU replay before default promotion.
+  The completion plan additionally requires current NVIDIA/AMD/full-property
+  evidence; clearing the reason alone is not satisfying that broader plan.
+- The twelve classical candidates explicitly owe NVIDIA/AMD alongside their
+  existing CPU/Apple evidence and installed replay. The six new kernel
+  candidates now owe NVIDIA and installed replay. They follow that same
+  four-column completion policy, not a newly weaker rule.
+- Exact release-wheel certification additionally pins native bytes, the wheel,
+  target architectures and property/fault gates. A source reference admission
+  or development installed replay does not replace this release certificate.
+
+Validation after scoped admission: 217 host-surface/reference/coverage tests
+passed. The separate 49 capture/gate orchestration tests also passed earlier.

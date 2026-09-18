@@ -1,0 +1,42 @@
+{
+  "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "estimator": "Nystroem",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "hashed",
+  "lane": "nystroem-laplacian",
+  "model_sha256": "539991c19e8790934c7beee16062a73949516131cef829efd32ba41e86fab642",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "cd4acc860bf2ba17",
+    "seconds": 0.001179,
+    "transform": {
+      "dtype": "<f4",
+      "sha256": "f06d597e1d271c168e5ca25c0bc6294f8cf6871dbf5dda8bff7963697c3e4d06",
+      "shape": [
+        64,
+        8
+      ]
+    }
+  },
+  "recorded_at": "2026-09-18T18:02:00+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "hip",
+  "x_sha256": "610f791343247286a120f012f4d03fb2d0bbc4500feb992df2fb844a344e4986"
+}
