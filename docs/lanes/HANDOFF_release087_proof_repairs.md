@@ -68,3 +68,22 @@ review cross-vendor equality and explicitly supersede the nine stale UMAP
 expectations, then rerun CPU certification and exact-artifact publication gates.
 Keep the rental deadlines; the extra bounded steps do not authorize runaway
 jobs or automatically extend a rental lease.
+
+## Checkpointing and revised worker policy
+
+User requested retaining intermediate evidence and parallel architecture jobs.
+Backports eca5bbfde and 92bc7306e add three stage artifact uploads, strict local
+shard resume, and max-parallel=3 with two shards/job (up to six workers). The
+earlier two-worker/serial constraint is superseded for this architecture matrix.
+No new Apple run has been dispatched. Keep the existing run's evidence.
+
+run-column --resume preserves shard JSON and appends logs, starts missing shards
+fresh, and recomputes the merged verdict. The harness still refuses incompatible
+source/binary bytes, environment, machine provenance and protocol. Failed cells
+are not converted to passes. All 43 binding-free orchestration tests pass.
+Intermediate uploads preserve completed stages but automatic cross-run artifact
+restore and safe stage selection are not yet implemented; a killed running
+stage can still lose cells not yet uploaded. Those are the next staging tasks.
+
+Main's --inference/--training CLI aliases and small-fixture-profile design are
+separate next-wheel work; neither was imported into this frozen release branch.
