@@ -440,3 +440,11 @@ Pods: none left (4090 9rts6f6fpgw7fm 404, H100 2knce7572vc9k1 404, Hot Aisle
 VM 4875e63c 404). Cost: H100 ~5 min at $3.49/h (~$0.29), 4090 ready-timeout
 ~10 min at $0.74/h (~$0.12), Hot Aisle $0.30; about $0.71. Apple Metal time
 ~2.5 h (LM runs dominate), all through `mac_slot.sh metal`.
+
+## POST-MERGE (origin/main merged at 9f489e740: AMD stage-ftz, kpack reuse)
+
+Evidence `bench/results/e1g/2026-09-18_apple-m4-seam-repair-postmerge/`.
+- sm_90a and gfx942 device modules of gemm_device_check and
+  gemm_step_price_main: byte-identical to the new origin/main (xcheck3_cmp.txt).
+- Apple, merged code: seam probe shipped `62a6b5621e27c707` (rtf), nativefix
+  rtf; whole-GEMM boundary check 35/35 OK, fails=0.
