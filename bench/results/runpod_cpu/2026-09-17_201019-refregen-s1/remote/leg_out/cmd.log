@@ -1,0 +1,41 @@
+IDB_EXIT=0
+REFUSED par-hdbscan/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-hdbscan/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-hdbscan/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-hdbscan/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-rbf-sampler/base: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/ties: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/hashed: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/wide: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/denormal: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/denormal_ftz: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/dupes: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/odd: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-rbf-sampler/negative: NotImplementedError: no CPU implementation of the parallel worker operation rbf_sampler_rows yet
+REFUSED par-boosting-reg/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/hashed: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/wide: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/denormal: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-boosting-reg/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/hashed: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/wide: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/denormal: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cd-elasticnet/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REPORTED training-primitives/base batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/hashed batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/wide batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/denormal batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/denormal_ftz batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/dupes batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/odd batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+REPORTED training-primitives/negative batchgrad: embedding_backward: REPORTED (not claimed; the run-sorted ascending fold, reported by clause 9.3) moved at aligned splits: ['A2:dweight', 'A4:dweight']
+wrote /root/leg_out/cpu-x86-shard1.json

@@ -1,0 +1,5 @@
+pod='b97wwyyfre2q1m'
+target='-p 40939 root@213.192.2.99'
+armed_utc='2026-09-17T20:11:46Z'
+deadline_epoch=1789684906
+minutes=150

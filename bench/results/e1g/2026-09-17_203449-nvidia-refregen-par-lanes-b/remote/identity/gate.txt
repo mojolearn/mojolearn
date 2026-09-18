@@ -1,0 +1,76 @@
+started=2026-09-17T20:38:49Z
+commit=68cac62a5197e4bf2703293833f352569ab537c0
+gpu_archs_resolved=sm_89
+bindings_built=10 failed=none
+3a622a6edbce5a93c190a9b28d8d1cddaa355c1f88e8dc217cf90cc5839229ae  python/mojolearn/identical/_mojolearn.so
+6d194e75ccf3c45327fea9f5bbffb22b0ba66f3f0ad26e025d24bf4ffed51c85  python/mojolearn/identical/_mojolearn_estimators.so
+fd9f7df8023d4d79658a9f4fa4a501799a3b61054fe239edaa5933d83563f7dc  python/mojolearn/identical/_mojolearn_gbdt.so
+de3d169593dfa1268f68e0fa9768ee73dc4936ba13cbb5a69abcf4a43202a4f1  python/mojolearn/identical/_mojolearn_linalg.so
+7119a78886ed71c44a2aa9987c7a0040bbb14fe6b6be24faa4e05e26383bfc80  python/mojolearn/identical/_mojolearn_metrics.so
+3ae36ba879ddabbd67e0c1634ec326a6079134ce0927156e23b6b497eab7be52  python/mojolearn/identical/_mojolearn_preprocessing.so
+039e46eefb2ed6b6e859c1282a3b120c02d867b37f5f1411d63f13fd651683db  python/mojolearn/identical/_mojolearn_rf.so
+ac66721c9b31e07d7ddba3a0a7d5b245c77583e5a15b1eed169d4fb2d6d87eee  python/mojolearn/identical/_mojolearn_solver.so
+30d3276327ab48a4ed126f2d85aa389c9dd52a8f7a942bde1a9e0fa51d91baab  python/mojolearn/identical/_mojolearn_svm.so
+397a36792385a77d7200e66b32320a983a9421041844842c6b657eb5de4541ab  python/mojolearn/identical/_mojolearn_trees.so
+identity_break_exit=0
+# CELL par-gram-ols/wide STABLE 4.549s
+# CELL par-gram-ols/denormal STABLE 4.629s
+# CELL par-gram-ols/denormal_ftz STABLE 4.846s
+# CELL par-gram-ols/dupes STABLE 4.536s
+# CELL par-gram-ols/odd STABLE 4.546s
+# CELL par-gram-ols/negative STABLE 4.438s
+# CELL par-gram-pca/base STABLE 4.325s
+# CELL par-gram-pca/ties STABLE 4.153s
+# CELL par-gram-pca/hashed STABLE 4.123s
+# CELL par-gram-pca/wide STABLE 4.255s
+# CELL par-gram-pca/denormal STABLE 4.410s
+# CELL par-gram-pca/denormal_ftz STABLE 4.254s
+# CELL par-gram-pca/dupes STABLE 4.146s
+# CELL par-gram-pca/odd STABLE 4.143s
+# CELL par-gram-pca/negative STABLE 4.147s
+# CELL par-gram-tsvd/base STABLE 4.137s
+# CELL par-gram-tsvd/ties STABLE 4.139s
+# CELL par-gram-tsvd/hashed STABLE 4.139s
+# CELL par-gram-tsvd/wide STABLE 4.308s
+# CELL par-gram-tsvd/denormal STABLE 4.122s
+# CELL par-gram-tsvd/denormal_ftz STABLE 4.115s
+# CELL par-gram-tsvd/dupes STABLE 4.132s
+# CELL par-gram-tsvd/odd STABLE 4.130s
+# CELL par-gram-tsvd/negative STABLE 4.139s
+# CELL par-cd-elasticnet/base STABLE 4.636s
+# CELL par-cd-elasticnet/ties STABLE 4.570s
+# CELL par-cd-elasticnet/hashed STABLE 4.726s
+# CELL par-cd-elasticnet/wide STABLE 4.554s
+# CELL par-cd-elasticnet/denormal STABLE 4.627s
+# CELL par-cd-elasticnet/denormal_ftz STABLE 4.536s
+# CELL par-cd-elasticnet/dupes STABLE 4.532s
+# CELL par-cd-elasticnet/odd STABLE 4.544s
+# CELL par-cd-elasticnet/negative STABLE 4.541s
+# CELL par-svm-svr/base STABLE 10.486s
+# CELL par-svm-svr/ties STABLE 9.202s
+# CELL par-svm-svr/hashed STABLE 9.175s
+# CELL par-svm-svr/wide STABLE 9.117s
+# CELL par-svm-svr/denormal STABLE 9.266s
+# CELL par-svm-svr/denormal_ftz STABLE 9.246s
+# CELL par-svm-svr/dupes STABLE 9.295s
+# CELL par-svm-svr/odd STABLE 9.252s
+# CELL par-svm-svr/negative STABLE 9.075s
+# CELL par-scaler-minmax/base STABLE 12.789s
+# CELL par-scaler-minmax/ties STABLE 12.617s
+# CELL par-scaler-minmax/hashed STABLE 12.644s
+# CELL par-scaler-minmax/wide STABLE 12.506s
+# CELL par-scaler-minmax/denormal STABLE 13.133s
+# CELL par-scaler-minmax/denormal_ftz STABLE 12.678s
+# CELL par-scaler-minmax/dupes STABLE 12.406s
+# CELL par-scaler-minmax/odd STABLE 12.530s
+# CELL par-scaler-minmax/negative STABLE 12.534s
+# CELL par-queries-nn/base STABLE 16.772s
+# CELL par-queries-nn/ties STABLE 16.726s
+# CELL par-queries-nn/hashed STABLE 16.726s
+# CELL par-queries-nn/wide STABLE 16.835s
+# CELL par-queries-nn/denormal STABLE 16.720s
+# CELL par-queries-nn/denormal_ftz STABLE 17.031s
+# CELL par-queries-nn/dupes STABLE 16.728s
+# CELL par-queries-nn/odd STABLE 17.057s
+# CELL par-queries-nn/negative STABLE 16.405s
+finished=2026-09-17T21:15:35Z

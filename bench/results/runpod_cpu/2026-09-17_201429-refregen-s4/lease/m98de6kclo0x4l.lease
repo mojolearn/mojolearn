@@ -1,0 +1,5 @@
+pod='m98de6kclo0x4l'
+target='-p 18570 root@213.173.105.109'
+armed_utc='2026-09-17T20:15:12Z'
+deadline_epoch=1789685112
+minutes=150

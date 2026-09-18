@@ -1,0 +1,16 @@
+Imported from /root/mojolearn/bindings/_mojolearn_mixture_host.mojo:33:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_mixture_host.mojo:158:18: warning: assignment to 'n_iter' was never used; assign to '_' instead?
+    var n_iter = 0
+                 ^
+Included from /root/mojolearn/bindings/_mojolearn_mixture_host.mojo:49:
+Included from ./mixture/host/gmm_host_oracle.mojo:72:
+/root/mojolearn/./cluster/host/kmeans_oracle.mojo:1046:31: warning: assignment to 'c_norm' was never used; assign to '_' instead?
+    var c_norm = List[Float32](length=k, fill=Float32(0.0))
+                              ^
+built python/mojolearn/host/_mojolearn_mixture_host.so
+BINCACHE miss+built-uploaded bindings/build_mixture_host.sh key=3da7824ed7e93029 seconds=9.6

@@ -1,0 +1,41 @@
+IDB_EXIT=0
+REFUSED par-byte-lm-model-pool/dupes: ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+REFUSED par-byte-lm-model-pool/odd: ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+REFUSED par-byte-lm-model-pool/negative: ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+REFUSED par-gmm/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/hashed: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/wide: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/denormal: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gmm/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/hashed: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/wide: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/denormal: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-kernel-ridge/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/base: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/ties: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/hashed: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/wide: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/denormal: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/denormal_ftz: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/dupes: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/odd: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-gram-pca/negative: NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REPORTED mamba1-int8w/base batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/ties batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/hashed batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/wide batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/denormal batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/denormal_ftz batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/dupes batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/odd batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+REPORTED mamba1-int8w/negative batchgrad: backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']
+wrote /root/leg_out/cpu-x86-shard3.json

@@ -1,0 +1,5 @@
+pod=m98de6kclo0x4l
+name=mojolearn-cpu-refregen-s4-20260917-201429
+terminated_verified=1
+exit=0
+at=2026-09-17T21:00:32Z

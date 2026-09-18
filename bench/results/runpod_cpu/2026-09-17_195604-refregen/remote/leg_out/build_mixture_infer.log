@@ -1,0 +1,10 @@
+1711 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7afa40000000, nodemask=2)
+Imported from /root/mojolearn/bindings/_mojolearn_mixture_infer_host.mojo:28:
+Imported from ./bindings/mixture_host_scoring.mojo:17:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+built python/mojolearn/host/_mojolearn_mixture_infer_host.so
+BINCACHE miss+built-uploaded bindings/build_mixture_infer_host.sh key=1c7068884d4594d3 seconds=10.8

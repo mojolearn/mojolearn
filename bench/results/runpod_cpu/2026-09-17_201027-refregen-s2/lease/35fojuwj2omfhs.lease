@@ -1,0 +1,5 @@
+pod='35fojuwj2omfhs'
+target='-p 36181 root@157.157.221.177'
+armed_utc='2026-09-17T20:11:41Z'
+deadline_epoch=1789684901
+minutes=150

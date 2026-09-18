@@ -1,0 +1,1462 @@
+# vendor=nvidia-nvidia-geforce-rtx-4090-sm_89 commit=68cac62a5197e4bf2703293833f352569ab537c0 (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-09-17 20:47:30  Linux-6.8.0-64-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START par-graph-umap/base repeat=1/train
+# DONE par-graph-umap/base repeat=1/train 6.815s
+# START par-graph-umap/base repeat=1/infer-save-reload
+# DONE par-graph-umap/base repeat=1/infer-save-reload 4.386s
+# START par-graph-umap/base repeat=1/batch
+# DONE par-graph-umap/base repeat=1/batch 44.315s
+# START par-graph-umap/base repeat=2/train
+# DONE par-graph-umap/base repeat=2/train 4.421s
+# START par-graph-umap/base repeat=2/infer-save-reload
+# DONE par-graph-umap/base repeat=2/infer-save-reload 4.598s
+# START par-graph-umap/base repeat=2/batch
+# DONE par-graph-umap/base repeat=2/batch 44.911s
+# CELL par-graph-umap/base STABLE 109.447s
+# START par-graph-umap/ties repeat=1/train
+# DONE par-graph-umap/ties repeat=1/train 4.386s
+# START par-graph-umap/ties repeat=1/infer-save-reload
+# DONE par-graph-umap/ties repeat=1/infer-save-reload 4.392s
+# START par-graph-umap/ties repeat=1/batch
+# DONE par-graph-umap/ties repeat=1/batch 44.811s
+# START par-graph-umap/ties repeat=2/train
+# DONE par-graph-umap/ties repeat=2/train 4.413s
+# START par-graph-umap/ties repeat=2/infer-save-reload
+# DONE par-graph-umap/ties repeat=2/infer-save-reload 4.601s
+# START par-graph-umap/ties repeat=2/batch
+# DONE par-graph-umap/ties repeat=2/batch 45.585s
+# CELL par-graph-umap/ties STABLE 108.189s
+# START par-graph-umap/hashed repeat=1/train
+# DONE par-graph-umap/hashed repeat=1/train 4.446s
+# START par-graph-umap/hashed repeat=1/infer-save-reload
+# DONE par-graph-umap/hashed repeat=1/infer-save-reload 4.592s
+# START par-graph-umap/hashed repeat=1/batch
+# DONE par-graph-umap/hashed repeat=1/batch 44.913s
+# START par-graph-umap/hashed repeat=2/train
+# DONE par-graph-umap/hashed repeat=2/train 4.384s
+# START par-graph-umap/hashed repeat=2/infer-save-reload
+# DONE par-graph-umap/hashed repeat=2/infer-save-reload 4.391s
+# START par-graph-umap/hashed repeat=2/batch
+# DONE par-graph-umap/hashed repeat=2/batch 45.608s
+# CELL par-graph-umap/hashed STABLE 108.334s
+# START par-graph-umap/wide repeat=1/train
+# DONE par-graph-umap/wide repeat=1/train 4.420s
+# START par-graph-umap/wide repeat=1/infer-save-reload
+# DONE par-graph-umap/wide repeat=1/infer-save-reload 4.417s
+# START par-graph-umap/wide repeat=1/batch
+# DONE par-graph-umap/wide repeat=1/batch 45.591s
+# START par-graph-umap/wide repeat=2/train
+# DONE par-graph-umap/wide repeat=2/train 4.429s
+# START par-graph-umap/wide repeat=2/infer-save-reload
+# DONE par-graph-umap/wide repeat=2/infer-save-reload 4.661s
+# START par-graph-umap/wide repeat=2/batch
+# DONE par-graph-umap/wide repeat=2/batch 45.328s
+# CELL par-graph-umap/wide STABLE 108.846s
+# START par-graph-umap/denormal repeat=1/train
+# DONE par-graph-umap/denormal repeat=1/train 4.522s
+# START par-graph-umap/denormal repeat=1/infer-save-reload
+# DONE par-graph-umap/denormal repeat=1/infer-save-reload 4.622s
+# START par-graph-umap/denormal repeat=1/batch
+# DONE par-graph-umap/denormal repeat=1/batch 45.177s
+# START par-graph-umap/denormal repeat=2/train
+# DONE par-graph-umap/denormal repeat=2/train 4.839s
+# START par-graph-umap/denormal repeat=2/infer-save-reload
+# DONE par-graph-umap/denormal repeat=2/infer-save-reload 4.577s
+# START par-graph-umap/denormal repeat=2/batch
+# DONE par-graph-umap/denormal repeat=2/batch 45.397s
+# CELL par-graph-umap/denormal STABLE 109.135s
+# START par-graph-umap/denormal_ftz repeat=1/train
+# DONE par-graph-umap/denormal_ftz repeat=1/train 4.513s
+# START par-graph-umap/denormal_ftz repeat=1/infer-save-reload
+# DONE par-graph-umap/denormal_ftz repeat=1/infer-save-reload 4.406s
+# START par-graph-umap/denormal_ftz repeat=1/batch
+# DONE par-graph-umap/denormal_ftz repeat=1/batch 45.423s
+# START par-graph-umap/denormal_ftz repeat=2/train
+# DONE par-graph-umap/denormal_ftz repeat=2/train 4.692s
+# START par-graph-umap/denormal_ftz repeat=2/infer-save-reload
+# DONE par-graph-umap/denormal_ftz repeat=2/infer-save-reload 4.495s
+# START par-graph-umap/denormal_ftz repeat=2/batch
+# DONE par-graph-umap/denormal_ftz repeat=2/batch 46.199s
+# CELL par-graph-umap/denormal_ftz STABLE 109.730s
+# START par-graph-umap/dupes repeat=1/train
+# DONE par-graph-umap/dupes repeat=1/train 4.422s
+# START par-graph-umap/dupes repeat=1/infer-save-reload
+# DONE par-graph-umap/dupes repeat=1/infer-save-reload 4.585s
+# START par-graph-umap/dupes repeat=1/batch
+# DONE par-graph-umap/dupes repeat=1/batch 45.516s
+# START par-graph-umap/dupes repeat=2/train
+# DONE par-graph-umap/dupes repeat=2/train 4.387s
+# START par-graph-umap/dupes repeat=2/infer-save-reload
+# DONE par-graph-umap/dupes repeat=2/infer-save-reload 4.495s
+# START par-graph-umap/dupes repeat=2/batch
+# DONE par-graph-umap/dupes repeat=2/batch 45.323s
+# CELL par-graph-umap/dupes STABLE 108.729s
+# START par-graph-umap/odd repeat=1/train
+# DONE par-graph-umap/odd repeat=1/train 4.454s
+# START par-graph-umap/odd repeat=1/infer-save-reload
+# DONE par-graph-umap/odd repeat=1/infer-save-reload 4.553s
+# START par-graph-umap/odd repeat=1/batch
+# DONE par-graph-umap/odd repeat=1/batch 45.926s
+# START par-graph-umap/odd repeat=2/train
+# DONE par-graph-umap/odd repeat=2/train 4.383s
+# START par-graph-umap/odd repeat=2/infer-save-reload
+# DONE par-graph-umap/odd repeat=2/infer-save-reload 4.626s
+# START par-graph-umap/odd repeat=2/batch
+# DONE par-graph-umap/odd repeat=2/batch 45.640s
+# CELL par-graph-umap/odd STABLE 109.582s
+# START par-graph-umap/negative repeat=1/train
+# DONE par-graph-umap/negative repeat=1/train 4.463s
+# START par-graph-umap/negative repeat=1/infer-save-reload
+# DONE par-graph-umap/negative repeat=1/infer-save-reload 4.808s
+# START par-graph-umap/negative repeat=1/batch
+# DONE par-graph-umap/negative repeat=1/batch 45.328s
+# START par-graph-umap/negative repeat=2/train
+# DONE par-graph-umap/negative repeat=2/train 4.508s
+# START par-graph-umap/negative repeat=2/infer-save-reload
+# DONE par-graph-umap/negative repeat=2/infer-save-reload 4.594s
+# START par-graph-umap/negative repeat=2/batch
+# DONE par-graph-umap/negative repeat=2/batch 45.390s
+# CELL par-graph-umap/negative STABLE 109.090s
+| par-graph-umap         | 9ec2f266855a6302 | a65fa255a80dbe89 | 76594cd269df24c3 | 383854621bb512d9 | ccfec6d66ea17fb3 | ccfec6d66ea17fb3 | 9ec2f266855a6302 | 9b9d0fa9ad02e0e4 | 0d3ab3dcad302a48 |
+| par-graph-umap infer   | 01d01e040df02560 | 69412caad3ac2091 | ef4dca78cab25a8a | 434ad4834cf6ac99 | d3b17552fe76de7e | d3b17552fe76de7e | 01d01e040df02560 | 3da4ff5741c4cbff | dd796bb63a2bc9c3 |
+| par-graph-umap model   | 9b11e3caf5fdbf13 | 03f1b126e7267505 | 40f0b0a8228eeb29 | 373b2b40f0a4f4b0 | b2e26b4d4348b799 | 5889a802cc5cd9cc | 9b11e3caf5fdbf13 | 338703ec3d735a5d | 29643ed48b1ea061 |
+| par-graph-umap batch   | f3da34387964fee6 | ab5f844f74a71632 | 797d65e02259921c | 3730ec2999871cce | 6afb90d3cdd5b32f | 6afb90d3cdd5b32f | f3da34387964fee6 | ee25637280e38b12 | c66407069061568f |
+# START par-forest-reg/base repeat=1/train
+# DONE par-forest-reg/base repeat=1/train 2.690s
+# START par-forest-reg/base repeat=1/infer-save-reload
+# DONE par-forest-reg/base repeat=1/infer-save-reload 0.091s
+# START par-forest-reg/base repeat=1/batch
+# DONE par-forest-reg/base repeat=1/batch 0.192s
+# START par-forest-reg/base repeat=2/train
+# DONE par-forest-reg/base repeat=2/train 2.472s
+# START par-forest-reg/base repeat=2/infer-save-reload
+# DONE par-forest-reg/base repeat=2/infer-save-reload 0.038s
+# START par-forest-reg/base repeat=2/batch
+# DONE par-forest-reg/base repeat=2/batch 0.170s
+# CELL par-forest-reg/base STABLE 5.651s
+# START par-forest-reg/ties repeat=1/train
+# DONE par-forest-reg/ties repeat=1/train 2.199s
+# START par-forest-reg/ties repeat=1/infer-save-reload
+# DONE par-forest-reg/ties repeat=1/infer-save-reload 0.091s
+# START par-forest-reg/ties repeat=1/batch
+# DONE par-forest-reg/ties repeat=1/batch 0.161s
+# START par-forest-reg/ties repeat=2/train
+# DONE par-forest-reg/ties repeat=2/train 2.205s
+# START par-forest-reg/ties repeat=2/infer-save-reload
+# DONE par-forest-reg/ties repeat=2/infer-save-reload 0.038s
+# START par-forest-reg/ties repeat=2/batch
+# DONE par-forest-reg/ties repeat=2/batch 0.173s
+# CELL par-forest-reg/ties STABLE 4.867s
+# START par-forest-reg/hashed repeat=1/train
+# DONE par-forest-reg/hashed repeat=1/train 2.326s
+# START par-forest-reg/hashed repeat=1/infer-save-reload
+# DONE par-forest-reg/hashed repeat=1/infer-save-reload 0.060s
+# START par-forest-reg/hashed repeat=1/batch
+# DONE par-forest-reg/hashed repeat=1/batch 0.174s
+# START par-forest-reg/hashed repeat=2/train
+# DONE par-forest-reg/hashed repeat=2/train 2.369s
+# START par-forest-reg/hashed repeat=2/infer-save-reload
+# DONE par-forest-reg/hashed repeat=2/infer-save-reload 0.055s
+# START par-forest-reg/hashed repeat=2/batch
+# DONE par-forest-reg/hashed repeat=2/batch 0.168s
+# CELL par-forest-reg/hashed STABLE 5.153s
+# START par-forest-reg/wide repeat=1/train
+# DONE par-forest-reg/wide repeat=1/train 2.299s
+# START par-forest-reg/wide repeat=1/infer-save-reload
+# DONE par-forest-reg/wide repeat=1/infer-save-reload 0.089s
+# START par-forest-reg/wide repeat=1/batch
+# DONE par-forest-reg/wide repeat=1/batch 0.170s
+# START par-forest-reg/wide repeat=2/train
+# DONE par-forest-reg/wide repeat=2/train 2.335s
+# START par-forest-reg/wide repeat=2/infer-save-reload
+# DONE par-forest-reg/wide repeat=2/infer-save-reload 0.038s
+# START par-forest-reg/wide repeat=2/batch
+# DONE par-forest-reg/wide repeat=2/batch 0.211s
+# CELL par-forest-reg/wide STABLE 5.143s
+# START par-forest-reg/denormal repeat=1/train
+# DONE par-forest-reg/denormal repeat=1/train 2.297s
+# START par-forest-reg/denormal repeat=1/infer-save-reload
+# DONE par-forest-reg/denormal repeat=1/infer-save-reload 0.037s
+# START par-forest-reg/denormal repeat=1/batch
+# DONE par-forest-reg/denormal repeat=1/batch 0.150s
+# START par-forest-reg/denormal repeat=2/train
+# DONE par-forest-reg/denormal repeat=2/train 2.311s
+# START par-forest-reg/denormal repeat=2/infer-save-reload
+# DONE par-forest-reg/denormal repeat=2/infer-save-reload 0.039s
+# START par-forest-reg/denormal repeat=2/batch
+# DONE par-forest-reg/denormal repeat=2/batch 0.176s
+# CELL par-forest-reg/denormal STABLE 5.011s
+# START par-forest-reg/denormal_ftz repeat=1/train
+# DONE par-forest-reg/denormal_ftz repeat=1/train 2.417s
+# START par-forest-reg/denormal_ftz repeat=1/infer-save-reload
+# DONE par-forest-reg/denormal_ftz repeat=1/infer-save-reload 0.045s
+# START par-forest-reg/denormal_ftz repeat=1/batch
+# DONE par-forest-reg/denormal_ftz repeat=1/batch 0.171s
+# START par-forest-reg/denormal_ftz repeat=2/train
+# DONE par-forest-reg/denormal_ftz repeat=2/train 2.410s
+# START par-forest-reg/denormal_ftz repeat=2/infer-save-reload
+# DONE par-forest-reg/denormal_ftz repeat=2/infer-save-reload 0.033s
+# START par-forest-reg/denormal_ftz repeat=2/batch
+# DONE par-forest-reg/denormal_ftz repeat=2/batch 0.159s
+# CELL par-forest-reg/denormal_ftz STABLE 5.235s
+# START par-forest-reg/dupes repeat=1/train
+# DONE par-forest-reg/dupes repeat=1/train 2.263s
+# START par-forest-reg/dupes repeat=1/infer-save-reload
+# DONE par-forest-reg/dupes repeat=1/infer-save-reload 0.035s
+# START par-forest-reg/dupes repeat=1/batch
+# DONE par-forest-reg/dupes repeat=1/batch 0.156s
+# START par-forest-reg/dupes repeat=2/train
+# DONE par-forest-reg/dupes repeat=2/train 2.272s
+# START par-forest-reg/dupes repeat=2/infer-save-reload
+# DONE par-forest-reg/dupes repeat=2/infer-save-reload 0.064s
+# START par-forest-reg/dupes repeat=2/batch
+# DONE par-forest-reg/dupes repeat=2/batch 0.147s
+# CELL par-forest-reg/dupes STABLE 4.938s
+# START par-forest-reg/odd repeat=1/train
+# DONE par-forest-reg/odd repeat=1/train 2.357s
+# START par-forest-reg/odd repeat=1/infer-save-reload
+# DONE par-forest-reg/odd repeat=1/infer-save-reload 0.027s
+# START par-forest-reg/odd repeat=1/batch
+# DONE par-forest-reg/odd repeat=1/batch 0.134s
+# START par-forest-reg/odd repeat=2/train
+# DONE par-forest-reg/odd repeat=2/train 2.563s
+# START par-forest-reg/odd repeat=2/infer-save-reload
+# DONE par-forest-reg/odd repeat=2/infer-save-reload 0.026s
+# START par-forest-reg/odd repeat=2/batch
+# DONE par-forest-reg/odd repeat=2/batch 0.080s
+# CELL par-forest-reg/odd STABLE 5.188s
+# START par-forest-reg/negative repeat=1/train
+# DONE par-forest-reg/negative repeat=1/train 2.366s
+# START par-forest-reg/negative repeat=1/infer-save-reload
+# DONE par-forest-reg/negative repeat=1/infer-save-reload 0.038s
+# START par-forest-reg/negative repeat=1/batch
+# DONE par-forest-reg/negative repeat=1/batch 0.160s
+# START par-forest-reg/negative repeat=2/train
+# DONE par-forest-reg/negative repeat=2/train 2.409s
+# START par-forest-reg/negative repeat=2/infer-save-reload
+# DONE par-forest-reg/negative repeat=2/infer-save-reload 0.039s
+# START par-forest-reg/negative repeat=2/batch
+# DONE par-forest-reg/negative repeat=2/batch 0.160s
+# CELL par-forest-reg/negative STABLE 5.172s
+| par-forest-reg         | f032017cfd1c73dd | ec6e7b28cd0d16a9 | c755113ac878c8b9 | 8d9b05172d7a3777 | feed3869ba06eaf7 | feed3869ba06eaf7 | 55f5becd2a3a172c | 33f207a8fab32866 | cd81c456c75aaaf0 |
+| par-forest-reg infer   | 16465c479f279614 | 9e088d6c6c1bf54b | c451d1194f8c47f5 | 1dddbff05a6645de | f2dbdf86d13054aa | f2dbdf86d13054aa | 76d74b876471a685 | c297fa86d8e8923e | b8e07686422213e6 |
+| par-forest-reg model   | ee1ec176625ae198 | a35ee93f7a000cbd | 3ce6c16334ce58a2 | f252dc1602084e7d | 477f1583967a6e80 | 477f1583967a6e80 | 1836f0b40183be27 | 95f31ab2b2ce0d0e | 9deda76973ef536f |
+| par-forest-reg batch   | f01eff208024fbd2 | cdda8ca2f47be0d0 | 2beefbce28d7b6fd | ab6df57a882a7235 | 348b6075bf065c1e | 348b6075bf065c1e | 437234d1b789556e | 263d83348195984e | a1dedfde3094b24b |
+# START par-forest-et-clf/base repeat=1/train
+# DONE par-forest-et-clf/base repeat=1/train 2.931s
+# START par-forest-et-clf/base repeat=1/infer-save-reload
+# DONE par-forest-et-clf/base repeat=1/infer-save-reload 0.154s
+# START par-forest-et-clf/base repeat=1/batch
+# DONE par-forest-et-clf/base repeat=1/batch 0.241s
+# START par-forest-et-clf/base repeat=2/train
+# DONE par-forest-et-clf/base repeat=2/train 2.435s
+# START par-forest-et-clf/base repeat=2/infer-save-reload
+# DONE par-forest-et-clf/base repeat=2/infer-save-reload 0.126s
+# START par-forest-et-clf/base repeat=2/batch
+# DONE par-forest-et-clf/base repeat=2/batch 0.292s
+# CELL par-forest-et-clf/base STABLE 6.179s
+# START par-forest-et-clf/ties repeat=1/train
+# DONE par-forest-et-clf/ties repeat=1/train 2.398s
+# START par-forest-et-clf/ties repeat=1/infer-save-reload
+# DONE par-forest-et-clf/ties repeat=1/infer-save-reload 0.165s
+# START par-forest-et-clf/ties repeat=1/batch
+# DONE par-forest-et-clf/ties repeat=1/batch 0.274s
+# START par-forest-et-clf/ties repeat=2/train
+# DONE par-forest-et-clf/ties repeat=2/train 2.333s
+# START par-forest-et-clf/ties repeat=2/infer-save-reload
+# DONE par-forest-et-clf/ties repeat=2/infer-save-reload 0.110s
+# START par-forest-et-clf/ties repeat=2/batch
+# DONE par-forest-et-clf/ties repeat=2/batch 0.261s
+# CELL par-forest-et-clf/ties STABLE 5.542s
+# START par-forest-et-clf/hashed repeat=1/train
+# DONE par-forest-et-clf/hashed repeat=1/train 2.453s
+# START par-forest-et-clf/hashed repeat=1/infer-save-reload
+# DONE par-forest-et-clf/hashed repeat=1/infer-save-reload 0.137s
+# START par-forest-et-clf/hashed repeat=1/batch
+# DONE par-forest-et-clf/hashed repeat=1/batch 0.269s
+# START par-forest-et-clf/hashed repeat=2/train
+# DONE par-forest-et-clf/hashed repeat=2/train 2.351s
+# START par-forest-et-clf/hashed repeat=2/infer-save-reload
+# DONE par-forest-et-clf/hashed repeat=2/infer-save-reload 0.107s
+# START par-forest-et-clf/hashed repeat=2/batch
+# DONE par-forest-et-clf/hashed repeat=2/batch 0.286s
+# CELL par-forest-et-clf/hashed STABLE 5.604s
+# START par-forest-et-clf/wide repeat=1/train
+# DONE par-forest-et-clf/wide repeat=1/train 2.410s
+# START par-forest-et-clf/wide repeat=1/infer-save-reload
+# DONE par-forest-et-clf/wide repeat=1/infer-save-reload 0.140s
+# START par-forest-et-clf/wide repeat=1/batch
+# DONE par-forest-et-clf/wide repeat=1/batch 0.242s
+# START par-forest-et-clf/wide repeat=2/train
+# DONE par-forest-et-clf/wide repeat=2/train 2.369s
+# START par-forest-et-clf/wide repeat=2/infer-save-reload
+# DONE par-forest-et-clf/wide repeat=2/infer-save-reload 0.127s
+# START par-forest-et-clf/wide repeat=2/batch
+# DONE par-forest-et-clf/wide repeat=2/batch 0.320s
+# CELL par-forest-et-clf/wide STABLE 5.608s
+# START par-forest-et-clf/denormal repeat=1/train
+# DONE par-forest-et-clf/denormal repeat=1/train 2.450s
+# START par-forest-et-clf/denormal repeat=1/infer-save-reload
+# DONE par-forest-et-clf/denormal repeat=1/infer-save-reload 0.158s
+# START par-forest-et-clf/denormal repeat=1/batch
+# DONE par-forest-et-clf/denormal repeat=1/batch 0.276s
+# START par-forest-et-clf/denormal repeat=2/train
+# DONE par-forest-et-clf/denormal repeat=2/train 2.544s
+# START par-forest-et-clf/denormal repeat=2/infer-save-reload
+# DONE par-forest-et-clf/denormal repeat=2/infer-save-reload 0.178s
+# START par-forest-et-clf/denormal repeat=2/batch
+# DONE par-forest-et-clf/denormal repeat=2/batch 0.279s
+# CELL par-forest-et-clf/denormal STABLE 5.885s
+# START par-forest-et-clf/denormal_ftz repeat=1/train
+# DONE par-forest-et-clf/denormal_ftz repeat=1/train 2.430s
+# START par-forest-et-clf/denormal_ftz repeat=1/infer-save-reload
+# DONE par-forest-et-clf/denormal_ftz repeat=1/infer-save-reload 0.151s
+# START par-forest-et-clf/denormal_ftz repeat=1/batch
+# DONE par-forest-et-clf/denormal_ftz repeat=1/batch 0.279s
+# START par-forest-et-clf/denormal_ftz repeat=2/train
+# DONE par-forest-et-clf/denormal_ftz repeat=2/train 2.360s
+# START par-forest-et-clf/denormal_ftz repeat=2/infer-save-reload
+# DONE par-forest-et-clf/denormal_ftz repeat=2/infer-save-reload 0.158s
+# START par-forest-et-clf/denormal_ftz repeat=2/batch
+# DONE par-forest-et-clf/denormal_ftz repeat=2/batch 0.265s
+# CELL par-forest-et-clf/denormal_ftz STABLE 5.644s
+# START par-forest-et-clf/dupes repeat=1/train
+# DONE par-forest-et-clf/dupes repeat=1/train 2.350s
+# START par-forest-et-clf/dupes repeat=1/infer-save-reload
+# DONE par-forest-et-clf/dupes repeat=1/infer-save-reload 0.148s
+# START par-forest-et-clf/dupes repeat=1/batch
+# DONE par-forest-et-clf/dupes repeat=1/batch 0.253s
+# START par-forest-et-clf/dupes repeat=2/train
+# DONE par-forest-et-clf/dupes repeat=2/train 2.336s
+# START par-forest-et-clf/dupes repeat=2/infer-save-reload
+# DONE par-forest-et-clf/dupes repeat=2/infer-save-reload 0.109s
+# START par-forest-et-clf/dupes repeat=2/batch
+# DONE par-forest-et-clf/dupes repeat=2/batch 0.244s
+# CELL par-forest-et-clf/dupes STABLE 5.440s
+# START par-forest-et-clf/odd repeat=1/train
+# DONE par-forest-et-clf/odd repeat=1/train 2.236s
+# START par-forest-et-clf/odd repeat=1/infer-save-reload
+# DONE par-forest-et-clf/odd repeat=1/infer-save-reload 0.085s
+# START par-forest-et-clf/odd repeat=1/batch
+# DONE par-forest-et-clf/odd repeat=1/batch 0.170s
+# START par-forest-et-clf/odd repeat=2/train
+# DONE par-forest-et-clf/odd repeat=2/train 2.247s
+# START par-forest-et-clf/odd repeat=2/infer-save-reload
+# DONE par-forest-et-clf/odd repeat=2/infer-save-reload 0.086s
+# START par-forest-et-clf/odd repeat=2/batch
+# DONE par-forest-et-clf/odd repeat=2/batch 0.160s
+# CELL par-forest-et-clf/odd STABLE 4.984s
+# START par-forest-et-clf/negative repeat=1/train
+# DONE par-forest-et-clf/negative repeat=1/train 2.326s
+# START par-forest-et-clf/negative repeat=1/infer-save-reload
+# DONE par-forest-et-clf/negative repeat=1/infer-save-reload 0.170s
+# START par-forest-et-clf/negative repeat=1/batch
+# DONE par-forest-et-clf/negative repeat=1/batch 0.262s
+# START par-forest-et-clf/negative repeat=2/train
+# DONE par-forest-et-clf/negative repeat=2/train 2.313s
+# START par-forest-et-clf/negative repeat=2/infer-save-reload
+# DONE par-forest-et-clf/negative repeat=2/infer-save-reload 0.067s
+# START par-forest-et-clf/negative repeat=2/batch
+# DONE par-forest-et-clf/negative repeat=2/batch 0.308s
+# CELL par-forest-et-clf/negative STABLE 5.446s
+| par-forest-et-clf      | c586b27a3b049614 | 604f59c7a4203eeb | eb7aaadcd0843a6d | ee8b318d6bf698b2 | b40377fb35e52909 | b40377fb35e52909 | a24dcc8a93f699ff | 1da918353bb9f10e | e1409786c462d97b |
+| par-forest-et-clf infer | b728e73e5f84514c | 7aa541bcca22b6fd | 122107c8d8ef1916 | a5387ead8aca6bb0 | df1046f889386ad8 | df1046f889386ad8 | 55bed611333bec41 | 518eb1a0b0211a91 | 2b7903f4728bb9c0 |
+| par-forest-et-clf model | 58a53490a62fba59 | e63de8292d8384e4 | 94580dd625aaa11a | f792edfcd53b6aff | 5d348c7133844b3e | 5d348c7133844b3e | ff82d3ce7bd5651f | ed0c7e9a34735dbd | 974e58a34d03e07b |
+| par-forest-et-clf batch | 81b2634afb4f8a2b | 2296c44521d45082 | 929c4ae2aa814f50 | f7c2f10cfe901b45 | 9e6b4329ac925a6a | 9e6b4329ac925a6a | 1b6985d9b8825e11 | c070f3c53e86d833 | b852e5cd9819f18a |
+# START par-boosting-clf/base repeat=1/train
+# DONE par-boosting-clf/base repeat=1/train 3.092s
+# START par-boosting-clf/base repeat=1/infer-save-reload
+# DONE par-boosting-clf/base repeat=1/infer-save-reload 0.011s
+# START par-boosting-clf/base repeat=1/batch
+# DONE par-boosting-clf/base repeat=1/batch 0.225s
+# START par-boosting-clf/base repeat=2/train
+# DONE par-boosting-clf/base repeat=2/train 2.359s
+# START par-boosting-clf/base repeat=2/infer-save-reload
+# DONE par-boosting-clf/base repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/base repeat=2/batch
+# DONE par-boosting-clf/base repeat=2/batch 0.222s
+# CELL par-boosting-clf/base STABLE 5.921s
+# START par-boosting-clf/ties repeat=1/train
+# DONE par-boosting-clf/ties repeat=1/train 2.650s
+# START par-boosting-clf/ties repeat=1/infer-save-reload
+# DONE par-boosting-clf/ties repeat=1/infer-save-reload 0.011s
+# START par-boosting-clf/ties repeat=1/batch
+# DONE par-boosting-clf/ties repeat=1/batch 0.211s
+# START par-boosting-clf/ties repeat=2/train
+# DONE par-boosting-clf/ties repeat=2/train 2.368s
+# START par-boosting-clf/ties repeat=2/infer-save-reload
+# DONE par-boosting-clf/ties repeat=2/infer-save-reload 0.011s
+# START par-boosting-clf/ties repeat=2/batch
+# DONE par-boosting-clf/ties repeat=2/batch 0.229s
+# CELL par-boosting-clf/ties STABLE 5.479s
+# START par-boosting-clf/hashed repeat=1/train
+# DONE par-boosting-clf/hashed repeat=1/train 2.529s
+# START par-boosting-clf/hashed repeat=1/infer-save-reload
+# DONE par-boosting-clf/hashed repeat=1/infer-save-reload 0.012s
+# START par-boosting-clf/hashed repeat=1/batch
+# DONE par-boosting-clf/hashed repeat=1/batch 0.206s
+# START par-boosting-clf/hashed repeat=2/train
+# DONE par-boosting-clf/hashed repeat=2/train 2.395s
+# START par-boosting-clf/hashed repeat=2/infer-save-reload
+# DONE par-boosting-clf/hashed repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/hashed repeat=2/batch
+# DONE par-boosting-clf/hashed repeat=2/batch 0.215s
+# CELL par-boosting-clf/hashed STABLE 5.369s
+# START par-boosting-clf/wide repeat=1/train
+# DONE par-boosting-clf/wide repeat=1/train 2.398s
+# START par-boosting-clf/wide repeat=1/infer-save-reload
+# DONE par-boosting-clf/wide repeat=1/infer-save-reload 0.011s
+# START par-boosting-clf/wide repeat=1/batch
+# DONE par-boosting-clf/wide repeat=1/batch 0.215s
+# START par-boosting-clf/wide repeat=2/train
+# DONE par-boosting-clf/wide repeat=2/train 2.403s
+# START par-boosting-clf/wide repeat=2/infer-save-reload
+# DONE par-boosting-clf/wide repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/wide repeat=2/batch
+# DONE par-boosting-clf/wide repeat=2/batch 0.217s
+# CELL par-boosting-clf/wide STABLE 5.257s
+# START par-boosting-clf/denormal repeat=1/train
+# DONE par-boosting-clf/denormal repeat=1/train 2.392s
+# START par-boosting-clf/denormal repeat=1/infer-save-reload
+# DONE par-boosting-clf/denormal repeat=1/infer-save-reload 0.012s
+# START par-boosting-clf/denormal repeat=1/batch
+# DONE par-boosting-clf/denormal repeat=1/batch 0.215s
+# START par-boosting-clf/denormal repeat=2/train
+# DONE par-boosting-clf/denormal repeat=2/train 2.407s
+# START par-boosting-clf/denormal repeat=2/infer-save-reload
+# DONE par-boosting-clf/denormal repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/denormal repeat=2/batch
+# DONE par-boosting-clf/denormal repeat=2/batch 0.215s
+# CELL par-boosting-clf/denormal STABLE 5.253s
+# START par-boosting-clf/denormal_ftz repeat=1/train
+# DONE par-boosting-clf/denormal_ftz repeat=1/train 2.444s
+# START par-boosting-clf/denormal_ftz repeat=1/infer-save-reload
+# DONE par-boosting-clf/denormal_ftz repeat=1/infer-save-reload 0.012s
+# START par-boosting-clf/denormal_ftz repeat=1/batch
+# DONE par-boosting-clf/denormal_ftz repeat=1/batch 0.219s
+# START par-boosting-clf/denormal_ftz repeat=2/train
+# DONE par-boosting-clf/denormal_ftz repeat=2/train 2.458s
+# START par-boosting-clf/denormal_ftz repeat=2/infer-save-reload
+# DONE par-boosting-clf/denormal_ftz repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/denormal_ftz repeat=2/batch
+# DONE par-boosting-clf/denormal_ftz repeat=2/batch 0.207s
+# CELL par-boosting-clf/denormal_ftz STABLE 5.352s
+# START par-boosting-clf/dupes repeat=1/train
+# DONE par-boosting-clf/dupes repeat=1/train 2.468s
+# START par-boosting-clf/dupes repeat=1/infer-save-reload
+# DONE par-boosting-clf/dupes repeat=1/infer-save-reload 0.012s
+# START par-boosting-clf/dupes repeat=1/batch
+# DONE par-boosting-clf/dupes repeat=1/batch 0.213s
+# START par-boosting-clf/dupes repeat=2/train
+# DONE par-boosting-clf/dupes repeat=2/train 2.466s
+# START par-boosting-clf/dupes repeat=2/infer-save-reload
+# DONE par-boosting-clf/dupes repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/dupes repeat=2/batch
+# DONE par-boosting-clf/dupes repeat=2/batch 0.213s
+# CELL par-boosting-clf/dupes STABLE 5.383s
+# START par-boosting-clf/odd repeat=1/train
+# DONE par-boosting-clf/odd repeat=1/train 2.408s
+# START par-boosting-clf/odd repeat=1/infer-save-reload
+# DONE par-boosting-clf/odd repeat=1/infer-save-reload 0.008s
+# START par-boosting-clf/odd repeat=1/batch
+# DONE par-boosting-clf/odd repeat=1/batch 0.155s
+# START par-boosting-clf/odd repeat=2/train
+# DONE par-boosting-clf/odd repeat=2/train 2.444s
+# START par-boosting-clf/odd repeat=2/infer-save-reload
+# DONE par-boosting-clf/odd repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/odd repeat=2/batch
+# DONE par-boosting-clf/odd repeat=2/batch 0.148s
+# CELL par-boosting-clf/odd STABLE 5.175s
+# START par-boosting-clf/negative repeat=1/train
+# DONE par-boosting-clf/negative repeat=1/train 2.422s
+# START par-boosting-clf/negative repeat=1/infer-save-reload
+# DONE par-boosting-clf/negative repeat=1/infer-save-reload 0.012s
+# START par-boosting-clf/negative repeat=1/batch
+# DONE par-boosting-clf/negative repeat=1/batch 0.220s
+# START par-boosting-clf/negative repeat=2/train
+# DONE par-boosting-clf/negative repeat=2/train 2.567s
+# START par-boosting-clf/negative repeat=2/infer-save-reload
+# DONE par-boosting-clf/negative repeat=2/infer-save-reload 0.012s
+# START par-boosting-clf/negative repeat=2/batch
+# DONE par-boosting-clf/negative repeat=2/batch 0.222s
+# CELL par-boosting-clf/negative STABLE 5.454s
+| par-boosting-clf       | 933184700a044eb2 | 492cbf5fbc9e6304 | dd5bb5e8c3018e9a | 2c52f777f933c7cc | 933184700a044eb2 | 933184700a044eb2 | 6c3582dfcd94bc9c | f8f56dac8e714ab8 | 9aa127676f821c18 |
+| par-boosting-clf infer | 33875685be67febb | fe960ad1ad7c54e5 | 84bd02377a59dbc3 | 2dd0483189f81a32 | 33875685be67febb | 33875685be67febb | e85d77ea7956ef95 | 94e4c2a70fc9bfd8 | ccd4bd587a2483c3 |
+| par-boosting-clf batch | 984baeb0cccbd21e | 14399e0cd5893cd4 | 0003824fb96636b7 | 24653b9a06a6071a | 984baeb0cccbd21e | 984baeb0cccbd21e | 832f98d68d745aec | 38ba96eea94d8ea9 | f2ca7ffadecb0625 |
+# START par-boosting-reg/base repeat=1/train
+# DONE par-boosting-reg/base repeat=1/train 2.398s
+# START par-boosting-reg/base repeat=1/infer-save-reload
+# DONE par-boosting-reg/base repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/base repeat=1/batch
+# DONE par-boosting-reg/base repeat=1/batch 0.104s
+# START par-boosting-reg/base repeat=2/train
+# DONE par-boosting-reg/base repeat=2/train 2.300s
+# START par-boosting-reg/base repeat=2/infer-save-reload
+# DONE par-boosting-reg/base repeat=2/infer-save-reload 0.001s
+# START par-boosting-reg/base repeat=2/batch
+# DONE par-boosting-reg/base repeat=2/batch 0.110s
+# CELL par-boosting-reg/base STABLE 4.915s
+# START par-boosting-reg/ties repeat=1/train
+# DONE par-boosting-reg/ties repeat=1/train 2.390s
+# START par-boosting-reg/ties repeat=1/infer-save-reload
+# DONE par-boosting-reg/ties repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/ties repeat=1/batch
+# DONE par-boosting-reg/ties repeat=1/batch 0.110s
+# START par-boosting-reg/ties repeat=2/train
+# DONE par-boosting-reg/ties repeat=2/train 2.369s
+# START par-boosting-reg/ties repeat=2/infer-save-reload
+# DONE par-boosting-reg/ties repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/ties repeat=2/batch
+# DONE par-boosting-reg/ties repeat=2/batch 0.123s
+# CELL par-boosting-reg/ties STABLE 4.996s
+# START par-boosting-reg/hashed repeat=1/train
+# DONE par-boosting-reg/hashed repeat=1/train 2.375s
+# START par-boosting-reg/hashed repeat=1/infer-save-reload
+# DONE par-boosting-reg/hashed repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/hashed repeat=1/batch
+# DONE par-boosting-reg/hashed repeat=1/batch 0.105s
+# START par-boosting-reg/hashed repeat=2/train
+# DONE par-boosting-reg/hashed repeat=2/train 2.397s
+# START par-boosting-reg/hashed repeat=2/infer-save-reload
+# DONE par-boosting-reg/hashed repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/hashed repeat=2/batch
+# DONE par-boosting-reg/hashed repeat=2/batch 0.116s
+# CELL par-boosting-reg/hashed STABLE 4.996s
+# START par-boosting-reg/wide repeat=1/train
+# DONE par-boosting-reg/wide repeat=1/train 2.312s
+# START par-boosting-reg/wide repeat=1/infer-save-reload
+# DONE par-boosting-reg/wide repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/wide repeat=1/batch
+# DONE par-boosting-reg/wide repeat=1/batch 0.107s
+# START par-boosting-reg/wide repeat=2/train
+# DONE par-boosting-reg/wide repeat=2/train 2.404s
+# START par-boosting-reg/wide repeat=2/infer-save-reload
+# DONE par-boosting-reg/wide repeat=2/infer-save-reload 0.001s
+# START par-boosting-reg/wide repeat=2/batch
+# DONE par-boosting-reg/wide repeat=2/batch 0.091s
+# CELL par-boosting-reg/wide STABLE 4.918s
+# START par-boosting-reg/denormal repeat=1/train
+# DONE par-boosting-reg/denormal repeat=1/train 2.377s
+# START par-boosting-reg/denormal repeat=1/infer-save-reload
+# DONE par-boosting-reg/denormal repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/denormal repeat=1/batch
+# DONE par-boosting-reg/denormal repeat=1/batch 0.115s
+# START par-boosting-reg/denormal repeat=2/train
+# DONE par-boosting-reg/denormal repeat=2/train 2.367s
+# START par-boosting-reg/denormal repeat=2/infer-save-reload
+# DONE par-boosting-reg/denormal repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/denormal repeat=2/batch
+# DONE par-boosting-reg/denormal repeat=2/batch 0.106s
+# CELL par-boosting-reg/denormal STABLE 4.968s
+# START par-boosting-reg/denormal_ftz repeat=1/train
+# DONE par-boosting-reg/denormal_ftz repeat=1/train 2.398s
+# START par-boosting-reg/denormal_ftz repeat=1/infer-save-reload
+# DONE par-boosting-reg/denormal_ftz repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/denormal_ftz repeat=1/batch
+# DONE par-boosting-reg/denormal_ftz repeat=1/batch 0.115s
+# START par-boosting-reg/denormal_ftz repeat=2/train
+# DONE par-boosting-reg/denormal_ftz repeat=2/train 2.352s
+# START par-boosting-reg/denormal_ftz repeat=2/infer-save-reload
+# DONE par-boosting-reg/denormal_ftz repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/denormal_ftz repeat=2/batch
+# DONE par-boosting-reg/denormal_ftz repeat=2/batch 0.105s
+# CELL par-boosting-reg/denormal_ftz STABLE 4.975s
+# START par-boosting-reg/dupes repeat=1/train
+# DONE par-boosting-reg/dupes repeat=1/train 2.415s
+# START par-boosting-reg/dupes repeat=1/infer-save-reload
+# DONE par-boosting-reg/dupes repeat=1/infer-save-reload 0.001s
+# START par-boosting-reg/dupes repeat=1/batch
+# DONE par-boosting-reg/dupes repeat=1/batch 0.137s
+# START par-boosting-reg/dupes repeat=2/train
+# DONE par-boosting-reg/dupes repeat=2/train 2.580s
+# START par-boosting-reg/dupes repeat=2/infer-save-reload
+# DONE par-boosting-reg/dupes repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/dupes repeat=2/batch
+# DONE par-boosting-reg/dupes repeat=2/batch 0.104s
+# CELL par-boosting-reg/dupes STABLE 5.239s
+# START par-boosting-reg/odd repeat=1/train
+# DONE par-boosting-reg/odd repeat=1/train 2.368s
+# START par-boosting-reg/odd repeat=1/infer-save-reload
+# DONE par-boosting-reg/odd repeat=1/infer-save-reload 0.001s
+# START par-boosting-reg/odd repeat=1/batch
+# DONE par-boosting-reg/odd repeat=1/batch 0.062s
+# START par-boosting-reg/odd repeat=2/train
+# DONE par-boosting-reg/odd repeat=2/train 2.345s
+# START par-boosting-reg/odd repeat=2/infer-save-reload
+# DONE par-boosting-reg/odd repeat=2/infer-save-reload 0.001s
+# START par-boosting-reg/odd repeat=2/batch
+# DONE par-boosting-reg/odd repeat=2/batch 0.079s
+# CELL par-boosting-reg/odd STABLE 4.856s
+# START par-boosting-reg/negative repeat=1/train
+# DONE par-boosting-reg/negative repeat=1/train 2.395s
+# START par-boosting-reg/negative repeat=1/infer-save-reload
+# DONE par-boosting-reg/negative repeat=1/infer-save-reload 0.002s
+# START par-boosting-reg/negative repeat=1/batch
+# DONE par-boosting-reg/negative repeat=1/batch 0.111s
+# START par-boosting-reg/negative repeat=2/train
+# DONE par-boosting-reg/negative repeat=2/train 2.387s
+# START par-boosting-reg/negative repeat=2/infer-save-reload
+# DONE par-boosting-reg/negative repeat=2/infer-save-reload 0.002s
+# START par-boosting-reg/negative repeat=2/batch
+# DONE par-boosting-reg/negative repeat=2/batch 0.107s
+# CELL par-boosting-reg/negative STABLE 5.003s
+| par-boosting-reg       | 3f8aef8d73be249c | 88cba1574daa922e | a89dba586c0f1ab4 | 5ea3a06d9df1d862 | 400f099e655dc453 | 400f099e655dc453 | 49848bfd3c26b52e | 7b54ca9d69e29714 | e54f74cdab3f29f0 |
+| par-boosting-reg infer | ba6284898fcd7adb | 4044415de3b73aee | b79afaae27b8bdb6 | 3f008ec3ab37ef2f | 86db747723f31263 | 86db747723f31263 | da755bd965b6c511 | 88f9e64eea1b35df | 2f7db100a96ca46b |
+| par-boosting-reg batch | 3a53a53abfe321f6 | 1681c6f968f338d2 | 15a568bd232c8fbd | 288e6b1fb3347f2d | 24d0e532611fba96 | 24d0e532611fba96 | 17cffc317f1b3c99 | 6b459ed54f82865a | 36bc296fc8f0a3cf |
+# START par-gram-ols/base repeat=1/train
+# DONE par-gram-ols/base repeat=1/train 2.563s
+# START par-gram-ols/base repeat=1/infer-save-reload
+# DONE par-gram-ols/base repeat=1/infer-save-reload 0.005s
+# START par-gram-ols/base repeat=1/batch
+# DONE par-gram-ols/base repeat=1/batch 0.019s
+# START par-gram-ols/base repeat=2/train
+# DONE par-gram-ols/base repeat=2/train 2.246s
+# START par-gram-ols/base repeat=2/infer-save-reload
+# DONE par-gram-ols/base repeat=2/infer-save-reload 0.002s
+# START par-gram-ols/base repeat=2/batch
+# DONE par-gram-ols/base repeat=2/batch 0.009s
+# CELL par-gram-ols/base STABLE 4.843s
+# START par-gram-ols/ties repeat=1/train
+# DONE par-gram-ols/ties repeat=1/train 2.232s
+# START par-gram-ols/ties repeat=1/infer-save-reload
+# DONE par-gram-ols/ties repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/ties repeat=1/batch
+# DONE par-gram-ols/ties repeat=1/batch 0.018s
+# START par-gram-ols/ties repeat=2/train
+# DONE par-gram-ols/ties repeat=2/train 2.273s
+# START par-gram-ols/ties repeat=2/infer-save-reload
+# DONE par-gram-ols/ties repeat=2/infer-save-reload 0.002s
+# START par-gram-ols/ties repeat=2/batch
+# DONE par-gram-ols/ties repeat=2/batch 0.009s
+# CELL par-gram-ols/ties STABLE 4.539s
+# START par-gram-ols/hashed repeat=1/train
+# DONE par-gram-ols/hashed repeat=1/train 2.250s
+# START par-gram-ols/hashed repeat=1/infer-save-reload
+# DONE par-gram-ols/hashed repeat=1/infer-save-reload 0.002s
+# START par-gram-ols/hashed repeat=1/batch
+# DONE par-gram-ols/hashed repeat=1/batch 0.012s
+# START par-gram-ols/hashed repeat=2/train
+# DONE par-gram-ols/hashed repeat=2/train 2.204s
+# START par-gram-ols/hashed repeat=2/infer-save-reload
+# DONE par-gram-ols/hashed repeat=2/infer-save-reload 0.003s
+# START par-gram-ols/hashed repeat=2/batch
+# DONE par-gram-ols/hashed repeat=2/batch 0.010s
+# CELL par-gram-ols/hashed STABLE 4.481s
+# START par-gram-ols/wide repeat=1/train
+# DONE par-gram-ols/wide repeat=1/train 2.225s
+# START par-gram-ols/wide repeat=1/infer-save-reload
+# DONE par-gram-ols/wide repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/wide repeat=1/batch
+# DONE par-gram-ols/wide repeat=1/batch 0.018s
+# START par-gram-ols/wide repeat=2/train
+# DONE par-gram-ols/wide repeat=2/train 2.278s
+# START par-gram-ols/wide repeat=2/infer-save-reload
+# DONE par-gram-ols/wide repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/wide repeat=2/batch
+# DONE par-gram-ols/wide repeat=2/batch 0.018s
+# CELL par-gram-ols/wide STABLE 4.549s
+# START par-gram-ols/denormal repeat=1/train
+# DONE par-gram-ols/denormal repeat=1/train 2.214s
+# START par-gram-ols/denormal repeat=1/infer-save-reload
+# DONE par-gram-ols/denormal repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/denormal repeat=1/batch
+# DONE par-gram-ols/denormal repeat=1/batch 0.018s
+# START par-gram-ols/denormal repeat=2/train
+# DONE par-gram-ols/denormal repeat=2/train 2.364s
+# START par-gram-ols/denormal repeat=2/infer-save-reload
+# DONE par-gram-ols/denormal repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/denormal repeat=2/batch
+# DONE par-gram-ols/denormal repeat=2/batch 0.024s
+# CELL par-gram-ols/denormal STABLE 4.629s
+# START par-gram-ols/denormal_ftz repeat=1/train
+# DONE par-gram-ols/denormal_ftz repeat=1/train 2.548s
+# START par-gram-ols/denormal_ftz repeat=1/infer-save-reload
+# DONE par-gram-ols/denormal_ftz repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/denormal_ftz repeat=1/batch
+# DONE par-gram-ols/denormal_ftz repeat=1/batch 0.018s
+# START par-gram-ols/denormal_ftz repeat=2/train
+# DONE par-gram-ols/denormal_ftz repeat=2/train 2.252s
+# START par-gram-ols/denormal_ftz repeat=2/infer-save-reload
+# DONE par-gram-ols/denormal_ftz repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/denormal_ftz repeat=2/batch
+# DONE par-gram-ols/denormal_ftz repeat=2/batch 0.019s
+# CELL par-gram-ols/denormal_ftz STABLE 4.846s
+# START par-gram-ols/dupes repeat=1/train
+# DONE par-gram-ols/dupes repeat=1/train 2.216s
+# START par-gram-ols/dupes repeat=1/infer-save-reload
+# DONE par-gram-ols/dupes repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/dupes repeat=1/batch
+# DONE par-gram-ols/dupes repeat=1/batch 0.019s
+# START par-gram-ols/dupes repeat=2/train
+# DONE par-gram-ols/dupes repeat=2/train 2.273s
+# START par-gram-ols/dupes repeat=2/infer-save-reload
+# DONE par-gram-ols/dupes repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/dupes repeat=2/batch
+# DONE par-gram-ols/dupes repeat=2/batch 0.019s
+# CELL par-gram-ols/dupes STABLE 4.536s
+# START par-gram-ols/odd repeat=1/train
+# DONE par-gram-ols/odd repeat=1/train 2.220s
+# START par-gram-ols/odd repeat=1/infer-save-reload
+# DONE par-gram-ols/odd repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/odd repeat=1/batch
+# DONE par-gram-ols/odd repeat=1/batch 0.018s
+# START par-gram-ols/odd repeat=2/train
+# DONE par-gram-ols/odd repeat=2/train 2.280s
+# START par-gram-ols/odd repeat=2/infer-save-reload
+# DONE par-gram-ols/odd repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/odd repeat=2/batch
+# DONE par-gram-ols/odd repeat=2/batch 0.019s
+# CELL par-gram-ols/odd STABLE 4.546s
+# START par-gram-ols/negative repeat=1/train
+# DONE par-gram-ols/negative repeat=1/train 2.205s
+# START par-gram-ols/negative repeat=1/infer-save-reload
+# DONE par-gram-ols/negative repeat=1/infer-save-reload 0.004s
+# START par-gram-ols/negative repeat=1/batch
+# DONE par-gram-ols/negative repeat=1/batch 0.018s
+# START par-gram-ols/negative repeat=2/train
+# DONE par-gram-ols/negative repeat=2/train 2.187s
+# START par-gram-ols/negative repeat=2/infer-save-reload
+# DONE par-gram-ols/negative repeat=2/infer-save-reload 0.004s
+# START par-gram-ols/negative repeat=2/batch
+# DONE par-gram-ols/negative repeat=2/batch 0.018s
+# CELL par-gram-ols/negative STABLE 4.438s
+| par-gram-ols           | 3d1d7c30b12d9872 | c73c0c1158ebcb9e | 7a4cc4b643207e04 | 880f803e2a9840cf | f0e2e46f2203e17d | f0e2e46f2203e17d | 5d93af9edf61d3e7 | bfb2368a5a4871ba | 737566e6c5e95e7d |
+| par-gram-ols infer     | 2546a13c03838433 | 55f61f34cae7e5ff | 73b6c23acb537f4f | c40c1d99f114c282 | 050118359943fcd8 | 050118359943fcd8 | 09ac924358918527 | 60eb6ff64dfbea28 | ddf1f9ebb606db70 |
+| par-gram-ols model     | a84289377ea9180f | b25d3a2214bc6196 | 5de64f00889bfe52 | 926f863307451ea0 | 1c22cb64d07612e4 | 1c22cb64d07612e4 | ef68b4364cd0fa2d | fcd41cbad6561bbb | f534c0184e2b735f |
+| par-gram-ols batch     | b578bef320871443 | 9dbfb3084184e215 | a4956d9ac7b79682 | 7b5124d64616ae30 | f43e33d63aa99b1f | f43e33d63aa99b1f | a38ddf4744dc462e | 5dbe95f10a137c72 | 134a538ba901d0d4 |
+# START par-gram-pca/base repeat=1/train
+# DONE par-gram-pca/base repeat=1/train 2.234s
+# START par-gram-pca/base repeat=1/infer-save-reload
+# DONE par-gram-pca/base repeat=1/infer-save-reload 0.006s
+# START par-gram-pca/base repeat=1/batch
+# DONE par-gram-pca/base repeat=1/batch 0.016s
+# START par-gram-pca/base repeat=2/train
+# DONE par-gram-pca/base repeat=2/train 2.046s
+# START par-gram-pca/base repeat=2/infer-save-reload
+# DONE par-gram-pca/base repeat=2/infer-save-reload 0.005s
+# START par-gram-pca/base repeat=2/batch
+# DONE par-gram-pca/base repeat=2/batch 0.018s
+# CELL par-gram-pca/base STABLE 4.325s
+# START par-gram-pca/ties repeat=1/train
+# DONE par-gram-pca/ties repeat=1/train 2.067s
+# START par-gram-pca/ties repeat=1/infer-save-reload
+# DONE par-gram-pca/ties repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/ties repeat=1/batch
+# DONE par-gram-pca/ties repeat=1/batch 0.019s
+# START par-gram-pca/ties repeat=2/train
+# DONE par-gram-pca/ties repeat=2/train 2.049s
+# START par-gram-pca/ties repeat=2/infer-save-reload
+# DONE par-gram-pca/ties repeat=2/infer-save-reload 0.003s
+# START par-gram-pca/ties repeat=2/batch
+# DONE par-gram-pca/ties repeat=2/batch 0.010s
+# CELL par-gram-pca/ties STABLE 4.153s
+# START par-gram-pca/hashed repeat=1/train
+# DONE par-gram-pca/hashed repeat=1/train 2.048s
+# START par-gram-pca/hashed repeat=1/infer-save-reload
+# DONE par-gram-pca/hashed repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/hashed repeat=1/batch
+# DONE par-gram-pca/hashed repeat=1/batch 0.019s
+# START par-gram-pca/hashed repeat=2/train
+# DONE par-gram-pca/hashed repeat=2/train 2.027s
+# START par-gram-pca/hashed repeat=2/infer-save-reload
+# DONE par-gram-pca/hashed repeat=2/infer-save-reload 0.005s
+# START par-gram-pca/hashed repeat=2/batch
+# DONE par-gram-pca/hashed repeat=2/batch 0.019s
+# CELL par-gram-pca/hashed STABLE 4.123s
+# START par-gram-pca/wide repeat=1/train
+# DONE par-gram-pca/wide repeat=1/train 2.069s
+# START par-gram-pca/wide repeat=1/infer-save-reload
+# DONE par-gram-pca/wide repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/wide repeat=1/batch
+# DONE par-gram-pca/wide repeat=1/batch 0.019s
+# START par-gram-pca/wide repeat=2/train
+# DONE par-gram-pca/wide repeat=2/train 2.128s
+# START par-gram-pca/wide repeat=2/infer-save-reload
+# DONE par-gram-pca/wide repeat=2/infer-save-reload 0.008s
+# START par-gram-pca/wide repeat=2/batch
+# DONE par-gram-pca/wide repeat=2/batch 0.026s
+# CELL par-gram-pca/wide STABLE 4.255s
+# START par-gram-pca/denormal repeat=1/train
+# DONE par-gram-pca/denormal repeat=1/train 2.314s
+# START par-gram-pca/denormal repeat=1/infer-save-reload
+# DONE par-gram-pca/denormal repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/denormal repeat=1/batch
+# DONE par-gram-pca/denormal repeat=1/batch 0.019s
+# START par-gram-pca/denormal repeat=2/train
+# DONE par-gram-pca/denormal repeat=2/train 2.047s
+# START par-gram-pca/denormal repeat=2/infer-save-reload
+# DONE par-gram-pca/denormal repeat=2/infer-save-reload 0.005s
+# START par-gram-pca/denormal repeat=2/batch
+# DONE par-gram-pca/denormal repeat=2/batch 0.018s
+# CELL par-gram-pca/denormal STABLE 4.410s
+# START par-gram-pca/denormal_ftz repeat=1/train
+# DONE par-gram-pca/denormal_ftz repeat=1/train 2.101s
+# START par-gram-pca/denormal_ftz repeat=1/infer-save-reload
+# DONE par-gram-pca/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/denormal_ftz repeat=1/batch
+# DONE par-gram-pca/denormal_ftz repeat=1/batch 0.019s
+# START par-gram-pca/denormal_ftz repeat=2/train
+# DONE par-gram-pca/denormal_ftz repeat=2/train 2.110s
+# START par-gram-pca/denormal_ftz repeat=2/infer-save-reload
+# DONE par-gram-pca/denormal_ftz repeat=2/infer-save-reload 0.004s
+# START par-gram-pca/denormal_ftz repeat=2/batch
+# DONE par-gram-pca/denormal_ftz repeat=2/batch 0.015s
+# CELL par-gram-pca/denormal_ftz STABLE 4.254s
+# START par-gram-pca/dupes repeat=1/train
+# DONE par-gram-pca/dupes repeat=1/train 2.047s
+# START par-gram-pca/dupes repeat=1/infer-save-reload
+# DONE par-gram-pca/dupes repeat=1/infer-save-reload 0.006s
+# START par-gram-pca/dupes repeat=1/batch
+# DONE par-gram-pca/dupes repeat=1/batch 0.020s
+# START par-gram-pca/dupes repeat=2/train
+# DONE par-gram-pca/dupes repeat=2/train 2.048s
+# START par-gram-pca/dupes repeat=2/infer-save-reload
+# DONE par-gram-pca/dupes repeat=2/infer-save-reload 0.005s
+# START par-gram-pca/dupes repeat=2/batch
+# DONE par-gram-pca/dupes repeat=2/batch 0.019s
+# CELL par-gram-pca/dupes STABLE 4.146s
+# START par-gram-pca/odd repeat=1/train
+# DONE par-gram-pca/odd repeat=1/train 2.045s
+# START par-gram-pca/odd repeat=1/infer-save-reload
+# DONE par-gram-pca/odd repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/odd repeat=1/batch
+# DONE par-gram-pca/odd repeat=1/batch 0.018s
+# START par-gram-pca/odd repeat=2/train
+# DONE par-gram-pca/odd repeat=2/train 2.050s
+# START par-gram-pca/odd repeat=2/infer-save-reload
+# DONE par-gram-pca/odd repeat=2/infer-save-reload 0.005s
+# START par-gram-pca/odd repeat=2/batch
+# DONE par-gram-pca/odd repeat=2/batch 0.018s
+# CELL par-gram-pca/odd STABLE 4.143s
+# START par-gram-pca/negative repeat=1/train
+# DONE par-gram-pca/negative repeat=1/train 2.051s
+# START par-gram-pca/negative repeat=1/infer-save-reload
+# DONE par-gram-pca/negative repeat=1/infer-save-reload 0.005s
+# START par-gram-pca/negative repeat=1/batch
+# DONE par-gram-pca/negative repeat=1/batch 0.018s
+# START par-gram-pca/negative repeat=2/train
+# DONE par-gram-pca/negative repeat=2/train 2.046s
+# START par-gram-pca/negative repeat=2/infer-save-reload
+# DONE par-gram-pca/negative repeat=2/infer-save-reload 0.006s
+# START par-gram-pca/negative repeat=2/batch
+# DONE par-gram-pca/negative repeat=2/batch 0.020s
+# CELL par-gram-pca/negative STABLE 4.147s
+| par-gram-pca           | 426e098860cb885e | 2cc3098a82f5e29c | 9c43c580f84b913e | ee30334357c2fe6e | 632dd2d41a856846 | 632dd2d41a856846 | f0d80567379e28e4 | 2bde4e929e103470 | c4903e2bddacb305 |
+| par-gram-pca infer     | 5ec98c317c9314a6 | 470065a905e144bf | da7f8a40931a091a | abbcfa36cfc4cc81 | d28a4176d38a79ad | d28a4176d38a79ad | 25b7f77104e4b5b3 | 9f765336b6cbcc11 | bed836c726c23255 |
+| par-gram-pca model     | b41a408ef6ffb8c9 | e3f6772a15daedcd | a9bcbe53314d1a00 | dec2221e136875c8 | 85752b8d4fc03a22 | 85752b8d4fc03a22 | 9c5913e3831259e4 | 87d34e709375c9b5 | 2a61ff40547fab89 |
+| par-gram-pca batch     | 65941b218439dea2 | d4c77e8aef2df217 | bb6c5927adc3043e | 7392d0d03806937b | c4efab49f835d5ac | c4efab49f835d5ac | 98bc7c4095374c13 | 7546b18e9c36ebe5 | c812e65b0525a6e8 |
+# START par-gram-tsvd/base repeat=1/train
+# DONE par-gram-tsvd/base repeat=1/train 2.045s
+# START par-gram-tsvd/base repeat=1/infer-save-reload
+# DONE par-gram-tsvd/base repeat=1/infer-save-reload 0.005s
+# START par-gram-tsvd/base repeat=1/batch
+# DONE par-gram-tsvd/base repeat=1/batch 0.018s
+# START par-gram-tsvd/base repeat=2/train
+# DONE par-gram-tsvd/base repeat=2/train 2.048s
+# START par-gram-tsvd/base repeat=2/infer-save-reload
+# DONE par-gram-tsvd/base repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/base repeat=2/batch
+# DONE par-gram-tsvd/base repeat=2/batch 0.018s
+# CELL par-gram-tsvd/base STABLE 4.137s
+# START par-gram-tsvd/ties repeat=1/train
+# DONE par-gram-tsvd/ties repeat=1/train 2.045s
+# START par-gram-tsvd/ties repeat=1/infer-save-reload
+# DONE par-gram-tsvd/ties repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/ties repeat=1/batch
+# DONE par-gram-tsvd/ties repeat=1/batch 0.018s
+# START par-gram-tsvd/ties repeat=2/train
+# DONE par-gram-tsvd/ties repeat=2/train 2.048s
+# START par-gram-tsvd/ties repeat=2/infer-save-reload
+# DONE par-gram-tsvd/ties repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/ties repeat=2/batch
+# DONE par-gram-tsvd/ties repeat=2/batch 0.019s
+# CELL par-gram-tsvd/ties STABLE 4.139s
+# START par-gram-tsvd/hashed repeat=1/train
+# DONE par-gram-tsvd/hashed repeat=1/train 2.035s
+# START par-gram-tsvd/hashed repeat=1/infer-save-reload
+# DONE par-gram-tsvd/hashed repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/hashed repeat=1/batch
+# DONE par-gram-tsvd/hashed repeat=1/batch 0.017s
+# START par-gram-tsvd/hashed repeat=2/train
+# DONE par-gram-tsvd/hashed repeat=2/train 2.060s
+# START par-gram-tsvd/hashed repeat=2/infer-save-reload
+# DONE par-gram-tsvd/hashed repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/hashed repeat=2/batch
+# DONE par-gram-tsvd/hashed repeat=2/batch 0.017s
+# CELL par-gram-tsvd/hashed STABLE 4.139s
+# START par-gram-tsvd/wide repeat=1/train
+# DONE par-gram-tsvd/wide repeat=1/train 2.158s
+# START par-gram-tsvd/wide repeat=1/infer-save-reload
+# DONE par-gram-tsvd/wide repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/wide repeat=1/batch
+# DONE par-gram-tsvd/wide repeat=1/batch 0.019s
+# START par-gram-tsvd/wide repeat=2/train
+# DONE par-gram-tsvd/wide repeat=2/train 2.104s
+# START par-gram-tsvd/wide repeat=2/infer-save-reload
+# DONE par-gram-tsvd/wide repeat=2/infer-save-reload 0.004s
+# START par-gram-tsvd/wide repeat=2/batch
+# DONE par-gram-tsvd/wide repeat=2/batch 0.018s
+# CELL par-gram-tsvd/wide STABLE 4.308s
+# START par-gram-tsvd/denormal repeat=1/train
+# DONE par-gram-tsvd/denormal repeat=1/train 2.053s
+# START par-gram-tsvd/denormal repeat=1/infer-save-reload
+# DONE par-gram-tsvd/denormal repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/denormal repeat=1/batch
+# DONE par-gram-tsvd/denormal repeat=1/batch 0.018s
+# START par-gram-tsvd/denormal repeat=2/train
+# DONE par-gram-tsvd/denormal repeat=2/train 2.030s
+# START par-gram-tsvd/denormal repeat=2/infer-save-reload
+# DONE par-gram-tsvd/denormal repeat=2/infer-save-reload 0.003s
+# START par-gram-tsvd/denormal repeat=2/batch
+# DONE par-gram-tsvd/denormal repeat=2/batch 0.013s
+# CELL par-gram-tsvd/denormal STABLE 4.122s
+# START par-gram-tsvd/denormal_ftz repeat=1/train
+# DONE par-gram-tsvd/denormal_ftz repeat=1/train 2.045s
+# START par-gram-tsvd/denormal_ftz repeat=1/infer-save-reload
+# DONE par-gram-tsvd/denormal_ftz repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/denormal_ftz repeat=1/batch
+# DONE par-gram-tsvd/denormal_ftz repeat=1/batch 0.018s
+# START par-gram-tsvd/denormal_ftz repeat=2/train
+# DONE par-gram-tsvd/denormal_ftz repeat=2/train 2.025s
+# START par-gram-tsvd/denormal_ftz repeat=2/infer-save-reload
+# DONE par-gram-tsvd/denormal_ftz repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/denormal_ftz repeat=2/batch
+# DONE par-gram-tsvd/denormal_ftz repeat=2/batch 0.018s
+# CELL par-gram-tsvd/denormal_ftz STABLE 4.115s
+# START par-gram-tsvd/dupes repeat=1/train
+# DONE par-gram-tsvd/dupes repeat=1/train 2.049s
+# START par-gram-tsvd/dupes repeat=1/infer-save-reload
+# DONE par-gram-tsvd/dupes repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/dupes repeat=1/batch
+# DONE par-gram-tsvd/dupes repeat=1/batch 0.018s
+# START par-gram-tsvd/dupes repeat=2/train
+# DONE par-gram-tsvd/dupes repeat=2/train 2.044s
+# START par-gram-tsvd/dupes repeat=2/infer-save-reload
+# DONE par-gram-tsvd/dupes repeat=2/infer-save-reload 0.003s
+# START par-gram-tsvd/dupes repeat=2/batch
+# DONE par-gram-tsvd/dupes repeat=2/batch 0.013s
+# CELL par-gram-tsvd/dupes STABLE 4.132s
+# START par-gram-tsvd/odd repeat=1/train
+# DONE par-gram-tsvd/odd repeat=1/train 2.042s
+# START par-gram-tsvd/odd repeat=1/infer-save-reload
+# DONE par-gram-tsvd/odd repeat=1/infer-save-reload 0.004s
+# START par-gram-tsvd/odd repeat=1/batch
+# DONE par-gram-tsvd/odd repeat=1/batch 0.017s
+# START par-gram-tsvd/odd repeat=2/train
+# DONE par-gram-tsvd/odd repeat=2/train 2.044s
+# START par-gram-tsvd/odd repeat=2/infer-save-reload
+# DONE par-gram-tsvd/odd repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/odd repeat=2/batch
+# DONE par-gram-tsvd/odd repeat=2/batch 0.018s
+# CELL par-gram-tsvd/odd STABLE 4.130s
+# START par-gram-tsvd/negative repeat=1/train
+# DONE par-gram-tsvd/negative repeat=1/train 2.050s
+# START par-gram-tsvd/negative repeat=1/infer-save-reload
+# DONE par-gram-tsvd/negative repeat=1/infer-save-reload 0.005s
+# START par-gram-tsvd/negative repeat=1/batch
+# DONE par-gram-tsvd/negative repeat=1/batch 0.018s
+# START par-gram-tsvd/negative repeat=2/train
+# DONE par-gram-tsvd/negative repeat=2/train 2.045s
+# START par-gram-tsvd/negative repeat=2/infer-save-reload
+# DONE par-gram-tsvd/negative repeat=2/infer-save-reload 0.005s
+# START par-gram-tsvd/negative repeat=2/batch
+# DONE par-gram-tsvd/negative repeat=2/batch 0.017s
+# CELL par-gram-tsvd/negative STABLE 4.139s
+| par-gram-tsvd          | 8e8d20af1d08720c | 86d6e87cfc1f48c0 | 7eeaca88b0e6a8de | 975f2a167b1ac6d5 | 36d9e3d5aaadcd92 | 36d9e3d5aaadcd92 | 9a24cf55eff6013c | 452fd865062565da | 22e0958cc1ded92d |
+| par-gram-tsvd infer    | 36793a22ecfc11d9 | 441e224141ca3ef4 | a253da0a489ff1d7 | cef9d6af2957dea2 | fc4af18e4659ab46 | fc4af18e4659ab46 | b20d1e18ded5c227 | 4ca5ee061209a589 | 47e1b7225f50fa55 |
+| par-gram-tsvd model    | dad8484c8148cc3a | 5aa8d4139303b4c2 | 9b2cd491dca9241a | d1350f18d6205fbb | 3ddbcba0a9ba339d | 3ddbcba0a9ba339d | 0ccf336c88307c6c | efe0b4a3e0f314b8 | 27c536a4f0a5c619 |
+| par-gram-tsvd batch    | 82ce7144bbf6ecdb | 6f772af007dbdeaf | 7712efc6f107037c | 01c3cbd301ab9c8e | fe195d8a3551d078 | fe195d8a3551d078 | 0c723290ada8b005 | 6f1af89fe056c083 | 103aac49d3277730 |
+# START par-cd-elasticnet/base repeat=1/train
+# DONE par-cd-elasticnet/base repeat=1/train 2.332s
+# START par-cd-elasticnet/base repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/base repeat=1/infer-save-reload 0.002s
+# START par-cd-elasticnet/base repeat=1/batch
+# DONE par-cd-elasticnet/base repeat=1/batch 0.010s
+# START par-cd-elasticnet/base repeat=2/train
+# DONE par-cd-elasticnet/base repeat=2/train 2.265s
+# START par-cd-elasticnet/base repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/base repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/base repeat=2/batch
+# DONE par-cd-elasticnet/base repeat=2/batch 0.020s
+# CELL par-cd-elasticnet/base STABLE 4.636s
+# START par-cd-elasticnet/ties repeat=1/train
+# DONE par-cd-elasticnet/ties repeat=1/train 2.234s
+# START par-cd-elasticnet/ties repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/ties repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/ties repeat=1/batch
+# DONE par-cd-elasticnet/ties repeat=1/batch 0.021s
+# START par-cd-elasticnet/ties repeat=2/train
+# DONE par-cd-elasticnet/ties repeat=2/train 2.285s
+# START par-cd-elasticnet/ties repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/ties repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/ties repeat=2/batch
+# DONE par-cd-elasticnet/ties repeat=2/batch 0.020s
+# CELL par-cd-elasticnet/ties STABLE 4.570s
+# START par-cd-elasticnet/hashed repeat=1/train
+# DONE par-cd-elasticnet/hashed repeat=1/train 2.383s
+# START par-cd-elasticnet/hashed repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/hashed repeat=1/infer-save-reload 0.006s
+# START par-cd-elasticnet/hashed repeat=1/batch
+# DONE par-cd-elasticnet/hashed repeat=1/batch 0.023s
+# START par-cd-elasticnet/hashed repeat=2/train
+# DONE par-cd-elasticnet/hashed repeat=2/train 2.288s
+# START par-cd-elasticnet/hashed repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/hashed repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/hashed repeat=2/batch
+# DONE par-cd-elasticnet/hashed repeat=2/batch 0.020s
+# CELL par-cd-elasticnet/hashed STABLE 4.726s
+# START par-cd-elasticnet/wide repeat=1/train
+# DONE par-cd-elasticnet/wide repeat=1/train 2.208s
+# START par-cd-elasticnet/wide repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/wide repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/wide repeat=1/batch
+# DONE par-cd-elasticnet/wide repeat=1/batch 0.020s
+# START par-cd-elasticnet/wide repeat=2/train
+# DONE par-cd-elasticnet/wide repeat=2/train 2.295s
+# START par-cd-elasticnet/wide repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/wide repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/wide repeat=2/batch
+# DONE par-cd-elasticnet/wide repeat=2/batch 0.020s
+# CELL par-cd-elasticnet/wide STABLE 4.554s
+# START par-cd-elasticnet/denormal repeat=1/train
+# DONE par-cd-elasticnet/denormal repeat=1/train 2.309s
+# START par-cd-elasticnet/denormal repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/denormal repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/denormal repeat=1/batch
+# DONE par-cd-elasticnet/denormal repeat=1/batch 0.020s
+# START par-cd-elasticnet/denormal repeat=2/train
+# DONE par-cd-elasticnet/denormal repeat=2/train 2.267s
+# START par-cd-elasticnet/denormal repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/denormal repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/denormal repeat=2/batch
+# DONE par-cd-elasticnet/denormal repeat=2/batch 0.021s
+# CELL par-cd-elasticnet/denormal STABLE 4.627s
+# START par-cd-elasticnet/denormal_ftz repeat=1/train
+# DONE par-cd-elasticnet/denormal_ftz repeat=1/train 2.198s
+# START par-cd-elasticnet/denormal_ftz repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/denormal_ftz repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/denormal_ftz repeat=1/batch
+# DONE par-cd-elasticnet/denormal_ftz repeat=1/batch 0.020s
+# START par-cd-elasticnet/denormal_ftz repeat=2/train
+# DONE par-cd-elasticnet/denormal_ftz repeat=2/train 2.285s
+# START par-cd-elasticnet/denormal_ftz repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/denormal_ftz repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/denormal_ftz repeat=2/batch
+# DONE par-cd-elasticnet/denormal_ftz repeat=2/batch 0.022s
+# CELL par-cd-elasticnet/denormal_ftz STABLE 4.536s
+# START par-cd-elasticnet/dupes repeat=1/train
+# DONE par-cd-elasticnet/dupes repeat=1/train 2.211s
+# START par-cd-elasticnet/dupes repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/dupes repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/dupes repeat=1/batch
+# DONE par-cd-elasticnet/dupes repeat=1/batch 0.021s
+# START par-cd-elasticnet/dupes repeat=2/train
+# DONE par-cd-elasticnet/dupes repeat=2/train 2.270s
+# START par-cd-elasticnet/dupes repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/dupes repeat=2/infer-save-reload 0.005s
+# START par-cd-elasticnet/dupes repeat=2/batch
+# DONE par-cd-elasticnet/dupes repeat=2/batch 0.021s
+# CELL par-cd-elasticnet/dupes STABLE 4.532s
+# START par-cd-elasticnet/odd repeat=1/train
+# DONE par-cd-elasticnet/odd repeat=1/train 2.260s
+# START par-cd-elasticnet/odd repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/odd repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/odd repeat=1/batch
+# DONE par-cd-elasticnet/odd repeat=1/batch 0.021s
+# START par-cd-elasticnet/odd repeat=2/train
+# DONE par-cd-elasticnet/odd repeat=2/train 2.233s
+# START par-cd-elasticnet/odd repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/odd repeat=2/infer-save-reload 0.004s
+# START par-cd-elasticnet/odd repeat=2/batch
+# DONE par-cd-elasticnet/odd repeat=2/batch 0.020s
+# CELL par-cd-elasticnet/odd STABLE 4.544s
+# START par-cd-elasticnet/negative repeat=1/train
+# DONE par-cd-elasticnet/negative repeat=1/train 2.210s
+# START par-cd-elasticnet/negative repeat=1/infer-save-reload
+# DONE par-cd-elasticnet/negative repeat=1/infer-save-reload 0.005s
+# START par-cd-elasticnet/negative repeat=1/batch
+# DONE par-cd-elasticnet/negative repeat=1/batch 0.020s
+# START par-cd-elasticnet/negative repeat=2/train
+# DONE par-cd-elasticnet/negative repeat=2/train 2.293s
+# START par-cd-elasticnet/negative repeat=2/infer-save-reload
+# DONE par-cd-elasticnet/negative repeat=2/infer-save-reload 0.002s
+# START par-cd-elasticnet/negative repeat=2/batch
+# DONE par-cd-elasticnet/negative repeat=2/batch 0.010s
+# CELL par-cd-elasticnet/negative STABLE 4.541s
+| par-cd-elasticnet      | 2cf742083831ee9d | 118eac19578010ab | 00b6923d62a41c0a | ef8800eaf0ca4f87 | 3add60ff69fd788c | 3add60ff69fd788c | 97d4c8c235d38bfe | 1a518e703b7dd1d9 | 7624315e7deffe10 |
+| par-cd-elasticnet infer | 483bce4b8cc1a137 | a767a79709358382 | db0926772dbaaff4 | e37614bc5b2ef0af | 0047832ca8c561a3 | 0047832ca8c561a3 | fc18f039274052f1 | 75a88217f1114867 | a21e833e3e925b89 |
+| par-cd-elasticnet model | 2e79bea4a0df84ff | 1a978679f1590988 | 201d9c05860739ce | 834bad42787a264a | 7f16adbc1a1fea7e | 7f16adbc1a1fea7e | 4c4bd6e9ae1567a9 | 14095ddb22139e58 | 1877315123c6622f |
+| par-cd-elasticnet batch | 956915d5c61aa604 | 81cfdf154152898d | 33e720c15cc1f77d | cff22b28b0b5e227 | 19772c145c4b0d34 | 19772c145c4b0d34 | ea2fea7d1c19311d | f140130bad4b7f18 | 57654a86835f557b |
+# START par-svm-svr/base repeat=1/train
+# DONE par-svm-svr/base repeat=1/train 5.814s
+# START par-svm-svr/base repeat=1/infer-save-reload
+# DONE par-svm-svr/base repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/base repeat=1/batch
+# DONE par-svm-svr/base repeat=1/batch 0.024s
+# START par-svm-svr/base repeat=2/train
+# DONE par-svm-svr/base repeat=2/train 4.612s
+# START par-svm-svr/base repeat=2/infer-save-reload
+# DONE par-svm-svr/base repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/base repeat=2/batch
+# DONE par-svm-svr/base repeat=2/batch 0.024s
+# CELL par-svm-svr/base STABLE 10.486s
+# START par-svm-svr/ties repeat=1/train
+# DONE par-svm-svr/ties repeat=1/train 4.596s
+# START par-svm-svr/ties repeat=1/infer-save-reload
+# DONE par-svm-svr/ties repeat=1/infer-save-reload 0.005s
+# START par-svm-svr/ties repeat=1/batch
+# DONE par-svm-svr/ties repeat=1/batch 0.023s
+# START par-svm-svr/ties repeat=2/train
+# DONE par-svm-svr/ties repeat=2/train 4.547s
+# START par-svm-svr/ties repeat=2/infer-save-reload
+# DONE par-svm-svr/ties repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/ties repeat=2/batch
+# DONE par-svm-svr/ties repeat=2/batch 0.024s
+# CELL par-svm-svr/ties STABLE 9.202s
+# START par-svm-svr/hashed repeat=1/train
+# DONE par-svm-svr/hashed repeat=1/train 4.511s
+# START par-svm-svr/hashed repeat=1/infer-save-reload
+# DONE par-svm-svr/hashed repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/hashed repeat=1/batch
+# DONE par-svm-svr/hashed repeat=1/batch 0.024s
+# START par-svm-svr/hashed repeat=2/train
+# DONE par-svm-svr/hashed repeat=2/train 4.603s
+# START par-svm-svr/hashed repeat=2/infer-save-reload
+# DONE par-svm-svr/hashed repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/hashed repeat=2/batch
+# DONE par-svm-svr/hashed repeat=2/batch 0.024s
+# CELL par-svm-svr/hashed STABLE 9.175s
+# START par-svm-svr/wide repeat=1/train
+# DONE par-svm-svr/wide repeat=1/train 4.608s
+# START par-svm-svr/wide repeat=1/infer-save-reload
+# DONE par-svm-svr/wide repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/wide repeat=1/batch
+# DONE par-svm-svr/wide repeat=1/batch 0.024s
+# START par-svm-svr/wide repeat=2/train
+# DONE par-svm-svr/wide repeat=2/train 4.437s
+# START par-svm-svr/wide repeat=2/infer-save-reload
+# DONE par-svm-svr/wide repeat=2/infer-save-reload 0.009s
+# START par-svm-svr/wide repeat=2/batch
+# DONE par-svm-svr/wide repeat=2/batch 0.032s
+# CELL par-svm-svr/wide STABLE 9.117s
+# START par-svm-svr/denormal repeat=1/train
+# DONE par-svm-svr/denormal repeat=1/train 4.597s
+# START par-svm-svr/denormal repeat=1/infer-save-reload
+# DONE par-svm-svr/denormal repeat=1/infer-save-reload 0.007s
+# START par-svm-svr/denormal repeat=1/batch
+# DONE par-svm-svr/denormal repeat=1/batch 0.027s
+# START par-svm-svr/denormal repeat=2/train
+# DONE par-svm-svr/denormal repeat=2/train 4.605s
+# START par-svm-svr/denormal repeat=2/infer-save-reload
+# DONE par-svm-svr/denormal repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/denormal repeat=2/batch
+# DONE par-svm-svr/denormal repeat=2/batch 0.023s
+# CELL par-svm-svr/denormal STABLE 9.266s
+# START par-svm-svr/denormal_ftz repeat=1/train
+# DONE par-svm-svr/denormal_ftz repeat=1/train 4.588s
+# START par-svm-svr/denormal_ftz repeat=1/infer-save-reload
+# DONE par-svm-svr/denormal_ftz repeat=1/infer-save-reload 0.007s
+# START par-svm-svr/denormal_ftz repeat=1/batch
+# DONE par-svm-svr/denormal_ftz repeat=1/batch 0.025s
+# START par-svm-svr/denormal_ftz repeat=2/train
+# DONE par-svm-svr/denormal_ftz repeat=2/train 4.595s
+# START par-svm-svr/denormal_ftz repeat=2/infer-save-reload
+# DONE par-svm-svr/denormal_ftz repeat=2/infer-save-reload 0.007s
+# START par-svm-svr/denormal_ftz repeat=2/batch
+# DONE par-svm-svr/denormal_ftz repeat=2/batch 0.024s
+# CELL par-svm-svr/denormal_ftz STABLE 9.246s
+# START par-svm-svr/dupes repeat=1/train
+# DONE par-svm-svr/dupes repeat=1/train 4.652s
+# START par-svm-svr/dupes repeat=1/infer-save-reload
+# DONE par-svm-svr/dupes repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/dupes repeat=1/batch
+# DONE par-svm-svr/dupes repeat=1/batch 0.024s
+# START par-svm-svr/dupes repeat=2/train
+# DONE par-svm-svr/dupes repeat=2/train 4.597s
+# START par-svm-svr/dupes repeat=2/infer-save-reload
+# DONE par-svm-svr/dupes repeat=2/infer-save-reload 0.003s
+# START par-svm-svr/dupes repeat=2/batch
+# DONE par-svm-svr/dupes repeat=2/batch 0.012s
+# CELL par-svm-svr/dupes STABLE 9.295s
+# START par-svm-svr/odd repeat=1/train
+# DONE par-svm-svr/odd repeat=1/train 4.533s
+# START par-svm-svr/odd repeat=1/infer-save-reload
+# DONE par-svm-svr/odd repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/odd repeat=1/batch
+# DONE par-svm-svr/odd repeat=1/batch 0.024s
+# START par-svm-svr/odd repeat=2/train
+# DONE par-svm-svr/odd repeat=2/train 4.658s
+# START par-svm-svr/odd repeat=2/infer-save-reload
+# DONE par-svm-svr/odd repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/odd repeat=2/batch
+# DONE par-svm-svr/odd repeat=2/batch 0.024s
+# CELL par-svm-svr/odd STABLE 9.252s
+# START par-svm-svr/negative repeat=1/train
+# DONE par-svm-svr/negative repeat=1/train 4.434s
+# START par-svm-svr/negative repeat=1/infer-save-reload
+# DONE par-svm-svr/negative repeat=1/infer-save-reload 0.006s
+# START par-svm-svr/negative repeat=1/batch
+# DONE par-svm-svr/negative repeat=1/batch 0.023s
+# START par-svm-svr/negative repeat=2/train
+# DONE par-svm-svr/negative repeat=2/train 4.581s
+# START par-svm-svr/negative repeat=2/infer-save-reload
+# DONE par-svm-svr/negative repeat=2/infer-save-reload 0.006s
+# START par-svm-svr/negative repeat=2/batch
+# DONE par-svm-svr/negative repeat=2/batch 0.024s
+# CELL par-svm-svr/negative STABLE 9.075s
+| par-svm-svr            | 2afafe190450304b | d69c878738f75a68 | cab554d4bdf018d2 | 089b83a32233143b | e916e4426dcd5a14 | e916e4426dcd5a14 | 6e2a4421f6b02f85 | 07d6f7035db0e04b | 157297e596168454 |
+| par-svm-svr infer      | 021831e9ffd2bb9d | 0a371cbfd4cbe5c1 | 6ea59f77ab4b672a | 62661f1f0efa01f4 | 13643cd05c4a641d | 13643cd05c4a641d | 2d84831c33ef58e0 | 7a2173bef2f1dcbe | 9815b80b4546e3a3 |
+| par-svm-svr model      | e28c2681321f99df | 490b7d9dbdf08c50 | b8882cb69c8e01b2 | ed154067c6066391 | 08b0cf218897d8e3 | d85762954c84445a | 73d9170287e81a7d | 23cbc4642d1cc522 | 06c9310b80362f99 |
+| par-svm-svr batch      | ad4096a1ae4cc4d7 | c5728a83acf5f4c2 | 508e60b4ef6eed4c | 7589ad96ecc05db1 | e4e4083511a0e155 | e4e4083511a0e155 | 172b3f38f86ea64a | ad054e11a184f1bf | 903978a7a15fdc7a |
+# START par-scaler-minmax/base repeat=1/train
+# DONE par-scaler-minmax/base repeat=1/train 6.350s
+# START par-scaler-minmax/base repeat=1/infer-save-reload
+# DONE par-scaler-minmax/base repeat=1/infer-save-reload 0.007s
+# START par-scaler-minmax/base repeat=1/batch
+# DONE par-scaler-minmax/base repeat=1/batch 0.019s
+# START par-scaler-minmax/base repeat=2/train
+# DONE par-scaler-minmax/base repeat=2/train 6.387s
+# START par-scaler-minmax/base repeat=2/infer-save-reload
+# DONE par-scaler-minmax/base repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/base repeat=2/batch
+# DONE par-scaler-minmax/base repeat=2/batch 0.020s
+# CELL par-scaler-minmax/base STABLE 12.789s
+# START par-scaler-minmax/ties repeat=1/train
+# DONE par-scaler-minmax/ties repeat=1/train 6.198s
+# START par-scaler-minmax/ties repeat=1/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/ties repeat=1/batch
+# DONE par-scaler-minmax/ties repeat=1/batch 0.019s
+# START par-scaler-minmax/ties repeat=2/train
+# DONE par-scaler-minmax/ties repeat=2/train 6.367s
+# START par-scaler-minmax/ties repeat=2/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=2/infer-save-reload 0.007s
+# START par-scaler-minmax/ties repeat=2/batch
+# DONE par-scaler-minmax/ties repeat=2/batch 0.020s
+# CELL par-scaler-minmax/ties STABLE 12.617s
+# START par-scaler-minmax/hashed repeat=1/train
+# DONE par-scaler-minmax/hashed repeat=1/train 6.370s
+# START par-scaler-minmax/hashed repeat=1/infer-save-reload
+# DONE par-scaler-minmax/hashed repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/hashed repeat=1/batch
+# DONE par-scaler-minmax/hashed repeat=1/batch 0.019s
+# START par-scaler-minmax/hashed repeat=2/train
+# DONE par-scaler-minmax/hashed repeat=2/train 6.222s
+# START par-scaler-minmax/hashed repeat=2/infer-save-reload
+# DONE par-scaler-minmax/hashed repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/hashed repeat=2/batch
+# DONE par-scaler-minmax/hashed repeat=2/batch 0.019s
+# CELL par-scaler-minmax/hashed STABLE 12.644s
+# START par-scaler-minmax/wide repeat=1/train
+# DONE par-scaler-minmax/wide repeat=1/train 6.155s
+# START par-scaler-minmax/wide repeat=1/infer-save-reload
+# DONE par-scaler-minmax/wide repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/wide repeat=1/batch
+# DONE par-scaler-minmax/wide repeat=1/batch 0.019s
+# START par-scaler-minmax/wide repeat=2/train
+# DONE par-scaler-minmax/wide repeat=2/train 6.296s
+# START par-scaler-minmax/wide repeat=2/infer-save-reload
+# DONE par-scaler-minmax/wide repeat=2/infer-save-reload 0.007s
+# START par-scaler-minmax/wide repeat=2/batch
+# DONE par-scaler-minmax/wide repeat=2/batch 0.022s
+# CELL par-scaler-minmax/wide STABLE 12.506s
+# START par-scaler-minmax/denormal repeat=1/train
+# DONE par-scaler-minmax/denormal repeat=1/train 6.350s
+# START par-scaler-minmax/denormal repeat=1/infer-save-reload
+# DONE par-scaler-minmax/denormal repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/denormal repeat=1/batch
+# DONE par-scaler-minmax/denormal repeat=1/batch 0.019s
+# START par-scaler-minmax/denormal repeat=2/train
+# DONE par-scaler-minmax/denormal repeat=2/train 6.732s
+# START par-scaler-minmax/denormal repeat=2/infer-save-reload
+# DONE par-scaler-minmax/denormal repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/denormal repeat=2/batch
+# DONE par-scaler-minmax/denormal repeat=2/batch 0.019s
+# CELL par-scaler-minmax/denormal STABLE 13.133s
+# START par-scaler-minmax/denormal_ftz repeat=1/train
+# DONE par-scaler-minmax/denormal_ftz repeat=1/train 6.314s
+# START par-scaler-minmax/denormal_ftz repeat=1/infer-save-reload
+# DONE par-scaler-minmax/denormal_ftz repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/denormal_ftz repeat=1/batch
+# DONE par-scaler-minmax/denormal_ftz repeat=1/batch 0.019s
+# START par-scaler-minmax/denormal_ftz repeat=2/train
+# DONE par-scaler-minmax/denormal_ftz repeat=2/train 6.313s
+# START par-scaler-minmax/denormal_ftz repeat=2/infer-save-reload
+# DONE par-scaler-minmax/denormal_ftz repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/denormal_ftz repeat=2/batch
+# DONE par-scaler-minmax/denormal_ftz repeat=2/batch 0.019s
+# CELL par-scaler-minmax/denormal_ftz STABLE 12.678s
+# START par-scaler-minmax/dupes repeat=1/train
+# DONE par-scaler-minmax/dupes repeat=1/train 6.148s
+# START par-scaler-minmax/dupes repeat=1/infer-save-reload
+# DONE par-scaler-minmax/dupes repeat=1/infer-save-reload 0.006s
+# START par-scaler-minmax/dupes repeat=1/batch
+# DONE par-scaler-minmax/dupes repeat=1/batch 0.019s
+# START par-scaler-minmax/dupes repeat=2/train
+# DONE par-scaler-minmax/dupes repeat=2/train 6.207s
+# START par-scaler-minmax/dupes repeat=2/infer-save-reload
+# DONE par-scaler-minmax/dupes repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/dupes repeat=2/batch
+# DONE par-scaler-minmax/dupes repeat=2/batch 0.019s
+# CELL par-scaler-minmax/dupes STABLE 12.406s
+# START par-scaler-minmax/odd repeat=1/train
+# DONE par-scaler-minmax/odd repeat=1/train 6.232s
+# START par-scaler-minmax/odd repeat=1/infer-save-reload
+# DONE par-scaler-minmax/odd repeat=1/infer-save-reload 0.007s
+# START par-scaler-minmax/odd repeat=1/batch
+# DONE par-scaler-minmax/odd repeat=1/batch 0.020s
+# START par-scaler-minmax/odd repeat=2/train
+# DONE par-scaler-minmax/odd repeat=2/train 6.244s
+# START par-scaler-minmax/odd repeat=2/infer-save-reload
+# DONE par-scaler-minmax/odd repeat=2/infer-save-reload 0.006s
+# START par-scaler-minmax/odd repeat=2/batch
+# DONE par-scaler-minmax/odd repeat=2/batch 0.019s
+# CELL par-scaler-minmax/odd STABLE 12.530s
+# START par-scaler-minmax/negative repeat=1/train
+# DONE par-scaler-minmax/negative repeat=1/train 6.197s
+# START par-scaler-minmax/negative repeat=1/infer-save-reload
+# DONE par-scaler-minmax/negative repeat=1/infer-save-reload 0.007s
+# START par-scaler-minmax/negative repeat=1/batch
+# DONE par-scaler-minmax/negative repeat=1/batch 0.019s
+# START par-scaler-minmax/negative repeat=2/train
+# DONE par-scaler-minmax/negative repeat=2/train 6.283s
+# START par-scaler-minmax/negative repeat=2/infer-save-reload
+# DONE par-scaler-minmax/negative repeat=2/infer-save-reload 0.007s
+# START par-scaler-minmax/negative repeat=2/batch
+# DONE par-scaler-minmax/negative repeat=2/batch 0.019s
+# CELL par-scaler-minmax/negative STABLE 12.534s
+| par-scaler-minmax      | 646b46cf73ead58e | fcaf2c976dae67d9 | 4260fe8f43ec10b2 | 77b3a6c235e5a346 | 760381e656d7edc6 | 760381e656d7edc6 | 768f7054da806434 | 803149932ba8b2da | b1d799cf9b13f224 |
+| par-scaler-minmax infer | 5b934842e164f80f | 6717b6636f5595fc | b97dad3c566f105a | 6577f1b08a4a0b8d | 17c9e6cc1a1bfd82 | 17c9e6cc1a1bfd82 | cb07d5eb86d27807 | c170795fb6119629 | b386904f1b2473e2 |
+| par-scaler-minmax model | 24956a7dff42ccef | 6c83436d35af2540 | 0399ca7b1cb036ad | d32f2d26c235a8ff | 1f70dcfa4e160e3e | 1f70dcfa4e160e3e | a12a63eb85664923 | be72f1cc9a133351 | 4e293888067f4c42 |
+| par-scaler-minmax batch | bdcf978b59eaee06 | af35d3cfeccf029b | d39557bdc9e10862 | c85af33e17ebc9f1 | e470cfca3c51904a | e470cfca3c51904a | 92acfd69d9b04106 | 380e2675e1096b8e | b11bf2396e39a72a |
+# START par-queries-nn/base repeat=1/train
+# DONE par-queries-nn/base repeat=1/train 2.062s
+# START par-queries-nn/base repeat=1/infer-save-reload
+# DONE par-queries-nn/base repeat=1/infer-save-reload 4.122s
+# START par-queries-nn/base repeat=1/batch
+# DONE par-queries-nn/base repeat=1/batch 2.135s
+# START par-queries-nn/base repeat=2/train
+# DONE par-queries-nn/base repeat=2/train 2.060s
+# START par-queries-nn/base repeat=2/infer-save-reload
+# DONE par-queries-nn/base repeat=2/infer-save-reload 4.197s
+# START par-queries-nn/base repeat=2/batch
+# DONE par-queries-nn/base repeat=2/batch 2.195s
+# CELL par-queries-nn/base STABLE 16.772s
+# START par-queries-nn/ties repeat=1/train
+# DONE par-queries-nn/ties repeat=1/train 2.121s
+# START par-queries-nn/ties repeat=1/infer-save-reload
+# DONE par-queries-nn/ties repeat=1/infer-save-reload 4.133s
+# START par-queries-nn/ties repeat=1/batch
+# DONE par-queries-nn/ties repeat=1/batch 2.094s
+# START par-queries-nn/ties repeat=2/train
+# DONE par-queries-nn/ties repeat=2/train 2.084s
+# START par-queries-nn/ties repeat=2/infer-save-reload
+# DONE par-queries-nn/ties repeat=2/infer-save-reload 4.199s
+# START par-queries-nn/ties repeat=2/batch
+# DONE par-queries-nn/ties repeat=2/batch 2.094s
+# CELL par-queries-nn/ties STABLE 16.726s
+# START par-queries-nn/hashed repeat=1/train
+# DONE par-queries-nn/hashed repeat=1/train 2.088s
+# START par-queries-nn/hashed repeat=1/infer-save-reload
+# DONE par-queries-nn/hashed repeat=1/infer-save-reload 4.183s
+# START par-queries-nn/hashed repeat=1/batch
+# DONE par-queries-nn/hashed repeat=1/batch 2.098s
+# START par-queries-nn/hashed repeat=2/train
+# DONE par-queries-nn/hashed repeat=2/train 2.059s
+# START par-queries-nn/hashed repeat=2/infer-save-reload
+# DONE par-queries-nn/hashed repeat=2/infer-save-reload 4.121s
+# START par-queries-nn/hashed repeat=2/batch
+# DONE par-queries-nn/hashed repeat=2/batch 2.176s
+# CELL par-queries-nn/hashed STABLE 16.726s
+# START par-queries-nn/wide repeat=1/train
+# DONE par-queries-nn/wide repeat=1/train 2.325s
+# START par-queries-nn/wide repeat=1/infer-save-reload
+# DONE par-queries-nn/wide repeat=1/infer-save-reload 4.131s
+# START par-queries-nn/wide repeat=1/batch
+# DONE par-queries-nn/wide repeat=1/batch 2.103s
+# START par-queries-nn/wide repeat=2/train
+# DONE par-queries-nn/wide repeat=2/train 2.045s
+# START par-queries-nn/wide repeat=2/infer-save-reload
+# DONE par-queries-nn/wide repeat=2/infer-save-reload 4.111s
+# START par-queries-nn/wide repeat=2/batch
+# DONE par-queries-nn/wide repeat=2/batch 2.118s
+# CELL par-queries-nn/wide STABLE 16.835s
+# START par-queries-nn/denormal repeat=1/train
+# DONE par-queries-nn/denormal repeat=1/train 2.123s
+# START par-queries-nn/denormal repeat=1/infer-save-reload
+# DONE par-queries-nn/denormal repeat=1/infer-save-reload 4.149s
+# START par-queries-nn/denormal repeat=1/batch
+# DONE par-queries-nn/denormal repeat=1/batch 2.160s
+# START par-queries-nn/denormal repeat=2/train
+# DONE par-queries-nn/denormal repeat=2/train 2.078s
+# START par-queries-nn/denormal repeat=2/infer-save-reload
+# DONE par-queries-nn/denormal repeat=2/infer-save-reload 4.127s
+# START par-queries-nn/denormal repeat=2/batch
+# DONE par-queries-nn/denormal repeat=2/batch 2.083s
+# CELL par-queries-nn/denormal STABLE 16.720s
+# START par-queries-nn/denormal_ftz repeat=1/train
+# DONE par-queries-nn/denormal_ftz repeat=1/train 2.145s
+# START par-queries-nn/denormal_ftz repeat=1/infer-save-reload
+# DONE par-queries-nn/denormal_ftz repeat=1/infer-save-reload 4.388s
+# START par-queries-nn/denormal_ftz repeat=1/batch
+# DONE par-queries-nn/denormal_ftz repeat=1/batch 2.160s
+# START par-queries-nn/denormal_ftz repeat=2/train
+# DONE par-queries-nn/denormal_ftz repeat=2/train 2.130s
+# START par-queries-nn/denormal_ftz repeat=2/infer-save-reload
+# DONE par-queries-nn/denormal_ftz repeat=2/infer-save-reload 4.131s
+# START par-queries-nn/denormal_ftz repeat=2/batch
+# DONE par-queries-nn/denormal_ftz repeat=2/batch 2.076s
+# CELL par-queries-nn/denormal_ftz STABLE 17.031s
+# START par-queries-nn/dupes repeat=1/train
+# DONE par-queries-nn/dupes repeat=1/train 2.133s
+# START par-queries-nn/dupes repeat=1/infer-save-reload
+# DONE par-queries-nn/dupes repeat=1/infer-save-reload 4.183s
+# START par-queries-nn/dupes repeat=1/batch
+# DONE par-queries-nn/dupes repeat=1/batch 2.078s
+# START par-queries-nn/dupes repeat=2/train
+# DONE par-queries-nn/dupes repeat=2/train 2.094s
+# START par-queries-nn/dupes repeat=2/infer-save-reload
+# DONE par-queries-nn/dupes repeat=2/infer-save-reload 4.151s
+# START par-queries-nn/dupes repeat=2/batch
+# DONE par-queries-nn/dupes repeat=2/batch 2.088s
+# CELL par-queries-nn/dupes STABLE 16.728s
+# START par-queries-nn/odd repeat=1/train
+# DONE par-queries-nn/odd repeat=1/train 2.247s
+# START par-queries-nn/odd repeat=1/infer-save-reload
+# DONE par-queries-nn/odd repeat=1/infer-save-reload 4.455s
+# START par-queries-nn/odd repeat=1/batch
+# DONE par-queries-nn/odd repeat=1/batch 2.034s
+# START par-queries-nn/odd repeat=2/train
+# DONE par-queries-nn/odd repeat=2/train 2.100s
+# START par-queries-nn/odd repeat=2/infer-save-reload
+# DONE par-queries-nn/odd repeat=2/infer-save-reload 4.149s
+# START par-queries-nn/odd repeat=2/batch
+# DONE par-queries-nn/odd repeat=2/batch 2.071s
+# CELL par-queries-nn/odd STABLE 17.057s
+# START par-queries-nn/negative repeat=1/train
+# DONE par-queries-nn/negative repeat=1/train 2.053s
+# START par-queries-nn/negative repeat=1/infer-save-reload
+# DONE par-queries-nn/negative repeat=1/infer-save-reload 4.108s
+# START par-queries-nn/negative repeat=1/batch
+# DONE par-queries-nn/negative repeat=1/batch 2.024s
+# START par-queries-nn/negative repeat=2/train
+# DONE par-queries-nn/negative repeat=2/train 2.022s
+# START par-queries-nn/negative repeat=2/infer-save-reload
+# DONE par-queries-nn/negative repeat=2/infer-save-reload 4.109s
+# START par-queries-nn/negative repeat=2/batch
+# DONE par-queries-nn/negative repeat=2/batch 2.090s
+# CELL par-queries-nn/negative STABLE 16.405s
+| par-queries-nn         | 6869ae45e01fcb7a | 23daf3a923d4c74f | 96db6b5a57d4d248 | 3956d623d56e1786 | c5404ea40ba502da | c5404ea40ba502da | 55dffcfe5d6aa112 | f4ddd08c4744ae8d | b73513bc451075d0 |
+| par-queries-nn infer   | da53642fe53493ad | 234e9e649f45c983 | 906e8d5ef7d91305 | 3173e563e425be1c | 32426a86a46b417f | 32426a86a46b417f | 6776f2a2ef1528ee | ef7c64cd35cc99ad | aa5dd33322e1cb78 |
+| par-queries-nn model   | 2262556d652b5187 | 4049122e7b37a94e | 924ef8b2b10467f0 | 244f616088763b08 | d2ef07879ac4916e | 771d0d3df6d1d2ac | 0f847e465f0fce2d | 8e7ac0d7c257cac6 | 5f934babcd0bc097 |
+| par-queries-nn batch   | da944e45126bd8e0 | f6f06727f6f8caec | 1c5e222f1cd206a3 | 62dabd8ae8cf5b4f | 9af443b575315e61 | 9af443b575315e61 | 4c05d8d24e5cfa27 | 7ebe1444150c0ee5 | 9f59fac4020afea4 |
+
+cells=108 stable=108 moved=0 refused=0
+infer: stable=108
+model: stable=90 n/a=18
+batch: stable=108
+n/a: par-boosting-clf model n/a:save-not-implemented, par-boosting-reg model n/a:save-not-implemented
+wrote /root/gemm_leg_out/identity/identity_break.nvidia-nvidia-geforce-rtx-4090-sm_89.json

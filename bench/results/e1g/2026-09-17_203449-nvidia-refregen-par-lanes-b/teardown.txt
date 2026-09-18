@@ -1,0 +1,6 @@
+pod=ny4j0vvsrkigke
+armed=1
+terminated=1
+deadman_pid=22804
+exit=0
+at=2026-09-17T21:16:05Z
