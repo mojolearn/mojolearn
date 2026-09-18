@@ -8,12 +8,13 @@ import unittest
 from unittest.mock import patch
 
 from verify_linux_surface_qualification import expected_bindings
+from check_linux_release_qualification import MODE_READBACK
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
 class InstalledInventoryTests(unittest.TestCase):
-    def readback(self, mode, missing=None, changed=None, wrong_mode=False):
+    def readback(self, mode, missing=None, changed=None, wrong_mode=False, wrong_binding=None):
         script = (ROOT / 'tools/release_linux_surface_qualification.sh').read_text()
         block = script.split('# Older bindings expose vendor', 1)[1]
         block = '# Older bindings expose vendor' + block.split("record = {'package':", 1)[0]
@@ -31,9 +32,10 @@ class InstalledInventoryTests(unittest.TestCase):
                 code = {'fast': 0, 'deterministic': 2, 'identical': 1}[mode]
                 class Binding:
                     __file__ = str(path)
+                    binding_name = name
                     def __getattr__(self, key):
                         if key.endswith('_numeric_mode'):
-                            return lambda: -1 if wrong_mode else code
+                            return lambda: -1 if wrong_mode or self.binding_name == wrong_binding else code
                         raise AttributeError(key)
                 modules[name] = Binding()
             if changed:
@@ -59,6 +61,14 @@ class InstalledInventoryTests(unittest.TestCase):
                 loaded, rows = self.readback(mode)
                 self.assertEqual(loaded, expected_bindings(mode, True))
                 self.assertEqual(len(rows), count)
+                for name in loaded & (MODE_READBACK | {'_mojolearn_byte_lm'}):
+                    self.assertEqual(rows[name]['mode_code'],
+                                     {'fast': 0, 'deterministic': 2, 'identical': 1}[mode])
+
+    def test_every_required_identical_mode_getter_is_enforced(self):
+        for name in MODE_READBACK | {'_mojolearn_byte_lm'}:
+            with self.subTest(binding=name), self.assertRaises(AssertionError):
+                self.readback('identical', wrong_binding=name)
 
     def test_new_binding_cannot_be_missing_or_changed(self):
         with self.assertRaises(ImportError):

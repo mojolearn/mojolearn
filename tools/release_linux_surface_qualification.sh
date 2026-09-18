@@ -120,7 +120,14 @@ getters = {'_mojolearn': 'mojolearn_numeric_mode', '_mojolearn_gbdt': 'gbdt_nume
            '_mojolearn_svm': 'svm_numeric_mode', '_mojolearn_metrics': 'umap_numeric_mode',
            '_mojolearn_linalg': 'linalg_numeric_mode', '_mojolearn_arima': 'arima_numeric_mode',
            '_mojolearn_training': 'training_numeric_mode', '_mojolearn_gp': 'gp_numeric_mode',
-           '_mojolearn_mamba': 'mamba_numeric_mode', '_mojolearn_transformer': 'transformer_numeric_mode'}
+           '_mojolearn_mamba': 'mamba_numeric_mode', '_mojolearn_transformer': 'transformer_numeric_mode',
+           '_mojolearn_preprocessing': 'preprocessing_numeric_mode',
+           '_mojolearn_kernel_methods': 'kernel_methods_numeric_mode',
+           '_mojolearn_mixture': 'mixture_numeric_mode',
+           '_mojolearn_hdbscan': 'hdbscan_numeric_mode',
+           '_mojolearn_resample': 'resample_numeric_mode',
+           '_mojolearn_ivf': 'ivf_numeric_mode',
+           '_mojolearn_embedding': 'embedding_numeric_mode'}
 if release_profile and mojolearn.numeric_mode() == 'identical':  # DEVIATION 2290
     getters['_mojolearn_byte_lm'] = 'byte_lm_numeric_mode'
 # Read the same complete, tier-specific inventory required by admission.

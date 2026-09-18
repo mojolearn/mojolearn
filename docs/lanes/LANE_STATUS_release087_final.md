@@ -236,3 +236,36 @@ to another owner's `lane/lm-attention-fallback`; do not switch or reset it.
 Use a separate integration worktree from fresh `origin/main` when publication
 is complete, preserving newer main work. The current release branch merges
 cleanly in a dry run, but repeat against the then-current main at integration.
+
+The repaired Linux wheel is `linux-wheel-final-v2`, SHA-256
+`d20e02f9665c46049dd4655304daae0f8eb897db3d90584295f0485d4c69ce4a`.
+All three v5 installed jobs and supplemental captures passed; H100 Python 3.10
+now has all 216 property training cells stable, including all 36 radius cells.
+All v5 GPU rentals were deleted. Both H100 and L40S independently match Apple
+and AMD on the 252 targeted training cells and applicable properties.
+
+Final admission of `linux-publish-v2` then correctly refused missing native
+numeric-mode readback for seven newer GPU bindings. The runner loaded and
+hashed them, but its getter map was stale. Add the seven exported getters and
+repeat all three installed qualifications against the SAME wheel, with fresh
+qualification-source witnesses; native inputs and wheel bytes are unchanged.
+The regression now asserts the admission contract for every required getter
+and rejects each individually wrong mode. Focused qualification tests pass:
+22 tests and 54 subtests. Do not publish from the rejected v2 staging directory.
+
+The positive Mamba poison gate passed all 36 training rows. Sabotage 2 triggers
+18 explicit native state-NaN refusals, while its 18 unaffected controls match.
+An extra external audit initially rejected every refusal; inspect the retained
+failed audit rather than calling it a hashed divergence. The no-band sabotage
+3 control passed all 36 rows. The pending shell gate now accepts only the
+specific native NaN diagnostic on affected Mamba2 lanes, or real changed
+hashes, with unaffected controls matching. Eight admission checks reject
+unrelated errors, missing hashes/cells, incomplete captures and broken controls.
+All three captures/diffs are retained outside temporary directories.
+
+CPU replay v2 could not create a pod because the default 40 GB disk exceeded
+provider limits. API inspection confirmed no matching pod existed. Replay v3
+uses a 20 GB disk with the same two CPUs, exact wheel and test workload; it is
+running under its watchdog. Wait for completion and verified deletion before
+starting the replacement GPU qualification campaign. Current reference files
+remain uncommitted until that campaign supplies complete mode evidence.
