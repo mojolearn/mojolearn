@@ -24,6 +24,16 @@ lane, so newer features cannot disappear behind the historical count. Entries
 are not distinct Python classes and mappings are not execution certificates.
 For every lane the inventory shows CPU availability, withheld-reference reasons,
 batch applicability and reference-fixture counts. It executes no algorithms.
+The JSON also includes `lanes.<name>.reference_support`: for each property,
+the number of fixtures with a numerical reference and matching CPU, Apple,
+NVIDIA and AMD records. Missing/conflicted, stale and inapplicable fixtures
+are counted separately. These counts describe the bundled reference table;
+they do not certify the installed wheel or promote a pending lane.
+
+The appendix is a historical list, not the total number of today's public
+algorithms. `additional_lanes` names registered checks outside that list.
+For the source/API/wheel comparison and the remaining qualification work, see
+[the next-wheel coverage audit](NEXT_WHEEL_COVERAGE.md).
 
 The candidate's default CPU selection now includes spectral clustering,
 Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
