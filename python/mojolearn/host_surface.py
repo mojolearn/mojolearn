@@ -1197,7 +1197,7 @@ FAMILIES = (
         display="nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances",
         host_modules=(
             "core/knn_host_predict.mojo", "bindings/host_helpers.mojo",
-            "cluster/host/kmeans_oracle.mojo",
+            "cluster/host/kmeans_oracle.mojo", "bindings/hotpath_helpers.mojo",
         ),
         exports=(
             "core_host_numeric_mode", "core_host_vendor", "core_host_column",
@@ -1209,6 +1209,15 @@ FAMILIES = (
             "all_finite_f64", "gather_i64", "gather_f64", "gather_rows_bytes", "argmax_rows_f32",
             "argmax_rows_f64", "column_mean_f64", "center_columns_f32",
             "scale_rows_f32", "probability_rows_f32",
+            # lane/python-hotpath (2026-09-17, DEVIATIONS 3100-3104): the helpers
+            # of bindings/hotpath_helpers.mojo that stand in for per-row Python,
+            # and the ORDER RULE's label encoder (DEVIATION 2500) a CPU-only
+            # install used to run as a Python loop.
+            "cast_elements", "reduce_stat", "equal_elements",
+            "encode_labels_f32", "encode_labels_f64", "encode_labels_i32",
+            "encode_labels_i64", "encode_labels_u32", "encode_labels_u8",
+            "gather_i32", "check_indices_i64", "indices_overlap_i64",
+            "fold_ids", "select_fold_i64",
         ),
         gate="tools/classical_host_gate.py (cpu-identity-gate.yml)",
         wheel_note=(
