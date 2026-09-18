@@ -12,12 +12,20 @@ ede6f6243.
 - WIP: both rows in `checks/kernel_matrix.mojo` now return True for NVIDIA,
   AMD and Apple. NOT QUALIFIED YET; do not merge until the sections below
   say PASS.
-- Pods out: none yet. 14:00Z: two Hot Aisle MI300X legs QUEUED (both team
-  slots held by lane gemm-single-leaf), launch logs
-  bench/results/attention_replay_vendors_2026-09-18/amd_{enwik8,pile_github}.launch.log.
+- Pods out (14:10Z), all MINE, each self-deletes at its lease:
+  RunPod ur4bbe8u4pe9wr (H100, extra body mode gates -> nvidia_gates/),
+  RunPod uywfr8o08f4qeh (H100, mode identity -> nvidia_identity/),
+  RunPod rf1ruxuaac3q5i (CPU pod, identity before/after -> cpu_identity/).
+  NOT MINE, never touch: 8dqkcbscpgbqu2 (another session's GEMM pod).
+  Hot Aisle: two legs queued/waiting for stock (amd_enwik8, amd_pile_github);
+  slot 1 taken by attn-replay-enwik8 at 14:06Z, VM not yet created.
   RunPod MI300X create returned "no instances currently available" twice
   (failed_runpod_no_stock/, nothing rented). A first Hot Aisle launch was
   refused locally for a dirty tree (refused_dirty_tree/, nothing rented).
+- Apple: native gate binaries built (one worker; ~/mojolearn-evidence/
+  attention-replay-vendors/apple-native/bin), bswz/legacy bindings building,
+  then ONE Metal job queued through mac_slot.sh metal behind the release
+  runner and two apple-seam tickets (scripts in apple_scripts/).
 - Local: Apple byte-LM binding with the flip + plumbing compiled, one worker,
   nice 19 (local/apple_compile_default.log, 212 s). Compile only.
 

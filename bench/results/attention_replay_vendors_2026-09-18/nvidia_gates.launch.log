@@ -1,0 +1,68 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  gemm
+   mode:     rent
+   gpu:      NVIDIA H100 80GB HBM3
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    60 minutes (hard cap 60)
+   out:      /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/nvidia_gates
+
+   commit:   a9584a477 parent b7bddca75
+
+== step 1: the Apple reference card ==
+[10:05:18 nvidia] local card SUPPLIED (not generated): /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/nvidia_gates/local/apple.card
+[10:05:18 nvidia]   nothing here can check it came from this commit. That is on the operator.
+  local card: mode read back from the run itself = [IDENTICAL]
+  local card: /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/nvidia_gates/local/apple.card (61 lines)
+
+== step 2: pre-flight ==
+  pre-flight: this machine's uplink
+    uplink up on all three probes
+  pre-flight: existing leases on this machine
+    3aoz6k8bdxhhju   EXPIRED 9757 min ago
+    44j9e1zik7r8qr   EXPIRED 9724 min ago
+    gdkumy79olopt6   EXPIRED 11801 min ago
+    kpq865uami33s3   EXPIRED 11670 min ago
+    m4gh2e66ikwihq   EXPIRED 12250 min ago
+    o8q8dklahstpoz   EXPIRED 12220 min ago
+    td6w0v7xzqcxeh   EXPIRED 11711 min ago
+    ujlg5ytky38cvv   EXPIRED 11760 min ago
+  pre-flight: pods already up on this account
+    CONCURRENT: pod(s) already up and NOT reaped: ph5zsazy7u4kxn,8dqkcbscpgbqu2
+    --allow-concurrent was passed. This leg creates its own
+    pod, terminates BY ITS OWN POD ID, and arms a dead-man
+    keyed to its own name, so it will not touch those. YOU
+    are now responsible for confirming ALL of them are gone:
+      tools/gemm_remote_leg.sh reap <pod-id>
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[10:05:34 nvidia] dead-man ARMED before the create: pid 46188, fires in 4500s, keyed by name mojolearn-gemm-nvidia-2026-09-18_100518-45845
+[10:05:34 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 46188; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-45845
+[10:05:34 nvidia] creating mojolearn-gemm-nvidia-2026-09-18_100518-45845 (NVIDIA H100 80GB HBM3, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[10:05:34 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[10:05:36 nvidia] pod ur4bbe8u4pe9wr created
+[10:06:10 nvidia] ssh target: -p 19313 root@103.207.149.173
+[10:06:13 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[10:06:13 nvidia] ARMING THE LEASE BEFORE ANY WORK (60 minutes)
+    arming a 60-minute self-kill on pod ur4bbe8u4pe9wr ...
+    ARMED. Pod ur4bbe8u4pe9wr is TERMINATED through the API in 60 minutes.
+      lease: /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/tools/../bench/results/runpod_leases/ur4bbe8u4pe9wr.lease
+      extend with: tools/runpod_guard.sh extend ur4bbe8u4pe9wr '-p 19313 root@103.207.149.173' <minutes>
+    ur4bbe8u4pe9wr: 60 minutes left of a 60-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep 18 14:06 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[10:06:30 nvidia] shipping the COMMIT (a9584a477cec456cdb64bc8c2eecfc647d21f07f), not the working tree
+[10:06:38 nvidia]   archive source sha256: f35eef62e2b65391ae3f2447287bb53d
+[10:07:43 nvidia] R2 STAGED 1 key(s) in 10s, 1 linked into /root/mojolearn
+[10:07:47 nvidia] shipped the extra body: tools/lm_attention_vendor_extra_gates.sh
+[10:07:51 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=679
+[10:07:54 nvidia]   remote pid 679; polling every 30s, giving up after 3209s

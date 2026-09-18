@@ -1,0 +1,23 @@
+== runpod_cpu_leg: lane attn-replay-cpu, RENT ==
+  worktree /Users/andrewhendel/mojolearn-wt/attention-replay-vendors  commit a9584a477cec  dirty tracked files: 0
+  pod mojolearn-cpu-attn-replay-cpu-20260918-140740  image runpod/base:1.3.1-ubuntu2204  flavors cpu3c,cpu5c  vCPU 8  disk 40GB  lease 60m
+  envs default  build [core,byte_lm,transformer,training,neural,mamba]  sabotage-build []  jobs 8  bincache=1 envcache=0
+  source: 3052 files, 19951042 bytes gz, sha256 7a462c9cbb44adac
+  box script OK (bash -n, no placeholder, commit baked in); create request: {"name":"mojolearn-cpu-attn-replay-cpu-20260918-140740","imageName":"runpod/base:1.3.1-ubuntu2204","computeType":"CPU","cpuFlavorIds":["cpu3c","cpu5c"],"vcpuCount":8,"containerDiskInGb":40,"volumeInGb":0,"ports":["22/tcp"],"supportPublicIp":true,"cloudType":"SECURE"}
+  cache key: pixi	pixi	0.77.0	runpod-cpu/v1/pixi-bin/0.77.0/linux-64/pixi
+  cache key: env	default	74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90	runpod-cpu/v1/pixi-env/linux-64/default/74724bfe77fc4247390533608d646980baddcfbf6f94e42fb9eed5793e135d90
+  dead-man composes (sh -n)
+[10:07:41 cpu-leg] pre-flight: pods on this account
+[10:07:43 cpu-leg] dead-man ARMED before the create: pid 48528, fires in 4800s, keyed by mojolearn-cpu-attn-replay-cpu-20260918-140740
+[10:07:43 cpu-leg] creating mojolearn-cpu-attn-replay-cpu-20260918-140740. THE BILL STARTS HERE.
+[10:07:45 cpu-leg] pod rf1ruxuaac3q5i created. COST $0.24/hr
+[10:08:51 cpu-leg] ssh up (-p 40112 root@213.192.2.99) after 68s; cost $0.24/hr
+[10:08:51 cpu-leg] arming the ON-POD watchdog (60 minutes)
+    WATCHDOG_ALIVE pid=93
+    sleep 3600
+    1
+    TOKEN_GET_200
+[10:08:58 cpu-leg] staging the source (19951042 bytes)
+[10:09:15 cpu-leg] CACHE PLAN pixi:pixi=hit env:default=hit
+[10:09:21 cpu-leg] BINCACHE STAGED partition=none/runpod-cpu-runpod-base-1.3.1-ubuntu2204 leg=20260918T140918Z-c625aa96 entries=365
+[10:09:24 cpu-leg] starting the box pipeline (env, build, command, cache upload)
