@@ -20,7 +20,7 @@ taskset -pc "$cores" $$
 export MOJOLEARN_BUILD_JOBS=1 MOJOLEARN_CPU_THREADS=2
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 export OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1 BLIS_NUM_THREADS=1 NUMEXPR_MAX_THREADS=1
-bash "$ROOT/tools/linux_surface_qualification.sh" "$@"
+bash "$ROOT/tools/release_linux_surface_qualification.sh" "$@"
 # A supplemental failure must invalidate the successful surface marker too.
 printf '1\n' > "$OUT/exit_code"
 VPY="$OUT/venv/bin/python"

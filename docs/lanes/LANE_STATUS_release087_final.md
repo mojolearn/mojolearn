@@ -140,3 +140,20 @@ default exclusions. Opt-in pending routes and 17 logical-shard drivers are
 exposed without falsely qualifying physical multi-GPU execution. Portable
 HostForest/HostGBDT saved models are included in the installed model gate.
 These counts describe source scope, not a claim that 0.8.7 is already on PyPI.
+
+Installed qualification v1 stopped on a stale runner inventory, not a native
+compile failure: fast/deterministic tried to load `_mojolearn`, whose correct
+behavior is to refuse those tiers. The IDENTICAL jobs ran successfully, but
+readback also omitted seven newer bindings. Rental `601623322` was deleted
+with HTTP 404. The failure and exact wheel remain retained.
+
+The release now uses `tools/release_linux_surface_qualification.sh`, a
+qualification-only successor that takes the complete per-mode inventory from
+`expected_bindings`. The original combined build script stays byte-for-byte
+unchanged in native provenance; no build witness is rewritten. The new runner
+and supplemental wrapper are included in `qualification-sources.json` and
+must match at release admission. Regression checks exercise the actual
+readback block: 3/3/23 binding inventories, missing/modified modules and wrong
+compiled mode. Together with admission/end-to-end tests: 29 passed, 33 subtests.
+The external qualification driver also derives the expected job names from
+`expected_jobs` (11), instead of a stale literal 25.
