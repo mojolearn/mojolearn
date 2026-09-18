@@ -87,6 +87,51 @@ skipped: no GPT-2 files present), `test_tokenizer_manifest.py` (with a new alias
   seen(build). `--write` then `--check` green (230 lanes, 236 public API entries).
   `lm_corpus.*` each read 1 lane, seen(build). No GPU column (host-only, like bpe-trainer).
 
+## The built-in design (Item B), as built
+
+DEFAULT = TOKENIZED. `lm_corpus.prepare(corpus)` with no `vocab` trains our vocabulary
+(`BpeVocabularyTrainer`, 50,256 ranks by default, on the first 10 MB of the corpus's TRAIN
+range only, never validation/test), tokenizes the whole corpus once, caches. `vocab=` (rank
+file, `(encoder.json, vocab.bpe)`, `BpeTokenizer`, `TrainedBpeVocabulary`) uses the user's
+token map and trains nothing. Byte mode: `tools/lm_train.py --bytes` -> `CorpusBatches`,
+whose file (`tools/lm_step_memory_probe.py`) this lane does not touch at all.
+
+WHY BYTES STAY THE DEFAULT IN THE PROBES. `lm_step_memory_probe.py`, `lm_recycle_probe.py`,
+`lm_shards_probe.py`, `lm_shakedown_resume.py` keep `--corpus` = bytes. They are timing and
+resume probes whose recorded numbers are byte runs; switching their default would make every
+future number incomparable with the recorded ones and would make each pod leg train a
+vocabulary first. The tokenized default lives in the new entry point instead.
+
+CACHE AND MANIFEST SCHEMA (`python/mojolearn/lm_corpus.py` docstring is authoritative):
+
+    <cache>/vocab/<corpus sha16>-v<vocab_size>-f<min_frequency>-s<sample bytes>/{ranks.tsv, vocabulary.json}
+    <cache>/vocab/user-<vocabulary sha16>/{ranks.tsv, vocabulary.json}
+    <cache>/tokens/<corpus sha16>-<vocabulary sha16>-d<document bytes>/{tokens.i32, manifest.json}
+
+- `vocabulary.json`: schema `mojolearn.bpe-vocabulary.v1`, `identity` {schema, sha256 (of the
+  canonical `rank<TAB>lowercase-hex` text), n_ranks, n_vocab, endoftext_id}, `recipe`
+  (trainer, format, tie_break, vocab_size, min_frequency, corpus_sha256, sample, counts,
+  train_seconds) or {source} for a user map.
+- `manifest.json`: schema `mojolearn.byte-lm.tokens.v1` (sibling of
+  `mojolearn.byte-lm.corpus.v1`): source {path, sha256, bytes, schema, manifest_sha256,
+  source_url}, vocabulary (identity), encoder, endoftext rule, document_rule, document_bytes,
+  n_documents, dtype int32 little-endian, sha256 + bytes + tokens of `tokens.i32`,
+  bytes_per_token, max_id, ids_above_255, train/validation/test ranges IN TOKENS (exact:
+  documents never span a range boundary), schedule `train-range-modulo.v1`, timings.
+- Reuse: corpus sha, vocabulary sha and document_bytes pick the directory; the id array is
+  re-hashed against the manifest on every reuse and a mismatch is REFUSED by name, never
+  silently rebuilt. Entries are built in a temp sibling and renamed into place.
+- The model carries the vocabulary: `TokenBatches.data_schedule()` has
+  `vocabulary: {schema, sha256, n_vocab}`; the trainer refuses n_vocab != vocab_size and keeps
+  the schedule in every checkpoint; `lm_corpus.tokenizer_for(model, vocab)` /
+  `require_vocabulary` refuse a tokenizer of another table by sha256.
+- `TokenBatches` fixes a defect `CorpusBatches` keeps for bit-compatibility: its modulus is
+  the TRAIN range in tokens, so a long run reads no validation or test id.
+
+NO VOCABULARY SHIPS. Trained tables live in the user's cache (and ours in
+~/mojolearn-evidence / R2). Question for Andrew, not acted on: whether mojolearn should ever
+ship a built-in trained vocabulary (it would be derived from third-party text).
+
 ## The vocabulary job (OWED, do not kill)
 
 pid 95203, `train_main`, started 09:26 local 2026-09-18, one core, nice 19: 50,256 ranks
