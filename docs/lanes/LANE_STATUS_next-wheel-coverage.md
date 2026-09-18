@@ -132,3 +132,19 @@ scheduling is useful independent-job parallelism, not a distributed fit.
 Historical one-vs-two-device evidence exists for 31 parallel lanes in the
 166-lane record plus eight in 2026-09-15_par-lanes-new on NVIDIA and AMD; it
 must not be mistaken for certification of every current lane/artifact.
+
+
+## Completion plan
+
+Andrew requested a CPU identity backlog and an implementation plan for six GPU
+gaps. See [CPU identity and useful multi-GPU completion plan](../CPU_IDENTITY_AND_MULTI_GPU_PLAN.md).
+It defines CPU qualification, the physical GPU gate, scopes/dependencies for
+loaded CausalLM, IVF storage/search, GPC, forecasting, cross-validation and GEMM,
+and installed-wheel acceptance. No GPU feature is claimed implemented by this
+planning change; parallel CPU expansion is explicitly out of scope.
+
+Status refresh: release run 35350125464's Mac build job succeeded at
+14:12:49 UTC, and its ephemeral runner exited/removed registration. ARM64 CPU
+certification is running the sabotage stage after the UMAP saved-model failure.
+The RBF regression and fresh Apple capture remain queued behind another lane's
+Metal work. Do not interfere with that lane's lease.
