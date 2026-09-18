@@ -1,0 +1,10 @@
+stage_injected_exit=17
+Strict R2 staging failed; payload not started
+EXPECTED FAILURE BEFORE PAYLOAD
+stage_injected_exit=0
+PAYLOAD_STARTED
+PASS STAGING CONTINUES
+POD NAMES ['mojolearn-gemm-nvidia-fixed', 'mojolearn-gemm-nvidia-fixed']
+EXPECTED FAIL recovery names collide
+POD NAMES ['mojolearn-gemm-nvidia-fixed-99148', 'mojolearn-gemm-nvidia-fixed-99149']
+PASS distinct recovery names in the same timestamp second
