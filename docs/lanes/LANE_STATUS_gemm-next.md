@@ -1,4 +1,4 @@
-# LANE STATUS: `lane/gemm-next` (2026-09-17)
+# LANE STATUS: `lane/gemm-next` (updated 2026-09-18)
 
 **2026-09-18 AMD update:** the class spelling now has device proof and full
 700-step comparisons on both corpora and columns. AMD whole-step reduction
@@ -8,13 +8,50 @@ is 8.43%; see [the measured follow-up](LANE_STATUS_amd-gemm-class.md). The
 Written for a reader with NO context. Branch `lane/gemm-next`, worktree
 `~/mojolearn-wt/gemm-next`, branched from `origin/main` at 712eedd16.
 
-**NO PODS ARE OUT.** All four legs this lane ran finished, and every box was
-terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
+## THE EXACT NEXT COMMAND
+
+Prove the AMD `v_cmp_class_f32` seam spelling on a device before any arm is
+built on it (section 5). Add `_ftz_class` as a lane of
+`gemm/checks/gemm_seam_probe.mojo` exactly as the `modeftz` lane was added, then:
+
+```sh
+cd ~/mojolearn-wt/gemm-next
+MOJOLEARN_HOTAISLE_KEY_FILE=$HOME/.mojolearn_hotaisle_key \
+MOJOLEARN_HOTAISLE_SPEC=8core MOJOLEARN_GPU_ARCHS=gfx942 \
+MOJOLEARN_STAGE_KEYS="" \
+MOJOLEARN_GEMM_LEG_EXTRA=tools/gemm_seam_probe_column_leg.sh \
+MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x-hotaisle-ftz-class-proof \
+bash tools/hotaisle_leg.sh amd --rent --minutes 30 --skip-gates
+```
+PASS is the new lane hashing `62a6b5621e27c707` (`rtf`, the contract) with
+mismatch count 0 against `shipped`. Anything else and the spelling is dead, the
+way the wave-mode arm died. Build and run took 7 s last time; the whole leg was
+about three minutes and $0.10.
+
+---
+
+**NO PODS ARE OUT FOR THIS LANE.** All four legs it ran finished, and every box
+was terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
 `20usq9mvqsq2u5`, Hot Aisle VMs `7a1b7c34` and `7c0350cd`, all HTTP 404
-confirmed). Nothing is billing.
+confirmed). No leg process of this lane is alive. Nothing here is billing.
+
+**TWO LIVE H100s ARE NOT THIS LANE'S: `5guu23hvyqj7tg` and `upye8nr41f4rxm`**
+(created 2026-09-18 09:01 and 08:44 UTC). They carry the `mojolearn-gemm-nvidia-`
+prefix because every lane that calls `tools/gemm_remote_leg.sh` gets that name,
+not because they are this lane's; neither appears anywhere in this worktree's
+`bench/results/e1g/*/pod_id.txt` or its leases. **DO NOT REAP THEM.**
+
+**READ THIS FIRST IF YOU WERE TOLD TO BUILD THE `proj` FOLD FUSION: DO NOT. IT
+WAS THIS LANE'S OWN ERROR AND IT IS RETRACTED.** Brief section 23, and item (a)
+in section 6 below. It would move bits.
+
+**STILL OPEN FOR ANDREW: the Apple GEMM seam does not implement the contract**
+(section 1). That is a correctness decision, not a speed one, and it is the
+oldest unanswered thing this lane holds.
 
 The lane owns `gemm/` and `core/gemm.mojo`. It does NOT own
-`transformer/impl/llama/` or the fused attention (`lane/attention-speed`),
+`transformer/impl/llama/modeling_llama.mojo` or `fused_attention.mojo`
+(`lane/attention-fallback-fix`),
 `python/mojolearn/verify_reference/table.json` or `docs/VERIFY_EXTERNALLY.md`
 (`lane/reference-regen`), `bench/results/identity_break/` (`sabotage-sweep`), or
 the `--compare` path in `_verify_all.py` (`compare-commit-reveal`).
@@ -206,20 +243,25 @@ exists and the arm has been priced. Its capability row is
 
 In priority order.
 
-**(a) DONE 2026-09-18, and it is now the top BUILD item (brief 22.1, commit
-437f01fcc).** The `PHASE` lines isolated it: the fold is a constant 0.05 to 0.07
-ms per call from one leaf to sixty-four, so it is a fixed LAUNCH cost. Every
-`proj` call has `group_leaves = 1`, and contract section 7.3 is titled "`P == 1`
-performs NO fold addition". At 144 proj calls that fold is **8.3 ms, 4.0 percent
-of the step, performing no arithmetic.**
+**(a) RETRACTED 2026-09-18. DO NOT BUILD THE `proj` FOLD FUSION.** For a few
+hours this lane's own brief said the `proj` fold performs no arithmetic and
+could be fused away for 4.0 percent of the step. **That was wrong and the change
+would move bits.** `group_leaves` is LEAVES PER GROUP, not the contract's `P`:
+`_ksplit_resolve_leaves` returns `(group_leaves, ceil(p_count / group_leaves))`,
+so `group_leaves = 1` is the MAXIMUM number of groups. At `L = 128`, `proj`'s
+`k = 768` gives `P = 6` and `proj_dB`'s `k = 2048` gives `P = 16` -- exactly the
+`groups=6` and `groups=16` the same `PHASE` line prints. The fold sums five real
+additions per cell, fifteen at `proj_dB`. **No call in the step has `P == 1`, so
+contract 7.3 never applies.** Brief 23 carries the retraction and the correct
+reading.
 
-THE CHANGE, stated precisely: the `P == 1` fold is not a no-op, it applies seam
-5g and copies (`c.unsafe_store(cell, ftz(v))`). So it is NOT "skip the launch";
-it is "when `leaves == 1`, have the GROUP kernel apply 5g and write `c` directly
-instead of writing a partial to the workspace for a second kernel to flush and
-copy". Bit-preserving because `ftz` lands on the same binary32 word, same order,
-same address. NOT a scheduling arm: no plan, geometry, group rule or leaf
-boundary moves. **Unbuilt. This is where to start.**
+**The `proj` gap is now EXPLAINED and it is structural.** With the fold
+excluded, every kind runs 12.36 to 14.80 TFLOP/s INCLUDING `proj`; the kernel is
+not slow on that shape. `fold_ms` tracks the OUTPUT SIZE and not `P` (every
+1.57M-cell call folds in 0.067 to 0.070 ms at 6, 7 or 8 partials, and `proj_dB`
+with the most partials and fewest cells is the fastest fold). `proj`'s fold
+share is large only because `proj` does the least arithmetic per output cell in
+the step. **There is nothing to remove.**
 
 The superseded command, kept because it is how any future PHASE question is
 asked:
