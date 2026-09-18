@@ -110,6 +110,30 @@ class ExpandedWheelTests(unittest.TestCase):
         self.assertFalse(result['release_qualified'])
         self.assertEqual(result['physical_execution_trace'], 'OWED')
 
+    def test_candidate_source_pin_mismatch_refuses_before_install(self):
+        import json, tempfile, zipfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); wheel=root/'mojolearn-0.8.7-py3-none-any.whl'
+            with zipfile.ZipFile(wheel,'w') as archive:
+                archive.writestr('mojolearn/verify_reference/models/models.json',json.dumps({'models':[]}))
+                archive.writestr('mojolearn/identity_columns/COMMIT','a'*40)
+            argv=['qualifier',str(wheel),'--output',str(root/'out'),'--expected-source-commit','b'*40]
+            with patch('sys.argv',argv), patch('subprocess.Popen') as spawn:
+                with self.assertRaises(SystemExit): main()
+                spawn.assert_not_called()
+
+    def test_optimized_interpreter_cannot_disable_admission_checks(self):
+        import os, subprocess, sys
+        from pathlib import Path
+        script = Path(__file__).with_name('qualify_verifier_wheel.py')
+        result = subprocess.run([sys.executable, '-O', str(script), '--help'],
+                                capture_output=True, text=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Python -O is refused', result.stderr)
+
     def test_every_expanded_stage_failure_propagates(self):
         _, calls = self.run_scope(devices=(0,1))
         for name, _ in calls:

@@ -51,19 +51,28 @@ from mojolearn import _backend
 apis = {
     'mojolearn.models': ['CausalLM', 'ParallelCausalLM'],
     'mojolearn.parallel_ivf': ['DistributedIVFIndex'],
+    'mojolearn.parallel_model_selection': ['cross_val_score'],
     'mojolearn.parallel_gaussian_process': ['fit_gaussian_process_classifier', 'predict_gaussian_process_classifier'],
     'mojolearn.parallel_forecasting': ['predict_arima', 'forecast_arima', 'predict_exponential_smoothing', 'forecast_exponential_smoothing'],
 }
 for name, symbols in apis.items():
     module = importlib.import_module(name)
     for symbol in symbols:
-        assert callable(getattr(module, symbol, None)), name + '.' + symbol + ' is unavailable'
+        if not callable(getattr(module, symbol, None)):
+            raise RuntimeError(name + '.' + symbol + ' is unavailable')
 native = _backend.binding('_mojolearn_ivf', 'identical')
 symbols = ['ivf_flat_partial_search', 'ivf_finalize_distances']
 for symbol in symbols:
-    assert callable(getattr(native, symbol, None)), 'rebuild IVF binding: missing ' + symbol
+    if not callable(getattr(native, symbol, None)):
+        raise RuntimeError('rebuild IVF binding: missing ' + symbol)
+gbdt = _backend.binding('_mojolearn_gbdt', 'identical')
+if not callable(getattr(gbdt, 'gbdt_fit', None)):
+    raise RuntimeError('GBDT binding has no fit entry for cross-validation')
+gbdt_path = pathlib.Path(gbdt.__file__).resolve()
 path = pathlib.Path(native.__file__).resolve()
-print(json.dumps(dict(apis=apis, ivf_symbols=symbols, binding=str(path),
+print(json.dumps(dict(apis=apis, ivf_symbols=symbols, gbdt_symbols=['gbdt_fit'],
+                     gbdt_binding=str(gbdt_path), gbdt_sha256=hashlib.sha256(gbdt_path.read_bytes()).hexdigest(),
+                     binding=str(path),
                      binding_sha256=hashlib.sha256(path.read_bytes()).hexdigest())))
 """
 
@@ -77,6 +86,7 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
         raise RuntimeError('multi-GPU qualification requires expanded CUDA/HIP scope')
     report = dict(scope=scope, release_qualified=False,
                   physical_execution_trace='OWED', native_fault_controls='SEPARATE_GATE',
+                  cross_validation='OWED',
                   multi_gpu='NOT_APPLICABLE' if vendor == 'metal' else 'OWED')
     if full:
         report['apis'] = run('expanded-api', [python, '-c', EXPANDED_API_GUARD], work, True)
@@ -99,11 +109,14 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
                 '--layer-devices', *map(str, selected), '--output', str(path)], work)
             run('loaded-lm-' + name + '-compare', [python, '-m', 'mojolearn', 'verify-causal-lm',
                 '--compare', str(output / 'loaded-lm-gpu-capture.json'), str(path)], work)
-        report['multi_gpu'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'
+        report['multi_gpu'] = dict(classical='NUMERICS_AND_PLACEMENT_CHECKED',
+                                   loaded_lm='SPLIT_AND_REVERSED_NUMERICS_CHECKED_PLACEMENT_TRACE_OWED')
     return report
 
 
 def main():
+    if not __debug__:
+        raise RuntimeError('qualification requires assertions enabled; Python -O is refused')
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("wheel", type=Path)
     parser.add_argument("--output", type=Path, required=True)
@@ -140,14 +153,16 @@ def main():
                     scope=args.scope, source_commit=source_commit, release_qualified=False,
                     expanded=None)
     env = {k: v for k, v in os.environ.items()
-           if not k.startswith("MOJOLEARN_") and k not in ("PYTHONPATH", "PYTHONHOME")}
+           if not k.startswith("MOJOLEARN_") and k not in ("PYTHONPATH", "PYTHONHOME", "PYTHONOPTIMIZE")}
     env.update(MOJOLEARN_NUMERIC_MODE="identical", PYTHONNOUSERSITE="1")
     for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
                  "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS", "MOJOLEARN_CPU_THREADS"):
         env[name] = "1"
 
     def save():
-        receipt.write_text(json.dumps(manifest, indent=2) + "\n")
+        temporary = receipt.with_suffix(".tmp")
+        temporary.write_text(json.dumps(manifest, indent=2) + "\n")
+        temporary.replace(receipt)
 
     def run(name, command, cwd, json_output=False, allowed_exits=(0,)):
         path = output / (name + (".json" if json_output else ".log"))
