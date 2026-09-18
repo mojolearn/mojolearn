@@ -132,6 +132,18 @@ source); after = b77a26e93 with its binding (`host/after_b77a26e93`).
   code). `--write` moved bpe-vocabulary's and tokenized-corpus's sabotage evidence to this
   record's `m4.trainer.sabotage-build.json`; `--check` then OK (236 lanes, 237 entries).
 
+### Step 5: the full-size job (PLANNED, pod not yet rented)
+
+`tools/runpod_cpu_leg.sh` gained `--stage 'KEYS'` (tools/stage_from_r2.sh, strict; the CPU
+runner had no way to stage a corpus). Body `~/mojolearn-evidence/bpe-builder-native-sep18/pod/
+body.sh` (template beside it; main's bpe_train.mojo embedded as base64, sha fd4751832a5f...):
+heads of the staged corpora checked against the M4 recipe (enwik8 5985c81c..., pile_github
+0bee7f53...) before anything runs; A new CLI alone; B `BpeVocabularyTrainer(backend="mojo")`
+alone; C old CLI bounded at 6,000 s (VmHWM sampled every 15 s so the peak survives a bound)
+beside `lm_corpus.prepare()` on all of enwik8 (the built-in default). Pod: 8 vCPU, memory
+flavors (>= 32 GB), lease 175 min. PREDICTIONS for it: A and B ranks sha 3d547b17...; A peak
+< 1 GB; old peak ~20.2 GB (VmHWM ~ 19.7 GiB); A wall well under the M4's 4,274 s.
+
 ## Candidates (not opened)
 
 (none yet)

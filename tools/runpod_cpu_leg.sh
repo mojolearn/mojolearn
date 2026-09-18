@@ -36,6 +36,12 @@
 #   --envcache           restore and upload .pixi/envs from R2 (default OFF: measured
 #                        slower than a locked install on RunPod, 37 s against 12 s)
 #   --max-pods N         refuse when N mojolearn-cpu pods are live (default 8, MOJOLEARN_RUNPOD_CPU_MAX_PODS)
+#   --stage 'KEYS'       R2 dataset keys staged onto the box after the source
+#                        (tools/stage_from_r2.sh, MOJOLEARN_STAGE_STRICT=1: a
+#                        staging failure stops the leg before anything runs), e.g.
+#                        'corpus/enwik8/input.txt corpus/pile_github/input.txt',
+#                        which land at training/corpus/<name>/input.txt.
+#                        Log: $OUT/stage_r2.log. Default: nothing staged.
 #   --rent               actually create the pod. Without it: a dry run that
 #                        creates nothing and costs nothing.
 #
@@ -73,6 +79,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
 LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=0
+STAGE_KEYS=""
 MAX_PODS=${MOJOLEARN_RUNPOD_CPU_MAX_PODS:-8}; RENT=0
 
 say() { printf '[%s cpu-leg] %s\n' "$(date +%T)" "$*"; }
@@ -227,8 +234,9 @@ ${1:-}" ;;
         --envcache) ENVCACHE=1 ;;
         --no-envcache) ENVCACHE=0 ;;
         --max-pods) shift; MAX_PODS="${1:-}" ;;
+        --stage) shift; STAGE_KEYS="${1:-}" ;;
         --rent) RENT=1 ;;
-        -h|--help) sed -n '2,62p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+        -h|--help) sed -n '2,68p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
         *) die "unknown argument '$1' (see --help)" ;;
     esac
     shift
@@ -695,6 +703,13 @@ if [ "$BINCACHE" = 1 ] && [ -n "$BUILD$SAB_BUILD" ]; then
     _neg=0; [ -n "$SAB_BUILD" ] && _neg=1
     MOJOLEARN_BINCACHE_NEGATIVE=$_neg sh "$ROOT/tools/bincache_leg.sh" stage "$SSH_TARGET" "runpod-cpu:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
     say "$(tail -1 "$OUT/bincache_stage.log")"
+fi
+if [ -n "$STAGE_KEYS" ]; then
+    say "staging R2 keys: $STAGE_KEYS"
+    # shellcheck disable=SC2086
+    MOJOLEARN_STAGE_STRICT=1 MOJOLEARN_STAGE_BOX_REPO="$BOX_REPO" sh "$ROOT/tools/stage_from_r2.sh" "$SSH_TARGET" $STAGE_KEYS \
+        > "$OUT/stage_r2.log" 2>&1 || die "R2 STAGING FAILED (strict): $(tail -1 "$OUT/stage_r2.log")"
+    say "$(tail -1 "$OUT/stage_r2.log")"
 fi
 bssh 'umask 022; cat > /root/leg_box.sh' < "$TMPD/box.sh" || die "box script upload failed"
 bssh 'umask 022; cat > /root/leg_user_cmd.sh' < "$TMPD/user_cmd.sh" || die "command upload failed"
