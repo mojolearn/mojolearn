@@ -363,9 +363,32 @@ jobs:
             *-manylinux_*_x86_64.whl) ;;
             *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
           esac
-          python3 tools/check_linux_release_qualification.py "$WHL" \
+          # The Mac build stages generated Python harness copies in its
+          # package directory. Admit Linux against this exact committed
+          # source, without counting those build products as native inputs.
+          source_dir=$(mktemp -d "$RUNNER_TEMP/linux-admission-source.XXXXXX")
+          trap 'rm -rf "$source_dir"' EXIT
+          git archive HEAD -- . ':!bench/results' | tar -x -C "$source_dir"
+          # Corpus operands are tracked but export-ignored. Restore only the
+          # qualification cases from the same commit, never the working tree.
+          python3 - "$source_dir" <<'PY'
+          import pathlib, subprocess, sys
+          root = pathlib.Path(sys.argv[1])
+          sys.path.insert(0, str(root / 'tools'))
+          from verify_linux_surface_qualification import CORPUS_CASES
+          for case in CORPUS_CASES:
+              prefix = 'mamba/corpus/' + case
+              names = subprocess.check_output(['git', 'ls-tree', '-rz', '--name-only', 'HEAD', '--', prefix])
+              for name in names.decode().split('\0'):
+                  if not name:
+                      continue
+                  target = root / name
+                  target.parent.mkdir(parents=True, exist_ok=True)
+                  target.write_bytes(subprocess.check_output(['git', 'show', 'HEAD:' + name]))
+          PY
+          python3 "$source_dir/tools/check_linux_release_qualification.py" "$WHL" \
             --qualification-root "$DIR/qualification" \
-            --source-root "$GITHUB_WORKSPACE" --profile release-linux3
+            --source-root "$source_dir" --profile release-linux3
           cp "$WHL" python/dist/
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"
