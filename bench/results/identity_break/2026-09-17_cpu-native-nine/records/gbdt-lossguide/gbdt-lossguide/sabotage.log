@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:36:24  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-lossguide/base repeat=1/train
+# DONE gbdt-lossguide/base repeat=1/train 2.129s
+# START gbdt-lossguide/base repeat=1/infer-save-reload
+# DONE gbdt-lossguide/base repeat=1/infer-save-reload 0.041s
+# START gbdt-lossguide/base repeat=1/batch
+# DONE gbdt-lossguide/base repeat=1/batch 0.139s
+# START gbdt-lossguide/base repeat=1/stepfull
+# DONE gbdt-lossguide/base repeat=1/stepfull 0.000s
+# START gbdt-lossguide/base repeat=2/train
+# DONE gbdt-lossguide/base repeat=2/train 2.134s
+# START gbdt-lossguide/base repeat=2/infer-save-reload
+# DONE gbdt-lossguide/base repeat=2/infer-save-reload 0.038s
+# START gbdt-lossguide/base repeat=2/batch
+# DONE gbdt-lossguide/base repeat=2/batch 0.151s
+# START gbdt-lossguide/base repeat=2/stepfull
+# DONE gbdt-lossguide/base repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/base STABLE 4.633s
+# START gbdt-lossguide/ties repeat=1/train
+# DONE gbdt-lossguide/ties repeat=1/train 2.007s
+# START gbdt-lossguide/ties repeat=1/infer-save-reload
+# DONE gbdt-lossguide/ties repeat=1/infer-save-reload 0.027s
+# START gbdt-lossguide/ties repeat=1/batch
+# DONE gbdt-lossguide/ties repeat=1/batch 0.110s
+# START gbdt-lossguide/ties repeat=1/stepfull
+# DONE gbdt-lossguide/ties repeat=1/stepfull 0.000s
+# START gbdt-lossguide/ties repeat=2/train
+# DONE gbdt-lossguide/ties repeat=2/train 1.987s
+# START gbdt-lossguide/ties repeat=2/infer-save-reload
+# DONE gbdt-lossguide/ties repeat=2/infer-save-reload 0.027s
+# START gbdt-lossguide/ties repeat=2/batch
+# DONE gbdt-lossguide/ties repeat=2/batch 0.104s
+# START gbdt-lossguide/ties repeat=2/stepfull
+# DONE gbdt-lossguide/ties repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/ties STABLE 4.263s
+# START gbdt-lossguide/hashed repeat=1/train
+# DONE gbdt-lossguide/hashed repeat=1/train 2.116s
+# START gbdt-lossguide/hashed repeat=1/infer-save-reload
+# DONE gbdt-lossguide/hashed repeat=1/infer-save-reload 0.039s
+# START gbdt-lossguide/hashed repeat=1/batch
+# DONE gbdt-lossguide/hashed repeat=1/batch 0.148s
+# START gbdt-lossguide/hashed repeat=1/stepfull
+# DONE gbdt-lossguide/hashed repeat=1/stepfull 0.000s
+# START gbdt-lossguide/hashed repeat=2/train
+# DONE gbdt-lossguide/hashed repeat=2/train 2.105s
+# START gbdt-lossguide/hashed repeat=2/infer-save-reload
+# DONE gbdt-lossguide/hashed repeat=2/infer-save-reload 0.040s
+# START gbdt-lossguide/hashed repeat=2/batch
+# DONE gbdt-lossguide/hashed repeat=2/batch 0.132s
+# START gbdt-lossguide/hashed repeat=2/stepfull
+# DONE gbdt-lossguide/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/hashed STABLE 4.582s
+# START gbdt-lossguide/wide repeat=1/train
+# DONE gbdt-lossguide/wide repeat=1/train 2.159s
+# START gbdt-lossguide/wide repeat=1/infer-save-reload
+# DONE gbdt-lossguide/wide repeat=1/infer-save-reload 0.040s
+# START gbdt-lossguide/wide repeat=1/batch
+# DONE gbdt-lossguide/wide repeat=1/batch 0.143s
+# START gbdt-lossguide/wide repeat=1/stepfull
+# DONE gbdt-lossguide/wide repeat=1/stepfull 0.000s
+# START gbdt-lossguide/wide repeat=2/train
+# DONE gbdt-lossguide/wide repeat=2/train 2.160s
+# START gbdt-lossguide/wide repeat=2/infer-save-reload
+# DONE gbdt-lossguide/wide repeat=2/infer-save-reload 0.040s
+# START gbdt-lossguide/wide repeat=2/batch
+# DONE gbdt-lossguide/wide repeat=2/batch 0.132s
+# START gbdt-lossguide/wide repeat=2/stepfull
+# DONE gbdt-lossguide/wide repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/wide STABLE 4.675s
+# START gbdt-lossguide/denormal repeat=1/train
+# DONE gbdt-lossguide/denormal repeat=1/train 2.088s
+# START gbdt-lossguide/denormal repeat=1/infer-save-reload
+# DONE gbdt-lossguide/denormal repeat=1/infer-save-reload 0.039s
+# START gbdt-lossguide/denormal repeat=1/batch
+# DONE gbdt-lossguide/denormal repeat=1/batch 0.138s
+# START gbdt-lossguide/denormal repeat=1/stepfull
+# DONE gbdt-lossguide/denormal repeat=1/stepfull 0.000s
+# START gbdt-lossguide/denormal repeat=2/train
+# DONE gbdt-lossguide/denormal repeat=2/train 2.116s
+# START gbdt-lossguide/denormal repeat=2/infer-save-reload
+# DONE gbdt-lossguide/denormal repeat=2/infer-save-reload 0.039s
+# START gbdt-lossguide/denormal repeat=2/batch
+# DONE gbdt-lossguide/denormal repeat=2/batch 0.127s
+# START gbdt-lossguide/denormal repeat=2/stepfull
+# DONE gbdt-lossguide/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/denormal STABLE 4.548s
+# START gbdt-lossguide/denormal_ftz repeat=1/train
+# DONE gbdt-lossguide/denormal_ftz repeat=1/train 2.141s
+# START gbdt-lossguide/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-lossguide/denormal_ftz repeat=1/infer-save-reload 0.039s
+# START gbdt-lossguide/denormal_ftz repeat=1/batch
+# DONE gbdt-lossguide/denormal_ftz repeat=1/batch 0.131s
+# START gbdt-lossguide/denormal_ftz repeat=1/stepfull
+# DONE gbdt-lossguide/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-lossguide/denormal_ftz repeat=2/train
+# DONE gbdt-lossguide/denormal_ftz repeat=2/train 2.161s
+# START gbdt-lossguide/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-lossguide/denormal_ftz repeat=2/infer-save-reload 0.039s
+# START gbdt-lossguide/denormal_ftz repeat=2/batch
+# DONE gbdt-lossguide/denormal_ftz repeat=2/batch 0.139s
+# START gbdt-lossguide/denormal_ftz repeat=2/stepfull
+# DONE gbdt-lossguide/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/denormal_ftz STABLE 4.650s
+# START gbdt-lossguide/dupes repeat=1/train
+# DONE gbdt-lossguide/dupes repeat=1/train 2.110s
+# START gbdt-lossguide/dupes repeat=1/infer-save-reload
+# DONE gbdt-lossguide/dupes repeat=1/infer-save-reload 0.036s
+# START gbdt-lossguide/dupes repeat=1/batch
+# DONE gbdt-lossguide/dupes repeat=1/batch 0.130s
+# START gbdt-lossguide/dupes repeat=1/stepfull
+# DONE gbdt-lossguide/dupes repeat=1/stepfull 0.000s
+# START gbdt-lossguide/dupes repeat=2/train
+# DONE gbdt-lossguide/dupes repeat=2/train 2.101s
+# START gbdt-lossguide/dupes repeat=2/infer-save-reload
+# DONE gbdt-lossguide/dupes repeat=2/infer-save-reload 0.037s
+# START gbdt-lossguide/dupes repeat=2/batch
+# DONE gbdt-lossguide/dupes repeat=2/batch 0.137s
+# START gbdt-lossguide/dupes repeat=2/stepfull
+# DONE gbdt-lossguide/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/dupes STABLE 4.552s
+# START gbdt-lossguide/odd repeat=1/train
+# DONE gbdt-lossguide/odd repeat=1/train 2.007s
+# START gbdt-lossguide/odd repeat=1/infer-save-reload
+# DONE gbdt-lossguide/odd repeat=1/infer-save-reload 0.028s
+# START gbdt-lossguide/odd repeat=1/batch
+# DONE gbdt-lossguide/odd repeat=1/batch 0.094s
+# START gbdt-lossguide/odd repeat=1/stepfull
+# DONE gbdt-lossguide/odd repeat=1/stepfull 0.000s
+# START gbdt-lossguide/odd repeat=2/train
+# DONE gbdt-lossguide/odd repeat=2/train 2.050s
+# START gbdt-lossguide/odd repeat=2/infer-save-reload
+# DONE gbdt-lossguide/odd repeat=2/infer-save-reload 0.028s
+# START gbdt-lossguide/odd repeat=2/batch
+# DONE gbdt-lossguide/odd repeat=2/batch 0.094s
+# START gbdt-lossguide/odd repeat=2/stepfull
+# DONE gbdt-lossguide/odd repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/odd STABLE 4.301s
+# START gbdt-lossguide/negative repeat=1/train
+# DONE gbdt-lossguide/negative repeat=1/train 2.141s
+# START gbdt-lossguide/negative repeat=1/infer-save-reload
+# DONE gbdt-lossguide/negative repeat=1/infer-save-reload 0.039s
+# START gbdt-lossguide/negative repeat=1/batch
+# DONE gbdt-lossguide/negative repeat=1/batch 0.143s
+# START gbdt-lossguide/negative repeat=1/stepfull
+# DONE gbdt-lossguide/negative repeat=1/stepfull 0.000s
+# START gbdt-lossguide/negative repeat=2/train
+# DONE gbdt-lossguide/negative repeat=2/train 2.078s
+# START gbdt-lossguide/negative repeat=2/infer-save-reload
+# DONE gbdt-lossguide/negative repeat=2/infer-save-reload 0.039s
+# START gbdt-lossguide/negative repeat=2/batch
+# DONE gbdt-lossguide/negative repeat=2/batch 0.126s
+# START gbdt-lossguide/negative repeat=2/stepfull
+# DONE gbdt-lossguide/negative repeat=2/stepfull 0.000s
+# CELL gbdt-lossguide/negative STABLE 4.567s
+| gbdt-lossguide         | 2f300a1746a894ea | 8b85c8be70345a3c | 7e8da92fddabd6bd | 68456c986c71e4ea | 91069ea8152d7ff5 | 91069ea8152d7ff5 | 851fce3db5ce2dd8 | 0b7e462c5bec06e7 | 2cc45524a985bddd |
+| gbdt-lossguide infer   | 195476ed3593f71a | 89023130a1de4186 | 9ad538d89a129692 | 955439f17bbcad33 | db16ecd3c34e760d | db16ecd3c34e760d | 96739931e7d4005c | 93d8dd50366afbd7 | 5d7d8dff9957e793 |
+| gbdt-lossguide model   | 379f5dcbfbf1f595 | 3772693a31aeff61 | 4a4716ca90fdf289 | 47993afb701110e0 | 02d9e28144ca0886 | 02d9e28144ca0886 | ae9da86f5458cf75 | 28780bd6e3753f9b | e3f4e15b999af263 |
+| gbdt-lossguide batch   | f0f340f6fcf1b24d | c2de6fe883df84a0 | 72fd940a6e1c6c11 | 56202f69c5ab0869 | a2e0668d6251634a | a2e0668d6251634a | 3a4e19a42e4cc97a | 3cdb3e27bfa73657 | e004bd82da58d89f |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-lossguide stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-lossguide/gbdt-lossguide/cpu-sabotage.json

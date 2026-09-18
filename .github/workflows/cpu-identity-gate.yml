@@ -139,6 +139,8 @@ jobs:
     name: ${{ matrix.label }}
     strategy:
       fail-fast: false
+      # Keep release certification within two cloud numerical workers.
+      max-parallel: 1
       matrix:
         # One CPU environment per OS/architecture. GPU release evidence is
         # separately one Apple, one AMD and one NVIDIA column.
@@ -165,6 +167,11 @@ jobs:
       # identity is weekly, explicitly dispatched, or called by a release.
       FULL_CPU_VERIFY: ${{ github.event_name != 'push' }}
       OMP_NUM_THREADS: "1"
+      OPENBLAS_NUM_THREADS: "1"
+      MKL_NUM_THREADS: "1"
+      NUMEXPR_NUM_THREADS: "1"
+      VECLIB_MAXIMUM_THREADS: "1"
+      MOJOLEARN_COMPILE_JOBS: "2"
       MOJOLEARN_CPU_THREADS: "1"
       MOJOLEARN_NUMERIC_MODE: identical
       PYTHONPATH: ${{ github.workspace }}/python
@@ -231,10 +238,9 @@ jobs:
           esac
           echo "MOJOLEARN_TARGET_CPU=$target" >> "$GITHUB_ENV"
           # The covered-lanes steps split their lanes into one identity_break
-          # process per CPU the runner reports (tools/cpu_identity_gate_check.py
-          # run-column); the one-core rule is the developer Mac's, not CI's.
+          # process per available CPU, capped at two; matrix jobs are serial.
           shards="$(getconf _NPROCESSORS_ONLN 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)"
-          [ "$shards" -le 4 ] || shards=4
+          [ "$shards" -le 2 ] || shards=2
           echo "GATE_SHARDS=$shards" >> "$GITHUB_ENV"
           echo "identity_break shards on this runner: $shards"
           python3 -m pip install --quiet numpy
@@ -448,7 +454,7 @@ jobs:
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
-      # batch part and 31 par-* lanes, AMD column MI325X): 1493 train cells
+      # batch part and 31 par-* lanes, AMD column MI325X): 1331 comparable train cells
       # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
       # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
@@ -466,9 +472,13 @@ jobs:
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
             > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
           cat "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1493' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1899, N/A=1089' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (batch): IDENTICAL=1188, N/A=306' "$GATE_OUT/diff_gpu3.txt"
+          # Current lane revisions invalidate 18 x 9 historical cells per
+          # vendor. Assert those exclusions as well as every remaining total;
+          # this record cannot certify the revised lanes by its old hashes.
+          [ "$(grep -c '^NOTE: column .*its 162 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=1331' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1701, N/A=963' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (batch): IDENTICAL=1080, N/A=252' "$GATE_OUT/diff_gpu3.txt"
           grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
           [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
@@ -628,13 +638,13 @@ jobs:
       # each further phase 1
       # binding names the fold its arm moves), loaded through
       # MOJOLEARN_HOST_DIR with MOJOLEARN_HOST_ALLOW_SABOTAGE=1, run on the
-      # covered lanes (all nine fixtures, one repeat: negative controls
-      # test detection, while production retains two stability repeats;
+      # covered lanes (all nine fixtures, two repeats in both arms;
       # sharded as above; the build is its own step since
       # 2026-09-15 so the run step's time is the lanes'), and the four-way
       # diff must exit non-zero with
-      # DIVERGENT on them. Every covered cell must still be STABLE (a wrong
-      # answer, not a refusal). A fixture on which the moved fold is exact
+      # DIVERGENT on them. Covered cells must be STABLE or carry an explicit
+      # oracle failure with repeated measured bytes and native sabotage
+      # readback; a refusal is never a catch. A fixture on which the moved fold is exact
       # (gemm-pinned/ties, an integer grid) stays IDENTICAL; the requirement
       # is DIVERGENT in the summary, not on every cell. Empty COVERED_LANES
       # skips it with the same statement as above.
@@ -689,23 +699,23 @@ jobs:
           # same module name, so both must name that file, or the lanes'
           # binary guard refuses them.
           export MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so" MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
-          python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
-            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 1 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
+          python3 tools/cpu_identity_gate_check.py run-column --sabotage --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
+            --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 2 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+            --sabotage --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
             exit 1
           fi
-          grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_sab.txt"
+          grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:]]|$)' "$GATE_OUT/diff_four_columns_sab.txt"
           if [ -n "$FIX_COVERED_LANES" ]; then
             if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                  --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
               echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
               exit 1
             fi
-            grep -E '^summary: .*DIVERGENT=' "$GATE_OUT/diff_four_columns_fix_sab.txt"
+            grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:]]|$)' "$GATE_OUT/diff_four_columns_fix_sab.txt"
           fi
           # Every OWED cell part the production diffs listed must MOVE between
           # the production and sabotage CPU columns: no GPU hash stands behind

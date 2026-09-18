@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:29:20  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START arima-011/base repeat=1/train
+# DONE arima-011/base repeat=1/train 0.010s
+# START arima-011/base repeat=1/infer-save-reload
+# DONE arima-011/base repeat=1/infer-save-reload 0.004s
+# START arima-011/base repeat=1/batch
+# DONE arima-011/base repeat=1/batch 0.001s
+# START arima-011/base repeat=1/stepfull
+# DONE arima-011/base repeat=1/stepfull 0.000s
+# START arima-011/base repeat=2/train
+# DONE arima-011/base repeat=2/train 0.010s
+# START arima-011/base repeat=2/infer-save-reload
+# DONE arima-011/base repeat=2/infer-save-reload 0.003s
+# START arima-011/base repeat=2/batch
+# DONE arima-011/base repeat=2/batch 0.001s
+# START arima-011/base repeat=2/stepfull
+# DONE arima-011/base repeat=2/stepfull 0.000s
+# CELL arima-011/base STABLE 0.030s
+# START arima-011/ties repeat=1/train
+# DONE arima-011/ties repeat=1/train 0.005s
+# START arima-011/ties repeat=1/infer-save-reload
+# DONE arima-011/ties repeat=1/infer-save-reload 0.003s
+# START arima-011/ties repeat=1/batch
+# DONE arima-011/ties repeat=1/batch 0.001s
+# START arima-011/ties repeat=1/stepfull
+# DONE arima-011/ties repeat=1/stepfull 0.000s
+# START arima-011/ties repeat=2/train
+# DONE arima-011/ties repeat=2/train 0.005s
+# START arima-011/ties repeat=2/infer-save-reload
+# DONE arima-011/ties repeat=2/infer-save-reload 0.003s
+# START arima-011/ties repeat=2/batch
+# DONE arima-011/ties repeat=2/batch 0.001s
+# START arima-011/ties repeat=2/stepfull
+# DONE arima-011/ties repeat=2/stepfull 0.000s
+# CELL arima-011/ties STABLE 0.018s
+# START arima-011/hashed repeat=1/train
+# DONE arima-011/hashed repeat=1/train 0.012s
+# START arima-011/hashed repeat=1/infer-save-reload
+# DONE arima-011/hashed repeat=1/infer-save-reload 0.003s
+# START arima-011/hashed repeat=1/batch
+# DONE arima-011/hashed repeat=1/batch 0.001s
+# START arima-011/hashed repeat=1/stepfull
+# DONE arima-011/hashed repeat=1/stepfull 0.000s
+# START arima-011/hashed repeat=2/train
+# DONE arima-011/hashed repeat=2/train 0.012s
+# START arima-011/hashed repeat=2/infer-save-reload
+# DONE arima-011/hashed repeat=2/infer-save-reload 0.003s
+# START arima-011/hashed repeat=2/batch
+# DONE arima-011/hashed repeat=2/batch 0.001s
+# START arima-011/hashed repeat=2/stepfull
+# DONE arima-011/hashed repeat=2/stepfull 0.000s
+# CELL arima-011/hashed STABLE 0.032s
+# START arima-011/wide repeat=1/train
+# DONE arima-011/wide repeat=1/train 0.025s
+# START arima-011/wide repeat=1/infer-save-reload
+# DONE arima-011/wide repeat=1/infer-save-reload 0.003s
+# START arima-011/wide repeat=1/batch
+# DONE arima-011/wide repeat=1/batch 0.001s
+# START arima-011/wide repeat=1/stepfull
+# DONE arima-011/wide repeat=1/stepfull 0.000s
+# START arima-011/wide repeat=2/train
+# DONE arima-011/wide repeat=2/train 0.023s
+# START arima-011/wide repeat=2/infer-save-reload
+# DONE arima-011/wide repeat=2/infer-save-reload 0.003s
+# START arima-011/wide repeat=2/batch
+# DONE arima-011/wide repeat=2/batch 0.001s
+# START arima-011/wide repeat=2/stepfull
+# DONE arima-011/wide repeat=2/stepfull 0.000s
+# CELL arima-011/wide STABLE 0.057s
+# START arima-011/denormal repeat=1/train
+# DONE arima-011/denormal repeat=1/train 0.084s
+# START arima-011/denormal repeat=1/infer-save-reload
+# DONE arima-011/denormal repeat=1/infer-save-reload 0.003s
+# START arima-011/denormal repeat=1/batch
+# DONE arima-011/denormal repeat=1/batch 0.001s
+# START arima-011/denormal repeat=1/stepfull
+# DONE arima-011/denormal repeat=1/stepfull 0.000s
+# START arima-011/denormal repeat=2/train
+# DONE arima-011/denormal repeat=2/train 0.089s
+# START arima-011/denormal repeat=2/infer-save-reload
+# DONE arima-011/denormal repeat=2/infer-save-reload 0.003s
+# START arima-011/denormal repeat=2/batch
+# DONE arima-011/denormal repeat=2/batch 0.001s
+# START arima-011/denormal repeat=2/stepfull
+# DONE arima-011/denormal repeat=2/stepfull 0.000s
+# CELL arima-011/denormal STABLE 0.182s
+# START arima-011/denormal_ftz repeat=1/train
+# DONE arima-011/denormal_ftz repeat=1/train 0.087s
+# START arima-011/denormal_ftz repeat=1/infer-save-reload
+# DONE arima-011/denormal_ftz repeat=1/infer-save-reload 0.003s
+# START arima-011/denormal_ftz repeat=1/batch
+# DONE arima-011/denormal_ftz repeat=1/batch 0.001s
+# START arima-011/denormal_ftz repeat=1/stepfull
+# DONE arima-011/denormal_ftz repeat=1/stepfull 0.000s
+# START arima-011/denormal_ftz repeat=2/train
+# DONE arima-011/denormal_ftz repeat=2/train 0.088s
+# START arima-011/denormal_ftz repeat=2/infer-save-reload
+# DONE arima-011/denormal_ftz repeat=2/infer-save-reload 0.003s
+# START arima-011/denormal_ftz repeat=2/batch
+# DONE arima-011/denormal_ftz repeat=2/batch 0.001s
+# START arima-011/denormal_ftz repeat=2/stepfull
+# DONE arima-011/denormal_ftz repeat=2/stepfull 0.000s
+# CELL arima-011/denormal_ftz STABLE 0.183s
+# START arima-011/dupes repeat=1/train
+# DONE arima-011/dupes repeat=1/train 0.010s
+# START arima-011/dupes repeat=1/infer-save-reload
+# DONE arima-011/dupes repeat=1/infer-save-reload 0.002s
+# START arima-011/dupes repeat=1/batch
+# DONE arima-011/dupes repeat=1/batch 0.001s
+# START arima-011/dupes repeat=1/stepfull
+# DONE arima-011/dupes repeat=1/stepfull 0.000s
+# START arima-011/dupes repeat=2/train
+# DONE arima-011/dupes repeat=2/train 0.009s
+# START arima-011/dupes repeat=2/infer-save-reload
+# DONE arima-011/dupes repeat=2/infer-save-reload 0.002s
+# START arima-011/dupes repeat=2/batch
+# DONE arima-011/dupes repeat=2/batch 0.001s
+# START arima-011/dupes repeat=2/stepfull
+# DONE arima-011/dupes repeat=2/stepfull 0.000s
+# CELL arima-011/dupes STABLE 0.026s
+# START arima-011/odd repeat=1/train
+# DONE arima-011/odd repeat=1/train 0.009s
+# START arima-011/odd repeat=1/infer-save-reload
+# DONE arima-011/odd repeat=1/infer-save-reload 0.002s
+# START arima-011/odd repeat=1/batch
+# DONE arima-011/odd repeat=1/batch 0.001s
+# START arima-011/odd repeat=1/stepfull
+# DONE arima-011/odd repeat=1/stepfull 0.000s
+# START arima-011/odd repeat=2/train
+# DONE arima-011/odd repeat=2/train 0.009s
+# START arima-011/odd repeat=2/infer-save-reload
+# DONE arima-011/odd repeat=2/infer-save-reload 0.002s
+# START arima-011/odd repeat=2/batch
+# DONE arima-011/odd repeat=2/batch 0.001s
+# START arima-011/odd repeat=2/stepfull
+# DONE arima-011/odd repeat=2/stepfull 0.000s
+# CELL arima-011/odd STABLE 0.026s
+# START arima-011/negative repeat=1/train
+# DONE arima-011/negative repeat=1/train 0.134s
+# START arima-011/negative repeat=1/infer-save-reload
+# DONE arima-011/negative repeat=1/infer-save-reload 0.003s
+# START arima-011/negative repeat=1/batch
+# DONE arima-011/negative repeat=1/batch 0.001s
+# START arima-011/negative repeat=1/stepfull
+# DONE arima-011/negative repeat=1/stepfull 0.000s
+# START arima-011/negative repeat=2/train
+# DONE arima-011/negative repeat=2/train 0.134s
+# START arima-011/negative repeat=2/infer-save-reload
+# DONE arima-011/negative repeat=2/infer-save-reload 0.003s
+# START arima-011/negative repeat=2/batch
+# DONE arima-011/negative repeat=2/batch 0.001s
+# START arima-011/negative repeat=2/stepfull
+# DONE arima-011/negative repeat=2/stepfull 0.000s
+# CELL arima-011/negative STABLE 0.275s
+| arima-011              | 0b6e27da8bbe4b81 | 5ad64b2afdd0c5ec | 0e5bb0b39db3b353 | 18e31d813867910c | 80ef7e31e6e0f7bb | 80ef7e31e6e0f7bb | 0b6e27da8bbe4b81 | 86c3fc7bf07f8c85 | 5110ab29e5875164 |
+| arima-011 infer        | 145816653fec7fd3 | d3829b8c838ea27d | 09bb0059269f1d78 | 02d9728614aa5f93 | dcb1d85e8551b79f | dcb1d85e8551b79f | 145816653fec7fd3 | d32d78636bb025a1 | 54efd978c80d9dc5 |
+| arima-011 model        | b1b6f1a2ed8f9122 | 54ec6afbb7f2398d | 268bf5ac3551682d | 31a0b15339c4c4d6 | 794a4b1c8cb69ef7 | 2ecee0035daad3b3 | b1b6f1a2ed8f9122 | 4ed7bfd219262249 | b54615c830a08caf |
+| arima-011 batch        | 8ce71130c0f6fbba | 95d5835f01e1d074 | 0a323ceb0860107f | a5dc1f3a8143065e | c483ea9c2f787229 | c483ea9c2f787229 | 8ce71130c0f6fbba | 9022e5e501ad6ff9 | 1e9f483caa6ae9e7 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: arima-011 stepfull n/a:no-decode-state
+wrote /root/leg_out/records/arima-011/arima-011/cpu-sabotage.json

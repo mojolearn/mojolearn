@@ -1,0 +1,81 @@
+{
+  "lanes": {
+    "kde-exponential-chebyshev": {
+      "cells": [
+        {
+          "cell": "kde-exponential-chebyshev/base",
+          "context_matches": true,
+          "clean": "4955944cfce4cc2e",
+          "sabotage": "7ade9a1153bbb4e2",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/denormal",
+          "context_matches": true,
+          "clean": "0c35b4bf1699cdf7",
+          "sabotage": "d1acbac1b6d26c34",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/denormal_ftz",
+          "context_matches": true,
+          "clean": "0c35b4bf1699cdf7",
+          "sabotage": "d1acbac1b6d26c34",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/dupes",
+          "context_matches": true,
+          "clean": "4955944cfce4cc2e",
+          "sabotage": "7ade9a1153bbb4e2",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/hashed",
+          "context_matches": true,
+          "clean": "9e933d61986426ab",
+          "sabotage": "0964203892fff270",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/negative",
+          "context_matches": true,
+          "clean": "040863f2f11a6101",
+          "sabotage": "e0fd1e7cfb213da4",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/odd",
+          "context_matches": true,
+          "clean": "923162f6d57b53ad",
+          "sabotage": "1666078958219214",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/ties",
+          "context_matches": true,
+          "clean": "771fafe72c84a4f4",
+          "sabotage": "a1990ee46369f138",
+          "detected": true
+        },
+        {
+          "cell": "kde-exponential-chebyshev/wide",
+          "context_matches": true,
+          "clean": "07e4f1bd67c75580",
+          "sabotage": "bdab33a9a052e1ba",
+          "detected": true
+        }
+      ],
+      "native_sabotage": true,
+      "clean_native": true,
+      "clean_failures": [],
+      "complete": true,
+      "passed": true,
+      "exit_codes": {
+        "clean": 0,
+        "sabotage": 0
+      }
+    }
+  },
+  "passed": true
+}

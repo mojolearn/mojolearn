@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:22  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START logistic-elasticnet/base repeat=1/train
+# DONE logistic-elasticnet/base repeat=1/train 0.246s
+# START logistic-elasticnet/base repeat=1/infer-save-reload
+# DONE logistic-elasticnet/base repeat=1/infer-save-reload 0.003s
+# START logistic-elasticnet/base repeat=1/batch
+# DONE logistic-elasticnet/base repeat=1/batch 0.003s
+# START logistic-elasticnet/base repeat=1/stepfull
+# DONE logistic-elasticnet/base repeat=1/stepfull 0.000s
+# START logistic-elasticnet/base repeat=2/train
+# DONE logistic-elasticnet/base repeat=2/train 0.244s
+# START logistic-elasticnet/base repeat=2/infer-save-reload
+# DONE logistic-elasticnet/base repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/base repeat=2/batch
+# DONE logistic-elasticnet/base repeat=2/batch 0.002s
+# START logistic-elasticnet/base repeat=2/stepfull
+# DONE logistic-elasticnet/base repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/base STABLE 0.500s
+# START logistic-elasticnet/ties repeat=1/train
+# DONE logistic-elasticnet/ties repeat=1/train 0.315s
+# START logistic-elasticnet/ties repeat=1/infer-save-reload
+# DONE logistic-elasticnet/ties repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/ties repeat=1/batch
+# DONE logistic-elasticnet/ties repeat=1/batch 0.002s
+# START logistic-elasticnet/ties repeat=1/stepfull
+# DONE logistic-elasticnet/ties repeat=1/stepfull 0.000s
+# START logistic-elasticnet/ties repeat=2/train
+# DONE logistic-elasticnet/ties repeat=2/train 0.321s
+# START logistic-elasticnet/ties repeat=2/infer-save-reload
+# DONE logistic-elasticnet/ties repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/ties repeat=2/batch
+# DONE logistic-elasticnet/ties repeat=2/batch 0.002s
+# START logistic-elasticnet/ties repeat=2/stepfull
+# DONE logistic-elasticnet/ties repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/ties STABLE 0.643s
+# START logistic-elasticnet/hashed repeat=1/train
+# DONE logistic-elasticnet/hashed repeat=1/train 0.226s
+# START logistic-elasticnet/hashed repeat=1/infer-save-reload
+# DONE logistic-elasticnet/hashed repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/hashed repeat=1/batch
+# DONE logistic-elasticnet/hashed repeat=1/batch 0.002s
+# START logistic-elasticnet/hashed repeat=1/stepfull
+# DONE logistic-elasticnet/hashed repeat=1/stepfull 0.000s
+# START logistic-elasticnet/hashed repeat=2/train
+# DONE logistic-elasticnet/hashed repeat=2/train 0.227s
+# START logistic-elasticnet/hashed repeat=2/infer-save-reload
+# DONE logistic-elasticnet/hashed repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/hashed repeat=2/batch
+# DONE logistic-elasticnet/hashed repeat=2/batch 0.003s
+# START logistic-elasticnet/hashed repeat=2/stepfull
+# DONE logistic-elasticnet/hashed repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/hashed STABLE 0.461s
+# START logistic-elasticnet/wide repeat=1/train
+# DONE logistic-elasticnet/wide repeat=1/train 0.441s
+# START logistic-elasticnet/wide repeat=1/infer-save-reload
+# DONE logistic-elasticnet/wide repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/wide repeat=1/batch
+# DONE logistic-elasticnet/wide repeat=1/batch 0.002s
+# START logistic-elasticnet/wide repeat=1/stepfull
+# DONE logistic-elasticnet/wide repeat=1/stepfull 0.000s
+# START logistic-elasticnet/wide repeat=2/train
+# DONE logistic-elasticnet/wide repeat=2/train 0.444s
+# START logistic-elasticnet/wide repeat=2/infer-save-reload
+# DONE logistic-elasticnet/wide repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/wide repeat=2/batch
+# DONE logistic-elasticnet/wide repeat=2/batch 0.002s
+# START logistic-elasticnet/wide repeat=2/stepfull
+# DONE logistic-elasticnet/wide repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/wide STABLE 0.892s
+# START logistic-elasticnet/denormal repeat=1/train
+# DONE logistic-elasticnet/denormal repeat=1/train 0.230s
+# START logistic-elasticnet/denormal repeat=1/infer-save-reload
+# DONE logistic-elasticnet/denormal repeat=1/infer-save-reload 0.002s
+# START logistic-elasticnet/denormal repeat=1/batch
+# DONE logistic-elasticnet/denormal repeat=1/batch 0.002s
+# START logistic-elasticnet/denormal repeat=1/stepfull
+# DONE logistic-elasticnet/denormal repeat=1/stepfull 0.000s
+# START logistic-elasticnet/denormal repeat=2/train
+# DONE logistic-elasticnet/denormal repeat=2/train 0.224s
+# START logistic-elasticnet/denormal repeat=2/infer-save-reload
+# DONE logistic-elasticnet/denormal repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/denormal repeat=2/batch
+# DONE logistic-elasticnet/denormal repeat=2/batch 0.002s
+# START logistic-elasticnet/denormal repeat=2/stepfull
+# DONE logistic-elasticnet/denormal repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/denormal STABLE 0.462s
+# START logistic-elasticnet/denormal_ftz repeat=1/train
+# DONE logistic-elasticnet/denormal_ftz repeat=1/train 0.223s
+# START logistic-elasticnet/denormal_ftz repeat=1/infer-save-reload
+# DONE logistic-elasticnet/denormal_ftz repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/denormal_ftz repeat=1/batch
+# DONE logistic-elasticnet/denormal_ftz repeat=1/batch 0.002s
+# START logistic-elasticnet/denormal_ftz repeat=1/stepfull
+# DONE logistic-elasticnet/denormal_ftz repeat=1/stepfull 0.000s
+# START logistic-elasticnet/denormal_ftz repeat=2/train
+# DONE logistic-elasticnet/denormal_ftz repeat=2/train 0.217s
+# START logistic-elasticnet/denormal_ftz repeat=2/infer-save-reload
+# DONE logistic-elasticnet/denormal_ftz repeat=2/infer-save-reload 0.001s
+# START logistic-elasticnet/denormal_ftz repeat=2/batch
+# DONE logistic-elasticnet/denormal_ftz repeat=2/batch 0.002s
+# START logistic-elasticnet/denormal_ftz repeat=2/stepfull
+# DONE logistic-elasticnet/denormal_ftz repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/denormal_ftz STABLE 0.447s
+# START logistic-elasticnet/dupes repeat=1/train
+# DONE logistic-elasticnet/dupes repeat=1/train 0.323s
+# START logistic-elasticnet/dupes repeat=1/infer-save-reload
+# DONE logistic-elasticnet/dupes repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/dupes repeat=1/batch
+# DONE logistic-elasticnet/dupes repeat=1/batch 0.002s
+# START logistic-elasticnet/dupes repeat=1/stepfull
+# DONE logistic-elasticnet/dupes repeat=1/stepfull 0.000s
+# START logistic-elasticnet/dupes repeat=2/train
+# DONE logistic-elasticnet/dupes repeat=2/train 0.329s
+# START logistic-elasticnet/dupes repeat=2/infer-save-reload
+# DONE logistic-elasticnet/dupes repeat=2/infer-save-reload 0.002s
+# START logistic-elasticnet/dupes repeat=2/batch
+# DONE logistic-elasticnet/dupes repeat=2/batch 0.002s
+# START logistic-elasticnet/dupes repeat=2/stepfull
+# DONE logistic-elasticnet/dupes repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/dupes STABLE 0.660s
+# START logistic-elasticnet/odd repeat=1/train
+# DONE logistic-elasticnet/odd repeat=1/train 0.123s
+# START logistic-elasticnet/odd repeat=1/infer-save-reload
+# DONE logistic-elasticnet/odd repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/odd repeat=1/batch
+# DONE logistic-elasticnet/odd repeat=1/batch 0.002s
+# START logistic-elasticnet/odd repeat=1/stepfull
+# DONE logistic-elasticnet/odd repeat=1/stepfull 0.000s
+# START logistic-elasticnet/odd repeat=2/train
+# DONE logistic-elasticnet/odd repeat=2/train 0.120s
+# START logistic-elasticnet/odd repeat=2/infer-save-reload
+# DONE logistic-elasticnet/odd repeat=2/infer-save-reload 0.002s
+# START logistic-elasticnet/odd repeat=2/batch
+# DONE logistic-elasticnet/odd repeat=2/batch 0.002s
+# START logistic-elasticnet/odd repeat=2/stepfull
+# DONE logistic-elasticnet/odd repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/odd STABLE 0.250s
+# START logistic-elasticnet/negative repeat=1/train
+# DONE logistic-elasticnet/negative repeat=1/train 0.251s
+# START logistic-elasticnet/negative repeat=1/infer-save-reload
+# DONE logistic-elasticnet/negative repeat=1/infer-save-reload 0.001s
+# START logistic-elasticnet/negative repeat=1/batch
+# DONE logistic-elasticnet/negative repeat=1/batch 0.002s
+# START logistic-elasticnet/negative repeat=1/stepfull
+# DONE logistic-elasticnet/negative repeat=1/stepfull 0.000s
+# START logistic-elasticnet/negative repeat=2/train
+# DONE logistic-elasticnet/negative repeat=2/train 0.266s
+# START logistic-elasticnet/negative repeat=2/infer-save-reload
+# DONE logistic-elasticnet/negative repeat=2/infer-save-reload 0.002s
+# START logistic-elasticnet/negative repeat=2/batch
+# DONE logistic-elasticnet/negative repeat=2/batch 0.002s
+# START logistic-elasticnet/negative repeat=2/stepfull
+# DONE logistic-elasticnet/negative repeat=2/stepfull 0.000s
+# CELL logistic-elasticnet/negative STABLE 0.525s
+| logistic-elasticnet    | 13d16c952886809e | d2bc706e71212b54 | 991c9b4ed18b3e9f | 781aa26a1678ad9b | d057c6546ef4a432 | d057c6546ef4a432 | 559ad72663917741 | c3c78dc7813e1dd1 | 320589d139a22d0a |
+| logistic-elasticnet infer | bb41dcdcc6b956cb | 257fb6f28d485ed1 | 26321409b30aaa10 | 4a14d6109afc60c4 | 9124d29f98d5f3a3 | 9124d29f98d5f3a3 | 0f518684011b22e9 | 959dbbc72b9e84fd | 08fda042a95186ae |
+| logistic-elasticnet model | 73c4066bfcea08e1 | b50e8a857b70b850 | 61ee562a40b9aeeb | ef403b6c61459578 | 0fc41d637c47c533 | 0fc41d637c47c533 | 42da9f5996d189c8 | 2fc5c63d76b381f2 | 99a00eb36727ec29 |
+| logistic-elasticnet batch | 790a349c8d79c171 | 4a5d204d643a9871 | 4befac316dd97391 | b298f3053f1d2b2b | dd992527e3a3b1b2 | dd992527e3a3b1b2 | 4576596ea892ada2 | 4139fcaafcc5beec | 55d051ee1826d598 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: logistic-elasticnet stepfull n/a:no-decode-state
+wrote /root/leg_out/records/logistic-elasticnet/logistic-elasticnet/cpu-clean.json

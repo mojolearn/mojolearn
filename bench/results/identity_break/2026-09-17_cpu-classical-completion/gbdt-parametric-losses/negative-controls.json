@@ -1,0 +1,75 @@
+{
+  "cells": [
+    {
+      "cell": "gbdt-parametric-losses/base",
+      "context_matches": true,
+      "clean": "bf0c582ab2b4f7a5",
+      "sabotage": "3191a1a2ce771cab",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/denormal",
+      "context_matches": true,
+      "clean": "d80eef4e2ad12c97",
+      "sabotage": "3a1f4faefa62afcc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/denormal_ftz",
+      "context_matches": true,
+      "clean": "d80eef4e2ad12c97",
+      "sabotage": "3a1f4faefa62afcc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/dupes",
+      "context_matches": true,
+      "clean": "854c507a784f068a",
+      "sabotage": "6b7ee088838fd4dc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/hashed",
+      "context_matches": true,
+      "clean": "c54d579e375b86eb",
+      "sabotage": "e8bdbcc4b347f8cc",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/negative",
+      "context_matches": true,
+      "clean": "32e08b1de6da457d",
+      "sabotage": "4359069ae8d60849",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/odd",
+      "context_matches": true,
+      "clean": "462337fbfa2adb14",
+      "sabotage": "ac191b2e8cc3c3de",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/ties",
+      "context_matches": true,
+      "clean": "fa77de36e16c9076",
+      "sabotage": "c07cb0f66363385d",
+      "detected": true
+    },
+    {
+      "cell": "gbdt-parametric-losses/wide",
+      "context_matches": true,
+      "clean": "a3f0908147d29daf",
+      "sabotage": "2404dc74f6e7d039",
+      "detected": true
+    }
+  ],
+  "native_sabotage": true,
+  "clean_native": true,
+  "complete": true,
+  "passed": true,
+  "exit_codes": {
+    "clean": 0,
+    "sabotage": 0
+  }
+}

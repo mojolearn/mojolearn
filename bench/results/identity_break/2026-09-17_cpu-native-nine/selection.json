@@ -1,0 +1,398 @@
+[
+  {
+    "lane": "arima",
+    "fixtures": 0
+  },
+  {
+    "lane": "arima-011",
+    "fixtures": 0
+  },
+  {
+    "lane": "arima-seasonal-c",
+    "fixtures": 0
+  },
+  {
+    "lane": "bootstrap",
+    "fixtures": 0
+  },
+  {
+    "lane": "byte-lm-host-infer",
+    "fixtures": 0
+  },
+  {
+    "lane": "byte-lm-host-infer-threaded",
+    "fixtures": 0
+  },
+  {
+    "lane": "byte-lm-host-train",
+    "fixtures": 0
+  },
+  {
+    "lane": "cross-entropy-arms",
+    "fixtures": 0
+  },
+  {
+    "lane": "cross-val",
+    "fixtures": 0
+  },
+  {
+    "lane": "dbscan",
+    "fixtures": 0
+  },
+  {
+    "lane": "dbscan-brute-l1",
+    "fixtures": 0
+  },
+  {
+    "lane": "dbscan-weighted",
+    "fixtures": 0
+  },
+  {
+    "lane": "elasticnet",
+    "fixtures": 0
+  },
+  {
+    "lane": "elasticnet-l2end-no-intercept",
+    "fixtures": 0
+  },
+  {
+    "lane": "et-clf-entropy-bestfirst",
+    "fixtures": 0
+  },
+  {
+    "lane": "et-reg-bootstrap-parallel",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-adapter-clf",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-adapter-reg",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-categorical-ctr",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-categorical-ctr-tables",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-depthwise",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-exact-mae",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-feature-freq",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-lossguide",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-multiclass",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-onevsall",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-ordered-rmse",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-pointwise-l2-bayesian-eval",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-rmse",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-symmetric",
+    "fixtures": 0
+  },
+  {
+    "lane": "gbdt-tensor-ctr-tables",
+    "fixtures": 0
+  },
+  {
+    "lane": "gemm-pinned",
+    "fixtures": 0
+  },
+  {
+    "lane": "gemm-transposed",
+    "fixtures": 0
+  },
+  {
+    "lane": "gp-normalize-y",
+    "fixtures": 0
+  },
+  {
+    "lane": "gp-sample-y-normalize",
+    "fixtures": 0
+  },
+  {
+    "lane": "iforest-tuned",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-cosine-minkowski",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-epanechnikov-l1",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-exponential-chebyshev",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-linear-cosine",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-tophat-sqeuclidean",
+    "fixtures": 0
+  },
+  {
+    "lane": "kde-weighted",
+    "fixtures": 0
+  },
+  {
+    "lane": "kmeans",
+    "fixtures": 1
+  },
+  {
+    "lane": "kmeans-array",
+    "fixtures": 0
+  },
+  {
+    "lane": "kmeans-classic-pp",
+    "fixtures": 0
+  },
+  {
+    "lane": "kmeans-cosine",
+    "fixtures": 0
+  },
+  {
+    "lane": "kmeans-random",
+    "fixtures": 0
+  },
+  {
+    "lane": "kmeans-weighted",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-chebyshev",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-clf",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-clf-distance",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-cosine",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-manhattan",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-minkowski-p3",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-rbc",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-reg",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-reg-distance",
+    "fixtures": 0
+  },
+  {
+    "lane": "knn-sqeuclidean",
+    "fixtures": 0
+  },
+  {
+    "lane": "lasso",
+    "fixtures": 0
+  },
+  {
+    "lane": "logistic",
+    "fixtures": 0
+  },
+  {
+    "lane": "logistic-elasticnet",
+    "fixtures": 0
+  },
+  {
+    "lane": "logistic-l1",
+    "fixtures": 0
+  },
+  {
+    "lane": "logistic-multiclass",
+    "fixtures": 0
+  },
+  {
+    "lane": "logistic-unpenalized-no-intercept",
+    "fixtures": 0
+  },
+  {
+    "lane": "metrics",
+    "fixtures": 0
+  },
+  {
+    "lane": "metrics-classification",
+    "fixtures": 0
+  },
+  {
+    "lane": "minmax-scaler",
+    "fixtures": 0
+  },
+  {
+    "lane": "minmax-scaler-clip",
+    "fixtures": 0
+  },
+  {
+    "lane": "mlp",
+    "fixtures": 0
+  },
+  {
+    "lane": "monte-carlo",
+    "fixtures": 0
+  },
+  {
+    "lane": "ols",
+    "fixtures": 1
+  },
+  {
+    "lane": "ols-no-intercept",
+    "fixtures": 0
+  },
+  {
+    "lane": "ols-weighted",
+    "fixtures": 0
+  },
+  {
+    "lane": "optim-adam-clip",
+    "fixtures": 0
+  },
+  {
+    "lane": "optim-sgd",
+    "fixtures": 0
+  },
+  {
+    "lane": "pca",
+    "fixtures": 0
+  },
+  {
+    "lane": "pca-full-whiten",
+    "fixtures": 0
+  },
+  {
+    "lane": "pca-whiten",
+    "fixtures": 0
+  },
+  {
+    "lane": "permutation-test",
+    "fixtures": 0
+  },
+  {
+    "lane": "radius",
+    "fixtures": 0
+  },
+  {
+    "lane": "radius-chebyshev",
+    "fixtures": 0
+  },
+  {
+    "lane": "radius-manhattan",
+    "fixtures": 0
+  },
+  {
+    "lane": "radius-minkowski-p3",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-clf",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-clf-balanced-parallel",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-clf-entropy-log2-noboot",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-reg",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-reg-gamma-ig",
+    "fixtures": 0
+  },
+  {
+    "lane": "rf-reg-poisson",
+    "fixtures": 0
+  },
+  {
+    "lane": "ridge",
+    "fixtures": 1
+  },
+  {
+    "lane": "ridge-no-intercept",
+    "fixtures": 0
+  },
+  {
+    "lane": "spectral-precomputed",
+    "fixtures": 0
+  },
+  {
+    "lane": "standard-scaler",
+    "fixtures": 0
+  },
+  {
+    "lane": "standard-scaler-no-mean",
+    "fixtures": 0
+  },
+  {
+    "lane": "standard-scaler-no-std",
+    "fixtures": 0
+  },
+  {
+    "lane": "training-primitives",
+    "fixtures": 0
+  },
+  {
+    "lane": "tsvd",
+    "fixtures": 0
+  }
+]

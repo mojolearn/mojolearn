@@ -709,3 +709,224 @@ def finish_sum_kernel(
     var s0 = pinned_block_sum[REDUCE_BY_KEY_TPB](acc)
     if tid == 0:
         out_scalar.unsafe_store(0, s0)
+
+
+# ---------------------------------------------------------------------------
+# DEVIATION 3080 (2026-09-17, lane kmeans-linear-speed): THE ROW-BLOCK
+# ACCUMULATOR. NO ATOMICS, NO SHARED MEMORY, THE SAME Int32 TOTALS.
+#
+# WHAT WAS MEASURED FIRST. One Lloyd iteration, split with a synchronize at
+# every phase (`cluster/tools/kmeans_linear_stage_probe_main.mojo`, RTX 4090,
+# IDENTICAL, k = 64): at Istella-S 2,043,304 x 220 the fused assignment is
+# 9.3 ms and THIS FILE'S sums reduction is 660 to 697 ms; at taxi 4,000,000
+# x 11 the assignment is 1.8 ms, the sums 36 to 41 ms and the weights 5 to
+# 6 ms. The update half of Lloyd, not the distance half, is the fit.
+#
+# WHY. `launch_accumulate_centroid_sums` privatizes only when `n_clusters *
+# n_features <= PRIVATE_ACC_CELLS` (6,144 cells on the NVIDIA column). 64 x
+# 220 is 14,080, so Istella-S takes the DIRECT arm: 449.5 million global
+# `Atomic.fetch_add`s landing on 14,080 cells per iteration. Taxi takes the
+# privatized arm and still pays one threadgroup atomic per element.
+#
+# THE ARM. Rows are cut into blocks of `BLOCK_ACC_ROWS`. Thread `(b, f)`
+# OWNS the `n_clusters` table cells `table[b][c][f]`: it zeroes them, walks
+# its block's rows in order and adds each row's quantized value into the
+# cell its label names. No other thread ever touches those cells, so the
+# adds are plain loads and stores. A second launch gives every output cell
+# `(c, f)` one thread that adds the `n_blocks` table entries and adds that
+# total into `sums_i32`.
+#
+# WHY NO BIT MOVES. The addend is formed by the IDENTICAL scalar fp32
+# expression the two existing kernels use, `Int32(x * w * scale)`, from the
+# same three loads, once per `(row, feature)` cell. Int32 addition is
+# associative and commutative, and `choose_scale` bounds the magnitude of
+# the sum over ANY subset of rows inside Int32, so no grouping of these
+# addends can wrap. The totals are therefore the direct arm's totals, which
+# is the argument the privatized arm already rests on, with "per GPU block"
+# replaced by "per row block". `check_blocked_accumulate` holds all three
+# arms bitwise equal; the sabotage define drops the first row of every
+# block so that check and the identity lanes are seen to fail.
+#
+# OFF BY DEFAULT: `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` selects it
+# in `cluster/impl/detail/kmeans.mojo`.
+# ---------------------------------------------------------------------------
+
+#: Rows per accumulator block. The table is `ceil(n / rows) * k * d` Int32
+#: cells, `k / BLOCK_ACC_ROWS` of the design's own size.
+comptime BLOCK_ACC_ROWS = 1024
+
+comptime BLOCK_ACC_TPB = 256
+
+
+def blocked_acc_blocks(n_samples: Int) -> Int:
+    var b = (n_samples + BLOCK_ACC_ROWS - 1) // BLOCK_ACC_ROWS
+    return b if b > 0 else 1
+
+
+def blocked_acc_table_cells(n_samples: Int, n_features: Int, n_clusters: Int) -> Int:
+    """Int32 cells the caller's scratch table must hold for the sums (pass
+    `n_features = 1` for the weights)."""
+    return blocked_acc_blocks(n_samples) * n_clusters * n_features
+
+
+def accumulate_centroid_sums_blocked_kernel[
+    sabotage: Bool
+](
+    table: MutPointer[Int32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_features_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """Thread `(b, f)`: block `b`'s rows of feature `f` into `table[b][*][f]`.
+    DEVIATION 3080, see the banner above."""
+    var n_rows = Int(n_rows_in)
+    var n_features = Int(n_features_in)
+    var n_clusters = Int(n_clusters_in)
+    var gid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var b = gid // n_features
+    var f = gid - b * n_features
+    var r0 = b * BLOCK_ACC_ROWS
+    if r0 >= n_rows:
+        return
+    var r1 = r0 + BLOCK_ACC_ROWS
+    if r1 > n_rows:
+        r1 = n_rows
+    var base = b * n_clusters * n_features + f
+    for c in range(n_clusters):
+        table.unsafe_store(base + c * n_features, Int32(0))
+    comptime if sabotage:
+        r0 += 1
+    for row in range(r0, r1):
+        var label = Int(labels.unsafe_load(row))
+        var w = weights.unsafe_load(row)
+        var q = Int32(x.unsafe_load(row * n_features + f) * w * scale_in)
+        var cell = base + label * n_features
+        table.unsafe_store(cell, table.unsafe_load(cell) + q)
+
+
+def accumulate_weight_blocked_kernel(
+    table: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    n_clusters_in: Int32,
+    scale_in: Float32,
+):
+    """Thread `b`: block `b`'s quantized weights into `table[b][*]`."""
+    var n_rows = Int(n_rows_in)
+    var n_clusters = Int(n_clusters_in)
+    var b = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var r0 = b * BLOCK_ACC_ROWS
+    if r0 >= n_rows:
+        return
+    var r1 = r0 + BLOCK_ACC_ROWS
+    if r1 > n_rows:
+        r1 = n_rows
+    var base = b * n_clusters
+    for c in range(n_clusters):
+        table.unsafe_store(base + c, Int32(0))
+    for row in range(r0, r1):
+        var label = Int(labels.unsafe_load(row))
+        var q = Int32(weights.unsafe_load(row) * scale_in)
+        table.unsafe_store(base + label, table.unsafe_load(base + label) + q)
+
+
+def fold_block_table_kernel(
+    out_i32: MutPointer[Int32, MutAnyOrigin],
+    table: MutPointer[Int32, MutAnyOrigin],
+    n_blocks_in: Int32,
+    cells_in: Int32,
+):
+    """Thread `cell`: `out[cell] += sum over blocks of table[b][cell]`. One
+    thread per output cell, so the add into `out` needs no atomic, and it is
+    an ADD because the two launchers accumulate into a buffer the caller
+    zeroed, as the atomic arms do."""
+    var n_blocks = Int(n_blocks_in)
+    var cells = Int(cells_in)
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cells:
+        return
+    var acc = Int32(0)
+    for b in range(n_blocks):
+        acc += table.unsafe_load(b * cells + cell)
+    out_i32.unsafe_store(cell, out_i32.unsafe_load(cell) + acc)
+
+
+def launch_accumulate_centroid_sums_blocked[
+    sabotage: Bool = False
+](
+    ctx: DeviceContext,
+    mut sums_i32: DeviceBuffer[DType.int32],
+    mut table: DeviceBuffer[DType.int32],
+    mut x: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_features: Int,
+    n_clusters: Int,
+    sum_scale: Float32,
+) raises:
+    """DEVIATION 3080. `table` holds at least `blocked_acc_table_cells(
+    n_samples, n_features, n_clusters)` Int32 cells; its contents on entry
+    do not matter."""
+    var n_blocks = blocked_acc_blocks(n_samples)
+    var threads = n_blocks * n_features
+    comptime kern = accumulate_centroid_sums_blocked_kernel[sabotage]
+    ctx.enqueue_function[kern](
+        table.unsafe_ptr(),
+        x.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_features),
+        Int32(n_clusters),
+        sum_scale,
+        grid_dim=((threads + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+    var cells = n_clusters * n_features
+    ctx.enqueue_function[fold_block_table_kernel](
+        sums_i32.unsafe_ptr(),
+        table.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(cells),
+        grid_dim=((cells + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+
+
+def launch_accumulate_weight_per_cluster_blocked(
+    ctx: DeviceContext,
+    mut weight_i32: DeviceBuffer[DType.int32],
+    mut table: DeviceBuffer[DType.int32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut weights: DeviceBuffer[DType.float32],
+    n_samples: Int,
+    n_clusters: Int,
+    weight_scale: Float32,
+) raises:
+    """DEVIATION 3080, the denominator. `table` holds at least
+    `blocked_acc_table_cells(n_samples, 1, n_clusters)` cells."""
+    var n_blocks = blocked_acc_blocks(n_samples)
+    ctx.enqueue_function[accumulate_weight_blocked_kernel](
+        table.unsafe_ptr(),
+        labels.unsafe_ptr(),
+        weights.unsafe_ptr(),
+        Int32(n_samples),
+        Int32(n_clusters),
+        weight_scale,
+        grid_dim=((n_blocks + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )
+    ctx.enqueue_function[fold_block_table_kernel](
+        weight_i32.unsafe_ptr(),
+        table.unsafe_ptr(),
+        Int32(n_blocks),
+        Int32(n_clusters),
+        grid_dim=((n_clusters + BLOCK_ACC_TPB - 1) // BLOCK_ACC_TPB, 1, 1),
+        block_dim=(BLOCK_ACC_TPB, 1, 1),
+    )

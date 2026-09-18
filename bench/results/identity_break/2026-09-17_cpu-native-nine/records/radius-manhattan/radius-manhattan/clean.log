@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:47:39  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START radius-manhattan/base repeat=1/train
+# DONE radius-manhattan/base repeat=1/train 0.033s
+# START radius-manhattan/base repeat=1/infer-save-reload
+# DONE radius-manhattan/base repeat=1/infer-save-reload 0.069s
+# START radius-manhattan/base repeat=1/batch
+# DONE radius-manhattan/base repeat=1/batch 0.076s
+# START radius-manhattan/base repeat=1/stepfull
+# DONE radius-manhattan/base repeat=1/stepfull 0.000s
+# START radius-manhattan/base repeat=2/train
+# DONE radius-manhattan/base repeat=2/train 0.033s
+# START radius-manhattan/base repeat=2/infer-save-reload
+# DONE radius-manhattan/base repeat=2/infer-save-reload 0.067s
+# START radius-manhattan/base repeat=2/batch
+# DONE radius-manhattan/base repeat=2/batch 0.074s
+# START radius-manhattan/base repeat=2/stepfull
+# DONE radius-manhattan/base repeat=2/stepfull 0.000s
+# CELL radius-manhattan/base STABLE 0.353s
+# START radius-manhattan/ties repeat=1/train
+# DONE radius-manhattan/ties repeat=1/train 0.077s
+# START radius-manhattan/ties repeat=1/infer-save-reload
+# DONE radius-manhattan/ties repeat=1/infer-save-reload 0.154s
+# START radius-manhattan/ties repeat=1/batch
+# DONE radius-manhattan/ties repeat=1/batch 0.175s
+# START radius-manhattan/ties repeat=1/stepfull
+# DONE radius-manhattan/ties repeat=1/stepfull 0.000s
+# START radius-manhattan/ties repeat=2/train
+# DONE radius-manhattan/ties repeat=2/train 0.077s
+# START radius-manhattan/ties repeat=2/infer-save-reload
+# DONE radius-manhattan/ties repeat=2/infer-save-reload 0.154s
+# START radius-manhattan/ties repeat=2/batch
+# DONE radius-manhattan/ties repeat=2/batch 0.177s
+# START radius-manhattan/ties repeat=2/stepfull
+# DONE radius-manhattan/ties repeat=2/stepfull 0.000s
+# CELL radius-manhattan/ties STABLE 0.814s
+# START radius-manhattan/hashed repeat=1/train
+# DONE radius-manhattan/hashed repeat=1/train 0.034s
+# START radius-manhattan/hashed repeat=1/infer-save-reload
+# DONE radius-manhattan/hashed repeat=1/infer-save-reload 0.070s
+# START radius-manhattan/hashed repeat=1/batch
+# DONE radius-manhattan/hashed repeat=1/batch 0.079s
+# START radius-manhattan/hashed repeat=1/stepfull
+# DONE radius-manhattan/hashed repeat=1/stepfull 0.000s
+# START radius-manhattan/hashed repeat=2/train
+# DONE radius-manhattan/hashed repeat=2/train 0.034s
+# START radius-manhattan/hashed repeat=2/infer-save-reload
+# DONE radius-manhattan/hashed repeat=2/infer-save-reload 0.069s
+# START radius-manhattan/hashed repeat=2/batch
+# DONE radius-manhattan/hashed repeat=2/batch 0.078s
+# START radius-manhattan/hashed repeat=2/stepfull
+# DONE radius-manhattan/hashed repeat=2/stepfull 0.000s
+# CELL radius-manhattan/hashed STABLE 0.364s
+# START radius-manhattan/wide repeat=1/train
+# DONE radius-manhattan/wide repeat=1/train 0.086s
+# START radius-manhattan/wide repeat=1/infer-save-reload
+# DONE radius-manhattan/wide repeat=1/infer-save-reload 0.172s
+# START radius-manhattan/wide repeat=1/batch
+# DONE radius-manhattan/wide repeat=1/batch 0.195s
+# START radius-manhattan/wide repeat=1/stepfull
+# DONE radius-manhattan/wide repeat=1/stepfull 0.000s
+# START radius-manhattan/wide repeat=2/train
+# DONE radius-manhattan/wide repeat=2/train 0.085s
+# START radius-manhattan/wide repeat=2/infer-save-reload
+# DONE radius-manhattan/wide repeat=2/infer-save-reload 0.168s
+# START radius-manhattan/wide repeat=2/batch
+# DONE radius-manhattan/wide repeat=2/batch 0.195s
+# START radius-manhattan/wide repeat=2/stepfull
+# DONE radius-manhattan/wide repeat=2/stepfull 0.000s
+# CELL radius-manhattan/wide STABLE 0.902s
+# START radius-manhattan/denormal repeat=1/train
+# DONE radius-manhattan/denormal repeat=1/train 0.035s
+# START radius-manhattan/denormal repeat=1/infer-save-reload
+# DONE radius-manhattan/denormal repeat=1/infer-save-reload 0.071s
+# START radius-manhattan/denormal repeat=1/batch
+# DONE radius-manhattan/denormal repeat=1/batch 0.081s
+# START radius-manhattan/denormal repeat=1/stepfull
+# DONE radius-manhattan/denormal repeat=1/stepfull 0.000s
+# START radius-manhattan/denormal repeat=2/train
+# DONE radius-manhattan/denormal repeat=2/train 0.035s
+# START radius-manhattan/denormal repeat=2/infer-save-reload
+# DONE radius-manhattan/denormal repeat=2/infer-save-reload 0.070s
+# START radius-manhattan/denormal repeat=2/batch
+# DONE radius-manhattan/denormal repeat=2/batch 0.081s
+# START radius-manhattan/denormal repeat=2/stepfull
+# DONE radius-manhattan/denormal repeat=2/stepfull 0.000s
+# CELL radius-manhattan/denormal STABLE 0.374s
+# START radius-manhattan/denormal_ftz repeat=1/train
+# DONE radius-manhattan/denormal_ftz repeat=1/train 0.035s
+# START radius-manhattan/denormal_ftz repeat=1/infer-save-reload
+# DONE radius-manhattan/denormal_ftz repeat=1/infer-save-reload 0.070s
+# START radius-manhattan/denormal_ftz repeat=1/batch
+# DONE radius-manhattan/denormal_ftz repeat=1/batch 0.079s
+# START radius-manhattan/denormal_ftz repeat=1/stepfull
+# DONE radius-manhattan/denormal_ftz repeat=1/stepfull 0.000s
+# START radius-manhattan/denormal_ftz repeat=2/train
+# DONE radius-manhattan/denormal_ftz repeat=2/train 0.034s
+# START radius-manhattan/denormal_ftz repeat=2/infer-save-reload
+# DONE radius-manhattan/denormal_ftz repeat=2/infer-save-reload 0.070s
+# START radius-manhattan/denormal_ftz repeat=2/batch
+# DONE radius-manhattan/denormal_ftz repeat=2/batch 0.078s
+# START radius-manhattan/denormal_ftz repeat=2/stepfull
+# DONE radius-manhattan/denormal_ftz repeat=2/stepfull 0.000s
+# CELL radius-manhattan/denormal_ftz STABLE 0.366s
+# START radius-manhattan/dupes repeat=1/train
+# DONE radius-manhattan/dupes repeat=1/train 0.033s
+# START radius-manhattan/dupes repeat=1/infer-save-reload
+# DONE radius-manhattan/dupes repeat=1/infer-save-reload 0.067s
+# START radius-manhattan/dupes repeat=1/batch
+# DONE radius-manhattan/dupes repeat=1/batch 0.076s
+# START radius-manhattan/dupes repeat=1/stepfull
+# DONE radius-manhattan/dupes repeat=1/stepfull 0.000s
+# START radius-manhattan/dupes repeat=2/train
+# DONE radius-manhattan/dupes repeat=2/train 0.033s
+# START radius-manhattan/dupes repeat=2/infer-save-reload
+# DONE radius-manhattan/dupes repeat=2/infer-save-reload 0.066s
+# START radius-manhattan/dupes repeat=2/batch
+# DONE radius-manhattan/dupes repeat=2/batch 0.074s
+# START radius-manhattan/dupes repeat=2/stepfull
+# DONE radius-manhattan/dupes repeat=2/stepfull 0.000s
+# CELL radius-manhattan/dupes STABLE 0.350s
+# START radius-manhattan/odd repeat=1/train
+# DONE radius-manhattan/odd repeat=1/train 0.033s
+# START radius-manhattan/odd repeat=1/infer-save-reload
+# DONE radius-manhattan/odd repeat=1/infer-save-reload 0.068s
+# START radius-manhattan/odd repeat=1/batch
+# DONE radius-manhattan/odd repeat=1/batch 0.077s
+# START radius-manhattan/odd repeat=1/stepfull
+# DONE radius-manhattan/odd repeat=1/stepfull 0.000s
+# START radius-manhattan/odd repeat=2/train
+# DONE radius-manhattan/odd repeat=2/train 0.034s
+# START radius-manhattan/odd repeat=2/infer-save-reload
+# DONE radius-manhattan/odd repeat=2/infer-save-reload 0.070s
+# START radius-manhattan/odd repeat=2/batch
+# DONE radius-manhattan/odd repeat=2/batch 0.078s
+# START radius-manhattan/odd repeat=2/stepfull
+# DONE radius-manhattan/odd repeat=2/stepfull 0.000s
+# CELL radius-manhattan/odd STABLE 0.359s
+# START radius-manhattan/negative repeat=1/train
+# DONE radius-manhattan/negative repeat=1/train 0.034s
+# START radius-manhattan/negative repeat=1/infer-save-reload
+# DONE radius-manhattan/negative repeat=1/infer-save-reload 0.068s
+# START radius-manhattan/negative repeat=1/batch
+# DONE radius-manhattan/negative repeat=1/batch 0.077s
+# START radius-manhattan/negative repeat=1/stepfull
+# DONE radius-manhattan/negative repeat=1/stepfull 0.000s
+# START radius-manhattan/negative repeat=2/train
+# DONE radius-manhattan/negative repeat=2/train 0.034s
+# START radius-manhattan/negative repeat=2/infer-save-reload
+# DONE radius-manhattan/negative repeat=2/infer-save-reload 0.068s
+# START radius-manhattan/negative repeat=2/batch
+# DONE radius-manhattan/negative repeat=2/batch 0.076s
+# START radius-manhattan/negative repeat=2/stepfull
+# DONE radius-manhattan/negative repeat=2/stepfull 0.000s
+# CELL radius-manhattan/negative STABLE 0.357s
+| radius-manhattan       | adbab4c619ab70dc | f4469b7cc5451c2b | f520a1cd60de3a00 | 96656c718463c3c0 | b3066725061ddd46 | b3066725061ddd46 | f57dcac1b9d84889 | 372fb9c534550f4d | 39bcca9c46c29872 |
+| radius-manhattan infer | 51e361a7911b9eb7 | c641c75dd063a967 | 80d08244b239ac42 | f5b2dde4c595864e | d467cf36242844c9 | d467cf36242844c9 | b3ebfcda94a96aa3 | b28b2b565e51540d | d7960118855980db |
+| radius-manhattan model | a57f1f07d75f73e1 | d893a0c29ba99797 | d9fb91586aa3aa55 | f4956308528d332e | 06e4242143d325b2 | 18e8bdf07ef319ba | d1c5d251599b1830 | 3440191387c43af8 | 80b5baa8c1aabd6b |
+| radius-manhattan batch | 2b54e52e49b2b3c9 | e7b7266b64bcfa5a | 819c03be5fab9500 | 3c074b0ddf67d9e5 | 4bb3a9fa1f0a054c | 4bb3a9fa1f0a054c | d8ac4219b67b2a4c | 84928b8dd182e647 | 60115615ac598373 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: radius-manhattan stepfull n/a:no-decode-state
+wrote /root/leg_out/records/radius-manhattan/radius-manhattan/cpu-clean.json

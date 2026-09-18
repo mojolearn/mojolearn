@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:41:53  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START kde-tophat-sqeuclidean/base repeat=1/train
+# DONE kde-tophat-sqeuclidean/base repeat=1/train 0.026s
+# START kde-tophat-sqeuclidean/base repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/base repeat=1/infer-save-reload 0.053s
+# START kde-tophat-sqeuclidean/base repeat=1/batch
+# DONE kde-tophat-sqeuclidean/base repeat=1/batch 0.105s
+# START kde-tophat-sqeuclidean/base repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/base repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/base repeat=2/train
+# DONE kde-tophat-sqeuclidean/base repeat=2/train 0.026s
+# START kde-tophat-sqeuclidean/base repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/base repeat=2/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/base repeat=2/batch
+# DONE kde-tophat-sqeuclidean/base repeat=2/batch 0.104s
+# START kde-tophat-sqeuclidean/base repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/base repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/base STABLE 0.366s
+# START kde-tophat-sqeuclidean/ties repeat=1/train
+# DONE kde-tophat-sqeuclidean/ties repeat=1/train 0.047s
+# START kde-tophat-sqeuclidean/ties repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/ties repeat=1/infer-save-reload 0.094s
+# START kde-tophat-sqeuclidean/ties repeat=1/batch
+# DONE kde-tophat-sqeuclidean/ties repeat=1/batch 0.150s
+# START kde-tophat-sqeuclidean/ties repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/ties repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/ties repeat=2/train
+# DONE kde-tophat-sqeuclidean/ties repeat=2/train 0.046s
+# START kde-tophat-sqeuclidean/ties repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/ties repeat=2/infer-save-reload 0.093s
+# START kde-tophat-sqeuclidean/ties repeat=2/batch
+# DONE kde-tophat-sqeuclidean/ties repeat=2/batch 0.148s
+# START kde-tophat-sqeuclidean/ties repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/ties repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/ties STABLE 0.578s
+# START kde-tophat-sqeuclidean/hashed repeat=1/train
+# DONE kde-tophat-sqeuclidean/hashed repeat=1/train 0.025s
+# START kde-tophat-sqeuclidean/hashed repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/hashed repeat=1/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/hashed repeat=1/batch
+# DONE kde-tophat-sqeuclidean/hashed repeat=1/batch 0.105s
+# START kde-tophat-sqeuclidean/hashed repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/hashed repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/hashed repeat=2/train
+# DONE kde-tophat-sqeuclidean/hashed repeat=2/train 0.025s
+# START kde-tophat-sqeuclidean/hashed repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/hashed repeat=2/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/hashed repeat=2/batch
+# DONE kde-tophat-sqeuclidean/hashed repeat=2/batch 0.107s
+# START kde-tophat-sqeuclidean/hashed repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/hashed repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/hashed STABLE 0.366s
+# START kde-tophat-sqeuclidean/wide repeat=1/train
+# DONE kde-tophat-sqeuclidean/wide repeat=1/train 0.025s
+# START kde-tophat-sqeuclidean/wide repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/wide repeat=1/infer-save-reload 0.054s
+# START kde-tophat-sqeuclidean/wide repeat=1/batch
+# DONE kde-tophat-sqeuclidean/wide repeat=1/batch 0.104s
+# START kde-tophat-sqeuclidean/wide repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/wide repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/wide repeat=2/train
+# DONE kde-tophat-sqeuclidean/wide repeat=2/train 0.025s
+# START kde-tophat-sqeuclidean/wide repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/wide repeat=2/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/wide repeat=2/batch
+# DONE kde-tophat-sqeuclidean/wide repeat=2/batch 0.104s
+# START kde-tophat-sqeuclidean/wide repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/wide repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/wide STABLE 0.366s
+# START kde-tophat-sqeuclidean/denormal repeat=1/train
+# DONE kde-tophat-sqeuclidean/denormal repeat=1/train 0.029s
+# START kde-tophat-sqeuclidean/denormal repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/denormal repeat=1/infer-save-reload 0.058s
+# START kde-tophat-sqeuclidean/denormal repeat=1/batch
+# DONE kde-tophat-sqeuclidean/denormal repeat=1/batch 0.109s
+# START kde-tophat-sqeuclidean/denormal repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/denormal repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/denormal repeat=2/train
+# DONE kde-tophat-sqeuclidean/denormal repeat=2/train 0.028s
+# START kde-tophat-sqeuclidean/denormal repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/denormal repeat=2/infer-save-reload 0.059s
+# START kde-tophat-sqeuclidean/denormal repeat=2/batch
+# DONE kde-tophat-sqeuclidean/denormal repeat=2/batch 0.110s
+# START kde-tophat-sqeuclidean/denormal repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/denormal repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/denormal STABLE 0.393s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=1/train
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=1/train 0.027s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=1/infer-save-reload 0.054s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=1/batch
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=1/batch 0.106s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=2/train
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=2/train 0.027s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=2/infer-save-reload 0.055s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=2/batch
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=2/batch 0.109s
+# START kde-tophat-sqeuclidean/denormal_ftz repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/denormal_ftz repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/denormal_ftz STABLE 0.379s
+# START kde-tophat-sqeuclidean/dupes repeat=1/train
+# DONE kde-tophat-sqeuclidean/dupes repeat=1/train 0.025s
+# START kde-tophat-sqeuclidean/dupes repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/dupes repeat=1/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/dupes repeat=1/batch
+# DONE kde-tophat-sqeuclidean/dupes repeat=1/batch 0.105s
+# START kde-tophat-sqeuclidean/dupes repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/dupes repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/dupes repeat=2/train
+# DONE kde-tophat-sqeuclidean/dupes repeat=2/train 0.025s
+# START kde-tophat-sqeuclidean/dupes repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/dupes repeat=2/infer-save-reload 0.053s
+# START kde-tophat-sqeuclidean/dupes repeat=2/batch
+# DONE kde-tophat-sqeuclidean/dupes repeat=2/batch 0.106s
+# START kde-tophat-sqeuclidean/dupes repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/dupes repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/dupes STABLE 0.366s
+# START kde-tophat-sqeuclidean/odd repeat=1/train
+# DONE kde-tophat-sqeuclidean/odd repeat=1/train 0.026s
+# START kde-tophat-sqeuclidean/odd repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/odd repeat=1/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/odd repeat=1/batch
+# DONE kde-tophat-sqeuclidean/odd repeat=1/batch 0.105s
+# START kde-tophat-sqeuclidean/odd repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/odd repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/odd repeat=2/train
+# DONE kde-tophat-sqeuclidean/odd repeat=2/train 0.026s
+# START kde-tophat-sqeuclidean/odd repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/odd repeat=2/infer-save-reload 0.052s
+# START kde-tophat-sqeuclidean/odd repeat=2/batch
+# DONE kde-tophat-sqeuclidean/odd repeat=2/batch 0.105s
+# START kde-tophat-sqeuclidean/odd repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/odd repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/odd STABLE 0.366s
+# START kde-tophat-sqeuclidean/negative repeat=1/train
+# DONE kde-tophat-sqeuclidean/negative repeat=1/train 0.026s
+# START kde-tophat-sqeuclidean/negative repeat=1/infer-save-reload
+# DONE kde-tophat-sqeuclidean/negative repeat=1/infer-save-reload 0.054s
+# START kde-tophat-sqeuclidean/negative repeat=1/batch
+# DONE kde-tophat-sqeuclidean/negative repeat=1/batch 0.107s
+# START kde-tophat-sqeuclidean/negative repeat=1/stepfull
+# DONE kde-tophat-sqeuclidean/negative repeat=1/stepfull 0.000s
+# START kde-tophat-sqeuclidean/negative repeat=2/train
+# DONE kde-tophat-sqeuclidean/negative repeat=2/train 0.026s
+# START kde-tophat-sqeuclidean/negative repeat=2/infer-save-reload
+# DONE kde-tophat-sqeuclidean/negative repeat=2/infer-save-reload 0.054s
+# START kde-tophat-sqeuclidean/negative repeat=2/batch
+# DONE kde-tophat-sqeuclidean/negative repeat=2/batch 0.107s
+# START kde-tophat-sqeuclidean/negative repeat=2/stepfull
+# DONE kde-tophat-sqeuclidean/negative repeat=2/stepfull 0.000s
+# CELL kde-tophat-sqeuclidean/negative STABLE 0.373s
+| kde-tophat-sqeuclidean | e3dab501622bde4f | e4dc63e0d788cbee | 471edd36cb0d9a61 | 795bd399a82cb1ea | 95d76004151004ca | 95d76004151004ca | e3dab501622bde4f | 61cd82d86ebb5883 | 9301de82fcf776f5 |
+| kde-tophat-sqeuclidean infer | f976877701039917 | 54d68d651b1aae2d | d0cd838c79bfd946 | 4b0f0103f086cdf9 | 627cf52d46a9dc04 | 627cf52d46a9dc04 | f976877701039917 | 0bcc46430ca11580 | 0a9e849233cc10ac |
+| kde-tophat-sqeuclidean model | c993389731292ddf | 87fae666d3f610e7 | a117a488cef65bb3 | f9535c3d73d6456a | 293d462980aa4a36 | 06617b4535762846 | c993389731292ddf | 42e8723db20bbe8b | eecfd977fef169c5 |
+| kde-tophat-sqeuclidean batch | 32cc29e4041d9627 | ff6b46c6a0348ee7 | 5a68c491fd8f248f | bbff0a335bce6d97 | f2199daa9d84410e | f2199daa9d84410e | 32cc29e4041d9627 | 215ae6853d08a1a3 | b858710f2d9a3bfb |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: kde-tophat-sqeuclidean stepfull n/a:no-decode-state
+wrote /root/leg_out/records/kde-tophat-sqeuclidean/kde-tophat-sqeuclidean/cpu-sabotage.json

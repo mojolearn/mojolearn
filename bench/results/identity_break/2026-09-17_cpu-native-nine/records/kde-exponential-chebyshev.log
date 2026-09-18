@@ -1,0 +1,3 @@
+kde-exponential-chebyshev: clean
+kde-exponential-chebyshev: sabotage
+kde-exponential-chebyshev: 9/9 controls; passed=True

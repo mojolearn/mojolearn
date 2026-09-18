@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:48:15  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START rf-clf-balanced-parallel/base repeat=1/train
+# DONE rf-clf-balanced-parallel/base repeat=1/train 0.271s
+# START rf-clf-balanced-parallel/base repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/base repeat=1/infer-save-reload 0.093s
+# START rf-clf-balanced-parallel/base repeat=1/batch
+# DONE rf-clf-balanced-parallel/base repeat=1/batch 0.214s
+# START rf-clf-balanced-parallel/base repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/base repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/base repeat=2/train
+# DONE rf-clf-balanced-parallel/base repeat=2/train 0.262s
+# START rf-clf-balanced-parallel/base repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/base repeat=2/infer-save-reload 0.090s
+# START rf-clf-balanced-parallel/base repeat=2/batch
+# DONE rf-clf-balanced-parallel/base repeat=2/batch 0.196s
+# START rf-clf-balanced-parallel/base repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/base repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/base STABLE 1.126s
+# START rf-clf-balanced-parallel/ties repeat=1/train
+# DONE rf-clf-balanced-parallel/ties repeat=1/train 0.253s
+# START rf-clf-balanced-parallel/ties repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/ties repeat=1/infer-save-reload 0.077s
+# START rf-clf-balanced-parallel/ties repeat=1/batch
+# DONE rf-clf-balanced-parallel/ties repeat=1/batch 0.188s
+# START rf-clf-balanced-parallel/ties repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/ties repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/ties repeat=2/train
+# DONE rf-clf-balanced-parallel/ties repeat=2/train 0.251s
+# START rf-clf-balanced-parallel/ties repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/ties repeat=2/infer-save-reload 0.073s
+# START rf-clf-balanced-parallel/ties repeat=2/batch
+# DONE rf-clf-balanced-parallel/ties repeat=2/batch 0.189s
+# START rf-clf-balanced-parallel/ties repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/ties repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/ties STABLE 1.032s
+# START rf-clf-balanced-parallel/hashed repeat=1/train
+# DONE rf-clf-balanced-parallel/hashed repeat=1/train 0.266s
+# START rf-clf-balanced-parallel/hashed repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/hashed repeat=1/infer-save-reload 0.093s
+# START rf-clf-balanced-parallel/hashed repeat=1/batch
+# DONE rf-clf-balanced-parallel/hashed repeat=1/batch 0.211s
+# START rf-clf-balanced-parallel/hashed repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/hashed repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/hashed repeat=2/train
+# DONE rf-clf-balanced-parallel/hashed repeat=2/train 0.260s
+# START rf-clf-balanced-parallel/hashed repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/hashed repeat=2/infer-save-reload 0.094s
+# START rf-clf-balanced-parallel/hashed repeat=2/batch
+# DONE rf-clf-balanced-parallel/hashed repeat=2/batch 0.203s
+# START rf-clf-balanced-parallel/hashed repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/hashed repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/hashed STABLE 1.127s
+# START rf-clf-balanced-parallel/wide repeat=1/train
+# DONE rf-clf-balanced-parallel/wide repeat=1/train 0.273s
+# START rf-clf-balanced-parallel/wide repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/wide repeat=1/infer-save-reload 0.094s
+# START rf-clf-balanced-parallel/wide repeat=1/batch
+# DONE rf-clf-balanced-parallel/wide repeat=1/batch 0.212s
+# START rf-clf-balanced-parallel/wide repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/wide repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/wide repeat=2/train
+# DONE rf-clf-balanced-parallel/wide repeat=2/train 0.277s
+# START rf-clf-balanced-parallel/wide repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/wide repeat=2/infer-save-reload 0.091s
+# START rf-clf-balanced-parallel/wide repeat=2/batch
+# DONE rf-clf-balanced-parallel/wide repeat=2/batch 0.209s
+# START rf-clf-balanced-parallel/wide repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/wide repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/wide STABLE 1.156s
+# START rf-clf-balanced-parallel/denormal repeat=1/train
+# DONE rf-clf-balanced-parallel/denormal repeat=1/train 0.258s
+# START rf-clf-balanced-parallel/denormal repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/denormal repeat=1/infer-save-reload 0.089s
+# START rf-clf-balanced-parallel/denormal repeat=1/batch
+# DONE rf-clf-balanced-parallel/denormal repeat=1/batch 0.207s
+# START rf-clf-balanced-parallel/denormal repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/denormal repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/denormal repeat=2/train
+# DONE rf-clf-balanced-parallel/denormal repeat=2/train 0.262s
+# START rf-clf-balanced-parallel/denormal repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/denormal repeat=2/infer-save-reload 0.091s
+# START rf-clf-balanced-parallel/denormal repeat=2/batch
+# DONE rf-clf-balanced-parallel/denormal repeat=2/batch 0.198s
+# START rf-clf-balanced-parallel/denormal repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/denormal repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/denormal STABLE 1.106s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=1/train
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=1/train 0.256s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=1/infer-save-reload 0.091s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=1/batch
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=1/batch 0.200s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=2/train
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=2/train 0.260s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=2/infer-save-reload 0.093s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=2/batch
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=2/batch 0.205s
+# START rf-clf-balanced-parallel/denormal_ftz repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/denormal_ftz repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/denormal_ftz STABLE 1.107s
+# START rf-clf-balanced-parallel/dupes repeat=1/train
+# DONE rf-clf-balanced-parallel/dupes repeat=1/train 0.249s
+# START rf-clf-balanced-parallel/dupes repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/dupes repeat=1/infer-save-reload 0.094s
+# START rf-clf-balanced-parallel/dupes repeat=1/batch
+# DONE rf-clf-balanced-parallel/dupes repeat=1/batch 0.216s
+# START rf-clf-balanced-parallel/dupes repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/dupes repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/dupes repeat=2/train
+# DONE rf-clf-balanced-parallel/dupes repeat=2/train 0.250s
+# START rf-clf-balanced-parallel/dupes repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/dupes repeat=2/infer-save-reload 0.094s
+# START rf-clf-balanced-parallel/dupes repeat=2/batch
+# DONE rf-clf-balanced-parallel/dupes repeat=2/batch 0.208s
+# START rf-clf-balanced-parallel/dupes repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/dupes repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/dupes STABLE 1.113s
+# START rf-clf-balanced-parallel/odd repeat=1/train
+# DONE rf-clf-balanced-parallel/odd repeat=1/train 0.241s
+# START rf-clf-balanced-parallel/odd repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/odd repeat=1/infer-save-reload 0.058s
+# START rf-clf-balanced-parallel/odd repeat=1/batch
+# DONE rf-clf-balanced-parallel/odd repeat=1/batch 0.121s
+# START rf-clf-balanced-parallel/odd repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/odd repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/odd repeat=2/train
+# DONE rf-clf-balanced-parallel/odd repeat=2/train 0.242s
+# START rf-clf-balanced-parallel/odd repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/odd repeat=2/infer-save-reload 0.057s
+# START rf-clf-balanced-parallel/odd repeat=2/batch
+# DONE rf-clf-balanced-parallel/odd repeat=2/batch 0.138s
+# START rf-clf-balanced-parallel/odd repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/odd repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/odd STABLE 0.859s
+# START rf-clf-balanced-parallel/negative repeat=1/train
+# DONE rf-clf-balanced-parallel/negative repeat=1/train 0.248s
+# START rf-clf-balanced-parallel/negative repeat=1/infer-save-reload
+# DONE rf-clf-balanced-parallel/negative repeat=1/infer-save-reload 0.093s
+# START rf-clf-balanced-parallel/negative repeat=1/batch
+# DONE rf-clf-balanced-parallel/negative repeat=1/batch 0.208s
+# START rf-clf-balanced-parallel/negative repeat=1/stepfull
+# DONE rf-clf-balanced-parallel/negative repeat=1/stepfull 0.000s
+# START rf-clf-balanced-parallel/negative repeat=2/train
+# DONE rf-clf-balanced-parallel/negative repeat=2/train 0.259s
+# START rf-clf-balanced-parallel/negative repeat=2/infer-save-reload
+# DONE rf-clf-balanced-parallel/negative repeat=2/infer-save-reload 0.089s
+# START rf-clf-balanced-parallel/negative repeat=2/batch
+# DONE rf-clf-balanced-parallel/negative repeat=2/batch 0.207s
+# START rf-clf-balanced-parallel/negative repeat=2/stepfull
+# DONE rf-clf-balanced-parallel/negative repeat=2/stepfull 0.000s
+# CELL rf-clf-balanced-parallel/negative STABLE 1.105s
+| rf-clf-balanced-parallel | 30cd3a2921bdfa0f | 37b1a8301b25dd3d | 5ceb05a4847b1e43 | 535665487edd91fb | 4586affe5f6d8471 | 4586affe5f6d8471 | 7b96b4fa4aa8cd33 | 221a8391dfe0431e | 556c7263e0162208 |
+| rf-clf-balanced-parallel infer | 6eb9a132c1c2ca81 | f974c6df7af56a35 | 008f7bd1977e2928 | fc1a85360dee9c5b | f3cdb2c652b3cc8b | f3cdb2c652b3cc8b | 6c2bd0bab8f776c2 | f72134078bf171e3 | 0b7c2555098c3e15 |
+| rf-clf-balanced-parallel model | a90bf75dddc42ff6 | 8775093dd835ddff | e0603d98abe78f84 | 3fd9a6a9ddbf0379 | 4e594718394b47d9 | 4e594718394b47d9 | 14b16ef73e1373a5 | d08bf59310a7e9ce | 8adc748a39b4a002 |
+| rf-clf-balanced-parallel batch | bed580e05ed90678 | 53e97740f8434ba1 | c664ae00780800d4 | 04cc56c6ee5451ae | 46752dc389bdf7ea | 46752dc389bdf7ea | 77a735f74ccb7b22 | 23eda7e136efc87b | 018dc5fa6ba59708 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: rf-clf-balanced-parallel stepfull n/a:no-decode-state
+wrote /root/leg_out/records/rf-clf-balanced-parallel/rf-clf-balanced-parallel/cpu-clean.json

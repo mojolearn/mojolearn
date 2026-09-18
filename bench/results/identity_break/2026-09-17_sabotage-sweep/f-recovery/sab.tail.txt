@@ -1,0 +1,30 @@
+# DONE cross-val/base repeat=1/batch 0.409s
+# START cross-val/base repeat=2/train
+# DONE cross-val/base repeat=2/train 0.372s
+# START cross-val/base repeat=2/infer-save-reload
+# DONE cross-val/base repeat=2/infer-save-reload 0.000s
+# START cross-val/base repeat=2/batch
+# DONE cross-val/base repeat=2/batch 0.409s
+# CELL cross-val/base STABLE 1.564s
+# START cross-val/ties repeat=1/train
+# DONE cross-val/ties repeat=1/train 0.404s
+# START cross-val/ties repeat=1/infer-save-reload
+# DONE cross-val/ties repeat=1/infer-save-reload 0.000s
+# START cross-val/ties repeat=1/batch
+# DONE cross-val/ties repeat=1/batch 0.461s
+# START cross-val/ties repeat=2/train
+# DONE cross-val/ties repeat=2/train 0.411s
+# START cross-val/ties repeat=2/infer-save-reload
+# DONE cross-val/ties repeat=2/infer-save-reload 0.000s
+# START cross-val/ties repeat=2/batch
+# DONE cross-val/ties repeat=2/batch 0.462s
+# CELL cross-val/ties STABLE 1.738s
+| cross-val              | f41b143e5470ee72 | 9cb67e6af41d49cd |
+| cross-val batch        | 9db568120272f7ee | 4a7a75de5373f207 |
+
+cells=14 stable=14 moved=0 refused=0
+infer: stable=8 n/a=6
+model: stable=4 n/a=10
+batch: stable=8 n/a=6
+n/a: cross-val infer n/a:function, cross-val model n/a:no-save, gbdt-adapter-score-weighted batch n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg), gbdt-adapter-score-weighted infer n/a:function, gbdt-adapter-score-weighted model n/a:no-save, gbdt-categorical-ctr-tables model n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none), gbdt-tensor-ctr-tables model n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none), gp-sample-y-normalize batch n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior), rf-score-weighted batch n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg), rf-score-weighted infer n/a:function, rf-score-weighted model n/a:no-save
+wrote /root/leg_out/f-recovery/cpu-x86.sabotage.json

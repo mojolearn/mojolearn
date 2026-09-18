@@ -1,0 +1,169 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:33:49  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-categorical-ctr-tables/base repeat=1/train
+# DONE gbdt-categorical-ctr-tables/base repeat=1/train 0.044s
+# START gbdt-categorical-ctr-tables/base repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/base repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/base repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/base repeat=1/batch 0.189s
+# START gbdt-categorical-ctr-tables/base repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/base repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/base repeat=2/train
+# DONE gbdt-categorical-ctr-tables/base repeat=2/train 0.038s
+# START gbdt-categorical-ctr-tables/base repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/base repeat=2/infer-save-reload 0.083s
+# START gbdt-categorical-ctr-tables/base repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/base repeat=2/batch 0.172s
+# START gbdt-categorical-ctr-tables/base repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/base repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/base STABLE 0.610s
+# START gbdt-categorical-ctr-tables/ties repeat=1/train
+# DONE gbdt-categorical-ctr-tables/ties repeat=1/train 0.031s
+# START gbdt-categorical-ctr-tables/ties repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/ties repeat=1/infer-save-reload 0.066s
+# START gbdt-categorical-ctr-tables/ties repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/ties repeat=1/batch 0.172s
+# START gbdt-categorical-ctr-tables/ties repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/ties repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/ties repeat=2/train
+# DONE gbdt-categorical-ctr-tables/ties repeat=2/train 0.031s
+# START gbdt-categorical-ctr-tables/ties repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/ties repeat=2/infer-save-reload 0.065s
+# START gbdt-categorical-ctr-tables/ties repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/ties repeat=2/batch 0.170s
+# START gbdt-categorical-ctr-tables/ties repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/ties repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/ties STABLE 0.536s
+# START gbdt-categorical-ctr-tables/hashed repeat=1/train
+# DONE gbdt-categorical-ctr-tables/hashed repeat=1/train 0.039s
+# START gbdt-categorical-ctr-tables/hashed repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/hashed repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/hashed repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/hashed repeat=1/batch 0.183s
+# START gbdt-categorical-ctr-tables/hashed repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/hashed repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/hashed repeat=2/train
+# DONE gbdt-categorical-ctr-tables/hashed repeat=2/train 0.039s
+# START gbdt-categorical-ctr-tables/hashed repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/hashed repeat=2/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/hashed repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/hashed repeat=2/batch 0.177s
+# START gbdt-categorical-ctr-tables/hashed repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/hashed repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/hashed STABLE 0.601s
+# START gbdt-categorical-ctr-tables/wide repeat=1/train
+# DONE gbdt-categorical-ctr-tables/wide repeat=1/train 0.038s
+# START gbdt-categorical-ctr-tables/wide repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/wide repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/wide repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/wide repeat=1/batch 0.180s
+# START gbdt-categorical-ctr-tables/wide repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/wide repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/wide repeat=2/train
+# DONE gbdt-categorical-ctr-tables/wide repeat=2/train 0.038s
+# START gbdt-categorical-ctr-tables/wide repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/wide repeat=2/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/wide repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/wide repeat=2/batch 0.182s
+# START gbdt-categorical-ctr-tables/wide repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/wide repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/wide STABLE 0.604s
+# START gbdt-categorical-ctr-tables/denormal repeat=1/train
+# DONE gbdt-categorical-ctr-tables/denormal repeat=1/train 0.038s
+# START gbdt-categorical-ctr-tables/denormal repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/denormal repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/denormal repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/denormal repeat=1/batch 0.192s
+# START gbdt-categorical-ctr-tables/denormal repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/denormal repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/denormal repeat=2/train
+# DONE gbdt-categorical-ctr-tables/denormal repeat=2/train 0.039s
+# START gbdt-categorical-ctr-tables/denormal repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/denormal repeat=2/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/denormal repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/denormal repeat=2/batch 0.171s
+# START gbdt-categorical-ctr-tables/denormal repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/denormal repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/denormal STABLE 0.606s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=1/train
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=1/train 0.038s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=1/batch 0.183s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=2/train
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=2/train 0.038s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=2/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=2/batch 0.182s
+# START gbdt-categorical-ctr-tables/denormal_ftz repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/denormal_ftz repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/denormal_ftz STABLE 0.607s
+# START gbdt-categorical-ctr-tables/dupes repeat=1/train
+# DONE gbdt-categorical-ctr-tables/dupes repeat=1/train 0.038s
+# START gbdt-categorical-ctr-tables/dupes repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/dupes repeat=1/infer-save-reload 0.082s
+# START gbdt-categorical-ctr-tables/dupes repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/dupes repeat=1/batch 0.185s
+# START gbdt-categorical-ctr-tables/dupes repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/dupes repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/dupes repeat=2/train
+# DONE gbdt-categorical-ctr-tables/dupes repeat=2/train 0.038s
+# START gbdt-categorical-ctr-tables/dupes repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/dupes repeat=2/infer-save-reload 0.081s
+# START gbdt-categorical-ctr-tables/dupes repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/dupes repeat=2/batch 0.180s
+# START gbdt-categorical-ctr-tables/dupes repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/dupes repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/dupes STABLE 0.605s
+# START gbdt-categorical-ctr-tables/odd repeat=1/train
+# DONE gbdt-categorical-ctr-tables/odd repeat=1/train 0.025s
+# START gbdt-categorical-ctr-tables/odd repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/odd repeat=1/infer-save-reload 0.053s
+# START gbdt-categorical-ctr-tables/odd repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/odd repeat=1/batch 0.108s
+# START gbdt-categorical-ctr-tables/odd repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/odd repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/odd repeat=2/train
+# DONE gbdt-categorical-ctr-tables/odd repeat=2/train 0.025s
+# START gbdt-categorical-ctr-tables/odd repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/odd repeat=2/infer-save-reload 0.053s
+# START gbdt-categorical-ctr-tables/odd repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/odd repeat=2/batch 0.120s
+# START gbdt-categorical-ctr-tables/odd repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/odd repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/odd STABLE 0.385s
+# START gbdt-categorical-ctr-tables/negative repeat=1/train
+# DONE gbdt-categorical-ctr-tables/negative repeat=1/train 0.039s
+# START gbdt-categorical-ctr-tables/negative repeat=1/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/negative repeat=1/infer-save-reload 0.083s
+# START gbdt-categorical-ctr-tables/negative repeat=1/batch
+# DONE gbdt-categorical-ctr-tables/negative repeat=1/batch 0.191s
+# START gbdt-categorical-ctr-tables/negative repeat=1/stepfull
+# DONE gbdt-categorical-ctr-tables/negative repeat=1/stepfull 0.000s
+# START gbdt-categorical-ctr-tables/negative repeat=2/train
+# DONE gbdt-categorical-ctr-tables/negative repeat=2/train 0.039s
+# START gbdt-categorical-ctr-tables/negative repeat=2/infer-save-reload
+# DONE gbdt-categorical-ctr-tables/negative repeat=2/infer-save-reload 0.083s
+# START gbdt-categorical-ctr-tables/negative repeat=2/batch
+# DONE gbdt-categorical-ctr-tables/negative repeat=2/batch 0.185s
+# START gbdt-categorical-ctr-tables/negative repeat=2/stepfull
+# DONE gbdt-categorical-ctr-tables/negative repeat=2/stepfull 0.000s
+# CELL gbdt-categorical-ctr-tables/negative STABLE 0.620s
+| gbdt-categorical-ctr-tables | 9aef0c9ccfa6907c | 24ff7d7c24861171 | 3dfceb762e69749f | 852e96ce7e62df7c | 9aef0c9ccfa6907c | 9aef0c9ccfa6907c | 25b392f853af49bc | 2b3fac1172a1b684 | 1bc75b82705d1b39 |
+| gbdt-categorical-ctr-tables infer | a624d9f200295ebd | ba5bb1e19090253b | db7c89907a783122 | a942bfe94df4d9db | a624d9f200295ebd | a624d9f200295ebd | ae3a773120cd3c33 | d0a5ab298e3f354c | ad6465f38360fd0c |
+| gbdt-categorical-ctr-tables batch | d37a90de0b078e27 | da78c16224627804 | cd07fda7956d86ab | b9b2a1559aa6e945 | d37a90de0b078e27 | d37a90de0b078e27 | a171156aa53e5e8b | 8a24ba90ab6fff7f | ca5eabccae08c416 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: gbdt-categorical-ctr-tables model n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none), gbdt-categorical-ctr-tables stepfull n/a:no-decode-state
+wrote /root/leg_out/records/gbdt-categorical-ctr-tables/gbdt-categorical-ctr-tables/cpu-clean.json

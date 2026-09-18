@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:46:33  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START logistic-multiclass/base repeat=1/train
+# DONE logistic-multiclass/base repeat=1/train 0.137s
+# START logistic-multiclass/base repeat=1/infer-save-reload
+# DONE logistic-multiclass/base repeat=1/infer-save-reload 0.003s
+# START logistic-multiclass/base repeat=1/batch
+# DONE logistic-multiclass/base repeat=1/batch 0.006s
+# START logistic-multiclass/base repeat=1/stepfull
+# DONE logistic-multiclass/base repeat=1/stepfull 0.000s
+# START logistic-multiclass/base repeat=2/train
+# DONE logistic-multiclass/base repeat=2/train 0.134s
+# START logistic-multiclass/base repeat=2/infer-save-reload
+# DONE logistic-multiclass/base repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/base repeat=2/batch
+# DONE logistic-multiclass/base repeat=2/batch 0.005s
+# START logistic-multiclass/base repeat=2/stepfull
+# DONE logistic-multiclass/base repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/base STABLE 0.288s
+# START logistic-multiclass/ties repeat=1/train
+# DONE logistic-multiclass/ties repeat=1/train 0.650s
+# START logistic-multiclass/ties repeat=1/infer-save-reload
+# DONE logistic-multiclass/ties repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/ties repeat=1/batch
+# DONE logistic-multiclass/ties repeat=1/batch 0.005s
+# START logistic-multiclass/ties repeat=1/stepfull
+# DONE logistic-multiclass/ties repeat=1/stepfull 0.000s
+# START logistic-multiclass/ties repeat=2/train
+# DONE logistic-multiclass/ties repeat=2/train 0.642s
+# START logistic-multiclass/ties repeat=2/infer-save-reload
+# DONE logistic-multiclass/ties repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/ties repeat=2/batch
+# DONE logistic-multiclass/ties repeat=2/batch 0.004s
+# START logistic-multiclass/ties repeat=2/stepfull
+# DONE logistic-multiclass/ties repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/ties STABLE 1.306s
+# START logistic-multiclass/hashed repeat=1/train
+# DONE logistic-multiclass/hashed repeat=1/train 0.140s
+# START logistic-multiclass/hashed repeat=1/infer-save-reload
+# DONE logistic-multiclass/hashed repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/hashed repeat=1/batch
+# DONE logistic-multiclass/hashed repeat=1/batch 0.004s
+# START logistic-multiclass/hashed repeat=1/stepfull
+# DONE logistic-multiclass/hashed repeat=1/stepfull 0.000s
+# START logistic-multiclass/hashed repeat=2/train
+# DONE logistic-multiclass/hashed repeat=2/train 0.142s
+# START logistic-multiclass/hashed repeat=2/infer-save-reload
+# DONE logistic-multiclass/hashed repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/hashed repeat=2/batch
+# DONE logistic-multiclass/hashed repeat=2/batch 0.005s
+# START logistic-multiclass/hashed repeat=2/stepfull
+# DONE logistic-multiclass/hashed repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/hashed STABLE 0.296s
+# START logistic-multiclass/wide repeat=1/train
+# DONE logistic-multiclass/wide repeat=1/train 0.162s
+# START logistic-multiclass/wide repeat=1/infer-save-reload
+# DONE logistic-multiclass/wide repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/wide repeat=1/batch
+# DONE logistic-multiclass/wide repeat=1/batch 0.004s
+# START logistic-multiclass/wide repeat=1/stepfull
+# DONE logistic-multiclass/wide repeat=1/stepfull 0.000s
+# START logistic-multiclass/wide repeat=2/train
+# DONE logistic-multiclass/wide repeat=2/train 0.156s
+# START logistic-multiclass/wide repeat=2/infer-save-reload
+# DONE logistic-multiclass/wide repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/wide repeat=2/batch
+# DONE logistic-multiclass/wide repeat=2/batch 0.004s
+# START logistic-multiclass/wide repeat=2/stepfull
+# DONE logistic-multiclass/wide repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/wide STABLE 0.330s
+# START logistic-multiclass/denormal repeat=1/train
+# DONE logistic-multiclass/denormal repeat=1/train 0.130s
+# START logistic-multiclass/denormal repeat=1/infer-save-reload
+# DONE logistic-multiclass/denormal repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/denormal repeat=1/batch
+# DONE logistic-multiclass/denormal repeat=1/batch 0.005s
+# START logistic-multiclass/denormal repeat=1/stepfull
+# DONE logistic-multiclass/denormal repeat=1/stepfull 0.000s
+# START logistic-multiclass/denormal repeat=2/train
+# DONE logistic-multiclass/denormal repeat=2/train 0.131s
+# START logistic-multiclass/denormal repeat=2/infer-save-reload
+# DONE logistic-multiclass/denormal repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/denormal repeat=2/batch
+# DONE logistic-multiclass/denormal repeat=2/batch 0.005s
+# START logistic-multiclass/denormal repeat=2/stepfull
+# DONE logistic-multiclass/denormal repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/denormal STABLE 0.275s
+# START logistic-multiclass/denormal_ftz repeat=1/train
+# DONE logistic-multiclass/denormal_ftz repeat=1/train 0.130s
+# START logistic-multiclass/denormal_ftz repeat=1/infer-save-reload
+# DONE logistic-multiclass/denormal_ftz repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/denormal_ftz repeat=1/batch
+# DONE logistic-multiclass/denormal_ftz repeat=1/batch 0.005s
+# START logistic-multiclass/denormal_ftz repeat=1/stepfull
+# DONE logistic-multiclass/denormal_ftz repeat=1/stepfull 0.000s
+# START logistic-multiclass/denormal_ftz repeat=2/train
+# DONE logistic-multiclass/denormal_ftz repeat=2/train 0.132s
+# START logistic-multiclass/denormal_ftz repeat=2/infer-save-reload
+# DONE logistic-multiclass/denormal_ftz repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/denormal_ftz repeat=2/batch
+# DONE logistic-multiclass/denormal_ftz repeat=2/batch 0.005s
+# START logistic-multiclass/denormal_ftz repeat=2/stepfull
+# DONE logistic-multiclass/denormal_ftz repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/denormal_ftz STABLE 0.275s
+# START logistic-multiclass/dupes repeat=1/train
+# DONE logistic-multiclass/dupes repeat=1/train 0.217s
+# START logistic-multiclass/dupes repeat=1/infer-save-reload
+# DONE logistic-multiclass/dupes repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/dupes repeat=1/batch
+# DONE logistic-multiclass/dupes repeat=1/batch 0.005s
+# START logistic-multiclass/dupes repeat=1/stepfull
+# DONE logistic-multiclass/dupes repeat=1/stepfull 0.000s
+# START logistic-multiclass/dupes repeat=2/train
+# DONE logistic-multiclass/dupes repeat=2/train 0.226s
+# START logistic-multiclass/dupes repeat=2/infer-save-reload
+# DONE logistic-multiclass/dupes repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/dupes repeat=2/batch
+# DONE logistic-multiclass/dupes repeat=2/batch 0.005s
+# START logistic-multiclass/dupes repeat=2/stepfull
+# DONE logistic-multiclass/dupes repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/dupes STABLE 0.457s
+# START logistic-multiclass/odd repeat=1/train
+# DONE logistic-multiclass/odd repeat=1/train 0.053s
+# START logistic-multiclass/odd repeat=1/infer-save-reload
+# DONE logistic-multiclass/odd repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/odd repeat=1/batch
+# DONE logistic-multiclass/odd repeat=1/batch 0.004s
+# START logistic-multiclass/odd repeat=1/stepfull
+# DONE logistic-multiclass/odd repeat=1/stepfull 0.000s
+# START logistic-multiclass/odd repeat=2/train
+# DONE logistic-multiclass/odd repeat=2/train 0.053s
+# START logistic-multiclass/odd repeat=2/infer-save-reload
+# DONE logistic-multiclass/odd repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/odd repeat=2/batch
+# DONE logistic-multiclass/odd repeat=2/batch 0.004s
+# START logistic-multiclass/odd repeat=2/stepfull
+# DONE logistic-multiclass/odd repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/odd STABLE 0.119s
+# START logistic-multiclass/negative repeat=1/train
+# DONE logistic-multiclass/negative repeat=1/train 0.524s
+# START logistic-multiclass/negative repeat=1/infer-save-reload
+# DONE logistic-multiclass/negative repeat=1/infer-save-reload 0.002s
+# START logistic-multiclass/negative repeat=1/batch
+# DONE logistic-multiclass/negative repeat=1/batch 0.005s
+# START logistic-multiclass/negative repeat=1/stepfull
+# DONE logistic-multiclass/negative repeat=1/stepfull 0.000s
+# START logistic-multiclass/negative repeat=2/train
+# DONE logistic-multiclass/negative repeat=2/train 0.544s
+# START logistic-multiclass/negative repeat=2/infer-save-reload
+# DONE logistic-multiclass/negative repeat=2/infer-save-reload 0.002s
+# START logistic-multiclass/negative repeat=2/batch
+# DONE logistic-multiclass/negative repeat=2/batch 0.005s
+# START logistic-multiclass/negative repeat=2/stepfull
+# DONE logistic-multiclass/negative repeat=2/stepfull 0.000s
+# CELL logistic-multiclass/negative STABLE 1.082s
+| logistic-multiclass    | b197f3db38cd7fab | 083b19eb8c842f52 | 453f615cf761f515 | d15222ad5dfec54f | ae4add4de101fdc6 | ae4add4de101fdc6 | 92b880ec6b23a858 | 237ff4f174ec0bbb | c8b3e52326ea542d |
+| logistic-multiclass infer | 9603308580e1a294 | ec57465dcbb52769 | 2f2abf53a96c07f3 | c425664f9a79cdfc | 5a55ffdebeec9e6f | 5a55ffdebeec9e6f | 1a7502a44255504c | 335e25d487fe0eb0 | 776efb8677ed42eb |
+| logistic-multiclass model | b4b216d91d0e4ba7 | 61105df92f03899b | 2673362e9e8716e4 | c9e4f0408b970bd5 | d218014d1003ca6f | d218014d1003ca6f | eba7445d0f4ff605 | f719d5ae4760729e | 534c14d079eed480 |
+| logistic-multiclass batch | 65c83b052abd0434 | a215249040d7dade | 5ca13d2b791bad22 | 3ad954fd86549d13 | 645fbd470f6484a8 | 645fbd470f6484a8 | 5b85c4812792ede3 | 77f23c9706cbc655 | d2620a052334bacd |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: logistic-multiclass stepfull n/a:no-decode-state
+wrote /root/leg_out/records/logistic-multiclass/logistic-multiclass/cpu-clean.json

@@ -1,0 +1,5 @@
+mac_slot: admitted after 0.001s
+clean exit 0
+sabotage exit 0
+PASS: all five repaired native controls, all nine fixtures, two repeats
+mac_slot: {"wait_seconds": 0.0009981669991248054, "run_seconds": 137.73565937500098, "exit_code": 0}

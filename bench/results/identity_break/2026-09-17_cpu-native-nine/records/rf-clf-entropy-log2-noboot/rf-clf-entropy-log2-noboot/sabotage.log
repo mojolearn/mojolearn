@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:48:43  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START rf-clf-entropy-log2-noboot/base repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/base repeat=1/train 0.230s
+# START rf-clf-entropy-log2-noboot/base repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/base repeat=1/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/base repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/base repeat=1/batch 0.186s
+# START rf-clf-entropy-log2-noboot/base repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/base repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/base repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/base repeat=2/train 0.231s
+# START rf-clf-entropy-log2-noboot/base repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/base repeat=2/infer-save-reload 0.051s
+# START rf-clf-entropy-log2-noboot/base repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/base repeat=2/batch 0.168s
+# START rf-clf-entropy-log2-noboot/base repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/base repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/base STABLE 0.918s
+# START rf-clf-entropy-log2-noboot/ties repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/ties repeat=1/train 0.166s
+# START rf-clf-entropy-log2-noboot/ties repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/ties repeat=1/infer-save-reload 0.075s
+# START rf-clf-entropy-log2-noboot/ties repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/ties repeat=1/batch 0.200s
+# START rf-clf-entropy-log2-noboot/ties repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/ties repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/ties repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/ties repeat=2/train 0.165s
+# START rf-clf-entropy-log2-noboot/ties repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/ties repeat=2/infer-save-reload 0.076s
+# START rf-clf-entropy-log2-noboot/ties repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/ties repeat=2/batch 0.201s
+# START rf-clf-entropy-log2-noboot/ties repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/ties repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/ties STABLE 0.885s
+# START rf-clf-entropy-log2-noboot/hashed repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=1/train 0.229s
+# START rf-clf-entropy-log2-noboot/hashed repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=1/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/hashed repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=1/batch 0.178s
+# START rf-clf-entropy-log2-noboot/hashed repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/hashed repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=2/train 0.227s
+# START rf-clf-entropy-log2-noboot/hashed repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=2/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/hashed repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=2/batch 0.173s
+# START rf-clf-entropy-log2-noboot/hashed repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/hashed repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/hashed STABLE 0.911s
+# START rf-clf-entropy-log2-noboot/wide repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/wide repeat=1/train 0.232s
+# START rf-clf-entropy-log2-noboot/wide repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/wide repeat=1/infer-save-reload 0.051s
+# START rf-clf-entropy-log2-noboot/wide repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/wide repeat=1/batch 0.175s
+# START rf-clf-entropy-log2-noboot/wide repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/wide repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/wide repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/wide repeat=2/train 0.225s
+# START rf-clf-entropy-log2-noboot/wide repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/wide repeat=2/infer-save-reload 0.050s
+# START rf-clf-entropy-log2-noboot/wide repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/wide repeat=2/batch 0.173s
+# START rf-clf-entropy-log2-noboot/wide repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/wide repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/wide STABLE 0.906s
+# START rf-clf-entropy-log2-noboot/denormal repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=1/train 0.228s
+# START rf-clf-entropy-log2-noboot/denormal repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=1/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/denormal repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=1/batch 0.179s
+# START rf-clf-entropy-log2-noboot/denormal repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/denormal repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=2/train 0.229s
+# START rf-clf-entropy-log2-noboot/denormal repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=2/infer-save-reload 0.051s
+# START rf-clf-entropy-log2-noboot/denormal repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=2/batch 0.164s
+# START rf-clf-entropy-log2-noboot/denormal repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/denormal repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/denormal STABLE 0.903s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/train 0.226s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/infer-save-reload 0.051s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/batch 0.174s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/train 0.228s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/infer-save-reload 0.053s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/batch 0.178s
+# START rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/denormal_ftz repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/denormal_ftz STABLE 0.910s
+# START rf-clf-entropy-log2-noboot/dupes repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=1/train 0.214s
+# START rf-clf-entropy-log2-noboot/dupes repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=1/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/dupes repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=1/batch 0.178s
+# START rf-clf-entropy-log2-noboot/dupes repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/dupes repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=2/train 0.218s
+# START rf-clf-entropy-log2-noboot/dupes repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=2/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/dupes repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=2/batch 0.176s
+# START rf-clf-entropy-log2-noboot/dupes repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/dupes repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/dupes STABLE 0.890s
+# START rf-clf-entropy-log2-noboot/odd repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/odd repeat=1/train 0.185s
+# START rf-clf-entropy-log2-noboot/odd repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/odd repeat=1/infer-save-reload 0.032s
+# START rf-clf-entropy-log2-noboot/odd repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/odd repeat=1/batch 0.103s
+# START rf-clf-entropy-log2-noboot/odd repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/odd repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/odd repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/odd repeat=2/train 0.183s
+# START rf-clf-entropy-log2-noboot/odd repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/odd repeat=2/infer-save-reload 0.032s
+# START rf-clf-entropy-log2-noboot/odd repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/odd repeat=2/batch 0.115s
+# START rf-clf-entropy-log2-noboot/odd repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/odd repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/odd STABLE 0.651s
+# START rf-clf-entropy-log2-noboot/negative repeat=1/train
+# DONE rf-clf-entropy-log2-noboot/negative repeat=1/train 0.226s
+# START rf-clf-entropy-log2-noboot/negative repeat=1/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/negative repeat=1/infer-save-reload 0.050s
+# START rf-clf-entropy-log2-noboot/negative repeat=1/batch
+# DONE rf-clf-entropy-log2-noboot/negative repeat=1/batch 0.177s
+# START rf-clf-entropy-log2-noboot/negative repeat=1/stepfull
+# DONE rf-clf-entropy-log2-noboot/negative repeat=1/stepfull 0.000s
+# START rf-clf-entropy-log2-noboot/negative repeat=2/train
+# DONE rf-clf-entropy-log2-noboot/negative repeat=2/train 0.227s
+# START rf-clf-entropy-log2-noboot/negative repeat=2/infer-save-reload
+# DONE rf-clf-entropy-log2-noboot/negative repeat=2/infer-save-reload 0.052s
+# START rf-clf-entropy-log2-noboot/negative repeat=2/batch
+# DONE rf-clf-entropy-log2-noboot/negative repeat=2/batch 0.178s
+# START rf-clf-entropy-log2-noboot/negative repeat=2/stepfull
+# DONE rf-clf-entropy-log2-noboot/negative repeat=2/stepfull 0.000s
+# CELL rf-clf-entropy-log2-noboot/negative STABLE 0.911s
+| rf-clf-entropy-log2-noboot | 1647dca33748f3fe | eefc693360e47443 | 7917bab317195cd3 | f9ed6e1438384bc3 | 787eb2eb530b8c62 | 787eb2eb530b8c62 | 37cec4aece7c26fb | 6a2e789d0131a129 | c0bf8b53509c474a |
+| rf-clf-entropy-log2-noboot infer | fbe3b4b33b89dd52 | b328d1ef1a63261e | 4ecdf3a99c4a0bcc | 42147de90fcd7fed | 6f36f646d319c9fc | 6f36f646d319c9fc | adfa6338df47e38f | 8bad0b055065fea7 | abb873e1b3881597 |
+| rf-clf-entropy-log2-noboot model | 80614b2a6835d56c | 1f70d64880b9d684 | 3538ab4a4a93cec5 | 70b03886d1ca56c2 | 222a9709ce7063b0 | 222a9709ce7063b0 | c6f6e48e9fc0328d | 5e97fa869eb548bd | 17e5fe4b08c13566 |
+| rf-clf-entropy-log2-noboot batch | 248d760fb4885f39 | b9dd6e55b9271b42 | d35141cde0663a24 | d99ae963ed578a1a | 8dcfe6e34efd0be2 | 8dcfe6e34efd0be2 | 0f89de381ef7185a | 55bb6eca2d110718 | 1e6e585b5ec395d6 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: rf-clf-entropy-log2-noboot stepfull n/a:no-decode-state
+wrote /root/leg_out/records/rf-clf-entropy-log2-noboot/rf-clf-entropy-log2-noboot/cpu-sabotage.json

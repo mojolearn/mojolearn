@@ -298,7 +298,13 @@ pip)
     note "pip start syspy=$SYSPY"
     step pip_base 900 "$SYSPY" -m pip install --no-input --disable-pip-version-check scikit-learn pyarrow threadpoolctl
     step pip_cuml 1800 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuml-cu12==26.8.0
-    step pip_cuvs 1200 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuvs-cu12==26.8.0
+    # cuvs-cu12 26.8.0 DOES NOT EXIST. pypi.nvidia.com goes 26.6.0 -> 26.8.1
+    # for this package (checked 2026-09-17; cuml-cu12 IS 26.8.0, the two are not
+    # released in lockstep), so this pin resolved to nothing and the step could
+    # only ever fail. bench/OPPONENT_REFERENCE.md line 828 records the version
+    # the rows were actually measured at -- cuVS 26.8.1 -- so the pin is
+    # corrected to the measured version rather than to "latest".
+    step pip_cuvs 1200 "$SYSPY" -m pip install --no-input --disable-pip-version-check --extra-index-url=https://pypi.nvidia.com cuvs-cu12==26.8.1
     "$SYSPY" -m pip freeze > "$OUT/pip_freeze.txt" 2>&1
     note pip_done
     : > "$OUT/pip.done"

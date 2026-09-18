@@ -1,0 +1,170 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:48:59  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START rf-reg/base repeat=1/train
+# DONE rf-reg/base repeat=1/train 0.971s
+# START rf-reg/base repeat=1/infer-save-reload
+# DONE rf-reg/base repeat=1/infer-save-reload 0.035s
+# START rf-reg/base repeat=1/batch
+# DONE rf-reg/base repeat=1/batch 0.098s
+# START rf-reg/base repeat=1/stepfull
+# DONE rf-reg/base repeat=1/stepfull 0.000s
+# START rf-reg/base repeat=2/train
+# DONE rf-reg/base repeat=2/train 0.967s
+# START rf-reg/base repeat=2/infer-save-reload
+# DONE rf-reg/base repeat=2/infer-save-reload 0.034s
+# START rf-reg/base repeat=2/batch
+# DONE rf-reg/base repeat=2/batch 0.113s
+# START rf-reg/base repeat=2/stepfull
+# DONE rf-reg/base repeat=2/stepfull 0.000s
+# CELL rf-reg/base STABLE 2.217s
+# START rf-reg/ties repeat=1/train
+# DONE rf-reg/ties repeat=1/train 0.863s
+# START rf-reg/ties repeat=1/infer-save-reload
+# DONE rf-reg/ties repeat=1/infer-save-reload 0.061s
+# START rf-reg/ties repeat=1/batch
+# DONE rf-reg/ties repeat=1/batch 0.120s
+# START rf-reg/ties repeat=1/stepfull
+# DONE rf-reg/ties repeat=1/stepfull 0.000s
+# START rf-reg/ties repeat=2/train
+# DONE rf-reg/ties repeat=2/train 0.842s
+# START rf-reg/ties repeat=2/infer-save-reload
+# DONE rf-reg/ties repeat=2/infer-save-reload 0.061s
+# START rf-reg/ties repeat=2/batch
+# DONE rf-reg/ties repeat=2/batch 0.121s
+# START rf-reg/ties repeat=2/stepfull
+# DONE rf-reg/ties repeat=2/stepfull 0.000s
+# CELL rf-reg/ties STABLE 2.067s
+# START rf-reg/hashed repeat=1/train
+# DONE rf-reg/hashed repeat=1/train 0.951s
+# START rf-reg/hashed repeat=1/infer-save-reload
+# DONE rf-reg/hashed repeat=1/infer-save-reload 0.034s
+# START rf-reg/hashed repeat=1/batch
+# DONE rf-reg/hashed repeat=1/batch 0.104s
+# START rf-reg/hashed repeat=1/stepfull
+# DONE rf-reg/hashed repeat=1/stepfull 0.000s
+# START rf-reg/hashed repeat=2/train
+# DONE rf-reg/hashed repeat=2/train 0.953s
+# START rf-reg/hashed repeat=2/infer-save-reload
+# DONE rf-reg/hashed repeat=2/infer-save-reload 0.034s
+# START rf-reg/hashed repeat=2/batch
+# DONE rf-reg/hashed repeat=2/batch 0.094s
+# START rf-reg/hashed repeat=2/stepfull
+# DONE rf-reg/hashed repeat=2/stepfull 0.000s
+# CELL rf-reg/hashed STABLE 2.169s
+# START rf-reg/wide repeat=1/train
+# DONE rf-reg/wide repeat=1/train 0.962s
+# START rf-reg/wide repeat=1/infer-save-reload
+# DONE rf-reg/wide repeat=1/infer-save-reload 0.034s
+# START rf-reg/wide repeat=1/batch
+# DONE rf-reg/wide repeat=1/batch 0.102s
+# START rf-reg/wide repeat=1/stepfull
+# DONE rf-reg/wide repeat=1/stepfull 0.000s
+# START rf-reg/wide repeat=2/train
+# DONE rf-reg/wide repeat=2/train 0.947s
+# START rf-reg/wide repeat=2/infer-save-reload
+# DONE rf-reg/wide repeat=2/infer-save-reload 0.034s
+# START rf-reg/wide repeat=2/batch
+# DONE rf-reg/wide repeat=2/batch 0.092s
+# START rf-reg/wide repeat=2/stepfull
+# DONE rf-reg/wide repeat=2/stepfull 0.000s
+# CELL rf-reg/wide STABLE 2.172s
+# START rf-reg/denormal repeat=1/train
+# DONE rf-reg/denormal repeat=1/train 0.939s
+# START rf-reg/denormal repeat=1/infer-save-reload
+# DONE rf-reg/denormal repeat=1/infer-save-reload 0.035s
+# START rf-reg/denormal repeat=1/batch
+# DONE rf-reg/denormal repeat=1/batch 0.101s
+# START rf-reg/denormal repeat=1/stepfull
+# DONE rf-reg/denormal repeat=1/stepfull 0.000s
+# START rf-reg/denormal repeat=2/train
+# DONE rf-reg/denormal repeat=2/train 0.959s
+# START rf-reg/denormal repeat=2/infer-save-reload
+# DONE rf-reg/denormal repeat=2/infer-save-reload 0.035s
+# START rf-reg/denormal repeat=2/batch
+# DONE rf-reg/denormal repeat=2/batch 0.095s
+# START rf-reg/denormal repeat=2/stepfull
+# DONE rf-reg/denormal repeat=2/stepfull 0.000s
+# CELL rf-reg/denormal STABLE 2.166s
+# START rf-reg/denormal_ftz repeat=1/train
+# DONE rf-reg/denormal_ftz repeat=1/train 0.944s
+# START rf-reg/denormal_ftz repeat=1/infer-save-reload
+# DONE rf-reg/denormal_ftz repeat=1/infer-save-reload 0.035s
+# START rf-reg/denormal_ftz repeat=1/batch
+# DONE rf-reg/denormal_ftz repeat=1/batch 0.107s
+# START rf-reg/denormal_ftz repeat=1/stepfull
+# DONE rf-reg/denormal_ftz repeat=1/stepfull 0.000s
+# START rf-reg/denormal_ftz repeat=2/train
+# DONE rf-reg/denormal_ftz repeat=2/train 0.939s
+# START rf-reg/denormal_ftz repeat=2/infer-save-reload
+# DONE rf-reg/denormal_ftz repeat=2/infer-save-reload 0.035s
+# START rf-reg/denormal_ftz repeat=2/batch
+# DONE rf-reg/denormal_ftz repeat=2/batch 0.095s
+# START rf-reg/denormal_ftz repeat=2/stepfull
+# DONE rf-reg/denormal_ftz repeat=2/stepfull 0.000s
+# CELL rf-reg/denormal_ftz STABLE 2.155s
+# START rf-reg/dupes repeat=1/train
+# DONE rf-reg/dupes repeat=1/train 0.939s
+# START rf-reg/dupes repeat=1/infer-save-reload
+# DONE rf-reg/dupes repeat=1/infer-save-reload 0.033s
+# START rf-reg/dupes repeat=1/batch
+# DONE rf-reg/dupes repeat=1/batch 0.091s
+# START rf-reg/dupes repeat=1/stepfull
+# DONE rf-reg/dupes repeat=1/stepfull 0.000s
+# START rf-reg/dupes repeat=2/train
+# DONE rf-reg/dupes repeat=2/train 0.938s
+# START rf-reg/dupes repeat=2/infer-save-reload
+# DONE rf-reg/dupes repeat=2/infer-save-reload 0.034s
+# START rf-reg/dupes repeat=2/batch
+# DONE rf-reg/dupes repeat=2/batch 0.104s
+# START rf-reg/dupes repeat=2/stepfull
+# DONE rf-reg/dupes repeat=2/stepfull 0.000s
+# CELL rf-reg/dupes STABLE 2.141s
+# START rf-reg/odd repeat=1/train
+# DONE rf-reg/odd repeat=1/train 0.823s
+# START rf-reg/odd repeat=1/infer-save-reload
+# DONE rf-reg/odd repeat=1/infer-save-reload 0.022s
+# START rf-reg/odd repeat=1/batch
+# DONE rf-reg/odd repeat=1/batch 0.057s
+# START rf-reg/odd repeat=1/stepfull
+# DONE rf-reg/odd repeat=1/stepfull 0.000s
+# START rf-reg/odd repeat=2/train
+# DONE rf-reg/odd repeat=2/train 0.821s
+# START rf-reg/odd repeat=2/infer-save-reload
+# DONE rf-reg/odd repeat=2/infer-save-reload 0.022s
+# START rf-reg/odd repeat=2/batch
+# DONE rf-reg/odd repeat=2/batch 0.055s
+# START rf-reg/odd repeat=2/stepfull
+# DONE rf-reg/odd repeat=2/stepfull 0.000s
+# CELL rf-reg/odd STABLE 1.800s
+# START rf-reg/negative repeat=1/train
+# DONE rf-reg/negative repeat=1/train 0.937s
+# START rf-reg/negative repeat=1/infer-save-reload
+# DONE rf-reg/negative repeat=1/infer-save-reload 0.034s
+# START rf-reg/negative repeat=1/batch
+# DONE rf-reg/negative repeat=1/batch 0.108s
+# START rf-reg/negative repeat=1/stepfull
+# DONE rf-reg/negative repeat=1/stepfull 0.000s
+# START rf-reg/negative repeat=2/train
+# DONE rf-reg/negative repeat=2/train 0.945s
+# START rf-reg/negative repeat=2/infer-save-reload
+# DONE rf-reg/negative repeat=2/infer-save-reload 0.034s
+# START rf-reg/negative repeat=2/batch
+# DONE rf-reg/negative repeat=2/batch 0.094s
+# START rf-reg/negative repeat=2/stepfull
+# DONE rf-reg/negative repeat=2/stepfull 0.000s
+# CELL rf-reg/negative STABLE 2.152s
+| rf-reg                 | 77aaa9402434a2c0 | 48fbd6d44e16e307 | 287b392dd9b41bf7 | ecff68465927b577 | c456566baa65adbe | c456566baa65adbe | 670903e49cb80d3e | f9939d4abb55c0c6 | 8091e94866452af4 |
+| rf-reg infer           | 5534c342c1ecfcca | 3645e9c657146d05 | cc0a03495a3822d9 | d51727191152f821 | 0edd9128e5af8bd8 | 0edd9128e5af8bd8 | 2270d0b47121a6a4 | ddee3027f1029b29 | cb370e113a4e8c94 |
+| rf-reg model           | f34a7fea573ff8cb | da8c9d8446c71bbb | 5650f0444883ab79 | f9ea5345ea5f71f1 | dc6e12bd1699ea80 | dc6e12bd1699ea80 | e8762b0cff51f851 | 1b269ad1286bc2f9 | 2632fbb2aa7b1835 |
+| rf-reg batch           | 22fd8a5d7d340ab3 | d8c1a37a346d760c | 8ce1dd2a2baf3c84 | 8232af422cab7e62 | 26eb897e8fc71938 | 26eb897e8fc71938 | ba18df0960c4c4a5 | fb4457353fbf2470 | 11e17a4da9b95b14 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+stepfull: n/a=9
+n/a: rf-reg stepfull n/a:no-decode-state
+wrote /root/leg_out/records/rf-reg/rf-reg/cpu-sabotage.json

@@ -94,7 +94,10 @@ def test_bindings_and_manifest_carry_the_entries():
 def test_classification_is_no_longer_not_implemented():
     rows = [l for l in _read("gaussian_process/NOT_IMPLEMENTED.tsv").splitlines()
             if l.startswith("sklearn GaussianProcessClassifier")]
-    assert rows == [], rows
+    # Classification is implemented; its optional hyperparameter optimizer
+    # still has an explicit, narrower refusal documented in this ledger.
+    assert all(row.startswith("sklearn GaussianProcessClassifier's hyperparameter optimizer")
+               for row in rows), rows
     steps = _read("gaussian_process/host/gpc_steps.mojo")
     for token in ("GPC_LML_TOL_BITS: UInt32 = 0x2EDBE6FF", "identical_softplus", "identical_exp64",
                   "DEVIATION 2830", "DEVIATION 2831", "DEVIATION 2832"):

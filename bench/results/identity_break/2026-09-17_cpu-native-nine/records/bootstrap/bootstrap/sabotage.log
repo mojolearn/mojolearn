@@ -1,0 +1,168 @@
+# vendor=cpu-amd-epyc-9655-96-core-processor commit=763565275bb976f09f03149ab42884faf72ac451 (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-17 21:30:12  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START bootstrap/base repeat=1/train
+# DONE bootstrap/base repeat=1/train 2.600s
+# START bootstrap/base repeat=1/infer-save-reload
+# DONE bootstrap/base repeat=1/infer-save-reload 0.000s
+# START bootstrap/base repeat=1/batch
+# DONE bootstrap/base repeat=1/batch 0.247s
+# START bootstrap/base repeat=1/stepfull
+# DONE bootstrap/base repeat=1/stepfull 0.000s
+# START bootstrap/base repeat=2/train
+# DONE bootstrap/base repeat=2/train 2.523s
+# START bootstrap/base repeat=2/infer-save-reload
+# DONE bootstrap/base repeat=2/infer-save-reload 0.000s
+# START bootstrap/base repeat=2/batch
+# DONE bootstrap/base repeat=2/batch 0.255s
+# START bootstrap/base repeat=2/stepfull
+# DONE bootstrap/base repeat=2/stepfull 0.000s
+# CELL bootstrap/base STABLE 5.626s
+# START bootstrap/ties repeat=1/train
+# DONE bootstrap/ties repeat=1/train 2.771s
+# START bootstrap/ties repeat=1/infer-save-reload
+# DONE bootstrap/ties repeat=1/infer-save-reload 0.000s
+# START bootstrap/ties repeat=1/batch
+# DONE bootstrap/ties repeat=1/batch 0.279s
+# START bootstrap/ties repeat=1/stepfull
+# DONE bootstrap/ties repeat=1/stepfull 0.000s
+# START bootstrap/ties repeat=2/train
+# DONE bootstrap/ties repeat=2/train 2.788s
+# START bootstrap/ties repeat=2/infer-save-reload
+# DONE bootstrap/ties repeat=2/infer-save-reload 0.000s
+# START bootstrap/ties repeat=2/batch
+# DONE bootstrap/ties repeat=2/batch 0.279s
+# START bootstrap/ties repeat=2/stepfull
+# DONE bootstrap/ties repeat=2/stepfull 0.000s
+# CELL bootstrap/ties STABLE 6.118s
+# START bootstrap/hashed repeat=1/train
+# DONE bootstrap/hashed repeat=1/train 2.568s
+# START bootstrap/hashed repeat=1/infer-save-reload
+# DONE bootstrap/hashed repeat=1/infer-save-reload 0.000s
+# START bootstrap/hashed repeat=1/batch
+# DONE bootstrap/hashed repeat=1/batch 0.259s
+# START bootstrap/hashed repeat=1/stepfull
+# DONE bootstrap/hashed repeat=1/stepfull 0.000s
+# START bootstrap/hashed repeat=2/train
+# DONE bootstrap/hashed repeat=2/train 2.556s
+# START bootstrap/hashed repeat=2/infer-save-reload
+# DONE bootstrap/hashed repeat=2/infer-save-reload 0.000s
+# START bootstrap/hashed repeat=2/batch
+# DONE bootstrap/hashed repeat=2/batch 0.259s
+# START bootstrap/hashed repeat=2/stepfull
+# DONE bootstrap/hashed repeat=2/stepfull 0.000s
+# CELL bootstrap/hashed STABLE 5.643s
+# START bootstrap/wide repeat=1/train
+# DONE bootstrap/wide repeat=1/train 2.537s
+# START bootstrap/wide repeat=1/infer-save-reload
+# DONE bootstrap/wide repeat=1/infer-save-reload 0.000s
+# START bootstrap/wide repeat=1/batch
+# DONE bootstrap/wide repeat=1/batch 0.259s
+# START bootstrap/wide repeat=1/stepfull
+# DONE bootstrap/wide repeat=1/stepfull 0.000s
+# START bootstrap/wide repeat=2/train
+# DONE bootstrap/wide repeat=2/train 2.577s
+# START bootstrap/wide repeat=2/infer-save-reload
+# DONE bootstrap/wide repeat=2/infer-save-reload 0.000s
+# START bootstrap/wide repeat=2/batch
+# DONE bootstrap/wide repeat=2/batch 0.260s
+# START bootstrap/wide repeat=2/stepfull
+# DONE bootstrap/wide repeat=2/stepfull 0.000s
+# CELL bootstrap/wide STABLE 5.633s
+# START bootstrap/denormal repeat=1/train
+# DONE bootstrap/denormal repeat=1/train 2.592s
+# START bootstrap/denormal repeat=1/infer-save-reload
+# DONE bootstrap/denormal repeat=1/infer-save-reload 0.000s
+# START bootstrap/denormal repeat=1/batch
+# DONE bootstrap/denormal repeat=1/batch 0.259s
+# START bootstrap/denormal repeat=1/stepfull
+# DONE bootstrap/denormal repeat=1/stepfull 0.000s
+# START bootstrap/denormal repeat=2/train
+# DONE bootstrap/denormal repeat=2/train 2.568s
+# START bootstrap/denormal repeat=2/infer-save-reload
+# DONE bootstrap/denormal repeat=2/infer-save-reload 0.000s
+# START bootstrap/denormal repeat=2/batch
+# DONE bootstrap/denormal repeat=2/batch 0.260s
+# START bootstrap/denormal repeat=2/stepfull
+# DONE bootstrap/denormal repeat=2/stepfull 0.000s
+# CELL bootstrap/denormal STABLE 5.680s
+# START bootstrap/denormal_ftz repeat=1/train
+# DONE bootstrap/denormal_ftz repeat=1/train 2.576s
+# START bootstrap/denormal_ftz repeat=1/infer-save-reload
+# DONE bootstrap/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START bootstrap/denormal_ftz repeat=1/batch
+# DONE bootstrap/denormal_ftz repeat=1/batch 0.268s
+# START bootstrap/denormal_ftz repeat=1/stepfull
+# DONE bootstrap/denormal_ftz repeat=1/stepfull 0.000s
+# START bootstrap/denormal_ftz repeat=2/train
+# DONE bootstrap/denormal_ftz repeat=2/train 2.588s
+# START bootstrap/denormal_ftz repeat=2/infer-save-reload
+# DONE bootstrap/denormal_ftz repeat=2/infer-save-reload 0.000s
+# START bootstrap/denormal_ftz repeat=2/batch
+# DONE bootstrap/denormal_ftz repeat=2/batch 0.272s
+# START bootstrap/denormal_ftz repeat=2/stepfull
+# DONE bootstrap/denormal_ftz repeat=2/stepfull 0.000s
+# CELL bootstrap/denormal_ftz STABLE 5.704s
+# START bootstrap/dupes repeat=1/train
+# DONE bootstrap/dupes repeat=1/train 2.710s
+# START bootstrap/dupes repeat=1/infer-save-reload
+# DONE bootstrap/dupes repeat=1/infer-save-reload 0.000s
+# START bootstrap/dupes repeat=1/batch
+# DONE bootstrap/dupes repeat=1/batch 0.271s
+# START bootstrap/dupes repeat=1/stepfull
+# DONE bootstrap/dupes repeat=1/stepfull 0.000s
+# START bootstrap/dupes repeat=2/train
+# DONE bootstrap/dupes repeat=2/train 2.747s
+# START bootstrap/dupes repeat=2/infer-save-reload
+# DONE bootstrap/dupes repeat=2/infer-save-reload 0.000s
+# START bootstrap/dupes repeat=2/batch
+# DONE bootstrap/dupes repeat=2/batch 0.273s
+# START bootstrap/dupes repeat=2/stepfull
+# DONE bootstrap/dupes repeat=2/stepfull 0.000s
+# CELL bootstrap/dupes STABLE 6.002s
+# START bootstrap/odd repeat=1/train
+# DONE bootstrap/odd repeat=1/train 2.623s
+# START bootstrap/odd repeat=1/infer-save-reload
+# DONE bootstrap/odd repeat=1/infer-save-reload 0.000s
+# START bootstrap/odd repeat=1/batch
+# DONE bootstrap/odd repeat=1/batch 0.269s
+# START bootstrap/odd repeat=1/stepfull
+# DONE bootstrap/odd repeat=1/stepfull 0.000s
+# START bootstrap/odd repeat=2/train
+# DONE bootstrap/odd repeat=2/train 2.698s
+# START bootstrap/odd repeat=2/infer-save-reload
+# DONE bootstrap/odd repeat=2/infer-save-reload 0.000s
+# START bootstrap/odd repeat=2/batch
+# DONE bootstrap/odd repeat=2/batch 0.269s
+# START bootstrap/odd repeat=2/stepfull
+# DONE bootstrap/odd repeat=2/stepfull 0.000s
+# CELL bootstrap/odd STABLE 5.860s
+# START bootstrap/negative repeat=1/train
+# DONE bootstrap/negative repeat=1/train 2.703s
+# START bootstrap/negative repeat=1/infer-save-reload
+# DONE bootstrap/negative repeat=1/infer-save-reload 0.000s
+# START bootstrap/negative repeat=1/batch
+# DONE bootstrap/negative repeat=1/batch 0.255s
+# START bootstrap/negative repeat=1/stepfull
+# DONE bootstrap/negative repeat=1/stepfull 0.000s
+# START bootstrap/negative repeat=2/train
+# DONE bootstrap/negative repeat=2/train 2.626s
+# START bootstrap/negative repeat=2/infer-save-reload
+# DONE bootstrap/negative repeat=2/infer-save-reload 0.000s
+# START bootstrap/negative repeat=2/batch
+# DONE bootstrap/negative repeat=2/batch 0.268s
+# START bootstrap/negative repeat=2/stepfull
+# DONE bootstrap/negative repeat=2/stepfull 0.000s
+# CELL bootstrap/negative STABLE 5.852s
+| bootstrap              | 3f6ba9c72af87818 | df10c73580fc117c | af2b73ebffeb6294 | f348c813a3289c05 | 392d42d9498d0462 | 392d42d9498d0462 | 834aa7a518a07122 | 35f916070fad8b7e | 78e6d3750ac9dcd7 |
+| bootstrap batch        | 813bac2a2a11fc02 | b6f7742f58e81ddd | a464918e12ea8889 | 2392374b94efc038 | 39c412c1d0f1c042 | 39c412c1d0f1c042 | d7057e02eb0fd72d | 9a0fe1ccd9aa619d | 71c4bce7a5d09ec4 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+stepfull: n/a=9
+n/a: bootstrap infer n/a:function, bootstrap model n/a:no-save, bootstrap stepfull n/a:no-decode-state
+wrote /root/leg_out/records/bootstrap/bootstrap/cpu-sabotage.json
