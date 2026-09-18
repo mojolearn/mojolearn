@@ -144,8 +144,8 @@ def main():
 
     print()
     print('=== 1. the two arms are two arms ===')
-    flags = dict(unguarded=un.get('attn_bwd_corner_refuses'),
-                 guarded=gu.get('attn_bwd_corner_refuses'))
+    flags = dict(refusing=un.get('attn_bwd_corner_refuses'),
+                 norefuse=gu.get('attn_bwd_corner_refuses'))
     v['bwd_corner_refuses_flag'] = flags
     print('byte_lm_attn_bwd_corner_refuses() from inside each process:', flags)
     assert flags['refusing'] is True, 'the control arm is not the refusing build: %r' % flags
