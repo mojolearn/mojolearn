@@ -72,18 +72,30 @@ rebuild. It retains and hashes the controller-owned helper outside the frozen
 source archive, so the build source remains `c9541a011`. Set
 `MOJOLEARN_EXPECT_CORE_HOST_SHA256` to the fetched NVIDIA core-host digest;
 an early real core-host compile/stage must match before the full build begins.
-This mode has shell syntax and surrounding release test coverage; the actual
-container build is still pending. H100 is now deleted. The queued AMD driver
-stopped at the original controller failure and must be restarted using the
-corrected-admission receipt. The earlier AMD build remains evidence,
-but is not packable with these NVIDIA sets.
+Both NVIDIA sets are retained under `linux-builds-v4`. AMD v5 stopped before
+compilation because cloud-init held the apt index lock; the controller now
+retries refresh within a deadline and never installs from stale indexes.
+AMD v6 prepared the container but its early host probe differed: the probe
+used `-j 2` while the actual release host builds use `-j 1`. Its binary is
+retained under `linux-builds-v6/hip-gfx942/toolchain-probe`. The probe now uses
+the exact release invocation. Pinning `patchelf==0.17.2.4` also applies when
+apt succeeds, so the ELF stager matches NVIDIA. Both short rentals are deleted
+(v5 `601581422`, v6 `601582110`, HTTP 404).
+
+AMD v7 is the active attempt: external `rebuild_amd_v7.py`, log
+`logs/amd-rebuild-v7-driver.log`, artifacts `linux-builds-v7/hip-gfx942`.
+It uses controller source `5814474ef` and unchanged native source `c9541a011`.
+Consult external state for its current rental/status before starting anything.
+Controller refusal/exit checks, Hopper admission and apt retries have seven
+focused tests with 18 subtests passing. A failed supplemental qualification
+marker or refused artifact now fails the controller process too.
 
 Unresolved release work:
 
-- Finish fresh Linux builds for CUDA sm_89, CUDA sm_90a and HIP gfx942,
-  assemble/audit the combined wheel, and qualify those exact bytes on each
-  actual device. The first AMD build predates the regenerated host source
-  and is superseded. No old build may be silently substituted.
+- Finish the reproducible AMD rebuild, require all 32 host binaries to match
+  both retained NVIDIA sets, assemble/audit the combined wheel, and qualify
+  those exact bytes on each actual device. No old or incompatible AMD build
+  may be silently substituted.
 - The Mamba poison capture is stable and agrees with the available clean
   cells, but the gate FAILED because its old reference record lacks current
   lane revisions. Bank current NVIDIA and AMD Mamba columns during installed
