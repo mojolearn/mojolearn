@@ -800,6 +800,11 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     out.append(grown_fwd)
     out.append(grown_bwd)
     out.append(grown_aexp)
+    # Triples in layer order: actual launch statuses and current materialization.
+    for layer in range(tr.config.n_layers):
+        out.append(tr.forward[layer].attn_forward_status)
+        out.append(tr.backward[layer].attn_backward_status)
+        out.append(Int(tr.forward[layer].attn_materialized))
     return out^
 
 

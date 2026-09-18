@@ -1054,7 +1054,9 @@ def byte_lm_session_info_binding(session: PythonObject) raises -> PythonObject:
     layers grown forward, layers grown backward, layers with a full
     `aexp`. They are ZERO when no trainer is open. Existing callers index
     positions 0 to 3 and are unaffected; nothing here launches, downloads
-    or synchronizes."""
+    or synchronizes. Open trainers additionally append one triple per layer:
+    forward launch status, backward launch status, current materialization.
+    Status -1 means no fused attempt, otherwise the actual FUSED_* code."""
     var owner = session.downcast_value_ptr[ByteLMSession]()
     var completed = -1
     var grad_step = -1
