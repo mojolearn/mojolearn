@@ -378,8 +378,20 @@ need=''; command -v patchelf >/dev/null || need=\"\$need patchelf\"
 # job. A build never needs this, which is why nothing had noticed.
 $REMOTE_PY -c 'import ensurepip' 2>/dev/null || need=\"\$need python3-venv python3-pip\"
 if [ -n \"\$need\" ]; then
-  timeout -k 10 180 apt-get -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=30 update > /root/apt.log 2>&1
-  timeout -k 10 300 apt-get -qq -o DPkg::Lock::Timeout=120 -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
+  # Fresh images may still be refreshing their indexes in cloud-init. APT's
+  # DPkg lock timeout does not cover the lists lock used by update. Retry that
+  # operation within a deadline; never install from stale indexes after it fails.
+  update_end=\$(( \$(date +%s) + 180 )); updated=0
+  : > /root/apt.log
+  while [ \$(date +%s) -lt \$update_end ]; do
+    timeout -k 10 60 apt-get -qq -o Acquire::Retries=1 -o Acquire::http::Timeout=20 update >> /root/apt.log 2>&1 && { updated=1; break; }
+    sleep 5
+  done
+  if [ \$updated = 1 ]; then
+    timeout -k 10 300 apt-get -qq -o DPkg::Lock::Timeout=120 -o Acquire::Retries=1 install -y --no-install-recommends \$need >> /root/apt.log 2>&1; echo APT_EXIT=\$? need=\$need
+  else
+    echo APT_EXIT=124 need=\$need
+  fi
 fi
 export PATH=/root/.pixi/bin:\$PATH
 command -v pixi >/dev/null || timeout -k 10 120 sh -c 'curl -fsSL --max-time 30 https://pixi.sh/install.sh | sh' > /root/pixi_bootstrap.log 2>&1

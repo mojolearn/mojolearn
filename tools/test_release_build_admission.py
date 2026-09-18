@@ -3,6 +3,7 @@ import hashlib
 import contextlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -95,6 +96,39 @@ class InstalledAdmissionTests(unittest.TestCase):
                             exec(compile(script, '<installed gate>', 'exec'), {})
                     else:
                         exec(compile(script, '<installed gate>', 'exec'), {})
+
+
+class PackagePreparationTests(unittest.TestCase):
+    def test_index_lock_retries_and_failed_refresh_never_installs(self):
+        source = (ROOT / 'tools/do_release061_leg.sh').read_text()
+        fragment = source.split('  update_end=', 1)[1].split('\nfi\nexport PATH=', 1)[0]
+        fragment = ('update_end=' + fragment).replace('\\$', '$').replace('/root/apt.log', '"$TEST_APT_LOG"')
+        for always_fail in ('0', '1'):
+            with self.subTest(always_fail=always_fail), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                programs = {
+                    'date': 'p=base/"clock"; n=int(p.read_text())+60 if p.exists() else 60; p.write_text(str(n)); print(n)',
+                    'sleep': '',
+                    'timeout': 'os.execvp(sys.argv[4],sys.argv[4:])',
+                    'apt-get': '''p=base/"calls"; p.open("a").write(" ".join(sys.argv[1:])+"\\n")
+if "update" in sys.argv:
+ n=p.read_text().count("update")
+ sys.exit(1 if os.environ["ALWAYS_FAIL"]=="1" or n==1 else 0)
+''',
+                }
+                for name, body in programs.items():
+                    path = root / name
+                    path.write_text('#!' + sys.executable + '\nimport os,sys\nfrom pathlib import Path\nbase=Path(os.environ["TEST_DIR"])\n' + body + '\n')
+                    path.chmod(0o755)
+                env = dict(os.environ, PATH=str(root) + os.pathsep + os.environ['PATH'],
+                           TEST_DIR=str(root), TEST_APT_LOG=str(root / 'apt.log'), ALWAYS_FAIL=always_fail)
+                result = subprocess.run(['bash', '-c', 'need=dummy\n' + fragment],
+                                        env=env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                calls = (root / 'calls').read_text()
+                self.assertEqual(calls.count('update'), 2)
+                self.assertEqual('install' in calls, always_fail == '0')
+                self.assertIn('APT_EXIT=' + ('124' if always_fail == '1' else '0'), result.stdout)
 
 
 if __name__ == '__main__':
