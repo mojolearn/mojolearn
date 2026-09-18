@@ -1,0 +1,25 @@
+# DONE par-scaler-minmax/base repeat=2/batch 0.001s
+# CELL par-scaler-minmax/base STABLE 0.497s
+# START par-scaler-minmax/ties repeat=1/train
+# DONE par-scaler-minmax/ties repeat=1/train 0.253s
+# START par-scaler-minmax/ties repeat=1/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=1/infer-save-reload 0.001s
+# START par-scaler-minmax/ties repeat=1/batch
+# DONE par-scaler-minmax/ties repeat=1/batch 0.002s
+# START par-scaler-minmax/ties repeat=2/train
+# DONE par-scaler-minmax/ties repeat=2/train 0.254s
+# START par-scaler-minmax/ties repeat=2/infer-save-reload
+# DONE par-scaler-minmax/ties repeat=2/infer-save-reload 0.001s
+# START par-scaler-minmax/ties repeat=2/batch
+# DONE par-scaler-minmax/ties repeat=2/batch 0.002s
+# CELL par-scaler-minmax/ties STABLE 0.512s
+| par-scaler-minmax      | 646b46cf73ead58e | fcaf2c976dae67d9 |
+| par-scaler-minmax infer | 5b934842e164f80f | 6717b6636f5595fc |
+| par-scaler-minmax model | 24956a7dff42ccef | 6c83436d35af2540 |
+| par-scaler-minmax batch | bdcf978b59eaee06 | af35d3cfeccf029b |
+
+cells=4 stable=4 moved=0 refused=0
+infer: stable=4
+model: stable=4
+batch: stable=4
+wrote /root/leg_out/cpu-x86.json

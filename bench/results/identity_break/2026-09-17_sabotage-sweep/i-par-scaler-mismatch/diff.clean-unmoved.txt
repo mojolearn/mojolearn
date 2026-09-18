@@ -1,0 +1,22 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 52 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-amd-epyc-9654-96-core-processor is a CPU column: cpu_model='AMD EPYC 9654 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_metrics_host', '_mojolearn_preprocessing_host', '_mojolearn_solver_host'] commit=372609f8e819e680f9a3b2ab9e92bd1cd5624b09
+NOTE: column cpu-amd-epyc-9655-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655 96-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_estimators_host', '_mojolearn_linalg_host', '_mojolearn_preprocessing_host'] commit=4f7c54c7da21883fe286b4e55b49bcefa4fdf9b8
+| lane/fixture                 | verdict    | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| par-scaler/base              | IDENTICAL x2 | c4cc661617a4b9a7 | c4cc661617a4b9a7 |
+| par-scaler/ties              | IDENTICAL x2 | 1ecadb87b13bb827 | 1ecadb87b13bb827 |
+
+summary: IDENTICAL=2
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9654-96-core-processor | cpu-amd-epyc-9655-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-scaler/base              | infer  | IDENTICAL x2 | fa0fbdef7ccae250 | fa0fbdef7ccae250 |
+| par-scaler/base              | model  | IDENTICAL x2 | 3adc4c98c02a61b6 | 3adc4c98c02a61b6 |
+| par-scaler/base              | batch  | IDENTICAL x2 | 917ae37b02618ab5 | 917ae37b02618ab5 |
+| par-scaler/ties              | infer  | IDENTICAL x2 | 4c66195589867f60 | 4c66195589867f60 |
+| par-scaler/ties              | model  | IDENTICAL x2 | b10d8fc2c81e61e7 | b10d8fc2c81e61e7 |
+| par-scaler/ties              | batch  | IDENTICAL x2 | 789ad47ddd5c18b0 | 789ad47ddd5c18b0 |
+
+summary (infer/model): IDENTICAL=4
+summary (batch): IDENTICAL=2
+summary (rlpair): 
