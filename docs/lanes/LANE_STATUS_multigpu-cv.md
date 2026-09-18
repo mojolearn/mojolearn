@@ -81,3 +81,18 @@ Latest validation: 91 passed, 10 optional sklearn skips (software contracts).
 Logs committed under bench/results/parallel_cv/2026-09-18-software-contracts.
 The independent visibility-mask fix and its 15 tests landed on main 4e8ee54a1.
 The CV implementation and driver inventory remain only on this feature branch.
+
+## Expanded 0.8.7 follow-up
+
+Merged current main into this branch, including the separately added forecast
+worker operation. The hardware capture now accepts a guarded git archive with
+a full commit witness and hashes the actual CV/scorer/worker/inventory source
+files; clean checkouts remain required when .git exists. Previously the remote
+runner could not start from the archive that every guarded cloud leg ships.
+
+`tools/parallel_cv_remote_leg.sh` is a bounded two-GPU extra body: one GBDT
+binding build and the one/two/reversed-device numerical/placement capture.
+The outer controller must provision two devices and retain/delete them under
+its watchdog. This does not manufacture an execution trace from inventory.
+68 targeted software tests passed after integration. Hardware execution and
+trace qualification are still owed, and this branch remains outside main.

@@ -6,12 +6,34 @@ import copy
 import functools
 import json
 import os
+import hashlib
+import re
 from pathlib import Path
 import subprocess
 import sys
 import time
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def source_identity(root=ROOT):
+    """Guarded cloud legs ship a pinned git archive, without its .git directory."""
+    root = Path(root)
+    if (root / '.git').exists():
+        commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=root, text=True).strip()
+        if subprocess.check_output(['git', 'status', '--porcelain'], cwd=root, text=True).strip():
+            raise RuntimeError('record from a committed, clean source checkout')
+        kind = 'clean-git-checkout'
+    else:
+        commit = os.environ.get('MOJOLEARN_COMMIT', '')
+        kind = 'guarded-source-archive'
+    if not re.fullmatch('[0-9a-f]{40}', commit):
+        raise RuntimeError('CV capture requires a full source commit witness')
+    paths = ('tools/parallel_cross_val_check.py', 'tools/parallel_cv_witness.py',
+             'python/mojolearn/parallel_model_selection.py',
+             'python/mojolearn/_gpu_witness.py', 'python/mojolearn/_parallel_worker.py')
+    return dict(commit=commit, kind=kind, source_sha256={
+        p: hashlib.sha256((root / p).read_bytes()).hexdigest() for p in paths})
 
 
 def main():
@@ -34,10 +56,8 @@ def main():
     from tools.parallel_cv_witness import score_with_witness, read_records, compare_records
     if ml.vendor() != args.require_backend:
         raise RuntimeError('requested GPU backend is not active; CPU fallback is not evidence')
-    commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
-    if subprocess.check_output(['git', 'status', '--porcelain'], text=True).strip():
-        raise RuntimeError('record from a committed, clean source checkout')
-    report = dict(status='INCOMPLETE', source_commit=commit, package_origin=ml.__file__,
+    source = source_identity()
+    report = dict(status='INCOMPLETE', source_commit=source['commit'], source=source, package_origin=ml.__file__,
                   vendor=ml.vendor(), runs=[], controls=[], physical_execution_trace='OWED',
                   scope='CV source numerical and placement checks only; no installed-wheel, '
                         'capacity, throughput or complete physical execution qualification')
