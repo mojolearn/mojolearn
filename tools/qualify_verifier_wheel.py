@@ -102,6 +102,10 @@ def expanded_checks(run, python, work, output, *, vendor, scope, devices=None):
         run('distributed', [python, '-m', 'mojolearn', 'verify-distributed',
             '--devices', ','.join(map(str, devices)), '--require-installed',
             '--out', str(output / 'distributed-capture.json')], work)
+        run('cross-validation', [python, '-m', 'mojolearn', 'verify-cross-validation',
+            '--devices', ','.join(map(str, devices)), '--require-backend', vendor, '--require-installed',
+            '--out', str(output / 'cross-validation')], work)
+        report['cross_validation'] = 'NUMERICS_AND_PLACEMENT_CHECKED_EXECUTION_TRACE_OWED'
         for name, selected in [('split', devices), ('reversed', tuple(reversed(devices)))]:
             path = output / ('loaded-lm-' + name + '-capture.json')
             run('loaded-lm-' + name, [python, '-m', 'mojolearn', 'verify-causal-lm',

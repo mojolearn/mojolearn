@@ -21,7 +21,8 @@ The existing `qualify_verifier_wheel.py` installed gate is extended, so both the
 macOS release workflow and Linux supplemental release checks automatically run:
 
 1. Fresh isolated wheel install with dependency check and import-origin guard.
-2. Public API availability and both new native IVF symbols, failing closed.
+2. Public API availability (including parallel CV), both new native IVF symbols
+   and the native GBDT fit entry for CV, failing closed.
 3. Loaded-model CPU and GPU v2 captures: all seven supported checkpoint families,
    24 cases across FP32/BF16/int8, then exact CPU/GPU comparison of 144 parts.
 4. Existing installed coverage, bundled models, batch/property and self-test gates.
@@ -75,8 +76,8 @@ checks use explicit exceptions.
    `tools/release_installed_checks.sh qualify-release-linux3 WHEEL SHA VENDOR OUT
    PROOFS ARCH`. On two-device NVIDIA and AMD qualification hosts, set
    `MOJOLEARN_RELEASE_MULTI_GPU_DEVICES=0,1`; this forwards to the expanded gate.
-   One/two/reversed classical layouts and split/reversed loaded-LM owners are
-   checked without another wheel install. Guarded archive source is exported by
+   One/two/reversed classical layouts, installed cross-validation, and
+   split/reversed loaded-LM owners are checked without another wheel install. Guarded archive source is exported by
    the existing supplemental script. Every output directory is new and retained.
 6. Assemble the retained per-architecture proofs and run
    `tools/check_linux_release_qualification.py ... --profile release-linux3`.

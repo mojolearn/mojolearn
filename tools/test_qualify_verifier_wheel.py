@@ -101,6 +101,8 @@ class ExpandedWheelTests(unittest.TestCase):
         result, calls = self.run_scope(devices=(2,0))
         commands = dict(calls)
         self.assertIn('--require-installed', commands['distributed'])
+        self.assertIn('--require-installed', commands['cross-validation'])
+        self.assertIn('--require-backend', commands['cross-validation'])
         self.assertEqual(commands['distributed'][commands['distributed'].index('--devices')+1], '2,0')
         for name, expected in [('split',['2','0']), ('reversed',['0','2'])]:
             command = commands['loaded-lm-'+name]
