@@ -63,3 +63,11 @@ backend/vendor/output/budget options; it verifies the installed package bytes.
 All 23 holds remain until independent property admission and installed verifier
 replay pass. Apple records now exist for the six saved-model debts; remaining
 NVIDIA/AMD/installed qualification is still explicit.
+
+Remote ordering refined: kernel build/capture/replay first, then each classical
+family, then neural bindings/captures. No longer waits for eleven builds before
+retaining its first evidence. Default total body budget is 2400 seconds (pass
+2400 explicitly in the example above), leaving controller setup/fetch time in
+a typical 60-minute rental guard. `MOJOLEARN_ORDINARY_LANES=kernel-ridge-poly,...`
+selects any validated subset; unused families are not built. Missing/failed
+families leave exit_code=1 while subsequent independent groups can still run.
