@@ -61,6 +61,17 @@ calls and 0.033 s as one call on the same bytes concatenated.
 `-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1` swaps ids across each document
 boundary inside a batch (a batch of one is untouched), the batch part's
 negative control; `tokenizer_host_sabotage()` reads True for either define.
+
+THE TRAINER ENTRIES (lane/bpe-builder-native, 2026-09-18). `bpe_train`
+runs `tokenizer/train/bpe_train.mojo::train_bpe` on documents passed like
+`bpe_encode_batch`'s (bytes back to back, int64 offsets) and returns an
+opaque `_BpeTrainedHandle`; `bpe_trained_sizes` and `bpe_trained_copy` read
+the vocabulary out. `BpeVocabularyTrainer` (backend "auto" or "mojo") calls
+them; `pixi run check-bpe-trainer` holds the trainer to the Python reference
+file byte for file byte. `-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the
+tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
+it; the `break_ties_high` flag in `dims` is the Python door's environment
+spelling of the same arm.
 """
 from std.memory import memcpy
 from std.os import abort
@@ -80,6 +91,12 @@ from tokenizer.encoding import (
     GPT2_ENDOFTEXT,
     BpeTokenizer,
     load_bpe_tokenizer_from,
+)
+from tokenizer.impl.unicode_class import builtin_unicode_classes
+from tokenizer.train.bpe_train import (
+    BPE_TRAINER_SABOTAGE,
+    TrainedVocabulary,
+    train_bpe,
 )
 
 comptime TOKENIZER_HOST_SABOTAGE = is_defined["MOJOLEARN_TOKENIZER_HOST_SABOTAGE"]()
@@ -106,6 +123,22 @@ struct BpeHandle(Movable, Writable):
 
     def write_repr_to(self, mut writer: Some[Writer]):
         writer.write("_BpeHandle(loaded=", Bool(self.tok), ")")
+
+
+struct BpeTrainedHandle(Movable, Writable):
+    """Python-owned result of one `bpe_train` call: the trained vocabulary,
+    held until `bpe_trained_copy` has copied it into the caller's buffers."""
+
+    var vocab: Optional[TrainedVocabulary]
+
+    def __init__(out self):
+        self.vocab = Optional[TrainedVocabulary]()
+
+    def write_to(self, mut writer: Some[Writer]):
+        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
+
+    def write_repr_to(self, mut writer: Some[Writer]):
+        writer.write("_BpeTrainedHandle(trained=", Bool(self.vocab), ")")
 
 
 def _index(value: PythonObject) raises -> Int:
@@ -163,9 +196,15 @@ def tokenizer_host_column_binding() raises -> PythonObject:
 
 
 def tokenizer_host_sabotage_binding() raises -> PythonObject:
-    """Whether this binary writes encode's ids in reverse order on purpose
-    (-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1, the gate's negative control)."""
-    return PythonObject(TOKENIZER_HOST_SABOTAGE or TOKENIZER_BATCH_SABOTAGE)
+    """Whether this binary is a negative-control build: encode's ids in
+    reverse order (-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1), ids swapped
+    across batch boundaries (-D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1) or
+    the trainer's tie-break reversed (-D MOJOLEARN_BPE_TRAINER_SABOTAGE=1)."""
+    return PythonObject(
+        TOKENIZER_HOST_SABOTAGE
+        or TOKENIZER_BATCH_SABOTAGE
+        or BPE_TRAINER_SABOTAGE
+    )
 
 
 def bpe_load_binding(ranks_path: PythonObject) raises -> PythonObject:
@@ -403,6 +442,134 @@ def bpe_decode_binding(
     return PythonObject(count)
 
 
+def bpe_train_binding(
+    text_addr: PythonObject,
+    offsets_addr: PythonObject,
+    dims: PythonObject,
+) raises -> PythonObject:
+    """`tokenizer/train/bpe_train.mojo::train_bpe` on the host
+    (lane/bpe-builder-native, 2026-09-18): TRAIN a vocabulary.
+
+    `dims` is `[n_docs, n_bytes, vocab_size, min_frequency,
+    break_ties_high]`. Reads the concatenated `n_bytes` uint8 at `text_addr`
+    and `n_docs + 1` int64 offsets at `offsets_addr` (0 first,
+    nondecreasing, `n_bytes` last); document k is bytes
+    [offsets[k], offsets[k + 1]), and each is pre-tokenized ALONE, exactly
+    as `BpeVocabularyTrainer` hands them over. `break_ties_high` is the
+    Python door's MOJOLEARN_BPE_TRAINER_SABOTAGE environment arm and must be
+    False outside a negative control. Returns an opaque handle;
+    `bpe_trained_sizes` then `bpe_trained_copy` read the result out. This
+    file adds no arithmetic: the one call below is the trainer
+    `pixi run check-bpe-trainer` holds to the Python reference."""
+    if Int(py=len(dims)) != 5:
+        raise Error(
+            "bpe_train: dims must be [n_docs, n_bytes, vocab_size,"
+            " min_frequency, break_ties_high]"
+        )
+    var n_docs = _index(dims[0])
+    var n = _index(dims[1])
+    var vocab_size = _index(dims[2])
+    var min_frequency = _index(dims[3])
+    var reverse = _flag(dims[4], "break_ties_high")
+    if n_docs < 1:
+        raise Error("bpe_train: n_docs must be >= 1, got " + String(n_docs))
+    if n < 0:
+        raise Error("bpe_train: n_bytes must be >= 0, got " + String(n))
+    var text_address = _index(text_addr) if n > 0 else 0
+    var offsets_address = _index(offsets_addr)
+    var handle = BpeTrainedHandle()
+    with GILReleased(Python()):
+        var offs = _i64_ptr(offsets_address)
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+            raise Error(
+                "bpe_train: offsets must start at 0 and end at n_bytes "
+                + String(n)
+                + ", got "
+                + String(Int(offs[0]))
+                + " and "
+                + String(Int(offs[n_docs]))
+            )
+        for k in range(n_docs):
+            if Int(offs[k + 1]) < Int(offs[k]):
+                raise Error(
+                    "bpe_train: offsets decrease at document " + String(k)
+                )
+        var documents = List[List[UInt8]](capacity=n_docs)
+        for k in range(n_docs):
+            var a = Int(offs[k])
+            var m = Int(offs[k + 1]) - a
+            var doc = List[UInt8](length=m, fill=UInt8(0))
+            if m > 0:
+                memcpy(
+                    dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
+                )
+            documents.append(doc^)
+        var classes = builtin_unicode_classes()
+        # THE ONE CALL THAT COMPUTES ANYTHING.
+        handle.vocab = train_bpe(
+            documents, classes, vocab_size, min_frequency, reverse
+        )
+    return PythonObject(alloc=handle^)
+
+
+def bpe_trained_sizes_binding(handle: PythonObject) raises -> PythonObject:
+    """`[n_tokens, arena_bytes, n_merges, n_ties_broken, n_groups]`, so the
+    caller can size `bpe_trained_copy`'s buffers."""
+    var owner = handle.downcast_value_ptr[BpeTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer host: the handle holds no trained vocabulary")
+    ref v = owner[].vocab.value()
+    var out = Python.list()
+    out.append(PythonObject(v.n_tokens()))
+    out.append(PythonObject(len(v.arena)))
+    out.append(PythonObject(v.n_merges()))
+    out.append(PythonObject(v.n_ties_broken))
+    out.append(PythonObject(v.n_groups))
+    return out
+
+
+def bpe_trained_copy_binding(
+    handle: PythonObject,
+    arena_addr: PythonObject,
+    lengths_addr: PythonObject,
+    left_addr: PythonObject,
+    right_addr: PythonObject,
+) raises -> PythonObject:
+    """Copy the trained vocabulary out: the token bytes back to back in rank
+    order (uint8, `arena_bytes`), each token's length (int64, `n_tokens`),
+    and the merges' left and right ids (int64, `n_merges` each). Buffers are
+    sized from `bpe_trained_sizes`. Returns `n_tokens`."""
+    var owner = handle.downcast_value_ptr[BpeTrainedHandle]()
+    if not owner[].vocab:
+        raise Error("tokenizer host: the handle holds no trained vocabulary")
+    var arena_address = _index(arena_addr)
+    var lengths_address = _index(lengths_addr)
+    var nm = owner[].vocab.value().n_merges()
+    var left_address = _index(left_addr) if nm > 0 else 0
+    var right_address = _index(right_addr) if nm > 0 else 0
+    ref v = owner[].vocab.value()
+    var arena = _u8_ptr(arena_address)
+    var lengths = _i64_ptr(lengths_address)
+    # The arena is written in RANK order from each token's own offset, so
+    # the caller's slicing by cumulative length is correct whatever order
+    # the trainer's arena was filled in.
+    var at = 0
+    for id in range(v.n_tokens()):
+        var m = v.length[id]
+        var src = v.offset[id]
+        for i in range(m):
+            arena[at + i] = v.arena[src + i]
+        at += m
+        lengths[id] = Int64(m)
+    if nm > 0:
+        var left = _i64_ptr(left_address)
+        var right = _i64_ptr(right_address)
+        for k in range(nm):
+            left[k] = Int64(v.merge_left[k])
+            right[k] = Int64(v.merge_right[k])
+    return PythonObject(v.n_tokens())
+
+
 @export
 def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
     try:
@@ -418,6 +585,10 @@ def PyInit__mojolearn_tokenizer_host() abi("C") -> PythonObject:
         module.def_function[bpe_encode_binding]("bpe_encode")
         module.def_function[bpe_encode_batch_binding]("bpe_encode_batch")
         module.def_function[bpe_decode_binding]("bpe_decode")
+        _ = module.add_type[BpeTrainedHandle]("_BpeTrainedHandle")
+        module.def_function[bpe_train_binding]("bpe_train")
+        module.def_function[bpe_trained_sizes_binding]("bpe_trained_sizes")
+        module.def_function[bpe_trained_copy_binding]("bpe_trained_copy")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_tokenizer_host: ", error))

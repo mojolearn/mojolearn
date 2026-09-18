@@ -1219,6 +1219,19 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
+def lib_zero_fma_repair_for[column: Int]() -> Bool:
+    """NUMERIC row (lane `lane/apple-seam-repair`, 2026-09-18): the column's
+    native FMA flushes BEFORE rounding, so an rtf-spelled seam
+    (`ftz(fma(a, b, acc))`) must repair a signed-zero result whose exact value
+    rounds up to the smallest normal. Apple M4 hashes `fbr` over the
+    262,144-triple seam probe (GEMM brief 14.3); NVIDIA and AMD compute `rtf`
+    already. Implementation: `checks/rtf_seam.mojo`. `-D
+    MOJOLEARN_NO_ZERO_FMA_REPAIR` is the never-shipped price arm."""
+    comptime if is_defined["MOJOLEARN_NO_ZERO_FMA_REPAIR"]():
+        return False
+    return column == COLUMN_APPLE
+
+
 def attn_masked_tail_replay_for[column: Int]() -> Bool:
     """Exact omitted-tail replay, measured H100 and MI300X 2026-09-18.
 

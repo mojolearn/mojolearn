@@ -328,6 +328,31 @@ def test_user_supplied_gpt2_files():
     assert tok.decode(tok.encode(text, allow_endoftext=True)) == text
 
 
+def test_trainer_mojo_backend_writes_the_python_reference_bytes(tok):
+    """lane/bpe-builder-native (2026-09-18): `BpeVocabularyTrainer` defaults
+    to the Mojo trainer in this binding. On the reference fixtures (one
+    engineered to tie) plus invalid UTF-8 and several documents, the Mojo
+    backend must write the SAME ranks and tokenizer.json bytes as the pure
+    Python reference. A binding built with -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1
+    fails this (reversed tie-break)."""
+    from mojolearn import _bpe_trainer as ref
+    from mojolearn.tokenizer import BpeVocabularyTrainer
+    bad = bytes([0xFF, 0xFE, 32, 97, 98, 0xC3, 32, 0xE2, 0x82, 32, 0x80, 97, 0xED, 0xA0, 0x80, 10])
+    corpora = [([ref.fixture_corpus(n)], v, f) for n, _c, v, f in ref.FIXTURES]
+    corpora.append(([bad * 9 + ref.synthetic_corpus(n_words=120, seed=5), bytes(range(256)) * 2, b""], 420, 2))
+    ties = 0
+    for docs, v, f in corpora:
+        m = BpeVocabularyTrainer(vocab_size=v, min_frequency=f, backend="mojo").train(docs)
+        p = BpeVocabularyTrainer(vocab_size=v, min_frequency=f, backend="python").train(docs)
+        assert m.stats["backend"] == "mojo" and p.stats["backend"] == "python"
+        assert m.render_ranks() == p.render_ranks(), f"ranks differ (vocab_size {v})"
+        assert m.render_tokenizer_json() == p.render_tokenizer_json(), f"tokenizer.json differs (vocab_size {v})"
+        assert m.merges == p.merges and m.n_ties_broken == p.n_ties_broken
+        ties += m.n_ties_broken
+    assert ties > 0, "no tie was reached, so the tie-break was not tested"
+    assert BpeVocabularyTrainer(vocab_size=300).train([b"ab ab"]).stats["backend"] == "mojo"
+
+
 def test_refuses_no_vocabulary_by_name():
     """Resolved before the binding is loaded, so this needs no build."""
     _raises(lambda: BpeTokenizer(), ValueError, "BpeTokenizer needs a vocabulary, and mojolearn ships none")

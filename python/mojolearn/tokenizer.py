@@ -539,13 +539,25 @@ class BpeVocabularyTrainer:
     selection that never depends on an iteration order, and no float anywhere
     in the selection.
 
-    The arithmetic is `tokenizer/train/bpe_train.mojo`; this door runs the
-    independent Python implementation of the same stated algorithm, which
-    `pixi run check-bpe-trainer` holds the Mojo one to file byte for file
-    byte.
+    THE BACKEND (lane/bpe-builder-native, 2026-09-18). `backend="auto"`
+    (the default) trains with the Mojo trainer `tokenizer/train/
+    bpe_train.mojo` through the tokenizer host binding (`bpe_train`), and
+    falls back to the pure Python reference `_bpe_trainer.train` when the
+    binding is not built or predates that entry. `"mojo"` requires the
+    binding; `"python"` runs the reference. The two are held to the SAME
+    BYTES by `pixi run check-bpe-trainer` (file byte for file byte, both
+    formats) and by the identity lanes, so which one ran cannot reach the
+    vocabulary; `stats["backend"]` records it. The Python reference recounts
+    every pair per merge in pure Python and is impractical at tens of
+    thousands of ranks; the Mojo one trained 50,256 ranks on 20 MB on one
+    core (see docs/lanes/LANE_STATUS_bpe-builder-native.md).
+    `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break on EITHER
+    backend (the negative control).
     """
 
-    def __init__(self, vocab_size=32000, min_frequency=2):
+    _BACKENDS = ("auto", "mojo", "python")
+
+    def __init__(self, vocab_size=32000, min_frequency=2, backend="auto"):
         if not isinstance(vocab_size, int) or isinstance(vocab_size, bool):
             raise TypeError(f"mojolearn: vocab_size must be an int, got {type(vocab_size).__name__}")
         if vocab_size < 256:
@@ -556,8 +568,11 @@ class BpeVocabularyTrainer:
             raise TypeError(f"mojolearn: min_frequency must be an int, got {type(min_frequency).__name__}")
         if min_frequency < 1:
             raise ValueError(f"mojolearn: min_frequency {min_frequency} must be at least 1")
+        if backend not in self._BACKENDS:
+            raise ValueError(f"mojolearn: backend must be one of {self._BACKENDS}, got {backend!r}")
         self.vocab_size = vocab_size
         self.min_frequency = min_frequency
+        self.backend = backend
 
     def train(self, documents):
         """Train on `documents`, a sequence of bytes-like or str."""
@@ -582,12 +597,72 @@ class BpeVocabularyTrainer:
             else:
                 raise TypeError(
                     f"mojolearn: document {k} must be str or bytes-like, got {type(d).__name__}")
-        tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
+        native = None
+        if self.backend != "python":
+            native = _native_trainer(required=self.backend == "mojo")
+        if native is not None:
+            tokens, merges, stats = _train_native(native, raws, self.vocab_size, self.min_frequency,
+                                                  _bpe_trainer.sabotaged())
+            stats["backend"] = "mojo"
+        else:
+            tokens, merges, stats = _bpe_trainer.train(raws, self.vocab_size, self.min_frequency)
+            stats["backend"] = "python"
         return TrainedBpeVocabulary(tokens, merges, stats)
 
     def __repr__(self):
         return (f"BpeVocabularyTrainer(vocab_size={self.vocab_size}, "
-                f"min_frequency={self.min_frequency})")
+                f"min_frequency={self.min_frequency}, backend={self.backend!r})")
+
+
+def _native_trainer(required):
+    """The binding when it exports `bpe_train`, else None (or the reason,
+    raised, when `required`)."""
+    try:
+        module = _backend.load_host_module(_EXTENSION)
+    except ImportError as exc:
+        if required:
+            raise ImportError(f"mojolearn: backend='mojo' needs the tokenizer host binding: {exc}") from exc
+        return None
+    if not all(hasattr(module, n) for n in ("bpe_train", "bpe_trained_sizes", "bpe_trained_copy")):
+        if required:
+            raise ImportError("mojolearn: backend='mojo': this tokenizer binding predates bpe_train; rebuild it")
+        return None
+    return module
+
+
+def _train_native(module, raws, vocab_size, min_frequency, break_ties_high):
+    """`_bpe_trainer.train`'s return shape, `(tokens, merges, stats)`, from
+    the Mojo trainer: one crossing in (the documents back to back with
+    int64 offsets), one out (the token bytes, lengths and merge ids)."""
+    offsets = array.array("q", [0])
+    for r in raws:
+        offsets.append(offsets[-1] + len(r))
+    text = bytearray(b"".join(raws))
+    n = len(text)
+    handle = module.bpe_train(addr_ro(text, name="documents") if n else 0, addr_ro(offsets, name="offsets"),
+                              [len(raws), n, int(vocab_size), int(min_frequency), bool(break_ties_high)])
+    n_tokens, arena_bytes, n_merges, n_ties, n_groups = (int(x) for x in module.bpe_trained_sizes(handle))
+    arena = bytearray(max(arena_bytes, 1))
+    lengths = array.array("q", [0]) * n_tokens
+    left = array.array("q", [0]) * max(n_merges, 1)
+    right = array.array("q", [0]) * max(n_merges, 1)
+    module.bpe_trained_copy(handle, addr(arena, name="arena"), addr(lengths, name="lengths"),
+                            addr(left, name="merge_left"), addr(right, name="merge_right"))
+    tokens, at = [], 0
+    for m in lengths:
+        tokens.append(bytes(arena[at:at + m]))
+        at += m
+    merges = [(int(left[k]), int(right[k]), 256 + k) for k in range(n_merges)]
+    stats = {
+        "n_tokens": n_tokens,
+        "n_merges": n_merges,
+        "n_groups": n_groups,
+        "n_ties_broken": n_ties,
+        "tie_break": _bpe_trainer.TIE_BREAK,
+        "vocab_size": vocab_size,
+        "min_frequency": min_frequency,
+    }
+    return tokens, merges, stats
 
 
 #: Renamed classes still importable under their old name, {old: new}.

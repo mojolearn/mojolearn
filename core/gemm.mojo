@@ -21,6 +21,7 @@ from checks.numerics import (
     ftz,
     identical_mul_add,
 )
+from checks.rtf_seam import rtf_mul_add
 from std.sys.compile import is_defined
 from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 
@@ -53,12 +54,10 @@ def pinned_gemm_nt_kernel(
     var j = cell % n
     var acc = Float32(0.0)
     for p in range(k):
-        acc = ftz(
-            identical_mul_add(
-                ftz(x.unsafe_load(i * k + p)),
-                ftz(y.unsafe_load(j * k + p)),
-                acc,
-            )
+        acc = rtf_mul_add(
+            ftz(x.unsafe_load(i * k + p)),
+            ftz(y.unsafe_load(j * k + p)),
+            acc,
         )
     z.unsafe_store(cell, ftz(Float32(0.0) + ftz(acc)))
 
@@ -80,10 +79,8 @@ def pinned_gemv_n_kernel(
         return
     var acc = Float32(0.0)
     for p in range(k):
-        acc = ftz(
-            identical_mul_add(
-                ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
-            )
+        acc = rtf_mul_add(
+            ftz(x.unsafe_load(i * k + p)), ftz(y.unsafe_load(p)), acc
         )
     z.unsafe_store(i, ftz(Float32(0.0) + ftz(acc)))
 

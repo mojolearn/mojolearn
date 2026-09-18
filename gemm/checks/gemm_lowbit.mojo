@@ -76,6 +76,7 @@ from checks.numerics import (
     int8_row_exponent,
     quantize_int8_value,
 )
+from checks.rtf_seam import rtf_mul_add
 from gemm.checks.gemm_identical import (
     GEMM_FOLD_SLOTS,
     _fold_drain,
@@ -251,12 +252,10 @@ def identical_gemm_bf16w_flat_kernel(
         var bounds = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
         var acc = Float32(0.0)
         for p in range(bounds[0], bounds[1]):
-            acc = ftz(
-                identical_mul_add(
-                    ftz(a.unsafe_load(a_row + p * a_sp)),
-                    ftz(bf16_bits_to_f32(b.unsafe_load(p * b_sp + b_col))),
-                    acc,
-                )
+            acc = rtf_mul_add(
+                ftz(a.unsafe_load(a_row + p * a_sp)),
+                ftz(bf16_bits_to_f32(b.unsafe_load(p * b_sp + b_col))),
+                acc,
             )
         _ = _fold_push(stack, occ, ftz(acc))
     var out = ftz(_fold_drain(stack, occ))

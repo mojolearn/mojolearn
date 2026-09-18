@@ -218,7 +218,8 @@ def _trained_vocabulary(data, ranges, sha, cache, vocab_size, min_frequency, sam
         v = _tokenizer.BpeVocabularyTrainer(vocab_size=vocab_size, min_frequency=min_frequency).train(docs)
         seconds = time.perf_counter() - t0
         v.write_ranks(str(tmp / "ranks.tsv"))
-        recipe = dict(trainer="mojolearn.tokenizer.BpeVocabularyTrainer", format=_tokenizer._bpe_trainer.FORMAT,
+        recipe = dict(trainer="mojolearn.tokenizer.BpeVocabularyTrainer", backend=v.stats.get("backend"),
+                      format=_tokenizer._bpe_trainer.FORMAT,
                       tie_break=v.tie_break, vocab_size=vocab_size, min_frequency=min_frequency,
                       corpus_sha256=sha, sample=[lo, hi], document_bytes=document_bytes,
                       n_tokens=v.n_tokens, n_merges=len(v.merges), n_ties_broken=v.n_ties_broken,

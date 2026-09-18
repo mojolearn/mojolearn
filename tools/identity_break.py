@@ -3609,7 +3609,17 @@ def _(ml, X, yc, yr, Xh=None):
     vocabularies the same. The Mojo trainer carries the same arm as a build
     define, and `pixi run check-bpe-trainer-sabotage` is where THAT one is
     watched failing; this Python door's arm is watched failing in the
-    directory above."""
+    directory above.
+
+    THE DOOR NOW RUNS THE MOJO TRAINER (lane/bpe-builder-native,
+    2026-09-18): `BpeVocabularyTrainer` defaults to `bpe_train` in the
+    tokenizer host binding and falls back to the Python reference only when
+    the binding lacks it. Before (main, Python) vs after (Mojo): IDENTICAL on
+    all nine fixtures, `base` still 6ed8b49585df3d85. The binding built with
+    -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves every cell (`base` ->
+    f5172d25e6499662, the env arm's value) and the env arm now reaches the
+    Mojo trainer as `break_ties_high`
+    (bench/results/identity_break/2026-09-18_bpe-builder-native/)."""
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
     ranks = np.frombuffer(v.render_ranks().encode("ascii"), dtype=np.uint8)
