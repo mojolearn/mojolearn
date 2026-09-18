@@ -607,6 +607,9 @@ class SmallByteLanguageModelTrainer:
         `released_eager_bytes` witnesses that work separately from capacity.
         `sticky_eager` and `layers_prefer_eager` report the policy which
         chooses eager before launch after a layer's first corner refusal.
+        `repair_masked_tail` identifies the replay build; per-layer
+        `backward_repair_sites` is a bitmask of repairs actually executed:
+        1 for zdot, 2 for dQ, 3 for both, 0 for neither.
         A legacy run therefore has no single device footprint: it can step up
         once, at a step nobody chose, and every capacity figure taken
         before that step is wrong afterwards. A three-step probe cannot

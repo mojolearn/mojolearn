@@ -5,6 +5,7 @@ Two independent sabotage defines skip zdot or dq replay while accepting the
 result. Each must fail its named bit check. HD64 instantiates the real kernels.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from transformer.impl.llama.modeling_llama import _upload, _download
 from transformer.impl.llama.fused_attention import (
@@ -77,6 +78,8 @@ def main() raises:
         ez.unsafe_ptr(), ndy.unsafe_ptr(), ey.unsafe_ptr(), Int32(1), Int32(1), Int32(1), Int32(3),
         grid_dim=(1,1,1), block_dim=(256,1,1),
     )
+    comptime if is_defined["MOJOLEARN_CHECK_CORRUPT_Z_PRESERVE"]():
+        z.enqueue_fill(Float32(0.0))
     var na = _download(ctx, z, 1)[0]
     var nb = _download(ctx, ez, 1)[0]
     if bitcast[DType.uint32](na) != bitcast[DType.uint32](nb) or bitcast[DType.uint32](nb) != UInt32(0x80000000):
@@ -133,6 +136,8 @@ def main() raises:
         eq.unsafe_ptr(), ncells.unsafe_ptr(), qk.unsafe_ptr(), Int32(1), Int32(1), Int32(1), Int32(1), Int32(64), Int32(2), Float32(1.0),
         grid_dim=(1,1,1), block_dim=(256,1,1),
     )
+    comptime if is_defined["MOJOLEARN_CHECK_CORRUPT_DQ_PRESERVE"]():
+        dq.enqueue_fill(Float32(0.0))
     var nqa = _download(ctx, dq, 64)
     var nqb = _download(ctx, eq, 64)
     for i in range(64):

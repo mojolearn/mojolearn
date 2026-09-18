@@ -166,3 +166,17 @@ expected differing zero bits before accepting the clean gate. Existing dk/dv
 masked suffix and grouped-prefix cases must still refuse. Run baseline and
 repair arms for 700 steps each on one strictly R2-staged H100. Sticky and
 release remain OFF to isolate this repair.
+
+Before AMD native correctness gates: Hot Aisle availability probe found two
+13-core MI300X instances available and zero of two slots occupied. Predict
+zdot and all 64 dQ cells equal eager at exactly 0x00000000 in the repair
+fixtures and 0x80000000 in the preservation fixtures. Skipping either repair
+must fail, and corrupting either preservation output to +0 must fail. Force
+the NVIDIA estash schedule through the existing every-column check define
+so the AMD broad gate is not an untouched-default comparison. These are
+native arithmetic checks, not a short training benchmark or AMD speed claim.
+
+Final qualification, conditional on the replay trial succeeding: paired
+700-step legacy/default training on both R2 enwik8 and Pile GitHub, followed
+by B4 enwik8 2000-step endurance. Prepared scripts fail their arm witnesses
+until the default is explicitly flipped; no current default flip is claimed.
