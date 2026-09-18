@@ -11,6 +11,12 @@ import wheel_api_audit
 
 
 class PublicPackageInventoryTests(unittest.TestCase):
+    def test_declared_deprecated_imports_remain_visible_outside_all(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'api.py'
+            path.write_text("__all__ = ['New']\n_DEPRECATED_ALIASES = {'Old': 'New'}\n")
+            self.assertEqual(matrix.module_all(path), ['New', 'Old'])
+
     def test_models_exports_resolve_to_their_own_implementation(self):
         surface, modules = matrix.public_surface()
         self.assertIn("models", modules)

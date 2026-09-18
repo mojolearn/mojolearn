@@ -670,7 +670,8 @@ jobs:
           # the manifest (host_surface.sabotage_build_defines): -D
           # MOJOLEARN_HOST_SABOTAGE=1 for all, plus the tokenizer's own define
           # and the forest's CTR arm (GATE_SABOTAGE_OWN_DEFINES), which the
-          # tokenizer and CTR table lanes rest on. byte_lm builds clean.
+          # tokenizer and CTR table lanes rest on. byte_lm also carries its
+          # native sabotage marker and needs its own loader opt-in below.
           for family in $SABOTAGE_FAMILIES; do
             defines="$(python3 $MOJOLEARN_HOST_SURFACE --sabotage-build-defines "$family")"
             echo "sabotage build $family: $defines"
@@ -693,6 +694,7 @@ jobs:
             [ -f "${{ runner.temp }}/host-sab/$b.so" ] || { echo "the sabotage host set lacks $b.so" >&2; exit 1; }
           done
           export MOJOLEARN_HOST_DIR="${{ runner.temp }}/host-sab" MOJOLEARN_HOST_ALLOW_SABOTAGE=1
+          export MOJOLEARN_BYTE_LM_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_byte_lm_host.so" MOJOLEARN_BYTE_LM_HOST_ALLOW_SABOTAGE=1
           # The CTR table lanes predict through _forest_host, which loads
           # MOJOLEARN_FOREST_HOST_BINARY (else the package's production file);
           # host_record has already loaded host-sab's forest binding under the

@@ -1,0 +1,31 @@
+mac_slot: waiting 0.0s for metal capacity
+mac_slot: waiting 30.0s for metal capacity
+mac_slot: waiting 60.1s for metal capacity
+mac_slot: waiting 90.2s for metal capacity
+mac_slot: waiting 120.3s for metal capacity
+mac_slot: waiting 150.3s for metal capacity
+mac_slot: waiting 180.3s for metal capacity
+mac_slot: waiting 210.4s for metal capacity
+mac_slot: waiting 240.6s for metal capacity
+mac_slot: waiting 270.7s for metal capacity
+mac_slot: waiting 300.9s for metal capacity
+mac_slot: admitted after 324.535s
+PASSED cpu-kernel-ridge-poly
+PASSED cpu-kernel-ridge-sigmoid
+PASSED cpu-kernel-ridge-laplacian
+PASSED cpu-nystroem-poly
+PASSED cpu-nystroem-sigmoid
+PASSED cpu-nystroem-laplacian
+PASSED apple-kernel-ridge-poly
+PASSED apple-kernel-ridge-sigmoid
+PASSED apple-kernel-ridge-laplacian
+PASSED apple-nystroem-poly
+PASSED apple-nystroem-sigmoid
+PASSED apple-nystroem-laplacian
+PASSED sabotage-kernel-ridge-poly
+PASSED sabotage-kernel-ridge-sigmoid
+PASSED sabotage-kernel-ridge-laplacian
+PASSED sabotage-nystroem-poly
+PASSED sabotage-nystroem-sigmoid
+PASSED sabotage-nystroem-laplacian
+mac_slot: {"wait_seconds": 324.53465804200096, "run_seconds": 45.13299333300529, "exit_code": 0}

@@ -3883,6 +3883,54 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:64, :4]),))
 
 
+def _kernel_variant(ml, X, yr, Xh, family, kernel):
+    # Fixed power-of-two input scaling keeps the polynomial matrix bounded
+    # while preserving fixture ties and denormal/FTZ distinctions.
+    x = np.ascontiguousarray(X[:48, :4] * np.float32(0.125))
+    test = np.ascontiguousarray(X[48:64, :4] * np.float32(0.125))
+    held = np.ascontiguousarray(Xh[:64, :4] * np.float32(0.125))
+    kw = dict(kernel=kernel, gamma=0.5, coef0=0.25, degree=3)
+    if family == "kernel-ridge":
+        m = ml.KernelRidge(alpha=64.0, **kw).fit(x, yr[:48])
+        return _fit(dict(dual=_h(m.dual_coef_), info=_h(np.int64(m.info_)),
+                         predict=_h(m.predict(test))), m, lambda e: (e.predict(held),))
+    m = ml.Nystroem(n_components=8, random_state=7, **kw).fit(x)
+    return _fit(dict(components=_h(m.components_), indices=_h(m.component_indices_),
+                     normalization=_h(m.normalization_), eigenvalues=_h(m.eigenvalues_),
+                     eigenvectors=_h(m.eigenvectors_), sweeps=_h(np.int64(m.sweeps_)),
+                     transform=_h(m.transform(test))), m, lambda e: (e.transform(held),))
+
+
+@lane("kernel-ridge-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "poly")
+
+
+@lane("kernel-ridge-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "sigmoid")
+
+
+@lane("kernel-ridge-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "kernel-ridge", "laplacian")
+
+
+@lane("nystroem-poly")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "poly")
+
+
+@lane("nystroem-sigmoid")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "sigmoid")
+
+
+@lane("nystroem-laplacian")
+def _(ml, X, yc, yr, Xh=None):
+    return _kernel_variant(ml, X, yr, Xh, "nystroem", "laplacian")
+
+
 @lane("rbf-sampler")
 def _(ml, X, yc, yr, Xh=None):
     """RBFSampler with 64 random Fourier features over the 16 fixture
@@ -4634,15 +4682,21 @@ def _(ml, X, yc, yr, Xh=None):
         d, i = rs.kneighbors(q)
         pr, pp = rs.predict(q), rs.predict_proba(q)
     d0, i0 = m.kneighbors(q)
-    _same_bytes("ReferenceShardedNeighbors distances", d, "plain distances", d0)
-    _same_bytes("ReferenceShardedNeighbors indices", i, "plain indices", i0)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
-    _same_bytes("ReferenceShardedNeighbors predict_proba", pp, "plain predict_proba", m.predict_proba(q))
+    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
+    # Retain measured bytes when the independent comparison detects a fault;
+    # a generic refusal would discard the evidence and cannot qualify a control.
+    for name, actual, expected in (("distances", d, d0), ("indices", i, i0),
+                                   ("predict", pr, m.predict(q)),
+                                   ("predict_proba", pp, m.predict_proba(q))):
+        mismatch = _mismatch_bytes("ReferenceShardedNeighbors " + name, actual,
+                                   "plain " + name, expected)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return rs.predict(Xh[:64]), rs.predict_proba(Xh[:64])
-    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-reference-knn-reg")
@@ -4653,12 +4707,15 @@ def _(ml, X, yc, yr, Xh=None):
     q = np.ascontiguousarray(X[4096:4160])
     with _rsn(m) as rs:
         pr = rs.predict(q)
-    _same_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    parts = dict(predict=_h(pr))
+    mismatch = _mismatch_bytes("ReferenceShardedNeighbors predict", pr, "plain predict", m.predict(q))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
 
     def probe(e):
         with _rsn(e) as rs:
             return (rs.predict(Xh[:64]),)
-    return _fit(dict(predict=_h(pr)), m, probe)
+    return _fit(parts, m, probe)
 
 
 @lane("par-graph-agglomerative")
@@ -5809,6 +5866,14 @@ def _batch_par_graph_umap(ml, e, Xh):
 
 _batch_decl(_batch_umap, "umap")
 _batch_decl(_batch_par_graph_umap, "par-graph-umap")
+def _kernel_variant_rows(X):
+    return np.ascontiguousarray(X[:64, :4] * np.float32(0.125))
+
+
+_batch_decl(_rows_calls("predict", prep=_kernel_variant_rows),
+            "kernel-ridge-poly", "kernel-ridge-sigmoid", "kernel-ridge-laplacian")
+_batch_decl(_rows_calls("transform", prep=_kernel_variant_rows),
+            "nystroem-poly", "nystroem-sigmoid", "nystroem-laplacian")
 _batch_decl(_rows_calls("predict", sl=(slice(0, 64), slice(0, 4))), "kernel-ridge")
 _batch_decl(_rows_calls("transform", sl=(slice(0, 64), slice(0, 4))), "nystroem")
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))), "gmm")

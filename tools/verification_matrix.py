@@ -326,14 +326,16 @@ def module_all(path):
         tree = ast.parse(Path(path).read_text())
     except (OSError, SyntaxError):
         return []
+    names = []
     for node in tree.body:
         if isinstance(node, ast.Assign) and any(
-                isinstance(t, ast.Name) and t.id == "__all__" for t in node.targets):
+                isinstance(t, ast.Name) and t.id in ("__all__", "_DEPRECATED_ALIASES")
+                for t in node.targets):
             try:
-                return list(ast.literal_eval(node.value))
-            except ValueError:
-                return []
-    return []
+                names.extend(ast.literal_eval(node.value))
+            except (ValueError, TypeError):
+                continue
+    return list(dict.fromkeys(names))
 
 
 def package_index():

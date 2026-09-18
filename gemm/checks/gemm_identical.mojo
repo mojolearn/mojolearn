@@ -154,6 +154,7 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
@@ -1206,13 +1207,13 @@ comptime TUNED_HW_FTZ_FMA = (
 )
 
 
-# Apply operand seams before shared staging on the measured NVIDIA path.
+# Apply operand seams before shared staging on qualified NVIDIA/AMD paths.
 # Consumers read the same flushed words without repeating their tests.
 # Explicit opt-in qualifies other columns; the legacy flag supplies A/B control.
 comptime TUNED_STAGE_FTZ = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
     and not is_defined["MOJOLEARN_GEMM_LEGACY_STAGE_FTZ"]()
-    and (TUNED_HW_FTZ_FMA or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
+    and (lib_gemm_stage_ftz_for[TARGET_COLUMN]() or is_defined["MOJOLEARN_GEMM_STAGE_FTZ"]())
 )
 
 
@@ -1581,7 +1582,7 @@ def _tuned_g2r[
                         out[s0 * VEC + e0] = src.unsafe_load(
                             oi0 * outer_stride + (p0 + cc0) * k_stride
                         )
-        comptime if TUNED_STAGE_FTZ:
+        comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
             comptime for f in range(SLOTS * VEC):
                 out[f] = ftz(out[f])
         return out
@@ -1604,7 +1605,7 @@ def _tuned_g2r[
                             out[s * VEC + e] = src.unsafe_load(
                                 oi * outer_stride + (p0 + cc + e) * k_stride
                             )
-    comptime if TUNED_STAGE_FTZ:
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_TUNED_STAGE_FTZ"]():
         comptime for f in range(SLOTS * VEC):
             out[f] = ftz(out[f])
     return out
@@ -3710,6 +3711,10 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
+comptime GEMM_REUSE_GROUP_WS = (
+    is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
+    and not is_defined["MOJOLEARN_GEMM_LEGACY_REUSE_GROUP_WS"]()
+)
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
@@ -4250,13 +4255,33 @@ def _shipped_body_kpack_hg[
     `identical_gemm_kpack_kernel` as the `kpack_hg` arm ran it (padded
     aligned page, gather staging, hardware fold flush): the group launch plus
     the fold at the ksplit row's group size where the rule takes the call
-    (`_kpack_run` allocates the node workspace and SYNCHRONIZES, `ws`
-    unused), all leaves in one asynchronous launch otherwise. Every other
+    (the reusable-workspace arm uses sufficiently sized caller scratch;
+    otherwise `_kpack_run` allocates the nodes and synchronizes), all leaves
+    in one asynchronous launch otherwise. Every other
     call keeps `choose_gemm_plan`'s plan. `SAB = True` is the trial hook's
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
     if m <= 0 or n <= 0:
         return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        comptime if GEMM_REUSE_GROUP_WS:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var part = contract_partition(k)
+            if gl > 0 and part[1] > 0:
+                var rg = _ksplit_resolve_leaves(gl, part[1])
+                if len(ws) >= m * n * rg[1]:
+                    # Same two kernels and same stream, with caller-owned
+                    # scratch kept alive until the caller's final fence.
+                    _kpack_launch[
+                        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
+                        GEMM_KPACK_KS, GEMM_KPACK_FS, True, SAB,
+                        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+                    ](ctx, ws, a, b, m, n, k, part[0], part[1],
+                      gemm_operand_strides(op, m, n, k), rg[0], rg[1])
+                    comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
+                        _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
+                    return
+                # Older callers with only plan-sized scratch retain the
+                # allocating path; they never write past a small buffer.
         _kpack_run[
             GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
             GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
@@ -5010,11 +5035,26 @@ def _kpack_gather[
     zeros, `_tuned_g2r`), flushed at staging exactly as `_tuned_g2r` flushes."""
     var out = SIMD[DType.float32, R](0.0)
     if step < chunk:
-        comptime for u in range(R):
-            var oi = base_outer + g + u * G
-            if oi < outer_limit:
-                out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
-    comptime if TUNED_STAGE_FTZ:
+        comptime if is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]():
+            # A block-uniform full-tile test replaces R per-line predicates.
+            # The ragged path still checks every line; no operand is padded.
+            if base_outer + R * G <= outer_limit:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+                comptime if is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FULL"]():
+                    out[0] = Float32(12345.0)
+            else:
+                comptime for u in range(R):
+                    var oi = base_outer + g + u * G
+                    if oi < outer_limit:
+                        out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+        else:
+            comptime for u in range(R):
+                var oi = base_outer + g + u * G
+                if oi < outer_limit:
+                    out[u] = src.unsafe_load(oi * outer_stride + (p0 + step) * k_stride)
+    comptime if TUNED_STAGE_FTZ and not is_defined["MOJOLEARN_GEMM_SABOTAGE_GATHER_FTZ"]():
         comptime for f in range(R):
             out[f] = ftz(out[f])
     return out
@@ -5307,6 +5347,12 @@ def identical_gemm_kpack_kernel[
         pb = _tuned_g2r[BREG, VEC, KV, BN, NTH](
             b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
         )
+
+    comptime if (DIAG == 3 or DIAG == 5) and GATHER:
+        comptime for initial_page in range(PAGES):
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+        barrier()
 
     while w < w_end:
         var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
@@ -6543,12 +6589,22 @@ def identical_gemm[allow_vendor: Bool = True](
 
 
 def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
-    """The workspace `identical_gemm` may need at this shape: what
-    `choose_gemm_plan`'s answer costs. Phase 3 and Phase 4 allocate with
-    this. Never less than 1, so the buffer is always constructible."""
+    """Scratch for the actual dispatcher, including enabled grouped reuse.
+
+    Phase 3 and Phase 4 allocate with this. Never less than 1, so the buffer
+    is always constructible. Older smaller buffers take the allocating path.
+    """
     var w = identical_gemm_workspace_floats(
         m, n, k, choose_gemm_plan(m, n, k)
     )
+    comptime if GEMM_REUSE_GROUP_WS and GEMM_BODY_KPACK_HG:
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var p = contract_partition(k)[1]
+            if gl > 0 and p > 0:
+                var required = m * n * ((p + gl - 1) // gl)
+                if required > w:
+                    w = required
     if w < 1:
         return 1
     return w

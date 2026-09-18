@@ -1,0 +1,14 @@
+{
+  "status": "PASSED",
+  "scope": "Targeted native Apple M4 CPU controls, ties fixture twice; not full release certification or multi-GPU qualification",
+  "source_commit": "49b747897e160a41f01c73e2f3a77122ee8ce00d",
+  "numeric_mismatches_retained": [
+    "par-reference-knn/ties",
+    "par-reference-knn-reg/ties"
+  ],
+  "native_byte_lm_control": "RLPAIR_MOVED",
+  "native_sha256": {
+    "_mojolearn_byte_lm_host.so": "e317955b6b31917b8e1248c27d48c2daaab121ab215c20b0e5100da0601496f9",
+    "_mojolearn_core_host.so": "7804ce5ba61236b6f134f23d4f19ccffffb183b0e666a3447547e2ac26e06156"
+  }
+}

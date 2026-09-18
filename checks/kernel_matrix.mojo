@@ -1196,6 +1196,18 @@ def lib_hardware_ftz_fma_for[column: Int]() -> Bool:
     return column == COLUMN_NVIDIA
 
 
+def lib_gemm_stage_ftz_for[column: Int]() -> Bool:
+    """Flush input operands once before shared staging, preserving their bits.
+
+    NVIDIA already uses this transport. AMD CDNA qualified 2026-09-18:
+    22.4% lower fixed-shape GEMM sum; 700-step enwik8/Pile comparisons
+    improve 13.9%/15.3% with identical loss and state witnesses. The FMA
+    rounding seam and fold topology do not change. Other columns remain
+    on their existing path. See LANE_STATUS_gemm-kernel-speed.md.
+    """
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD
+
+
 def lib_postround_class_flush_for[column: Int]() -> Bool:
     """AMD post-round class flush, measured 2026-09-18.
 
