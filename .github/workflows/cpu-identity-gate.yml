@@ -155,9 +155,12 @@ jobs:
             slot: x86-a
             label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
-    # 90 since 2026-09-15: the seven shipped inference bindings are built
-    # twice more (production and sabotage) than before.
-    timeout-minutes: 90
+    # Both full-column sweeps have 50-minute step budgets, in addition to
+    # binding builds and saved-model/property gates. The previous 90-minute
+    # job cap cancelled hosted Apple run 35350125464 during its sabotage
+    # sweep. Preserve serial matrix execution and the two-worker shard cap;
+    # allow bounded time for both arms and artifact upload instead.
+    timeout-minutes: 180
     permissions:
       contents: read
     env:
