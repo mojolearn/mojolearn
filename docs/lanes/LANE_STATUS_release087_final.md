@@ -269,3 +269,36 @@ uses a 20 GB disk with the same two CPUs, exact wheel and test workload; it is
 running under its watchdog. Wait for completion and verified deletion before
 starting the replacement GPU qualification campaign. Current reference files
 remain uncommitted until that campaign supplies complete mode evidence.
+
+The v6 installed campaign passed on all three GPUs with complete mode readback;
+all rentals were deleted. Final admission then exposed the separate Hopper
+name comparison: the CUDA driver reports `sm_90` while the package correctly
+selects `sm_90a`. Accept only that exact CUDA pair (or exact equality), retaining
+the selected-architecture, probe, no-override and binary-hash requirements.
+The full corrected admission diagnostic against retained v6 evidence and its
+original source checkout passes. Regression checks also reject other devices
+and arbitrary suffixes: 34 tests and 54 subtests pass. The report now derives
+its FULL job count from the same inventory (11), replacing a stale literal 25.
+Because qualification snapshots bind all tools, repeat the final hardware
+campaign after this checker correction; do not overwrite the v6 witnesses.
+
+CPU v3 hit its 35-minute suite bound after 139 lane progress lines; neither
+shard emitted a complete JSON report, so none of that attempt qualifies the
+wheel. The pod was deleted with `terminated_verified=1`. CPU v4 is now running
+independently after all v6 GPU deletions. It writes a fresh validated JSON
+report per lane, uses at most two numerical processes, schedules previously
+unfinished/expensive lanes first, and retains each result as it completes.
+Default-suite cap is 80 minutes, per-lane cap 20 minutes, outer cap 110 minutes,
+with a 120-minute on-box watchdog and external dead-man. Four scheduler cases
+verify two-process maximum, complete reports, and rejection of nonzero exit,
+missing parts and OWED default results. The normal numerical checks, 162 lanes,
+nine fixtures and two repetitions are unchanged.
+
+The current committed-reference candidate uses the v6 AMD/H100 captures with
+complete mode evidence and the retained Apple captures. Their same exact wheel
+passes the corrected full admission diagnostic. The actual CPU-workflow
+preflight passes on these records; the positive and no-band poison captures
+still match all 36 training rows, and the strict negative validator accepts
+only the 18 native state-NaN refusals with its unaffected controls matching.
+Later qualification-source-only changes do not invalidate those unchanged
+measured values; compare the final campaign against them as an additional check.
