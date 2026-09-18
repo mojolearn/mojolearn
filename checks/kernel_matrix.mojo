@@ -1207,6 +1207,29 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
+def attn_masked_tail_replay_for[column: Int]() -> Bool:
+    """Exact omitted-tail replay, measured H100 2026-09-18.
+
+    700 enwik8 steps: 3697 backward corner refusals become zero, all losses
+    and checkpoint hashes match, late median 0.456855 -> 0.199255 seconds.
+    Native HD64 repair/preservation gates pass on NVIDIA and AMD, including
+    independently failing controls. Enable the measured NVIDIA schedule;
+    other columns keep their existing paths pending training qualification.
+    See docs/lanes/LANE_STATUS_lm-attention-fallback.md.
+    """
+    return column == COLUMN_NVIDIA
+
+
+def byte_lm_release_eager_for[column: Int]() -> Bool:
+    """Bound byte-LM eager buffers at their last consumers on NVIDIA.
+
+    The active 700-step eager lifetime arm matches all losses and checkpoint
+    hashes and returns retained eager capacity to 432 bytes; aexp is kept
+    separately. This is a storage bound, not a speed claim.
+    """
+    return column == COLUMN_NVIDIA
+
+
 def attn_zdot_rows_per_block_for[column: Int]() -> Int:
     """SCHEDULING row (DEVIATION 2528, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 12): query rows per 256-thread block of the fused attention's register-blocked y/dy kernel (`fused_bwd_ydy_tiled_kernel`), 64 or 32. The kernel's shared page is `(2 * rows + 128) * 20` floats (20,480 B at 64, 15,360 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: every chain keeps its terms and order at either value. UNMEASURED on every column. AMD reads 32 as the variant section 11.3 named to price; the page-only count (3 blocks x 64 rows vs 4 x 32 rows per CU) does not favor it, so the AMD leg prices both through the `_r32` / `_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
     if column == COLUMN_AMD:

@@ -122,6 +122,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
     TARGET_COLUMN,
     attn_default_arm_for,
+    attn_masked_tail_replay_for,
     attn_dkdv_keys_per_block_for,
     attn_fwd_rows_per_block_for,
     attn_zdot_rows_per_block_for,
@@ -141,8 +142,10 @@ from checks.numerics import (
 # STATUS CODES AND LIMITS
 # ===========================================================================
 
-# Trial until the 700-step differential run and adversarial gates qualify it.
-comptime ATTN_REPAIR_MASKED_TAIL = is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"]()
+# The matrix enables measured columns. Explicit old arms preserve reproducibility.
+comptime ATTN_REPAIR_MASKED_TAIL = (
+    is_defined["MOJOLEARN_ATTN_REPAIR_MASKED_TAIL"]() or attn_masked_tail_replay_for[TARGET_COLUMN]()
+) and not is_defined["MOJOLEARN_ATTN_LEGACY_CORNER"]()
 comptime ATTN_REPAIR_SAB_Z = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_Z"]()
 comptime ATTN_REPAIR_SAB_DQ = is_defined["MOJOLEARN_ATTN_REPAIR_SAB_DQ"]()
 comptime ATTN_EXACT_TAIL_GUARD = ATTN_REPAIR_MASKED_TAIL or is_defined["MOJOLEARN_ATTN_EXACT_TAIL_GUARD"]()

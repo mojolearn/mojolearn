@@ -88,7 +88,7 @@ if ! pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1; then
 fi
 
 
-build_byte_lm instrumented ""
+build_byte_lm instrumented "-D MOJOLEARN_ATTN_LEGACY_CORNER=1 -D MOJOLEARN_BYTE_LM_RETAIN_EAGER=1"
 probe baseline --shape $TARGET --steps 700 --tail 0 --smi-every 10 --witness-every 0 $CORPUS_ARG
 probe forced-eager --shape 1 32 256 4 2 64 64 2 256 --steps 1 --tail 0 --attention-path eager
 probe forced-fused --shape 1 32 256 4 2 64 64 2 256 --steps 1 --tail 0 --attention-path fused

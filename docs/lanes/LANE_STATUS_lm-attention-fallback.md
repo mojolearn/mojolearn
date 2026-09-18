@@ -180,3 +180,38 @@ Final qualification, conditional on the replay trial succeeding: paired
 700-step legacy/default training on both R2 enwik8 and Pile GitHub, followed
 by B4 enwik8 2000-step endurance. Prepared scripts fail their arm witnesses
 until the default is explicitly flipped; no current default flip is claimed.
+
+## Replay trial verdict and final predictions (registered before final runs)
+
+The paired H100 trial at 42d225229 completed 700 steps in each arm. Every
+loss and all six state hashes at steps 0 and 699 match. Backward statuses:
+legacy RAN 4703 / CORNER 3697 / REFUSED_REGIME 0; repaired RAN 8400 /
+CORNER 0 / REFUSED_REGIME 0. Repair masks: 4951 none, 3449 dQ, zero zdot.
+Thus zdot replay is INERT in this training experiment; its native fixture
+is active. Tail median 0.456854569 -> 0.199255138 s (2.293x); device tail
+31537 -> 15153 MiB. Eager bytes 17314086912 -> 432; aexp remains
+2415919104. Every registered replay prediction passed.
+
+AMD MI300X native gates at 190cebf92 passed all 15 broad cases under the
+forced estash schedule, repair and preservation fixtures, and four observed
+negative controls. The AMD run is native correctness evidence, not a
+700-step training or performance claim. Apple received source compiles only.
+Both completed rented VMs were deleted and verified absent.
+
+Enable replay and buffer release in the NVIDIA matrix rows on this branch;
+sticky routing stays OFF. Keep explicit legacy defines for repeatable A/Bs.
+Before merging, run paired legacy/default 700-step arms on enwik8 and Pile
+GitHub. Predict zero default refusals, all exact loss/checkpoint witnesses
+matching, 432 eager bytes, 2415919104 aexp bytes, late median 0.18–0.27 s
+on EACH corpus. Any bit difference rejects the default; any missing active
+repair is INERT for that corpus, not evidence of unchanged repaired bits.
+Also run a 700-step legacy-arithmetic/release-only enwik8 arm, sticky OFF:
+predict original per-step statuses and bit witnesses, but 432 retained
+eager bytes after every step. This exercises return to fused after release.
+
+B4 enwik8 prediction: complete 2000 steps, finite losses and exact step
+sequence, 432 eager bytes, 9663676416 aexp bytes; sampled device peak below
+70000 MiB and last-200 median 0.55–0.90 s. Predict throughput 1.1–1.5x
+B1 default on the same corpus; <=1.1x falsifies that multiplier prediction.
+B4 failure or OOM is a failed endurance prediction, never a shorter pass.
+The final runs will finish even if an early timing observation loses.

@@ -76,6 +76,7 @@ from training.checks.optimizer import (
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
+from checks.kernel_matrix import TARGET_COLUMN, byte_lm_release_eager_for
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
@@ -169,7 +170,9 @@ witness and skips the controls on a build without it."""
 
 comptime BYTE_LM_STICKY_EAGER = is_defined["MOJOLEARN_BYTE_LM_STICKY_EAGER"]()
 
-comptime BYTE_LM_RELEASE_EAGER = is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"]()
+comptime BYTE_LM_RELEASE_EAGER = (
+    is_defined["MOJOLEARN_BYTE_LM_RELEASE_EAGER"]() or byte_lm_release_eager_for[TARGET_COLUMN]()
+) and not is_defined["MOJOLEARN_BYTE_LM_RETAIN_EAGER"]()
 
 comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
 """DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
