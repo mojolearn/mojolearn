@@ -42,11 +42,52 @@ from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
-from checks.kernel_matrix import TARGET_COLUMN, column_name
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_AMD, column_name
 from gemm.checks.gemm_identical import _tuned_step, TUNED_HW_FTZ_FMA
 from transformer.impl.llama.modeling_llama import _upload, _download, _zeros
 
 comptime LANES = 4
+
+#: DEVIATION 2701, extended 2026-09-17 (lane `lane/gemm-next`, brief section
+#: 14.5 point 2 and section 20). A FIFTH lane, in its own kernel and its own
+#: buffer, asks the one question that decides whether AMD's eight-instruction
+#: seam can become one: **when the wave's MODE register is told to flush f32
+#: denormals, does AMD's FMA flush BEFORE or AFTER rounding?** If after
+#: (`rtf`), a single `v_fma_f32` computes the contract and the seven `ftz`
+#: instructions in the loop go away. If before (`fbr`, which is what Apple's
+#: FMA does), the arm is WRONG at the 315 boundary triples and is a defect.
+#:
+#: It is a SEPARATE KERNEL on purpose. `s_setreg` changes the mode for the
+#: rest of the wave, so setting it inside `seam_kernel` would silently change
+#: the four lanes computed after it. Nothing here touches those four.
+comptime MODE_LANE = TARGET_COLUMN == COLUMN_AMD
+
+
+def mode_seam_kernel(
+    results: MutPointer[Float32, MutAnyOrigin],
+    words: MutPointer[Float32, MutAnyOrigin],
+    count_in: Int32,
+):
+    comptime if MODE_LANE:
+        # hwreg(HW_REG_MODE = 1, offset = 4, width = 2), the f32 FP_DENORM
+        # field: 1 | (4 << 6) | ((2 - 1) << 11) = 2305 = 0x0901. Value 0 is
+        # "flush f32 denormal inputs and outputs". Read back from the emitted
+        # gfx942 GCN as `s_setreg_imm32_b32 hwreg(HW_REG_MODE, 4, 2), 0`
+        # (bench/results/e1g/2026-09-17_163900-apple-m4-amd-seam-instruction-count).
+        # `llvm.amdgcn.s.setreg.imm32.b32` is the ISA mnemonic, not an LLVM
+        # intrinsic name, and is rejected by name.
+        llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(0x0901), Int32(0))
+    var count = Int(count_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= count * count * count:
+        return
+    var a = ftz(words.unsafe_load(i % count))
+    var b = ftz(words.unsafe_load((i // count) % count))
+    var acc = ftz(words.unsafe_load(i // (count * count)))
+    # The NATIVE FMA ALONE. On a column where the mode was not set (every
+    # column but AMD) this is the `fma` lane again, which is how the line
+    # stays readable everywhere and is why the printed name says so.
+    results.unsafe_store(i, identical_mul_add(a, b, acc))
 
 
 @always_inline
@@ -87,10 +128,10 @@ def _hex(w: UInt32) -> String:
     return s
 
 
-def _fnv1a(actual: List[Float32], n: Int, lane: Int) -> UInt64:
+def _fnv1a(actual: List[Float32], n: Int, lane: Int, stride: Int = LANES) -> UInt64:
     var h = UInt64(0xCBF29CE484222325)
     for i in range(n):
-        var w = bitcast[DType.uint32](actual[LANES * i + lane])
+        var w = bitcast[DType.uint32](actual[stride * i + lane])
         for k in range(4):
             h = h ^ UInt64((w >> UInt32(8 * k)) & UInt32(0xFF))
             h = h * UInt64(0x100000001B3)
@@ -139,6 +180,23 @@ def main() raises:
     var names: List[String] = ["shipped", "fma", "hwftz", "swrtf"]
     for lane in range(LANES):
         print("SEAM_HASH lane=" + names[lane] + " fnv1a64=" + _hex64(_fnv1a(actual, n, lane)))
+
+    # THE FIFTH LANE, its own kernel and its own buffer, launched after the
+    # four above are already downloaded so no mode change can reach them.
+    var mode_result = _zeros(ctx, n)
+    ctx.enqueue_function[mode_seam_kernel](
+        mode_result.unsafe_ptr(), inputs.unsafe_ptr(), Int32(count),
+        grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.synchronize()
+    var mode_actual = _download(ctx, mode_result, n)
+    var mode_name = "modeftz" if MODE_LANE else "modeftz_NOT_SET_ON_THIS_COLUMN"
+    print("SEAM_HASH lane=" + mode_name + " fnv1a64=" + _hex64(_fnv1a(mode_actual, n, 0, 1)))
+    print(
+        "SEAM_MODE column=" + column_name(TARGET_COLUMN) + " mode_set=" + String(MODE_LANE)
+        + " boundary=" + _hex(bitcast[DType.uint32](mode_actual[16 + count * 6]))
+        + " (the contract reads 00800000 here; 00000000 is flush-before-round)"
+    )
     # The literal boundary triple: a=0x3f7fffff (index 16), b=0x00800000 (6), acc=+0 (0).
     var boundary = 16 + count * 6
     var bl = String("SEAM_BOUNDARY a=3f7fffff b=00800000 acc=00000000")
