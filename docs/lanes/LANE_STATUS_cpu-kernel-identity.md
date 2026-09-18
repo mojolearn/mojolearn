@@ -80,3 +80,15 @@ runtime-tests-fresh-estimators.log record its outcome. The script builds fresh
 clean and sabotage estimators bindings, replaces only this evidence directory's
 symlinks, then runs the 31 selected kernel/family tests. It never writes into
 the frozen release. This checkpoint is WIP pending that job's actual result.
+
+## Completed runtime validation
+
+Session 44239 completed successfully: both estimators builds passed and all
+31 runtime tests passed, with no skips. The saved-model public CPU inference
+path now passes reload, one-row and uneven-batch invariance for all five
+supported kernels and tested polynomial degrees 0, 1, 2, 3, 7, 32. Retained
+runtime logs and native hashes accompany the source comparison witnesses.
+This implementation is ready to merge. Six verifier lanes remain pending
+until independent NVIDIA/AMD records and installed-wheel qualification pass.
+No frozen release artifact was changed. All jobs for this worktree finished;
+its external native evidence remains under mojolearn-evidence for retention.

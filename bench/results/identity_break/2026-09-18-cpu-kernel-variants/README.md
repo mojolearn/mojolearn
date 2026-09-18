@@ -16,3 +16,9 @@ binary. That binding also needed degree transport updated for the new
 oracle signatures. A fresh estimators build and runtime rerun are required.
 These failures do not invalidate the separate direct-family comparison,
 but that comparison does not qualify the public saved-model path.
+
+The fresh estimators binding now passes all 31 selected runtime tests with
+zero skips (runtime-tests-fresh-estimators.log). Both clean and sabotage
+estimators builds succeeded. The saved-model binding transports polynomial
+degree correctly, and reload, one-row and uneven-batch outputs match bitwise.
+Independent NVIDIA/AMD and installed-wheel qualification remain pending.
