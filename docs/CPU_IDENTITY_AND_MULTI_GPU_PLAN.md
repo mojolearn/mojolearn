@@ -206,6 +206,15 @@ both vendors. Benchmark enough independent series to assess transfer overhead.
 
 Likely seams: `parallel_classical.py`, forecast model state and worker protocol.
 
+Implementation audit (2026-09-18): Holt-Winters `predict` currently invokes
+`bindings/holtwinters_host_predict.mojo` for in-sample arithmetic even in the
+GPU binding; `forecast` and wholly out-of-sample `predict` use the device
+forecast entry. Merely dispatching the existing in-sample method to GPU worker
+processes would still execute host arithmetic. C4 must either implement and
+verify that arithmetic on the assigned GPUs or explicitly leave in-sample
+prediction outside its GPU claim. Physical worker placement alone is not
+evidence of GPU computation. Preserve its startup NaNs in either case.
+
 ### C5. Multi-GPU cross-validation scheduling
 
 Priority: bounded job-throughput feature; can follow C4 before the larger builds.
