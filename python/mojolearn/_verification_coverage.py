@@ -20,7 +20,7 @@ def declaration(spec):
     return dict(kind="undeclared", reason="no explicit verification contract")
 
 
-def reference_support(table, lane, fixtures, parts, stale=False):
+def reference_support(table, lane, fixtures, parts, stale=False, vendor_class=None):
     """Expose which current numerical answers each device class supports.
 
     An old, conflicting or N/A entry is not a numerical witness. These are
@@ -32,7 +32,7 @@ def reference_support(table, lane, fixtures, parts, stale=False):
                    missing_or_conflicted_fixtures=0, stale_fixtures=0,
                    agreeing_device_classes={c: 0 for c in ('cpu', 'apple', 'nvidia', 'amd')})
         for fixture in fixtures:
-            ent = vref.entry(table, lane, fixture, part)
+            ent = vref.entry(table, lane, fixture, part, device_class=vendor_class)
             if stale:
                 row['stale_fixtures'] += 1
                 continue
@@ -102,7 +102,7 @@ def inventory(harness, table, vendor_class):
                                physical_multi_gpu_measured_by_cpu=False),
                            reference_fixtures=refs, fixtures=len(harness.FIXTURES),
                            reference_support=reference_support(table, name, harness.FIXTURES,
-                                                               refs, stale=name in stale),
+                                                               refs, stale=name in stale, vendor_class=vendor_class),
                            reference_admission=table.get('lane_admission', {}).get(name,
                                dict(policy=table.get('admission_policy', dict(status='legacy')))))
     for name, lane in lanes.items():

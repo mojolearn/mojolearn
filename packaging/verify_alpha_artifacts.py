@@ -119,7 +119,8 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                     for value in metadata.get_all('Summary', [])),
                 'package Summary must be a single line')
         released = released_version(source_root)  # DEVIATION 2290: never a literal
-        if version == released and ('linux' in parts[-1]):
+        overlay_present = dist + 'ALPHA_PROVENANCE.json' in files
+        if version == released and ('linux' in parts[-1]) and not overlay_present:
             require(dist + 'LINUX_PAYLOAD.json' in files,
                     'Linux ' + released + ' requires a fresh combined payload, not an inherited native overlay')
         if dist + 'LINUX_PAYLOAD.json' in files:
@@ -156,6 +157,29 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                 and hex_digest(provenance.get('base_wheel_sha256'))
                 and provenance.get('current_numerical_qualification') ==
                     'NOT INHERITED; requires separate root validation', 'alpha provenance contract mismatch')
+        reuse = provenance.get('native_reuse')
+        if reuse is not None:
+            require(isinstance(reuse, dict) and reuse.get('schema') == 'mojolearn.native-reuse.v1'
+                    and all(re.fullmatch('[0-9a-f]{40}', str(reuse.get(k, '')))
+                            for k in ('package_source_commit', 'native_source_commit'))
+                    and hex_digest(reuse.get('compile_inputs_sha256'))
+                    and isinstance(reuse.get('compile_input_count'), int)
+                    and reuse['compile_input_count'] > 0, 'invalid native reuse contract')
+            require(small('mojolearn/identity_columns/COMMIT').decode().strip()
+                    == reuse['package_source_commit'], 'native reuse package source mismatch')
+            resources = provenance.get('resource_overlay_sha256', {})
+            require(set(resources) == {'mojolearn/verify_reference/table.json',
+                                       'mojolearn/identity_columns/COMMIT'}
+                    and all(hex_digest(h) and hashes.get(n) == h for n, h in resources.items()),
+                    'resource overlay provenance mismatch')
+        if version == released and 'linux' in parts[-1]:
+            require(release_profile == 'alpha-api' and reuse is not None
+                    and parts[-1].startswith('manylinux_'), 'Linux overlay requires explicit native reuse provenance')
+            parent = decode(small(dist + 'BASE_LINUX_PAYLOAD.json'))
+            require(hashes[dist + 'BASE_LINUX_PAYLOAD.json'] == provenance.get('base_linux_payload_sha256')
+                    and parent.get('schema') == 'mojolearn.linux-payload.v1'
+                    and parent.get('source_commit') == reuse['native_source_commit'],
+                    'native reuse parent Linux build provenance mismatch')
         if release_profile == 'alpha-api':
             require(provenance.get('release_profile') == 'alpha-api', 'wheel lacks manifest alpha-api release profile')
         native = {n: h for n, h in hashes.items() if n.endswith(('.so', '.dylib', '.dll', '.pyd')) or '.so.' in n}

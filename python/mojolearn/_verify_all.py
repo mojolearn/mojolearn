@@ -1816,14 +1816,14 @@ def lanes_line(report):
 
 
 
-def judge_rows(raw, table, families=None, unreferenced_lanes=()):
+def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=None):
     """Attach state, detail and reference columns to raw result rows."""
     out = []
     for r in raw:
         part, lane = r["part"], r["lane"]
         ref_part, ref_lane = r.get("reference_part") or (part, lane)
         ent = (None if ref_lane in unreferenced_lanes else
-               vref.entry(table, ref_lane, r["fixture"], ref_part))
+               vref.entry(table, ref_lane, r["fixture"], ref_part, device_class=device_class))
         state, detail = vref.judge(r["value"], ent, r.get("error"))
         out.append(dict(lane=lane, fixture=r["fixture"], part=part, value=r["value"], state=state,
                         detail=detail, reference=(ent or {}).get("ref"),
@@ -2087,7 +2087,7 @@ def cmd_verify_all(args):
             lane_seconds[lane] = round(time.time() - t0, 3)
             log(f"  {lane:<34} {families[lane]:<16} {lane_seconds[lane]:6.1f}s")
     model_rows = [] if getattr(args, "no_models", False) else run_models(harness, ml, table, log=log, repeats=repeats, host_only=models_only)
-    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale)
+    rows = judge_rows(raw + model_rows, table, families, unreferenced_lanes=stale, device_class=vclass)
     counts = {s: sum(1 for r in rows if r["state"] == s) for s in vref.STATES}
     code, headline = verdict(counts)
     fams = []

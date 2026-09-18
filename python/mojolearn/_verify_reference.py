@@ -138,10 +138,35 @@ def load_table(path=None):
     return table
 
 
-def entry(table, lane, fixture, part):
+def entry(table, lane, fixture, part, device_class=None):
     """The table entry of one cell part, or None when no record has it."""
     cell = table["cells"].get(f"{lane}/{fixture}")
-    return None if cell is None else cell.get(part)
+    ent = None if cell is None else cell.get(part)
+    if not ent or part != "model" or device_class not in ("cpu", "apple", "nvidia", "amd"):
+        return ent
+    # These CPU lanes load the GPU's saved file; they do not write a model.
+    # A newer CPU N/A record must not erase a GPU's model-byte reference.
+    # Keep the two roles separate, without treating disagreeing GPU hashes
+    # as interchangeable or granting an unrecorded CPU exemption.
+    from .host_surface import GBDT_CTR_MODEL_LANES
+    if lane not in GBDT_CTR_MODEL_LANES:
+        return ent
+    values = {cls: (column, ent.get("ref")) if isinstance(column, int)
+              else tuple(column) for cls, column in ent.get("cols", {}).items()}
+    cpu = values.get("cpu")
+    cpu_na = "n/a:gpu-saved-file (a CPU column loads the GPU column's model and writes none)"
+    if not cpu or cpu[1] != cpu_na:
+        return ent
+    if device_class == "cpu":
+        return dict(ref=cpu_na, cols={"cpu": cpu[0]})
+    gpu = {cls: value for cls, value in values.items() if cls in ("apple", "nvidia", "amd")}
+    hashes = {value for _, value in gpu.values()}
+    if not gpu or any(not isinstance(value, str) or not re.fullmatch(r"[0-9a-f]{16}", value)
+                      for value in hashes):
+        return ent
+    if len(hashes) != 1:
+        return dict(ref=None, conflict=True, cols={cls: list(value) for cls, value in gpu.items()})
+    return dict(ref=next(iter(hashes)), cols={cls: index for cls, (index, _) in gpu.items()})
 
 
 def columns_of(table, ent):

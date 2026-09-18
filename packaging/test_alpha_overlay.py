@@ -6,6 +6,7 @@ import io
 import json
 from pathlib import Path
 import sys
+import subprocess
 import tempfile
 import unittest
 import zipfile
@@ -118,6 +119,56 @@ class AlphaOverlayTests(unittest.TestCase):
         self.write()
         with self.assertRaisesRegex(ValueError, 'explicit alpha'):
             overlay.assemble(self.wheel, self.python, '0.6.0', self.root / 'out')
+
+    def test_python_reference_patch_reuses_native_bytes_and_refuses_native_edits(self):
+        def git(*args):
+            return subprocess.check_output(['git', '-C', str(self.root), *args], stderr=subprocess.DEVNULL).decode().strip()
+        git('init')
+        git('config', 'user.email', 'fixture@example.invalid')
+        git('config', 'user.name', 'Fixture')
+        package = self.python / 'mojolearn'
+        (package / '_version.py').write_text("__version__ = '0.6.0'\n")
+        (package / 'verify_reference').mkdir()
+        reference = package / 'verify_reference/table.json'
+        reference.write_text('{"cells": {}}\n')
+        (self.root / 'tools').mkdir()
+        for name in ('identity_break.py', 'identity_trace_diff.py'):
+            (self.root / 'tools' / name).write_text('# packaged harness fixture\n')
+        native = self.root / 'kernel.mojo'
+        native.write_text('# original native input\n')
+        git('add', 'python', 'tools', 'kernel.mojo'); git('commit', '-m', 'base')
+        parent = git('rev-parse', 'HEAD')
+        self.files['mojolearn/identity_columns/COMMIT'] = (parent + '\n').encode()
+        self.files['mojolearn/verify_reference/table.json'] = reference.read_bytes()
+        payload = dict(schema='mojolearn.linux-payload.v1', source_commit=parent, version='0.6.0')
+        self.files[self.dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
+        self.write()
+        reference.write_text('{"cells": {"new": "measured"}}\n')
+        (package / '_version.py').write_text("__version__ = '0.6.1'\n")
+        git('add', 'python'); git('commit', '-m', 'reference patch')
+        source = git('rev-parse', 'HEAD')
+        result = overlay.assemble(self.wheel, self.python, '0.6.1', self.root / 'out', True, source)
+        with zipfile.ZipFile(result) as archive:
+            dist = 'mojolearn-0.6.1.dist-info/'
+            self.assertEqual(archive.read('mojolearn/verify_reference/table.json'), reference.read_bytes())
+            self.assertEqual(archive.read('mojolearn/identity_columns/COMMIT').decode().strip(), source)
+            self.assertEqual(archive.read(dist + 'BASE_LINUX_PAYLOAD.json'), self.files[self.dist + 'LINUX_PAYLOAD.json'])
+            self.assertNotIn(dist + 'LINUX_PAYLOAD.json', archive.namelist())
+            self.assertEqual(archive.read('mojolearn/hip/identical/_mojolearn.so'), self.files['mojolearn/hip/identical/_mojolearn.so'])
+            self.assertIn('mojolearn/_identity_break.py', archive.namelist())
+            provenance = json.loads(archive.read(dist + 'ALPHA_PROVENANCE.json'))
+            self.assertEqual(provenance['native_reuse']['native_source_commit'], parent)
+        sys.path.insert(0, str(Path(__file__).parent))
+        try:
+            from verify_alpha_artifacts import verify_wheel
+            verify_wheel(result, '0.6.1', 'alpha-api', source_root=self.root)
+        finally:
+            sys.path.pop(0)
+        native.write_text('# changed arithmetic\n')
+        git('add', 'kernel.mojo'); git('commit', '-m', 'native edit')
+        with self.assertRaisesRegex(ValueError, 'native compile inputs changed'):
+            overlay.assemble(self.wheel, self.python, '0.6.1', self.root / 'refused', True, git('rev-parse', 'HEAD'))
+        self.assertFalse((self.root / 'refused').exists())
 
     def test_explicit_final_number_keeps_alpha_api_profile(self):
         self.write()
