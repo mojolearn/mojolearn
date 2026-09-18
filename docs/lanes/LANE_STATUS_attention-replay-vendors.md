@@ -58,6 +58,37 @@ Consequences, registered before running anything:
   HD64 training witness equal to NVIDIA/AMD at the same shape.
 - identity_break byte-LM/transformer lanes before/after on NVIDIA, AMD, CPU.
 
+## AMD predictions, registered before the first rental (2026-09-18 ~14:30Z)
+
+RunPod MI300X (Hot Aisle full: both team slots held by lane gemm-single-leaf),
+`tools/gemm_remote_leg.sh amd`, strict R2 staging of the one corpus key.
+Bodies: `tools/lm_attention_vendor_train_{enwik8,pile_github}.sh` ->
+`tools/lm_attention_vendor_train_body.sh`. enwik8 adds a release-only arm
+(released_legacy), Pile GitHub a dk/dv-guard-only arm (guarded).
+Host verdict: `tools/lm_attention_vendor_compare.py <amd dir> <nvidia dir>`
+(its 11 corruption controls per arm fail first on the NVIDIA record itself).
+
+The arithmetic is claimed identical across columns, so the routing is
+predicted to match NVIDIA per step AND per layer, not only in total:
+
+| | enwik8 | Pile GitHub |
+|---|---|---|
+| legacy backward | RAN 4703 / CORNER 3697 | RAN 6632 / CORNER 1768 |
+| repaired backward | RAN 8400 / CORNER 0 | RAN 8400 / CORNER 0 |
+| repaired replay sites | dQ 3449, zdot 0 | dQ 1612, zdot 0 |
+| forward | RAN 8400 both arms | RAN 8400 both arms |
+
+- All 700 losses and six hashes at steps 0/699 equal between AMD arms and
+  equal to NVIDIA's; one differing bit rejects the AMD flip.
+- repaired eager_bytes 432 every step, aexp 2415919104.
+- Guarded (Pile): CORNER 1768 - 156 = 1612 (NVIDIA's dQ count), if the
+  dk/dv guard alone removes the same 156 there as the arithmetic predicts.
+- Late (last 50 steps) median: AMD legacy ~0.72-0.86 s (the gemm-class
+  pure 501-700 medians), repaired 0.40-0.65 s; speedup > 1.1x on EACH
+  corpus. <= 1.1x on either falsifies the speed prediction (bits still decide
+  the flip; speed is reported either way).
+- An AMD zdot CORNER or zdot site anywhere falsifies prediction 1 above.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).

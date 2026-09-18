@@ -62,14 +62,27 @@ def sha(data):
 
 
 def device_peak_mb(index=0):
-    """Device-wide used memory from nvidia-smi, in MB, or None."""
+    """Device-wide used memory from nvidia-smi (or rocm-smi), in MB, or None."""
     if not shutil.which('nvidia-smi'):
-        return None
+        return rocm_used_mb(index)
     try:
         out = subprocess.run(['nvidia-smi', '-i', str(index), '--query-gpu=memory.used',
                               '--format=csv,noheader,nounits'],
                              capture_output=True, text=True, timeout=20).stdout
         return int(out.strip().splitlines()[0])
+    except Exception:
+        return None
+
+
+def rocm_used_mb(index=0):
+    """AMD device-wide used VRAM from rocm-smi, in MiB, or None."""
+    if not shutil.which('rocm-smi'):
+        return None
+    try:
+        out = subprocess.run(['rocm-smi', '-d', str(index), '--showmeminfo', 'vram', '--json'],
+                             capture_output=True, text=True, timeout=20).stdout
+        card = next(iter(json.loads(out).values()))
+        return int(card['VRAM Total Used Memory (B)']) // (1024 * 1024)
     except Exception:
         return None
 
