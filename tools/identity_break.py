@@ -3636,11 +3636,15 @@ def _(ml, X, yc, yr, Xh=None):
     trainer's tokens, merges and stats, so the object hashed is one the lane
     built itself and not only one the trainer returned.
 
-    SABOTAGE, two arms, both must move it: MOJOLEARN_BPE_TRAINER_SABOTAGE=1
-    (the trainer's reversed tie-break) moves every part but the flags, and
-    the tokenizer host build with -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1
-    (ids written in reverse) moves `ids`, `decoded` and `roundtrip` and
-    leaves the files alone."""
+    SABOTAGE, two arms, both must move it. MEASURED on the M4, one core,
+    `--repeats 2`, all nine fixtures DIVERGENT under each
+    (bench/results/identity_break/2026-09-18_tokenized-corpus/):
+    MOJOLEARN_BPE_TRAINER_SABOTAGE=1 (the trainer's reversed tie-break) moves
+    `ranks`, `tokenizer_json`, `identity` and `ids` and leaves `decoded`,
+    `roundtrip` and `flags` (a different vocabulary still round trips); the
+    tokenizer host build with -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1 (ids
+    written in reverse) moves `ids`, `decoded` and `roundtrip` and leaves the
+    files and the identity alone."""
     import tempfile
     TV = ml.tokenizer.TrainedBpeVocabulary
     raw = np.ascontiguousarray(X).tobytes()[:4096]
@@ -3685,8 +3689,11 @@ def _(ml, X, yc, yr, Xh=None):
     arm (the trained rank file passed back as `vocab=`) lands on the same
     ids.
 
-    SABOTAGE: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves the vocabulary and so
-    every id; the tokenizer host sabotage build moves the id array."""
+    SABOTAGE, MEASURED like bpe-vocabulary's (same directory), all nine
+    fixtures DIVERGENT under each: MOJOLEARN_BPE_TRAINER_SABOTAGE=1 moves
+    `tokens`, `identity`, `batches` and `schedule`; the tokenizer host
+    sabotage build moves `tokens`, `batches` and `schedule` (the schedule
+    carries the id array's sha256) and leaves `identity`."""
     import tempfile
     LC = ml.lm_corpus
     raw = np.ascontiguousarray(X).tobytes()[:16384]
@@ -3705,7 +3712,7 @@ def _(ml, X, yc, yr, Xh=None):
         schedule = json.dumps(b.data_schedule(), sort_keys=True).encode("ascii")
         ok = LC.tokenizer_for(b.data_schedule(), c.vocabulary_path)
         try:
-            LC.tokenizer_for(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
+            LC.require_vocabulary(b.data_schedule(), ml.tokenizer.BpeTokenizer._synthetic())
             refused = 0
         except ValueError as exc:
             refused = int("vocabulary mismatch" in str(exc))
