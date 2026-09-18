@@ -26,7 +26,7 @@ class LegTests(unittest.TestCase):
                     'if __name__ == "__main__":\n'
                     ' import os,sys\n'
                     ' with open(os.environ["TRACE"], "a") as f: f.write("capture:" + sys.argv[sys.argv.index("--lanes")+1] + "\\n")\n')
-                for build in ('build', 'build_kernel_methods', 'build_estimators_host', 'build_gp', 'build_svm'):
+                for build in ('build', 'build_kernel_methods', 'build_estimators_host', 'build_gp', 'build_preprocessing', 'build_svm'):
                     (root / f'bindings/{build}.sh').write_text(
                         f'echo {build} >> "$TRACE"\n'
                         f'[ "${{FAIL_BUILD:-}}" != "{build}" ]\n')
@@ -49,6 +49,8 @@ class LegTests(unittest.TestCase):
                 events = trace.read_text().splitlines()
                 self.assertLess(events.index('capture:kernel-ridge-poly'), events.index('build_gp'))
                 self.assertIn('capture:svc-poly', events)
+                if not fail:
+                    self.assertLess(events.index('build_preprocessing'), events.index('capture:gpc'))
                 self.assertEqual('capture:gpc' in events, not bool(fail))
                 self.assertNotIn('build_training', events)
                 self.assertEqual((root / 'out/exit_code').read_text().strip(), str(int(bool(fail))))

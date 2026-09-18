@@ -1,0 +1,41 @@
+{
+  "commit": "f771338c7ab68820606b66892e202a45d43c6dda",
+  "estimator": "KernelRidge",
+  "gpu_arch": null,
+  "host": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8462Y+",
+    "family": "6",
+    "isa": [
+      "avx2",
+      "avx512f",
+      "fma"
+    ],
+    "machine": "x86_64",
+    "model": "143",
+    "python": "3.14.7",
+    "release": "6.8.0-124-generic",
+    "stepping": "8",
+    "system": "Linux",
+    "vendor": "GenuineIntel"
+  },
+  "kind": "ties",
+  "lane": "kernel-ridge-laplacian",
+  "model_sha256": "857ab7ff0c67b9cade527de3cc6f38740a1f71c70925e65671b6bbd57ac9cb48",
+  "numeric_mode": "identical",
+  "predictions": {
+    "identity_hash": "342d39a74aca2759",
+    "predict": {
+      "dtype": "<f4",
+      "sha256": "5d4546d418d33f2dcaad21418a2d9d6f95404b4733ec5b7381c0fdbebbdfa143",
+      "shape": [
+        64
+      ]
+    },
+    "seconds": 0.001132
+  },
+  "recorded_at": "2026-09-18T18:01:22+0000",
+  "reload_equal": true,
+  "status": "RECORDED",
+  "vendor": "hip",
+  "x_sha256": "cb717abc7fdea535547b185d7f6b53f113cbab5b15e61b6f0f7c62e31ea62f5e"
+}

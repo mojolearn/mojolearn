@@ -2522,12 +2522,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "kernel-ridge-poly": "no reference",
-    "kernel-ridge-sigmoid": "no reference",
-    "kernel-ridge-laplacian": "no reference",
-    "nystroem-poly": "no reference",
-    "nystroem-sigmoid": "no reference",
-    "nystroem-laplacian": "no reference",
 
     # mamba2-dtlimit regained all-nine references at its corrected clamp;
     # see the CPU verification completion records (2026-09-17).
@@ -2674,6 +2668,15 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 PUBLIC_REFERENCE_CANDIDATES = (
+    # Strict all-nine CPU/Apple/AMD references admitted 2026-09-18.
+    # NVIDIA evidence and installed verifier replay are still owed.
+    "kernel-ridge-poly",
+    "kernel-ridge-sigmoid",
+    "kernel-ridge-laplacian",
+    "nystroem-poly",
+    "nystroem-sigmoid",
+    "nystroem-laplacian",
+
     # CPU diagnostics now match all nine fixtures, but the bundled table
     # has only Apple GPU witnesses for these optimizers. CUDA/HIP release
     # records and installed-wheel verification are still owed.
@@ -2730,12 +2733,12 @@ PUBLIC_REFERENCE_CANDIDATES = (
 #: NOT mean nothing is left to implement. A new `save` that ships without a
 #: recording belongs here, with the reason, rather than nowhere.
 SAVED_MODEL_INFERENCE_OWED = {
-    "kernel-ridge-poly": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "kernel-ridge-sigmoid": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "kernel-ridge-laplacian": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-poly": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-sigmoid": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
-    "nystroem-laplacian": "The serialization format is implemented; Apple saved-model recording and CPU replay passed all nine fixtures (2026-09-18-apple-kernel-variants); NVIDIA/AMD records and installed qualification remain owed.",
+    "kernel-ridge-poly": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "kernel-ridge-sigmoid": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "kernel-ridge-laplacian": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-poly": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-sigmoid": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
+    "nystroem-laplacian": "The serialization format is implemented; Apple and AMD saved-model recordings and CPU replay passed all nine fixtures (2026-09-18 kernel records); NVIDIA records and installed qualification remain owed.",
 }
 
 
