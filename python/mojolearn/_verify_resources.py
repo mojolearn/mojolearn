@@ -47,7 +47,7 @@ def run_with_budget(args):
     late os.environ assignment resized an already initialized native pool.
     This controls supported pools, not OS CPU usage, RAM or GPU memory.
     """
-    if args.command != 'verify' or any(getattr(args, flag, None) for flag in (
+    if args.command not in ('verify', 'verify-causal-lm') or any(getattr(args, flag, None) for flag in (
             'coverage', 'compare', 'commitment', 'commitment_a', 'commitment_b')):
         return None
     effective, env = budget_environment(args.cpu_threads)

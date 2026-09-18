@@ -49,6 +49,31 @@ No 0.8.5 artifact was examined for this implementation task.
 
 ## Remaining
 
+## Integrated proof and API checkpoints
+
+- Six kernel variants are now selectable in the classical saved-model gate,
+  with correctly scaled held-out probes. All 54 local GPU-recorded models
+  (six variants, nine fixtures) passed CPU replay using explicitly hashed
+  retained binaries. Independent current NVIDIA/AMD and installed-wheel
+  receipts remain owed; no ordinary hold was removed.
+- The 23-hold capture runner records full properties twice, checkpoints by
+  lane/stage, validates installed wheel bytes when requested, and has a total
+  time budget. Its remote wrapper captures families as soon as their bindings
+  are built, starting with kernels, preserving early results if later work fails.
+- Forecast scheduling and GPC class-level scheduling are integrated and exposed
+  through public modules. Partition/failure tests pass; real CPU-native logical
+  partition evidence and physical GPU qualification are separate lane work.
+- Whole loaded-CausalLM capture is reachable through `verify-causal-lm`, with
+  separate capture/comparison actions, non-overwriting output and the same
+  conservative CPU budget as other verifier commands. Read-only coverage lists
+  this supplemental check and the still-experimental three-route small profile.
+- Integration checks: 34 targeted capture/kernel/LM/GPC/resource tests, four
+  new CLI tests, then 47 coverage/resource/CLI tests passed. The package import
+  inventory reports every current root module reachable. No full native sweep
+  was substituted for missing hardware evidence.
+
+## Remaining execution
+
 Integrate each feature checkpoint, exercise real GPU paths with bounded guarded
 jobs, admit matching references only after their actual checks pass, build the
 expanded 0.8.7 candidate, run installed API/verifier gates and qualify exact wheel

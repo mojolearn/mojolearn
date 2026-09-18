@@ -32,6 +32,23 @@ models and Holt-Winters in-sample prediction are explicitly outside this initial
 distributed API. Software partition/failure tests pass; physical NVIDIA/AMD
 qualification is pending. This does not inherit the older fit-path receipts.
 
+Independent GPC classes can also be scheduled explicitly:
+
+```python
+from mojolearn.parallel_gaussian_process import (
+    fit_gaussian_process_classifier, predict_gaussian_process_classifier,
+)
+
+fit_gaussian_process_classifier(gpc, X, y, devices=(0, 1))
+probabilities = predict_gaussian_process_classifier(gpc, queries, devices=(0, 1),
+                                                   method='predict_proba')
+```
+
+This preserves binary solves and class/probability order. It can distribute
+multiclass work, but a single binary covariance problem still must fit on one
+GPU. Physical vendor qualification is pending; software scheduling tests alone
+are not a throughput or capacity measurement.
+
 | Surface | Partition | Numerical contract |
 | --- | --- | --- |
 | Pooled byte language model | Decoder layers and their model/optimizer state; embedding/head on the first device | Original layer kernels, ordered logical gradient sums and atomic owned AdamW updates |

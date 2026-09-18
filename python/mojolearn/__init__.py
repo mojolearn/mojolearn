@@ -300,9 +300,11 @@ from .parallel_training import ParallelByteLanguageModelTrainer, ParallelNeuralT
 from .model_pool_training import PooledByteLanguageModelTrainer
 from .offload_training import OffloadedByteLanguageModelTrainer
 from . import parallel_forecasting
+from . import parallel_gaussian_process
 
 __all__ = [
     "parallel_forecasting",
+    "parallel_gaussian_process",
     "ParallelByteLanguageModelTrainer",
     "ParallelNeuralTrainer",
     "PooledByteLanguageModelTrainer",
