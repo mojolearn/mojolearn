@@ -10,6 +10,7 @@ Open questions for Andrew (not acted on):
    Candidate follow-up: expose `tokenizer/train/bpe_train.mojo` through the tokenizer binding
    (held file-byte-equal to the Python one already by check-bpe-trainer) and drop its dense
    V x V count table (20.2 GB at 50,256). Not opened.
+   DONE 2026-09-18 in lane/bpe-builder-native (docs/lanes/LANE_STATUS_bpe-builder-native.md).
 2. Should mojolearn ever ship a trained vocabulary? It would be derived from third-party text.
    Today: none ships; ours is in R2 only.
 3. Default vocabulary size 50,256 ranks (GPT-3 Small's 50,257 ids) and 10 MB training sample:
