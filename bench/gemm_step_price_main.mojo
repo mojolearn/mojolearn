@@ -78,6 +78,7 @@ default-flip input under ENGINEERING_RULES 9 is the LM step on the two
 corpora (`tools/gemm_step_leg.sh`), never this harness.
 """
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -155,7 +156,7 @@ def _launch(
     geom: Int,
 ) raises:
     if candidate:
-        identical_gemm_step_geometry_into(ctx, dc, da, db, dw, m, n, k, op, geom, False)
+        identical_gemm_step_geometry_into(ctx, dc, da, db, dw, m, n, k, op, geom, is_defined["MOJOLEARN_GEMM_PRICE_SABOTAGE"]())
     else:
         # DEVIATION 2595: the reference is the SHIPPED dispatch (the ksplit
         # default where the column's row is above 0), never the old plan by
