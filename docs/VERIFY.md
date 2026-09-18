@@ -824,3 +824,14 @@ not GPU cores. Driver UUID/PCI identities and numerical worker activity establis
 placement. They do not replace independent GPU kernel traces, native arithmetic
 sabotage, or release qualification. Loaded-language-model checks use the separate
 `verify-causal-lm` command above.
+
+GPU cross-validation has its own installed check:
+
+```sh
+MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify-cross-validation --devices 0,1 --out cv-evidence --require-installed
+```
+
+It checks fold models, predictions and scores across device orderings and
+repetitions, retains intermediate evidence, and validates installed file bytes.
+Like the distributed suite, it requires the optional NumPy test dependency.
+Physical GPU traces and native sabotage remain separate qualification gates.

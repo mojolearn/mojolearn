@@ -128,3 +128,26 @@ polling, verified absence and cancelled its local watchdog. Another GEMM lane's
 NVIDIA pod is active and was untouched. The deletion cause is unproven; no NVIDIA
 numerical pass is claimed. Replacement awaits ownership coordination. AMD and
 local installed-wheel preparation continue independently.
+
+## User-requested checkpoint: no new pods or long builds
+
+The user requested saving everything promptly because usage points are low.
+No new rentals or fresh macOS build will start. The existing AMD lease finished;
+its owner fetched the records, received DELETE 204 and independently verified
+GET 404/list absence at 18:23:16 UTC. All 23 ordinary routes match the CPU-backed
+references across 990 numerical parts. Two initial normalized-GP dependency
+refusals are preserved alongside successful corrected captures.
+
+Merged the 54 kernel portable models and expanded wheel qualification gates.
+The bundle now contains 58 models; source CPU inference passed all 116 model/batch
+parts with two repetitions. Root integrated gate tests: 19 passed. The workflow
+YAML test could not be collected in the root test interpreter because PyYAML is
+absent; the owning lane's gate/orchestration tests are separately recorded.
+
+Merged the installed CV verifier through `9dc7fbb0f` and exposed it as
+`python -m mojolearn verify-cross-validation`; CLI/resource/coverage tests:
+48 passed. Hardware qualification remains explicit and separate from software
+integration. Follow `EXPANDED_087_BUILD_AND_PROOF.md` for the deferred fresh
+source-pinned build. Outstanding: NVIDIA records, exact rebuilt-wheel replay,
+physical two-GPU execution evidence and release qualification. No wheel was
+published by this work.

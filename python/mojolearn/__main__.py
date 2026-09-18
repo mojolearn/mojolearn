@@ -129,6 +129,23 @@ def _distributed_dispatch(args):
     return distributed_main(argv)
 
 
+def _cross_validation_dispatch(args):
+    from ._verify_parallel_cv import main as cv_main
+    if args.compare:
+        if args.devices or args.out or args.require_installed or args.require_backend:
+            raise ValueError('--compare cannot be combined with capture options')
+        argv = ['--compare', *args.compare]
+    else:
+        argv = []
+        for flag, value in (('--devices', args.devices), ('--out', args.out),
+                            ('--require-backend', args.require_backend)):
+            if value is not None:
+                argv += [flag, value]
+        if args.require_installed:
+            argv += ['--require-installed']
+    return cv_main(argv)
+
+
 def build_parser():
     parser = argparse.ArgumentParser(
         prog="python -m mojolearn",
@@ -143,6 +160,16 @@ def build_parser():
             "  4 cannot run 5 no reference\n"),
     )
     sub = parser.add_subparsers(dest="command", metavar="<subcommand>")
+
+    cv = sub.add_parser('verify-cross-validation',
+        help='checkpoint small GPU cross-validation scheduling checks')
+    cv.add_argument('--devices', help='two distinct GPU indices, e.g. 0,1')
+    cv.add_argument('--out', metavar='DIRECTORY', help='new evidence directory')
+    cv.add_argument('--require-installed', action='store_true')
+    cv.add_argument('--require-backend', choices=('cuda', 'hip'))
+    cv.add_argument('--compare', nargs=2, metavar=('LEFT', 'RIGHT'))
+    cv.add_argument('--cpu-threads', type=int, default=1)
+    cv.set_defaults(func=_cross_validation_dispatch)
 
     distributed = sub.add_parser('verify-distributed',
         help='checkpoint small two-GPU forecast, classifier and sharded-index checks',
