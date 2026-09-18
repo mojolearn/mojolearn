@@ -29,3 +29,45 @@
 == the droplet ==
 [11:26:02 amd/extra] creating mojolearn-extra-amd (gpu-mi325x1-256gb, tor1, image 188571990)
 [11:26:04 amd/extra] droplet id 601730505
+[11:26:46 amd/extra] active at 159.203.44.67
+[11:27:08 amd/extra] ssh settled
+    ON_DROPLET_DEADMAN_ARMED
+    ID_BAKED_IN=1
+    TOKEN_GET_HTTP=200
+[11:27:12 amd/extra] on-droplet dead-man ARMED and verified (id 601730505, 3533s, token GET 200)
+    KEY_NOT_IN_PS
+    [gpu] 
+    [gpu] 
+    [gpu] ============================ ROCm System Management Interface ============================
+    [gpu] ====================================== Product Info ======================================
+    [gpu] GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+    [gpu] GPU[0]		: Card Model: 		0x74b9
+    [gpu] GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+    [gpu] GPU[0]		: Card SKU: 		M3250101
+    [gpu] GPU[0]		: Subsystem ID: 	0x74a5
+    [gpu] GPU[0]		: Device Rev: 		0x00
+    [gpu] GPU[0]		: Node ID: 		1
+    [gpu] GPU[0]		: GUID: 		43855
+    [gpu] GPU[0]		: GFX Version: 		gfx942
+    [gpu] ==========================================================================================
+    [gpu] ================================== End of ROCm SMI Log ===================================
+    [gpu] -- free VRAM at acceptance --
+    [gpu] 
+    [gpu] 
+    [gpu] ============================ ROCm System Management Interface ============================
+    [gpu] ================================== Memory Usage (Bytes) ==================================
+    [gpu] GPU[0]		: VRAM Total Memory (B): 274542362624
+    [gpu] GPU[0]		: VRAM Total Used Memory (B): 299687936
+    [gpu] ==========================================================================================
+    [gpu] ================================== End of ROCm SMI Log ===================================
+
+== the source ==
+[11:27:14 amd/extra] scp the bundle (14394829 bytes, sha256 7da9aacb054d4810)
+[11:27:19 amd/extra] uploaded after 78s of lease
+    ARCHIVE-SHA-OK
+    UNPACKED 3043 files
+[11:27:25 amd/extra] R2 STAGED 1 key(s) in 5s, 1 linked into /root/mojolearn
+[11:27:26 amd/extra] shipped the extra body (tools/lm_attention_vendor_extra_all.sh, sha256 b148232df2fe82f8) and the remote body
+
+== the work ==
+[11:27:27 amd/extra] remote pid 3399, bound 3095s; polling every 30s
