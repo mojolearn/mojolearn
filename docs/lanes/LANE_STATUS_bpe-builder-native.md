@@ -1,6 +1,6 @@
 # LANE STATUS: bpe-builder-native (lane/bpe-builder-native)
 
-**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes DONE (IDENTICAL before vs after, both sabotage arms DIVERGENT); full-size pod run owed.**
+**STATE 2026-09-18: WIP, steps 1-2 done locally (sparse pair counts; binding door, Mojo == Python on ten corpora); identity lanes DONE; full-size job DONE (ranks 3d547b17 reproduced by the new CLI and the door). Merging to main.**
 
 Worktree `~/mojolearn-wt/bpe-builder-native`, branch `lane/bpe-builder-native`, cut from
 origin/main 0e4715f7c. Evidence goes under `~/mojolearn-evidence/bpe-builder-native-sep18/`,
@@ -183,6 +183,33 @@ at 600 s, VmHWM of the train_main process sampled every 10 s:
 `~/mojolearn-evidence/bpe-builder-native-sep18/pod/leg/.../old_bounded/`. Leg B (new CLI
 alone) is retrying for capacity every 3 min (`pod/retry_legB.sh`).
 
+### Step 5 results (record: bench/results/bpe_trainer_full/2026-09-18_bpe-builder-native/)
+
+- NEW CLI (leg B, pod plxga3yp9l0vmh, EPYC 9575F, $0.28/hr): wall 1,116.6 s, peak 91,736 KiB
+  (94 MB); ranks 3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d, tokenizer.json
+  7ae8b893219619cf73e64b262367cc6e6d2f9f1aa9c1a32b8fb7e3cb84d972e9 -- BYTE EQUAL to the old
+  dense-table run. Counters equal (50,256 / 50,000 / 47,825 ties / 220,165 groups).
+- NEW via the door (leg 1, EPYC 7713P): 2,532.9 s, 161 MB whole process, same two shas.
+- OLD peak (leg 1, bounded 600 s by design): **34.8 GB** (33,997,832 KiB, ru_maxrss = VmHWM),
+  not the 20.2 GB predicted: the final List capacity doubling holds the 17.2 GB buffer and its
+  copy at once; RSS then settles at 20.0 GB. Prediction P3 was right about the new arm and
+  wrong (low) about the old one.
+- `prepare()` defaults on all of enwik8 now train with the Mojo backend (recipe backend
+  "mojo"): 1,291.2 s end to end, 751 MB peak.
+- Pods: c2fj95nckg26vq (leg 1, billed 4,159 s at $0.44/hr) and plxga3yp9l0vmh (leg B,
+  1,245 s, $0.097) both read HTTP 404; the API pod listing is `[]`. Six creates refused for
+  capacity created nothing.
+
 ## Candidates (not opened)
 
-(none yet)
+1. INCREMENTAL PAIR COUNTS. Every merge still recounts every pair of every group (O(merges x
+   corpus positions)); that is the whole 2,533 s at full size. Keeping per-pair counts and
+   updating only the groups that contain the merged pair (plus an ordered structure over
+   `(count desc, key asc)` for the selection) is the same output by construction and should
+   bring the 50,256-rank job from ~40 min to seconds-to-minutes. The same identity lanes and
+   the full-size sha would gate it.
+2. `train_main` reads each corpus file as a Mojo `String` and REFUSES invalid UTF-8 (rc 1 on
+   `invalid_utf8`, old and new alike); the binding and the Python trainer take raw bytes. The
+   CLI should read bytes.
+3. `lm_corpus.prepare()`'s default (50,256 ranks on 10 MB) now runs in the Mojo trainer
+   (measured below); with candidate 1 it would stop being the slow step of `prepare`.
