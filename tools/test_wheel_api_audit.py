@@ -21,6 +21,9 @@ class WheelPayloadTests(unittest.TestCase):
             'python/mojolearn/new_package/__init__.py': '__all__ = []\n',
             'python/mojolearn/new_package/inference.py': 'def decode(): return 2\n',
             'python/mojolearn/tests/test_not_shipped.py': 'raise AssertionError\n',
+            'python/mojolearn/verify_reference/table.json': '{"current": true}',
+            'python/mojolearn/verify_reference/models/models.json': '{"models": []}',
+            'python/mojolearn/verify_reference/models/kernel.base.npz': 'saved-model-bytes',
             'tools/identity_break.py': 'CURRENT_HARNESS = True\n',
             'tools/identity_trace_diff.py': 'CURRENT_COMPARATOR = True\n',
         }.items():
@@ -31,7 +34,7 @@ class WheelPayloadTests(unittest.TestCase):
     def wheel(self, *, omit=(), replace=None):
         path = self.root / 'candidate.whl'
         with zipfile.ZipFile(path, 'w') as wheel:
-            for name, source in audit.source_payload(self.root).items():
+            for name, source in {**audit.source_payload(self.root), **audit.reference_payload(self.root)}.items():
                 if name not in omit:
                     wheel.writestr(name, (replace or {}).get(name, source.read_bytes()))
         return path
@@ -39,7 +42,8 @@ class WheelPayloadTests(unittest.TestCase):
     def test_complete_payload_excludes_tests(self):
         wheel = self.wheel()
         self.assertEqual(audit.payload_gaps(wheel, self.root),
-                         dict(missing_python_payload=[], changed_python_payload=[]))
+                         dict(missing_python_payload=[], changed_python_payload=[],
+                              missing_reference_payload=[], changed_reference_payload=[]))
         with zipfile.ZipFile(wheel) as z:
             self.assertFalse(any('/tests/' in name for name in z.namelist()))
 
@@ -57,6 +61,13 @@ class WheelPayloadTests(unittest.TestCase):
         missing = 'mojolearn/_identity_trace_diff.py'
         self.assertEqual(audit.payload_gaps(self.wheel(omit=[missing]), self.root)
                          ['missing_python_payload'], [missing])
+
+    def test_missing_model_and_stale_reference_block_candidate(self):
+        missing = 'mojolearn/verify_reference/models/kernel.base.npz'
+        changed = 'mojolearn/verify_reference/table.json'
+        result = audit.payload_gaps(self.wheel(omit=[missing], replace={changed: b'{}'}), self.root)
+        self.assertEqual(result['missing_reference_payload'], [missing])
+        self.assertEqual(result['changed_reference_payload'], [changed])
 
     def test_strict_cli_rejects_bad_candidate(self):
         for complete, expected in [(False, 1), (True, 0)]:

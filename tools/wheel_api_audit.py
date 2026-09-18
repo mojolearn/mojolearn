@@ -3,7 +3,8 @@
 
 An export is packaging evidence, not numerical qualification or a distinct
 algorithm. Release builders use --require-complete to reject a candidate that
-omits or carries stale Python implementation/verifier bytes from this source.
+omits or carries stale Python implementation/verifier bytes or bundled reference
+assets from this source.
 """
 import argparse
 import hashlib
@@ -38,17 +39,30 @@ def source_payload(root):
     return result
 
 
+def reference_payload(root):
+    """Committed reference table and portable models used by installed checks."""
+    package = Path(root) / 'python' / 'mojolearn'
+    base = package / 'verify_reference'
+    paths = list(base.glob('*.json')) + list((base / 'models').glob('*'))
+    return {'mojolearn/' + path.relative_to(package).as_posix(): path
+            for path in paths if path.is_file()}
+
+
 def payload_gaps(wheel, root):
-    missing, changed = [], []
+    result = {}
     with zipfile.ZipFile(wheel) as archive:
         names = set(archive.namelist())
-        for member, source in source_payload(root).items():
-            if member not in names:
-                missing.append(member)
-            elif archive.read(member) != source.read_bytes():
-                changed.append(member)
-    return dict(missing_python_payload=sorted(missing),
-                changed_python_payload=sorted(changed))
+        for kind, sources in (('python', source_payload(root)),
+                              ('reference', reference_payload(root))):
+            missing, changed = [], []
+            for member, source in sources.items():
+                if member not in names:
+                    missing.append(member)
+                elif archive.read(member) != source.read_bytes():
+                    changed.append(member)
+            result['missing_' + kind + '_payload'] = sorted(missing)
+            result['changed_' + kind + '_payload'] = sorted(changed)
+    return result
 
 
 def inspect_wheel(wheel):
@@ -87,7 +101,8 @@ def audit(wheels):
         row['wheel_names_absent_from_source'] = sorted(set(row['public_names']) - set(surface))
         row.update(payload_gaps(wheel, matrix.ROOT))
         row['source_payload_complete'] = not any(row[key] for key in (
-            'source_names_absent_from_wheel', 'missing_python_payload', 'changed_python_payload'))
+            'source_names_absent_from_wheel', 'missing_python_payload', 'changed_python_payload',
+            'missing_reference_payload', 'changed_reference_payload'))
         results.append(row)
     return dict(scope='Public export inventory; includes aliases, helpers and constants. '
                       'Neither an algorithm count nor numerical qualification.',
@@ -99,7 +114,7 @@ def main():
     parser.add_argument('wheels', nargs='+', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--require-complete', action='store_true',
-                        help='fail for missing public exports or missing/stale source Python payload')
+                        help='fail for missing public exports or missing/stale source Python or reference payload')
     args = parser.parse_args()
     report = audit(args.wheels)
     result = json.dumps(report, indent=2) + '\n'
