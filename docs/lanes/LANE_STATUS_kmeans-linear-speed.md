@@ -188,6 +188,15 @@ of 30 in the first set, kmeans-cosine's five cells refuse a fit; 45 of 60 in the
 and 3081 on 30 of the 35 that record centroids (the five `ties` cells inert); the rest are
 reached by code path and inert on their recorded parts.
 
+### Identity, cpu column, second pod (host bindings core, estimators, metrics, mixture, mixture_infer, ivf, ivf_search built from each tree; the pod's CPU is an EPYC 7543)
+
+| diff | verdict |
+|---|---|
+| cpu base vs both, the 16 lanes | IDENTICAL 80 fit cells; infer/model 150 + 10 n/a; batch 75 + 5 n/a (`diff.cpu.base-both.txt`) |
+| cpu base vs both, the other 12 lanes | IDENTICAL 45; the 15 par-* cells REFUSED on both sides ("no CPU implementation of the cooperative multi-GPU driver", a NotImplementedError by design) (`diff.cpu2.base-both.txt`) |
+| cuda vs cpu, before (base) and after (both), the 16 lanes | IDENTICAL 80 each (`diff.before.cuda-vs-cpu.txt`, `diff.after.cuda-vs-cpu.txt`) |
+| cuda vs cpu, before and after, the other 12 lanes | IDENTICAL 45 each, 15 one-column (the par-* cells) (`diff.before2.cuda-vs-cpu.txt`, `diff.after2.cuda-vs-cpu.txt`) |
+
 ### Interleaved A/B, second pod, 7 rounds, arms rotated (all output digests equal across arms)
 
 | lane / dataset | before arm | before ms med (min..max, spread) | after arm | after ms med (min..max, spread) | note |
