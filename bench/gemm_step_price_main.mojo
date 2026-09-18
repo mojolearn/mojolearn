@@ -88,6 +88,7 @@ from gemm.checks.gemm_identical import (
     GEMM_ARM_SABOTAGE,
     GEMM_ARM_TRIAL,
     GEMM_BODY_KPACK_HG,
+    GEMM_REUSE_GROUP_WS,
     GEMM_GEOM_KFOLDV,
     GEMM_GEOM_KFOLDV_LEAF,
     GEMM_GEOM_KPACK,
@@ -194,6 +195,7 @@ def _price_call(
     var sname = gemm_shipped_dispatch_name(m, n, k)
     var counts = gemm_step_operand_counts(m, n, k)
     var nws = identical_gemm_workspace_max_floats(m, n, k)
+    print("WORKSPACE call=" + cname + " floats=" + String(nws) + " reuse=" + String(GEMM_REUSE_GROUP_WS))
     var da = ctx.enqueue_create_buffer[DType.float32](counts[0])
     var db = ctx.enqueue_create_buffer[DType.float32](counts[1])
     var dc = ctx.enqueue_create_buffer[DType.float32](mn)
@@ -419,6 +421,7 @@ def main() raises:
         + " shipped=[" + gemm_step_geometry_name(GEMM_GEOM_SHIPPED) + "]"
     )
     print("CLASS_FLUSH enabled=" + String(TUNED_CLASS_FLUSH))
+    print("REUSE_GROUP_WS enabled=" + String(GEMM_REUSE_GROUP_WS))
     print("STAGE_FTZ enabled=" + String(TUNED_STAGE_FTZ))
     print("GATHER_FULL enabled=" + String(is_defined["MOJOLEARN_GEMM_GATHER_FULL_TILE"]()))
     print("PLANLABEL arm=" + name + " label=" + gemm_step_arm_plan_label(arm))

@@ -126,3 +126,32 @@ the corresponding check fails. No component/step-share timing is performed.
 A historical attention result was used only to exercise the comparator with
 synthetic dispatch labels; all 13 intentional corruptions were rejected for
 their expected reasons. This is a harness test, not a new training result.
+
+## Experiment 3 result; registered experiment 4: reusable grouped scratch
+
+Full-tile predicate H100 ABBA base 121.665776 / 121.676622 ms,
+full-tile arm 120.262619 / 120.255100 ms. All digests and 288 transport
+fixtures match, both device defects rejected. The ~1.2% difference falls
+below the registered >=2% hypothesis: INERT for that hypothesis, no default
+flip. Pod 02i56zs2nj2cp5 completed and was deleted/verified gone.
+
+Source exposes a separate overhead: _shipped_body_kpack_hg ignores the caller
+workspace and _kpack_run allocates m*n*groups floats plus two host fences per
+call. Candidate reuses sufficiently sized caller scratch, launching the exact
+same group and fold kernels, on the same ordered context, without those two
+fences. The workspace size helper includes the actual default group count;
+older small-buffer callers retain the safe allocating path. GemmWorkspace
+already fences before growth and retains scratch across calls. This may
+increase retained session scratch; it must be reported with training memory.
+No leaf, group rule, fold, kernel body or floating-point operation changes.
+
+Prediction before rental: >=5% lower weighted H100 GEMM sum. Less falsifies
+this magnitude; no actual improvement rejects the default flip. ABBA builds
+plus alternating old/new calls within each price process. All 12 real-shape
+outputs must match, including each cross-build digest. A dedicated gate queues
+two different products through the same scratch, checks both full outputs,
+grows then reuses scratch, and exercises old undersized-buffer fallback.
+Deliberately omit the candidate fold and require poisoned/mismatched outputs;
+also sabotage the priced old arm and require price-comparator rejection.
+Print required and retained workspace sizes; a non-grouped shape is refused
+by the dedicated gate. Registered before launch, not measured yet.

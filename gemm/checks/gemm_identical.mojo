@@ -3710,6 +3710,7 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
+comptime GEMM_REUSE_GROUP_WS = is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
 #: The largest group size `_ksplit_resolve_leaves` accepts (it travels as an
 #: Int32 kernel argument).
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
@@ -4257,6 +4258,25 @@ def _shipped_body_kpack_hg[
     if m <= 0 or n <= 0:
         return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        comptime if GEMM_REUSE_GROUP_WS:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var part = contract_partition(k)
+            if gl > 0 and part[1] > 0:
+                var rg = _ksplit_resolve_leaves(gl, part[1])
+                if len(ws) >= m * n * rg[1]:
+                    # Same two kernels and same stream, with caller-owned
+                    # scratch kept alive until the caller's final fence.
+                    _kpack_launch[
+                        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
+                        GEMM_KPACK_KS, GEMM_KPACK_FS, True, SAB,
+                        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+                    ](ctx, ws, a, b, m, n, k, part[0], part[1],
+                      gemm_operand_strides(op, m, n, k), rg[0], rg[1])
+                    comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
+                        _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
+                    return
+                # Older callers with only plan-sized scratch retain the
+                # allocating path; they never write past a small buffer.
         _kpack_run[
             GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
             GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
@@ -6570,6 +6590,14 @@ def identical_gemm_workspace_max_floats(m: Int, n: Int, k: Int) -> Int:
     var w = identical_gemm_workspace_floats(
         m, n, k, choose_gemm_plan(m, n, k)
     )
+    comptime if GEMM_REUSE_GROUP_WS and GEMM_BODY_KPACK_HG:
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var p = contract_partition(k)[1]
+            if gl > 0 and p > 0:
+                var required = m * n * ((p + gl - 1) // gl)
+                if required > w:
+                    w = required
     if w < 1:
         return 1
     return w
