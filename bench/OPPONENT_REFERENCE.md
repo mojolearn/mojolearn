@@ -1016,6 +1016,23 @@ its rows are here because the lane timed them. Source:
 | Covtype MultiClass 100 trees | 581,012 | refused | 174.8u | refused | 159.5u |
 | Covtype MultiClass 1000 trees | 581,012 | refused | 352.1u | refused | 352.1u |
 
+### RTX 4090 cuML k-means, OLS and PCA at full size, measured 2026-09-18 (lane kmeans-linear-speed)
+
+Pod 0knlkeg0ni0y08, RTX 4090, driver 580.178.04, cuML 26.8.0 in the image's
+Python, its inputs on the device, 5 rounds, medians (min..max) in ms. OLS
+Istella-S is struck for quality (r2 -15111, its eigensolve on near-constant
+columns; ours 0.332). Source: `docs/lanes/LANE_STATUS_kmeans-linear-speed.md`
+("cuML on the same box").
+
+| lane | dataset | rows x cols | cuML ms |
+|---|---|---|---|
+| kmeans (k 64, 20 it) | taxi | 4,000,000 x 11 | 129.5 (127.6..140.5) |
+| kmeans | Istella-S | 2,043,304 x 220 | 321.4 (319.2..327.9) |
+| ols | taxi | 4,000,000 x 11 | 23.2 (23.0..24.0) |
+| ols | Istella-S | 2,043,304 x 220 | 73.6 (71.0..75.0), quality struck |
+| pca (8 comp) | taxi | 4,000,000 x 11 | 18.8 (18.5..20.4) |
+| pca | Istella-S | 2,043,304 x 220 | 68.1 (66.8..70.2) |
+
 ### L40S forest inference, cuML 26.08.00 FIL, measured 2026-09-17
 
 Pod oeb71n6q3y70sy, NVIDIA L40S, driver 580.159.03, treelite 4.7.2. `fil-ours`

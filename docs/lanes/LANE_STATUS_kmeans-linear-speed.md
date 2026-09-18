@@ -329,3 +329,37 @@ both blk) and `sh tools/kmeans_linear_body.sh opponent both 5 kmeans,ols,pca tax
 
 Second pod 0knlkeg0ni0y08: 01:37Z to 03:04Z, 1.45 h at $0.74/h, $1.07; reaped, HTTP 404
 verified. Both pods together about $2.0.
+
+## The flip (orchestrator, 2026-09-18 03:11Z to 03:31Z)
+
+Commit `221a043f4`: `KMEANS_BLOCK_ACC` (DEVIATION 3080) and
+`KMEANS_DEVICE_SCALE` (DEVIATION 3081) are ON when `TARGET_COLUMN ==
+COLUMN_NVIDIA`; `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` and
+`-D MOJOLEARN_KMEANS_DEVICE_SCALE_OFF=1` force them off, the EXPERIMENTAL
+defines force them on for any column. Apple and AMD keep the atomic
+reductions and the host scale pass. M4 Metal: `cluster/checks/kmeans_identity_check.mojo`
+builds and passes with the flip in place and with both forced on.
+
+Pod `h6kqsst3wtmiv8` (RTX 4090, 64 vCPU, $0.74 per hour, 20 minutes, about
+$0.25), the flipped binary built from this branch with NO defines (`flipped`)
+against a `base` built from `origin/main` at `e6e7096ad`
+(`tools/kmeans_linear_body.sh`, the same stages as the lane's pods):
+
+| diff | fit | infer/model | batch |
+|---|---|---|---|
+| base vs flipped, 16 lanes | IDENTICAL=80 | IDENTICAL=150, N/A=10 | IDENTICAL=75, N/A=5 |
+| base vs flipped, the 12 other Lloyd-loop lanes | IDENTICAL=60 | IDENTICAL=90, N/A=30 | IDENTICAL=45, N/A=15 |
+
+Race, 7 rounds, interleaved, one process per arm per round, inertia and
+iteration count equal (`bench/results/kmeans_linear_2026-09-18/flipped_default_pass.log`):
+
+| dataset | base (main) ms med (min..max) | flipped default ms | ratio |
+|---|---|---|---|
+| kmeans taxi 4,000,000 x 11 | 1062.9 (1030.1..1073.8) | 95.3 (94.6..97.7) | 11.2x |
+| kmeans Istella-S 2,043,304 x 220 | 11428.7 (11319.6..12181.3) | 430.6 (427.3..452.1) | 26.5x |
+
+The pass's identity and race JSONs were LOST: the pull moved zero files (the
+image has no rsync and this chain did not install it) and the pod was
+reaped on the next line; the chain log, captured over ssh first, is the
+record above. The lane's own pods carry the full JSONs for the same
+comparison with the defines forced.
