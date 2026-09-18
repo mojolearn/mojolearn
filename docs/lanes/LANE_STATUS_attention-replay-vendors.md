@@ -170,6 +170,33 @@ the worktree had no core `_mojolearn.so` ("base binding has no
 all_finite_f32"); nothing measured. Core binding building (one worker), then
 the same Metal job requeued.
 
+## AMD Pile GitHub: PASS, bits and routing equal to NVIDIA at every step and layer
+
+Hot Aisle MI300X VM d89c0dc6 (13core), source dac7749a1, strict R2 staging
+("R2 STAGED 1 key(s)"; the body's --check also passed). DELETE 204, verified
+gone (GET 404, not listed) 14:52:43Z. Host verdict
+`amd_pile_github_vs_nvidia.log` (22 corruption controls failed first):
+- all 700 losses, six hashes at steps 0 and 699, and per-step per-layer
+  forward/backward status and replay-site vectors EQUAL to NVIDIA's, for
+  legacy and for repaired; legacy == repaired bits on AMD. Step 699 hashes:
+  loss 8d4315c3..., gradients 1e0b647b..., parameters 749594fd..., m
+  781348d9..., v 50dd0b46..., flags 360d579d....
+- legacy backward RAN 6632 / CORNER 1768; repaired RAN 8400 / CORNER 0;
+  replay sites dQ 1612, zdot 0 (INERT, as predicted); forward RAN 8400.
+- guarded (dk/dv exact guard only): CORNER 1612 (predicted 1612); per
+  layer-step, 156 legacy CORNERs vanish under the dk/dv guard alone and all
+  1612 remaining are dQ replay sites; 0 unexplained.
+- repaired eager_bytes 432, aexp 2415919104 every step.
+- late (last 50) median: legacy 0.773939 s, repaired 0.630843 s ->
+  **1.2268x**. Head (steps 1-50) 0.625 / 0.627 s: the repaired late step is
+  back at the head step, i.e. the whole eager-fallback cost is removed. The
+  speed prediction (repaired 0.40-0.65 s, >1.1x) passed; my legacy range
+  (0.72-0.86 s) held. Smaller than NVIDIA's 1.916x because AMD's non-attention
+  step (~0.62 s) is ~3x NVIDIA's, and Pile's corner count is the low one.
+- device memory: rocm-smi reports 183625 MiB used device-wide in EVERY arm
+  and step: the allocator reservation, not live arrays. Not a measurement of
+  the storage bound; eager_bytes is.
+
 ## Candidates (not opened)
 
 - Apple default arm word does not reach any replay kernel (finding 3).
