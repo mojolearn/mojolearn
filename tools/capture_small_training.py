@@ -42,11 +42,13 @@ def main():
     if ml.vendor() != args.require_backend or ml.numeric_mode() != 'identical':
         parser.error(f'expected {args.require_backend}/identical, got {ml.vendor()}/{ml.numeric_mode()}')
     harness = suite.load_harness()
+    capture_commit, capture_commit_source = harness.commit_witness()
     args.out.mkdir(parents=True)
     path = args.out / 'capture.json'
     started = time.monotonic()
     record = dict(format='mojolearn.small-training-capture.v1', complete=False,
         status='INCOMPLETE', reference_admitted=False, repeats=2,
+        capture_commit=capture_commit, capture_commit_source=capture_commit_source,
         contract=profile.contract(harness), inputs={}, cells={},
         device=suite._device_block(ml, harness), package_dir=str(Path(ml.__file__).parent),
         capture_tool_sha256=__import__('hashlib').sha256(Path(__file__).read_bytes()).hexdigest())

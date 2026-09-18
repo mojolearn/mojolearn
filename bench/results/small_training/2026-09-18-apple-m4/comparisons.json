@@ -1,0 +1,16 @@
+{
+  "cpu_replay": {
+    "status": "NUMERICAL_MATCH_UNQUALIFIED",
+    "differences": [],
+    "compared_parts": 180,
+    "independent_backends": false,
+    "reference_admitted": false
+  },
+  "cpu_metal": {
+    "status": "NUMERICAL_MATCH_UNQUALIFIED",
+    "differences": [],
+    "compared_parts": 180,
+    "independent_backends": true,
+    "reference_admitted": false
+  }
+}

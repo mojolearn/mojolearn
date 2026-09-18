@@ -1,5 +1,7 @@
 """Small-profile inputs and evidence admission; these tests perform no fits."""
 import copy
+import json
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -112,3 +114,24 @@ def test_mismatched_inputs_or_source_cannot_be_compared(harness, field):
         right[field]['harness_sha256'] = 'b' * 64
     with pytest.raises(ValueError, match='different profile'):
         small.compare_captures(left, right)
+
+
+def test_retained_native_pilot_matches_and_catches_estimator_fault():
+    root = Path(__file__).resolve().parents[3]
+    evidence = root / 'bench/results/small_training/2026-09-18-apple-m4'
+    if not evidence.is_dir():
+        pytest.skip('source capture evidence is not installed in wheels')
+    read = lambda name: json.loads((evidence / name).read_text())
+    cpu = read('cpu.json')
+    for name, independent in [('cpu-replay.json', False), ('metal.json', True)]:
+        result = small.compare_captures(cpu, read(name))
+        assert not result['differences']
+        assert result['compared_parts'] == 180
+        assert result['independent_backends'] is independent
+        assert not result['reference_admitted']
+    fault = read('cpu-ridge-sabotage.json')
+    assert fault['host']['families']['_mojolearn_estimators_host']['sabotage'] is True
+    result = small.compare_captures(cpu, fault)
+    expected = {f'ridge/{case}/{part}' for case, *_ in small.CASES
+                for part in ('train', 'infer', 'model', 'batch')}
+    assert set(result['differences']) == expected

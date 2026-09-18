@@ -93,6 +93,15 @@ Existing parallel routes do not establish completion of these new scopes.
 
 ## Next steps, in execution order
 
+Small-profile implementation update: a three-lane maintainer pilot now exists
+(Ridge and two scalers), with 15 cases capped at 257 rows. CPU captures finished
+in 0.7–1.0 seconds and an Apple GPU capture in 4 seconds; all 180 compared parts
+matched. A native Ridge fault moved all 60 Ridge parts. This is not yet a public
+reference: scaler fault controls, NVIDIA/AMD and installed-wheel evidence remain
+owed. See [the pilot handoff](lanes/LANE_STATUS_small-training.md) and its raw
+evidence for scope, commands, exact timings and observed Metal diagnostics.
+Earlier statements that the profile is unimplemented describe the prior state.
+
 External-user resource follow-up: the CLI now defaults to one thread for
 supported CPU host/math libraries, with --cpu-threads 5 as an explicit request.
 Requests are clamped below detected available logical CPU capacity where
