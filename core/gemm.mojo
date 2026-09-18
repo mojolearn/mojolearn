@@ -249,7 +249,11 @@ def gemm_tn_identical_v1(
     if need <= k * m:
         identical_gemm_into(ctx, z, x, x2, scratch, m, m, k, OP_TN)
         return
-    raise Error("gemm_tn_identical_v1: scratch buffer too small for plan workspace.")
+    var ws = ctx.enqueue_create_buffer[DType.float32](need)
+    ctx.synchronize()
+    identical_gemm_into(ctx, z, x, x2, ws, m, m, k, OP_TN)
+    ctx.synchronize()
+    _ = ws^
 
 
 def gemm_tn_via_transpose(

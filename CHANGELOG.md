@@ -3,7 +3,14 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (main after 0.8.7)
+## 0.8.7 (unreleased 2026-09-18)
+
+This candidate is built from the current integrated `main`, including the
+tokenizer/corpus additions, expanded CPU model bundle and verifier, loaded
+language-model proof, and experimental distributed and cross-validation APIs.
+The explicit light release profile checks the exact installed Apple/NVIDIA
+wheels; it does not promote every exposed configuration to numerical
+certification. See `docs/lanes/RELEASE_087_LIGHT.md` for the release boundary.
 
 - `GPT2Tokenizer` is renamed `BpeTokenizer` (2026-09-18). It ships no GPT-2
   vocabulary and `TrainedBpeVocabulary.tokenizer()` returns one over mojolearn's own
@@ -13,8 +20,6 @@ contain the detailed investigation record.
   entries moved from `gpt2_*` to `bpe_*`; the Python door still reads a binding built
   before the rename. No id moved: the `tokenizer` and `bpe-trainer` identity lanes hash
   the same before and after (docs/lanes/LANE_STATUS_tokenized-corpus.md).
-
-## 0.8.7 (unreleased 2026-09-17)
 
 **0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
 release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded

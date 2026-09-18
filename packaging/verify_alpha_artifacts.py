@@ -250,7 +250,22 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
     for name, digest in files.items():
         safe_name(name)
         require('/' not in name and name.endswith('.whl') and hex_digest(digest), 'invalid manifest wheel entry')
-    require({p.name for p in directory.iterdir()} == set(files) | {'alpha-manifest.json'},
+    smoke = manifest.get('light_smoke')
+    smoke_files = {}
+    if smoke is not None:
+        require(isinstance(smoke, dict) and set(smoke) == {'source_commit', 'receipts'}
+                and re.fullmatch('[0-9a-f]{40}', str(smoke['source_commit']))
+                and isinstance(smoke['receipts'], dict) and len(smoke['receipts']) == 2,
+                'invalid light smoke contract')
+        smoke_files = smoke['receipts']
+        for name, expected in smoke_files.items():
+            require(re.fullmatch(r'light-smoke-[a-z0-9-]+\.json', name) and hex_digest(expected),
+                    'invalid smoke receipt entry')
+            path = directory / name
+            require(path.is_file() and not path.is_symlink() and path.stat().st_size < 2 * 1024**2
+                    and hashlib.sha256(path.read_bytes()).hexdigest() == expected,
+                    'missing or changed smoke receipt')
+    require({p.name for p in directory.iterdir()} == set(files) | set(smoke_files) | {'alpha-manifest.json'},
             'artifact directory has missing or injected files')
     qualification = manifest.get('linux_qualification')
     if qualification is not None:
