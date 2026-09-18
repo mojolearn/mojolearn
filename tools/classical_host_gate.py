@@ -62,6 +62,13 @@ from forest_host_gate import (  # noqa: E402
 PROBE_ROWS = 256
 
 
+def _kernel_variant_probe(model, X, method):
+    """Use the kernel-variant harness's exact held-out input contract."""
+    import numpy as np
+    held = np.ascontiguousarray(X[:64, :4] * np.float32(0.125))
+    return (getattr(model, method)(held),)
+
+
 def _forecast_pair(e):
     """identity_break's forecaster infer probe, the same call and the same
     byte check (`_same_bytes`), so its hash is that column's cell."""
@@ -405,6 +412,12 @@ LANES = {
     'elasticnet-l2end-no-intercept': ('ElasticNet', lambda e, X: (e.predict(X),), {}),
     'kernel-ridge': ('KernelRidge', lambda e, X: (e.predict(X[:64, :4]),), {}),
     'nystroem': ('Nystroem', lambda e, X: (e.transform(X[:64, :4]),), {}),
+    **{f'kernel-ridge-{kernel}': (
+        'KernelRidge', lambda e, X: _kernel_variant_probe(e, X, 'predict'), {})
+       for kernel in ('poly', 'sigmoid', 'laplacian')},
+    **{f'nystroem-{kernel}': (
+        'Nystroem', lambda e, X: _kernel_variant_probe(e, X, 'transform'), {})
+       for kernel in ('poly', 'sigmoid', 'laplacian')},
     'rbf-sampler': ('RBFSampler', lambda e, X: (e.transform(X),), {}),
     # lane/inference-embedding-ivf-cholesky (2026-09-15). The IVF lanes probe
     # identity_break's 64 held-out queries over the saved, GPU-built index
@@ -476,6 +489,8 @@ PROBE_NAMES = {'ols': 'predict', 'ridge': 'predict', 'tsvd': 'transform',
                'minmax-scaler-clip': 'transform', 'lasso': 'predict', 'elasticnet': 'predict',
                'elasticnet-l2end-no-intercept': 'predict', 'kernel-ridge': 'predict',
                'nystroem': 'transform', 'rbf-sampler': 'transform',
+               **{f'kernel-ridge-{kernel}': 'predict' for kernel in ('poly', 'sigmoid', 'laplacian')},
+               **{f'nystroem-{kernel}': 'transform' for kernel in ('poly', 'sigmoid', 'laplacian')},
                'ivf': 'search_distances', 'ivf-euclidean': 'search_distances', 'embedding': 'forward', 'ivf-extend': 'search_distances',
                'svc-linear': 'decision_function', 'svc-poly': 'decision_function',
                'svr': 'predict', 'svr-linear': 'predict',
