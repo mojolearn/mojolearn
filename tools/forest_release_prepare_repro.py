@@ -19,13 +19,27 @@ where the second snapshot's `forest_prepare_gpu` runs. `--mode keep` holds
 the first estimator alive across the second, the control that passed on
 main. Both print one flushed line per phase, so a hang names its phase.
 
-On a deadline the watchdog prints every Python thread's stack, asks the
-main thread for a native backtrace when `tools/native_stack_dump.c` is
-preloaded (`MOJOLEARN_NATIVE_STACK_FILE` set, DEVIATION 2518), and exits
-124. EXIT 124 IS THE HANG; exit 0 with a `DONE` line is the pass. The
-predictions' SHA-256 goes to stdout in both modes, so the two arms of a
-teardown change can be compared bit for bit on the mode that completes on
-both of them.
+THE IN-PROCESS WATCHDOG CANNOT FIRE ON THIS HANG, and that is a property
+of the hang, not a bug in the watchdog. The forest binding holds the GIL
+across `forest_prepare_gpu`, so once the main thread is blocked inside it
+no other Python thread ever runs: the watchdog thread below stays asleep
+for ever and so would `faulthandler`'s own timeout and any Python-level
+SIGALRM handler. Measured 2026-09-18 on an RTX 4090: `--deadline 240` and
+the process still sitting in phase 5 eleven minutes later, 130 of 132
+threads in `futex_wait_queue`, 0 percent CPU, GPU idle.
+
+SO THE DEADLINE MUST COME FROM OUTSIDE: run this under `timeout -k 30 N`
+(which `tools/forest_deadlock_body.sh` does) and read exit 124 as the hang.
+The watchdog below is kept for a hang that does NOT hold the GIL, and the
+SIGUSR2 request for a native backtrace works either way, because a signal
+handler is not a Python thread: with `tools/native_stack_dump.c` preloaded
+(`MOJOLEARN_NATIVE_STACK_FILE` set, DEVIATION 2518) a
+`kill -USR2 <pid>` from OUTSIDE the process prints the hung thread's native
+stack while it is still hung.
+
+Exit 0 with a `DONE` line is the pass. The predictions' SHA-256 goes to
+stdout in both modes, so the two arms of a teardown change can be compared
+bit for bit on the mode that completes on both of them.
 """
 import argparse
 import faulthandler

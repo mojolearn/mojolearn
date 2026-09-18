@@ -56,9 +56,14 @@ repro)
     export MOJOLEARN_NATIVE_STACK_FILE="$OUT/$L-$M.nativestack.txt"
     [ -f /root/native_stack_dump.so ] && export LD_PRELOAD="/root/native_stack_dump.so${LD_PRELOAD:+:$LD_PRELOAD}"
     say "repro $L mode=$M deadline=${DEADLINE}s"
-    pixi run python3 tools/forest_release_prepare_repro.py --mode "$M" --deadline "$DEADLINE" \
+    # The deadline comes from OUT HERE: the binding holds the GIL across the
+    # native call, so the repro's own watchdog thread never runs (measured).
+    timeout -k 30 "$((DEADLINE + 60))" \
+        pixi run python3 tools/forest_release_prepare_repro.py --mode "$M" --deadline "$DEADLINE" \
         > "$OUT/$L-$M.log" 2>&1
     rc=$?
+    # timeout kills the shell it started; the pixi/python children outlive it
+    pkill -f "forest_release_prepare_repro.py --mode $M" 2>/dev/null
     say "repro $L mode=$M rc=$rc  (124 = THE HANG, 0 with DONE = pass)"
     echo "repro	$L	$M	$rc" >> "$OUT/verdicts.tsv"
     tail -25 "$OUT/$L-$M.log"
