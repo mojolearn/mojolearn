@@ -135,6 +135,7 @@ from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
 )
 from checks.fixed_point import choose_scale
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 
 
 @fieldwise_init
@@ -224,11 +225,17 @@ def plan_sum_scale(
 
 
 #: DEVIATION 3081 (2026-09-17, lane kmeans-linear-speed): `sum_scale` from a
-#: CERTIFIED DEVICE MAGNITUDE, the host pass kept as the fallback. Off unless
-#: the define is given. See `plan_sum_scale_certified`.
-comptime KMEANS_DEVICE_SCALE = is_defined[
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE"
-]()
+#: CERTIFIED DEVICE MAGNITUDE, the host pass kept as the fallback. ON for
+#: NVIDIA since 2026-09-18 (with 3080: taxi 264 to 100 ms; the host pass was
+#: 156 to 711 ms of every fit); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE=1`
+#: forces it on any column, `-D MOJOLEARN_KMEANS_DEVICE_SCALE_OFF=1` forces it
+#: off. Apple and AMD keep the host pass until their columns are taken (the
+#: certificate needs IEEE NaN propagation checked there). See
+#: `plan_sum_scale_certified`.
+comptime KMEANS_DEVICE_SCALE = (
+    not is_defined["MOJOLEARN_KMEANS_DEVICE_SCALE_OFF"]()
+    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE"]() or TARGET_COLUMN == COLUMN_NVIDIA)
+)
 #: The reach control for 3081: the device magnitude is multiplied by 4 before
 #: it is certified, so the scale moves two binades. NEVER a shipping define.
 comptime KMEANS_DEVICE_SCALE_SABOTAGE = is_defined[

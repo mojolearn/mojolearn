@@ -99,6 +99,7 @@ from cluster.impl.detail.kmeans_common import (
 )
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
+from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 from cluster.impl.detail.min_cluster_distance_compute import (
     compute_centroid_norms,
     min_cluster_and_distance_compute,
@@ -116,10 +117,17 @@ from cluster.impl.kmeans_params import (
 #: DEVIATION 3080 (2026-09-17, lane kmeans-linear-speed): the row-block
 #: accumulator of `cluster/checks/reduce_by_key.mojo`, in place of the two
 #: atomic reductions of `update_centroids`. Same Int32 totals by construction
-#: (see the banner there). Off unless the define is given.
-comptime KMEANS_BLOCK_ACC = is_defined[
-    "MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"
-]()
+#: (see the banner there). ON for NVIDIA since 2026-09-18 (RTX 4090,
+#: bench/results/kmeans_linear_2026-09-18/: kmeans taxi 4M x 11 1216 to 100
+#: ms, Istella-S 2M x 220 14167 to 460 ms with 3081, digests equal to main's
+#: and to the H100 record's on every cell, the sabotage arm divergent on 75
+#: of 90 fitting cells); `-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1` forces
+#: it on any column for an A/B, `-D MOJOLEARN_KMEANS_BLOCK_ACC_OFF=1` forces
+#: it off. Apple and AMD are untimed and keep the atomic reductions.
+comptime KMEANS_BLOCK_ACC = (
+    not is_defined["MOJOLEARN_KMEANS_BLOCK_ACC_OFF"]()
+    and (is_defined["MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC"]() or TARGET_COLUMN == COLUMN_NVIDIA)
+)
 #: The reach control for 3080: the row-block arm with the first row of every
 #: block dropped. NEVER a shipping define.
 comptime KMEANS_BLOCK_ACC_SABOTAGE = is_defined[
