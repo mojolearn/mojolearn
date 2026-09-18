@@ -8,6 +8,14 @@ terminated and verified gone by its own runner (RunPod `e8rs6eq63pwejl` and
 `20usq9mvqsq2u5`, Hot Aisle VMs `7a1b7c34` and `7c0350cd`, all HTTP 404
 confirmed). Nothing is billing.
 
+**READ THIS FIRST IF YOU WERE TOLD TO BUILD THE `proj` FOLD FUSION: DO NOT. IT
+WAS THIS LANE'S OWN ERROR AND IT IS RETRACTED.** Brief section 23, and item (a)
+in section 6 below. It would move bits.
+
+**STILL OPEN FOR ANDREW: the Apple GEMM seam does not implement the contract**
+(section 1). That is a correctness decision, not a speed one, and it is the
+oldest unanswered thing this lane holds.
+
 The lane owns `gemm/` and `core/gemm.mojo`. It does NOT own
 `transformer/impl/llama/` or the fused attention (`lane/attention-speed`),
 `python/mojolearn/verify_reference/table.json` or `docs/VERIFY_EXTERNALLY.md`
@@ -199,20 +207,25 @@ capability row beside `lib_hardware_ftz_fma_for`, never an inline vendor branch.
 
 In priority order.
 
-**(a) DONE 2026-09-18, and it is now the top BUILD item (brief 22.1, commit
-437f01fcc).** The `PHASE` lines isolated it: the fold is a constant 0.05 to 0.07
-ms per call from one leaf to sixty-four, so it is a fixed LAUNCH cost. Every
-`proj` call has `group_leaves = 1`, and contract section 7.3 is titled "`P == 1`
-performs NO fold addition". At 144 proj calls that fold is **8.3 ms, 4.0 percent
-of the step, performing no arithmetic.**
+**(a) RETRACTED 2026-09-18. DO NOT BUILD THE `proj` FOLD FUSION.** For a few
+hours this lane's own brief said the `proj` fold performs no arithmetic and
+could be fused away for 4.0 percent of the step. **That was wrong and the change
+would move bits.** `group_leaves` is LEAVES PER GROUP, not the contract's `P`:
+`_ksplit_resolve_leaves` returns `(group_leaves, ceil(p_count / group_leaves))`,
+so `group_leaves = 1` is the MAXIMUM number of groups. At `L = 128`, `proj`'s
+`k = 768` gives `P = 6` and `proj_dB`'s `k = 2048` gives `P = 16` -- exactly the
+`groups=6` and `groups=16` the same `PHASE` line prints. The fold sums five real
+additions per cell, fifteen at `proj_dB`. **No call in the step has `P == 1`, so
+contract 7.3 never applies.** Brief 23 carries the retraction and the correct
+reading.
 
-THE CHANGE, stated precisely: the `P == 1` fold is not a no-op, it applies seam
-5g and copies (`c.unsafe_store(cell, ftz(v))`). So it is NOT "skip the launch";
-it is "when `leaves == 1`, have the GROUP kernel apply 5g and write `c` directly
-instead of writing a partial to the workspace for a second kernel to flush and
-copy". Bit-preserving because `ftz` lands on the same binary32 word, same order,
-same address. NOT a scheduling arm: no plan, geometry, group rule or leaf
-boundary moves. **Unbuilt. This is where to start.**
+**The `proj` gap is now EXPLAINED and it is structural.** With the fold
+excluded, every kind runs 12.36 to 14.80 TFLOP/s INCLUDING `proj`; the kernel is
+not slow on that shape. `fold_ms` tracks the OUTPUT SIZE and not `P` (every
+1.57M-cell call folds in 0.067 to 0.070 ms at 6, 7 or 8 partials, and `proj_dB`
+with the most partials and fewest cells is the fastest fold). `proj`'s fold
+share is large only because `proj` does the least arithmetic per output cell in
+the step. **There is nothing to remove.**
 
 The superseded command, kept because it is how any future PHASE question is
 asked:
