@@ -5,9 +5,13 @@
 # THE ENVIRONMENT.
 #
 #   MOJOLEARN_GAP_LANES=a,b,c MOJOLEARN_GAP_SLUG=vendor-class-gaps \
+#   MOJOLEARN_GAP_COMMIT_DIR=bench/results/identity_break/<dir>/ \
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/gap_column_leg.sh \
 #   sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent \
 #      --local-card <an apple.card from a previous leg>
+#
+# and, for an all-`par-*` lane list on a box rented with
+# MOJOLEARN_GEMM_LEG_GPU_COUNT=2, MOJOLEARN_GAP_TWO_DEVICE=1 as well.
 #
 # WHY THIS FILE IS NOT tools/single_device_gaps_nvidia_leg.sh ANY MORE.
 # It is that file (ed0d6e48b), renamed and generalized on 2026-09-19 rather
@@ -100,9 +104,16 @@
 # identical binary exists under .../identical" until at least one is built. A
 # check that cannot pass is not a check.
 #
-# ONE DEVICE, ASSERTED AND PRINTED. `admit` refuses a column recording
-# par_devices, and a second visible GPU would make every cell below a
-# different claim than the one this column is recorded as. On AMD there is a
+# ONE DEVICE BY DEFAULT, ASSERTED AND PRINTED. `admit` refuses a column
+# recording par_devices, and a second visible GPU would make every cell below
+# a different claim than the one this column is recorded as. The ONE exception
+# is MOJOLEARN_GAP_TWO_DEVICE=1 with an all-`par-*` lane list, which adds a
+# SECOND column at MOJOLEARN_PAR_DEVICES=0,1 after the one above and holds the
+# two to each other on the box; a `par-*` driver's claim is not stateable on
+# one device and `admit(..., par_axis=True)` is the only rule that admits the
+# run that can state it. Nothing else changes: the column phase itself never
+# sets MOJOLEARN_PAR_DEVICES, so it records par_devices="0" on a two-GPU box
+# exactly as it does on a one-GPU box. On AMD there is a
 # second reason: the MI300X SR-IOV peer-copy stale read (fixed by routing
 # cross-device bytes through transfer_bytes host staging, d36cd8cb4). This leg
 # does not test that fix and does not depend on it -- GPU_COUNT stays 1 and no
@@ -183,7 +194,8 @@ if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
     nvidia-smi --query-gpu=name,driver_version,compute_cap,memory.total --format=csv,noheader \
         > "$OUT/logs/device.txt" 2>&1
     say "device=$(tr '\n' ' ' < "$OUT/logs/device.txt")"
-    say "visible_gpus=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')"
+    VISIBLE=$(nvidia-smi -L 2>/dev/null | grep -c '^GPU ')
+    say "visible_gpus=$VISIBLE"
     if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
         _cc=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -1 | tr -d ' ')
         case "$_cc" in
@@ -204,7 +216,8 @@ else
         > "$OUT/logs/device.txt" 2>&1
     say "device=$(rocm-smi --showproductname 2>/dev/null | tr '\n' ' ' | cut -c1-200)"
     say "amdgpu_driver=$(cat /sys/module/amdgpu/version 2>/dev/null)"
-    say "visible_gpus=$(rocminfo 2>/dev/null | grep -c -E '^ *Name: *gfx')"
+    VISIBLE=$(rocminfo 2>/dev/null | grep -c -E '^ *Name: *gfx')
+    say "visible_gpus=$VISIBLE"
     if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
         MOJOLEARN_GPU_ARCHS=$(rocminfo 2>/dev/null | grep -m1 -oE 'gfx[0-9a-z]+')
         export MOJOLEARN_GPU_ARCHS
@@ -454,6 +467,116 @@ if [ -n "$MISSING" ]; then
     sha256sum python/mojolearn/identical/*.so python/mojolearn/host/*.so >> "$G" 2>/dev/null
     column column-after-backstop
 fi
+
+# ====================================== THE SECOND DEVICE, WHEN THE LANES ARE par-*
+# MOJOLEARN_GAP_TWO_DEVICE=1 (with MOJOLEARN_GEMM_LEG_GPU_COUNT=2) adds the
+# only run that can STATE a `par-*` driver's claim, and it is the same lane
+# list, the same build, the same box and the same commit as the column above.
+#
+# WHY THE PAIR AND NOT THE TWO-DEVICE COLUMN ALONE. `_par_devices`'s own
+# docstring is the claim: "A two-device column ... must hash equal, cell for
+# cell, to the one-device column of the same commit". A two-device column on
+# its own asserts nothing -- it is a set of hashes with nothing to be equal
+# to. The one-device half is the column phase that already ran, so the pair
+# costs one extra identity run and no extra build.
+#
+# AND WHY THE ONE-DEVICE HALF IS NOT THE DELIVERABLE HERE.
+# `lane_applicability.degenerate` holds every `par-*` lane on a one-device
+# column: with one shard the equality they assert is not false, it is not
+# expressible. So for a par lane list the one-device column is the REFERENCE
+# and the two-device column is the EVIDENCE -- the reverse of every other
+# lane list this body runs, and the reason `admit` grew `par_axis=True` on
+# 2026-09-19. ONLY a `par-*` lane may be credited from a column admitted that
+# way, and this phase refuses a lane list that is not all `par-*`.
+#
+# TWO DEVICES, COUNTED AND REFUSED BY NAME. A box that came back with one
+# agent would run this phase as a second copy of the column above and the
+# "they agree" line would be a tautology: the verification that cannot fail.
+if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
+    TWO="$OUT/$LABEL.$SLUG.two-device.json"
+    _notpar=$(printf '%s' "$LANES" | tr ',' '\n' | grep -cv '^par-')
+    if [ "${VISIBLE:-0}" -lt 2 ]; then
+        say "TWO-DEVICE PHASE REFUSED: the box reports ${VISIBLE:-0} visible GPU(s); a two-device claim needs 2. Nothing was run."
+    elif [ "$_notpar" -gt 0 ]; then
+        say "TWO-DEVICE PHASE REFUSED: $_notpar lane(s) in the list do not start 'par-'. Only a par-* lane may be credited from a par_axis column."
+    else
+        run column-two timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical \
+            MOJOLEARN_PAR_DEVICES=0,1 PYTHONPATH=/root/mojolearn/python \
+            pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+            --vendor "$LABEL" --json "$TWO"
+        say "column_two_exit=$(awk -F'	' '$1=="column-two"{print $2}' "$OUT/status.tsv")"
+        grep -E '^cells=|MOVED|DIVERGENT|REFUSED|RELOAD' "$OUT/logs/column-two.log" | head -120 >> "$G"
+        cp "$OUT/logs/column-two.log" "$OUT/column-two.log" 2>/dev/null
+    fi
+    # THE DIFF RUNS HERE, WHILE THE BOX CAN STILL BE ASKED AGAIN. `--diff`
+    # exits non-zero on any DIVERGENT, MOVED or RELOAD-MOVED cell, and a cell
+    # that disagrees is re-run SOLO -- one lane at a time, one process at a
+    # time -- before anybody at home calls it real.
+    if [ -s "$JSON" ] && [ -s "$TWO" ]; then
+        run par_diff timeout "$(cap 300)" env MOJOLEARN_NUMERIC_MODE=identical \
+            PYTHONPATH=/root/mojolearn/python \
+            pixi run python tools/identity_break.py --diff "$JSON" "$TWO"
+        say "par_diff_exit=$(awk -F'	' '$1=="par_diff"{print $2}' "$OUT/status.tsv")"
+        grep -E 'summary|DIVERGENT|MOVED|REFUSED|NOT-COMPARED' "$OUT/logs/par_diff.log" | head -40 >> "$G"
+        cp "$OUT/logs/par_diff.log" "$OUT/par_diff.log" 2>/dev/null
+        _bad=$(grep -E '^\| *par-[a-z0-9/_-]+ ' "$OUT/logs/par_diff.log" 2>/dev/null \
+               | grep -E 'DIVERGENT|MOVED' | awk -F'|' '{print $2}' | awk '{print $1}' \
+               | cut -d/ -f1 | sort -u | tr '\n' ',' | sed 's/,$//')
+        if [ -n "$_bad" ]; then
+            say "DISAGREEING LANES: $_bad -- re-running each arm SOLO before this is reported"
+            run solo_one timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0 \
+                PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
+                --lanes "$_bad" --repeats 2 --vendor "$LABEL" --json "$OUT/solo-one-rerun.json"
+            run solo_two timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0,1 \
+                PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
+                --lanes "$_bad" --repeats 2 --vendor "$LABEL" --json "$OUT/solo-two-rerun.json"
+            run solo_diff timeout "$(cap 300)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
+                pixi run python tools/identity_break.py --diff "$OUT/solo-one-rerun.json" "$OUT/solo-two-rerun.json"
+            say "solo_diff_exit=$(awk -F'	' '$1=="solo_diff"{print $2}' "$OUT/status.tsv")"
+            grep -E 'summary|DIVERGENT|MOVED' "$OUT/logs/solo_diff.log" | head -40 >> "$G"
+        else
+            say "no DIVERGENT or MOVED cell in the one-vs-two diff"
+        fi
+    else
+        say "PAR DIFF SKIPPED: one or both columns are missing or empty"
+    fi
+fi
+
+# ======================= ADMISSIBILITY, AT THE PATH THE COLUMN WILL BE COMMITTED AT
+# `admit` is PATH SENSITIVE: _EXCLUDED_PATH_TOKENS, _EXCLUDED_BASENAME_TOKENS
+# and the quarantine prefix all read the path it is given. Asking it about the
+# ON-BOX path answers a question nobody will ever ask again, so it is asked
+# about MOJOLEARN_GAP_COMMIT_DIR, the repo-relative directory these files will
+# land in. It is asked a SECOND time at home, at the real path, because only
+# that one is the claim -- a leg was caught by exactly that difference on
+# 2026-09-19. MOJOLEARN_NUMERIC_MODE is set because `_verify_reference` lives
+# INSIDE the package, so reaching it runs `__init__.py` and `_backend.select()`,
+# which refuses an unset mode on a box that has only identical bindings.
+COMMIT_DIR="${MOJOLEARN_GAP_COMMIT_DIR:-bench/results/identity_break/$SLUG/}"
+say "admit_commit_dir=$COMMIT_DIR"
+run admit_check timeout "$(cap 180)" env MOJOLEARN_NUMERIC_MODE=identical \
+    PYTHONPATH=/root/mojolearn/python pixi run python -c "
+import glob, json, os, sys
+from mojolearn import _verify_reference as vr
+for p in sorted(glob.glob('$OUT/*.json')):
+    name = os.path.basename(p)
+    try:
+        j = json.load(open(p))
+    except Exception as exc:
+        print(name, 'UNREADABLE', exc); continue
+    at = '$COMMIT_DIR' + name
+    why = vr.admit(j, at)
+    why_par = vr.admit(j, at, par_axis=True)
+    print(name,
+          'par_devices=' + str((j.get('package') or {}).get('par_devices')),
+          'cells=' + str(len(j.get('cells') or {})),
+          'admit=' + ('ADMISSIBLE' if why is None else why),
+          'admit_par_axis=' + ('ADMISSIBLE' if why_par is None else why_par),
+          'at=' + at)
+"
+say "--- admit, at the committed path ---"
+cat "$OUT/logs/admit_check.log" >> "$G" 2>/dev/null
+cp "$OUT/logs/admit_check.log" "$OUT/admit_check.log" 2>/dev/null
 
 # ------------------------------------- THE LANES THAT ARE NOT HERE, IN ITS WORDS
 # Not a lane list this file argues with: the rule lives in
