@@ -125,8 +125,10 @@ tools/identity_break.py on the metrics lane is the measurement.
 from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, identical_mul_add, identical_sqrt
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -754,42 +756,58 @@ def host_silhouette(
     # get_cluster_counts -> countLabels over [0, n_labels)
     var counts = host_histogram(y, n_rows, Int32(0), n_labels)
     scores.clear()
-    var dist = List[Float32](length=n_rows, fill=Float32(0.0))
-    var terms = List[Float32](length=n_rows, fill=Float32(0.0))
-    for i in range(n_rows):
-        var rc = Int(y[i])
-        var singleton = Int(counts[rc]) == 1
-        var a = Float32(0.0)
-        var b = List[Float32](length=n_labels, fill=Float32(0.0))
-        for c in range(n_labels):
-            if c == rc or Int(counts[c]) == 0:
-                b[c] = Float32(0.0) if singleton else _float32_max()
-        if not singleton:
-            for j in range(n_rows):
-                if j == i:
-                    dist[j] = Float32(0.0)
-                else:
-                    comptime if METRICS_ORACLE_HOST_SABOTAGE:
-                        # THE VALUE SABOTAGE ARM: row 0 read shifted.
-                        dist[j] = host_sabotage_l2sqrt(x, i, j, n_cols)
-                    else:
-                        dist[j] = host_l2sqrt_unexpanded(x, i, j, n_cols)
+    for _ in range(n_rows):
+        scores.append(Float32(0.0))
+    var sp = scores.unsafe_ptr()
+    var tasks = host_predict_task_count(n_rows)
+    var row_chunk = host_predict_chunk(n_rows, tasks)
+
+    def _rows(task: Int) {imm x, imm y, imm counts, imm sp, imm row_chunk, imm n_rows, imm n_cols, imm n_labels}:
+        # Scratch belongs to the task.  A score owns one row, and its distance
+        # and pinned cluster folds keep exactly the serial statement order.
+        var dist = List[Float32](length=n_rows, fill=Float32(0.0))
+        var terms = List[Float32](length=n_rows, fill=Float32(0.0))
+        var lo = task * row_chunk
+        var hi = min(lo + row_chunk, n_rows)
+        for i in range(lo, hi):
+            var rc = Int(y[i])
+            var singleton = Int(counts[rc]) == 1
+            var a = Float32(0.0)
+            var b = List[Float32](length=n_labels, fill=Float32(0.0))
             for c in range(n_labels):
-                var cc = Int(counts[c])
-                var denom = Float32(cc - 1) if c == rc else Float32(cc)
+                if c == rc or Int(counts[c]) == 0:
+                    b[c] = Float32(0.0) if singleton else _float32_max()
+            if not singleton:
                 for j in range(n_rows):
-                    if j != i and Int(y[j]) == c:
-                        terms[j] = ftz(dist[j] / denom)
+                    if j == i:
+                        dist[j] = Float32(0.0)
                     else:
-                        terms[j] = Float32(0.0)
-                var s = host_tree_sum(terms, n_rows)
-                if c == rc:
-                    a = ftz(a + ftz(s))
-                else:
-                    b[c] = ftz(b[c] + ftz(s))
-        var bmin = _float32_max()
-        for c in range(n_labels):
-            if b[c] < bmin:
-                bmin = b[c]
-        scores.append(host_sil_op(a, bmin))
+                        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                            # THE VALUE SABOTAGE ARM: row 0 read shifted.
+                            dist[j] = host_sabotage_l2sqrt(x, i, j, n_cols)
+                        else:
+                            dist[j] = host_l2sqrt_unexpanded(x, i, j, n_cols)
+                for c in range(n_labels):
+                    var cc = Int(counts[c])
+                    var denom = Float32(cc - 1) if c == rc else Float32(cc)
+                    for j in range(n_rows):
+                        if j != i and Int(y[j]) == c:
+                            terms[j] = ftz(dist[j] / denom)
+                        else:
+                            terms[j] = Float32(0.0)
+                    var s = host_tree_sum(terms, n_rows)
+                    if c == rc:
+                        a = ftz(a + ftz(s))
+                    else:
+                        b[c] = ftz(b[c] + ftz(s))
+            var bmin = _float32_max()
+            for c in range(n_labels):
+                if b[c] < bmin:
+                    bmin = b[c]
+            sp.unsafe_store(i, host_sil_op(a, bmin))
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return ftz(host_tree_sum(scores, n_rows) / Float32(n_rows))
