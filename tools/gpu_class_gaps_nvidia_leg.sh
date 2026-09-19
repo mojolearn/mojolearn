@@ -111,6 +111,42 @@ build() {
         MOJOLEARN_COMPILE_JOBS="$JOBS" sh "bindings/$1.sh"
 }
 
+# ------------------------------------------- THE HOST MATH LIBRARY, OR NOTHING IMPORTS
+# MEASURED ON POD 9laka4vs9h2zli, 2026-09-19: both identity phases died ONE
+# SECOND in, before any GPU work, at
+#
+#   OSError: python/mojolearn/.libs/libMojolearnMath.so: cannot open shared
+#   object file: No such file or directory
+#
+# and the run came home with every binding built and NOT ONE CELL.
+#
+# `python/mojolearn/_portable_math.py` dlopens that library, and
+# `_training_impl.py`'s `def kaiming_uniform(self, shape, fan_in,
+# a=math.sqrt(5.0))` evaluates it as a DEFAULT ARGUMENT, at class definition
+# time. So `import mojolearn` needs it unconditionally -- it is not lazy and
+# no lane can avoid it.
+#
+# Nothing under bindings/ builds it, `python/mojolearn/.libs/` and `.dylibs/`
+# are gitignored so `git archive` ships nothing, and the only thing in the
+# tree that ever compiles it is `packaging/macos/build_release_wheel.sh`, a
+# RELEASE WHEEL script that does not run on Linux. A developer Mac has the
+# file sitting in its checkout from some past wheel build and never notices;
+# a freshly rented box cannot import the package at all.
+#
+# This calls the tree's OWN recipe, `packaging/portable_math/stage.py`'s
+# build(), rather than retyping its compiler flags here -- those flags
+# (-ffp-contract=off, -fno-fast-math, -march=x86-64-v3, -nostdlib) are the
+# arithmetic contract, and a second copy of them is a second answer.
+run portable_math timeout 300 env PYTHONPATH=/root/mojolearn/packaging/portable_math \
+    pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('/root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so'))"
+say "portable_math_exit=$(awk -F'	' '$1=="portable_math"{print $2}' "$OUT/status.tsv")"
+ls -l python/mojolearn/.libs/ >> "$G" 2>&1
+# FAIL FAST. If the package still cannot import, every phase below is a
+# one-second traceback and the lease is spent finding that out twice.
+run import_probe timeout 300 env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
+    pixi run python -c "import mojolearn; print('IMPORT_OK', mojolearn.__version__)"
+say "import_probe=$(tail -1 "$OUT/logs/import_probe.log" 2>/dev/null)"
+
 # --------------------------------------------------- PHASE A builds, then the column
 # bindings/build.sh is the shared kernels and fixtures every lane reaches; the
 # other six are exactly the families phase A's lanes bind:
