@@ -6,8 +6,8 @@
     pixi run check-bpe-trainer-oracle
     python3 tools/bpe_trainer_oracle_check.py [--sabotage-expected]
 
-WHY THIS FILE EXISTS. `docs/lanes/LANE_STATUS_oracle-and-applicability-audit.md`
-found four lanes a release record runs whose passing cell is compared against
+WHY THIS FILE EXISTS. The oracle/applicability audit found four lanes a
+release record runs whose passing cell is compared against
 nothing but a previous hash of the same code. `bpe-trainer` is one of them, and
 it is the worst of the four on one axis: its lane body is pure Python integer
 work, so every column of a release record computes the SAME BYTES BY
@@ -99,7 +99,7 @@ WHAT IT CANNOT CATCH
 
 SEEN TO FAIL. `--sabotage-expected` inverts every comparison arm: it requires
 at least one disagreement and exits nonzero on agreement. The evidence and the
-printed values are in `docs/lanes/LANE_STATUS_four-lane-oracles.md`.
+printed values are emitted by this program.
 """
 from __future__ import annotations
 

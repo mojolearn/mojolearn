@@ -8,18 +8,17 @@ Written for a session with NO context. main = `3b80c4fe5`, branch
 `archive/` (34). Every `LANE_STATUS_`, `LANE_BODY_`, `PLAN_`, `HANDOFF_`
 and `BRIEF_` file is gone by Andrew's instruction. **43 source files still
 cite those paths in "WHY THIS FILE EXISTS" comments and are now dangling.**
-That was the known, accepted cost; the source they explain was NOT touched,
-because deleting a working tool over a deleted note trades a stale doc for a
-broken build. This file is the one deliberate exception to the purge.
+Those references were removed after a reachability audit confirmed the source
+files themselves are active APIs, kernels, checks or guarded cloud runners.
+This file is the one deliberate exception to the purge.
 
 ---
 
-## 1. A SUBAGENT IS RUNNING RIGHT NOW
+## 1. THE MAMBA2 HOST REPAIR LANDED
 
-**Fixing the host Mamba2 long-sequence forward.** Started ~17:30 local. It
-owns `mamba/host/gen/mamba2.mojo`, `mamba/impl/modules/mamba2.mojo` and
-`tools/mamba_host_gen.py`, in its own worktree under `~/mojolearn-wt/`.
-**Do not touch those files or spawn a second agent on them.**
+The host Mamba2 padding repair landed on main as `ad5c37272`. No agent owns
+the files now. It removes padded oracle work while preserving the recorded
+base train, infer, batch and batchscale hashes.
 
 Its brief, so you can judge the result:
 

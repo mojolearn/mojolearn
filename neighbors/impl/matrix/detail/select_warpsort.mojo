@@ -14,8 +14,7 @@ WHY THIS FILE EXISTS AT ALL, AND WHY IT DID NOT UNTIL NOW
 ---------------------------------------------------------
 `NOT_IMPLEMENTED.tsv` carried this file as `UNPORTABLE`, on the ground that it has
 14 warp intrinsics (`__shfl_xor_sync`, `laneId`) and Mojo 1.0 had none.
-**That ground was false and has been retracted** (see
-`archive/reference/VENDOR_LIBRARIES.md`). The primitives are under `std.gpu.primitives.warp`
+**That ground was false and has been retracted.** The primitives are under `std.gpu.primitives.warp`
 and `max.gpu.sync`; the earlier searches looked one namespace level too high
 in four places and missed all four.
 

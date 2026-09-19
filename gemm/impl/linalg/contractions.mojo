@@ -21,8 +21,7 @@ hand-written integers.
 
 WHAT THE POLICY IS AND IS NOT, IN THIS LANE'S TERMS
 ----------------------------------------------------
-Every field below is an EXECUTION PLAN quantity in the sense of
-`archive/plans/IDENTICAL_GEMM_PLAN.md`'s table: tile sizes, thread counts, how many loads
+Every field below is an EXECUTION PLAN quantity: tile sizes, thread counts, how many loads
 each thread issues, and the shared-memory page layout. **None of it is a
 numerical plan quantity**, and that is a statement about RAFT's kernel, not a
 hope about this one: the reference main loop walks `kidx` from `0` to `k` ASCENDING in

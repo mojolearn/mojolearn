@@ -8,11 +8,9 @@
     pixi run check-gp-optimize-restarts-oracle
     python3 tools/gp_optimize_oracle_check.py --lane gp-optimize [--sabotage-expected]
 
-WHY THIS FILE EXISTS. `docs/lanes/LANE_STATUS_oracle-and-applicability-audit.md`
-lists these two among four record lanes whose passing cell is a hash compared
-only against a previous hash of the same code. Two corrections to that entry,
-both measured here rather than assumed, are in
-`docs/lanes/LANE_STATUS_four-lane-oracles.md`; neither removes the gap this
+WHY THIS FILE EXISTS. The oracle/applicability audit listed these two among
+four record lanes whose passing cell is a hash compared only against a
+previous hash of the same code. Two later measured corrections do not remove the gap this
 file closes, which is that NOTHING anywhere asks whether the returned
 hyperparameters are the ones the optimizer was asked for.
 
@@ -40,7 +38,7 @@ what this file checks, in three layers:
       the note also prints where the optimizer lands when restarted from it,
       so the reader can see whether the answer is a second maximum. On the
       `wide` fixture it is; the numbers are in
-      `docs/lanes/LANE_STATUS_four-lane-oracles.md`.
+      this program prints.
 
   (2) THE ANSWER IS STATIONARY. The projected gradient at the returned theta,
       `max_i |clip(x_i - g_i) - x_i|`, must be small. When the optimizer's own
@@ -136,8 +134,7 @@ WHAT IT CANNOT CATCH
   * anything about `predict`, `sample_y` or the saved model.
 
 SEEN TO FAIL. `--sabotage-expected` requires at least one disagreement. The
-evidence, with the differing values printed, is in
-`docs/lanes/LANE_STATUS_four-lane-oracles.md`.
+evidence includes the differing values printed by this program.
 """
 from __future__ import annotations
 
@@ -166,8 +163,7 @@ ULPS = 2                      # float32 ULPs of the likelihood that are not a di
 #: `logspace(-4, 4)`) the optimizer stops on `ftol` at a point whose
 #: gradient is still 1.8e-2 in the constant, and a step of +0.1 there raises
 #: the likelihood under BOTH our float32 objective and the float64 reference.
-#: The margin and the re-optimization that reaches 6,322 nats higher are in
-#: docs/lanes/LANE_STATUS_four-lane-oracles.md. `--strict` makes it a failure.
+#: The re-optimization reaches 6,322 nats higher. `--strict` makes it a failure.
 KNOWN_NON_STATIONARY = {("gp-optimize", "wide"), ("gp-optimize-restarts", "wide")}
 
 #: A start no restart has to work hard to beat, for the selection sub-arm.
@@ -503,7 +499,7 @@ def arm_optimal(rep, tag, model, theta, bounds, grad_here, best, X, y, kind, rng
                   "fails; if that is a fix, take it off the list", file=rep.out)
     elif (spec["lane"], spec["fixture"]) in KNOWN_NON_STATIONARY and not spec["strict"]:
         print(f"  known OPTIMAL: {message}{detail}"
-              f"\n        KNOWN, see docs/lanes/LANE_STATUS_four-lane-oracles.md. Run with "
+              f"\n        KNOWN non-stationary case. Run with "
               f"--strict to make it a failure.", file=rep.out)
     else:
         rep.fail("OPTIMAL", message, detail)

@@ -276,7 +276,7 @@ struct ExtraTreesConfig(ImplicitlyCopyable, Movable):
     ADDED TO THIS STRUCT 2026-09-01. The implementation was already here and
     already checked by `builder_check`, but `resolve` hard-coded
     `params.max_leaves = -1`, so NO FIT COULD REACH IT -- the lane's own
-    `archive/plans/UNWIRED.md` rule 3 state, which that file now records. This field is
+    rule that an unreachable checked branch is still unverified. This field is
     the host-side half of the fix; the Python half needs a params slot in
     `bindings/_mojolearn_trees.mojo`, which this lane does not own, and
     until that lands the Python classes deliberately expose no keyword for

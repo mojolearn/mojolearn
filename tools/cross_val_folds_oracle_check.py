@@ -6,8 +6,8 @@
     pixi run check-cross-val-folds-oracle
     python3 tools/cross_val_folds_oracle_check.py [--sabotage-expected]
 
-WHY THIS FILE EXISTS. `docs/lanes/LANE_STATUS_oracle-and-applicability-audit.md`
-found four lanes a release record runs whose passing cell is a hash compared
+WHY THIS FILE EXISTS. The oracle/applicability audit found four lanes a
+release record runs whose passing cell is a hash compared
 only against a previous hash of the same code. `cross-val-folds` is one of
 them, and like `bpe-trainer` its lane body is pure Python integer work, so
 every column of a record computes the same bytes by construction and a
@@ -92,8 +92,7 @@ WHAT THEY CANNOT CATCH
     is the fold partition alone.
 
 SEEN TO FAIL. `--sabotage-expected` requires at least one disagreement. The
-evidence, with the differing values printed, is in
-`docs/lanes/LANE_STATUS_four-lane-oracles.md`.
+evidence includes the differing values printed by this program.
 """
 from __future__ import annotations
 

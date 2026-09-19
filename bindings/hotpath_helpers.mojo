@@ -8,7 +8,7 @@ handful of places that are invisible at 10,000 rows and cost hundreds of
 milliseconds to seconds at 1,000,000: `Array.astype` and every `as_*_c`
 conversion from an integer buffer (`array.array(code, memoryview)`, one
 Python object per element: 20 to 33 ns each on an M4, 43 to 72 ns on an
-EPYC 7713 pod, docs/lanes/LANE_STATUS_python-hotpath.md), `Array.min/max/sum/argmax/
+EPYC 7713 pod), `Array.min/max/sum/argmax/
 __eq__` (a `tolist()` first), the metrics label preparation (a dict lookup
 per row), and the fold bookkeeping of `cross_val_score` (a `set` of every
 index per fold). Every helper here is the SAME function of the same bytes

@@ -1070,8 +1070,8 @@ def main() raises:
 
     var fails = 0
     # ONE CONTEXT FOR THE WHOLE CARD. A context per shape would be a
-    # different control plane per record, and `archive/reference/HOST_AND_DEVICE.md`'s point is
-    # that the control plane is part of what a run is.
+    # different control plane per record; the control plane is part of what a
+    # run is.
     with DeviceContext() as ctx:
         for i in range(len(shapes)):
             _run_shape(ctx, t, shapes[i], fails)
