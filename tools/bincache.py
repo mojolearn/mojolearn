@@ -95,7 +95,33 @@ KEY_ENV_PREFIXES = ("MOJOLEARN_", "MOJO_", "MODULAR_")
 NON_BUILD_ENV = ("MOJOLEARN_COMMIT", "MOJOLEARN_CPU_THREADS", "MOJOLEARN_SKIP_BUILD_GATE",
                  "MOJOLEARN_BUILD_LOCK_HELD", "MOJOLEARN_PYTHON", "MOJOLEARN_SMOKE_SO")
 NON_BUILD_PREFIXES = ("MOJOLEARN_BINCACHE", "MOJOLEARN_IDENTITY_", "MOJOLEARN_STAGE_",
-                      "MOJOLEARN_GEMM_LEG_", "MOJOLEARN_HOTAISLE_", "MOJOLEARN_DO_")
+                      "MOJOLEARN_GEMM_LEG_", "MOJOLEARN_HOTAISLE_", "MOJOLEARN_DO_",
+                      # MOJOLEARN_GAP_ IS WHICH LANES THE LEG WILL RUN AFTERWARDS
+                      # AND WHERE IT WILL FILE THEM (tools/gap_column_leg.sh:
+                      # _LANES, _SLUG, _COMMIT_DIR, _BUDGET, _TWO_DEVICE,
+                      # _DEGENERATE). Nothing under bindings/ reads any of them
+                      # -- checked: `grep -rln MOJOLEARN_GAP bindings/` is
+                      # empty -- so not one of them can reach `mojo build`, and
+                      # a body that exports them before calling this file was
+                      # partitioning the cache by its own errand.
+                      #
+                      # MEASURED, 2026-09-19, on the first two legs ever to
+                      # read this cache. They put 110 objects into the first
+                      # GPU partitions it has ever had (sm_89/ and gfx942/, 55
+                      # families each, 1731 s and 1082 s of compiling) and
+                      # every one is keyed to
+                      #   MOJOLEARN_GAP_LANES = gbdt-ordered,...
+                      #   MOJOLEARN_GAP_SLUG = gbdt-class-gaps
+                      #   MOJOLEARN_GAP_COMMIT_DIR = bench/results/.../
+                      #   MOJOLEARN_GAP_BUDGET = 2600
+                      # (read out of their own keys/<key>.json, not inferred).
+                      # `bindings/build_gbdt.sh` at one commit, one arch, one
+                      # image and one OS keyed f98190e48ddcdb06 under that lane
+                      # list and cf6f513b683fb1cf under the next leg's. So the
+                      # only leg that could ever have hit those 110 objects is
+                      # one running the SAME LANES into the SAME DIRECTORY --
+                      # which is the one leg nobody ever needs to run twice.
+                      "MOJOLEARN_GAP_")
 SABOTAGE_RE = re.compile(r"SABOTAGE|FAULT_INJECT", re.I)
 # Import roots that are the toolchain's, not this tree's: the precompiled
 # packages in .pixi/envs/default/lib/mojo/*.mojoc for mojo 1.0.0 / max 26.5.0
