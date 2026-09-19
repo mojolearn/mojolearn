@@ -1,9 +1,9 @@
 {
  "mode": "identical",
  "repeats": 2,
- "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+ "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
  "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
- "commit": "3d203f75fe887c09881cf1d154c354fa5cf49b37",
+ "commit": "900038b2422b8f6fdb74769d42056f1bd55d7c01",
  "commit_source": "commit.txt",
  "heldout_seed": 1,
  "fixtures": {
@@ -83,908 +83,55 @@
   }
  },
  "cells": {
-  "par-ordered/base": {
+  "par-forecast-arima/base": {
    "verdict": "STABLE",
    "hashes": [
-    "0e73adb47576ba74",
-    "0e73adb47576ba74"
+    "a44b54d65768bf5e",
+    "a44b54d65768bf5e"
    ],
    "parts": [
     {
-     "predict": "a40d857d0c16464b"
+     "predict": "fc394a633b4b3334",
+     "forecast": "e33b73fe4f43dde5"
     },
     {
-     "predict": "a40d857d0c16464b"
+     "predict": "fc394a633b4b3334",
+     "forecast": "e33b73fe4f43dde5"
     }
    ],
    "infer": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
    ],
    "infer_verdict": "STABLE",
    "model": [
-    "3ebe10dd16986fee",
-    "3ebe10dd16986fee"
+    "6ae822845884aedf",
+    "6ae822845884aedf"
    ],
    "model_verdict": "STABLE",
    "reload": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
    ],
    "batch": [
-    "1b7f902bed2f8264",
-    "1b7f902bed2f8264"
+    "ec97b45a1c88081b",
+    "ec97b45a1c88081b"
    ],
    "batch_verdict": "STABLE",
    "timing": {
-    "total_seconds": 8.95127114187926,
+    "total_seconds": 35.10809789504856,
     "stages": {
-     "repeat=1/train": 5.500013379380107,
-     "repeat=1/infer-save-reload": 0.022550546564161777,
-     "repeat=1/batch": 0.1063852533698082,
-     "repeat=2/train": 3.2014861395582557,
-     "repeat=2/infer-save-reload": 0.00986288208514452,
-     "repeat=2/batch": 0.1105332700535655
-    }
-   }
-  },
-  "par-ordered/ties": {
-   "verdict": "STABLE",
-   "hashes": [
-    "b08dd75a1fd4de8a",
-    "b08dd75a1fd4de8a"
-   ],
-   "parts": [
-    {
-     "predict": "2459f53f0c2c85d5"
-    },
-    {
-     "predict": "2459f53f0c2c85d5"
-    }
-   ],
-   "infer": [
-    "529e6b54d8cfe020",
-    "529e6b54d8cfe020"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "e1ea00b03e0a3d16",
-    "e1ea00b03e0a3d16"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "529e6b54d8cfe020",
-    "529e6b54d8cfe020"
-   ],
-   "batch": [
-    "e60f8dc009c82663",
-    "e60f8dc009c82663"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.753546362742782,
-    "stages": {
-     "repeat=1/train": 3.3097939006984234,
-     "repeat=1/infer-save-reload": 0.006340082734823227,
-     "repeat=1/batch": 0.09110292326658964,
-     "repeat=2/train": 3.2033721078187227,
-     "repeat=2/infer-save-reload": 0.00678484421223402,
-     "repeat=2/batch": 0.13567832298576832
-    }
-   }
-  },
-  "par-ordered/hashed": {
-   "verdict": "STABLE",
-   "hashes": [
-    "457ba1962b5ee0f3",
-    "457ba1962b5ee0f3"
-   ],
-   "parts": [
-    {
-     "predict": "e4cb5021fa4bfb94"
-    },
-    {
-     "predict": "e4cb5021fa4bfb94"
-    }
-   ],
-   "infer": [
-    "f472f8f2e506ce3e",
-    "f472f8f2e506ce3e"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "b80eb3b72b5c95c7",
-    "b80eb3b72b5c95c7"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "f472f8f2e506ce3e",
-    "f472f8f2e506ce3e"
-   ],
-   "batch": [
-    "cd945653faa71f59",
-    "cd945653faa71f59"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.772675992920995,
-    "stages": {
-     "repeat=1/train": 3.2182985795661807,
-     "repeat=1/infer-save-reload": 0.009497042745351791,
-     "repeat=1/batch": 0.10709895193576813,
-     "repeat=2/train": 3.2819738099351525,
-     "repeat=2/infer-save-reload": 0.009726649150252342,
-     "repeat=2/batch": 0.1456577992066741
-    }
-   }
-  },
-  "par-ordered/wide": {
-   "verdict": "STABLE",
-   "hashes": [
-    "c143f163f1e23772",
-    "c143f163f1e23772"
-   ],
-   "parts": [
-    {
-     "predict": "379ee1f3d365cd8f"
-    },
-    {
-     "predict": "379ee1f3d365cd8f"
-    }
-   ],
-   "infer": [
-    "e8fde999f64eec22",
-    "e8fde999f64eec22"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "c24f27aa4e7d989f",
-    "c24f27aa4e7d989f"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "e8fde999f64eec22",
-    "e8fde999f64eec22"
-   ],
-   "batch": [
-    "0cc769bdafb5820b",
-    "0cc769bdafb5820b"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.677385312505066,
-    "stages": {
-     "repeat=1/train": 3.2372670751065016,
-     "repeat=1/infer-save-reload": 0.010251962579786777,
-     "repeat=1/batch": 0.0994233563542366,
-     "repeat=2/train": 3.226776466704905,
-     "repeat=2/infer-save-reload": 0.010239612311124802,
-     "repeat=2/batch": 0.09297928027808666
-    }
-   }
-  },
-  "par-ordered/denormal": {
-   "verdict": "STABLE",
-   "hashes": [
-    "0e73adb47576ba74",
-    "0e73adb47576ba74"
-   ],
-   "parts": [
-    {
-     "predict": "a40d857d0c16464b"
-    },
-    {
-     "predict": "a40d857d0c16464b"
-    }
-   ],
-   "infer": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "337411e478a47dd5",
-    "337411e478a47dd5"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
-   ],
-   "batch": [
-    "1b7f902bed2f8264",
-    "1b7f902bed2f8264"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.694777728058398,
-    "stages": {
-     "repeat=1/train": 3.2097686901688576,
-     "repeat=1/infer-save-reload": 0.009720108471810818,
-     "repeat=1/batch": 0.1372902849689126,
-     "repeat=2/train": 3.2311882385984063,
-     "repeat=2/infer-save-reload": 0.00995994545519352,
-     "repeat=2/batch": 0.09641918912529945
-    }
-   }
-  },
-  "par-ordered/denormal_ftz": {
-   "verdict": "STABLE",
-   "hashes": [
-    "0e73adb47576ba74",
-    "0e73adb47576ba74"
-   ],
-   "parts": [
-    {
-     "predict": "a40d857d0c16464b"
-    },
-    {
-     "predict": "a40d857d0c16464b"
-    }
-   ],
-   "infer": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "337411e478a47dd5",
-    "337411e478a47dd5"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "d7a4f4eeda536f16",
-    "d7a4f4eeda536f16"
-   ],
-   "batch": [
-    "1b7f902bed2f8264",
-    "1b7f902bed2f8264"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.781119327992201,
-    "stages": {
-     "repeat=1/train": 3.220738470554352,
-     "repeat=1/infer-save-reload": 0.010032515972852707,
-     "repeat=1/batch": 0.13903543818742037,
-     "repeat=2/train": 3.306013073772192,
-     "repeat=2/infer-save-reload": 0.00992316473275423,
-     "repeat=2/batch": 0.09490763954818249
-    }
-   }
-  },
-  "par-ordered/dupes": {
-   "verdict": "STABLE",
-   "hashes": [
-    "d6c73836e3381dd4",
-    "d6c73836e3381dd4"
-   ],
-   "parts": [
-    {
-     "predict": "ae31e7b2215c65fa"
-    },
-    {
-     "predict": "ae31e7b2215c65fa"
-    }
-   ],
-   "infer": [
-    "d2d7de40eeb0e888",
-    "d2d7de40eeb0e888"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "c110a1e501e287f1",
-    "c110a1e501e287f1"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "d2d7de40eeb0e888",
-    "d2d7de40eeb0e888"
-   ],
-   "batch": [
-    "ae28684d368e2b6f",
-    "ae28684d368e2b6f"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.607602197676897,
-    "stages": {
-     "repeat=1/train": 3.203269014135003,
-     "repeat=1/infer-save-reload": 0.009253476746380329,
-     "repeat=1/batch": 0.13710575085133314,
-     "repeat=2/train": 3.1527116699144244,
-     "repeat=2/infer-save-reload": 0.009321718476712704,
-     "repeat=2/batch": 0.09549957513809204
-    }
-   }
-  },
-  "par-ordered/odd": {
-   "verdict": "STABLE",
-   "hashes": [
-    "ff7a264740642731",
-    "ff7a264740642731"
-   ],
-   "parts": [
-    {
-     "predict": "3d02cae115233675"
-    },
-    {
-     "predict": "3d02cae115233675"
-    }
-   ],
-   "infer": [
-    "96ab641b67fe93b4",
-    "96ab641b67fe93b4"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "2762eab7c9aadc51",
-    "2762eab7c9aadc51"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "96ab641b67fe93b4",
-    "96ab641b67fe93b4"
-   ],
-   "batch": [
-    "7b18f6ba4d9bf426",
-    "7b18f6ba4d9bf426"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.293438102118671,
-    "stages": {
-     "repeat=1/train": 3.058430596254766,
-     "repeat=1/infer-save-reload": 0.009825902059674263,
-     "repeat=1/batch": 0.06400340888649225,
-     "repeat=2/train": 3.044242632575333,
-     "repeat=2/infer-save-reload": 0.009601525962352753,
-     "repeat=2/batch": 0.10693046823143959
-    }
-   }
-  },
-  "par-ordered/negative": {
-   "verdict": "STABLE",
-   "hashes": [
-    "ba631525958c6163",
-    "ba631525958c6163"
-   ],
-   "parts": [
-    {
-     "predict": "07cb4d9fb74c5d6d"
-    },
-    {
-     "predict": "07cb4d9fb74c5d6d"
-    }
-   ],
-   "infer": [
-    "09e6dfe70a9e8341",
-    "09e6dfe70a9e8341"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "a003b5a16d9f7e2f",
-    "a003b5a16d9f7e2f"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "09e6dfe70a9e8341",
-    "09e6dfe70a9e8341"
-   ],
-   "batch": [
-    "6f79c5a5836408fb",
-    "6f79c5a5836408fb"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 6.55599785503,
-    "stages": {
-     "repeat=1/train": 3.1989827351644635,
-     "repeat=1/infer-save-reload": 0.009764139540493488,
-     "repeat=1/batch": 0.09366201888769865,
-     "repeat=2/train": 3.146654974669218,
-     "repeat=2/infer-save-reload": 0.009814230725169182,
-     "repeat=2/batch": 0.09667953476309776
-    }
-   }
-  },
-  "par-border-types/base": {
-   "verdict": "STABLE",
-   "hashes": [
-    "10ef01c731a66a06",
-    "10ef01c731a66a06"
-   ],
-   "parts": [
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    },
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    }
-   ],
-   "infer": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "4499afe4e3ed96be",
-    "4499afe4e3ed96be"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "batch": [
-    "deba437782731acd",
-    "deba437782731acd"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.890023287385702,
-    "stages": {
-     "repeat=1/train": 14.471202169544995,
-     "repeat=1/infer-save-reload": 0.008006994612514973,
-     "repeat=1/batch": 0.14945430681109428,
-     "repeat=2/train": 14.13428018335253,
-     "repeat=2/infer-save-reload": 0.007953392341732979,
-     "repeat=2/batch": 0.11852888483554125
-    }
-   }
-  },
-  "par-border-types/ties": {
-   "verdict": "STABLE",
-   "hashes": [
-    "a7eca40195af6ded",
-    "a7eca40195af6ded"
-   ],
-   "parts": [
-    {
-     "Median": "bef850678fccf553",
-     "Uniform": "bef850678fccf553",
-     "UniformAndQuantiles": "bef850678fccf553",
-     "MaxLogSum": "bef850678fccf553",
-     "MinEntropy": "bef850678fccf553",
-     "GreedyMinEntropy": "bef850678fccf553"
-    },
-    {
-     "Median": "bef850678fccf553",
-     "Uniform": "bef850678fccf553",
-     "UniformAndQuantiles": "bef850678fccf553",
-     "MaxLogSum": "bef850678fccf553",
-     "MinEntropy": "bef850678fccf553",
-     "GreedyMinEntropy": "bef850678fccf553"
-    }
-   ],
-   "infer": [
-    "8ee7f9352fb63cc0",
-    "8ee7f9352fb63cc0"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "7e32a31d0097a69c",
-    "7e32a31d0097a69c"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "8ee7f9352fb63cc0",
-    "8ee7f9352fb63cc0"
-   ],
-   "batch": [
-    "355457a0a246a2a1",
-    "355457a0a246a2a1"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 27.248225962743163,
-    "stages": {
-     "repeat=1/train": 13.784010354429483,
-     "repeat=1/infer-save-reload": 0.00642839539796114,
-     "repeat=1/batch": 0.15141663700342178,
-     "repeat=2/train": 13.183450499549508,
-     "repeat=2/infer-save-reload": 0.006359482184052467,
-     "repeat=2/batch": 0.11594302859157324
-    }
-   }
-  },
-  "par-border-types/hashed": {
-   "verdict": "STABLE",
-   "hashes": [
-    "7f756ddfe38a2ebe",
-    "7f756ddfe38a2ebe"
-   ],
-   "parts": [
-    {
-     "Median": "cf24e267517fb40a",
-     "Uniform": "e54fcb33878141d4",
-     "UniformAndQuantiles": "21160c8d0c4d0a4c",
-     "MaxLogSum": "bed42357a824cbbe",
-     "MinEntropy": "68bb2045f62b10d0",
-     "GreedyMinEntropy": "7335b0a75f2f8651"
-    },
-    {
-     "Median": "cf24e267517fb40a",
-     "Uniform": "e54fcb33878141d4",
-     "UniformAndQuantiles": "21160c8d0c4d0a4c",
-     "MaxLogSum": "bed42357a824cbbe",
-     "MinEntropy": "68bb2045f62b10d0",
-     "GreedyMinEntropy": "7335b0a75f2f8651"
-    }
-   ],
-   "infer": [
-    "74e7fcf52b8b2c4a",
-    "74e7fcf52b8b2c4a"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "6d959300597b3068",
-    "6d959300597b3068"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "74e7fcf52b8b2c4a",
-    "74e7fcf52b8b2c4a"
-   ],
-   "batch": [
-    "34cb9dc84217d641",
-    "34cb9dc84217d641"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.03505912888795,
-    "stages": {
-     "repeat=1/train": 13.748866745270789,
-     "repeat=1/infer-save-reload": 0.008544928394258022,
-     "repeat=1/batch": 0.1602352438494563,
-     "repeat=2/train": 14.014472235925496,
-     "repeat=2/infer-save-reload": 0.004121536388993263,
-     "repeat=2/batch": 0.0983067974448204
-    }
-   }
-  },
-  "par-border-types/wide": {
-   "verdict": "STABLE",
-   "hashes": [
-    "85cc9ad0a84c9aec",
-    "85cc9ad0a84c9aec"
-   ],
-   "parts": [
-    {
-     "Median": "5690247011024708",
-     "Uniform": "b90efcf91884d364",
-     "UniformAndQuantiles": "e9169cc1b0cdf73b",
-     "MaxLogSum": "166ffa086fd85fea",
-     "MinEntropy": "5690247011024708",
-     "GreedyMinEntropy": "612b0110634532d1"
-    },
-    {
-     "Median": "5690247011024708",
-     "Uniform": "b90efcf91884d364",
-     "UniformAndQuantiles": "e9169cc1b0cdf73b",
-     "MaxLogSum": "166ffa086fd85fea",
-     "MinEntropy": "5690247011024708",
-     "GreedyMinEntropy": "612b0110634532d1"
-    }
-   ],
-   "infer": [
-    "a8c4137b0a3660e2",
-    "a8c4137b0a3660e2"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "76527f36b20dab4a",
-    "76527f36b20dab4a"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "a8c4137b0a3660e2",
-    "a8c4137b0a3660e2"
-   ],
-   "batch": [
-    "49c82a3106bba3a6",
-    "49c82a3106bba3a6"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 27.794346015900373,
-    "stages": {
-     "repeat=1/train": 13.971667199395597,
-     "repeat=1/infer-save-reload": 0.005435829982161522,
-     "repeat=1/batch": 0.10178845562040806,
-     "repeat=2/train": 13.567974674515426,
-     "repeat=2/infer-save-reload": 0.007148003205657005,
-     "repeat=2/batch": 0.1398165700957179
-    }
-   }
-  },
-  "par-border-types/denormal": {
-   "verdict": "STABLE",
-   "hashes": [
-    "10ef01c731a66a06",
-    "10ef01c731a66a06"
-   ],
-   "parts": [
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    },
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    }
-   ],
-   "infer": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "5375b98ac5eca8d2",
-    "5375b98ac5eca8d2"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "batch": [
-    "deba437782731acd",
-    "deba437782731acd"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.27273938432336,
-    "stages": {
-     "repeat=1/train": 13.973569439724088,
-     "repeat=1/infer-save-reload": 0.008069337345659733,
-     "repeat=1/batch": 0.11824334692209959,
-     "repeat=2/train": 14.011127510108054,
-     "repeat=2/infer-save-reload": 0.007801620289683342,
-     "repeat=2/batch": 0.153285495005548
-    }
-   }
-  },
-  "par-border-types/denormal_ftz": {
-   "verdict": "STABLE",
-   "hashes": [
-    "10ef01c731a66a06",
-    "10ef01c731a66a06"
-   ],
-   "parts": [
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    },
-    {
-     "Median": "ec1ac01d44396e56",
-     "Uniform": "6b5e3b9eeedef73b",
-     "UniformAndQuantiles": "92f2366fb53fab0c",
-     "MaxLogSum": "265814e9c3aad1f3",
-     "MinEntropy": "7554c35537a20da9",
-     "GreedyMinEntropy": "0d55db0560d23e37"
-    }
-   ],
-   "infer": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "5375b98ac5eca8d2",
-    "5375b98ac5eca8d2"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "df725acd3908c4f9",
-    "df725acd3908c4f9"
-   ],
-   "batch": [
-    "deba437782731acd",
-    "deba437782731acd"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.43319136183709,
-    "stages": {
-     "repeat=1/train": 14.042032802477479,
-     "repeat=1/infer-save-reload": 0.007630965672433376,
-     "repeat=1/batch": 0.11805588193237782,
-     "repeat=2/train": 14.119545035995543,
-     "repeat=2/infer-save-reload": 0.004085334949195385,
-     "repeat=2/batch": 0.14134175889194012
-    }
-   }
-  },
-  "par-border-types/dupes": {
-   "verdict": "STABLE",
-   "hashes": [
-    "cbcef08fd74fc613",
-    "cbcef08fd74fc613"
-   ],
-   "parts": [
-    {
-     "Median": "b1a832b38e60c0bb",
-     "Uniform": "f9603f91987910a3",
-     "UniformAndQuantiles": "c21d1deec5f1b401",
-     "MaxLogSum": "b1a832b38e60c0bb",
-     "MinEntropy": "b1a832b38e60c0bb",
-     "GreedyMinEntropy": "86f38371e6e16459"
-    },
-    {
-     "Median": "b1a832b38e60c0bb",
-     "Uniform": "f9603f91987910a3",
-     "UniformAndQuantiles": "c21d1deec5f1b401",
-     "MaxLogSum": "b1a832b38e60c0bb",
-     "MinEntropy": "b1a832b38e60c0bb",
-     "GreedyMinEntropy": "86f38371e6e16459"
-    }
-   ],
-   "infer": [
-    "fd23741816d7611d",
-    "fd23741816d7611d"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "e4178a57a728a449",
-    "e4178a57a728a449"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "fd23741816d7611d",
-    "fd23741816d7611d"
-   ],
-   "batch": [
-    "eaf5c67e384055c5",
-    "eaf5c67e384055c5"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.019830639474094,
-    "stages": {
-     "repeat=1/train": 13.900409716181457,
-     "repeat=1/infer-save-reload": 0.008137298747897148,
-     "repeat=1/batch": 0.1247015530243516,
-     "repeat=2/train": 13.86762976553291,
-     "repeat=2/infer-save-reload": 0.0077723292633891106,
-     "repeat=2/batch": 0.11055337078869343
-    }
-   }
-  },
-  "par-border-types/odd": {
-   "verdict": "STABLE",
-   "hashes": [
-    "c24d55c7434cf391",
-    "c24d55c7434cf391"
-   ],
-   "parts": [
-    {
-     "Median": "eeaa8ddc37cb8fc2",
-     "Uniform": "a7824256e96e5940",
-     "UniformAndQuantiles": "17bf71aad5eea3da",
-     "MaxLogSum": "c439a8a8a1a7a75f",
-     "MinEntropy": "2f0b28d1e548d391",
-     "GreedyMinEntropy": "819f7a45d36b2840"
-    },
-    {
-     "Median": "eeaa8ddc37cb8fc2",
-     "Uniform": "a7824256e96e5940",
-     "UniformAndQuantiles": "17bf71aad5eea3da",
-     "MaxLogSum": "c439a8a8a1a7a75f",
-     "MinEntropy": "2f0b28d1e548d391",
-     "GreedyMinEntropy": "819f7a45d36b2840"
-    }
-   ],
-   "infer": [
-    "f78a6ffb8b9c4a27",
-    "f78a6ffb8b9c4a27"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "eab81b63a3e306ab",
-    "eab81b63a3e306ab"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "f78a6ffb8b9c4a27",
-    "f78a6ffb8b9c4a27"
-   ],
-   "batch": [
-    "a24f8fe40fa919ba",
-    "a24f8fe40fa919ba"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.022953068837523,
-    "stages": {
-     "repeat=1/train": 13.906482201069593,
-     "repeat=1/infer-save-reload": 0.007836289703845978,
-     "repeat=1/batch": 0.10967312753200531,
-     "repeat=2/train": 13.921534905210137,
-     "repeat=2/infer-save-reload": 0.005556472577154636,
-     "repeat=2/batch": 0.07129354495555162
-    }
-   }
-  },
-  "par-border-types/negative": {
-   "verdict": "STABLE",
-   "hashes": [
-    "d638f3adaf1d0bb8",
-    "d638f3adaf1d0bb8"
-   ],
-   "parts": [
-    {
-     "Median": "0556cf0a080748e7",
-     "Uniform": "2bcf346c5ceca273",
-     "UniformAndQuantiles": "93e0727bd64b5823",
-     "MaxLogSum": "21f12bdc2ed8d588",
-     "MinEntropy": "5dd34d08b75b863f",
-     "GreedyMinEntropy": "d4f7852d3783169b"
-    },
-    {
-     "Median": "0556cf0a080748e7",
-     "Uniform": "2bcf346c5ceca273",
-     "UniformAndQuantiles": "93e0727bd64b5823",
-     "MaxLogSum": "21f12bdc2ed8d588",
-     "MinEntropy": "5dd34d08b75b863f",
-     "GreedyMinEntropy": "d4f7852d3783169b"
-    }
-   ],
-   "infer": [
-    "922b88f982e8dfe9",
-    "922b88f982e8dfe9"
-   ],
-   "infer_verdict": "STABLE",
-   "model": [
-    "846dc3e9b49543c0",
-    "846dc3e9b49543c0"
-   ],
-   "model_verdict": "STABLE",
-   "reload": [
-    "922b88f982e8dfe9",
-    "922b88f982e8dfe9"
-   ],
-   "batch": [
-    "58c475080fa02b79",
-    "58c475080fa02b79"
-   ],
-   "batch_verdict": "STABLE",
-   "timing": {
-    "total_seconds": 28.435310455970466,
-    "stages": {
-     "repeat=1/train": 14.091897208243608,
-     "repeat=1/infer-save-reload": 0.007565283216536045,
-     "repeat=1/batch": 0.11627020686864853,
-     "repeat=2/train": 14.068653693422675,
-     "repeat=2/infer-save-reload": 0.008129317313432693,
-     "repeat=2/batch": 0.1422050604596734
+     "repeat=1/train": 5.692243823315948,
+     "repeat=1/infer-save-reload": 4.150406891014427,
+     "repeat=1/batch": 8.381456087809056,
+     "repeat=2/train": 4.350043796002865,
+     "repeat=2/infer-save-reload": 4.16982123022899,
+     "repeat=2/batch": 8.36307389382273
     }
    }
   }
  },
- "complete": true,
+ "complete": false,
  "skipped": [],
  "batch_protocol": {
   "alone": 16,
@@ -1037,8 +184,7 @@
   "par-graph-umap": "transform-row-separable-1"
  },
  "degenerate_lanes": [
-  "par-border-types",
-  "par-ordered"
+  "par-forecast-arima"
  ],
  "degenerate_column": "nvidia-1gpu",
  "gpu_slot": "FREE (run not serialised)",
@@ -1150,11 +296,6 @@
     "size": 3165480
    },
    {
-    "module": "_mojolearn_transformer",
-    "sha256": "cd961fe04df697923c090fa289f1ab934d603816677a8653fcd6913aed1bfb39",
-    "size": 8066120
-   },
-   {
     "module": "_mojolearn_trees",
     "sha256": "dc1cf94791edfc57fb774c69535735de3387a6acb6f19b8bd29caabec0af0a0f",
     "size": 1869808
@@ -1168,12 +309,12 @@
  },
  "resume_signature": {
   "schema": 1,
-  "source_sha256": "14759df86450114e8fec8bf37201a5f6c79002760e4ae9c0e6fabbeb9f3eb399",
+  "source_sha256": "801d0a35f9eadea6c41555764b1f933b258d2a70f02936b770dd26054489efaa",
   "options": {
    "require_backend": null,
    "require_cpu": false,
    "fail_on_refused": false,
-   "lanes": "par-ordered,par-border-types",
+   "lanes": "par-border-types,par-forecast-arima,par-forecast-holtwinters,par-ivf,par-ordered",
    "skip": "",
    "fixtures": "",
    "repeats": 2,
@@ -1192,12 +333,12 @@
    "merge": null,
    "allow_separate_builds": false
   },
-  "environment_sha256": "eeedaf82d58bc344966a67a62cdaccc2faf101856aa7c733ec5e16136188f46b",
+  "environment_sha256": "b5758dcfbe35dd7a0f3aeda0681d3a14390cd7650132e8ef8725c75dca4a214d",
   "provenance": {
-   "commit": "3d203f75fe887c09881cf1d154c354fa5cf49b37",
+   "commit": "900038b2422b8f6fdb74769d42056f1bd55d7c01",
    "mode": "identical",
    "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
-   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+   "platform": "Linux-6.8.0-136-generic-x86_64-with-glibc2.35",
    "python": "3.14.7",
    "numpy": "2.5.2",
    "fixtures": {
