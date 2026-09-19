@@ -88,7 +88,23 @@ work". What is actually left:
    2-GPU box. `par-forecast-arima` and `-holtwinters` DO run on CPU.
 2. **6 kernel/nystroem NVIDIA `classical_host` saved-model recordings**
    (`SAVED_MODEL_INFERENCE_OWED`). A different artifact from an identity
-   cell; today's promotion did not pay it. Only Apple recordings exist.
+   cell; today's promotion did not pay it. Only Apple recordings exist
+   (`bench/results/classical_host/2026-09-18-apple-kernel-variants`).
+   RECORDING REQUIRES A GPU BOX -- the CPU binding cannot manufacture its
+   own expected answer. All six are confirmed selectable routes, so this is
+   one command on a rented NVIDIA box, not a research task:
+
+   ```sh
+   python3 tools/classical_host_gate.py record \
+     bench/results/classical_host/2026-09-19-nvidia-kernel-variants \
+     --lanes kernel-ridge-poly,kernel-ridge-sigmoid,kernel-ridge-laplacian,\
+nystroem-poly,nystroem-sigmoid,nystroem-laplacian
+   ```
+
+   then `classical_host_gate.py check` against it on the CPU box. Note
+   `record` had been raising AttributeError on main for a while before
+   2026-09-16 -- ahead of every other refusal -- so if it dies instantly,
+   suspect the tool, not the lane.
 3. **The three-column release record.** See section 5.
 4. **0.8.9** -- not cut. 98 commits and 4253 insertions of shipping kernel
    source since v0.8.8, including new arithmetic (ordered boosting 789
