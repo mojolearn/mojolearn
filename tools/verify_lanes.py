@@ -61,6 +61,15 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
 
 ROOT = lane_select.ROOT
+
+# The Apple pass. `base` is the ordinary path, `denormal` is where Apple is
+# known to differ (it flushes subnormals the other vendors keep) and `odd`
+# reaches every tile tail. The other six fixtures vary properties the CPU
+# column already carries on all nine. Measured 2026-09-18 on the M4: train
+# plus infer/save/reload is 24% of a fully probed cell, so this selection at
+# one fit is about 1/25 of the two-fit, nine-fixture, every-probe column.
+APPLE_PASS_FIXTURES = "base,denormal,odd"
+APPLE_PASS_BUDGET = 600
 #: RunPod CPU, 16 vCPU, 2026-09-16. The 8 vCPU figure in docs/RUNPOD_CPU_LEG.md
 #: is $0.24/h; a 16 vCPU pod is about twice that. Printed with a plan so the
 #: cost of a full sweep is a number before anyone rents anything.
@@ -154,6 +163,9 @@ def _run_local(groups, load, args, out_dir):
     import identity_iterate
     parts = [os.path.join(out_dir, f"part{k}.json") for k in range(len(groups))]
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
+    if getattr(args, "apple_pass", False):
+        import identity_break
+        env[identity_break.APPLE_FULL_DIAGNOSTIC_ENV] = "1"
     env["PYTHONPATH"] = os.path.join(ROOT, "python") + os.pathsep + env.get("PYTHONPATH", "")
     if args.backend == "cpu":
         package, host = identity_iterate.cpu_package(Path(out_dir),
@@ -354,6 +366,10 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--full-selection", action="store_true", help="explicitly accept selector fallback")
     ap.add_argument("--metal-diagnostic", action="store_true")
+    ap.add_argument("--apple-pass", action="store_true",
+                    help="the whole Apple check: Metal, one fit per cell, the end model only "
+                         f"(train, infer, save/reload), fixtures {APPLE_PASS_FIXTURES}, "
+                         f"a {APPLE_PASS_BUDGET}-second total budget")
     ap.add_argument("--runner", choices=("local", "pods"), default="local",
                     help="local processes, or print one runpod_cpu_leg.sh command per shard")
     ap.add_argument("--plan", action="store_true", help="print what would run and stop")
@@ -366,6 +382,16 @@ def main(argv=None):
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
     ap.add_argument("extra", nargs="*", help="legacy extra arguments are rejected; use explicit scope controls")
     args = ap.parse_args(argv)
+    if args.apple_pass:
+        # The batch and decode probes check batching logic, which the CPU and
+        # NVIDIA columns carry; here Metal answers one question, whether its
+        # end model is the reference's. Anything that would widen that refuses.
+        if args.backend not in ("cpu", "metal") or args.probe_group != "core" or args.repeats != 1 or args.exhaustive:
+            ap.error("--apple-pass is Metal, core probes, one fit; it takes --fixtures and --budget only")
+        args.backend = "metal"
+        args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
+        args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
+        args.timeout = args.wait_timeout = args.budget
     args.budget = args.budget if args.budget is not None else (60 if args.backend == "metal" else 300)
     args.started, args.deadline = started, started + args.budget
     if any(not math.isfinite(v) or v <= 0 for v in (args.budget, args.timeout, args.wait_timeout)):
@@ -398,6 +424,16 @@ def main(argv=None):
         ap.error("choose one of --all, named lanes, --changed-since, or --lanes-for-paths")
 
     lanes, sel, _ = _selection(args)
+    if args.apple_pass and not (args.lanes or args.lane):
+        # A lane whose arithmetic never reaches Metal says nothing here. Named
+        # lanes still refuse below; a derived selection drops them, out loud.
+        import lane_applicability
+        skip = lane_applicability.degenerate("apple-metal")
+        dropped = [n for n in lanes if n in skip]
+        lanes = [n for n in lanes if n not in skip]
+        if dropped:
+            print(f"# --apple-pass leaves out {len(dropped)} lane(s) that cannot run on Metal "
+                  f"(CPU-route or multi-GPU): {','.join(dropped)}")
     print(f"# {len(lanes)} of {len(lane_select.all_lanes())} lanes selected")
     print(f"# {len(fixtures)} fixture(s): {args.fixtures}; "
           f"{len(lanes) * len(fixtures)} cells, {len(lanes) * len(fixtures) * args.repeats} independent fits")
@@ -424,10 +460,11 @@ def main(argv=None):
         except lane_applicability.LaneNotApplicable as exc:
             ap.error(str(exc))
         if args.backend == "metal":
-            if not (args.metal_diagnostic or os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV)):
-                ap.error("Metal is release-only; use --metal-diagnostic for investigation")
-            if len(lanes) * len(fixtures) != 1 or args.probe_group == "all":
-                ap.error("one Metal lane/fixture/probe per round; use test-algo for expanded diagnostics")
+            if not (args.apple_pass or args.metal_diagnostic
+                    or os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV)):
+                ap.error("Metal is release-only; use --apple-pass, or --metal-diagnostic for investigation")
+            if not args.apple_pass and (len(lanes) * len(fixtures) != 1 or args.probe_group == "all"):
+                ap.error("one Metal lane/fixture/probe per round; use --apple-pass for the whole check")
         if not args.resume and any(Path(out_dir).glob("part*.json")):
             ap.error("records already exist; use --resume or a new output directory")
     manifest = dict(commit=_commit(), lanes=lanes, shards=[list(g) for g in groups], weights=load,

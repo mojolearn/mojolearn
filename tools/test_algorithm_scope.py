@@ -202,3 +202,19 @@ def test_expanded_metal_diagnostic_is_explicit_and_still_budgeted(monkeypatch, t
     assert len(calls) == 3
     deadlines = {cmd[cmd.index("--deadline") + 1] for cmd in calls}
     assert len(deadlines) == 1
+
+
+def test_apple_pass_is_metal_core_one_fit_three_fixtures(monkeypatch, capsys):
+    monkeypatch.setattr(lane_select, "shard", lambda lanes, shards: ([lanes], [1]))
+    assert verify_lanes.main(["--lanes", "ridge,ols", "--apple-pass", "--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "backend=metal" in out and f"budget={verify_lanes.APPLE_PASS_BUDGET}" in out
+    assert f"--fixtures {verify_lanes.APPLE_PASS_FIXTURES}" in out
+    assert "--repeats 1" in out and "--no-batch" in out and "--no-rlpair" in out
+
+
+@pytest.mark.parametrize("extra", [["--repeats", "2"], ["--probe-group", "all"], ["--exhaustive"],
+                                   ["--backend", "cuda"]])
+def test_apple_pass_refuses_anything_that_widens_it(extra):
+    with pytest.raises(SystemExit):
+        verify_lanes.main(["--lane", "ridge", "--apple-pass", "--plan", *extra])
