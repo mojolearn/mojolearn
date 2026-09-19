@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.8 (unreleased 2026-09-19)
+## 0.8.8 (published 2026-09-19)
 
 A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
 of GPU-written CTR models no longer erases the recorded GPU model-byte reference;
