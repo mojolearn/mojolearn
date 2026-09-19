@@ -349,6 +349,10 @@ struct GbdtFitParams(Copyable, Movable):
     var min_child_hessian: Float64
     #: Numeric per-tree feature fraction, independent portable sampling stream.
     var feature_fraction: Float64
+    #: their `feature_border_type` spelling (`data_processing_options.cpp:
+    #: 15`, default GreedyLogSum); empty is the default. The float columns'
+    #: border search, `gbdt/grid_creator/binarization.mojo`.
+    var feature_border_type: String
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -385,6 +389,8 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         List[Float32](),
         # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
         String("SymmetricTree"), -1, 1, Float64(-1), Float64(-1), Float64(1),
+        # feature_border_type: their default, GreedyLogSum
+        String("GreedyLogSum"),
     )
 
 
@@ -582,6 +588,7 @@ def gbdt_fit(
         min_split_gain=params.min_split_gain,
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
+        feature_border_type=params.feature_border_type,
         x_borrow=x_borrow,
         group_sizes=group_sizes,
         pair_winners=pair_winners,

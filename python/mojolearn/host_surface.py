@@ -585,6 +585,7 @@ TRAINING_LANE_NAMES = {
     # and 18 batch cells IDENTICAL x4 against the 166-lane columns before
     # the gate ran, and the sabotage build DIVERGENT on every cell.
     "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
+    "gbdt-border-types": "gradient boosting with the six non-default feature border types",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -908,8 +909,15 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: table lanes' train, infer and batch parts), which leaves every other
 #: forest and GBDT prediction alone. byte_lm keeps building clean here.
 GATE_SABOTAGE_OWN_DEFINES = {
-    "forest": "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",
-    "tokenizer": "MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
+    # lane/catboost-parity (2026-09-19): the non-default border types' own
+    # arm (drops `select_borders`' middle border). MOJOLEARN_HOST_SABOTAGE
+    # already moves gbdt-border-types through the Newton walker; this one
+    # reaches the border branch itself, and moves no GreedyLogSum lane
+    # (gbdt-symmetric reads its clean hash under it, measured on the M4).
+    # A family may carry more than one own define, so every value is a tuple.
+    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE",),
+    "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
+    "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE",),
 }
 
 
@@ -918,8 +926,7 @@ def sabotage_build_defines(name):
     gate's sabotage host set."""
     family(name)
     defines = ["-D MOJOLEARN_HOST_SABOTAGE=1"]
-    own = GATE_SABOTAGE_OWN_DEFINES.get(name)
-    if own:
+    for own in GATE_SABOTAGE_OWN_DEFINES.get(name, ()):
         defines.append(f"-D {own}=1")
     return " ".join(defines)
 
@@ -1964,6 +1971,10 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            # lane/catboost-parity (2026-09-19): the non-default border
+            # types run the device fit's own host function
+            # (`select_borders`) on the CPU column
+            "gbdt-border-types",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2527,6 +2538,12 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    # lane/catboost-parity (2026-09-19). New lanes, so no committed record and
+    # no shipped table cell describes them; the Apple M4 Metal column and the
+    # CPU column agree at the branch (docs/lanes/LANE_STATUS_catboost-parity.md)
+    # and the NVIDIA and AMD columns are owed. They join
+    # `public_reference_lanes()` the day a record carries them.
+    "gbdt-border-types": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

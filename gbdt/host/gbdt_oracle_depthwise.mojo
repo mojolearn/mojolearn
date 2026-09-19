@@ -1056,6 +1056,7 @@ def gbdt_host_fit_non_symmetric(
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, base.border_count,
         base.border_build_max_samples, base.random_seed, base.nan_mode,
+        base.border_type,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)

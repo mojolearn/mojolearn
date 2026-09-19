@@ -470,7 +470,11 @@ class SabotageDefinesTests(unittest.TestCase):
             self.assertEqual(defines[:2], ['-D', 'MOJOLEARN_HOST_SABOTAGE=1'], family)
             if len(defines) > 2:
                 own[family] = defines[2:]
+        # gbdt carries the border types' own arm since lane/catboost-parity
+        # (2026-09-19): MOJOLEARN_BORDER_TYPES_SABOTAGE drops select_borders'
+        # middle border, which no GreedyLogSum lane reaches.
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
+                               'gbdt': ['-D', 'MOJOLEARN_BORDER_TYPES_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1']})
 
     def test_lanes_resting_on_their_own_define_are_covered(self):

@@ -264,6 +264,7 @@ def gbdt_rmse_host_fit(
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, params.border_count,
         params.border_build_max_samples, params.random_seed, params.nan_mode,
+        params.border_type,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)

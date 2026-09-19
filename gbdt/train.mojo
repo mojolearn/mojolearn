@@ -41,7 +41,11 @@ from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
 )
-from gbdt.grid_creator.binarization import best_split
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    best_split,
+    border_type_from_name,
+)
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     build_ctr_tables,
@@ -789,6 +793,10 @@ def train(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    # `feature_border_type` (`data_processing_options.cpp:15`, default
+    # GreedyLogSum), their seven `EBorderSelectionType` spellings; the
+    # float columns' border search (`gbdt/grid_creator/binarization.mojo`)
+    feature_border_type: String = String("GreedyLogSum"),
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -966,6 +974,7 @@ def train(
     var t_phase = host_times.start()
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    var border_type_code = border_type_from_name(feature_border_type)
     check_feature_fraction(feature_fraction)
     if feature_fraction < 1:
         for flag in cat_features:
@@ -1552,6 +1561,7 @@ def train(
         dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
         border_count, border_build_max_samples, random_seed, nan_mode,
         column_ptrs=column_ptrs,
+        border_type=border_type_code,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -2081,6 +2091,9 @@ def _quantize_training_columns(
     column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]] = List[
         MutPointer[Float32, MutUntrackedOrigin]
     ](),
+    # `feature_border_type` (`binarization.mojo` BORDER_TYPE_*), for the
+    # float columns only: the CTR columns keep their own grids
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
@@ -2355,15 +2368,16 @@ def _quantize_training_columns(
         var bc2 = border_count
         var nm2 = nan_mode_opt
         var cap2 = out_cap
+        var bt2 = border_type
 
         def _dp_task(
             k: Int
-        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
+        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2, imm bt2}:
             try:
                 var col2 = List[Float32]()
                 col2.resize(nr2, Float32(0.0))
                 memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
-                var q2 = calc_quantization(col2^, bc2, nm2)
+                var q2 = calc_quantization(col2^, bc2, nm2, bt2)
                 var nb = len(q2[0])
                 if nb > cap2:
                     ocp.unsafe_store(k, -2)

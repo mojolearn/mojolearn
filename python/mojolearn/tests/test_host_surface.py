@@ -415,14 +415,19 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1"]
     assert host_surface.sabotage_build_defines("forest").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1"]
+    # lane/catboost-parity: the non-default border types' own arm
+    assert host_surface.sabotage_build_defines("gbdt").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_BORDER_TYPES_SABOTAGE=1"]
     for name in host_surface.families():
         if name not in host_surface.GATE_SABOTAGE_OWN_DEFINES:
             assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
     sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"]}
-    for name, define in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
+    sources["gbdt"] = ["gbdt/grid_creator/binarization.mojo"]
+    for name, defines in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
         text = "".join(_read(rel) for rel in sources[name])
-        assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
+        for define in defines:
+            assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
     with pytest.raises(KeyError):
         host_surface.sabotage_build_defines("nonesuch")
 
