@@ -104,3 +104,19 @@ changes what that leg recorded or what its README says about it.
 `admit` was re-asked at THIS path after the move, because it reads the path:
 `ordered-and-border-types/` carries none of the excluded tokens and both
 answers are unchanged.
+
+## The three `par-*` lanes still without a two-device column, read out of the matrix
+
+`par-ivf`, `par-forecast-arima` and `par-forecast-holtwinters`, and they are
+short of one for two different reasons, which matters to whoever buys the next
+lease:
+
+* `par-forecast-arima` HAS a pair, in this directory, at `../`. Both halves
+  carry `complete: false` -- the leg that made them was cut off -- and `admit`
+  refuses an incomplete checkpoint by name whether or not `par_axis` is passed,
+  so `par_two_device` cannot read either one and the lane counts as having
+  none. One cell of real agreement is recorded there and its README says so;
+  it needs the run finished, not redone from nothing.
+* `par-forecast-holtwinters` and `par-ivf` have NO column on any box at all.
+  (A commit message of mine, `a2b6fcc0a`, said holtwinters was the
+  `complete: false` case. It is not; only `par-forecast-arima` is.)
