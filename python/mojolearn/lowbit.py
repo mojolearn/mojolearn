@@ -425,6 +425,17 @@ def pack(weights, fmt):
     out = {}
     for name, value in weights.items():
         if is_packed(value):
+            # Repacking in the format it already has needs independent
+            # storage (as the float32 arm below provides), but not a full
+            # float32 expansion followed by the same quantizer. Besides
+            # wasting bandwidth, that old route briefly needed 4 bytes per
+            # weight for a model whose packed representation needs 1 or 2.
+            if value.format == fmt:
+                if isinstance(value, BF16Weight):
+                    out[name] = BF16Weight(value.bits.copy())
+                else:
+                    out[name] = Int8Weight(value.codes.copy(), value.exponents.copy())
+                continue
             value = materialize_one(value, name)
         a, ndim = _as_given(value, name)
         if fmt != "float32" and ndim == 2:
