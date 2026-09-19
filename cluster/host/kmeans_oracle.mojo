@@ -1283,16 +1283,25 @@ def host_kmeans_fit(
         Float32(weight_scale), trace, String(""),
     )
 
-    # fit_predict's FRESH assignment against the returned centroids, with
-    # the estimator's own row norms: SQUARED, for both metrics
-    # (DEVIATION 2716, `cluster/estimator.mojo`; `host_norms_take_sqrt`).
-    var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
-    var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
-    var min_dist = List[Float32](length=n, fill=Float32(0.0))
-    host_assign(
-        x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
-        labels, min_dist,
-    )
+    # `host_fit_main` ends EVERY restart with this exact assignment against
+    # that restart's final centroids.  When there is only one effective
+    # restart, its returned centroids and the labels already in `labels` are
+    # therefore the requested fit_predict answer; repeating the O(n*k*d)
+    # pass cannot change a bit.  INIT_ARRAY forces one effective restart in
+    # host_fit_main even if the caller supplied a larger n_init.
+    #
+    # With multiple effective restarts, `labels` belongs to the LAST one
+    # while `centroids` belongs to the BEST one, so the fresh assignment is
+    # still required.  Keep that distinction explicit: it is the proof that
+    # makes this elision safe rather than an assumption about defaults.
+    if n_init > 1 and init != INIT_ARRAY:
+        var x_norm = host_row_norms(x, n, d, host_norms_take_sqrt(metric))
+        var c_norm = host_row_norms(centroids, k, d, host_norms_take_sqrt(metric))
+        var min_dist = List[Float32](length=n, fill=Float32(0.0))
+        host_assign(
+            x, n, x_norm, centroids, k, c_norm, d, host_metric_is_sqrt(metric),
+            labels, min_dist,
+        )
     return KMeansHostResult(result.inertia, result.n_iter, sum_scale, weight_scale)
 
 
