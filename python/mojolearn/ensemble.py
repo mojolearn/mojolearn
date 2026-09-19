@@ -18,6 +18,9 @@ them were not, see CHANGELOG):
     feature_border_type  GreedyLogSum          data_processing_options.cpp:15
     random_strength 1.0                        oblivious_tree_options.cpp:17
     bootstrap_type  Bayesian, temperature 1    bootstrap_options.h:16-18
+    boosting_type   Ordered below 50,000 rows  catboost_options.cpp:802-807,
+                    at >= 500 iterations,      defaults_helper.h:33-42
+                    else Plain
 
 The learning rate is fitted from the pool exactly when CatBoost fits it:
 `learning_rate`, `l2_leaf_reg`, `leaf_estimation_method` and
@@ -376,6 +379,15 @@ _LEGACY_ITERATIONS = 100
 _LEGACY_LEARNING_RATE = 0.03
 _LEGACY_RANDOM_STRENGTH = 0.0
 
+#: `EBoostingType` spellings (`boosting_options.cpp:16`).
+BOOSTING_TYPES = ("Plain", "Ordered")
+
+#: `UpdateBoostingTypeOption` (`defaults_helper.h:33-42`): an unset boosting
+#: type becomes Plain at or above this many learn rows, or below
+#: `_ORDERED_MIN_ITERATIONS` iterations.
+_ORDERED_MAX_ROWS = 50000
+_ORDERED_MIN_ITERATIONS = 500
+
 #: The ranking losses: their GPU bootstrap samples WHOLE QUERIES, which this
 #: implementation does not restate (the native trainer refuses any bootstrap
 #: for them), so CatBoost's default Bayesian bootstrap is refused by name
@@ -715,6 +727,55 @@ def _one_string(member):
     return values if isinstance(values, str) else None
 
 
+def _check_ordered_options(boosting_type, loss, grow_policy, score_function,
+                           leaf_estimation_method, use_pointwise_searcher,
+                           feature_fraction):
+    """What an EXPLICIT boosting_type='Ordered' refuses, by name, where
+    CatBoost refuses it (their words) or where this implementation does not
+    restate their arm (said so). An unset boosting type never reaches an
+    Ordered it cannot run: `_resolved_boosting_type` resolves those to the
+    same refusals at fit time, so the answer does not depend on how the
+    Ordered fit was asked for."""
+    if boosting_type != "Ordered":
+        return
+    if grow_policy != "SymmetricTree":
+        raise ValueError(
+            "mojolearn: Ordered boosting is not supported for nonsymmetric "
+            "trees. (catboost_options.cpp:757-759)"
+        )
+    if loss in MULTI_OUTPUT_LOSSES:
+        raise ValueError(
+            f"mojolearn: On GPU loss {loss} can't be used with ordered "
+            "boosting (catboost_options.cpp:949-967)"
+        )
+    if score_function not in ("Cosine", "NewtonCosine"):
+        raise ValueError(
+            f"mojolearn: Score function {score_function} can't be used with "
+            "ordered boosting (catboost_options.cpp:972-978)"
+        )
+    if leaf_estimation_method == "Exact":
+        raise ValueError(
+            "mojolearn: Exact leaf estimation method don't work with ordered "
+            "boosting on GPU (catboost_options.cpp:346-350)"
+        )
+    if loss in _QUERYWISE_LOSSES:
+        raise NotImplementedError(
+            f"mojolearn: boosting_type='Ordered' with loss={loss!r} is not "
+            "implemented: their folds follow the query grouping "
+            "(dynamic_boosting.h:189-223); use boosting_type='Plain'"
+        )
+    if use_pointwise_searcher:
+        raise ValueError(
+            "mojolearn: use_pointwise_searcher selects the doc-parallel Plain "
+            "searcher; an Ordered fit runs the feature-parallel fold searcher"
+        )
+    if feature_fraction < 1.0:
+        raise NotImplementedError(
+            "mojolearn: boosting_type='Ordered' with feature_fraction < 1 is "
+            "not implemented"
+        )
+
+
 class GradientBoosting(NumericModeMixin):
     """Gradient-boosted trees, with CatBoost's GPU learner as the reference: its three
     growth policies (`grow_policy`), its losses, its leaf estimators.
@@ -959,11 +1020,60 @@ class GradientBoosting(NumericModeMixin):
         composes with `sample_weight`. The length must match the label set
         or the fit raises. Refused with `loss='RMSE'`, which CatBoost also
         refuses.
+    boosting_type : {'Plain', 'Ordered'} or None, default None
+        CatBoost's `boosting_type` (`boosting_options.cpp:16`). None under
+        SymmetricTree is their GPU default, DATA-DEPENDENT: Ordered
+        (`catboost_options.cpp:802-807`) unless the pool has 50,000 rows or
+        more or there are fewer than 500 iterations
+        (`UpdateBoostingTypeOption`, `defaults_helper.h:33-42`), and Plain
+        for the multiclass losses and the L2 scores, which their GPU trains
+        Plain only (`:949-978`), and for `use_pointwise_searcher` and
+        `feature_fraction < 1` (Plain arms of this library). None under
+        Depthwise and Lossguide is Plain. The value a fit used is
+        `boosting_type_`.
+
+        ORDERED is their GPU `TDynamicBoosting` (`gbdt/methods/
+        ordered_boosting.mojo` carries the account): `permutation_count`
+        learn permutations of the shuffled pool, growing folds per
+        permutation with one prediction cursor per fold, every tree's
+        structure searched on one permutation's folds with leaves estimated
+        on each fold's PREFIX only, and the exported model estimated on the
+        last (estimation) permutation. It supports every pointwise loss,
+        Cosine and NewtonCosine scores, every bootstrap (applied to the
+        quality slices, their TestOnly default), random_strength, every
+        border type and NaN mode, sample and class weights, one-hot
+        categorical columns and boost_from_average. It runs in the
+        identical numeric mode; the CPU host path restates it at unit
+        weights on numeric columns (sample weights, class weights and
+        one-hot columns are GPU only and refused by name on a CPU-only
+        install) and agrees with Apple Metal bit for bit there (the
+        `gbdt-ordered*` identity lanes; the NVIDIA and AMD columns are
+        owed). `parallel_ensemble.fit_boosting` partitions its fold
+        histograms across GPUs as it does OrderedRMSE's (the multi-GPU run
+        is owed). REFUSED BY NAME where
+        CatBoost refuses: Depthwise and Lossguide, the multiclass losses, L2
+        and NewtonL2 scores, the Exact leaf estimator (unset, MAE, MAPE and
+        Quantile take Gradient under Ordered, as theirs). NOT IMPLEMENTED,
+        refused by name: categorical columns that build CTRs, the ranking
+        losses, an eval set / the overfitting detector. Their random streams
+        (the load shuffle, the permutation draw, the score noise) are this
+        library's, so an Ordered model matches CatBoost in behavior, not in
+        bits.
+    fold_len_multiplier : float, default 2.0
+        Ordered only: the fold growth factor (`boosting_options.cpp:11`),
+        greater than 1. Refused by a Plain fit.
+    fold_permutation_block : int or None, default None
+        Ordered only: `fold_permutation_block` (`boosting_options.cpp:12`).
+        None or 0 is their GPU 64 (`cuda/train_lib/train.cpp:115-118`), used
+        from 50,000 rows up and halved while `block * 128 > rows`
+        (`dynamic_boosting.h:115-128`); below 50,000 rows the block is 1.
     permutation_count : int, optional
-        CatBoost's `permutation_count` (`boosting_options.cpp:16`). None
-        (default) lets `UpdateGpuSpecificDefaults` resolve it. **ONLY THE
-        CATEGORICAL PATH READS IT** -- with no `cat_features` it is inert,
-        and it is refused there rather than accepted and ignored.
+        CatBoost's `permutation_count` (`boosting_options.cpp:14`, default
+        4). None (default) lets the fit resolve it: 4 for an Ordered fit (its
+        permutations) and for CTR categoricals, and 1 for a Plain fit without
+        CTRs (`UpdateGpuSpecificDefaults`). It is read by the categorical
+        path and by Ordered boosting only; a Plain fit with no
+        `cat_features` refuses it rather than accept and ignore it.
     ctr_estimation_permutation_id : int, optional
         Which permutation estimates the CTRs
         (`doc_parallel_boosting.h:101-103`). None (default) means
@@ -986,6 +1096,10 @@ class GradientBoosting(NumericModeMixin):
         The HELD-OUT loss after each iteration, `None` without an
         `eval_set`. This is the curve the detector reads and the one worth
         plotting: `loss_curve_` falls almost by construction.
+    learning_rate_ : float
+        The learning rate the fit used (CatBoost's auto-selection resolved).
+    boosting_type_ : str
+        'Plain' or 'Ordered', the boosting type the fit used.
     best_iteration_ : int
         The index of the lowest `test_loss_curve_` entry, or of the lowest
         learn loss with no eval set. It is the ERROR tracker's best
@@ -1041,6 +1155,9 @@ class GradientBoosting(NumericModeMixin):
         min_child_hessian=None,
         feature_fraction=1.0,
         feature_border_type="GreedyLogSum",
+        boosting_type=None,
+        fold_len_multiplier=2.0,
+        fold_permutation_block=None,
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -1294,11 +1411,49 @@ class GradientBoosting(NumericModeMixin):
                     "mojolearn: class_weights is not accepted with "
                     "loss='RMSE', which has no class structure to weight"
                 )
-        # THE TWO CTR PERMUTATION KNOBS ARE INERT WITHOUT CATEGORICALS.
-        # Nothing outside the CTR path reads either one, so accepting them
-        # on an all-numeric fit would be accepting an option that cannot do
-        # anything. `cat_features` is checked rather than `one_hot_features`
-        # because a one-hot column never grows CTRs either.
+        # ---- boosting_type (lane/catboost-parity), and what CatBoost
+        # refuses beside Ordered, in their words where they have them ----
+        if boosting_type is not None and boosting_type not in BOOSTING_TYPES:
+            raise ValueError(
+                f"mojolearn: boosting_type must be one of {BOOSTING_TYPES} or "
+                f"None, got {boosting_type!r}"
+            )
+        _check_ordered_options(
+            boosting_type, loss, grow_policy, score_function,
+            leaf_estimation_method, use_pointwise_searcher, feature_fraction,
+        )
+        if (is_bool(fold_len_multiplier)
+                or not isinstance(fold_len_multiplier, numbers.Real)
+                or not math.isfinite(float(fold_len_multiplier))
+                or not float(fold_len_multiplier) > 1.0):
+            # `boosting_options.cpp:64`
+            raise ValueError(
+                "mojolearn: fold len multiplier should be greater than 1, got "
+                f"{fold_len_multiplier!r}"
+            )
+        if fold_permutation_block is not None and (
+                is_bool(fold_permutation_block)
+                or not isinstance(fold_permutation_block, numbers.Integral)
+                or not 0 <= int(fold_permutation_block) <= 256):
+            raise ValueError(
+                "mojolearn: fold_permutation_block must be an integer in "
+                f"0..256 or None, got {fold_permutation_block!r}"
+            )
+        if boosting_type == "Plain" and (
+                float(fold_len_multiplier) != 2.0
+                or fold_permutation_block is not None):
+            raise ValueError(
+                "mojolearn: fold_len_multiplier and fold_permutation_block are "
+                "read only by Ordered boosting (dynamic_boosting.h:115-223); "
+                "with boosting_type='Plain' they would be accepted and ignored"
+            )
+        # THE CTR PERMUTATION KNOBS ARE INERT WITHOUT CATEGORICALS -- except
+        # that `permutation_count` is ALSO the number of Ordered boosting's
+        # permutations (`dynamic_boosting.h:137-141`), so it stands wherever
+        # the fit may be Ordered (an unset boosting type resolves in `fit`,
+        # and a Plain resolution with no cat_features refuses it there).
+        # `cat_features` is checked rather than `one_hot_features` because a
+        # one-hot column never grows CTRs either.
         for _name, _val in (
             ("permutation_count", permutation_count),
             ("ctr_estimation_permutation_id", ctr_estimation_permutation_id),
@@ -1309,12 +1464,16 @@ class GradientBoosting(NumericModeMixin):
                 raise ValueError(
                     f"mojolearn: {_name} must be >= 0 when given, got {_val}"
                 )
-            if not cat_features:
+            may_be_ordered = (_name == "permutation_count"
+                              and boosting_type != "Plain"
+                              and grow_policy == "SymmetricTree")
+            if not cat_features and not may_be_ordered:
                 raise ValueError(
                     f"mojolearn: {_name} is read only by the categorical "
-                    "path (doc_parallel_dataset_builder.cpp:190-262); with "
-                    "no cat_features it would be accepted and ignored. Pass "
-                    "cat_features= or leave it unset."
+                    "path (doc_parallel_dataset_builder.cpp:190-262)"
+                    + (" and by Ordered boosting" if _name == "permutation_count" else "")
+                    + "; with no cat_features it would be accepted and "
+                    "ignored. Pass cat_features= or leave it unset."
                 )
 
         self.loss = loss
@@ -1366,6 +1525,10 @@ class GradientBoosting(NumericModeMixin):
         self.min_child_hessian = min_child_hessian
         self.feature_fraction = feature_fraction
         self.feature_border_type = feature_border_type
+        self.boosting_type = boosting_type
+        self.fold_len_multiplier = float(fold_len_multiplier)
+        self.fold_permutation_block = (None if fold_permutation_block is None
+                                       else int(fold_permutation_block))
 
         self.model_ = None
         self.loss_curve_ = None
@@ -1375,6 +1538,8 @@ class GradientBoosting(NumericModeMixin):
         #: the learning rate the last fit used (CatBoost's auto-selection
         #: resolved against that fit's pool), None before a fit
         self.learning_rate_ = None
+        #: the boosting type the last fit used ('Plain' or 'Ordered')
+        self.boosting_type_ = None
         self.n_features_in_ = None
         #: 1 for every single-output loss; `n_classes - 1` for MultiClass,
         #: because the last class's approx is pinned at zero and is not
@@ -1423,6 +1588,33 @@ class GradientBoosting(NumericModeMixin):
         rate = catboost_auto_learning_rate(
             self.loss, n_rows, int(self.n_estimators), use_best, bfa)
         return _CATBOOST_LEARNING_RATE if rate is None else rate
+
+    def _resolved_boosting_type(self, n_rows):
+        """The boosting type a fit on `n_rows` rows uses (`boosting_type_`).
+
+        Explicit is used as given. Unset under SymmetricTree is CatBoost's
+        GPU chain: `SetNotSpecifiedOptionsToDefaults` defaults it to Ordered
+        (`catboost_options.cpp:802-807`) except for the multiclass losses,
+        which their GPU trains Plain only (`:949-967`), and except for score
+        functions with no ordered kernel (`:972-978`); then
+        `UpdateBoostingTypeOption` (`defaults_helper.h:33-42`) makes it Plain
+        at 50,000 learn rows or more, or below 500 iterations. Two options of
+        this library that CatBoost's GPU does not have resolve it to Plain,
+        because they name Plain arms: `use_pointwise_searcher` (the
+        doc-parallel searcher) and `feature_fraction < 1`. Unset under
+        Depthwise and Lossguide is Plain, as theirs (`:757-759`)."""
+        if self.boosting_type is not None:
+            return self.boosting_type
+        if (self.grow_policy != "SymmetricTree"
+                or self.loss in MULTI_OUTPUT_LOSSES
+                or self.score_function not in ("Cosine", "NewtonCosine")
+                or self.use_pointwise_searcher
+                or getattr(self, "feature_fraction", 1.0) < 1.0):
+            return "Plain"
+        if (n_rows >= _ORDERED_MAX_ROWS
+                or int(self.n_estimators) < _ORDERED_MIN_ITERATIONS):
+            return "Plain"
+        return "Ordered"
 
     def _resolved_leaf_iterations(self, n_features):
         """`UpdateLeavesEstimationIterations` (`options_helper.cpp:290-307`)
@@ -1839,8 +2031,53 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: feature_border_type must be one of "
                 f"{BORDER_TYPES}, got {border_type!r}"
             )
-        if border_type != "GreedyLogSum":
+        # THE BOOSTING TYPE, resolved against this pool (lane/catboost-
+        # parity). An Ordered fit sends the three-string Ordered tail after
+        # the border type: `boosting_type`, `fold_len_multiplier` as the
+        # decimal of its float64 bits, `fold_permutation_block` (0 unset).
+        boosting = self._resolved_boosting_type(n_rows)
+        _check_ordered_options(
+            boosting, self.loss, self.grow_policy, self.score_function,
+            self.leaf_estimation_method, self.use_pointwise_searcher,
+            getattr(self, "feature_fraction", 1.0),
+        )
+        fold_len = float(getattr(self, "fold_len_multiplier", 2.0))
+        fold_block = getattr(self, "fold_permutation_block", None)
+        if boosting == "Plain":
+            if fold_len != 2.0 or fold_block is not None:
+                raise ValueError(
+                    "mojolearn: fold_len_multiplier and fold_permutation_block "
+                    "are read only by Ordered boosting, and this fit resolved "
+                    "to Plain; they would be accepted and ignored"
+                )
+            if self.permutation_count is not None and not self.cat_features:
+                raise ValueError(
+                    "mojolearn: permutation_count is read only by the "
+                    "categorical path and by Ordered boosting, and this fit "
+                    "resolved to Plain with no cat_features; it would be "
+                    "accepted and ignored"
+                )
+        if n_eval_rows and boosting == "Ordered":
+            raise NotImplementedError(
+                "mojolearn: an eval_set with Ordered boosting is not "
+                "implemented (their test cursor, dynamic_boosting.h:423-430, "
+                "is not restated); pass boosting_type='Plain' to use one"
+                + ("" if self.boosting_type == "Ordered" else
+                   " -- this fit resolved to Ordered because CatBoost's GPU "
+                   "default is Ordered below 50,000 rows at 500 iterations "
+                   "or more (catboost_options.cpp:802-807, "
+                   "defaults_helper.h:33-42)")
+            )
+        if border_type != "GreedyLogSum" or boosting == "Ordered":
             strs.append(border_type)
+        if boosting == "Ordered":
+            strs += [
+                "Ordered",
+                str(struct.unpack("<Q", struct.pack("<d", fold_len))[0]),
+                str(0 if fold_block is None else int(fold_block)),
+            ]
+        #: the boosting type this fit used
+        self.boosting_type_ = boosting
 
         # THE EVAL ADDRESSES ARE UNREAD WHEN params[20] IS 0, and the
         # learn buffer stands in so nothing has to allocate a throwaway --
@@ -2508,7 +2745,8 @@ class OrderedRMSE(GradientBoosting):
     nonnegative sample weights, zero initial bias, Newton-1 leaves, and
     depths 1..8. Categorical CTRs, other objectives, bootstrap and early
     stopping are absent from this narrow API and rejected as unknown kwargs.
-    This is not the general CatBoost ``boosting_type="Ordered"`` interface.
+    This is not the general CatBoost ``boosting_type="Ordered"`` interface;
+    that is ``GradientBoosting(boosting_type="Ordered")`` (lane/catboost-parity).
 
     Pass ``numeric_mode="identical"`` to select pinned arithmetic. Native
     AMD/NVIDIA fixtures are certified; the Python binding needs independent

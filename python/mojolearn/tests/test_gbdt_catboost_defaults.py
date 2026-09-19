@@ -141,3 +141,102 @@ def test_adapters_inherit_the_learner_defaults():
         assert learner.bootstrap_type == 'Bayesian'
         assert learner.learning_rate is None and learner.l2_leaf_reg is None
         assert learner._params(1000, 5, 0)[25] == 1.0
+
+
+# ---------------------------------------------------------------------------
+# boosting_type (Ordered boosting) -- host-only: the resolution rule, the
+# refusals and the parameter tail, through a fake binding
+# ---------------------------------------------------------------------------
+
+import struct as _struct
+import numpy as np
+
+
+class _FakeGbdt:
+    """Captures what `fit` hands `gbdt_fit`; answers a one-tree text."""
+
+    def __init__(self):
+        self.calls = []
+
+    def gbdt_fit(self, *args):
+        self.calls.append(args)
+        return ["mojolearn-model 2\n", 0, False, [0.5], []]
+
+    def gbdt_model_dim(self, text):
+        return 1
+
+
+def _fit_fake(model, n_rows=64, **fit_kw):
+    fake = _FakeGbdt()
+    model._bind = lambda name: fake
+    X = np.arange(n_rows * 3, dtype=np.float32).reshape(n_rows, 3) / 7
+    y = (np.arange(n_rows) % 2).astype(np.float32)
+    model.fit(X, y, **fit_kw)
+    return fake.calls[-1]
+
+
+@pytest.mark.parametrize('n_estimators,rows,want', [
+    (1000, 49999, 'Ordered'), (1000, 50000, 'Plain'), (500, 100, 'Ordered'), (499, 100, 'Plain'),
+])
+def test_boosting_type_default_is_catboost_gpu(n_estimators, rows, want):
+    # catboost_options.cpp:802-807 then defaults_helper.h:33-42
+    assert GradientBoosting(loss='Logloss', n_estimators=n_estimators)._resolved_boosting_type(rows) == want
+
+
+@pytest.mark.parametrize('kw', [
+    dict(loss='MultiClass'), dict(loss='MultiClassOneVsAll'), dict(score_function='L2'),
+    dict(score_function='NewtonL2'), dict(grow_policy='Depthwise', loss='Logloss'),
+    dict(grow_policy='Lossguide', loss='Logloss'), dict(use_pointwise_searcher=True),
+    dict(feature_fraction=0.5),
+])
+def test_boosting_type_unset_resolves_plain_where_theirs_does(kw):
+    assert GradientBoosting(n_estimators=1000, **kw)._resolved_boosting_type(100) == 'Plain'
+
+
+@pytest.mark.parametrize('kw,exc,match', [
+    (dict(grow_policy='Depthwise', loss='Logloss'), ValueError, 'nonsymmetric'),
+    (dict(loss='MultiClass'), ValueError, "can't be used with ordered"),
+    (dict(score_function='L2'), ValueError, "can't be used with ordered"),
+    (dict(leaf_estimation_method='Exact', loss='MAE'), ValueError, 'Exact leaf estimation'),
+    (dict(loss='QueryRMSE', bootstrap_type='No'), NotImplementedError, 'query grouping'),
+    (dict(use_pointwise_searcher=True), ValueError, 'doc-parallel'),
+    (dict(feature_fraction=0.5), NotImplementedError, 'feature_fraction'),
+])
+def test_explicit_ordered_refusals_by_name(kw, exc, match):
+    with pytest.raises(exc, match=match):
+        GradientBoosting(boosting_type='Ordered', **kw)
+
+
+def test_fold_options_are_ordered_only():
+    with pytest.raises(ValueError, match='greater than 1'):
+        GradientBoosting(fold_len_multiplier=1.0)
+    with pytest.raises(ValueError, match='read only by Ordered'):
+        GradientBoosting(boosting_type='Plain', fold_len_multiplier=3.0)
+    with pytest.raises(ValueError, match='read only by Ordered'):
+        # unset boosting type resolving Plain at fit time (100 iterations)
+        _fit_fake(GradientBoosting(n_estimators=100, fold_permutation_block=16))
+    # permutation_count is Ordered's too, and refused where the fit is Plain
+    GradientBoosting(permutation_count=2)
+    with pytest.raises(ValueError, match='permutation_count'):
+        GradientBoosting(boosting_type='Plain', permutation_count=2)
+    with pytest.raises(ValueError, match='permutation_count'):
+        _fit_fake(GradientBoosting(n_estimators=100, permutation_count=2))
+
+
+def test_ordered_fit_sends_the_ordered_tail():
+    m = GradientBoosting(loss='Logloss', n_estimators=20, boosting_type='Ordered',
+                         fold_len_multiplier=1.5, fold_permutation_block=16)
+    args = _fit_fake(m)
+    strs = args[7]
+    assert strs[4:] == ['GreedyLogSum', 'Ordered',
+                        str(_struct.unpack('<Q', _struct.pack('<d', 1.5))[0]), '16']
+    assert m.boosting_type_ == 'Ordered'
+    # a default Plain fit keeps the four-string call
+    p = GradientBoosting(n_estimators=100)
+    assert len(_fit_fake(p)[7]) == 4 and p.boosting_type_ == 'Plain'
+
+
+def test_ordered_eval_set_is_refused_by_name_and_says_why_when_defaulted():
+    with pytest.raises(NotImplementedError, match='resolved to Ordered because'):
+        _fit_fake(GradientBoosting(loss='Logloss', n_estimators=600),
+                  eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))

@@ -118,6 +118,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_PAIR_LOGIT,
     GBDT_OBJ_QUANTILE,
     GBDT_OBJ_QUERY_RMSE,
+    GBDT_OBJ_RMSE,
     GBDT_OBJ_TWEEDIE,
     GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
@@ -147,7 +148,15 @@ from gbdt.grid_creator.binarization import (
     border_type_from_name,
 )
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
-from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
+from gbdt.host.gbdt_oracle_ordered import (
+    GbdtOrderedHostOptions,
+    gbdt_ordered_host_fit,
+    gbdt_ordered_rmse_host_fit,
+)
+from gbdt.data.ordered_plan import (
+    ORDERED_MIN_FOLD_SIZE,
+    ordered_permutation_block_size,
+)
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
 from gbdt.host.gbdt_oracle_onehot import (
     gbdt_host_model_text_one_hot,
@@ -548,6 +557,230 @@ def _gbdt_fit_pointwise_arm(
     return out
 
 
+def _refuse_ordered_host(what: String) raises:
+    raise Error(
+        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
+        + " with boosting_type='Ordered'; the gbdt host binding trains Ordered"
+        " boosting at unit weights on numeric columns with RMSE, Logloss,"
+        " CrossEntropy and the pointwise losses (see"
+        " gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit)"
+    )
+
+
+def _gbdt_fit_ordered_arm(
+    x_address: Int,
+    y_address: Int,
+    flags_address: Int,
+    params: PythonObject,
+    strs: PythonObject,
+    border_type: Int,
+) raises -> PythonObject:
+    """`gbdt_fit` with `boosting_type='Ordered'`: `train`'s Ordered refusals
+    in its words, the host binding's own (what the oracle does not restate),
+    the loss resolved as `train` resolves it under Ordered (their GPU
+    `useExact` needs Plain, `catboost_options.cpp:290-293`, so MAE, MAPE and
+    Quantile keep Gradient), then `gbdt_ordered_host_fit`."""
+    var n_class_weights = Int(py=params[34])
+    var fixed_and_weights = 35 + n_class_weights
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_flags = Int(py=params[3])
+    var border_count = Int(py=params[4])
+    var n_estimators = Int(py=params[5])
+    var max_depth = Int(py=params[6])
+    var learning_rate = Float32(Float64(py=params[7]))
+    var l2_leaf_reg = Float32(Float64(py=params[8]))
+    var random_seed = UInt64(Int(py=params[9]))
+    var score_function = Int(py=params[10])
+    var loss_border = Float32(Float64(py=params[15]))
+    var leaf_iterations = Int(py=params[16])
+    var leaf_method = Int(py=params[17])
+    var bagging_temperature = Float32(Float64(py=params[18]))
+    var subsample = Float32(Float64(py=params[19]))
+    var n_eval_rows = Int(py=params[20])
+    var od_pvalue = Float64(py=params[21])
+    var od_wait = Int(py=params[22])
+    var random_strength = Float32(Float64(py=params[25]))
+    var use_pointwise = Int(py=params[26]) != 0
+    var border_build_max_samples = Int(py=params[27])
+    var permutation_count = Int(py=params[28])
+    var boost_from_average = Int(py=params[30])
+    var grow_code = Int(py=params[31])
+    var feature_fraction = Float64(1)
+    if len(params) >= fixed_and_weights + 3:
+        feature_fraction = Float64(py=params[fixed_and_weights + 2])
+    var loss = String(py=strs[0])
+    var bootstrap_type = String(py=strs[1])
+    var od_type = String(py=strs[2])
+    var nan_mode = nan_mode_from_name(String(py=strs[3]))
+    var fold_len_multiplier = bitcast[DType.float64](UInt64(Int(String(py=strs[6]))))
+    var fold_permutation_block = Int(String(py=strs[7]))
+
+    # ---- `train`'s Ordered refusals (`gbdt/train.mojo`), their words ----
+    if grow_code != 0:
+        raise Error(
+            "Ordered boosting is not supported for nonsymmetric trees."
+            " (catboost_options.cpp:757-759)"
+        )
+    if loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
+        raise Error(
+            "On GPU loss " + loss + " can't be used with ordered boosting"
+            " (catboost_options.cpp:949-967: their GPU trains this loss"
+            " doc-parallel and Plain only)"
+        )
+    if score_function != GBDT_HOST_SCORE_COSINE and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
+        raise Error(
+            "Score function can't be used with ordered boosting"
+            " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
+            " the two with an ordered kernel"
+        )
+    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank"):
+        raise Error(
+            "boosting_type='Ordered' with loss='" + loss + "' is not"
+            " implemented here: the reference's folds follow the query"
+            " grouping (dynamic_boosting.h:189-223), which this Ordered arm"
+            " does not restate"
+        )
+    if n_eval_rows != 0:
+        raise Error(
+            "boosting_type='Ordered' with eval_set is not implemented here"
+            " (the reference's test cursor, dynamic_boosting.h:423-430, is"
+            " not restated); fit without an eval set"
+        )
+    if use_pointwise:
+        raise Error(
+            "use_pointwise_searcher selects the doc-parallel Plain searcher;"
+            " an Ordered fit always runs the feature-parallel fold searcher"
+        )
+    if feature_fraction != 1.0:
+        raise Error(
+            "boosting_type='Ordered' with feature_fraction < 1 is not"
+            " implemented here"
+        )
+    if leaf_method == GBDT_LEAF_EXACT:
+        raise Error(
+            "Exact leaf estimation method don't work with ordered boosting"
+            " on GPU (catboost_options.cpp:346-350)"
+        )
+    # ---- what this oracle does not restate, by name ----
+    if n_weights != 0:
+        _refuse_ordered_host("sample_weight")
+    if n_class_weights != 0:
+        _refuse_ordered_host("class_weights")
+    if n_flags != 0:
+        _refuse_ordered_host("cat_features or one_hot_features")
+    if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
+        _refuse_ordered_host("the overfitting detector")
+    if boost_from_average == 1 and loss != String("RMSE"):
+        _refuse_ordered_host("boost_from_average=True outside RMSE")
+    if border_count < 1 or border_count > 255:
+        _refuse_ordered_host("border_count=" + String(border_count) + " (1 to 255)")
+
+    # ---- the loss, as `train` resolves it under Ordered ----
+    var hloss: GbdtHostLoss
+    var border = GBDT_HOST_DEFAULT_BORDER
+    if loss_border >= Float32(0.0):
+        border = loss_border
+    if loss == String("RMSE") or loss == String("Logloss"):
+        var objective = GBDT_OBJ_RMSE if loss == String("RMSE") else GBDT_OBJ_LOGLOSS
+        var method = GBDT_LEAF_NEWTON if leaf_method == -1 else leaf_method
+        var iterations: Int
+        if method == GBDT_LEAF_NEWTON:
+            iterations = 1 if objective == GBDT_OBJ_RMSE else GBDT_LOGLOSS_NEWTON_ITERATIONS
+        elif method == GBDT_LEAF_GRADIENT:
+            iterations = 1 if objective == GBDT_OBJ_RMSE else 40
+        else:
+            _refuse_ordered_host("leaf_estimation_method code " + String(method))
+            iterations = 1
+        if leaf_iterations >= 0:
+            iterations = leaf_iterations
+        # `kernel_alpha` carries Logloss's border, as `_loss_row` reads it
+        hloss = GbdtHostLoss(
+            objective, border if objective == GBDT_OBJ_LOGLOSS else Float32(0.0),
+            Float32(0.5), method, iterations, -1, Float32(0.0), border,
+        )
+    else:
+        var pw_objective = _pointwise_objective(loss)
+        if pw_objective < 0:
+            _refuse_ordered_host("loss='" + loss + "'")
+        hloss = _resolve_pointwise_loss(
+            pw_objective, loss,
+            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
+            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            leaf_method, leaf_iterations, String(""), Float32(-1.0),
+        )
+        if hloss.method == GBDT_LEAF_EXACT:
+            # the loss's own default under Ordered: Gradient, one iteration
+            # (`GetEstimationMethodDefaults`, `catboost_options.cpp:113-124`)
+            hloss.method = GBDT_LEAF_GRADIENT
+            hloss.iterations = leaf_iterations if leaf_iterations >= 0 else 1
+        if pw_objective == GBDT_OBJ_CROSSENTROPY:
+            hloss.kernel_alpha = border
+
+    # ---- the bootstrap (`train`'s resolution, `gbdt/train.mojo`) ----
+    var boot_kind = -1
+    var boot_param = Float32(0.0)
+    if bootstrap_type == String("Bayesian"):
+        if subsample >= Float32(0.0):
+            raise Error(
+                "Error: default bootstrap type (bayesian) doesn't support"
+                " 'subsample' option"
+            )
+        boot_kind = 0
+        boot_param = bagging_temperature
+    elif bootstrap_type == String("Bernoulli"):
+        boot_kind = 1
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Poisson"):
+        boot_kind = 2
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type != String("") and bootstrap_type != String("No"):
+        raise Error(
+            "unknown bootstrap_type '" + bootstrap_type
+            + "': Bayesian, Bernoulli, Poisson, No"
+        )
+
+    var perm_count = permutation_count if permutation_count != -1 else 4
+    if perm_count < 1:
+        raise Error("Permutation count should be positive (boosting_options.cpp:67)")
+    var bfa = boost_from_average == 1 or (
+        boost_from_average == -1 and loss == String("RMSE")
+    )
+    var p = GbdtHostParams(
+        border_count, border_build_max_samples, n_estimators, max_depth,
+        learning_rate, l2_leaf_reg, random_seed, nan_mode, border,
+        hloss.iterations, border_type,
+    )
+    var opts = GbdtOrderedHostOptions(
+        score_function == GBDT_HOST_SCORE_NEWTON_COSINE, random_strength,
+        boot_kind, boot_param, perm_count, fold_len_multiplier,
+        ordered_permutation_block_size(n_rows, fold_permutation_block),
+        ORDERED_MIN_FOLD_SIZE, bfa,
+    )
+    var text = String("")
+    var losses = List[Float64]()
+    var best = 0
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        var fit = gbdt_ordered_host_fit(x, y, n_rows, n_features, p, hloss, opts)
+        text = fit.text
+        losses = fit.losses.copy()
+        best = fit.best_iteration
+    _ = flags_address
+    var learn = Python.list()
+    for i in range(len(losses)):
+        learn.append(PythonObject(losses[i]))
+    var out = Python.list()
+    out.append(PythonObject(text))
+    out.append(PythonObject(best))
+    out.append(PythonObject(False))
+    out.append(learn)
+    out.append(Python.list())
+    return out
+
+
 def gbdt_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -582,18 +815,31 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4 and len(strs) != 5:
+    if len(strs) != 4 and len(strs) != 5 and len(strs) != 8:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode] and optionally feature_border_type, got "
-            + String(len(strs))
+            " nan_mode], optionally feature_border_type, optionally then"
+            " boosting_type, the fold_len_multiplier's float64 bits and"
+            " fold_permutation_block, got " + String(len(strs))
         )
     # `feature_border_type`, the optional fifth string (lane/catboost-parity);
     # the seven types are the device fit's own host functions
     # (`calc_quantization` / `select_borders`), restated nowhere
     var border_type = BORDER_TYPE_GREEDY_LOG_SUM
-    if len(strs) == 5:
+    if len(strs) >= 5:
         border_type = border_type_from_name(String(py=strs[4]))
+    # the Ordered tail (lane/catboost-parity): its own arm, before any of
+    # the Plain arms' refusals
+    if len(strs) == 8 and String(py=strs[5]) == String("Ordered"):
+        return _gbdt_fit_ordered_arm(
+            Int(py=x_addr), Int(py=y_addr), Int(py=cat_flags_addr), params,
+            strs, border_type,
+        )
+    if len(strs) == 8 and String(py=strs[5]) != String("Plain"):
+        raise Error(
+            "gbdt_fit: boosting_type must be 'Plain' or 'Ordered', got '"
+            + String(py=strs[5]) + "'"
+        )
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
     _ = f32_ptr(Int(py=weights_addr))

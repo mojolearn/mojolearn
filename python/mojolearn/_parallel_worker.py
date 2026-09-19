@@ -152,10 +152,16 @@ def execute(request):
         if (not callable(getattr(binding, 'gbdt_parallel_available', None))
                 or binding.gbdt_parallel_available() != 1):
             raise ImportError('rebuild GBDT binding for feature-parallel training')
-        if operation == 'ordered_rmse_fit' or getattr(model, 'use_pointwise_searcher', False):
+        # the fold searcher of Ordered boosting is the pointwise searcher's
+        # fold arm (lane/catboost-parity), so it needs the same capability
+        X, y, kwargs = args
+        ordered = False
+        resolve = getattr(model, '_resolved_boosting_type', None)
+        if callable(resolve):
+            ordered = resolve(len(X)) == 'Ordered'
+        if operation == 'ordered_rmse_fit' or getattr(model, 'use_pointwise_searcher', False) or ordered:
             if not callable(getattr(binding, 'pointwise_parallel_available', None)) or binding.pointwise_parallel_available() != 1:
                 raise ImportError('rebuild GBDT binding for parallel pointwise histograms')
-        X, y, kwargs = args
         model.fit(X, y, **kwargs)
         return model
     if operation == 'ivf_store':

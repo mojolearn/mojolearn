@@ -35,6 +35,22 @@ and the covered lanes reproduce their shipped reference hashes on the CPU
 route under those pins. A CPU-only install still refuses the new defaults'
 Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
 
+- `boosting_type` ('Plain' or 'Ordered'): CatBoost's GPU Ordered boosting
+  (`TDynamicBoosting`), with `fold_len_multiplier`, `fold_permutation_block`
+  and `permutation_count` as its knobs. **Unset, it is CatBoost's GPU default:
+  Ordered under SymmetricTree below 50,000 rows at 500 iterations or more**
+  (`catboost_options.cpp:802-807`, `defaults_helper.h:33-42`), Plain otherwise,
+  for the multiclass losses and for the L2 scores. Refused by name where
+  CatBoost refuses (non-symmetric trees, multiclass, L2 scores, Exact leaves)
+  and where it is not implemented (CTR categoricals, the ranking losses, an
+  eval set). A default fit with an eval set on a small pool therefore raises
+  by name; pass `boosting_type='Plain'`.
+- `feature_border_type`: all seven of CatBoost's border selections
+  (GreedyLogSum stays the default), matching CatBoost 1.2.10's own borders bit
+  for bit on 294 oracle cases.
+- The score-noise add in both pointwise scorers is now a pinned fma under
+  IDENTICAL (IDENTITY_PATHS row 96); no recorded lane reached it.
+
 ## 0.8.8 (published 2026-09-19)
 
 A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
