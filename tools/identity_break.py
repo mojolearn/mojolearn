@@ -9985,8 +9985,21 @@ def _run_reference(args):
                 _lk = pathlib.Path(os.environ.get("MOJOLEARN_METAL_LOCK",
                                                  "/tmp/mojolearn-metal-slot"))
                 _pid = (_lk / "pid").read_text().strip() if (_lk / "pid").exists() else ""
-                record["gpu_slot"] = (f"held pid={_pid}" if _pid
-                                      else "held" if _lk.exists() else "FREE (run not serialised)")
+                # THREE STATES, AND THE MIDDLE ONE IS THE HAZARD. `held by
+                # another` means a second GPU job is live while this one
+                # runs -- concurrent Metal on one M4 returns NaN, constant
+                # and zero output that still hashes stably. `mac_slot.py`
+                # marks its own children with MOJOLEARN_SLOT_TOKEN, so a run
+                # under the slot is distinguishable from one merely racing it.
+                _mine = bool(os.environ.get("MOJOLEARN_SLOT_TOKEN"))
+                if not _lk.exists():
+                    record["gpu_slot"] = "FREE (run not serialised)"
+                elif _mine:
+                    record["gpu_slot"] = f"held by this run (pid={_pid})" if _pid else "held by this run"
+                else:
+                    record["gpu_slot"] = (
+                        f"HELD BY ANOTHER RUN (pid={_pid}) -- concurrent GPU work, "
+                        "these cells are not evidence")
         except Exception as exc:
             record["gpu_slot_error"] = f"{type(exc).__name__}: {exc}"[:200]
         host_infer = _host_infer_lanes()

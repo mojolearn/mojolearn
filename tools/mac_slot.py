@@ -135,6 +135,20 @@ class Scheduler:
                 self.ticket = None
             return True
 
+    def mark_env(self, env):
+        """Tell the child it is running UNDER the slot (2026-09-19).
+
+        Without this a GPU run cannot tell `the lock is held by me` from `the
+        lock is held by SOMEONE ELSE and I am running anyway` -- and the
+        second is the hazard: concurrent Metal on one M4 returns NaN,
+        constant and zero output that still hashes stably. The token is the
+        slot's own, so a stale variable inherited from an unrelated shell
+        cannot impersonate a held slot.
+        """
+        env["MOJOLEARN_SLOT_TOKEN"] = self.token
+        return env
+
+
     def child_started(self, pgid):
         with self.guard():
             for path in self.held:
@@ -241,6 +255,7 @@ def main(argv=None):
             code = 124
             return code
         limit = min(args.timeout, remaining) if args.timeout and remaining is not None else (remaining or args.timeout or None)
+        scheduler.mark_env(env)   # the child can now tell it holds the slot
         child = subprocess.Popen(["nice", "-n", "19", *args.command], env=env, start_new_session=True)
         scheduler.child_started(child.pid)
         try:
