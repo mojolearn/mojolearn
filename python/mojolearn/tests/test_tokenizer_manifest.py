@@ -50,8 +50,12 @@ def test_manifest_declares_the_family():
     # them on the CPU column while the binding was built, loaded and producing
     # hashes. A lane that cannot be RUN and a lane that PASSES read the same
     # in a total, which is the defect this tuple now has to keep out.
+    # `hf-tokenizer` joined on 2026-09-19 (lane/models-namespace-lanes):
+    # `mojolearn.models.Tokenizer` encodes through this binding's compiled
+    # door for the `gpt2` pattern, and through Python for `llama3` and
+    # `qwen2`, so this family serves its cell on a CPU column.
     assert f["training_lanes"] == ("tokenizer", "bpe-trainer", "bpe-vocabulary",
-                                   "tokenized-corpus") and f["inference_lanes"] == ()
+                                   "tokenized-corpus", "hf-tokenizer") and f["inference_lanes"] == ()
     # The trainer's own arm is in the gate's set too: the encoder arm above
     # cannot reach `bpe-trainer`, which never encodes (measured: that lane's
     # cell was byte-identical under MOJOLEARN_TOKENIZER_HOST_SABOTAGE alone).

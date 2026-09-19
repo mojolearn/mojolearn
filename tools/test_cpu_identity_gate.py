@@ -463,7 +463,7 @@ class SabotageDefinesTests(unittest.TestCase):
     def setUp(self):
         self.manifest = gate.load_manifest()
 
-    def test_every_family_carries_the_host_define_and_two_carry_their_own(self):
+    def test_every_family_carries_the_host_define_and_three_carry_their_own(self):
         own = {}
         for family in self.manifest['families']():
             defines = self.manifest['sabotage_build_defines'](family).split()
@@ -477,7 +477,16 @@ class SabotageDefinesTests(unittest.TestCase):
         # trainer's own arm moves it (-> f5172d25e6499662), so the gate's set
         # builds with both. A negative control that leaves a covered lane
         # where it found it is not a negative control for that lane.
+        # The linalg family joined them on lane/laneless-public-classes
+        # (2026-09-19), for the same reason one step further out: the family
+        # define moves `gemm_oracle`'s leaf and `gemm_int8_oracle`'s
+        # dequantized cell and reaches NOTHING in the four low-bit CONVERSION
+        # seams (contract L-1..L-6), so the `lowbit-conversions` cell read the
+        # clean hash on all nine fixtures under it (0ff2da2cf430c48a clean and
+        # sabotaged, M4, --repeats 2). MOJOLEARN_LOWBIT_CONVERT_SABOTAGE moves
+        # it (-> d58be6e94de78728), and the gate's set now builds with both.
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
+                               'linalg': ['-D', 'MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
                                              '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})
 

@@ -2261,6 +2261,285 @@ def _(ml, X, yc, yr, Xh=None):
                      product=_h(c), dequant=_h(ml.linalg.dequantize_int8(qb, eb))))
 
 
+def _lane_refuses(fn, text):
+    """True when `fn()` raises with `text` in the message. A lane records a
+    refusal as a NUMBER and never as an assertion: a raise reads REFUSED,
+    which no column total can tell from a pass (the tokenizer lane's note,
+    2026-09-15)."""
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001
+        return text in str(exc)
+    return False
+
+
+@lane("saved-model-host-infer")
+def _(ml, X, yc, yr, Xh=None):
+    """THE PUBLIC SAVED-MODEL CPU INFERENCE SURFACE by its own names:
+    `mojolearn.HostForest`, `mojolearn.HostGBDT`, `mojolearn.host_predict`
+    and `mojolearn.host_predict_proba`. Lane lane/laneless-public-classes,
+    2026-09-19.
+
+    WHAT WAS ALREADY TRUE, AND WHAT WAS NOT. `tools/forest_host_gate.py`
+    compares `host_model(<file>).predict` and `.predict_proba` against a
+    SHA-256 a GPU box recorded, over 24 committed fixtures (three vendors x
+    eight kinds under `bench/results/forest_host/`); that gate is real and it
+    passes -- re-run on the M4 at this commit, 8 Apple fixtures IDENTICAL.
+    docs/COVERAGE_AUDIT_2026-09-18.md is right that HostForest and HostGBDT
+    are not two unimplemented algorithms. TWO THINGS IT DOES NOT COVER.
+    First, `host_predict` and `host_predict_proba`, the one-call entries the
+    package exports, are reached by no gate and no lane; the gate calls
+    `host_model`. Second, and this is the one that costs coverage: the gate
+    REFUSES a `parallel_groves` archive by name (`tools/forest_host_gate.py`,
+    "the host engine is sequential"), a sentence that stopped being true on
+    lane/forest-groves-cpu-and-speed (2026-09-17) when
+    `core/forest_host_groves.mojo` and `forest_host_groves_prepare/predict/
+    release` landed. So the groves HOST engine -- the 32 fixed tree groups
+    and the 16/8/4/2/1 fold that a groves-saved model infers with on a CPU --
+    had no recorded evidence of any kind. This lane runs all three.
+
+    THE MODELS. The `rf-clf` lane's RandomForestClassifier, the
+    `gbdt-symmetric` lane's GradientBoosting and a RandomForestRegressor
+    saved with `inference_engine="parallel_groves"`, each written with
+    `save` and read back with `HostForest.from_file` / `HostGBDT.from_file`.
+    Same fits, same fixture, so a cell here and the cell in those lanes are
+    the same arithmetic reached two ways.
+
+    THE PARTS. `rf`, `gbdt` and `groves` are the host predictions (and the
+    two probability columns) on training rows. `sha` is each host model's
+    `model_sha256`, the bytes it will predict with, which moves if the
+    ARCHIVE moved even where the predictions round to the same answer.
+    `flags` holds what the classes must agree about: that each host model
+    answers exactly what the estimator that saved it answers, that
+    `host_predict`/`host_predict_proba` on the same FILE answer exactly what
+    the loaded object answers, that the engine each archive names is the
+    engine the model reports, and the tree counts and class lists.
+
+    THE INFER COLUMN is the held-out probe of the same three host models, so
+    the CPU-inference claim is made on rows no forest saw. The MODEL column
+    is `n/a:no-save`: a host model is a reader, it writes no file.
+
+    SABOTAGE. The forest family's define is `MOJOLEARN_FOREST_HOST_SABOTAGE`,
+    NOT the generic `MOJOLEARN_HOST_SABOTAGE`, which reaches nothing in
+    `core/forest_host_predict.mojo`, `core/gbdt_host_predict.mojo` or
+    `core/forest_host_groves.mojo`; a column built with the generic one alone
+    reads this cell UNMOVED, which a column total cannot tell from a pass.
+    Under the family's define all three engines move (the groves engine
+    carries a second arm of its own, `MOJOLEARN_FOREST_GROVES_SABOTAGE`).
+    MEASURED on the M4, one core, `--repeats 2`, ALL NINE FIXTURES
+    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    the clean prebuilt host set against `-D MOJOLEARN_FOREST_HOST_SABOTAGE=1`
+    moves 9 of 9 cells (`base` 3918f891959b852a -> 4f407d8f1968fd09) through
+    `rf`, `gbdt`, `groves` and `flags`; the same set against
+    `-D MOJOLEARN_HOST_SABOTAGE=1` ALONE moves 0 of 9 and every part reads
+    the clean value. `sha` does not move under either, and that is correct:
+    it hashes the ARCHIVE the estimator wrote, which the host binding only
+    reads."""
+    rows = np.ascontiguousarray(X[:4096])
+    held = np.ascontiguousarray(Xh[:512])
+    rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+    gb = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+    gr = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7,
+                                  inference_engine="parallel_groves").fit(X, yr)
+    with tempfile.TemporaryDirectory(prefix="ib-saved-model-host-") as d:
+        paths = {}
+        for tag, est in (("rf", rf), ("gbdt", gb), ("groves", gr)):
+            paths[tag] = os.path.join(d, f"{tag}.npz")
+            est.save(paths[tag])
+        hrf = ml.HostForest.from_file(paths["rf"])
+        hgb = ml.HostGBDT.from_file(paths["gbdt"])
+        hgr = ml.HostForest.from_file(paths["groves"])
+        # THE ONE-CALL ENTRIES, on the same files: `host_predict(path, X)` is
+        # `host_model(path).predict(X)` and must be its bytes, not a second
+        # arithmetic. A fresh load per call is the point -- a user calls these
+        # without holding a model.
+        one = dict(rf=np.asarray(ml.host_predict(paths["rf"], held)),
+                   rf_proba=np.asarray(ml.host_predict_proba(paths["rf"], held)),
+                   gbdt=np.asarray(ml.host_predict(paths["gbdt"], held)),
+                   gbdt_proba=np.asarray(ml.host_predict_proba(paths["gbdt"], held)),
+                   groves=np.asarray(ml.host_predict(paths["groves"], held)))
+    flags = np.array([
+        # the host model answers what the estimator that saved it answers
+        np.asarray(hrf.predict(held)).tobytes() == np.asarray(rf.predict(held)).tobytes(),
+        np.asarray(hrf.predict_proba(held)).tobytes() == np.asarray(rf.predict_proba(held)).tobytes(),
+        np.asarray(hgb.predict(held)).tobytes() == np.asarray(gb.predict(held)).tobytes(),
+        np.asarray(hgb.predict_proba(held)).tobytes() == np.asarray(gb.predict_proba(held)).tobytes(),
+        np.asarray(hgr.predict(held)).tobytes() == np.asarray(gr.predict(held)).tobytes(),
+        # the one-call entries answer what the loaded object answers
+        one["rf"].tobytes() == np.asarray(hrf.predict(held)).tobytes(),
+        one["rf_proba"].tobytes() == np.asarray(hrf.predict_proba(held)).tobytes(),
+        one["gbdt"].tobytes() == np.asarray(hgb.predict(held)).tobytes(),
+        one["gbdt_proba"].tobytes() == np.asarray(hgb.predict_proba(held)).tobytes(),
+        one["groves"].tobytes() == np.asarray(hgr.predict(held)).tobytes(),
+        # the engine the archive names is the engine the model reports
+        hrf.inference_engine == "sequential", hgb.inference_engine == "sequential",
+        hgr.inference_engine == "parallel_groves",
+        hrf.estimator == "RandomForestClassifier", hgb.estimator == "GradientBoosting",
+        hgr.estimator == "RandomForestRegressor",
+        hrf.n_trees == 16, hgr.n_trees == 16, hgb.n_trees == gb.n_estimators,
+        list(hrf.classes_) == list(rf.classes_),
+        hrf.n_features_in_ == rf.n_features_in_,
+        # a regressor archive has no predict_proba, and it refuses BY NAME
+        _lane_refuses(lambda: hgr.predict_proba(held), "has no predict_proba"),
+    ], dtype=np.int64)
+    shas = np.frombuffer(b"".join(bytes.fromhex(m.model_sha256())
+                                  for m in (hrf, hgb, hgr)), dtype=np.uint8)
+    return _fit(dict(rf=_h(np.asarray(hrf.predict(rows)), np.asarray(hrf.predict_proba(rows))),
+                     gbdt=_h(np.asarray(hgb.predict(rows)), np.asarray(hgb.predict_proba(rows))),
+                     groves=_h(np.asarray(hgr.predict(rows))),
+                     sha=_h(shas), flags=_h(flags)),
+                hrf, lambda e: (np.asarray(e.predict(held)), np.asarray(e.predict_proba(held)),
+                                np.asarray(hgb.predict(held)), np.asarray(hgb.predict_proba(held)),
+                                np.asarray(hgr.predict(held))))
+
+
+#: THE OPERAND `lowbit-conversions` CONVERTS: a 2-D block of the fixture,
+#: the only rank `pack_one` takes. 64 x 16 is 1,024 elements, which reshape
+#: into the 1-D and 3-D bit buffers `widen_bf16` is asked for -- the ranks
+#: the model loader hands it for a norm weight and an embedding table and
+#: that `pack_one` refuses by name.
+LOWBIT_ROWS, LOWBIT_COLS = 64, 16
+
+
+def _lowbit_operands(A):
+    """(2-D float32 block, the bf16 bit buffer reshaped 1-D, and 3-D) from a
+    fixture slab. The reshapes are of the SAME bits, so a shape that moved
+    is visible in `widened` without a second conversion."""
+    return np.ascontiguousarray(A[:LOWBIT_ROWS, :LOWBIT_COLS]).astype(np.float32)
+
+
+@lane("lowbit-conversions")
+def _(ml, X, yc, yr, Xh=None):
+    """THE LOW-BIT CONVERSION SEAMS THEMSELVES (`python/mojolearn/lowbit.py`,
+    contract `gemm/IDENTICAL_LOWBIT_CONTRACT.md` clauses L-1 through L-6), as
+    a user reaches them: `lowbit.pack_one`, `lowbit.materialize_one`,
+    `lowbit.widen_bf16`, `lowbit.format_of`, `lowbit.is_packed` and
+    `linalg.from_bf16`. Lane lane/laneless-public-classes, 2026-09-19.
+
+    WHY A LANE AND NOT ONLY THE `*-bf16w` LANES. Ten lanes already run blocks
+    whose weights were packed, but every one of them hashes a BLOCK OUTPUT:
+    a logit, a hidden state, a GEMM product. A conversion defect that the
+    following fp32 GEMM happens to absorb -- a bf16 rounded down instead of
+    to nearest even, an int8 row exponent off by one -- is a DIFFERENT MODEL
+    on disk and those cells can still agree. What is hashed here is the
+    STORED BYTES: the bf16 bit buffer, the int8 codes and their per-row
+    exponents, and the float32 each materializes back to.
+
+    THE PARTS. `bf16_bits` and `int8` are what `pack_one` writes, which is
+    what a low-bit checkpoint holds. `materialized` is `materialize_one` of
+    each, the exact float32 an inference class actually computes with.
+    `widened` is `widen_bf16` on the SAME bits reshaped 1-D and 3-D, the
+    ranks `pack_one` refuses and the model loader needs. `f32_copy` is
+    `pack_one(x, "float32")`, the identity arm, which must be x's bytes.
+    `linalg` is `linalg.from_bf16`, the public linalg spelling of the same
+    widening. `flags` carries the two predicates (`is_packed`, `format_of`,
+    including the refusal of a dict that mixes formats), the shape and
+    format each packed object reports, the refusals `pack_one` owes, and
+    the four AGREEMENTS BETWEEN SPELLINGS below.
+
+    THE THREE SPELLINGS, AND THE SILENT FALLBACK. `lowbit.py` materializes
+    through the linalg extension's kernels on a GPU column, through
+    `_mojolearn_linalg_host` on a CPU column, and through a pure-Python
+    integer construction when neither loads -- and `_conversion_backend()`
+    SWALLOWS the exception that chooses the third. So a column whose linalg
+    binding refused to load (a sabotage build outside the gate, a missing
+    .so) computes every conversion in Python and reads exactly like a
+    column that ran the compiled seam. `flags` therefore carries
+    `_conversion_backend() == "python"` as a number: it is 0 on a GPU column
+    and 0 on a CPU column with the binding, so it is vendor-independent, and
+    a column that fell back reads DIVERGENT against every other. The four
+    agreement flags hold the spelling that RAN to the pure-Python one, which
+    is the equality `python/mojolearn/tests/test_lowbit_weights.py` asserts
+    on one box and this cell asserts on every column.
+
+    SABOTAGE, AND THE ARM THAT DID NOT EXIST UNTIL THIS LANE.
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on the linalg family reaches
+    `gemm_oracle`'s leaf and `gemm_int8_oracle`'s dequantized cell and
+    NOTHING ELSE: `widen_bf16`, `narrow_bf16`, `quantize_rows_int8` and
+    `dequantize_rows_int8` in `gemm/host/gemm_lowbit_oracle.mojo` -- the
+    whole of L-1 through L-6, and every byte this lane hashes -- carried no
+    arm at all. Measured: with the family define alone this cell is
+    UNMOVED. So the four seams were given one, `MOJOLEARN_LOWBIT_CONVERT_SABOTAGE`
+    (a low-bit flip on a bf16 pattern and an int8 code, the fp32 value flip
+    on a widened or dequantized float32, so no input can make any of them a
+    no-op), named for the linalg family in
+    `host_surface.GATE_SABOTAGE_OWN_DEFINES` so the gate's sabotage set
+    carries it beside the family one. MEASURED on the M4, one core,
+    `--repeats 2`, ALL NINE FIXTURES
+    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    the clean prebuilt host set against a linalg binding built with BOTH
+    defines moves 9 of 9 cells (`base` 0ff2da2cf430c48a -> d58be6e94de78728)
+    through `bf16_bits`, `int8`, `materialized`, `widened`, `linalg` and
+    `flags`; against `-D MOJOLEARN_HOST_SABOTAGE=1` ALONE it moves 0 of 9
+    and every part reads the clean value, which is the measurement the
+    paragraph above reports. `f32_copy` does not move under either and
+    cannot: `pack_one(x, "float32")` is a copy that touches no binding.
+
+    A clean build of the edited oracle changes no shipping bit. The 15 other
+    linalg and low-bit cells (`gemm-bf16`, `gemm-int8`, `gemm-pinned`,
+    `gemm-transposed`, `cholesky` and the ten `*-bf16w`/`*-int8w` lanes) hash
+    exactly what the pre-edit prebuilt binding hashed, base fixture, measured
+    in the same directory."""
+    from mojolearn import lowbit as _lb
+    a2 = _lowbit_operands(X)
+    bf = ml.lowbit.pack_one(a2, "bfloat16")
+    q8 = ml.lowbit.pack_one(a2, "int8")
+    f32 = ml.lowbit.pack_one(a2, "float32")
+    bits = np.asarray(bf.bits)
+    codes, exps = np.asarray(q8.codes), np.asarray(q8.exponents)
+    mbf = np.asarray(ml.lowbit.materialize_one(bf))
+    mq8 = np.asarray(ml.lowbit.materialize_one(q8))
+    w1 = np.asarray(ml.lowbit.widen_bf16(bf.bits.reshape((LOWBIT_ROWS * LOWBIT_COLS,))))
+    w3 = np.asarray(ml.lowbit.widen_bf16(bf.bits.reshape((4, LOWBIT_ROWS // 4, LOWBIT_COLS))))
+    lin = np.asarray(ml.linalg.from_bf16(bf.bits))
+    # The pure-Python spelling of the same four seams, from the module's own
+    # private functions; it is `checks/numerics.mojo` written over Python
+    # ints and never a NumPy vectorization, so agreeing with it is a claim
+    # about the compiled seam and not about NumPy.
+    py_bits = np.asarray(_lb._to_bf16_py(a2))
+    py_wide = np.asarray(_lb._from_bf16_py(bits))
+    py_codes, py_exps = _lb._quantize_int8_py(a2)
+    py_deq = np.asarray(_lb._dequantize_int8_py(q8.codes, q8.exponents))
+
+    def _refuses(fn, text):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001
+            return text in str(exc)
+        return False
+
+    flags = np.array([
+        ml.lowbit.is_packed(bf), ml.lowbit.is_packed(q8),
+        ml.lowbit.is_packed(a2), ml.lowbit.is_packed(f32),
+        ml.lowbit.format_of({"w": bf}) == "bfloat16",
+        ml.lowbit.format_of({"w": q8}) == "int8",
+        ml.lowbit.format_of({"w": a2}) == "float32",
+        ml.lowbit.format_of([bf, a2]) == "bfloat16",
+        _refuses(lambda: ml.lowbit.format_of({"a": bf, "b": q8}), "store a model one way"),
+        bf.format == "bfloat16" and tuple(bf.shape) == (LOWBIT_ROWS, LOWBIT_COLS),
+        q8.format == "int8" and tuple(q8.shape) == (LOWBIT_ROWS, LOWBIT_COLS),
+        _refuses(lambda: ml.lowbit.pack_one(a2[:, 0], "bfloat16"), "must be 2-D to pack"),
+        _refuses(lambda: ml.lowbit.pack_one(a2, "float16"), "unknown format"),
+        # the same bits three ways: materialize_one, widen_bf16 at two other
+        # ranks, and the public linalg entry
+        lin.tobytes() == mbf.tobytes(),
+        w1.tobytes() == mbf.tobytes(),
+        w3.tobytes() == mbf.tobytes(),
+        np.asarray(f32).tobytes() == a2.tobytes(),
+        # the spelling that RAN against the pure-Python construction
+        py_bits.tobytes() == bits.tobytes(),
+        py_wide.tobytes() == mbf.tobytes(),
+        np.asarray(py_codes).tobytes() == codes.tobytes(),
+        np.asarray(py_exps).tobytes() == exps.tobytes(),
+        py_deq.tobytes() == mq8.tobytes(),
+        # THE SILENT-FALLBACK TRIPWIRE: 0 on every column that has a binding
+        _lb._conversion_backend() == "python",
+    ], dtype=np.int64)
+    return _fit(dict(bf16_bits=_h(bits), int8=_h(codes, exps),
+                     materialized=_h(mbf, mq8), widened=_h(w1, w3),
+                     f32_copy=_h(np.asarray(f32)), linalg=_h(lin), flags=_h(flags)))
+
+
 @lane("samba")
 @floor(steps=(1, "one step is measured to be ENOUGH for this lane's arms, which is the only reason a "
                  "floor of one is honest here: its 20 parameter tensors contain no bitwise-equal "
@@ -3934,6 +4213,667 @@ def _(ml, X, yc, yr, Xh=None):
                      schedule=_h(np.frombuffer(schedule, dtype=np.uint8)), flags=_h(flags)))
 
 
+# --------------------------------------------- the Hugging Face loading path
+# THE NAMESPACE THAT HAD NO LANE (lane/models-namespace-lanes, 2026-09-19).
+# `tools/verification_matrix.py --json` enumerates the public surface and
+# names the lanes that reach each entry. On 2026-09-19 it reported FOURTEEN
+# entries with no lane of any kind and every one of them was
+# `mojolearn.models`: CausalLM, Checkpoint, SafetensorsFile, Tokenizer,
+# ParallelCausalLM, plan_for, pretokenize and pattern_name, each counted
+# twice where the package re-exports a submodule's name.
+#
+# WHAT WAS ALREADY THERE, AND WHY IT IS NOT A LANE. Two things, and neither
+# produces a cell a record carries. `python/mojolearn/tests/
+# test_models_loader.py` is 53 assertions over synthetic checkpoints, which
+# say the loader agrees WITH ITSELF on one box and nothing about two boxes
+# agreeing on a byte. `python -m mojolearn._verify_causal_lm` (lane/causal-
+# lm-distributed-proof) is better than that -- it captures a loaded model's
+# logits, prefill, decode and greedy ids for eight architectures and
+# compares a CPU capture against a GPU one -- but it is a separate tool with
+# its own file format: `--diff` cannot read it, the verification matrix
+# cannot see it, `verify --all` does not run it, it has no fixture axis, and
+# its own header says its fault controls "alter composition, not native
+# arithmetic", so it carries no arithmetic negative control at all. The
+# lanes below put the same claim where every other estimator's lives, with
+# nine hostile fixtures under it and a build sabotage measured against each.
+# They reuse that tool's own synthetic checkpoints
+# (`python/mojolearn/_causal_lm_fixtures.py`) so the two are comparable.
+#
+# THREE LANES, CUT WHERE THE CODE PATHS CUT and not one per symbol:
+#
+#   hf-checkpoint  THE FILE, AND WHAT ITS SHAPE IS TAKEN TO BE.
+#                  `SafetensorsFile` and `Checkpoint` -- the header, the
+#                  mmap, the five admitted dtypes, the sharded index and the
+#                  refusals -- and `plan_for`, the option matrix that decides
+#                  which tensor name carries which weight. They are the two
+#                  halves of `CausalLM.load` that run before one weight
+#                  reaches a block and they read the same thing: a directory.
+#   hf-tokenizer   THE TEXT. `Tokenizer.from_pretrained` over a
+#                  `tokenizer.json`, the three pre-tokenization patterns
+#                  (`pretokenize`, `pattern_name`), encode, decode, the
+#                  added tokens and the SentencePiece refusals.
+#   hf-causal-lm   THE ARITHMETIC. The assembled model's logits, one decode
+#                  step held against the prefill, and greedy `generate`, on
+#                  the column's own device (`device="auto"`, the public
+#                  default: a GPU column runs the GPU blocks, a CPU column
+#                  the `neural_inference` classes over
+#                  `_mojolearn_neural_host`).
+#
+# `ParallelCausalLM` GETS NO LANE, deliberately. It raises
+# NotImplementedError unless `_backend.vendor()` is 'cuda' or 'hip' -- in
+# `load` before a file is opened and again in `__init__` -- so on the CPU
+# column and on Apple there is no arithmetic to hash and its cell would be a
+# REFUSED, which a column total cannot tell from a build that did not run.
+# What pins it is python/mojolearn/tests/test_parallel_causal_lm.py, which
+# is a TEST and not a lane and says so in its header.
+
+#: The Llama-shaped checkpoint these lanes write: two layers, grouped-query
+#: attention (4 heads over 2 KV heads, so q and k/v are not the same shape),
+#: head_dim 8, a vocabulary that is not a power of two and an UNTIED head, so
+#: every name the llama row of the option matrix lists exists in the file and
+#: no two of them are the same shape by accident.
+#: THE CHECKPOINTS THESE LANES WRITE ARE THE PACKAGE'S OWN, not a fourth
+#: spelling of them. `python/mojolearn/_causal_lm_fixtures.py` already builds
+#: a tiny config and its tensors for every architecture the option matrix
+#: admits, and `python -m mojolearn._verify_causal_lm` (lane/causal-lm-
+#: distributed-proof) captures a loaded model from exactly those; so do the
+#: tests. Restating them here would be a second statement of the synthetic
+#: checkpoint to drift from, and would make this lane's cells incomparable
+#: with that tool's captures.
+#:
+#: `(architecture, tie_word_embeddings)`, the eight rows `family_fixture`
+#: builds and `_verify_causal_lm.ARCHITECTURES` captures. The tied rows are
+#: the ones whose `head_name` is None, where the head IS the embedding table
+#: and `_read_weights` reads no `lm_head.weight`. `hf-checkpoint`'s `flags`
+#: holds this tuple to that module's, so the two cannot drift apart quietly.
+HF_ARCHITECTURES = (("llama", False), ("llama", True), ("mistral", False),
+                    ("qwen2", False), ("qwen3", False), ("phi3", False),
+                    ("mamba", True), ("mamba2", True))
+
+#: Configs the option matrix must REFUSE and the words it must refuse them
+#: with, one per clause a caller can trip without writing a checkpoint. Each
+#: is the fixtures' Llama config with the named fields replaced, so the only
+#: reason any of them is refused is the clause it names; the odd `head_dim`
+#: replaces the whole shape, because 9 cannot also satisfy
+#: `n_heads*head_dim == hidden_size`.
+HF_PLAN_REFUSALS = (
+    (dict(model_type="gpt2"), "is not in the option matrix"),
+    (dict(model_type="gemma"), "model_type 'gemma'"),
+    (dict(model_type="gemma2"), "model_type 'gemma2'"),
+    (dict(num_local_experts=8), "mixture of experts"),
+    (dict(rope_scaling={"rope_type": "linear", "factor": 2.0}), "rope_scaling"),
+    (dict(hidden_act="gelu"), "SwiGLU"),
+    (dict(use_sliding_window=True, max_window_layers=1), "sliding-window-alternating"),
+    (dict(layer_types=["full_attention", "sliding_attention"]), "alternating attention kinds"),
+    (dict(attention_dropout=0.1), "inference has no dropout"),
+    (dict(num_key_value_heads=3), "is not a multiple of it"),
+    (dict(num_attention_heads=5), "must equal hidden_size"),
+    (dict(hidden_size=18, num_attention_heads=2, num_key_value_heads=2, head_dim=9,
+          intermediate_size=36), "head_dim must be even"),
+    (dict(num_hidden_layers="two"), "an integer is required"),
+    (dict(vocab_size=None), "the field is required"),
+    (dict(sliding_window=-1), "an integer width or null"),
+)
+
+
+def _hf_bytes(a):
+    """A tensor's raw bytes as a uint8 array, whatever its dtype and rank.
+    Hashing BYTES and not values is what lets one part carry five dtypes at
+    once, and what makes a NaN payload a hashed fact rather than a value
+    that compares unequal to itself."""
+    return np.frombuffer(np.ascontiguousarray(np.asarray(a)).tobytes(), dtype=np.uint8)
+
+
+def _hf_refused(fn, want):
+    """1 when `fn()` raised with `want` in the message, else 0.
+
+    A HASHED FLAG AND NOT AN ASSERTION, for the tokenizer lane's reason: a
+    raise reads REFUSED, which the owed check does not count as a catch,
+    while a hash that moves is a catch. The `want` strings are the
+    load-bearing words of each refusal, so a refusal that stops naming its
+    reason moves the cell. The MESSAGE is not hashed here because every
+    safetensors and loader refusal carries the temporary directory's path,
+    which differs run to run and would read MOVED on one box for no
+    arithmetic reason."""
+    try:
+        fn()
+    except Exception as exc:  # noqa: BLE001
+        return 1 if want in str(exc) else 0
+    return 0
+
+
+def _hf_plan_row(plan):
+    """A plan as the table a checkpoint reader and a weight packer both index
+    with: the kind, the sizes, every interface option with its value, the
+    three top-level names and, per layer, `(block key, checkpoint name, row
+    slice)`. Objects that are identities and not values (the `HFConfig`, the
+    family's plan function) are left out; an address is not a fact about a
+    model, and `_h` would hash the address."""
+    return {
+        "model_type": plan.model_type, "kind": plan.kind, "n_layers": plan.n_layers,
+        "d_model": plan.d_model, "vocab_size": plan.vocab_size,
+        "tie_embeddings": plan.tie_embeddings, "norm_eps": repr(plan.norm_eps),
+        "max_position_embeddings": plan.max_position_embeddings,
+        "n_heads": getattr(plan, "n_heads", None), "n_kv_heads": getattr(plan, "n_kv_heads", None),
+        "head_dim": getattr(plan, "head_dim", None),
+        "intermediate": getattr(plan, "intermediate", None),
+        "block_options": {k: repr(v) for k, v in sorted(plan.block_options.items())},
+        "block_kwargs": {k: repr(v) for k, v in sorted(plan.block_kwargs.items())},
+        "embed_name": plan.embed_name, "norm_name": plan.norm_name, "head_name": plan.head_name,
+        "checkpoint_names": plan.checkpoint_names(),
+        "layer_weights": [[[k, n, list(rows) if rows is not None else None]
+                           for k, n, rows in plan.layer_weights(i)] for i in range(plan.n_layers)],
+    }
+
+
+def _hf_text(s):
+    """Text as a uint8 array: `_h` refuses a text dtype, and rightly."""
+    return np.frombuffer(s.encode("utf-8"), dtype=np.uint8)
+
+
+@lane("hf-checkpoint")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.models.SafetensorsFile`, `Checkpoint` and `plan_for`: what
+    a checkpoint directory HOLDS and what its shape is taken to be, the two
+    halves of `CausalLM.load` that run before one weight reaches a block.
+
+    WHY ONE LANE AND NOT TWO. They have one input (a directory), they fail
+    together (a name the plan asks for and the file does not hold is one
+    error, raised once by `_read_weights` across both), and neither has a
+    GPU path to owe: the reader is a header, an mmap and one copy per
+    tensor, and the option matrix is integers and strings. Two cells that
+    always move together are one cell with extra bookkeeping.
+
+    THE PARTS.
+
+    `dtypes` is every dtype the reader admits, read back from a file the
+    lane wrote, concatenated in NAME ORDER: F32, I32 and I64 as stored, F16
+    widened by `safetensors.widen_f16`'s own bit construction, and BF16
+    widened through `mojolearn.lowbit.widen_bf16` (the linalg host binding
+    on a CPU column, the linalg extension on a GPU one). The F16 and BF16
+    payloads are the FIXTURE'S BYTES read as bit patterns rather than as
+    values, so the widening is asked about subnormals, infinities and NaN
+    payloads on every fixture instead of about whatever nine well-behaved
+    numbers a hand-written case would have carried. A NaN hashes as its
+    bits, which is the point: a widening that dropped a payload moves it.
+
+    `bits` is that same BF16 tensor read with `bf16="bits"` -- the form a
+    block accepts directly, a `lowbit.BF16Weight` at rank 2 -- whose uint16
+    must be the stored bits unchanged.
+
+    `sharded` is the same tensors written as THREE shards with an index and
+    read back through `Checkpoint`. `flags` carries what makes it a part and
+    not a duplicate: that the sharded read is byte-equal to the single-file
+    read and that `names()` agrees across the two layouts.
+
+    `plan` is `plan_for` over all EIGHT rows of HF_ARCHITECTURES, hashed as
+    each one's whole derived table (see `_hf_plan_row`). An off-by-one in a
+    row slice is not a Python bug, it is a different model, and `phi3`'s
+    fused `qkv_proj`/`gate_up_proj` is the one row that has a row slice at
+    all. `flags` holds HF_ARCHITECTURES to `_verify_causal_lm.ARCHITECTURES`
+    and the architecture set to `models.FAMILIES` minus the two SentencePiece
+    families and the `smollm` alias, so a family added to the matrix and not
+    to this lane is a flag that drops to 0 rather than a silent omission.
+
+    `refusals` is the MESSAGES of HF_PLAN_REFUSALS joined, not merely the
+    flags: `plan_for`'s refusals name the model_type, the field and the
+    value and carry no path, so the words are hashable and a refusal that
+    stops naming its reason moves the cell. `caught` is the same refusals as
+    flags. The READER's refusals do carry a path, so they appear in `flags`
+    only.
+
+    `flags` also carries the RE-EXPORTS: `models.SafetensorsFile` must BE
+    `models.safetensors.SafetensorsFile` and `models.plan_for` must BE
+    `models.config.plan_for`, or the public names document objects that are
+    not the ones that run (`language-model-config`'s alias part, for the
+    same reason).
+
+    SABOTAGE, AND THE ONE BINDING THIS LANE STANDS ON. The only native call
+    in the whole lane is `lowbit.widen_bf16`'s `from_bf16` in the linalg
+    host binding; everything else is a header parse, a memoryview cast and
+    integer bookkeeping in Python. So the family's GENERIC arm is the wrong
+    one and its OWN arm is the right one, and both were measured on the M4,
+    one core, `--repeats 2`, nine fixtures, 2026-09-19
+    (bench/results/identity_break/2026-09-19_models-namespace):
+
+      -D MOJOLEARN_HOST_SABOTAGE=1 alone: THE CELL DOES NOT MOVE, on any
+      fixture, in any of the eight parts (`base` stays 2e4e083eaea46d80).
+      That arm is gemm_oracle's descending leaf and the factorizations; a
+      bit shift has no accumulation order to perturb, so there is nothing
+      in it for this lane to catch. A set built with it alone is not a
+      negative control for this lane, exactly as it is not one for
+      `bpe-trainer` or `lowbit-conversions`.
+
+      -D MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1 (the four conversion seams'
+      own arm, in GATE_SABOTAGE_OWN_DEFINES["linalg"]): the cell MOVES on
+      every fixture, `base` 2e4e083eaea46d80 -> fb18c7b40e708e5b, through
+      `dtypes` and `sharded` -- the two parts that carry the widened BF16
+      tensor.
+
+    THE OTHER SIX PARTS DO NOT MOVE UNDER EITHER ARM and cannot. `bits` is
+    the STORED uint16, which no conversion touches by construction; `infos`,
+    `plan`, `refusals`, `caught` and `flags` are integers, names and
+    sentences with no float anywhere near them. What guards those is the
+    recorded hash itself, which reads DIVERGENT on every column at once if
+    an offset, a dtype table entry, a tensor name or a refusal sentence
+    changes -- the guard `language-model-config`'s `derived` and `flags`
+    parts already rest on."""
+    from mojolearn import _causal_lm_fixtures as fx
+    from mojolearn import _verify_causal_lm as capture
+    S, C, plan_for = ml.models.SafetensorsFile, ml.models.Checkpoint, ml.models.plan_for
+    st = ml.models.safetensors
+    cfg0 = fx._llama_config()
+    raw = np.ascontiguousarray(X).tobytes()
+    bits = np.frombuffer(raw[:512], dtype="<u2")
+    f32 = np.frombuffer(raw[512:512 + 256 * 4], dtype="<f4")
+    i32 = np.frombuffer(raw[2048:2048 + 64 * 4], dtype="<i4")
+    i64 = np.frombuffer(raw[4096:4096 + 32 * 8], dtype="<i8")
+    tensors = {"t.f32": ("F32", (16, 16), f32.tobytes()), "t.f16": ("F16", (16, 16), bits.tobytes()),
+               "t.bf16": ("BF16", (16, 16), bits.tobytes()), "t.i32": ("I32", (8, 8), i32.tobytes()),
+               "t.i64": ("I64", (8, 4), i64.tobytes()), "t.f32s": ("F32", (), f32[:1].tobytes())}
+    with tempfile.TemporaryDirectory(prefix="ib-hf-checkpoint-") as d:
+        one = fx._write_checkpoint(os.path.join(d, "one"), cfg0, tensors, shards=1)
+        many = fx._write_checkpoint(os.path.join(d, "many"), cfg0, tensors, shards=3)
+        sf = S(os.path.join(one, "model.safetensors"))
+        single = C.open(one)
+        sharded = ml.models.safetensors.Checkpoint.open(many)
+        try:
+            names = sorted(sf.names())
+            dtypes = np.concatenate([_hf_bytes(single.read(n)) for n in names])
+            sharded_bytes = np.concatenate([_hf_bytes(sharded.read(n)) for n in sorted(sharded.names())])
+            packed = single.read("t.bf16", bf16="bits")
+            bitsback = _hf_bytes(getattr(packed, "bits", packed))
+            infos = _hf_text("|".join(f"{t.name},{t.dtype},{t.shape},{t.nbytes},{t.size}"
+                                      for t in (sf.info(n) for n in names)))
+            empty = os.path.join(d, "empty")
+            os.makedirs(empty, exist_ok=True)
+            loose = fx._write_checkpoint(os.path.join(d, "loose"), cfg0, tensors, shards=2)
+            os.remove(os.path.join(loose, st.INDEX_NAME))
+            bad = os.path.join(d, "bad")
+            os.makedirs(bad, exist_ok=True)
+            badfile = st.write_safetensors(os.path.join(bad, "x.safetensors"),
+                                           {"t.f64": ("F64", (4,), b"\0" * 32)})
+            flags = np.asarray([
+                dtypes.tobytes() == sharded_bytes.tobytes(),
+                names == sorted(sharded.names()),
+                bitsback.tobytes() == bits.tobytes(),
+                "t.f32" in single and "t.nope" not in single,
+                _hf_refused(lambda: single.read("t.nope"), "no tensor"),
+                _hf_refused(lambda: single.read("t.f32", bf16="raw"), "bf16 must be"),
+                _hf_refused(lambda: st.SafetensorsFile(badfile).read("t.f64"), "refuses by name"),
+                _hf_refused(lambda: C.open(empty), "holds neither"),
+                _hf_refused(lambda: C.open(loose), "not an index"),
+                _hf_refused(lambda: C.open(os.path.join(d, "nope")), "does not exist"),
+                ml.models.SafetensorsFile is st.SafetensorsFile,
+                ml.models.Checkpoint is st.Checkpoint,
+                ml.models.plan_for is ml.models.config.plan_for,
+                tuple(HF_ARCHITECTURES) == tuple(capture.ARCHITECTURES),
+                sorted(set(a for a, _ in HF_ARCHITECTURES) | {"gemma", "gemma2", "smollm"})
+                == sorted(ml.models.FAMILIES),
+            ], dtype=np.int64)
+        finally:
+            sf.close()
+            single.close()
+            sharded.close()
+    plans = [_hf_plan_row(plan_for(fx.family_fixture(arch, tied)[0]))
+             for arch, tied in HF_ARCHITECTURES]
+    messages, caught = [], []
+    for over, want in HF_PLAN_REFUSALS:
+        cfg = fx._llama_config()
+        cfg.update(over)
+        try:
+            ml.models.config.plan_for(cfg)
+            messages.append("<no refusal>")
+            caught.append(0)
+        except Exception as exc:  # noqa: BLE001
+            messages.append(f"{type(exc).__name__}: {exc}")
+            caught.append(1 if (want in str(exc)
+                                and isinstance(exc, ml.models.UnsupportedModel)) else 0)
+    return _fit(dict(dtypes=_h(dtypes), bits=_h(bitsback), sharded=_h(sharded_bytes),
+                     infos=_h(infos), plan=_h(_hf_text(json.dumps(plans, sort_keys=True))),
+                     refusals=_h(_hf_text("\n".join(messages))),
+                     caught=_h(np.asarray(caught, dtype=np.int64)), flags=_h(flags)))
+
+
+@lane("hf-tokenizer")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.models.Tokenizer` over a `tokenizer.json`, with
+    `pretokenize` and `pattern_name`: the THREE pre-tokenization patterns a
+    byte-level BPE family can carry, which is the one thing
+    `mojolearn.tokenizer.BpeTokenizer` does not parameterize (DEVIATION
+    2960).
+
+    THE VOCABULARY IS OURS. mojolearn ships none, so the lane trains one on
+    the FIXTURE'S OWN BYTES with `BpeVocabularyTrainer` (the `bpe-trainer`
+    lane's trainer, the Mojo one since lane/bpe-builder-native) and hands
+    its tokens and merge pairs to `Tokenizer`. The vocabulary therefore
+    moves with the fixture and so do the ids: `ties` trains on repeated
+    bytes and `hashed` on a flat stream, and the two cut differently.
+
+    WHAT RUNS WHERE, which is why this lane can move at all. For
+    `pattern="gpt2"`, `_encode_ordinary` goes through
+    `BpeTokenizer.from_token_bytes`, the compiled door in the tokenizer host
+    binding. For `llama3` and `qwen2` the cut is Python over the byte codes
+    (`_pretoken_end_llama`) and the merge is `_tokenizer_synthetic._bpe`,
+    the Python reference the Mojo merge is held to. So `gpt2_ids` and
+    `json_ids` are the parts with a build behind them, and `llama3_ids` and
+    `qwen2_ids` pin the Python cut.
+
+    THE PARTS. `bounds` is `pretokenize` on one hostile text under all three
+    patterns -- contractions in both cases, a digit run (three at a time for
+    llama3, one for qwen2, uncut for gpt2), a non-ASCII word, a run of
+    spaces, CRLF and a trailing tab -- so the digit rule and the
+    case-insensitive contraction are REACHED and not merely available.
+    `names` is `pattern_name` over every spelling in `PATTERNS` plus one
+    that is not a pattern, as indices into the sorted name list, which makes
+    the two GPT-2 spellings' collapse onto one name a hashed fact.
+
+    `gpt2_ids`, `llama3_ids` and `qwen2_ids` encode the FIXTURE'S OWN first
+    4,096 bytes, and `text_ids` the hostile text; see the comment at `doc`
+    for why the ids cannot be the hostile text's. `json_ids` encodes the
+    same document through a tokenizer loaded from a `tokenizer.json` the
+    lane wrote, held in `flags` to the directly-constructed one byte for
+    byte, which is the claim `from_pretrained` makes. `specials` encodes a
+    document carrying an added token BOTH WAYS (`allow_special` False, then
+    True), and `decoded` is the round trip back to bytes.
+
+    `flags` also carries the SENTENCEPIECE REFUSALS by name (a Unigram
+    model, `byte_fallback`, a Metaspace pre-tokenizer, an unknown Split
+    regex, a directory holding only `tokenizer.model`), the id outside the
+    vocabulary, and the re-export: `models.Tokenizer` must BE
+    `models.tokenizer.Tokenizer`.
+
+    SABOTAGE: TWO ARMS OF THE TOKENIZER FAMILY, AND NEITHER ALONE REACHES
+    EVERY PART. Measured on the M4, one core, `--repeats 2`, nine fixtures,
+    2026-09-19 (bench/results/identity_break/2026-09-19_models-namespace);
+    the cell moves under each, and both are in this family's
+    GATE_SABOTAGE_OWN_DEFINES, so the gate's set carries both:
+
+      -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1, the ENCODER arm (it reverses
+      the ids of every encoded document), moves `gpt2_ids`, `text_ids`,
+      `json_ids`, `specials`, `decoded` and `flags` -- everything that goes
+      through the compiled door, `flags` included, because a reversed
+      encoder breaks the round trip the flags hold. `base`
+      a66a961b530381ae -> 4bb26860b4f41795.
+
+      -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1, the TRAINER's arm (a reversed
+      merge tie-break), moves `gpt2_ids`, `llama3_ids`, `qwen2_ids`,
+      `json_ids` and `specials` -- every id part, because it moves the
+      VOCABULARY the ids are drawn from, the Python patterns' ids with the
+      compiled one's. `base` a66a961b530381ae -> dc2af787603953e6.
+
+    `bounds` and `names` move under NEITHER and cannot: the pre-tokenizer
+    boundaries and the pattern-name lookup are Python over byte codes, with
+    no binding of any kind behind them, and `names` does not even read the
+    vocabulary. `text_ids` does not move under the trainer arm, and that is
+    a measurement: the hostile text is plain ASCII, and a vocabulary trained
+    on float32 bytes has no merge that applies to it, so a different
+    vocabulary gives the same ids. `decoded` does not move under the trainer
+    arm either, because a differently-encoded document still round trips.
+    What guards those four is the recorded hash.
+
+    The generic -D MOJOLEARN_HOST_SABOTAGE=1 reaches NOTHING in the
+    tokenizer binding, which is why this family has its own defines at all;
+    a set built with it alone leaves this cell where it found it."""
+    T = ml.models.Tokenizer
+    tk = ml.models.tokenizer
+    raw = np.ascontiguousarray(X).tobytes()[:8192]
+    v = ml.tokenizer.BpeVocabularyTrainer(vocab_size=320, min_frequency=2).train([raw])
+    tokens = list(v.tokens)
+    merges = [(tokens[a], tokens[b]) for a, b, _ in v.merges]
+    text = b"IT'S 12345 caf\xc3\xa9 hello  world\r\n\n  x-y \t"
+    bounds = np.concatenate([np.asarray(ml.models.tokenizer.pretokenize(text, p), dtype=np.int64)
+                             for p in ("gpt2", "llama3", "qwen2")])
+    known = sorted(tk.PATTERNS)
+    names = np.asarray([known.index(ml.models.tokenizer.pattern_name(s))
+                        for _, spellings in sorted(tk.PATTERNS.items()) for s in spellings]
+                       + [-1 if tk.pattern_name("not a pattern") is None else 0], dtype=np.int64)
+    # THE DOCUMENT IS THE FIXTURE'S OWN BYTES and the hostile text above is
+    # not, and the difference cost this lane its fixture axis once. Encoding
+    # only `text` (plain ASCII) through a vocabulary trained on float32 bytes
+    # reaches NO merge -- every merge in that vocabulary is over high byte
+    # values ASCII never carries -- so the ids were the raw bytes and `base`
+    # and `ties` hashed the SAME cell, a983a295bf677e0b on both, measured
+    # 2026-09-19 before this line existed. Ids that cannot move with the
+    # fixture cannot move under the trainer's arm either, which is the
+    # negative control this lane rests on. So the three id parts encode the
+    # first 4,096 bytes of X (the `tokenizer` lane's own derivation), where
+    # the merges apply, and `text` keeps the pre-tokenizer parts, where the
+    # patterns differ.
+    doc = np.ascontiguousarray(X).tobytes()[:4096]
+    ids = {}
+    for p in ("gpt2", "llama3", "qwen2"):
+        ids[p] = np.asarray(T(tokens, merges, pattern=p).encode_bytes(doc), dtype=np.int32)
+    gpt2 = T(tokens, merges, pattern="gpt2")
+    text_ids = np.asarray(gpt2.encode_bytes(text), dtype=np.int32)
+    decoded = np.frombuffer(gpt2.decode_bytes(ids["gpt2"].tolist()), dtype=np.uint8)
+    cut = tk.pretokenize(text, "gpt2")
+    pieces = [text[a:b] for a, b in zip(cut, cut[1:])]
+    spelled = ml.tokenizer._byte_to_char()
+    eot, eot_id = "<|endoftext|>", len(tokens)
+
+    def spell(bs):
+        return "".join(spelled[b] for b in bs)
+
+    def tokenizer_json(regex, model_over=None, **over):
+        vocab = {spell(t): i for i, t in enumerate(tokens)}
+        vocab[eot] = eot_id
+        model = dict(type="BPE", dropout=None, unk_token=None, continuing_subword_prefix=None,
+                     end_of_word_suffix=None, fuse_unk=False, byte_fallback=False,
+                     ignore_merges=False, vocab=vocab,
+                     merges=[[spell(a), spell(b)] for a, b in merges])
+        model.update(model_over or {})
+        pre = ({"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
+                "use_regex": True} if regex is None else
+               {"type": "Sequence", "pretokenizers": [
+                   {"type": "Split", "pattern": {"Regex": regex}, "behavior": "Isolated",
+                    "invert": False},
+                   {"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
+                    "use_regex": False}]})
+        out = dict(version="1.0", truncation=None, padding=None,
+                   added_tokens=[dict(id=eot_id, content=eot, single_word=False, lstrip=False,
+                                      rstrip=False, normalized=False, special=True)],
+                   normalizer=None, pre_tokenizer=pre, post_processor=None,
+                   decoder={"type": "ByteLevel", "add_prefix_space": False, "trim_offsets": True,
+                            "use_regex": False},
+                   model=model)
+        out.update(over)
+        return out
+
+    def write(root, data):
+        os.makedirs(root, exist_ok=True)
+        with open(os.path.join(root, "tokenizer.json"), "w", encoding="utf-8") as fh:
+            json.dump(data, fh)
+        return root
+
+    with tempfile.TemporaryDirectory(prefix="ib-hf-tokenizer-") as d:
+        plain = write(os.path.join(d, "gpt2"), tokenizer_json(None))
+        llama = write(os.path.join(d, "llama3"), tokenizer_json(tk.PATTERNS["llama3"][0]))
+        loaded = T.from_pretrained(plain)
+        loaded_llama = ml.models.tokenizer.Tokenizer.from_pretrained(llama)
+        json_ids = np.asarray(loaded.encode_bytes(doc), dtype=np.int32)
+        str_ids = np.asarray(loaded.encode(text.decode("utf-8", "replace"),
+                                           add_special_tokens=False), dtype=np.int32)
+        marked = doc + eot.encode() + doc[:8]
+        plain_ids = np.asarray(loaded.encode_bytes(marked, allow_special=False), dtype=np.int32)
+        special_ids = np.asarray(loaded.encode_bytes(marked, allow_special=True), dtype=np.int32)
+        specials = np.concatenate([plain_ids, special_ids])
+        sp = write(os.path.join(d, "unigram"), tokenizer_json(None, {"type": "Unigram"}))
+        bf = write(os.path.join(d, "bytefallback"), tokenizer_json(None, {"byte_fallback": True}))
+        ms = write(os.path.join(d, "metaspace"),
+                   tokenizer_json(None, pre_tokenizer={"type": "Metaspace",
+                                                       "replacement": "▁"}))
+        odd = write(os.path.join(d, "oddregex"), tokenizer_json("(?i:'zz)|\\p{L}+"))
+        onlymodel = os.path.join(d, "onlymodel")
+        os.makedirs(onlymodel, exist_ok=True)
+        with open(os.path.join(onlymodel, "tokenizer.model"), "wb") as fh:
+            fh.write(b"\0")
+        flags = np.asarray([
+            json_ids.tobytes() == ids["gpt2"].tobytes(),
+            str_ids.tobytes() == text_ids.tobytes(),
+            np.asarray(loaded_llama.encode_bytes(doc),
+                       dtype=np.int32).tobytes() == ids["llama3"].tobytes(),
+            loaded.pattern == "gpt2" and loaded_llama.pattern == "llama3",
+            loaded.n_ranks == len(tokens) and loaded.n_vocab == len(tokens) + 1,
+            [bytes(p) for p in loaded.pretokenize(text)] == pieces,
+            loaded.decode_bytes(special_ids.tolist()) == marked,
+            eot_id in special_ids.tolist() and eot_id not in plain_ids.tolist(),
+            _hf_refused(lambda: T.from_pretrained(sp), "Unigram"),
+            _hf_refused(lambda: T.from_pretrained(bf), "byte_fallback"),
+            _hf_refused(lambda: T.from_pretrained(ms), "Metaspace"),
+            _hf_refused(lambda: T.from_pretrained(odd), "not one of the known patterns"),
+            _hf_refused(lambda: T.from_pretrained(onlymodel), "SentencePiece family"),
+            _hf_refused(lambda: T(tokens, merges, pattern="gpt3"), "unknown pattern"),
+            _hf_refused(lambda: tk.pretokenize(text, "gpt3"), "unknown pattern"),
+            _hf_refused(lambda: gpt2.decode_bytes([eot_id + 99]), "outside"),
+            ml.models.Tokenizer is tk.Tokenizer,
+        ], dtype=np.int64)
+    return _fit(dict(bounds=_h(bounds), names=_h(names), gpt2_ids=_h(ids["gpt2"]),
+                     llama3_ids=_h(ids["llama3"]), qwen2_ids=_h(ids["qwen2"]),
+                     text_ids=_h(text_ids), json_ids=_h(json_ids), specials=_h(specials),
+                     decoded=_h(decoded), flags=_h(flags)),
+                gpt2, lambda e: (np.asarray(e.encode_bytes(np.ascontiguousarray(Xh).tobytes()[:4096]),
+                                            dtype=np.int32),))
+
+
+#: The ids `hf-causal-lm` runs: 4 rows of 12 tokens from the fixture bytes,
+#: modulo the fixtures' vocabulary, and 6 tokens decoded past them. Four
+#: rows so the batch part has rows to split, and a length the prefix part
+#: can cut at 1, 7 and 11.
+HF_LM_BATCH, HF_LM_LEN, HF_LM_NEW = 4, 12, 6
+
+#: The fixtures' vocabulary, the one every architecture in HF_ARCHITECTURES
+#: is built at (`_causal_lm_fixtures._llama_config`); the ids are taken
+#: modulo it so one id stream feeds all eight models.
+HF_LM_VOCAB = 64
+
+
+@lane("hf-causal-lm")
+def _(ml, X, yc, yr, Xh=None):
+    """`mojolearn.models.CausalLM`: a checkpoint directory loaded and RUN, on
+    the column's own device.
+
+    `device="auto"` is the public default and is what this lane passes, so
+    the cell means what a user means by it: a GPU column assembles
+    `TransformerBlock`/`Mamba1Block` and the training extension's embedding,
+    RMS norm and head, and a CPU column assembles
+    `TransformerBlockInference`/`Mamba1BlockInference` and `_CpuPrimitives`
+    over `_mojolearn_neural_host`. The claim is the one the package exists
+    to make: the same checkpoint gives the same logits on every vendor.
+
+    EIGHT MODELS, the rows of HF_ARCHITECTURES, each assembled from the
+    package's own synthetic checkpoint (`_causal_lm_fixtures.family_fixture`,
+    the same one `python -m mojolearn._verify_causal_lm` captures) written
+    as two shards. They are not eight spellings of one thing: `llama` tied
+    and untied differ in whether `head_name` is None and a `lm_head.weight`
+    is read at all, `mistral` carries a sliding window, `qwen2` the three
+    attention biases, `qwen3` the q/k norms, `phi3` the fused projections
+    split by rows, and the two Mamba rows take the mamba1 and mamba2 block
+    classes instead of the transformer.
+
+    THE PARTS. `every` is all eight forwards over the same ids, concatenated
+    in HF_ARCHITECTURES order: the part that says the assembly of each row
+    is right. `logits` is the Llama row's forward alone, so a moved `every`
+    can be attributed. `generate` is greedy decoding, the prompt as one
+    prefill and every later token as one `step`; it is the only public entry
+    where argmax ties are visible (`_argmax_last` breaks them to the lowest
+    index, a scan with a strict `>`), and on the `ties` fixture that rule is
+    REACHED. `step` is the decode logits alone. `params` hashes
+    `parameters()` in CHECKPOINT-NAME order, which is the name mapping read
+    back: a weight that landed under the wrong block key comes back under
+    the wrong name and moves it.
+
+    `flags` carries the STEP-AGAINST-PREFILL equality -- a fresh state, the
+    first L-1 tokens prefilled, then one `step`, held bitwise against
+    position L-1 of the one-shot forward -- which is the property a serving
+    system rests on and which `--step-full` measures for the blocks. It is a
+    flag and not an assertion so a build where it fails reads DIVERGENT
+    rather than REFUSED. It also holds the refusals (`device="tpu"`, an
+    unknown `weight_format`, `max_positions` past the config's own, a state
+    allocated on another model, float ids, a `greedy=False` decode, a
+    `max_tokens` past the capacity) and the re-export: `models.CausalLM`
+    must BE `models.causal_lm.CausalLM`.
+
+    THE WEIGHTS ARE NOT THE FIXTURE'S. They come from the fixtures module's
+    LCG, the same bytes on every machine, because `wide` puts 1e4 in every
+    cell and `denormal` puts subnormals there, and either one inside a
+    softmax makes `CausalLM.__init__`'s finiteness check raise -- the cell
+    would read REFUSED on every fixture but `base` and the lane would be
+    measuring the fixture's magnitude rather than the arithmetic. WHAT THE
+    FIXTURE MOVES here is the TOKEN IDS, so every fixture decodes a
+    different sequence through the same weights.
+
+    SABOTAGE. On a CPU column, `-D MOJOLEARN_HOST_SABOTAGE=1` on the neural
+    host family (gemm_oracle's descending leaf, the arm `mlp`,
+    `transformer` and the Mamba lanes read DIVERGENT under) moves the cell
+    on every fixture: MEASURED on the M4, one core, `--repeats 2`, nine
+    fixtures, 2026-09-19 (bench/results/identity_break/
+    2026-09-19_models-namespace), `base` 13d9b4ba89461093 ->
+    9b87625cbfe914f6, through `every`, `logits` and `step`, and
+    the infer and batch columns move with it.
+
+    THREE PARTS DO NOT MOVE UNDER IT. `params` cannot: those are the bytes
+    the reader handed over, which no arithmetic touches. `flags` cannot
+    either: the arm perturbs the fold on BOTH sides of the
+    step-against-prefill comparison at once, so the equality survives it,
+    and every other flag is a refusal no build define reaches.
+
+    `generate` NOT MOVING IS A MEASUREMENT AND NOT A DESIGN, and it is the
+    same finding `language-model-config`'s `next` part carries: the arm
+    changes the fold ORDER, the resulting logit changes are far below the
+    gap between the top two logits at every position of this fixture, and
+    greedy decoding is an argmax, so the ids come out the same. A lane
+    whose ONLY part were `generate` would be a lane that cannot fail under
+    this arm; that is why the logits are hashed beside it."""
+    from mojolearn import _causal_lm_fixtures as fx
+    M = ml.models
+    ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    probe_ids = _ids(Xh, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    A = ml.Array.from_buffer
+    with tempfile.TemporaryDirectory(prefix="ib-hf-causal-lm-") as d:
+        roots, models = [], []
+        for arch, tied in HF_ARCHITECTURES:
+            cfg, tensors = fx.family_fixture(arch, tied)
+            root = fx._write_checkpoint(os.path.join(d, f"{arch}-{int(tied)}"), cfg, tensors)
+            roots.append(root)
+            models.append(ml.models.causal_lm.CausalLM.load(root))
+        every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+        llama, m = roots[0], models[0]
+        mamba = models[-2]  # ("mamba", True): the tied head, no lm_head.weight
+        logits = np.asarray(m.forward(A(ids)))
+        gen = np.asarray(m.generate(A(ids), HF_LM_NEW), dtype=np.int32)
+        state = m.allocate_state(HF_LM_BATCH, HF_LM_LEN)
+        m.forward(A(np.ascontiguousarray(ids[:, :HF_LM_LEN - 1])), state)
+        step = np.asarray(m.step(A(np.ascontiguousarray(ids[:, HF_LM_LEN - 1:])), state))
+        params = np.concatenate([_hf_bytes(w) for _, w in sorted(m.parameters().items())])
+        other = mamba.allocate_state(HF_LM_BATCH, HF_LM_LEN)
+        flags = np.asarray([
+            step.tobytes() == np.ascontiguousarray(logits[:, HF_LM_LEN - 1, :]).tobytes(),
+            gen[:, :HF_LM_LEN].tobytes() == ids.tobytes(),
+            all(one.unused_names == [] for one in models),
+            m.plan.head_name is not None and mamba.plan.head_name is None,
+            [one.device for one in models] == [m.device] * len(models),
+            all(one.weight_format == "float32" for one in models),
+            sorted(m.parameters()) == sorted(m.plan.checkpoint_names()),
+            [one.plan.kind for one in models]
+            == ["transformer"] * 6 + ["mamba1", "mamba2"],
+            _hf_refused(lambda: M.CausalLM.load(llama, device="tpu"), "device must be"),
+            _hf_refused(lambda: M.CausalLM.load(llama, weight_format="fp8"), "weight_format must be"),
+            _hf_refused(lambda: M.CausalLM.load(llama, max_positions=4096),
+                        "max_position_embeddings"),
+            _hf_refused(lambda: m.step(A(np.ascontiguousarray(ids[:, :1])), other),
+                        "belongs to another model"),
+            _hf_refused(lambda: m.forward(A(np.ascontiguousarray(ids.astype(np.float32)))),
+                        "ids must be integer"),
+            _hf_refused(lambda: m.generate(A(ids), 1, greedy=False), "greedy=True"),
+            _hf_refused(lambda: m.allocate_state(HF_LM_BATCH, 10 ** 6), "max_tokens"),
+            ml.models.CausalLM is ml.models.causal_lm.CausalLM,
+        ], dtype=np.int64)
+    return _fit(dict(every=_h(every), logits=_h(logits), generate=_h(gen), step=_h(step),
+                     params=_h(params), flags=_h(flags)),
+                m, lambda e: (np.asarray(e.forward(A(probe_ids))),))
+
+
 @lane("cross-val")
 def _(ml, X, yc, yr, Xh=None):
     """cross_val_score, which had no lane: three unshuffled folds of the
@@ -4369,6 +5309,115 @@ def _(ml, X, yc, yr, Xh=None):
     if mismatch:
         raise NumericalMismatch("ordered gradient sum differs from Float32 left fold", parts)
     return _fit(parts)
+
+
+#: The (T, A) pairs `grad-accumulation` asks `accumulation_is_aligned`, one
+#: per side of clause 9.2: a divisible split, an indivisible one, A = 1 (no
+#: split at all), A = T (one token per microbatch) and a split with more
+#: microbatches than tokens. The answers are the binding's, not Python's.
+ACCUM_SPLITS = ((1024, 4), (1024, 3), (1024, 1), (1024, 1024), (12, 5), (7, 7), (100, 8))
+
+
+@lane("grad-accumulation")
+def _(ml, X, yc, yr, Xh=None):
+    """GRADIENT ACCUMULATION by its public names: `training.accumulate_grads`
+    and `training.accumulation_is_aligned` (optimizer contract clause 9.2).
+    Lane lane/laneless-public-classes, 2026-09-19.
+
+    WHAT IT IS. A step too large for one device is run as A microbatches and
+    their weight gradients combined. Clause 9.2 says the combination is a
+    BALANCED TREE in ascending microbatch index -- `ftz(ftz(x) + ftz(y))` at
+    every node, never a running sum -- so that the combined bits are the
+    unsplit step's bits, and `accumulation_is_aligned(T, A)` is the
+    predicate that says for which (T, A) that holds. Both are native:
+    `accumulate` and `accumulation_is_aligned` in the training binding,
+    `training/host/samba_ops_oracle.mojo::host_samba_accumulate` on the CPU
+    column. Until this lane the pair was reached only by the opt-in
+    `--batch-grad` part, which no default record carries, so no column in
+    any record held either of them.
+
+    THE PARTS. `combined` is `accumulate_grads` over A = 4 microbatches of
+    three tensors of different shapes, values cut from the fixture; the
+    first element of the first tensor is DELIBERATELY NONZERO (see the
+    sabotage note). `single` is the same call at A = 1, the no-split arm,
+    which the contract says is `ftz` of the input. `unaligned` is the same
+    microbatches with `tokens=None`, the explicit no-claim form, which must
+    still be the same tree. `pairs` is a second shape set passed as bare
+    arrays rather than lists, because `accumulate_grads` returns an array
+    for an array input and a list for a list input and a caller can tell
+    them apart. `aligned` is `accumulation_is_aligned` over ACCUM_SPLITS,
+    the BINDING's answers as integers. `flags` holds the refusals the
+    function owes by name: an empty microbatch list, a ragged tensor count,
+    a shape that differs between microbatches and tokens < 1.
+
+    SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` on the training family reaches
+    `host_samba_accumulate`, whose arm sets the FIRST combined element to
+    0.0 (`training/host/samba_ops_oracle.mojo`: pairwise addition has no
+    fold-order fault, so the arm corrupts a value). That arm is INERT on any
+    fixture whose first combined element is already zero, which is why this
+    lane builds its microbatches so that element is not, and the `+ 1.0`
+    below is the whole of that defence. MEASURED, which is why it is there:
+    `X[0, 0]` is exactly 0.0 on `denormal_ftz` and a subnormal that flushes
+    to 0.0 on `denormal`, so microbatches cut straight from the fixture
+    would have combined to 0.0 in that element and the arm -- which WRITES
+    0.0 there -- would have left the cell exactly where it found it on two
+    of the nine fixtures. A negative control that cannot fail on a fixture
+    is not a negative control on that fixture.
+
+    MEASURED on the M4, one core, `--repeats 2`, ALL NINE FIXTURES
+    (`bench/results/identity_break/2026-09-19_laneless-public-classes/`):
+    9 of 9 cells move (`base` 7914bf0b244d9142 -> c18d7abf3e2a978e), through
+    `combined`, `unaligned` and `pairs`.
+
+    THREE PARTS DO NOT MOVE UNDER IT, each for its own reason and none of
+    them a defect. `single` is the A = 1 call, which `host_samba_accumulate`
+    answers from an EARLY RETURN above the arm (`if a == 1`, the flushed
+    input), so no define placed at the end of the fold can reach it; it is
+    kept because A = 1 is the no-split boundary a caller passes when
+    accumulation is configured off, and a defect in that branch would move
+    it. `aligned` and `flags` are integers out of a predicate and a set of
+    refusals with no float fold near them, so no arithmetic arm can reach
+    them either; what guards those is the recorded hash itself, which reads
+    DIVERGENT on every column at once if the predicate's answer changes."""
+    T = ml.training
+    base = np.ascontiguousarray(X[:16, :8]).astype(np.float32)
+    # Three tensors per microbatch, four microbatches. `+ 1.0` keeps the
+    # FIRST element of the first tensor away from zero on every fixture,
+    # which is the only thing that makes the family's arm reach this cell.
+    micro = [[np.ascontiguousarray(base * np.float32(k + 1) + np.float32(1.0)),
+              np.ascontiguousarray(base[:4, :3] - np.float32(k)),
+              np.array([k + 1, -(k + 1), 2 * k + 1], dtype=np.float32)]
+             for k in range(4)]
+    combined = T.accumulate_grads(micro, 1024)
+    single = T.accumulate_grads([micro[0]], 1024)
+    unaligned = T.accumulate_grads(micro, None)
+    # arrays in, one array out (the shape a caller can tell from a list)
+    flat = [np.ascontiguousarray(base * np.float32(k + 1) + np.float32(1.0)) for k in range(4)]
+    pairs = T.accumulate_grads(flat, 1024)
+    aligned = np.array([T.accumulation_is_aligned(t, a) for t, a in ACCUM_SPLITS], dtype=np.int64)
+
+    def _refuses(fn, text):
+        try:
+            fn()
+        except Exception as exc:  # noqa: BLE001
+            return text in str(exc)
+        return False
+
+    flags = np.array([
+        _refuses(lambda: T.accumulate_grads([], 1024), "no microbatches"),
+        _refuses(lambda: T.accumulate_grads([micro[0], micro[1][:2]], 1024), "tensors"),
+        _refuses(lambda: T.accumulate_grads([micro[0], [micro[1][0][:4]] + micro[1][1:]], 1024), "shape"),
+        _refuses(lambda: T.accumulate_grads(micro, 0), "tokens must be >= 1"),
+        len(combined) == 3, len(single) == 3,
+        # an array input returns one array, a list input a list of arrays
+        not isinstance(pairs, list),
+        isinstance(combined, list),
+    ], dtype=np.int64)
+    return _fit(dict(combined=_h(*(np.asarray(a) for a in combined)),
+                     single=_h(*(np.asarray(a) for a in single)),
+                     unaligned=_h(*(np.asarray(a) for a in unaligned)),
+                     pairs=_h(np.asarray(pairs)),
+                     aligned=_h(aligned), flags=_h(flags)))
 
 
 @lane("training-primitives")
@@ -6523,6 +7572,48 @@ def _batch_optim_adam(ml, e, Xh):
                                             o.step_accumulated([[g[2]], [g[3]]], 256)))]
 
 
+def _batch_saved_model_host(ml, e, Xh):
+    """The saved-model host inference part: the LOADED HostForest's two
+    prediction entries over held-out rows. A row's answer must not depend on
+    how many other rows were in the call -- the forest host binding walks
+    trees row by row and writes one output slab, so a row-block bug in that
+    walk shows up here and nowhere else in this lane. Only the `est` model
+    (the RandomForestClassifier archive) is reachable from a declaration;
+    the GBDT and groves models are the lane body's."""
+    R = np.ascontiguousarray(Xh[:64])
+    return [_BatchRows("HostForest.predict", R, lambda r: (np.asarray(e.predict(r)),)),
+            _BatchRows("HostForest.predict_proba", R, lambda r: (np.asarray(e.predict_proba(r)),))]
+
+
+def _batch_lowbit_conversions(ml, e, Xh):
+    """The low-bit part: `pack_one` and `materialize_one` over held-out
+    rows. bf16 is elementwise, so its rows are trivially separable; INT8 IS
+    NOT ELEMENTWISE -- the exponent is per row (contract L-3) -- and this is
+    the part that says the row's exponent is a function of that row and not
+    of the block it was packed with. The outputs' leading axis is the rows:
+    the bf16 bits, the int8 codes, the per-row exponents and the two
+    materialized float32 blocks."""
+    R = np.ascontiguousarray(Xh[:64, :LOWBIT_COLS]).astype(np.float32)
+
+    def fn(r):
+        bf = ml.lowbit.pack_one(r, "bfloat16")
+        q8 = ml.lowbit.pack_one(r, "int8")
+        return (np.asarray(bf.bits), np.asarray(q8.codes), np.asarray(q8.exponents),
+                np.asarray(ml.lowbit.materialize_one(bf)), np.asarray(ml.lowbit.materialize_one(q8)))
+
+    return [_BatchRows("pack_one + materialize_one", R, fn)]
+
+
+_batch_decl(_batch_saved_model_host, "saved-model-host-infer")
+_batch_decl(_batch_lowbit_conversions, "lowbit-conversions")
+# `grad-accumulation` HAS no batch axis to vary: the A microbatches ARE the
+# split whose arithmetic the lane hashes, exactly as the optimizer lanes'
+# step is (the `optimizer-step` and `training-step` reasons above). Asking
+# the same call with fewer microbatches is a DIFFERENT accumulation, not the
+# same answer in a smaller batch.
+_batch_decl("n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with "
+            "fewer of them is a different accumulation, not a smaller batch of the same one)",
+            "grad-accumulation")
 _batch_decl("n/a:scalar-reduction (accuracy_score, adjusted_rand_score, v_measure_score, r2_score and "
             "silhouette_score each return one float over every row, python/mojolearn/_metrics_impl.py; the "
             "per-sample silhouette_samples is asked on metrics-classification)", "metrics")
@@ -6573,6 +7664,42 @@ def _batch_tokenizer(ml, e, Xh):
 
 
 _batch_decl(_batch_tokenizer, "tokenizer")
+
+
+# ------------------------------------------- the Hugging Face loading path
+# `hf-checkpoint` reads a file and plans a shape: no fitted model, no rows
+# in and no per-row output, so there is no batch axis to vary.
+_batch_decl("n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and "
+            "asks nothing for a row's answer)", "hf-checkpoint")
+# `models.Tokenizer` has ONE document per call: `encode`, `encode_bytes`,
+# `decode` and `decode_bytes` all take a single text (python/mojolearn/
+# models/tokenizer.py). `BpeTokenizer.encode_batch` -- the entry the
+# `tokenizer` lane's part uses -- has no counterpart here, and the GPT-2
+# door this class opens is built per instance from the token bytes, so a
+# batch call would be the harness's own loop and not a surface the class
+# offers. The day `Tokenizer` grows a batch entry this becomes a part.
+_batch_decl("n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no "
+            "encode_batch, and a loop written here would test the harness, not the class)", "hf-tokenizer")
+
+
+def _batch_hf_causal_lm(ml, e, Xh):
+    """CausalLM.forward from a zero state: each sequence alone against the
+    whole batch of 4, and every prefix length against L = 12. The API takes
+    no padding and no ragged batch, so the batch is same-length sequences,
+    as the Samba and byte LM parts' is. `e` is the lane's Llama model, the
+    first of HF_ARCHITECTURES; the other seven are hashed in `every` and
+    are not asked again here, because a batch part per architecture would
+    cost eight times the calls to test one splitting rule."""
+    ids = _ids(Xh, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+
+    def fwd(rows):
+        return (np.asarray(e.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
+
+    return [_BatchRows("forward", ids, fwd),
+            _BatchPrefix("forward", HF_LM_LEN, lambda p: fwd(ids[:, :p]), axis=1)]
+
+
+_batch_decl(_batch_hf_causal_lm, "hf-causal-lm")
 _batch_decl(_batch_optim_sgd, "optim-sgd")
 _batch_decl(_batch_optim_adam, "optim-adam-clip")
 _batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "

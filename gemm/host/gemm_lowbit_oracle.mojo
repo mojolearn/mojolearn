@@ -37,6 +37,7 @@ every int8 sum is exact.
 """
 
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     bf16_bits_to_f32,
@@ -60,6 +61,33 @@ from gemm.host.gemm_oracle import (
 #: bound is a number a reader can check. Contract L-7.
 comptime INT8_MAX_K = 131072
 
+#: THE CONVERSION SEAMS' OWN NEGATIVE CONTROL (lane/laneless-public-classes,
+#: 2026-09-19). The four functions below -- `widen_bf16`, `narrow_bf16`,
+#: `quantize_rows_int8`, `dequantize_rows_int8` -- are the whole of contract
+#: clauses L-1 through L-6 and they are what `mojolearn.lowbit.pack_one`,
+#: `materialize_one` and `widen_bf16` and `mojolearn.linalg.to_bf16`,
+#: `from_bf16`, `quantize_int8` and `dequantize_int8` compute on a CPU
+#: column. Until this define they had NO arm at all: `GEMM_ORACLE_HOST_SABOTAGE`
+#: reaches `gemm_oracle`'s leaf and `gemm_int8_oracle`'s dequantized cell and
+#: stops there, so a build carrying `-D MOJOLEARN_HOST_SABOTAGE=1` left every
+#: conversion byte where it found it. A lane over the conversions alone was
+#: therefore REACHED AND INERT, which is the defect `linalg-eigh` and
+#: `bpe-trainer` each turned out to be; the `lowbit-conversions` lane of
+#: tools/identity_break.py is watched failing under THIS define, and
+#: host_surface.GATE_SABOTAGE_OWN_DEFINES names it for the linalg family so
+#: the CPU identity gate's sabotage set carries it beside the family one.
+#:
+#: Each arm perturbs a VALUE and not an order, for the reason
+#: `gemm_oracle.mojo` records: every seam here is exact, so an order arm
+#: would fold away. A bf16 bit pattern and an int8 code take the low bit
+#: flipped, which no input can make a no-op; a float32 result takes
+#: `gemm_oracle_sabotage_value_flip`, which moves a zero and a subnormal off
+#: the flush as well.
+# Spelled on ONE LINE on purpose: test_host_surface greps each family's own
+# define as `is_defined["<NAME>"]`, and a wrapped call makes that probe
+# return nothing forever while reading exactly like a pass.
+comptime LOWBIT_CONVERT_SABOTAGE = is_defined["MOJOLEARN_LOWBIT_CONVERT_SABOTAGE"]()
+
 #: The profile version the bindings read back. The leaf rule and fold
 #: topology are fp32.v1's; the low-bit seams are this file's; a change to
 #: either makes v2.
@@ -75,7 +103,10 @@ def widen_bf16(bits: List[UInt16]) -> List[Float32]:
     """Contract L-1: every element exactly widened."""
     var out = List[Float32]()
     for i in range(len(bits)):
-        out.append(bf16_bits_to_f32(bits[i]))
+        var v = bf16_bits_to_f32(bits[i])
+        comptime if LOWBIT_CONVERT_SABOTAGE:
+            v = gemm_oracle_sabotage_value_flip(v)
+        out.append(v)
     return out^
 
 
@@ -83,7 +114,10 @@ def narrow_bf16(x: List[Float32]) -> List[UInt16]:
     """Contract L-2: every element flushed, then rounded to nearest even."""
     var out = List[UInt16]()
     for i in range(len(x)):
-        out.append(f32_to_bf16_bits_rne(x[i]))
+        var b = f32_to_bf16_bits_rne(x[i])
+        comptime if LOWBIT_CONVERT_SABOTAGE:
+            b = b ^ UInt16(1)
+        out.append(b)
     return out^
 
 
@@ -161,7 +195,10 @@ def quantize_rows_int8(x: List[Float32], rows: Int, cols: Int) -> Int8Rows:
         var ex = int8_row_exponent(row_absmax(x, r, cols))
         e.append(Int32(ex))
         for c in range(cols):
-            q.append(quantize_int8_value(x[r * cols + c], ex))
+            var code = quantize_int8_value(x[r * cols + c], ex)
+            comptime if LOWBIT_CONVERT_SABOTAGE:
+                code = code ^ Int8(1)
+            q.append(code)
     return Int8Rows(q^, e^, rows, cols)
 
 
@@ -172,9 +209,12 @@ def dequantize_rows_int8(qr: Int8Rows) -> List[Float32]:
     var out = List[Float32]()
     for r in range(qr.rows):
         for c in range(qr.cols):
-            out.append(
-                dequant_int8_pinned(Int32(qr.q[r * qr.cols + c]), Int(qr.e[r]))
+            var v = dequant_int8_pinned(
+                Int32(qr.q[r * qr.cols + c]), Int(qr.e[r])
             )
+            comptime if LOWBIT_CONVERT_SABOTAGE:
+                v = gemm_oracle_sabotage_value_flip(v)
+            out.append(v)
     return out^
 
 

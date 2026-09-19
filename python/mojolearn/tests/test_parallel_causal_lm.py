@@ -1,4 +1,32 @@
 # SPDX-License-Identifier: Apache-2.0
+"""`mojolearn.models.ParallelCausalLM`. THIS IS A TEST AND NOT AN IDENTITY
+LANE, and the reason is the class's own first line.
+
+`tools/verification_matrix.py` reported `models.ParallelCausalLM` with no
+lane on 2026-09-19 and lane/models-namespace-lanes gave the rest of the
+`mojolearn.models` namespace three (`hf-checkpoint`, `hf-tokenizer`,
+`hf-causal-lm`). This one deliberately got none. `ParallelCausalLM.load` and
+`__init__` both raise NotImplementedError unless `_backend.vendor()` is
+'cuda' or 'hip' -- the refusal is by name and comes before a file is opened
+-- so on the CPU column, on Apple and in that harness there is no arithmetic
+to hash at all. A lane would record REFUSED on every fixture of every column
+this project actually runs, and a column total cannot tell a REFUSED from a
+build that did not run. Writing one would have added a row that cannot fail.
+
+What CAN be pinned without two CUDA devices is pinned here: the vendor
+refusal before any checkpoint read, the layer-map validation before a worker
+is started, the worker-index arithmetic and the closed-model refusal, the
+remote state's ownership and idempotent release, and -- in the last test --
+the real CPU numerics of the ordinary `CausalLM` path driven through
+emulated RPC, held to the plain model's digest. That last one is NOT
+physical two-GPU evidence and says so; the transport is mocked.
+
+What is still owed is a run on two real CUDA or HIP devices
+(docs/lanes/LANE_STATUS_causal-lm-distributed-proof.md's outstanding item).
+The day this box has one, the question is whether `ParallelCausalLM` belongs
+in `identity_break` as a `par-*` lane, which `tools/lane_applicability.py`
+already refuses on a zero-device column, rather than here.
+"""
 from types import SimpleNamespace
 import pytest
 from mojolearn.models import parallel_causal_lm as mod

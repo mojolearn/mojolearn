@@ -525,18 +525,55 @@ def harness_references(harness):
     for node in ast.walk(tree):
         if not isinstance(node, ast.Attribute) or getattr(node, "lineno", 0) in lane_lines:
             continue
-        base = node.value
-        if isinstance(base, ast.Name):
-            if base.id == "ml":
-                refs.add(node.attr)
-            elif base.id in alias:
-                refs.add(node.attr)
-                refs.add(f"{alias[base.id]}.{node.attr}")
-        elif (isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
-              and base.value.id == "ml"):
-            refs.add(node.attr)
-            refs.add(f"{base.attr}.{node.attr}")
+        parts = _ml_chain(node, alias)
+        if parts:
+            refs |= _chain_refs(parts)
     return refs
+
+
+def _ml_chain(node, alias):
+    """The dotted path of an attribute chain rooted at the harness's `ml`
+    (or at a name bound to `ml.<attr>`), or None for a chain rooted
+    anywhere else. `ml.models.tokenizer.pattern_name` answers
+    `["models", "tokenizer", "pattern_name"]`."""
+    parts = []
+    cur = node
+    while isinstance(cur, ast.Attribute):
+        parts.append(cur.attr)
+        cur = cur.value
+    if not isinstance(cur, ast.Name):
+        return None
+    if cur.id == "ml":
+        root = []
+    elif cur.id in alias:
+        root = [alias[cur.id]]
+    else:
+        return None
+    parts.reverse()
+    return root + parts
+
+
+def _chain_refs(parts):
+    """Every SUFFIX of a dotted path.
+
+    THE HOLE THIS CLOSES (lane/models-namespace-lanes, 2026-09-19). This walk
+    used to read two levels: `ml.<a>` answered `<a>` and `ml.<a>.<b>` answered
+    `<b>` and `<a>.<b>`, and a third level answered nothing beyond what its
+    own prefix answered. The public surface below is enumerated from `__all__`
+    of every public submodule INCLUDING a submodule's submodules, so it holds
+    eight keys with two dots -- `models.causal_lm.CausalLM`,
+    `models.tokenizer.pattern_name` and their six peers -- and no lane body
+    could ever have named one of them. All eight were reported "no lane" on
+    2026-09-19 while lanes exercised the very objects they name, and no
+    spelling of a lane body could have fixed it: `from mojolearn.models...
+    import` was the only door that reached a two-dot key, and the harness
+    hands lanes an `ml` handle rather than imports. Reporting a gap that
+    cannot be closed is the same defect as reporting a pass that cannot fail.
+
+    Suffixes rather than the full path only: the enumeration keys a top-level
+    name as `<name>` and a submodule's as `<mod>.<name>`, so a chain must
+    answer both. A suffix that matches no enumerated name matches nothing."""
+    return {".".join(parts[i:]) for i in range(len(parts))}
 
 
 def host_family_classes(surface_mod):
@@ -569,17 +606,9 @@ def lane_references(src):
     refs = set()
     for node in ast.walk(tree):
         if isinstance(node, ast.Attribute):
-            base = node.value
-            if isinstance(base, ast.Name):
-                if base.id == "ml":
-                    refs.add(node.attr)
-                elif base.id in alias:
-                    refs.add(node.attr)
-                    refs.add(f"{alias[base.id]}.{node.attr}")
-            elif (isinstance(base, ast.Attribute) and isinstance(base.value, ast.Name)
-                  and base.value.id == "ml"):
-                refs.add(node.attr)
-                refs.add(f"{base.attr}.{node.attr}")
+            parts = _ml_chain(node, alias)
+            if parts:
+                refs |= _chain_refs(parts)
         elif isinstance(node, ast.ImportFrom) and (node.module or "").startswith("mojolearn"):
             sub = node.module.split(".", 1)[1] if "." in node.module else ""
             for a in node.names:
@@ -851,14 +880,19 @@ def render(data):
         for a in no_lane:
             w(f"| `{a['name']}` | {a['kind']} | {a['host_family'] or '-'} | `{a['where']}` |")
         w("")
-        w("The saved-model host inference surface (`HostForest`, `HostGBDT`,")
-        w("`host_model`, `host_predict`, `host_predict_proba`) has no identity_break")
-        w("lane on purpose. It is measured by `tools/forest_host_gate.py` and")
-        w("`tools/classical_host_gate.py` against committed recordings instead:")
-        w(f"{data['forest_recordings']} under `bench/results/forest_host/` and")
-        w(f"{data['classical_recordings']} classical recording directories named in")
-        w("`host_surface.py`. That is a different gate, not a missing one, but it is")
-        w("also not one of the four kinds counted here.")
+        w("THE SAVED-MODEL HOST INFERENCE SURFACE used to be listed here with the")
+        w("note that it had no lane ON PURPOSE, because `tools/forest_host_gate.py`")
+        w("and `tools/classical_host_gate.py` measure it against committed")
+        w(f"recordings instead: {data['forest_recordings']} under")
+        w(f"`bench/results/forest_host/` and {data['classical_recordings']} classical")
+        w("recording directories named in `host_surface.py`. Those gates are real")
+        w("and they pass. What they did not reach (lane/laneless-public-classes,")
+        w("2026-09-19) is `host_predict` and `host_predict_proba`, which no gate")
+        w("calls, and the `parallel_groves` HOST engine, which the forest gate still")
+        w("refuses by name although `core/forest_host_groves.mojo` landed on")
+        w("lane/forest-groves-cpu-and-speed. The `saved-model-host-infer` lane runs")
+        w("all three, so the surface is counted in the four kinds below; the gates")
+        w("remain a different and additional kind of evidence.")
     w("")
     w("### Reached by the harness, with no lane of their own")
     w("")

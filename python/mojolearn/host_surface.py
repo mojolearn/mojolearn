@@ -915,6 +915,22 @@ TRAINING_LANE_NAMES = {
     "bpe-trainer": "byte-level BPE vocabulary training",
     "bpe-vocabulary": "a trained BPE vocabulary written, loaded back and used",
     "tokenized-corpus": "a corpus tokenized once, cached and read back as batches",
+    # THE `mojolearn.models` NAMESPACE, which had no lane of any kind
+    # (lane/models-namespace-lanes, 2026-09-19). tools/verification_matrix.py
+    # reported fourteen public entries with no lane and every one of them was
+    # the Hugging Face loading path; what stood in for a lane was
+    # python/mojolearn/tests/test_models_loader.py, which says the loader
+    # agrees with itself on one box and nothing about two boxes agreeing on a
+    # byte. Three lanes, cut where the code paths cut, each declared by the
+    # family whose binding computes its CPU cell:
+    #   hf-checkpoint  linalg   (widen_bf16 -> from_bf16; see the lane)
+    #   hf-tokenizer   tokenizer (the GPT-2 door, BpeTokenizer.from_token_bytes)
+    #   hf-causal-lm   neural   (_CpuPrimitives and the *Inference blocks)
+    # No GPU record carries them yet, so their cells are OWED against the
+    # record until the next one is taken.
+    "hf-checkpoint": "the Hugging Face checkpoint reader and the option matrix",
+    "hf-tokenizer": "the Hugging Face byte-level BPE tokenizer (three pre-tokenization patterns)",
+    "hf-causal-lm": "a Hugging Face causal language model loaded and run",
     # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
     # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
@@ -939,6 +955,30 @@ TRAINING_LANE_NAMES = {
     "mlp-int8w": "the small MLP with int8-stored weights",
     "samba-bf16w": "the Samba stack with bf16-stored weights",
     "samba-int8w": "the Samba stack with int8-stored weights",
+    # lane/laneless-public-classes (2026-09-19): three public surfaces that
+    # tools/verification_matrix.py reported with NO identity lane at all.
+    # Each is a CPU route already in the tree, so the missing thing was the
+    # lane and not the implementation.
+    #
+    # `saved-model-host-infer` is HostForest, HostGBDT, host_predict and
+    # host_predict_proba. tools/forest_host_gate.py already holds
+    # host_model's two entries to 24 committed GPU recordings and it passes;
+    # what it does not reach is the two one-call entries and the
+    # parallel_groves HOST engine, which that gate still refuses by name
+    # ("the host engine is sequential") although core/forest_host_groves.mojo
+    # landed on lane/forest-groves-cpu-and-speed. It moves under the forest
+    # family's OWN define, not the generic one.
+    #
+    # `lowbit-conversions` is the four conversion seams of contract L-1..L-6.
+    # They had NO sabotage arm before this lane: MOJOLEARN_HOST_SABOTAGE
+    # reaches gemm_oracle's leaf and stops. GATE_SABOTAGE_OWN_DEFINES now
+    # names MOJOLEARN_LOWBIT_CONVERT_SABOTAGE for linalg.
+    #
+    # `grad-accumulation` is clause 9.2's balanced tree and its alignment
+    # predicate, which only the opt-in --batch-grad part had ever reached.
+    "saved-model-host-infer": "saved forest and gradient boosting models predicted on the CPU (inference)",
+    "lowbit-conversions": "the bf16 and int8 weight-storage conversions",
+    "grad-accumulation": "gradient accumulation across microbatches",
 }
 
 #: The saved models the CTR table lanes load on a CPU column, one
@@ -970,8 +1010,21 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: moves it, so it is listed here too and the gate's set now carries both.
 #: A negative control that leaves a covered lane where it found it is not a
 #: negative control for that lane.
+#:
+#: THE LINALG CONVERSION ARM, the same shape as the tokenizer's trainer arm
+#: and for the same reason (lane/laneless-public-classes, 2026-09-19). The
+#: linalg family's own define is MOJOLEARN_HOST_SABOTAGE, and through
+#: `gemm/host/gemm_oracle.mojo::GEMM_ORACLE_HOST_SABOTAGE` it moves the GEMM
+#: leaf and `gemm_int8_oracle`'s dequantized cell. It reaches NOTHING in
+#: `widen_bf16`, `narrow_bf16`, `quantize_rows_int8` or
+#: `dequantize_rows_int8`, which are the whole of contract clauses L-1
+#: through L-6 and every byte the `lowbit-conversions` lane hashes: measured
+#: on the M4, that cell read UNMOVED under the family define alone.
+#: MOJOLEARN_LOWBIT_CONVERT_SABOTAGE is those four seams' own arm and the
+#: gate's set now carries it too.
 GATE_SABOTAGE_OWN_DEFINES = {
     "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
+    "linalg": ("MOJOLEARN_LOWBIT_CONVERT_SABOTAGE",),
     "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE", "MOJOLEARN_BPE_TRAINER_SABOTAGE"),
 }
 
@@ -1073,7 +1126,7 @@ FAMILIES = (
         # models under GBDT_CTR_MODELS_DIR (no CPU fit; see
         # TRAINING_LANE_NAMES), moved in the gate by the CTR arm
         # (GATE_SABOTAGE_OWN_DEFINES).
-        training_lanes=GBDT_CTR_MODEL_LANES,
+        training_lanes=GBDT_CTR_MODEL_LANES + ("saved-model-host-infer",),
         inference_lanes=(),
         forest_kinds=(
             "rf_classifier", "rf_regressor", "et_classifier", "et_regressor",
@@ -1158,7 +1211,18 @@ FAMILIES = (
         # lane read 6ed8b49585df3d85, every part unmoved, on the M4 at the
         # fix. MOJOLEARN_BPE_TRAINER_SABOTAGE is the trainer's, which is why
         # GATE_SABOTAGE_OWN_DEFINES now names both for this family.
-        training_lanes=("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus"),
+        # `hf-tokenizer` joined on 2026-09-19 (lane/models-namespace-lanes).
+        # `mojolearn.models.Tokenizer` reads a Hugging Face `tokenizer.json`
+        # and makes the pre-tokenization PATTERN a parameter (DEVIATION
+        # 2960); for the `gpt2` pattern it encodes through this binding's
+        # compiled door (`BpeTokenizer.from_token_bytes`), and for `llama3`
+        # and `qwen2` through the Python cut and the Python merge, which have
+        # no binding at all. So the ENCODER arm moves the GPT-2 parts, the
+        # TRAINER arm moves every id part (it moves the vocabulary the lane
+        # trains on the fixture), and the Python patterns' parts move under
+        # neither -- what guards those is the recorded hash.
+        training_lanes=("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus",
+                        "hf-tokenizer"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("BpeTokenizer",),
@@ -1206,7 +1270,18 @@ FAMILIES = (
         routes=None,
         loaded_by="python/mojolearn/neural_inference.py",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=(),
+        # THIS FAMILY'S FIRST COVERED LANE (lane/models-namespace-lanes,
+        # 2026-09-19). It served the held-out and batch cells of `mlp`,
+        # `transformer` and the Mamba lanes, whose TRAINING rows belong to
+        # the training, transformer and mamba families, so it declared none
+        # of its own. `hf-causal-lm` is different: `models.CausalLM` with the
+        # public default `device="auto"` assembles
+        # `TransformerBlockInference`/`Mamba1BlockInference` and
+        # `_CpuPrimitives`'s embedding, rms_norm and linear over THIS
+        # binding on a CPU column, and nothing else computes that cell. The
+        # generic -D MOJOLEARN_HOST_SABOTAGE=1 (gemm_oracle's descending
+        # leaf) reaches it, so no own define is needed.
+        training_lanes=("hf-causal-lm",),
         inference_lanes=(),
         forest_kinds=(),
         # lane/inference-neural-forward, 2026-09-15: the Mamba-1, Mamba-2
@@ -1330,7 +1405,19 @@ FAMILIES = (
         # estimator that owns a DeviceContext -- so this family IS their
         # route, not their fallback.
         training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8",
-                        "linalg-qr", "linalg-eigh", "linalg-svdvals"),
+                        "linalg-qr", "linalg-eigh", "linalg-svdvals",
+                        # lane/laneless-public-classes (2026-09-19): the
+                        # conversion seams themselves, under their own arm
+                        "lowbit-conversions",
+                        # lane/models-namespace-lanes (2026-09-19): the
+                        # safetensors reader and the option matrix. The ONE
+                        # native call in that lane is `lowbit.widen_bf16`,
+                        # which is this binding's `from_bf16`, so this family
+                        # is where it belongs and the arm that moves it is
+                        # this family's own MOJOLEARN_LOWBIT_CONVERT_SABOTAGE
+                        # and not MOJOLEARN_HOST_SABOTAGE, for the reason
+                        # GATE_SABOTAGE_OWN_DEFINES states above.
+                        "hf-checkpoint"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("linalg.gemm", "linalg.gemv", "Cholesky",
@@ -2101,7 +2188,9 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("mlp", "optim-sgd", "optim-adam-clip", "cross-entropy-arms", "training-primitives", "ordered-gradient-sum", "par-mlp",
                         "samba", "samba-untied-dropout-accum", "par-samba", "par-samba-clip",
-                        "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w"),
+                        "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w",
+                        # lane/laneless-public-classes (2026-09-19)
+                        "grad-accumulation"),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
@@ -2631,6 +2720,44 @@ PUBLIC_PENDING_LANES = {
     "linalg-qr": "no reference",
     "linalg-eigh": "no reference",
     "linalg-svdvals": "no reference",
+
+    # lane/laneless-public-classes (2026-09-19), the same debt again and
+    # declared the same hour. Three lanes joined their families'
+    # `training_lanes` today, which makes them public reference lanes, and no
+    # committed column of any kind carries them. What they DO have is on this
+    # box and is in `bench/results/identity_break/
+    # 2026-09-19_laneless-public-classes/`: 27 of 27 cells STABLE over all
+    # nine fixtures at `--repeats 2`, both declared batch parts STABLE and
+    # seen BATCH_MOVED under the harness switch, and each one watched failing
+    # under a build define (`saved-model-host-infer` and `lowbit-conversions`
+    # 9/9 under their families' OWN defines and 0/9 under the generic one,
+    # `grad-accumulation` 9/9 under the training family's). That is CPU
+    # bit-reproducibility and a live negative control; it is NOT the
+    # cross-vendor claim, and the honest place to say so is here. They leave
+    # this table the day a GPU column carries them.
+    "saved-model-host-infer": "no reference",
+    "lowbit-conversions": "no reference",
+    "grad-accumulation": "no reference",
+
+    # lane/models-namespace-lanes (2026-09-19), THE SAME DEBT, declared in
+    # the same commit that incurs it. The three `mojolearn.models` lanes
+    # joined the linalg, tokenizer and neural families' `training_lanes`,
+    # which makes them public reference lanes, and no committed column of
+    # any kind carries them. What they DO have is on this box, in
+    # `bench/results/identity_break/2026-09-19_models-namespace/`: 27 of 27
+    # cells STABLE over all nine fixtures at `--repeats 2`, a clean replay
+    # IDENTICAL on all 27, `hf-causal-lm`'s batch part STABLE, and each lane
+    # watched failing 9/9 under a build define -- `hf-checkpoint` under
+    # MOJOLEARN_LOWBIT_CONVERT_SABOTAGE (and 0/9 under the generic one,
+    # which is recorded there and is why linalg needs its own arm),
+    # `hf-tokenizer` under both of the tokenizer family's own arms, and
+    # `hf-causal-lm` under the generic define on the neural family. That is
+    # CPU bit-reproducibility and a live negative control; it is NOT the
+    # cross-vendor claim, which for these three has never been taken on any
+    # column. They leave this table the day a GPU column carries them.
+    "hf-checkpoint": "no reference",
+    "hf-tokenizer": "no reference",
+    "hf-causal-lm": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

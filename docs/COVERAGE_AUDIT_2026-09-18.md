@@ -33,7 +33,26 @@ not run new numerical qualification. Counts below describe different scopes.
 
 The 246-entry catalog maps 244 entries to harness routes. HostForest and HostGBDT
 are the other two: representative bundled saved models and dedicated gates
-cover them. They are not two unimplemented algorithms. Nor can we add 26 to 246
+cover them. They are not two unimplemented algorithms.
+
+> **CHECKED AND PART-CORRECTED SINCE 2026-09-19** (lane/laneless-public-classes).
+> The gate is real: `tools/forest_host_gate.py check` over the eight Apple
+> fixtures re-ran on the M4 at this commit and read IDENTICAL on every
+> `predict` and `predict_proba` SHA-256, and 24 fixture directories across
+> three vendors are committed under `bench/results/forest_host/`. TWO THINGS
+> THE SENTENCE ABOVE COVERED THAT THE GATE DOES NOT. (1) The gate calls
+> `host_model`; `host_predict` and `host_predict_proba`, which the package
+> exports, are called by no gate and no lane. (2) The gate REFUSES a
+> `parallel_groves` archive by name ("the host engine is sequential"), which
+> stopped being true on lane/forest-groves-cpu-and-speed (2026-09-17) when
+> `core/forest_host_groves.mojo` and `forest_host_groves_prepare/predict/
+> release` landed, so the groves HOST engine had no recorded evidence of any
+> kind. The `saved-model-host-infer` lane of `tools/identity_break.py` now
+> runs all three and is watched failing under the forest family's own
+> define, 9 of 9 fixtures
+> (`bench/results/identity_break/2026-09-19_laneless-public-classes/`).
+> The gate's own groves refusal is still owed a fix; it is a gate bug, not
+> an engine bug. Nor can we add 26 to 246
 and claim 272 unique algorithms: the inventories overlap and count different
 things. The checked-in audit inventory lists all 26 additions, all 236 routes,
 per-property declarations and reference-class counts.

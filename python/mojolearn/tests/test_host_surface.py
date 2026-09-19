@@ -422,8 +422,17 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     for name in host_surface.families():
         if name not in host_surface.GATE_SABOTAGE_OWN_DEFINES:
             assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
+    # The linalg family joined GATE_SABOTAGE_OWN_DEFINES on
+    # lane/laneless-public-classes (2026-09-19): MOJOLEARN_HOST_SABOTAGE
+    # reaches gemm_oracle's leaf and gemm_int8_oracle's dequantized cell and
+    # NOTHING in the four conversion seams of contract L-1..L-6, measured --
+    # the lowbit-conversions cell read the clean hash on all nine fixtures
+    # under the family define alone.
+    assert host_surface.sabotage_build_defines("linalg").split() == [
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1"]
     sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
-               "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"]}
+               "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"],
+               "linalg": ["gemm/host/gemm_lowbit_oracle.mojo"]}
     sources["tokenizer"].append("tokenizer/train/bpe_train.mojo")
     for name, defines in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
         text = "".join(_read(rel) for rel in sources[name])
@@ -446,7 +455,14 @@ def test_gbdt_ctr_models_cover_every_fixture():
     missing = [f"{lane}.{fx}.npz" for lane in host_surface.GBDT_CTR_MODEL_LANES for fx in fixtures
                if not (d / f"{lane}.{fx}.npz").is_file()]
     assert missing == [], f"{d} lacks {missing}"
-    assert set(host_surface.GBDT_CTR_MODEL_LANES) == set(host_surface.family("forest")["training_lanes"])
+    # Every CTR lane is a forest training lane. The reverse stopped holding on
+    # lane/laneless-public-classes (2026-09-19), when `saved-model-host-infer`
+    # joined the family: that lane FITS on the fixture and saves, so it needs
+    # no bundled model, and an equality here would have forced a second
+    # meaning onto this tuple.
+    assert set(host_surface.GBDT_CTR_MODEL_LANES) <= set(host_surface.family("forest")["training_lanes"])
+    assert set(host_surface.family("forest")["training_lanes"]) - set(host_surface.GBDT_CTR_MODEL_LANES) \
+        == {"saved-model-host-infer"}
 
 
 def test_workflow_wires_the_gaps_7_lanes():
