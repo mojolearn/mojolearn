@@ -1,56 +1,53 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""`verify --all` IN SINGLE-DIGIT MINUTES, by packing lanes instead of adding cores.
+"""SHARD `verify --all` -- ON A CPU BACKEND ONLY, AND IT REFUSES ANY OTHER.
 
-    python3 tools/verify_sharded.py                 # 4 shards, the default
+    python3 tools/verify_sharded.py                 # 4 shards, CPU backend
     python3 tools/verify_sharded.py --shards 6
     python3 tools/verify_sharded.py --weights <a previous --json-out>
 
-WHY THIS EXISTS, AND WHY IT IS PACKING AND NOT PARALLELISM.
+READ THIS BEFORE CHANGING THE REFUSAL. On 2026-09-19 this tool was written
+without it, run against the Metal backend on the shared M4, and it produced
+1049 DIVERGENT cell parts across 40 lanes. NONE OF THEM WERE REAL. Three of
+those lanes, re-run SOLO on the same bindings the same minute:
 
-`python -m mojolearn verify --all` walks its lanes SERIALLY. On 2026-09-19 it
-took 1296 s, and the obvious reading -- "241 lanes, so it is slow" -- is
-wrong. The run's own `lane_seconds` says:
+    gmm, gp-matern12, rbf-sampler, 4-way sharded   36 DIVERGENT parts each
+    the same three, solo                            0 DIVERGENT, VERIFIED
 
-    median lane                      0.76 s
-    lanes finishing under 1 s         143 of 241
-    top 15 lanes                      919 s = 71% of all lane time
-    gbdt-parametric-losses            200 s = 15.5%, one lane
+`docs/` and this project's operating rules already said so: concurrent Metal
+jobs on one M4 return NaN, constant and zero outputs, and solo reruns come
+back clean -- a Metal-only cell produced under contention IS NOT EVIDENCE.
+Four shards on one GPU is four concurrent Metal jobs.
 
-The library is not slow. FIFTEEN LANES ARE, ten of them gbdt. That changes
-the fix: splitting 241 lanes evenly across N processes does NOT divide the
-wall clock by N, because whichever shard draws the 200 s lane becomes the
-critical path and the other shards sit idle. Measured against this run:
+AND IT BOUGHT NOTHING. Predicted critical path 323 s; measured wall 1163 s
+against 1296 s serial. A 10% saving, for a run whose every divergence was an
+artifact, because THE GPU IS THE SERIAL RESOURCE -- packing lanes across
+processes cannot parallelise one device.
 
-    shards   even split (naive)      heaviest-first (this tool)
-         2            ~648 s                        647 s
-         4            ~324 s  but in practice       323 s
-         6            ~216 s   bounded by 200 s     216 s
+SO: this tool refuses to run unless the verifier is on the CPU route, where
+the shards are genuinely independent. On a Metal or CUDA backend, one Mac
+runs `verify --all` SERIALLY and 21.6 minutes is the floor on this machine.
 
-The floor is the single heaviest lane, 200 s, and no number of shards beats
-it. Four shards reach 5.4 minutes, which is the budget this was written to.
+WHEN IT DOES APPLY, THE PACKING IS THE RIGHT PACKING. A CPU run's cost is
+wildly uneven -- from the 2026-09-19 measurement:
 
-HEAVIEST FIRST ONTO THE LIGHTEST SHARD -- the same rule
-`cpu_identity_gate_check.shard_lanes` uses, for the same reason, so a rerun
-with the same weights gives the same split and two runs are comparable.
+    median lane                    0.76 s
+    lanes finishing under 1 s       143 of 241
+    top 15 lanes                    919 s = 71% of all lane time
+    gbdt-parametric-losses          200 s = 15.5%, ONE LANE
 
-THE WEIGHTS ARE MEASURED, AND THEY AGE. `--weights` takes any previous
-`--json-out`; its `lane_seconds` become the packing weights. Without one
-every lane weighs the same and the split is merely even, which is the naive
-column above. A lane absent from the weights is given the median, not zero,
-so a NEW lane is never packed as if it were free.
+so an even split does not divide the wall clock: whichever shard draws the
+200 s lane is the critical path. Heaviest lane first onto the lightest shard
+-- the rule `cpu_identity_gate_check.shard_lanes` already uses, so the split
+is deterministic and two runs are comparable. THE FLOOR IS THE HEAVIEST
+LANE, 200 s, and no number of shards beats it.
 
-WHAT IS NOT SHARDED. The comparator self-test runs ONCE, in shard 0, not in
-every shard: it is the same question each time and it costs a full lane.
-Every shard reads the same shipped reference table, so the merged counts are
-the counts `verify --all` would have produced; this tool re-adds them and
-re-derives the verdict, it does not re-judge any cell.
-
-A SHARD THAT DIES IS NOT A SHARD THAT PASSED. Any non-zero exit, or a
-missing json, makes the whole run INCOMPLETE and names the shard. That is
-the failure mode `verify_lanes.py` documents at length, and it is refused
-here by construction rather than by hoping.
+`--weights` takes any previous `--json-out`; a lane ABSENT from its
+`lane_seconds` is given the median, never zero, so a new lane is never
+packed as if it were free. The comparator self-test runs ONCE, in shard 0.
+A shard that exits non-zero or writes no json makes the whole run INCOMPLETE
+and is named.
 """
 import argparse
 import json
@@ -99,7 +96,22 @@ def main(argv=None):
                     help="a previous --json-out; its lane_seconds pack the shards")
     ap.add_argument("--out", default=None, help="directory for the shard JSONs")
     ap.add_argument("--plan", action="store_true", help="print the split and stop")
+    ap.add_argument("--cpu-only", action="store_true",
+                    help="assert the verifier is on the CPU route; sharding is "
+                         "refused without it (see this module's docstring)")
     args = ap.parse_args(argv)
+
+    if args.shards > 1 and not args.cpu_only:
+        print("REFUSED: sharding is valid on the CPU route only.\n"
+              "  Four shards on one GPU is four CONCURRENT METAL JOBS, and this\n"
+              "  tool produced 1049 phantom DIVERGENT parts that way on\n"
+              "  2026-09-19; the same lanes run solo came back VERIFIED. It also\n"
+              "  saved nothing -- 1163 s sharded against 1296 s serial -- because\n"
+              "  the GPU is the serial resource.\n"
+              "  Pass --cpu-only when the verifier is on the CPU route, or run\n"
+              "  `python -m mojolearn verify --all` serially for a GPU column.",
+              file=sys.stderr)
+        return 2
 
     lanes, weights = lanes_and_weights(args.weights)
     bins, load = pack(lanes, weights, args.shards)
