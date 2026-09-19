@@ -69,6 +69,7 @@ from gemm.checks.gemm_oracle import (
     OP_TN,
     contract_leaf_count,
     contract_leaf_size,
+    fold_balanced_tree,
     fold_level_base,
     fold_level_count,
     fold_level_width,
@@ -84,6 +85,7 @@ from gemm.checks.gemm_oracle import (
     leaf_count,
     leaf_end,
     op_name,
+    oracle_leaf_partial,
 )
 from core.gemm import (
     GEMM_MBLK,
@@ -1934,6 +1936,69 @@ def check_serial_oracle_is_the_one_leaf_case() raises:
     print("check_serial_oracle_is_the_one_leaf_case OK [" + _mode_name() + "]")
 
 
+def check_one_leaf_fast_path_matches_explicit_fold() raises:
+    """The allocation-free P=1 path is the former spelling, bit for bit.
+
+    Exercise every orientation, both leaf-boundary endpoints, ordinary
+    cancellation, and signed zero.  The expected value is deliberately
+    rebuilt through a one-element ``fold_balanced_tree`` so this check keeps
+    covering the exact allocation-and-fold route replaced in production.
+    """
+    for k in List[Int]([1, 64, 127, 128]):
+        if contract_leaf_count(k) != 1:
+            raise Error("one-leaf fast-path fixture unexpectedly has P != 1")
+        comptime m = 3
+        comptime n = 4
+        for op in List[Int]([OP_NN, OP_NT, OP_TN]):
+            var a = List[Float32]()
+            var b = List[Float32]()
+            if op == OP_TN:
+                for p in range(k):
+                    for i in range(m):
+                        var av = Float32((p * 5 + i * 3) % 13 - 6) * Float32(0.25)
+                        if (p + i) % 17 == 0:
+                            av = Float32(-0.0)
+                        a.append(av)
+            else:
+                for i in range(m):
+                    for p in range(k):
+                        var av = Float32((p * 5 + i * 3) % 13 - 6) * Float32(0.25)
+                        if (p + i) % 17 == 0:
+                            av = Float32(-0.0)
+                        a.append(av)
+            if op == OP_NT:
+                for j in range(n):
+                    for p in range(k):
+                        var bv = Float32((p * 7 + j * 2) % 11 - 5) * Float32(0.125)
+                        if (p + j) % 19 == 0:
+                            bv = Float32(-0.0)
+                        b.append(bv)
+            else:
+                for p in range(k):
+                    for j in range(n):
+                        var bv = Float32((p * 7 + j * 2) % 11 - 5) * Float32(0.125)
+                        if (p + j) % 19 == 0:
+                            bv = Float32(-0.0)
+                        b.append(bv)
+            var got = gemm_oracle(a, b, op, m, n, k)
+            for i in range(m):
+                for j in range(n):
+                    var partials = List[Float32]()
+                    partials.append(
+                        oracle_leaf_partial(a, b, op, i, j, m, n, k, 0, k)
+                    )
+                    var want = fold_balanced_tree(partials)
+                    var cell = i * n + j
+                    if _bits(got[cell]) != _bits(want):
+                        raise Error(
+                            "one-leaf fast path moved k=" + String(k)
+                            + " op=" + op_name(op) + " cell=" + String(cell)
+                            + ": got " + _show(got[cell]) + " explicit fold "
+                            + _show(want)
+                        )
+    print("check_one_leaf_fast_path_matches_explicit_fold OK [" + _mode_name() + "]")
+
+
 def check_right_zero_padding_elision() raises:
     """Compressing a shared exact-zero k suffix preserves every output bit.
 
@@ -2601,6 +2666,7 @@ def main() raises:
     check_fold_tree_addressing()
     check_oracle_matches_the_contract_spelling()
     check_serial_oracle_is_the_one_leaf_case()
+    check_one_leaf_fast_path_matches_explicit_fold()
     check_right_zero_padding_elision()
     check_orientations_agree()
     check_f1_serial_vs_splitk()
