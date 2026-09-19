@@ -3,6 +3,21 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.8 (unreleased 2026-09-19)
+
+A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
+of GPU-written CTR models no longer erases the recorded GPU model-byte reference;
+a real mismatch still fails. Targeted parallel-lane reference updates and exact
+new-wheel light smoke evidence accompany publication. This patch does not add
+CPU implementations of GPU-only parallel lanes or certify physical multi-GPU use.
+
+Alpha Python/reference patches can now reuse a published wheel when its native
+compile inputs are unchanged. The wheel records separate package and native
+source commits, preserves the parent's build proof, and requires a new installed
+smoke. Unchanged algorithms do not require a repeat library-wide campaign. Prepared
+alpha publication now defaults to the light profile; full certification remains
+an explicit choice.
+
 ## 0.8.7 (published 2026-09-18)
 
 This release was built from integrated `main` at `4e1828f90`, including the

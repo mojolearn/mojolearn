@@ -1,5 +1,7 @@
 # Release checklist
 
+**Alpha Python/reference patch:** use the [bounded patch path](lanes/RELEASE_PROCESS_ALPHA.md#pythonreference-patches-with-unchanged-native-inputs). Reuse unchanged native binaries, check only affected numerical references, and smoke each exact final wheel. The broader native-build and certification steps below do not apply to every such patch.
+
 Five steps, one finish line: the file is on PyPI and installs. The longer
 runbooks (`docs/PYPI_RELEASE.md`, `docs/RELEASE_0_6_1_EXECUTION_PLAN.md`,
 `packaging/ALPHA_LINUX_061_PUBLICATION.md`, `docs/RELEASE_0_6_1_RUNPOD_PROFILE7.md`)

@@ -81,9 +81,9 @@ on:
         default: ''
         type: string
       validation_profile:
-        description: Full CPU certification, or explicitly scoped Apple/NVIDIA installed smoke for prepared alpha API artifacts.
+        description: Light installed smoke for prepared alpha API artifacts (default), or explicit full native build/certification.
         required: true
-        default: full
+        default: light
         type: choice
         options:
           - full
@@ -115,8 +115,24 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate_inputs:
+    name: Select the release path
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require a prepared candidate for light publication
+        env:
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          if [ "$VALIDATION_PROFILE" = light ] && [ -z "$CANDIDATE_TAG" ]; then
+            echo '::error::Light releases need alpha_candidate_tag and its manifest SHA. Select full only when a fresh native build/certification is intended.'
+            exit 2
+          fi
+
   cpu_certification:
     name: Full CPU reference certification
+    needs: validate_inputs
     if: inputs.publish != 'none' && inputs.validation_profile != 'light'
     uses: ./.github/workflows/cpu-identity-gate.yml
     with:
@@ -126,7 +142,8 @@ jobs:
 
   build:
     name: Build and verify the wheel
-    if: inputs.alpha_candidate_tag == ''
+    needs: validate_inputs
+    if: inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light'
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
@@ -605,6 +622,7 @@ jobs:
 
   alpha_stage:
     name: Admit explicitly alpha API artifacts
+    needs: validate_inputs
     outputs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
     if: inputs.alpha_candidate_tag != ''

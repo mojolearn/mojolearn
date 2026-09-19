@@ -228,6 +228,16 @@ class AlphaOverlayTests(unittest.TestCase):
             self.assertNotIn(b'Development Status :: 5 - Production/Stable', metadata)
             self.assertIn(overlay.NOTICE.encode('ascii'), metadata)
 
+    def test_overlay_does_not_duplicate_the_parent_alpha_notice(self):
+        header, _ = self.files[self.dist + 'METADATA'].split(b'\n\n', 1)
+        self.files[self.dist + 'METADATA'] = header + b'\n\n' + (overlay.NOTICE + '\n\nOriginal description\n').encode()
+        self.write()
+        result = overlay.assemble(self.wheel, self.python, '0.6.0a1', self.root / 'out')
+        with zipfile.ZipFile(result) as archive:
+            metadata = archive.read('mojolearn-0.6.0a1.dist-info/METADATA')
+            self.assertEqual(metadata.count(overlay.NOTICE.encode()), 1)
+            self.assertTrue(metadata.endswith(b'Original description\n'))
+
     def test_traversal_refused(self):
         self.files['../escape'] = b'bad'
         self.write()

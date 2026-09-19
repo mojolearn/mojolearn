@@ -87,12 +87,16 @@ class LightReleaseTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'receipt digest'):
             gate.check(self.root, self.commit)
 
-    def test_workflow_keeps_full_default_and_checks_light_before_both_publish_stages(self):
+    def test_workflow_defaults_to_prepared_light_and_checks_before_both_publish_stages(self):
         import yaml
         workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / '.github/workflows/release-provenance.yml').read_text())
         inputs = workflow.get('on', workflow.get(True))['workflow_dispatch']['inputs']
-        self.assertEqual(inputs['validation_profile']['default'], 'full')
+        self.assertEqual(inputs['validation_profile']['default'], 'light')
         jobs = workflow['jobs']
+        self.assertEqual(jobs['alpha_stage']['needs'], 'validate_inputs')
+        self.assertEqual(jobs['build']['needs'], 'validate_inputs')
+        self.assertIn("validation_profile != 'light'", jobs['build']['if'])
+        self.assertIn('exit 2', jobs['validate_inputs']['steps'][0]['run'])
         self.assertIn("validation_profile != 'light'", jobs['cpu_certification']['if'])
         publish = jobs['publish_alpha']['if']
         self.assertIn("needs.alpha_stage.result == 'success'", publish)

@@ -215,8 +215,11 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
         # Preserve the original UTF-8 description bytes; compat32's text
         # payload round-trip otherwise tries to serialize non-ASCII as ASCII.
         body_parts = re.split(br'\r?\n\r?\n', metadata_raw, maxsplit=1)
-        metadata.set_payload(NOTICE.encode('utf-8') + b'\n\n' +
-                             (body_parts[1] if len(body_parts) == 2 else b''))
+        description = body_parts[1] if len(body_parts) == 2 else b''
+        notice_prefix = NOTICE.encode('utf-8') + b'\n\n'
+        while description.startswith(notice_prefix):
+            description = description[len(notice_prefix):]
+        metadata.set_payload(notice_prefix + description)
         new_dist = 'mojolearn-' + version + '.dist-info'
         reuse = None
         if source_commit is not None:

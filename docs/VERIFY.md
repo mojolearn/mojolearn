@@ -1,8 +1,7 @@
 # Verify the identity claims on your own machine
 
-This page describes the **0.8.7 release candidate**, including commands that
-are not in older published wheels. Source coverage and a development-wheel
-check do not qualify the final PyPI release.
+This page describes the current verifier API. Each published wheel has its own
+release evidence; source coverage alone does not qualify a distributed wheel.
 
 Under the IDENTICAL tier, verification compares fixed fixtures with recorded
 hashes and checks applicable local contracts, including batch invariance:
@@ -545,20 +544,17 @@ boosting lanes take 40 to 140 s each on the M4. On a shared GPU run it in
 pieces, `--lanes a,b,...` a group at a time, or check one area with
 `--lanes` and `--fixtures base`. `--quick` is the few-seconds check.
 
-**Maintainers: do not run a full Apple column routinely.** There is one Mac
-with one GPU, only one Metal job runs at a time, and it cannot be rented or
-parallelized, so a full Apple pass (over seven hours, measured) serializes
-every other GPU need on that machine behind it. The Apple column is recorded
-ONCE PER PyPI RELEASE (`docs/RELEASE_CHECKLIST.md` section 5b,
-ENGINEERING_RULES.md section 12), and `tools/identity_break.py` refuses a
-full-column Apple run that does not name the release in
-`MOJOLEARN_APPLE_RELEASE_RECORD`.
+**Maintainers: do not run a full Apple column routinely or for every alpha
+release.** Use the exact-wheel light smoke and target numerical checks at changed
+arithmetic, missing references, or a specific observed failure. A historical full
+Apple pass exceeded seven hours; it is not a publication requirement. The bounded
+alpha policy is documented in `docs/lanes/RELEASE_PROCESS_ALPHA.md` and
+`ENGINEERING_RULES.md` section 12. Full-column diagnostic guards remain in place.
 
-For routine and occasional verification use the **rented CPU column**, which
-is bitwise equal to Metal, runs in parallel and costs about $0.24/hour
-(`tools/runpod_cpu_leg.sh`, `docs/RUNPOD_CPU_LEG.md`). The only question the
-Apple column uniquely answers is whether the Metal backend agrees, and that
-is a per-release question.
+Routine checks can use an implemented CPU route. A CPU result does not establish
+Metal correctness, and a GPU-only route has no CPU evidence merely because the
+corresponding serial algorithm exists. Preserve successful compatible records;
+repeat only the affected work and the final new wheel's small installed smoke.
 
 ## Exit codes
 
