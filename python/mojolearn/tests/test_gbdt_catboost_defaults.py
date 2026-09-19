@@ -236,7 +236,11 @@ def test_ordered_fit_sends_the_ordered_tail():
     assert len(_fit_fake(p)[7]) == 4 and p.boosting_type_ == 'Plain'
 
 
-def test_ordered_eval_set_is_refused_by_name_and_says_why_when_defaulted():
-    with pytest.raises(NotImplementedError, match='resolved to Ordered because'):
-        _fit_fake(GradientBoosting(loss='Logloss', n_estimators=600),
-                  eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))
+def test_ordered_fit_takes_an_eval_set():
+    # their test cursor is restated (dynamic_boosting.h:423-430): the eval
+    # arrays cross with the Ordered tail, as a Plain fit's do
+    m = GradientBoosting(loss='Logloss', n_estimators=600)
+    args = _fit_fake(m, eval_set=(np.ones((4, 3), np.float32), np.array([0, 1, 0, 1], np.float32)))
+    assert m.boosting_type_ == 'Ordered'
+    assert args[6][20] == 4          # n_eval_rows
+    assert args[7][5] == 'Ordered'

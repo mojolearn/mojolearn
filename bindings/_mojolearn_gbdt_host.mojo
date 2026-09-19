@@ -143,12 +143,17 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
+from gbdt.options.overfitting_detector_options import (
+    load_overfitting_detector_options,
+)
+from gbdt.overfitting_detector.overfitting_detector import OD_NONE
 from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
     border_type_from_name,
 )
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 from gbdt.host.gbdt_oracle_ordered import (
+    GbdtOrderedHostEval,
     GbdtOrderedHostOptions,
     gbdt_ordered_host_fit,
     gbdt_ordered_rmse_host_fit,
@@ -571,6 +576,8 @@ def _gbdt_fit_ordered_arm(
     x_address: Int,
     y_address: Int,
     flags_address: Int,
+    eval_x_address: Int,
+    eval_y_address: Int,
     params: PythonObject,
     strs: PythonObject,
     border_type: Int,
@@ -642,12 +649,6 @@ def _gbdt_fit_ordered_arm(
             " grouping (dynamic_boosting.h:189-223), which this Ordered arm"
             " does not restate"
         )
-    if n_eval_rows != 0:
-        raise Error(
-            "boosting_type='Ordered' with eval_set is not implemented here"
-            " (the reference's test cursor, dynamic_boosting.h:423-430, is"
-            " not restated); fit without an eval set"
-        )
     if use_pointwise:
         raise Error(
             "use_pointwise_searcher selects the doc-parallel Plain searcher;"
@@ -670,8 +671,30 @@ def _gbdt_fit_ordered_arm(
         _refuse_ordered_host("class_weights")
     if n_flags != 0:
         _refuse_ordered_host("cat_features or one_hot_features")
-    if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
-        _refuse_ordered_host("the overfitting detector")
+    # the detector as `gbdt_fit` resolves it, through the same host function
+    # (`load_overfitting_detector_options`, their `Load`)
+    var use_best_model = Int(py=params[23])
+    var best_model_min_trees = Int(py=params[24])
+    var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
+    var od_kind = od.od_type
+    if use_best_model == 1 and n_eval_rows == 0:
+        raise Error(
+            "use_best_model=1 needs an eval set: pass eval_x_colmajor and"
+            " eval_y, or leave it unset."
+        )
+    if best_model_min_trees < 1:
+        raise Error(
+            "best_model_min_trees must be at least 1, got "
+            + String(best_model_min_trees)
+        )
+    if od_kind != OD_NONE and n_eval_rows == 0:
+        raise Error(
+            "od_type is set but there is no held-out set. Stopping on the"
+            " LEARN loss would stop on a curve that falls almost by"
+            " construction; their own detector is inert without a test set"
+            " (overfitting_detector.cpp:122-124) and this refuses rather"
+            " than silently never firing."
+        )
     if boost_from_average == 1 and loss != String("RMSE"):
         _refuse_ordered_host("boost_from_average=True outside RMSE")
     if border_count < 1 or border_count > 255:
@@ -760,24 +783,49 @@ def _gbdt_fit_ordered_arm(
     )
     var text = String("")
     var losses = List[Float64]()
+    var test_losses = List[Float64]()
     var best = 0
+    var stopped = False
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
         var y = read_f32(y_address, n_rows)
-        var fit = gbdt_ordered_host_fit(x, y, n_rows, n_features, p, hloss, opts)
+        var ex = List[Float32]()
+        var ey = List[Float32]()
+        if n_eval_rows > 0:
+            ex = read_f32(eval_x_address, n_eval_rows * n_features)
+            ey = read_f32(eval_y_address, n_eval_rows)
+        # `UpdateUseBestModel` (`options_helper.cpp:100-113`), as `train`
+        var eval_const = True
+        for r in range(1, n_eval_rows):
+            if ey[r] != ey[0]:
+                eval_const = False
+                break
+        var want_best = use_best_model
+        if want_best == -1:
+            want_best = 1 if (n_eval_rows > 0 and not eval_const) else 0
+        var ev = GbdtOrderedHostEval(
+            ex^, ey^, n_eval_rows, od_kind, od.auto_stop_p_value,
+            od.iterations_wait, want_best, best_model_min_trees,
+        )
+        var fit = gbdt_ordered_host_fit(x, y, n_rows, n_features, p, hloss, opts, ev)
         text = fit.text
         losses = fit.losses.copy()
+        test_losses = fit.test_losses.copy()
         best = fit.best_iteration
+        stopped = fit.stopped_early
     _ = flags_address
     var learn = Python.list()
     for i in range(len(losses)):
         learn.append(PythonObject(losses[i]))
+    var test = Python.list()
+    for i in range(len(test_losses)):
+        test.append(PythonObject(test_losses[i]))
     var out = Python.list()
     out.append(PythonObject(text))
     out.append(PythonObject(best))
-    out.append(PythonObject(False))
+    out.append(PythonObject(stopped))
     out.append(learn)
-    out.append(Python.list())
+    out.append(test)
     return out
 
 
@@ -832,8 +880,9 @@ def gbdt_fit_binding(
     # the Plain arms' refusals
     if len(strs) == 8 and String(py=strs[5]) == String("Ordered"):
         return _gbdt_fit_ordered_arm(
-            Int(py=x_addr), Int(py=y_addr), Int(py=cat_flags_addr), params,
-            strs, border_type,
+            Int(py=x_addr), Int(py=y_addr), Int(py=cat_flags_addr),
+            Int(py=eval_x_addr), Int(py=eval_y_addr), params, strs,
+            border_type,
         )
     if len(strs) == 8 and String(py=strs[5]) != String("Plain"):
         raise Error(

@@ -1260,16 +1260,21 @@ _GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
 def _(ml, X, yc, yr, Xh=None):
     """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
     configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
-    (their four permutations, ten Newton steps per leaf) and an RMSE fit
-    (boost_from_average on, as their unset default), 20 trees of depth 6
-    each. The fold structure search, every (permutation, fold) cursor and the
-    estimation permutation reach the train column through the RMSE fit's
-    loss curve as well as both fits' predictions."""
+    (their four permutations, ten Newton steps per leaf) with an eval set,
+    the Iter detector at wait 5 and use_best_model (their test cursor), and
+    an RMSE fit (boost_from_average on, as their unset default), 20 trees of
+    depth 6 each. The fold structure search, every (permutation, fold)
+    cursor and the estimation permutation reach the train column through both
+    fits' predictions and learn curves and the Logloss fit's held-out curve."""
+    ych = labels_for(Xh, HELDOUT_SEED)[0]
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
-              boosting_type="Ordered").fit(X, yc)
+              boosting_type="Ordered", od_type="Iter", od_wait=5
+              ).fit(X, yc, eval_set=(Xh, ych))
     r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
               boosting_type="Ordered").fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
+                     best_iteration=_h(np.asarray([m.best_iteration_], dtype=np.int64)),
                      rmse=_h(r.predict(X)),
                      rmse_loss_curve=_h(np.asarray(r.loss_curve_, dtype=np.float64))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))

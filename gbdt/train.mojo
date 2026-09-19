@@ -1111,17 +1111,6 @@ def train(
                 " grouping (dynamic_boosting.h:189-223), which this Ordered"
                 " arm does not restate"
             )
-        if len(eval_y) > 0 or len(eval_x_colmajor) > 0:
-            raise Error(
-                "boosting_type='Ordered' with eval_set is not implemented"
-                " here (the reference's test cursor, dynamic_boosting.h:"
-                "423-430, is not restated); fit without an eval set"
-            )
-        if od_type != "" and od_type != "None":
-            raise Error(
-                "boosting_type='Ordered' with the overfitting detector is not"
-                " implemented here: it needs the eval set"
-            )
         if use_pointwise_searcher:
             raise Error(
                 "use_pointwise_searcher selects the doc-parallel Plain"
@@ -1981,84 +1970,6 @@ def train(
                 + "': Bayesian, Bernoulli, Poisson, No"
             )
 
-    # ---- ORDERED BOOSTING (lane/catboost-parity) ----------------------
-    # Everything above -- borders, the compressed index, the targets and
-    # weights, the loss and its leaf estimator, the bootstrap -- is shared
-    # with the Plain fit; the loop is `fit_ordered`.
-    if ordered:
-        var o_model = TAdditiveModel()
-        var o_start = Float64(0.0)
-        if bfa:
-            var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
-            ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
-            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
-            ctx.synchronize()
-            var t_host = List[Float32](capacity=n_rows)
-            var w_host = List[Float32](capacity=n_rows)
-            for i in range(n_rows):
-                t_host.append(h_t.unsafe_ptr().unsafe_load(i))
-                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
-            # `StartingPoint = CalcOptimumConstApprox(...)`
-            # (`dynamic_boosting.h:563-573`), the plain fit's own helper
-            o_start = calc_one_dimensional_optimum_const_approx(
-                objective, t_host, w_host, True
-            )
-            o_model.bias = o_start
-            _ = h_t^
-            _ = h_w^
-        var o_opts = OrderedBoostingOptions(
-            objective,
-            loss_desc.kernel_alpha(),
-            loss_desc.get_alpha(),
-            loss_desc.get_logloss_border(),
-            estimation.method,
-            estimation.iterations,
-            score_function,
-            learning_rate,
-            resolved_l2,
-            random_strength,
-            random_seed,
-            boot_kind,
-            boot_param,
-            DEFAULT_PERMUTATION_COUNT if permutation_count == -1
-            else permutation_count,
-            fold_len_multiplier,
-            ordered_permutation_block_size(n_rows, fold_permutation_block),
-            ORDERED_MIN_FOLD_SIZE,
-            Float32(o_start),
-        )
-        var o_layout = build_layout(fold_counts, column_one_hot)
-        var o_losses = fit_ordered(
-            ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
-            max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
-            column_one_hot, o_opts, o_model, trace,
-        )
-        host_times.stop_host("train_ordered_fit", t_phase)
-        host_times.stop_host("train_total", t_train)
-        host_times.report()
-        # the ERROR tracker's best with no test set: the first strict
-        # minimum of the learn curve (`error_tracker.h:58-64`), what the
-        # plain fit reports without an eval set
-        var o_best = 0
-        for i in range(1, len(o_losses)):
-            if o_losses[i] < o_losses[o_best]:
-                o_best = i
-        return TrainedModel(
-            o_model^,
-            fold_counts^,
-            column_one_hot^,
-            borders^,
-            column_nan_treatment^,
-            o_losses^,
-            List[Float64](),
-            o_best,
-            False,
-            ctr_column_count,
-            ctr_tables^,
-            TTensorCtrRegistry(len(fold_counts)),
-        )
-
     # ---- the HELD-OUT set, quantized against THIS MODEL'S BORDERS ----
     # That is the whole reason this lives in `train` and not in `fit`:
     # `borders` is built here, from the learn rows, and a `cindex` built
@@ -2159,6 +2070,92 @@ def train(
         ctx, eval_rows, test_cindex^, test_targets^,
         approx_dim, 1 + approx_dim, max_depth,
     )
+
+    # ---- ORDERED BOOSTING (lane/catboost-parity) ----------------------
+    # Everything above -- borders, the compressed index, the targets and
+    # weights, the loss and its leaf estimator, the bootstrap -- is shared
+    # with the Plain fit; the loop is `fit_ordered`.
+    if ordered:
+        var o_model = TAdditiveModel()
+        var o_start = Float64(0.0)
+        if bfa:
+            var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+            var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+            ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
+            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
+            ctx.synchronize()
+            var t_host = List[Float32](capacity=n_rows)
+            var w_host = List[Float32](capacity=n_rows)
+            for i in range(n_rows):
+                t_host.append(h_t.unsafe_ptr().unsafe_load(i))
+                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
+            # `StartingPoint = CalcOptimumConstApprox(...)`
+            # (`dynamic_boosting.h:563-573`), the plain fit's own helper
+            o_start = calc_one_dimensional_optimum_const_approx(
+                objective, t_host, w_host, True
+            )
+            o_model.bias = o_start
+            _ = h_t^
+            _ = h_w^
+        var o_opts = OrderedBoostingOptions(
+            objective,
+            loss_desc.kernel_alpha(),
+            loss_desc.get_alpha(),
+            loss_desc.get_logloss_border(),
+            estimation.method,
+            estimation.iterations,
+            score_function,
+            learning_rate,
+            resolved_l2,
+            random_strength,
+            random_seed,
+            boot_kind,
+            boot_param,
+            DEFAULT_PERMUTATION_COUNT if permutation_count == -1
+            else permutation_count,
+            fold_len_multiplier,
+            ordered_permutation_block_size(n_rows, fold_permutation_block),
+            ORDERED_MIN_FOLD_SIZE,
+            Float32(o_start),
+        )
+        var o_layout = build_layout(fold_counts, column_one_hot)
+        var o_out = fit_ordered(
+            ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
+            max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+            column_one_hot, o_opts, o_model, trace, test_arm,
+            od_kind, od_pvalue, od_wait,
+        )
+        # `ShrinkToBestIteration`, the Plain fit's own block below
+        if want_best_model == 1 and len(o_out.test_losses) > 0:
+            var o_min_best = -1
+            var o_min_err = Float64(0.0)
+            for i in range(len(o_out.test_losses)):
+                if i + 1 < best_model_min_trees:
+                    continue
+                if o_min_best < 0 or o_out.test_losses[i] < o_min_err:
+                    o_min_err = o_out.test_losses[i]
+                    o_min_best = i
+            var o_best_iter = o_min_best + 1
+            if 0 < o_best_iter and o_best_iter < o_model.size():
+                o_model.shrink(o_best_iter)
+        host_times.stop_host("train_ordered_fit", t_phase)
+        host_times.stop_host("train_total", t_train)
+        host_times.report()
+        return TrainedModel(
+            o_model^,
+            fold_counts^,
+            column_one_hot^,
+            borders^,
+            column_nan_treatment^,
+            o_out.learn_losses.copy(),
+            o_out.test_losses.copy(),
+            o_out.best_iteration,
+            o_out.stopped_early,
+            ctr_column_count,
+            ctr_tables^,
+            TTensorCtrRegistry(len(fold_counts)),
+        )
+
 
     host_times.stop_host("train_pre_fit", t_phase)
     t_phase = host_times.start()
