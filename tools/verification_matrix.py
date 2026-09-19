@@ -1145,6 +1145,45 @@ def build():
                 neural_public_lanes=list(getattr(harness, "NEURAL_PUBLIC_PART_LANES", ())))
 
 
+def unreachable_gaps(lanes):
+    """Gap-list entries that NO RUN ON ANY HARDWARE could close.
+
+    FOUR TIMES ON 2026-09-19 a heading in this document advertised work
+    nobody could do, which is worse than silence because somebody rents a box
+    for it:
+
+      * `par-*` on the CPU axis -- 36 inexpressible claims sitting on top of
+        3 real ones, a 12:1 noise ratio that hid them for a day;
+      * `par-*` on the GPU axis -- 13 lanes whose claim is STATEABLE only on
+        two devices and ADMISSIBLE only on one, so the count was unreachable
+        in both directions at once;
+      * six host-routed lanes under "No GPU column at all", whose arithmetic
+        is the CPU route and which measure that box's CPU when handed a GPU;
+      * `admit` refusing `par_devices != "0"`, which threw away the only
+        column able to state the drivers' proposition -- 50 of 51 lanes had
+        two-device proof sitting unread for five days.
+
+    Each was found by hand, late, after the number had already sent work
+    somewhere. This is the check for the fifth: a lane may only be listed as
+    missing a vendor class if it can actually STATE its proposition on that
+    class's column. `lane_applicability.degenerate()` is the same rule
+    `verify_lanes.py` enforces at run time, asked here at report time.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import lane_applicability as la
+    col_for = {"apple": "apple-metal", "nvidia": "nvidia-1gpu", "amd": "amd-1gpu"}
+    deg = {cls: set(la.degenerate(col)) for cls, col in col_for.items()}
+    bad = []
+    rows = lanes.values() if isinstance(lanes, dict) else lanes
+    for r in rows:
+        if r["two_device"] or r.get("gpu_vacuous"):
+            continue                      # already held out, with a reason
+        for cls in col_for:
+            if cls not in (r["gpu"] or []) and r["lane"] in deg[cls]:
+                bad.append((r["lane"], cls))
+    return bad
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--write", action="store_true", help=f"rewrite {DOC}")
@@ -1172,8 +1211,20 @@ def main():
         if have != text:
             print(f"verification_matrix: {DOC} is STALE; run --write", file=sys.stderr)
             return 1
+        bad = unreachable_gaps(data["lanes"])
+        if bad:
+            print("verification_matrix: a gap list names work NO RUN CAN DO -- "
+                  "the lane is degenerate on the very column it is said to lack:",
+                  file=sys.stderr)
+            for lane, cls in bad:
+                print(f"  {lane} listed as missing {cls}, but is degenerate there",
+                      file=sys.stderr)
+            print("  Hold them out with a reason, as par-* and the host-routed "
+                  "lanes already are.", file=sys.stderr)
+            return 1
         print(f"verification_matrix OK: {DOC} matches the tree "
-              f"({len(data['lanes'])} lanes, {len(data['algorithms'])} public API entries)")
+              f"({len(data['lanes'])} lanes, {len(data['algorithms'])} public API entries); "
+              "no gap list names unreachable work")
         return 0
     sys.stdout.write(text)
     return 0

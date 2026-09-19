@@ -26,10 +26,10 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **254** (201 single-device, 53 `par-*` multi-GPU drivers).
+- Lanes: **256** (201 single-device, 55 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **244**.
 - Source public API entries with ALL FOUR kinds on at least one lane: **193** of 244.
-- Source public API entries with NO IDENTITY LANE AT ALL: **10**.
+- Source public API entries with NO IDENTITY LANE AT ALL: **6**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
 
@@ -38,20 +38,20 @@ Per kind, over the public API entries:
 | kind | API entries that have it | missing |
 |---|---|---|
 | gpu column | 227 | 17 |
-| cpu verifier | 200 | 44 |
+| cpu verifier | 204 | 40 |
 | sabotage seen to move a build | 198 | 46 |
-| batch part or named n/a | 234 | 10 |
+| batch part or named n/a | 238 | 6 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 250 | 4 |
-| gpu column on all three classes | 230 | 24 |
-| cpu verifier declared | 219 | 35 |
-| sabotage seen to move a build | 210 | 44 |
-| batch part or named n/a | 254 | 0 |
-| ALL FOUR | 207 | 47 |
+| gpu column (any class) | 250 | 6 |
+| gpu column on all three classes | 230 | 26 |
+| cpu verifier declared | 221 | 35 |
+| sabotage seen to move a build | 210 | 46 |
+| batch part or named n/a | 256 | 0 |
+| ALL FOUR | 207 | 49 |
 
 Sabotage, split by what was actually watched:
 
@@ -59,7 +59,7 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 210 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 10 | the family declares a define; no committed pair moves this lane |
+| declared | 12 | the family declares a define; no committed pair moves this lane |
 | none | 34 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -73,10 +73,6 @@ means a CPU path exists and only the identity lane is missing.
 |---|---|---|---|
 | `mamba.Mamba1DecodeSession` | class | - | `python/mojolearn/_mamba_impl.py` |
 | `models.ParallelCausalLM` | class | - | `python/mojolearn/models/parallel_causal_lm.py` |
-| `parallel_forecasting.forecast_arima` | function | - | `python/mojolearn/parallel_forecasting.py` |
-| `parallel_forecasting.forecast_exponential_smoothing` | function | - | `python/mojolearn/parallel_forecasting.py` |
-| `parallel_forecasting.predict_arima` | function | - | `python/mojolearn/parallel_forecasting.py` |
-| `parallel_forecasting.predict_exponential_smoothing` | function | - | `python/mojolearn/parallel_forecasting.py` |
 | `parallel_gaussian_process.fit_gaussian_process_classifier` | function | - | `python/mojolearn/parallel_gaussian_process.py` |
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | function | - | `python/mojolearn/parallel_gaussian_process.py` |
 | `parallel_model_selection.cross_val_score` | function | - | `python/mojolearn/parallel_model_selection.py` |
@@ -114,7 +110,7 @@ A blank cell means no lane of this algorithm has that kind.
 
 | algorithm | lanes | gpu | cpu | sabotage | batch | all four |
 |---|---|---|---|---|---|---|
-| `ARIMA` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ARIMA` | 7 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `AgglomerativeClustering` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -127,7 +123,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `ElasticNet` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExperimentalTwoLevelFeatureFreq` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `ExponentialSmoothing` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ExponentialSmoothing` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExtraTreesClassifier` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExtraTreesRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GPT2Tokenizer` (alias of `BpeTokenizer`) | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -309,10 +305,10 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_ensemble.fit_isolation_forest` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ensemble.fit_ordered_rmse` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ensemble.score_isolation_forest` | 1 | amd,apple,nvidia |  | none | part | NO |
-| `parallel_forecasting.forecast_arima` | **0** |  |  |  |  | NO |
-| `parallel_forecasting.forecast_exponential_smoothing` | **0** |  |  |  |  | NO |
-| `parallel_forecasting.predict_arima` | **0** |  |  |  |  | NO |
-| `parallel_forecasting.predict_exponential_smoothing` | **0** |  |  |  |  | NO |
+| `parallel_forecasting.forecast_arima` | 1 |  | training | declared | part | NO |
+| `parallel_forecasting.forecast_exponential_smoothing` | 1 |  | training | declared | part | NO |
+| `parallel_forecasting.predict_arima` | 1 |  | training | declared | part | NO |
+| `parallel_forecasting.predict_exponential_smoothing` | 1 |  | training | declared | part | NO |
 | `parallel_gaussian_process.fit_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_graph.fit_graph` | 3 | amd,apple,nvidia |  | none | part | NO |
@@ -535,6 +531,8 @@ A blank cell means no lane of this algorithm has that kind.
 | par-cholesky | amd,apple,nvidia | - | none | - | part | NO |
 | par-dbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-feature-freq | amd,apple,nvidia | - | none | - | part | NO |
+| par-forecast-arima | - | training | declared | - | part | NO |
+| par-forecast-holtwinters | - | training | declared | - | part | NO |
 | par-forest | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
 | par-forest-et | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
 | par-forest-et-clf | amd,nvidia | training | declared | - | part | NO |
@@ -653,7 +651,7 @@ proved is real and is reported under the driver heading below, not here.
 
 > none
 
-> (plus 1 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+> (plus 3 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
 **GPU column on fewer than three classes: 5**
 
@@ -671,7 +669,7 @@ proved is real and is reported under the driver heading below, not here.
 
 > gbdt-bfa-quantile, gbdt-border-types, gbdt-catboost-defaults, gbdt-ordered, gbdt-ordered-bayesian-noise
 
-> (plus 39 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
+> (plus 41 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
 **Batch undeclared: 0**
 
@@ -699,9 +697,9 @@ stateable on.
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 
-53 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
+55 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
 
-**50 of 53 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
+**50 of 55 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
 
 | par-arima | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
@@ -717,6 +715,8 @@ stateable on.
 | par-cholesky | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
 | par-dbscan | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-feature-freq | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-forecast-arima | - | no two-device column |
+| par-forecast-holtwinters | - | no two-device column |
 | par-forest | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-forest-et | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-forest-et-clf | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-forest-et-clf-two.json |
@@ -757,7 +757,7 @@ stateable on.
 | par-svm | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-svm-svr | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-svm-svr-two.json |
 
-> par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-ivf, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
+> par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forecast-arima, par-forecast-holtwinters, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-ivf, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
 ## Public names not counted as algorithms
 
