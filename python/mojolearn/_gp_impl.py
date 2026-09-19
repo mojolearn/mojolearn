@@ -72,7 +72,7 @@ the Apple M4, an NVIDIA H100 and an AMD MI325X under IDENTICAL. The gp SPEED lad
 speed claim.
 """
 
-import math
+from . import _portable_math as math
 import numbers
 
 from . import _backend
@@ -168,8 +168,8 @@ class Kernel:
     left operand first, scikit-learn's order), one entry per feature for an
     ARD length scale; `bounds` is the log of each entry's `(low, high)` pair;
     `n_dims` is their count. A leaf built with bounds "fixed" contributes
-    nothing. On a user's kernel these read `math.log` in Python; the fit
-    computes the same quantities with the binding's portable `log` and `exp`,
+    nothing. A user's kernel uses the owned host math helper; the fit
+    uses the same pinned logarithm arithmetic through its Mojo binding,
     and a fitted `kernel_` reports the optimizer's own theta."""
 
     def __add__(self, other):

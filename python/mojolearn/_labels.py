@@ -46,7 +46,7 @@ module, and because it depends only on the contract's `addr_ro`.
 """
 
 import ctypes
-import math
+from . import _portable_math as math
 import numbers
 
 from ._array import Array

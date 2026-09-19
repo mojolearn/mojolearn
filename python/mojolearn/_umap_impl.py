@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Python surface for the supported dense, Euclidean UMAP slice."""
 
-import math
+from . import _portable_math as math
 import operator
 
 from . import _backend

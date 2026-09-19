@@ -195,9 +195,9 @@ def main(argv=None):
         except ValueError as exc:
             parser.error(str(exc))
         distribution['source_record_hashes_match'] = distribution['native_record_hashes_match'] = True
-    from ._verify import environment
+    from ._verify import environment_json
     report = dict(protocol=PROTOCOL, status='INCOMPLETE', source_commit=source['commit'], source=source,
-                  package_origin=ml.__file__, distribution=distribution, bindings=bindings, environment=environment(),
+                  package_origin=ml.__file__, distribution=distribution, bindings=bindings, environment=environment_json(),
                   vendor=ml.vendor(), devices=list(devices), repeats=2, folds=5, runs=[], controls=[],
                   physical_execution_trace='OWED', native_fault_controls='OWED',
                   scope='CV numerical, save/reload and placement checks; no capacity, throughput or complete physical execution qualification')

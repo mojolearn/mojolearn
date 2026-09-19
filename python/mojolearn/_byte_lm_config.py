@@ -75,7 +75,7 @@ class ByteLanguageModelConfig:
 
     @property
     def offsets(self):
-        from math import prod
+        from ._portable_math import prod
         offsets = [0]
         for shape in self.parameter_shapes:
             offsets.append(offsets[-1] + prod(shape))

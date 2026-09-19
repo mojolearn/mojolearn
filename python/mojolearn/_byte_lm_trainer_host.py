@@ -56,7 +56,7 @@ read-backs, and the attention and step glue arm read-backs
 them).
 """
 import ctypes
-import math
+from . import _portable_math as math
 import operator
 import struct
 

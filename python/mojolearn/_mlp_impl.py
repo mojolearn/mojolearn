@@ -18,7 +18,7 @@ written here loads there, byte for byte (see `_encode_array`).
 """
 import hashlib
 import json
-import math
+from . import _portable_math as math
 import operator
 import os
 from pathlib import Path

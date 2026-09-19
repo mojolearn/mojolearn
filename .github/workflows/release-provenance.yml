@@ -80,6 +80,29 @@ on:
         required: false
         default: ''
         type: string
+      validation_profile:
+        description: Light installed smoke for prepared alpha API artifacts (default), or explicit full native build/certification.
+        required: true
+        default: light
+        type: choice
+        options:
+          - full
+          - light
+
+      light_platform:
+        description: Explicit platform batch for light publication; each wheel needs its own successful installed smoke.
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - macos
+          - linux
+      artifact_source_commit:
+        description: Optional frozen artifact source SHA when only publisher automation changed after the build.
+        required: false
+        default: ''
+        type: string
 
 # Deny by default. Every job adds back exactly what it needs, so a step that
 # starts wanting a token has to say so in a diff.
@@ -92,9 +115,25 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  validate_inputs:
+    name: Select the release path
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Require a prepared candidate for light publication
+        env:
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          if [ "$VALIDATION_PROFILE" = light ] && [ -z "$CANDIDATE_TAG" ]; then
+            echo '::error::Light releases need alpha_candidate_tag and its manifest SHA. Select full only when a fresh native build/certification is intended.'
+            exit 2
+          fi
+
   cpu_certification:
     name: Full CPU reference certification
-    if: inputs.publish != 'none'
+    needs: validate_inputs
+    if: inputs.publish != 'none' && inputs.validation_profile != 'light'
     uses: ./.github/workflows/cpu-identity-gate.yml
     with:
       confirm: RUN-HEAVY
@@ -103,7 +142,8 @@ jobs:
 
   build:
     name: Build and verify the wheel
-    if: inputs.alpha_candidate_tag == ''
+    needs: validate_inputs
+    if: inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light'
     # Self-hosted and ephemeral. See the header: a hosted runner produces a
     # wheel with no GPU kernels in it.
     runs-on: [self-hosted, macos, arm64, metal, real-gpu]
@@ -505,7 +545,7 @@ jobs:
   publish:
     name: Publish to ${{ inputs.publish }}
     needs: [build, cpu_certification]
-    if: inputs.publish != 'none' && inputs.alpha_candidate_tag == ''
+    if: inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The environment name is what the Trusted Publisher on PyPI and TestPyPI
@@ -520,7 +560,11 @@ jobs:
       # THE ONLY JOB IN THIS FILE WITH THIS PERMISSION. It mints the OIDC
       # token the Trusted Publisher checks; there is no API token anywhere.
       id-token: write
+      contents: read
     steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
       - name: Download the wheel that was built
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -570,6 +614,12 @@ jobs:
           }
           rm -f manifest.txt
 
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
+
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
@@ -582,6 +632,7 @@ jobs:
 
   alpha_stage:
     name: Admit explicitly alpha API artifacts
+    needs: validate_inputs
     outputs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
     if: inputs.alpha_candidate_tag != ''
@@ -625,6 +676,14 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('required=' + ('true' if contract is not None else 'false') + '\n')
           PYQUAL
+      - name: Download bounded installed smoke receipts
+        if: inputs.validation_profile == 'light'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CANDIDATE_TAG: ${{ inputs.alpha_candidate_tag }}
+        run: |
+          gh release download "$CANDIDATE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --pattern 'light-smoke-*.json' --dir dist
       - name: Download complete installed Linux evidence when declared
         if: steps.linux_qualification.outputs.required == 'true'
         env:
@@ -648,12 +707,19 @@ jobs:
           timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
             dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}" > alpha-admission.json
           cat alpha-admission.json
+      - name: Admit the exact prepared wheels under the light release policy
+        if: inputs.validation_profile == 'light'
+        env:
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
+        run: python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mojolearn-alpha-wheel
           path: |
             dist/*.whl
             dist/alpha-manifest.json
+            dist/light-smoke-*.json
           if-no-files-found: error
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: steps.linux_qualification.outputs.required == 'true'
@@ -670,7 +736,11 @@ jobs:
   publish_alpha:
     name: Publish alpha API artifacts to ${{ inputs.publish }}
     needs: [alpha_stage, cpu_certification]
-    if: inputs.publish != 'none' && inputs.alpha_candidate_tag != ''
+    if: >-
+      always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
+      needs.alpha_stage.result == 'success' &&
+      ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
+       (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
     timeout-minutes: 15
     environment:
@@ -694,6 +764,9 @@ jobs:
       - name: Recheck exact alpha bytes immediately before publishing
         env:
           EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
         run: |
           set -euo pipefail
           cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
@@ -703,7 +776,17 @@ jobs:
           fi
           timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
             dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          if [ "$VALIDATION_PROFILE" = light ]; then
+            python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
+          fi
           rm dist/alpha-manifest.json
+          rm -f dist/light-smoke-*.json
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
+
       - name: Publish exact alpha API wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:

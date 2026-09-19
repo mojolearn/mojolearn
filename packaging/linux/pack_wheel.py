@@ -482,6 +482,8 @@ def main():
                     help='complete per-architecture build-provenance.json; three required for ' + RELEASE_PROFILE)
     ap.add_argument("--check-against", default="",
                     help="a macOS wheel whose METADATA must match this one's")
+    ap.add_argument("--portable-math-helper", type=pathlib.Path,
+                    help="Linux-built libMojolearnMath.so; required when packing on macOS")
     a = ap.parse_args()
     if a.profile in RELEASE_PROFILES:
         a.profile = RELEASE_PROFILE  # DEVIATION 2290: the alias maps to the same path
@@ -680,6 +682,17 @@ def main():
             record.append(f"{arc},sha256={urlsafe_b64(hashlib.sha256(data).digest())},{len(data)}")
         record.append(f"{dist}/RECORD,,")
         z.writestr(f"{dist}/RECORD", "\n".join(record) + "\n")
+
+    # Finalize cached runtime closures too; never trust an older set to be libm-free.
+    import subprocess
+    command = [sys.executable, str(REPO / "packaging/portable_math/wheel.py"), str(whl)]
+    if a.portable_math_helper:
+        command += ["--helper", str(a.portable_math_helper)]
+    try:
+        subprocess.run(command, check=True)
+    except Exception:
+        whl.unlink(missing_ok=True)
+        raise
 
     # Audit independently of the package allow-list above, so adding an API
     # without updating packaging fails at build time rather than after upload.

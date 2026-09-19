@@ -1,0 +1,77 @@
+{
+  "scope": "Previously missing two-device model-file references. Batch checks deliberately omitted because their compatible existing evidence is retained.",
+  "lanes": [
+    {
+      "lane": "par-arima",
+      "record": "nvidia-model-par-arima.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "d978d7f7fae28a9a88c9533c0c4c478bc7b2d2c0db3693aad9cb3607cdb5bd71"
+    },
+    {
+      "lane": "par-cd",
+      "record": "nvidia-model-par-cd.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "30ac0d25b35a6aa1d0c015943cc0c28c34d12ec063d602a4b58b1f544d4f56ab"
+    },
+    {
+      "lane": "par-cholesky",
+      "record": "nvidia-model-par-cholesky.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "229986d8876f6d4570cde2db7145fc0cfe010707bbcbc478a87c6e13df362df9"
+    },
+    {
+      "lane": "par-gmm",
+      "record": "nvidia-model-par-gmm.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "edd9a4d8a601f22181ea9a6a9b707731f6b758aaab163d7ababff15b63a39ab7"
+    },
+    {
+      "lane": "par-gp",
+      "record": "nvidia-model-par-gp.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "231f6e5d98ede9e48dd877973919e4daa679d405a0080d19793c37c35f07005b"
+    },
+    {
+      "lane": "par-holtwinters",
+      "record": "nvidia-model-par-holtwinters.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "003f77656d518ce98319dad312111917a049a82d4e144bf6c964c168e1591962"
+    },
+    {
+      "lane": "par-iforest",
+      "record": "nvidia-model-par-iforest.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "fa8a1d75b6819b3fa978a10e12b14027548b6ee8dd53531e3c0eb982494b3415"
+    },
+    {
+      "lane": "par-kernel-ridge",
+      "record": "nvidia-model-par-kernel-ridge.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "ae003bdb0e06a569ba92014c6bede93c635f00213f617685527d0a228719577c"
+    },
+    {
+      "lane": "par-nystroem",
+      "record": "nvidia-model-par-nystroem.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "602cde3b971e0b76b8c4d101e0b9162ec8c5d194e497f510801e883d769efada"
+    },
+    {
+      "lane": "par-queries-radius",
+      "record": "nvidia-model-par-queries-radius.json",
+      "matching_numerical_parts": 27,
+      "new_model_fixtures": 9,
+      "sha256": "8993ab9424fe77bdc38e4941475ee7aa2c1c18bda631fc758834407c2b8bc5ca"
+    }
+  ],
+  "matching_numerical_parts": 270,
+  "new_model_fixtures": 90
+}

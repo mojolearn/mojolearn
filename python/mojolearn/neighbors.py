@@ -9,7 +9,7 @@ regressor built on it.
 (`neighbors/impl/knn/knn.mojo`, `neighbors/impl/selection/knn.mojo`).
 """
 
-import math
+from . import _portable_math as math
 
 from . import _mojolearn, _serialize
 from ._array import Array

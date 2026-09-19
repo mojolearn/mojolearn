@@ -509,7 +509,7 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     (identical GEMM cell contract and a per-cell epilogue); rows are joined
     by copying bytes in input order.
     """
-    import numpy as np
+    from ._array import Array
     from .kernel_methods import RBFSampler
     if type(estimator) is not RBFSampler:
         raise TypeError('requires mojolearn.RBFSampler')
@@ -525,7 +525,7 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     rows = X.shape[0]
     if rows == 0:
         return estimator.transform(X)
-    shards = [np.ascontiguousarray(np.asarray(X)[start:start + rows_per_shard])
+    shards = [X[start:start + rows_per_shard]
               for start in range(0, rows, rows_per_shard)]
     pool = DevicePool(devices)
     try:
@@ -533,10 +533,14 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     finally:
         pool.close()
     q = estimator.random_weights_.shape[1]
-    out = np.empty((rows, q), dtype='<f4')
+    out = Array((rows, q), '<f4')
     start = 0
     for part in parts:
-        part = np.asarray(part)
-        out[start:start + part.shape[0]] = part
+        part, _ = as_f32_c(part, ndim=2, name="worker result")
+        if part.shape[1] != q or start + part.shape[0] > rows:
+            raise ValueError("RBFSampler worker returned an invalid result shape")
+        out._mv[start * q:(start + part.shape[0]) * q] = part._mv
         start += part.shape[0]
+    if start != rows:
+        raise ValueError("RBFSampler workers returned an incomplete result")
     return out

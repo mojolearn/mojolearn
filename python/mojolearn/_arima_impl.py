@@ -78,7 +78,7 @@ That property, where it exists at all, belongs to
 selected explicitly, makes no cross-vendor claim of any kind.
 """
 
-import math
+from . import _portable_math as math
 
 from . import _backend
 from ._array import Array

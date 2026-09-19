@@ -25,7 +25,7 @@ if args.installed:
   raise AssertionError('Installed qualification requires a clean environment without NumPy')
  assert pathlib.Path(ml.__file__).resolve().is_relative_to(pathlib.Path(sys.prefix).resolve()), ml.__file__
  required = importlib.metadata.requires('mojolearn') or []
- assert not [r for r in required if 'extra ==' not in r], required
+ assert not required, required
 if args.no_gpu:
  assert ml.Array.from_list([1, 2], '<i4').tolist() == [1, 2]
  print(json.dumps(dict(numpy_loaded=False, package_file=ml.__file__, scope='import and Array only; GPU not tested')))

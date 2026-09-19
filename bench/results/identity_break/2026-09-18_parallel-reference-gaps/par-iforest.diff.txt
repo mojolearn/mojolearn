@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|------------|------------------|------------------|------------------|
+| par-iforest/base             | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
+| par-iforest/denormal         | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
+| par-iforest/denormal_ftz     | IDENTICAL x3 | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b | 54ea9b5c8c3fc38b |
+| par-iforest/dupes            | IDENTICAL x3 | b879bcf3dcf99f38 | b879bcf3dcf99f38 | b879bcf3dcf99f38 |
+| par-iforest/hashed           | IDENTICAL x3 | 72260557474879ae | 72260557474879ae | 72260557474879ae |
+| par-iforest/negative         | IDENTICAL x3 | a5b7676e39778af5 | a5b7676e39778af5 | a5b7676e39778af5 |
+| par-iforest/odd              | IDENTICAL x3 | 9b849a13c8d35adb | 9b849a13c8d35adb | 9b849a13c8d35adb |
+| par-iforest/ties             | IDENTICAL x3 | 5043855ee14799da | 5043855ee14799da | 5043855ee14799da |
+| par-iforest/wide             | IDENTICAL x3 | 8703d4a008ffd13d | 8703d4a008ffd13d | 8703d4a008ffd13d |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| par-iforest/base             | infer  | IDENTICAL x3 | c4247bb3a6c4675e | c4247bb3a6c4675e | c4247bb3a6c4675e |
+| par-iforest/base             | model  | IDENTICAL x3 | 547970b132aefe8b | 547970b132aefe8b | 547970b132aefe8b |
+| par-iforest/base             | batch  | IDENTICAL x3 | 59fc2061e91cc75e | 59fc2061e91cc75e | 59fc2061e91cc75e |
+| par-iforest/base             | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/denormal         | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
+| par-iforest/denormal         | model  | IDENTICAL x3 | c238af75d3ba262b | c238af75d3ba262b | c238af75d3ba262b |
+| par-iforest/denormal         | batch  | IDENTICAL x3 | 89245b842d2fa13e | 89245b842d2fa13e | 89245b842d2fa13e |
+| par-iforest/denormal         | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/denormal_ftz     | infer  | IDENTICAL x3 | f3dcde6748050803 | f3dcde6748050803 | f3dcde6748050803 |
+| par-iforest/denormal_ftz     | model  | IDENTICAL x3 | 0ac95e316c539de0 | 0ac95e316c539de0 | 0ac95e316c539de0 |
+| par-iforest/denormal_ftz     | batch  | IDENTICAL x3 | 89245b842d2fa13e | 89245b842d2fa13e | 89245b842d2fa13e |
+| par-iforest/denormal_ftz     | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/dupes            | infer  | IDENTICAL x3 | db8a00a8aa424f7c | db8a00a8aa424f7c | db8a00a8aa424f7c |
+| par-iforest/dupes            | model  | IDENTICAL x3 | fb2362d583209a88 | fb2362d583209a88 | fb2362d583209a88 |
+| par-iforest/dupes            | batch  | IDENTICAL x3 | bfeab82f12199afa | bfeab82f12199afa | bfeab82f12199afa |
+| par-iforest/dupes            | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/hashed           | infer  | IDENTICAL x3 | e4d04598e6d55395 | e4d04598e6d55395 | e4d04598e6d55395 |
+| par-iforest/hashed           | model  | IDENTICAL x3 | 37e9f5de0dd4f62f | 37e9f5de0dd4f62f | 37e9f5de0dd4f62f |
+| par-iforest/hashed           | batch  | IDENTICAL x3 | bbe1f1b12f09585b | bbe1f1b12f09585b | bbe1f1b12f09585b |
+| par-iforest/hashed           | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/negative         | infer  | IDENTICAL x3 | 99572e40ada83cdf | 99572e40ada83cdf | 99572e40ada83cdf |
+| par-iforest/negative         | model  | IDENTICAL x3 | 67a2841351048d55 | 67a2841351048d55 | 67a2841351048d55 |
+| par-iforest/negative         | batch  | IDENTICAL x3 | 413ee44500f1aadd | 413ee44500f1aadd | 413ee44500f1aadd |
+| par-iforest/negative         | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/odd              | infer  | IDENTICAL x3 | 7b104f74d47a6e15 | 7b104f74d47a6e15 | 7b104f74d47a6e15 |
+| par-iforest/odd              | model  | IDENTICAL x3 | 2d57161b40f6a7bd | 2d57161b40f6a7bd | 2d57161b40f6a7bd |
+| par-iforest/odd              | batch  | IDENTICAL x3 | a1fd5f3bc2fbe36a | a1fd5f3bc2fbe36a | a1fd5f3bc2fbe36a |
+| par-iforest/odd              | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/ties             | infer  | IDENTICAL x3 | 288c5e41c62cddea | 288c5e41c62cddea | 288c5e41c62cddea |
+| par-iforest/ties             | model  | IDENTICAL x3 | 052acc3268f89dc5 | 052acc3268f89dc5 | 052acc3268f89dc5 |
+| par-iforest/ties             | batch  | IDENTICAL x3 | d441bc2c72edfeab | d441bc2c72edfeab | d441bc2c72edfeab |
+| par-iforest/ties             | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-iforest/wide             | infer  | IDENTICAL x3 | a8612e7e09b4983b | a8612e7e09b4983b | a8612e7e09b4983b |
+| par-iforest/wide             | model  | IDENTICAL x3 | 26cfa8e7383086a0 | 26cfa8e7383086a0 | 26cfa8e7383086a0 |
+| par-iforest/wide             | batch  | IDENTICAL x3 | a034e98794a42baf | a034e98794a42baf | a034e98794a42baf |
+| par-iforest/wide             | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): NOT-COMPARED=9
+require-columns 3 over ['par-iforest']: OK

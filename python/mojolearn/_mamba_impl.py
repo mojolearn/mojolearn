@@ -92,7 +92,7 @@ prefill backward. Current scope and packaging boundaries are documented in
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 from ._arrays import _addr, _addr_ro
-import math
+from . import _portable_math as math
 
 from . import _backend
 from . import lowbit as _lowbit

@@ -5,7 +5,7 @@
 # rather than from the building machine. Nothing is stated in both files.
 
 [build-system]
-requires = ["setuptools>=77", "wheel"]
+requires = ["setuptools>=77", "wheel", "lief==1.0.0"]
 build-backend = "setuptools.build_meta"
 # 77 is the floor because the PEP 639 `license` expression and `license-files`
 # below are only understood from that version.
@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.8.7"
+version = "0.8.8"
 description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast, deterministic, and cross-vendor identical modes for certified configurations"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -128,9 +128,6 @@ classifiers = [
 # a zero-copy __array_interface__ for callers that choose to use NumPy.
 # NumPy is an optional test/diagnostic oracle, not a runtime requirement.
 dependencies = []
-
-[project.optional-dependencies]
-test = ["numpy>=1.24"]
 
 [project.urls]
 Homepage = "https://github.com/mojolearn/mojolearn"

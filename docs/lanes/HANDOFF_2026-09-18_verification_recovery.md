@@ -1,5 +1,13 @@
 # Verification coverage: worktree recovery audit
 
+## Release closeout (2026-09-18)
+
+0.8.7 is published on PyPI for macOS and Linux and marked latest on GitHub.
+Both exact wheels passed the approved light installed smoke; all owned rentals
+are deleted. See [release evidence](RELEASE_087_LIGHT.md) and the
+[alpha process review](RELEASE_PROCESS_ALPHA.md). The verifier and identity work
+remaining below is separate follow-up, not an unfinished publication gate.
+
 2026-09-18. Continued at origin/main a4dfa844fde4fbd65c7beb802a1daead0f8e1a27
 in ~/mojolearn-wt/verification-coverage-continuation. The user requested checking
 existing worktrees for good work not yet merged before continuing coverage.

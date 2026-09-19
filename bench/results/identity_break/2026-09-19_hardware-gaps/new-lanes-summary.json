@@ -1,0 +1,75 @@
+{
+  "scope": "Eleven previously uncaptured two-device lanes; default nine fixtures and two repeats; numerical references match. Separate candidate fixes receipt serialization for distributed/CV. No universal hardware or execution-trace certificate.",
+  "published_wheel_sha256": "3f0a7003d33c3de04349663350e37497c043f6a4b884950255dc5254295041e5",
+  "package_source_commit": "d8047d4415b34327a28013dd9331969567ea02b7",
+  "native_source_commit": "4e1828f90384c4b2bb3e4bdc025f4931b7553dfb",
+  "lanes": [
+    {
+      "lane": "par-boosting-clf",
+      "record": "nvidia-par-boosting-clf.json",
+      "matching_numerical_parts": 27,
+      "sha256": "1ebf0e8adcb4cca9e0fea805d80b05c646b896f543c6c77c50535552baaa7892"
+    },
+    {
+      "lane": "par-boosting-reg",
+      "record": "nvidia-par-boosting-reg.json",
+      "matching_numerical_parts": 27,
+      "sha256": "57962946bf585fecb5e32fbcd49f85a95bb729480b124bf64d1a6121542e3c59"
+    },
+    {
+      "lane": "par-cd-elasticnet",
+      "record": "nvidia-par-cd-elasticnet.json",
+      "matching_numerical_parts": 36,
+      "sha256": "9c93aaaa2c85111653544f3a8716de29ed3e8e4f7bcc9fc2c2e5add6d2dfdc68"
+    },
+    {
+      "lane": "par-forest-et-clf",
+      "record": "nvidia-par-forest-et-clf.json",
+      "matching_numerical_parts": 36,
+      "sha256": "c04609d723c5678407978b3222fb26a114d23f71fd4b36b7b6281bbb7f8cb6c2"
+    },
+    {
+      "lane": "par-forest-reg",
+      "record": "nvidia-par-forest-reg.json",
+      "matching_numerical_parts": 36,
+      "sha256": "1aaa7841cf45b0b1834a9a05a6bc4a227f2b7c02a928fc9fb25af22d08d9f2d7"
+    },
+    {
+      "lane": "par-gram-ols",
+      "record": "nvidia-par-gram-ols.json",
+      "matching_numerical_parts": 36,
+      "sha256": "877865e8ea415d2922826a5981c20aa8b2bb84362ec295e7a850c0218741aec6"
+    },
+    {
+      "lane": "par-gram-pca",
+      "record": "nvidia-par-gram-pca.json",
+      "matching_numerical_parts": 36,
+      "sha256": "c52d735e88887e153b5c2d06984f9089160f0f96bac3bc6679c00e01db54e5da"
+    },
+    {
+      "lane": "par-gram-tsvd",
+      "record": "nvidia-par-gram-tsvd.json",
+      "matching_numerical_parts": 36,
+      "sha256": "21b34494ca19609f3add4eae99b26d0c784309b96ef4c277989ba683fcc4e71c"
+    },
+    {
+      "lane": "par-queries-nn",
+      "record": "nvidia-par-queries-nn.json",
+      "matching_numerical_parts": 36,
+      "sha256": "5c6a95cc7ee8004cc30a383e2657573647fc96d0e9b0852a7f213b4b8f4f3c97"
+    },
+    {
+      "lane": "par-scaler-minmax",
+      "record": "nvidia-par-scaler-minmax.json",
+      "matching_numerical_parts": 36,
+      "sha256": "4af9b4d6323dddab01e8f25957387ec4ac2c2d384379613e894790447c5b83f0"
+    },
+    {
+      "lane": "par-svm-svr",
+      "record": "nvidia-par-svm-svr.json",
+      "matching_numerical_parts": 36,
+      "sha256": "4f003405bcc4841bcec498c358ff40fe7956b52d7b8f6303acb9a0c2bb1d8c5d"
+    }
+  ],
+  "matching_numerical_parts": 378
+}

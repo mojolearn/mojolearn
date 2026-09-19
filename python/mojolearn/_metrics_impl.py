@@ -57,7 +57,7 @@ reachable from Python. They are gated where they live, in
 `silhouette_check.mojo`.
 """
 
-import math
+from . import _portable_math as math
 import numbers
 from ._buffer import _materialize, _native
 from ._labels import is_bool, flatten_labels, flat_view

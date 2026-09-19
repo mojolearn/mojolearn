@@ -1,0 +1,232 @@
+{
+  "schema": "mojolearn.targeted-parallel-admission.v1",
+  "status": "PASSED",
+  "source_commit": "4e1828f90384c4b2bb3e4bdc025f4931b7553dfb",
+  "lanes": [
+    "par-cd",
+    "par-cholesky",
+    "par-dbscan",
+    "par-gmm",
+    "par-gp",
+    "par-graph-agglomerative",
+    "par-hdbscan",
+    "par-iforest",
+    "par-kernel-ridge",
+    "par-kmeans",
+    "par-nystroem",
+    "par-resample"
+  ],
+  "fixtures": [
+    "base",
+    "ties",
+    "hashed",
+    "wide",
+    "denormal",
+    "denormal_ftz",
+    "dupes",
+    "odd",
+    "negative"
+  ],
+  "repeats": 2,
+  "device_classes": [
+    "apple",
+    "amd",
+    "nvidia"
+  ],
+  "record_count": 35,
+  "comparison_counts": {
+    "IDENTICAL": 414,
+    "N/A": 81,
+    "NOT-COMPARED": 45
+  },
+  "reference_changes": {
+    "na_to_hash": 148
+  },
+  "unrelated_cells_unchanged": true,
+  "native_fault_injection": "not part of this targeted capture; changed verifier has mismatch/refusal controls and each final wheel requires light self-test",
+  "cpu_routes_added": false,
+  "resampling_nvidia": "partial capture retained externally, not admitted; complete Apple/AMD nine-fixture agreement supplies the reference",
+  "scope": "148 missing numerical references across 12 GPU parallel lanes; nine fixtures; not CPU implementations, physical multi-GPU, or universal library certification",
+  "records": [
+    {
+      "vendor": "apple",
+      "lane": "par-cd",
+      "sha256": "2239495b125e95668173a78c0a943b39efadb670b59e1a4f3b30ff1a5fc3d87b"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-cholesky",
+      "sha256": "86f4aa920564b79b6f63fcc8217825f4812d3aa0dade0a2e77c71961f6b05ec8"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-dbscan",
+      "sha256": "e7fc913f85100b72f4977c64c44611999e6ab8ae70c51bcc5bc020d564763b1d"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-gmm",
+      "sha256": "0371890844c94381996228fdeaa763423959b202ec417231bde9012010ae604a"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-gp",
+      "sha256": "e82b0aa219703e4969d0123edc61c7e7dab1bd8da7eb0c23759054921a9c3e9c"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-graph-agglomerative",
+      "sha256": "083668e6c4b60550272f51c68a6b045db740b37f50f60f62758bd816b601e48c"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-hdbscan",
+      "sha256": "87684fa905a04625cd46eb3b1cf8770f77f55a698fbda672e672fd2aa706e271"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-iforest",
+      "sha256": "9cbf93533795e55452c3fe1dd0e546631eb4d82a62b3224ebfe1ac03693f1ea4"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-kernel-ridge",
+      "sha256": "9245e9bebd6e157393b90d451282058b48a3514c4c657b43cd4a9a2147398421"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-kmeans",
+      "sha256": "425e6caa2a372c7d5e08f806d47aa338b25c13024a422136051323c75ea252bf"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-nystroem",
+      "sha256": "616f713d9c3831b1d65342fb1e6652d02bd62551a96868fb8c99d588ed4bb584"
+    },
+    {
+      "vendor": "apple",
+      "lane": "par-resample",
+      "sha256": "b5ac616d0d33fd825562b714b6cfeb806ac1ef09ac1f45b1bf9778ed1cd12fe4"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-cd",
+      "sha256": "e53f5ea15c5a91d1d4e15983e4bcd650a0a2a48268968d06b3997b793e078501"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-cholesky",
+      "sha256": "e954654ec14f2cd2c744733467c9d3bb833a438b0485e1496a6cca407a358681"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-dbscan",
+      "sha256": "d826a6d8d7699744ce6cfdc15053268b22210c3324ccde75e235394d7657da40"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-gmm",
+      "sha256": "05a4ba9f26eb2262c21760020dbd78c59ff6fa942c1129ec50a9dc600f8878fd"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-gp",
+      "sha256": "ecbd189b46cd005c837ad26df9687a1cbd5e581a89b6767b76f3b0f06e48589c"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-graph-agglomerative",
+      "sha256": "45b686ad9045d1ef3ee94a59c81a55d5c6c8a9a3c6b5d494e6c410fb492df6cd"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-hdbscan",
+      "sha256": "a1fd5ca9eeb37721839207d31fc18066b5b6d2ef87c53ddfc0d8690d0be8c1d0"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-iforest",
+      "sha256": "a738aae4e578b7a39aeb3e6e3a313b41d5bde61b12651e21368d914cf898ce31"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-kernel-ridge",
+      "sha256": "1d9d946f7561e28f715c9416c3a1caf8a99c3166eb057eace27640c5b5cc05e8"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-kmeans",
+      "sha256": "a9cb5e6acdb1c6929097f59828177eabb1ef2d570c1b3e79f7d91a4d744369e9"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-nystroem",
+      "sha256": "5711484b7ec5e32ead4ea6aaf4bbc1177bf5f100dafcc2389a7ad95dcb90a7b8"
+    },
+    {
+      "vendor": "amd",
+      "lane": "par-resample",
+      "sha256": "86a353b8253869f5ac148903689304c811df3d3f7baabfb034aa68fec9e6eb64"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-cd",
+      "sha256": "4a3e7ca0bf38f48546a7b399e6d773734f7509206ace659cc591b347bc79b629"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-cholesky",
+      "sha256": "adba2cbdce95e496f74f3945ee32e0e2b8b3b337ef85a9f0d5dcb2fd5b41f7e9"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-dbscan",
+      "sha256": "a36b71ddd711970e2a3b9a26cbd58e647a0d44886d3b8b6ea9fac67a9c70be1e"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-gmm",
+      "sha256": "33d982177cd9acd4f550307c8fe394e9cfb86d073e2a30c325a96363db4bb26f"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-gp",
+      "sha256": "4d88f2e6c34638f726ff736242f21103abd07bbae62eec903c9f1affe3f55586"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-graph-agglomerative",
+      "sha256": "bf61628c8597afcd00a83115948bb40a81bf98c2476bd3788e828ea116986aff"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-hdbscan",
+      "sha256": "9dd7b9a4feee3ee3667cd39cedcf22e1481e2d54d8a73f88b422fd0ebc916fa6"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-iforest",
+      "sha256": "1b0b355f53c6a4a8d725a0cd3ec1f09e2356bb6704906559195f857c9261be03"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-kernel-ridge",
+      "sha256": "97be2b9b491cea7432a222a910168d7eca042aa199e12f08a5870cd4bc4d3a77"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-kmeans",
+      "sha256": "196116af2b500815a157dab3a91eb4fe1f96cbcbe0a6e53903ecad4fd03961a2"
+    },
+    {
+      "vendor": "nvidia",
+      "lane": "par-nystroem",
+      "sha256": "7d3c312aa86615d24c2ade14e8d5bc76220be826417461382e88388cde630fd9"
+    }
+  ],
+  "admitted_reference_parts": {
+    "3_gpu_numerical": 396,
+    "2_gpu_numerical": 18,
+    "2_gpu_not_applicable": 18
+  }
+}

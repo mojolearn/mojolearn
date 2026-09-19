@@ -66,6 +66,34 @@ def _f32_boundary_block(rng, n):
 # --------------------------------------------------------------- zero-copy
 
 
+def test_empty_array_interface_numpy_conversion():
+    # Force the array-interface path even on Python 3.12+, where a buffer
+    # export would otherwise conceal the older-NumPy null-pointer failure.
+    class InterfaceOnly:
+        def __init__(self, value):
+            self.value = value
+
+        @property
+        def __array_interface__(self):
+            return self.value.__array_interface__
+
+    nonempty = Array((2,), "<i8")
+    exported = np.asarray(InterfaceOnly(nonempty))
+    assert exported.__array_interface__["data"][0] == nonempty._addr
+    exported[0] = 7
+    assert nonempty[0] == 7
+
+    for dtype in ("<i8", "<i4", "<f4", "<f8", "<f2"):
+        for shape in ((0,), (0, 3), (2, 0)):
+            value = Array(shape, dtype)
+            interface = value.__array_interface__
+            assert interface["data"][0] != 0
+            for wrapped in (value, InterfaceOnly(value)):
+                got = np.asarray(wrapped)
+                assert got.shape == shape and got.dtype == np.dtype(dtype)
+                assert got.size == 0 and got.tobytes() == b""
+
+
 def test_array_interface_is_zero_copy():
     a = _buffer.zeros((3, 2), "<f4")
     v = np.asarray(a)

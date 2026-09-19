@@ -1,0 +1,11 @@
+{
+  "candidate_sha256": "51a06c755c23c05e6a2d99c67a78cf014ec2947c4d4a171bad5395f68d7fd6b5",
+  "source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
+  "native_files_byte_identical": 123,
+  "changed_python_files": [
+    "mojolearn/_verify.py",
+    "mojolearn/_verify_distributed.py",
+    "mojolearn/_verify_parallel_cv.py"
+  ],
+  "published": false
+}

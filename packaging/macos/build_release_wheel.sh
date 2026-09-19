@@ -366,6 +366,8 @@ echo "package tree: exactly the $(printf '%s\n' $ALL_SOS | sort -u | wc -l | tr 
 # shellcheck disable=SC2086
 pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
     $ALL_SOS "$ENV_LIB"
+pixi run -e pkg python "$here/packaging/portable_math/stage.py" "$PKG/.dylibs" \
+    --receipt "$here/portable-math-build.json"
 
 
 

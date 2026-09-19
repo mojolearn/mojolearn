@@ -16,7 +16,7 @@ cd "$ROOT"
 export PATH="$HOME/.pixi/bin:$PATH"
 pixi run -e gbmbench python3 -m venv "$DEST/tool-venv"
 PY="$DEST/tool-venv/bin/python"
-"$PY" -m pip install --disable-pip-version-check --only-binary=:all: auditwheel patchelf twine > "$DEST/tool-install.log" 2>&1
+"$PY" -m pip install --disable-pip-version-check --only-binary=:all: auditwheel patchelf twine lief==1.0.0 > "$DEST/tool-install.log" 2>&1
 export PATH="$DEST/tool-venv/bin:$PATH"
 export MOJOLEARN_QUALIFY_PYTHON="$PY"
 BASE_PY=$(pixi run -e gbmbench python3 -c 'import sys; print(sys.executable)' | tail -1)
@@ -80,6 +80,7 @@ wheels=("$DEST"/repaired/*.whl)
 [[ ${#wheels[@]} = 1 ]] || exit 2
 "$PY" tools/normalize_wheel_directories.py "${wheels[0]}" \
     "$DEST/normalized/$(basename "${wheels[0]}")" > "$DEST/normalization.json"
+"$PY" packaging/portable_math/wheel.py --audit-only "$DEST"/normalized/*.whl
 phase=qualify
 wheels=("$DEST"/normalized/*.whl)
 sha=$("$PY" - "${wheels[0]}" <<'PYSHA'

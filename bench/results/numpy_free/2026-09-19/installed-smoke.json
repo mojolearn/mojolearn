@@ -1,0 +1,11 @@
+{
+  "numpy_installed": false,
+  "numpy_imported": false,
+  "requires_dist": null,
+  "package": "/private/tmp/mojolearn-no-numpy-20260919/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "actual_tokenizer_and_corpus": true,
+  "corpus_sha256": "d75bdb272cbed961631e2c82061a608de4977b60541e51340310aaa58c1970e1",
+  "actual_apple_rbf_shards_match": true,
+  "rbf_sha256": "0d9e53ef22e10676919272a8674757e1294d1cf701a859326ea0ff0a7533a9da",
+  "empty_rbf_refusal_preserved": true
+}

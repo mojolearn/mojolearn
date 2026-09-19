@@ -119,7 +119,8 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                     for value in metadata.get_all('Summary', [])),
                 'package Summary must be a single line')
         released = released_version(source_root)  # DEVIATION 2290: never a literal
-        if version == released and ('linux' in parts[-1]):
+        overlay_present = dist + 'ALPHA_PROVENANCE.json' in files
+        if version == released and ('linux' in parts[-1]) and not overlay_present:
             require(dist + 'LINUX_PAYLOAD.json' in files,
                     'Linux ' + released + ' requires a fresh combined payload, not an inherited native overlay')
         if dist + 'LINUX_PAYLOAD.json' in files:
@@ -156,6 +157,29 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                 and hex_digest(provenance.get('base_wheel_sha256'))
                 and provenance.get('current_numerical_qualification') ==
                     'NOT INHERITED; requires separate root validation', 'alpha provenance contract mismatch')
+        reuse = provenance.get('native_reuse')
+        if reuse is not None:
+            require(isinstance(reuse, dict) and reuse.get('schema') == 'mojolearn.native-reuse.v1'
+                    and all(re.fullmatch('[0-9a-f]{40}', str(reuse.get(k, '')))
+                            for k in ('package_source_commit', 'native_source_commit'))
+                    and hex_digest(reuse.get('compile_inputs_sha256'))
+                    and isinstance(reuse.get('compile_input_count'), int)
+                    and reuse['compile_input_count'] > 0, 'invalid native reuse contract')
+            require(small('mojolearn/identity_columns/COMMIT').decode().strip()
+                    == reuse['package_source_commit'], 'native reuse package source mismatch')
+            resources = provenance.get('resource_overlay_sha256', {})
+            require(set(resources) == {'mojolearn/verify_reference/table.json',
+                                       'mojolearn/identity_columns/COMMIT'}
+                    and all(hex_digest(h) and hashes.get(n) == h for n, h in resources.items()),
+                    'resource overlay provenance mismatch')
+        if version == released and 'linux' in parts[-1]:
+            require(release_profile == 'alpha-api' and reuse is not None
+                    and parts[-1].startswith('manylinux_'), 'Linux overlay requires explicit native reuse provenance')
+            parent = decode(small(dist + 'BASE_LINUX_PAYLOAD.json'))
+            require(hashes[dist + 'BASE_LINUX_PAYLOAD.json'] == provenance.get('base_linux_payload_sha256')
+                    and parent.get('schema') == 'mojolearn.linux-payload.v1'
+                    and parent.get('source_commit') == reuse['native_source_commit'],
+                    'native reuse parent Linux build provenance mismatch')
         if release_profile == 'alpha-api':
             require(provenance.get('release_profile') == 'alpha-api', 'wheel lacks manifest alpha-api release profile')
         native = {n: h for n, h in hashes.items() if n.endswith(('.so', '.dylib', '.dll', '.pyd')) or '.so.' in n}
@@ -250,7 +274,22 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
     for name, digest in files.items():
         safe_name(name)
         require('/' not in name and name.endswith('.whl') and hex_digest(digest), 'invalid manifest wheel entry')
-    require({p.name for p in directory.iterdir()} == set(files) | {'alpha-manifest.json'},
+    smoke = manifest.get('light_smoke')
+    smoke_files = {}
+    if smoke is not None:
+        require(isinstance(smoke, dict) and set(smoke) == {'source_commit', 'receipts'}
+                and re.fullmatch('[0-9a-f]{40}', str(smoke['source_commit']))
+                and isinstance(smoke['receipts'], dict) and 1 <= len(smoke['receipts']) <= 2,
+                'invalid light smoke contract')
+        smoke_files = smoke['receipts']
+        for name, expected in smoke_files.items():
+            require(re.fullmatch(r'light-smoke-[a-z0-9-]+\.json', name) and hex_digest(expected),
+                    'invalid smoke receipt entry')
+            path = directory / name
+            require(path.is_file() and not path.is_symlink() and path.stat().st_size < 2 * 1024**2
+                    and hashlib.sha256(path.read_bytes()).hexdigest() == expected,
+                    'missing or changed smoke receipt')
+    require({p.name for p in directory.iterdir()} == set(files) | set(smoke_files) | {'alpha-manifest.json'},
             'artifact directory has missing or injected files')
     qualification = manifest.get('linux_qualification')
     if qualification is not None:

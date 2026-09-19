@@ -57,7 +57,7 @@ has several maxima. Restarts (DEVIATION 2881, `gp_theta.mojo`) draw log-uniform
 starting points from position-mapped Philox rather than NumPy's RandomState.
 """
 
-import math
+from . import _portable_math as math
 
 M = 10
 EPS = 2.0 ** -52

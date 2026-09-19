@@ -35,6 +35,10 @@ import array
 import struct
 from itertools import chain
 
+# NumPy before 2.4 treats a null interface pointer as a scalar conversion,
+# even for an empty shape. Keep a stable, non-null address for empty exports.
+_EMPTY_ARRAY_STORAGE = array.array("B", [0] * 8)
+
 # typestr -> array.array typecode of the backing store
 _CODE = {
     "<f4": "f", "<f8": "d", "<i4": "i", "<i8": "q",
@@ -398,7 +402,8 @@ class Array:
         return {
             "shape": self.shape,
             "typestr": self.dtype,
-            "data": (self._addr, bool(self._readonly)),
+            "data": (self._addr if self.size or self._addr else
+                     _EMPTY_ARRAY_STORAGE.buffer_info()[0], bool(self._readonly)),
             "strides": None if self.order == "C" else self.strides,
             "version": 3,
         }

@@ -1620,6 +1620,9 @@ wheel = "*"
 python-build = "*"
 twine = "*"
 
+[feature.pkg.pypi-dependencies]
+lief = "==1.0.0"
+
 # NVIDIA's gbm-bench harness (bench/external/), which needs pandas and
 # LightGBM on top of what `bench` has. A SEPARATE feature, not additions to
 # `bench`, for the same reason `skgpu` is: adding dependencies to `bench`

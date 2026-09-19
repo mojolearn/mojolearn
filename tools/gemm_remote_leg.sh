@@ -4599,7 +4599,8 @@ leg_ship_and_run() {
     done
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
-        python3 - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
+        # Keep imports from adding untracked bytecode to the source transport manifest.
+        python3 -B - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
 import json, pathlib, sys
 archive, local=map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0,str(archive/'tools'))

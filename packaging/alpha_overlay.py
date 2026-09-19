@@ -18,6 +18,7 @@ import json
 from pathlib import Path, PurePosixPath
 import re
 import stat
+import subprocess
 import zipfile
 
 MAX_WHEEL = 8 * 1024**3
@@ -57,7 +58,28 @@ def record_hash(raw_digest):
     return 'sha256=' + base64.urlsafe_b64encode(raw_digest).rstrip(b'=').decode('ascii')
 
 
-def assemble(base, python_root, version, out, allow_alpha_final_version=False):
+def native_sources(root, commit):
+    """Compile inputs, excluding the separately overlaid Python package.
+
+    Git blob identities cover additions and removals as well as edits. The
+    original binaries retain their original build/toolchain proofs.
+    """
+    raw = subprocess.check_output(['git', '-C', str(root), 'ls-tree', '-rz', commit])
+    selected = {}
+    for row in raw.split(b'\0'):
+        if not row:
+            continue
+        meta, name = row.split(b'\t', 1)
+        name = name.decode()
+        if (name.endswith(('.mojo', '.mojopkg')) or name.startswith((
+                'bindings/', 'packaging/linux/', 'packaging/macos/', 'tokenizer/tools/'))
+                or name in ('pixi.lock', 'pixi.toml', 'tools/linux_surface_qualification.sh')):
+            selected[name] = meta.decode()
+    require(selected, 'empty native source inventory')
+    return selected
+
+
+def assemble(base, python_root, version, out, allow_alpha_final_version=False, source_commit=None):
     alpha_version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)a(0|[1-9][0-9]*)', version)
     final_version = re.fullmatch(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)', version)
     require(alpha_version or (allow_alpha_final_version is True and final_version),
@@ -96,11 +118,41 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False):
             replacements[name] = source.read_bytes()
     require('mojolearn/__init__.py' in replacements and 'mojolearn/_backend.py' in replacements,
             'incomplete Python source tree')
+    generated = {'mojolearn/_identity_break.py': 'tools/identity_break.py',
+                 'mojolearn/_identity_trace_diff.py': 'tools/identity_trace_diff.py'}
+    if source_commit is not None:
+        for name, source in generated.items():
+            replacements[name] = (python_root.parent / source).read_bytes()
     source_hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in replacements.items() if name.endswith('.py')}
     doc_hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in replacements.items() if name.endswith('.md')}
     require(sum(map(len, replacements.values())) <= 64 * 1024**2 and len(replacements) <= MAX_FILES,
             'Python source overlay exceeds bounds')
     replacements['mojolearn/_version.py'] = ('__version__ = ' + repr(version) + '\n').encode()
+    if source_commit is not None:
+        require(re.fullmatch('[0-9a-f]{40}', source_commit), 'invalid package source commit')
+        root = python_root.resolve().parent
+        require(subprocess.check_output(['git', '-C', str(root), 'rev-parse', 'HEAD']).decode().strip()
+                == source_commit, 'overlay source must be the checked-out commit')
+        for name, raw in replacements.items():
+            if name.endswith('.py'):
+                committed = subprocess.check_output(['git', '-C', str(root), 'show',
+                    source_commit + ':' + generated.get(name, 'python/' + name)])
+                if name == 'mojolearn/_version.py':
+                    assignments = [n for n in ast.parse(committed).body if isinstance(n, ast.Assign)
+                                   and any(isinstance(t, ast.Name) and t.id == '__version__' for t in n.targets)]
+                    require(len(assignments) == 1 and ast.literal_eval(assignments[0].value) == version,
+                            'committed package version differs from overlay')
+                else:
+                    require(raw == committed, 'uncommitted Python overlay: ' + name)
+        reference = package / 'verify_reference/table.json'
+        require(reference.is_file() and not reference.is_symlink()
+                and reference.stat().st_size <= 16 * 1024**2, 'missing/oversize reference table')
+        raw = reference.read_bytes()
+        require(raw == subprocess.check_output(['git', '-C', str(root), 'show',
+                source_commit + ':python/mojolearn/verify_reference/table.json']),
+                'uncommitted reference overlay')
+        replacements['mojolearn/verify_reference/table.json'] = raw
+        replacements['mojolearn/identity_columns/COMMIT'] = (source_commit + '\n').encode()
     expected = None
     for node in ast.parse(replacements['mojolearn/_backend.py']).body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_MODULES' for t in node.targets):
@@ -163,9 +215,31 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False):
         # Preserve the original UTF-8 description bytes; compat32's text
         # payload round-trip otherwise tries to serialize non-ASCII as ASCII.
         body_parts = re.split(br'\r?\n\r?\n', metadata_raw, maxsplit=1)
-        metadata.set_payload(NOTICE.encode('utf-8') + b'\n\n' +
-                             (body_parts[1] if len(body_parts) == 2 else b''))
+        description = body_parts[1] if len(body_parts) == 2 else b''
+        notice_prefix = NOTICE.encode('utf-8') + b'\n\n'
+        while description.startswith(notice_prefix):
+            description = description[len(notice_prefix):]
+        metadata.set_payload(notice_prefix + description)
         new_dist = 'mojolearn-' + version + '.dist-info'
+        reuse = None
+        if source_commit is not None:
+            parent_commit = archive.read('mojolearn/identity_columns/COMMIT').decode().strip()
+            if dist + '/ALPHA_PROVENANCE.json' in names:
+                parent_provenance = json.loads(archive.read(dist + '/ALPHA_PROVENANCE.json'))
+                parent_commit = parent_provenance.get('native_reuse', {}).get('native_source_commit', parent_commit)
+            require(re.fullmatch('[0-9a-f]{40}', parent_commit), 'invalid native parent commit')
+            old_sources = native_sources(root, parent_commit)
+            require(old_sources == native_sources(root, source_commit),
+                    'native compile inputs changed; a Python overlay cannot reuse this base')
+            reuse = dict(schema='mojolearn.native-reuse.v1', package_source_commit=source_commit,
+                         native_source_commit=parent_commit,
+                         compile_inputs_sha256=hashlib.sha256(json.dumps(
+                             old_sources, sort_keys=True, separators=(',', ':')).encode()).hexdigest(),
+                         compile_input_count=len(old_sources))
+            for parent_payload in ('LINUX_PAYLOAD.json', 'BASE_LINUX_PAYLOAD.json'):
+                if dist + '/' + parent_payload in names:
+                    replacements[new_dist + '/BASE_LINUX_PAYLOAD.json'] = archive.read(dist + '/' + parent_payload)
+                    break
         replacements[new_dist + '/METADATA'] = metadata.as_bytes(policy=policy.compat32.clone(max_line_length=0))
         native = {n: h for n, h in hashes.items() if n.endswith(('.so', '.dylib', '.dll', '.pyd')) or '.so.' in n}
         directories = sorted({str(PurePosixPath(n).parent) for n in native if PurePosixPath(n).name.startswith('_mojolearn')})
@@ -183,6 +257,13 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False):
             missing_optional_native_modules_by_present_directory=missing,
             required_module_registry=list(expected), availability='file inventory only; absent vendor/tier directories remain absent',
             current_numerical_qualification='NOT INHERITED; requires separate root validation')
+        if reuse is not None:
+            provenance['native_reuse'] = reuse
+            provenance['resource_overlay_sha256'] = {n: hashlib.sha256(replacements[n]).hexdigest()
+                for n in ('mojolearn/verify_reference/table.json', 'mojolearn/identity_columns/COMMIT')}
+            if new_dist + '/BASE_LINUX_PAYLOAD.json' in replacements:
+                provenance['base_linux_payload_sha256'] = hashlib.sha256(
+                    replacements[new_dist + '/BASE_LINUX_PAYLOAD.json']).hexdigest()
         replacements[new_dist + '/ALPHA_PROVENANCE.json'] = (json.dumps(provenance, sort_keys=True, indent=2) + '\n').encode()
         replacements[new_dist + '/ALPHA_NOTICE.md'] = (NOTICE + '\n').encode()
         # Preserve every non-Python payload byte, including runtime libraries.
@@ -194,6 +275,8 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False):
                 name = info.filename
                 if info.is_dir() or name == record_name:
                     continue
+                if reuse is not None and name == dist + '/LINUX_PAYLOAD.json':
+                    continue  # Its unmodified bytes are explicitly labelled BASE above.
                 target = new_dist + name[len(dist):] if name.startswith(dist + '/') else name
                 if target in replacements:
                     continue
@@ -230,5 +313,6 @@ if __name__ == '__main__':
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--allow-alpha-final-version', action='store_true',
                         help='Explicitly allow X.Y.Z numbering while retaining the alpha-api profile and all qualification limits')
+    parser.add_argument('--source-commit', help='Frozen Python/reference patch; verify native inputs unchanged and retain parent build provenance')
     args = parser.parse_args()
-    print(assemble(args.base_wheel, args.python_root, args.version, args.out, args.allow_alpha_final_version))
+    print(assemble(args.base_wheel, args.python_root, args.version, args.out, args.allow_alpha_final_version, args.source_commit))

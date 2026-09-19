@@ -17,7 +17,7 @@ arithmetic otherwise (DEVIATION 2450).
 """
 
 import array
-import math
+from . import _portable_math as math
 
 from . import _backend, _mojolearn_estimators, _serialize
 from ._array import Array

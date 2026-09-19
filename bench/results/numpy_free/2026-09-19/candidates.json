@@ -1,0 +1,25 @@
+[
+  {
+    "wheel": "mojolearn-0.8.8-py3-none-macosx_11_0_arm64.whl",
+    "sha256": "baed4a02f4509f2454a4754a6a8a1e7d2020d6b54d4d21582ec12adb8a667f8b",
+    "changed": [
+      "mojolearn/lm_corpus.py",
+      "mojolearn/parallel_classical.py",
+      "mojolearn-0.8.8.dist-info/METADATA",
+      "mojolearn-0.8.8.dist-info/RECORD",
+      "mojolearn/NUMPY_FREE_CONTRACT.md"
+    ],
+    "native_bytes_unchanged": true
+  },
+  {
+    "wheel": "mojolearn-0.8.8-py3-none-manylinux_2_35_x86_64.whl",
+    "sha256": "557cd668c4ce9d951dc5aad6bbc790bb6a03b16b9dc44e198540f224aa797739",
+    "changed": [
+      "mojolearn/lm_corpus.py",
+      "mojolearn/parallel_classical.py",
+      "mojolearn-0.8.8.dist-info/RECORD",
+      "mojolearn/NUMPY_FREE_CONTRACT.md"
+    ],
+    "native_bytes_unchanged": true
+  }
+]

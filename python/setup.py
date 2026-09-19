@@ -36,6 +36,7 @@ facts PEP 621 has no field for.
 import os
 import platform
 import runpy
+import subprocess
 import zipfile
 from pathlib import Path
 import sys
@@ -114,6 +115,19 @@ class bdist_wheel(_bdist_wheel):
                 Path(filename).unlink()
                 raise SystemExit("wheel contained reference-only host bindings: "
                                  + ", ".join(sorted(shipped - allowed)))
+
+            # This hook covers direct pip/build invocations too, not only
+            # the release shell script. Cached runtimes are finalized here.
+            finalizer = root.parent / "packaging" / "portable_math" / "wheel.py"
+            try:
+                command = [sys.executable, str(finalizer), filename]
+                helper = os.environ.get("MOJOLEARN_PORTABLE_MATH_HELPER")
+                if helper:
+                    command += ["--helper", helper]
+                subprocess.run(command, check=True)
+            except Exception:
+                Path(filename).unlink(missing_ok=True)
+                raise
 
     def get_tag(self):
         _, _, plat = _bdist_wheel.get_tag(self)

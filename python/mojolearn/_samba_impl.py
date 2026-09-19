@@ -29,7 +29,7 @@ import hashlib
 import json
 from pathlib import Path
 
-import math
+from . import _portable_math as math
 from ._training_impl import _round_f32
 
 from . import _backend

@@ -1,0 +1,18 @@
+{
+  "status": "MATCH",
+  "scope": "Canonical complete receipt comparisons, no fresh numerical captures",
+  "rows": [
+    {
+      "profile": "distributed",
+      "match": true,
+      "nvidia_sha256": "c0fdfa787c57afc1823c5a1eaf7f0b1a6d2390d5cdf88af0de12f097fa3fc409",
+      "amd_sha256": "4eaedf00bd9ec3d7b0a18ecfc3ed31588a12c26cb0a20ce2b8b7fde2393833a6"
+    },
+    {
+      "profile": "cv",
+      "match": true,
+      "nvidia_sha256": "4b1c0e3dda8b65b37e0a9f2bb49997e313a5deb34d27fa8fcaa8634a64e13fdd",
+      "amd_sha256": "d599f4d7cceff5ee100a42a6c2ce25b5c17af339f3b03a793e6651453b04aad4"
+    }
+  ]
+}

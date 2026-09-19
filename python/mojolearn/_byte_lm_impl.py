@@ -41,7 +41,7 @@ from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
 import hashlib
 import json
-import math
+from . import _portable_math as math
 import operator
 import os
 from pathlib import Path

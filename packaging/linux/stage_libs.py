@@ -200,7 +200,7 @@ def verify_closed(files, libs_dir, env_lib):
     for f in files:
         needed, _, _ = elf_dynamic(f)
         for dep in needed:
-            if classify(dep, env_lib) == "staged" and dep not in have:
+            if dep not in have and classify(dep, env_lib) not in ("system", "driver"):
                 missing.append(f"{f.name} -> {dep}")
     if missing:
         print("ERROR: the staged library set is NOT closed:", file=sys.stderr)
@@ -253,6 +253,19 @@ def main():
         staged.append({"name": name, "bytes": (libs / name).stat().st_size,
                        "sha256": sha256(libs / name),
                        "source": str(src.resolve())})
+    # Build on the Linux leg so packing these sets on macOS needs no cross compiler.
+    sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "portable_math"))
+    from stage import stage
+    portable_math = stage(libs)
+    sources = {record["name"]: record["source"] for record in staged}
+    staged = [{"name": path.name, "bytes": path.stat().st_size,
+               "sha256": sha256(path), "source": sources.get(path.name, "repository-owned host math")}
+              for path in sorted(libs.glob("*.so*"))]
+    input_edges = edges
+    have = {record["name"] for record in staged}
+    edges = [{"from": path.name, "needs": dep,
+              "class": "staged" if dep in have else classify(dep, env_lib)}
+             for path in exts + sorted(libs.glob("*.so*")) for dep in elf_dynamic(path)[0]]
     ext_records = []
     for ext in exts:
         if ext.parent == root:
@@ -281,6 +294,7 @@ def main():
         "set": str(root), "env_lib": str(env_lib),
         "extensions": ext_records, "staged_libs": staged,
         "driver_libs_not_staged": driver, "edges": edges,
+        "input_edges": input_edges, "portable_math": portable_math,
         "bytes_extensions": total_ext, "bytes_staged_libs": total_libs,
         "bytes_total_uncompressed": total_ext + total_libs,
     }

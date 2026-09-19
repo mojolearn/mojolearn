@@ -268,10 +268,10 @@ def _tokens_by_decoding(tok):
 # ---------------------------------------------------------------- tokenizing
 
 def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_documents, progress=None):
-    import numpy as np
+    from ._array import Array
     docs = documents(data, ranges, document_bytes)
     boundaries = {p: None for p in _split_points(ranges, len(data))}
-    chunks, at_token, above_255, max_id = [], 0, 0, -1
+    payload, at_token, above_255, max_id = bytearray(), 0, 0, -1
     encode_seconds, t_start = 0.0, time.perf_counter()
     for k in range(0, len(docs), batch_documents):
         group = docs[k:k + batch_documents]
@@ -281,11 +281,11 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
         for (a, _b), ids in zip(group, encoded):
             if a in boundaries:
                 boundaries[a] = at_token
-            arr = np.asarray(ids, dtype=np.int32)
-            chunks.append(arr)
+            arr = Array.from_list(ids, "<i4")
+            payload.extend(arr.tobytes())
             at_token += arr.size
             if arr.size:
-                above_255 += int((arr > 255).sum())
+                above_255 += sum(value > 255 for value in ids)
                 max_id = max(max_id, int(arr.max()))
         if progress and (k // batch_documents) % 8 == 0:
             done = group[-1][1]
@@ -294,8 +294,7 @@ def _tokenize(data, src, ranges, tok, identity, out, document_bytes, batch_docum
                      f"{done / max(secs, 1e-9) / 1e6:.3f} MB/s")
     boundaries[len(data)] = at_token
     seconds = time.perf_counter() - t_start
-    ids = np.concatenate(chunks) if chunks else np.zeros(0, dtype=np.int32)
-    payload = ids.astype("<i4", copy=False).tobytes()
+    payload = bytes(payload)
     token_ranges = {key: [boundaries[a], boundaries[b]] for key, (a, b) in ranges.items()}
     manifest = dict(
         schema=TOKENS_SCHEMA,
@@ -416,7 +415,8 @@ class TokenBatches:
     runs hash as they always have.)"""
 
     def __init__(self, tokens_dir, batch, length):
-        import numpy as np
+        import mmap
+        from ._array import Array
         self.dir = Path(tokens_dir)
         raw = (self.dir / "manifest.json").read_bytes()
         self.manifest = json.loads(raw)
@@ -427,7 +427,15 @@ class TokenBatches:
         self.sha256 = _sha_file(path)
         if self.sha256 != self.manifest["sha256"] or path.stat().st_size != self.manifest["bytes"]:
             raise ValueError(f"mojolearn: pinned tokens length/SHA mismatch for {path}")
-        self.ids_all = np.memmap(path, dtype="<i4", mode="r")
+        if path.stat().st_size % 4:
+            raise ValueError("mojolearn: token payload is not an int32 stream")
+        if path.stat().st_size:
+            with path.open("rb") as stream:
+                mapping = mmap.mmap(stream.fileno(), 0, access=mmap.ACCESS_READ)
+            # The borrowed Array pins the memoryview and its mmap owner.
+            self.ids_all = Array.from_buffer(memoryview(mapping).cast("i"))
+        else:
+            self.ids_all = Array((0,), "<i4")
         self.batch, self.length = int(batch), int(length)
         lo, hi = self.manifest.get("train_range") or [0, int(self.ids_all.size)]
         self.lo, self.hi = int(lo), int(hi)
@@ -440,12 +448,13 @@ class TokenBatches:
         return dict(self.manifest["vocabulary"])
 
     def ids(self, step_index):
-        import numpy as np
-        rows = []
+        from ._array import Array
+        width = self.length + 1
+        out = Array((self.batch, width), "<i4")
         for b in range(self.batch):
             start = self.lo + (step_index * self.batch * self.length + b * self.length) % self.modulus
-            rows.append(np.asarray(self.ids_all[start:start + self.length + 1], dtype=np.int32))
-        return np.stack(rows)
+            out._mv[b * width:(b + 1) * width] = self.ids_all._mv[start:start + width]
+        return out
 
     def describe(self):
         v = self.manifest["vocabulary"]

@@ -49,7 +49,7 @@ import importlib.util
 import os
 import sys
 
-import math
+from . import _portable_math as math
 import numbers
 
 from . import _backend

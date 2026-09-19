@@ -3,7 +3,31 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (main after 0.8.7)
+## 0.8.8 (published 2026-09-19)
+
+A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
+of GPU-written CTR models no longer erases the recorded GPU model-byte reference;
+a real mismatch still fails. Targeted parallel-lane reference updates and exact
+new-wheel light smoke evidence accompany publication. This patch does not add
+CPU implementations of GPU-only parallel lanes or certify physical multi-GPU use.
+
+Alpha Python/reference patches can now reuse a published wheel when its native
+compile inputs are unchanged. The wheel records separate package and native
+source commits, preserves the parent's build proof, and requires a new installed
+smoke. Unchanged algorithms do not require a repeat library-wide campaign. Prepared
+alpha publication now defaults to the light profile; full certification remains
+an explicit choice.
+
+## 0.8.7 (published 2026-09-18)
+
+This release was built from integrated `main` at `4e1828f90`, including the
+tokenizer/corpus additions, expanded CPU model bundle and verifier, loaded
+language-model proof, and experimental distributed and cross-validation APIs.
+The explicit light release profile checks the exact installed Apple/NVIDIA
+wheels; it does not promote every exposed configuration to numerical
+certification. Both macOS and Linux wheels are published on PyPI. See
+`docs/lanes/RELEASE_087_LIGHT.md` for the release evidence and boundary, and
+`docs/lanes/RELEASE_PROCESS_ALPHA.md` for the post-release simplification plan.
 
 - `GPT2Tokenizer` is renamed `BpeTokenizer` (2026-09-18). It ships no GPT-2
   vocabulary and `TrainedBpeVocabulary.tokenizer()` returns one over mojolearn's own
@@ -13,8 +37,6 @@ contain the detailed investigation record.
   entries moved from `gpt2_*` to `bpe_*`; the Python door still reads a binding built
   before the rename. No id moved: the `tokenizer` and `bpe-trainer` identity lanes hash
   the same before and after (docs/lanes/LANE_STATUS_tokenized-corpus.md).
-
-## 0.8.7 (unreleased 2026-09-17)
 
 **0.8.6 WAS NEVER PUBLISHED, and its number is skipped.** It was frozen on branch
 release/0.8.6, built on three GPU boxes, packed, audited and partly recorded, and then folded

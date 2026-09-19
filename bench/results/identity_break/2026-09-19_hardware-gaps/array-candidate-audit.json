@@ -1,0 +1,10 @@
+{
+  "source_commit": "1aa581748cc09e14982baf36e81b509ffe49f1ea",
+  "candidate_sha256": "61a53d9e673628f0f46ad3f65d000fdb80d4865f416f96e3ef59f813c2c99dc1",
+  "parent_candidate_sha256": "51a06c755c23c05e6a2d99c67a78cf014ec2947c4d4a171bad5395f68d7fd6b5",
+  "changed_python_files": [
+    "mojolearn/_array.py"
+  ],
+  "native_files_byte_identical": 123,
+  "published": false
+}
