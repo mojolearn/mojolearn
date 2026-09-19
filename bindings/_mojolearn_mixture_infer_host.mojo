@@ -37,7 +37,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 
 
 def mixture_infer_host_numeric_mode_binding() raises -> PythonObject:

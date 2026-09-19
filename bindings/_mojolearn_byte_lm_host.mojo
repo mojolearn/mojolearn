@@ -34,7 +34,7 @@ from gemm.checks.gemm_backward import ANY_BWD_SABOTAGE
 # host build. It reaches the training step and the logits through
 # gemm_oracle, so a build carrying it computes wrong answers and must read
 # back as a sabotage build too.
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,

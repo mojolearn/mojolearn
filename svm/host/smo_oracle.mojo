@@ -63,7 +63,7 @@ from std.math import exp, fma, inf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from gemm.host.gemm_oracle import (
+from gemm.host.identical_gemm import (
     contract_leaf_size,
     fold_balanced_tree,
     leaf_begin,

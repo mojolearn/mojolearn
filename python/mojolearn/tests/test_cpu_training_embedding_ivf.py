@@ -269,7 +269,7 @@ def test_adapter_holds_no_arithmetic_and_calls_the_host_entries():
     impl = _read("python/mojolearn/_byte_lm_impl.py")
     assert "is_cpu_trainer_binding(binding)" in impl
     src = _read(host_surface.binding_source("byte_lm"))
-    assert "from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE" in src
+    assert "from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE" in src
     assert "or ANY_BWD_SABOTAGE or GEMM_ORACLE_HOST_SABOTAGE)" in src
 
 

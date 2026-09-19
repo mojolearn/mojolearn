@@ -49,7 +49,7 @@ at 1024 tokens is not the bits of the gradient at 512 tokens accumulated
 twice. A pass here is a statement at the shape it ran at.
 """
 
-from gemm.host.gemm_oracle import OP_NT, gemm_oracle
+from gemm.host.identical_gemm import OP_NT, gemm_oracle
 from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_backward_oracle,

@@ -153,7 +153,7 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
-from gemm.host.gemm_oracle import OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_TN, gemm_oracle
 
 
 #: The gate's negative control (the CPU training lane, brief section 3.4):

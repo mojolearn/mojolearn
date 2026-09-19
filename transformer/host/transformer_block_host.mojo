@@ -38,7 +38,7 @@ moves the q, k, v, o and MLP projections forward and every weight and
 activation gradient they reach.
 """
 
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from transformer.checks.transformer_fixture import (
     ScorePlant,
     TransformerDims,

@@ -82,7 +82,7 @@ from gemm.checks.gemm_lowbit import (
     quantize_rows_int8_device,
 )
 from gemm.host.gemm_lowbit_oracle import INT8_MAX_K, LOWBIT_PROFILE_VERSION
-from gemm.host.gemm_oracle import OP_NN, OP_NT, OP_TN
+from gemm.host.identical_gemm import OP_NN, OP_NT, OP_TN
 from max.gpu.host import DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 

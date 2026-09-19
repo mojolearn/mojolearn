@@ -85,7 +85,7 @@ from cholesky.host.chol_oracle import (
     chol_host_solve,
     chol_host_trsm_lower,
 )
-from gemm.host.gemm_oracle import OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_TN, gemm_oracle
 
 #: THE NEGATIVE CONTROL. See this file's header.
 comptime GPR_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()

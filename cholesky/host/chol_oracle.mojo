@@ -74,7 +74,7 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
 )
-from gemm.host.gemm_oracle import OP_NT, contract_leaf_size, gemm_oracle_cell
+from gemm.host.identical_gemm import OP_NT, contract_leaf_size, gemm_oracle_cell
 
 
 #: `cholesky/checks/potrf.mojo::CHOL_PROFILE`.

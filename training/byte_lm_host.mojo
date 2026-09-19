@@ -46,7 +46,7 @@ from max.algorithm import sync_parallelize
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, identical_mul_add
 from embedding.checks.embedding_oracle import EmbConfig, emb_forward_oracle, refuse_nonfinite
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_NT, gemm_oracle
 from training.byte_lm_config import ByteConfig
 from training.byte_lm_host_kernels import (
     all_finite_span,

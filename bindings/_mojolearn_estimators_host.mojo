@@ -98,7 +98,7 @@ from decomposition.host.pca_full_oracle import (
     host_pca_fit_full,
     host_pca_full_validate,
 )
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
 from core.host_predict_threads import host_list_ptr, host_predict_task_count

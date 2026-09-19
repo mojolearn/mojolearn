@@ -57,7 +57,7 @@ from cholesky.host.chol_oracle import (
     chol_host_potrf,
     chol_host_solve,
 )
-from gemm.host.gemm_oracle import (
+from gemm.host.identical_gemm import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_NN,
     OP_NT,

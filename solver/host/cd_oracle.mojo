@@ -81,7 +81,7 @@ test data hides permutation"):
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
-from gemm.host.gemm_oracle import contract_leaf_size
+from gemm.host.identical_gemm import contract_leaf_size
 from checks.numerics import ftz, identical_mul_add
 from solver.checks.profile_dot import (
     column_as_list,

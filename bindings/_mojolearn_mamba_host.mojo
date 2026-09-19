@@ -46,7 +46,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from mamba.checks.mamba_fixture import D_CONV, D_STATE, MambaDims, MambaWeights
 from mamba.checks.mamba_oracle import MambaState, mamba_block_oracle
 from mamba.checks.mamba2_fixture import (
