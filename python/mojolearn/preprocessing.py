@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """GPU preprocessing with explicit Float32 and numeric-mode contracts."""
 import struct
-import math
+from . import _portable_math as math
 import numbers
 from ._array import Array
 from ._buffer import _materialize, all_finite, empty, zeros, full, as_f32_c

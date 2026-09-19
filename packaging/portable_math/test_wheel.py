@@ -1,0 +1,44 @@
+# SPDX-License-Identifier: Apache-2.0
+"""Reject independently introduced platform math from a wheel payload."""
+import importlib.util
+from pathlib import Path
+import subprocess
+import sys
+
+import pytest
+
+HERE = Path(__file__).resolve().parent
+sys.path.insert(0, str(HERE))
+from stage import build
+spec = importlib.util.spec_from_file_location('math_wheel_audit', HERE / 'wheel.py')
+audit = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(audit)
+
+
+@pytest.fixture
+def payload(tmp_path):
+    path = tmp_path / ('libMojolearnMath.dylib' if sys.platform == 'darwin' else 'libMojolearnMath.so')
+    build(path)
+    return tmp_path
+
+
+def test_owned_library_has_no_math_imports(payload):
+    assert audit.audit_tree(payload)['platform_math_free']
+
+
+@pytest.mark.parametrize('name,content', [('libm.so.6', b'not an ELF'),
+                                         ('module.py', b'import math\n'),
+                                         ('module.py', b'from math import sqrt\n')])
+def test_rejects_payload_regressions(payload, name, content):
+    (payload / name).write_bytes(content)
+    with pytest.raises(ValueError, match='platform math audit failed'):
+        audit.audit_tree(payload)
+
+
+def test_rejects_native_math_import(payload):
+    source = payload / 'foreign.c'
+    source.write_text('extern double sin(double); double foreign(double x) { return sin(x); }\n')
+    flags = ['clang', '-dynamiclib'] if sys.platform == 'darwin' else ['cc', '-shared', '-fPIC']
+    subprocess.run(flags + [str(source), '-o', str(payload / 'foreign.so')], check=True)
+    with pytest.raises(ValueError, match="math imports=\\['sin'\\]"):
+        audit.audit_tree(payload)

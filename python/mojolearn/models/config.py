@@ -37,7 +37,7 @@ the checkpoint name, and for phi3's fused `qkv_proj` / `gate_up_proj` to a
 row slice of it (a slice copies bytes, no arithmetic).
 """
 import json
-import math
+from .. import _portable_math as math
 import os
 
 __all__ = ["HFConfig", "ModelPlan", "UnsupportedModel", "FAMILIES", "plan_for",

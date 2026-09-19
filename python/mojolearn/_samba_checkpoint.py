@@ -8,7 +8,7 @@ and transfer chunk, in addition to the arrays being restored.
 """
 import hashlib
 import json
-import math
+from . import _portable_math as math
 import os
 from pathlib import Path
 import struct

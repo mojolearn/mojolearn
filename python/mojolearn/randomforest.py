@@ -66,7 +66,7 @@ numeric labels and a Python list for str labels. Nothing in this module
 imports NumPy.
 """
 
-import math
+from . import _portable_math as math
 import numbers
 
 from . import _mojolearn_rf, _serialize
@@ -252,26 +252,13 @@ def _max_features_fraction(max_features, n_features):
         return 1.0
     if isinstance(max_features, str):
         if max_features == "sqrt":
-            # IEEE-754 requires sqrt correctly rounded: `math.sqrt`,
-            # `np.sqrt` and the Mojo side's `sqrt` cannot disagree.
+            # The owned host helper uses the correctly rounded CPU sqrt instruction.
             return math.sqrt(n_features) / n_features
         if max_features == "log2":
-            # DEVIATION 2304 (contract): `math.log2` in float64, which is
-            # libm's `log2` -- the SAME oracle `ensemble/randomforest.mojo`
-            # `compute_max_features_log2` calls through `external_call`,
-            # where `np.log2` was NumPy's own loop. The binding takes the
-            # FRACTION (slot 6, `Float32`), not a count, so the fraction
-            # is kept; the kernel truncates `Int32(Float32(fraction) *
-            # Float32(n_cols))` (`n_sampled_cols`, `builder.cuh:240`).
-            # THE BOUNDARY CASE: the count moves only when `log2(n)` sits
-            # within about `n * 2**-24` of an integer AND the two log2s
-            # differ in the last bit there. `log2(n)` is an exact integer
-            # precisely at `n = 2**k`, where both are exact and `k / 2**k`
-            # is exact in float32, so no column count moves at any power
-            # of two; the Mojo side measured last-bit disagreement between
-            # libm and `std.math.log2` on 4051 of 4095 inputs in [2, 4096]
-            # and NO column count moving. `max(2, n)` keeps 1 feature from
-            # resolving to a zero fraction, as before.
+            # Use the same pinned portable_log2_64 arithmetic as the Mojo
+            # builder. Keep the fraction: the kernel truncates after FP32
+            # conversion. Powers of two are exact; max(2, n) retains the
+            # existing nonzero fraction for a one-feature input.
             return math.log2(max(2, n_features)) / n_features
         raise ValueError(
             f"max_features={max_features!r} is not a recognised form;"

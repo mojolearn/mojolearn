@@ -101,7 +101,7 @@ than hidden, and both have a cheaper device-side form that is OWED.
 
 from . import _buffer as _buffers, _bufcheck as _checks
 from ._array import Array as _Array
-import math
+from . import _portable_math as math
 from fractions import Fraction
 
 import ctypes
@@ -1487,7 +1487,7 @@ def _f32_round(q):
         return 0.0
     if e + 23 > _F32_MAX_EXP:
         raise OverflowError("mojolearn: schedule value overflows float32")
-    return sign * float(m) * (2.0 ** e)
+    return math.ldexp(sign * float(m), e)
 
 
 def _f32_bits(value):

@@ -2,7 +2,7 @@
 """Deterministic tiny loaded-model fixtures; no pytest or network dependency."""
 import array
 import json
-import math
+from . import _portable_math as math
 import os
 from .models.safetensors import write_safetensors
 

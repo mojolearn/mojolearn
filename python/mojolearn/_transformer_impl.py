@@ -119,7 +119,7 @@ an independent artifact. The build is `bash bindings/build_transformer.sh`
 per tier, REBUILT before any run is believed.
 """
 
-import math
+from . import _portable_math as math
 import os
 import struct
 import threading

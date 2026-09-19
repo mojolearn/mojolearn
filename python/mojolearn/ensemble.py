@@ -92,7 +92,7 @@ derives it.
 import hashlib
 import itertools
 import numbers
-import math
+from . import _portable_math as math
 import os
 import struct
 

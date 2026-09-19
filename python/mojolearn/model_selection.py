@@ -8,7 +8,7 @@ Fold indices are host metadata; all learning stays with the GPU estimator.
 import copy
 import hashlib
 import json
-import math
+from . import _portable_math as math
 import numbers
 import os
 import warnings

@@ -57,7 +57,7 @@ the packed tensors up to the rounding `pack` performs, and
 `unpack(pack(unpack(p)))` is `unpack(p)`.
 """
 import array
-import math
+from . import _portable_math as math
 import struct
 
 from . import _backend
