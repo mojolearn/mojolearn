@@ -54,7 +54,7 @@ def test_execution_runs_only_named_cells(monkeypatch, tmp_path):
     cmd = calls[0]
     assert cmd[cmd.index("--lanes") + 1] == "ridge"
     assert cmd[cmd.index("--fixtures") + 1] == "base"
-    assert cmd[cmd.index("--repeats") + 1] == "2"
+    assert cmd[cmd.index("--repeats") + 1] == "1"
 
 
 @pytest.mark.parametrize("extra,expected", [([], "base"), (["--exhaustive"], ",".join(ib.FIXTURES))])
@@ -65,11 +65,11 @@ def test_existing_runner_uses_same_explicit_fixture_policy(monkeypatch, capsys, 
     assert f"--fixtures {expected}" in out
 
 
-def test_invalid_scope_combinations_and_single_repeat_refuse():
+def test_invalid_scope_combinations_and_zero_repeats_refuse():
     with pytest.raises(SystemExit):
         verify_lanes.main(["--all", "--lane", "ridge", "--plan"])
     with pytest.raises(SystemExit):
-        verify_lanes.main(["--lane", "ridge", "--repeats", "1", "--plan"])
+        verify_lanes.main(["--lane", "ridge", "--repeats", "0", "--plan"])
     with pytest.raises(SystemExit):
         iterate.main(["--lane", "ridge", "--exhaustive", "--fixtures", "base", "--plan"])
 

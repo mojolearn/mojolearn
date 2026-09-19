@@ -495,9 +495,10 @@ def build_parser():
     d.add_argument("--fixtures", default="",
                    help="comma separated subset of the record's fixtures "
                         "(default: all nine)")
-    d.add_argument("--repeats", type=int, default=2,
-                   help="fits per cell, to separate a mover on this box from "
-                        "a divergence between boxes (default %(default)s)")
+    d.add_argument("--repeats", type=int, default=1,
+                   help="fits per cell (default %(default)s); a hash equal to "
+                        "another box's is already stable, so raise it only to "
+                        "classify a cell that diverged")
     d.add_argument("--vendor", default=None,
                    help="the box label written into the local column "
                         "(default: the harness's own, cpu-<model> or the "

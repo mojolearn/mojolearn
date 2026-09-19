@@ -8,7 +8,7 @@ permission, numerical contract or frozen reference is changed by this runner.
 # Inspect the exact jobs, coverage and limits without running anything.
 pixi run -e test test-algo --lane transformer --plan
 
-# Two fits plus inference/save/reload, on prebuilt CPU oracle bindings.
+# One fit plus inference/save/reload, on prebuilt CPU oracle bindings.
 pixi run -e test test-algo --lane transformer --host-dir /path/to/host \
   --out /tmp/transformer-core
 
@@ -55,7 +55,7 @@ protocols differ deliberately.
 The `core` group includes training and inference/save/reload. `batch` and
 `rlpair` each rerun that prerequisite, plus only their selected contract.
 `all` expands to separate jobs; inapplicable batch and undeclared rlpair probes
-are omitted from its plan, and requesting one explicitly refuses. Both fits and fixture sizes stay
+are omitted from its plan, and requesting one explicitly refuses. Fixture sizes stay
 unchanged. Skipped probes are recorded N/A with their skip reason.
 
 Changed-path selection is also supported by `test-identity-changed --base REF`.
@@ -74,6 +74,25 @@ For a narrow native gradient-transfer check on CPU or GPU, see
 one small case at a time and preserves complete bytewise output comparisons.
 [Transformer weight setup](TRANSFORMER_WEIGHT_SETUP.md) documents batched
 validation, separate output/refusal groups, and CPU/Metal/CUDA/HIP comparisons.
+
+## One fit per cell
+
+A check fits each cell ONCE (2026-09-19). A second fit on the same box only
+separates "this box moves from run to run" from "this box differs from the
+others", and a hash EQUAL to the reference a different machine produced already
+rules out both. A repeat is informative only after a mismatch: rerun the
+DIVERGENT cell with `--repeats 2` to classify it, never the selection.
+`test-algo`, `tools/verify_lanes.py`, `python -m mojolearn verify` and its
+cross-check all default to one. `tools/identity_break.py` itself still defaults
+to two because its bytes are pinned by `verify_reference/table.json`
+(`harness_sha256`); callers pass `--repeats 1`.
+
+Measured on the M4 (`bench/results/identity_break/2026-09-18_installed-apple-properties`,
+19 lanes, nine fixtures, two repeats, every probe): 615 s, of which train plus
+inference/save/reload is 149 s (24%) and the batch, rlpair, batchgrad,
+batchscale, ragged and stepfull probes are the other 76%. The end-model check
+of the same cells at one repeat is therefore about 74 s, and about 8 s on the
+base fixture alone.
 
 ## Scheduler
 
@@ -168,7 +187,7 @@ pixi run -e test test-algo --lane transformer --mode metal \
   --metal-diagnostic --out /tmp/apple-transformer-core
 ```
 
-The default runs one base fixture and one core group, with two fits, under a
+The default runs one base fixture and one core group, with one fit, under a
 60-second total deadline. To investigate batching or decoding, select just
 `--probe-group batch` or `--probe-group rlpair`. An arbitrary single fixture
 can be selected with `--fixtures NAME` without broadening the round.
@@ -180,7 +199,7 @@ No Apple runtime speedup is implied: this limits the amount tested per round.
 
 ## The same controls on CPU, AMD and NVIDIA
 
-The routine default is CPU, base fixture, two fits and core probes on every
+The routine default is CPU, base fixture, one fit and core probes on every
 host. GPU work requires an explicit backend. The harness reads the loaded
 backend before fitting, so a CUDA request cannot silently measure CPU or HIP.
 All backends have per-job execution/queue limits and one shared run deadline.

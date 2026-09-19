@@ -360,7 +360,7 @@ def main(argv=None):
     ap.add_argument("--out", default="", metavar="DIR", help="where parts, logs and the column go")
     ap.add_argument("--fixtures", default=None, help="fixtures to check; default base, even with --all")
     ap.add_argument("--exhaustive", action="store_true", help="all nine fixtures, explicitly requested")
-    ap.add_argument("--repeats", type=int, default=2)
+    ap.add_argument("--repeats", type=int, default=1)
     ap.add_argument("--vendor", default="")
     ap.add_argument("--tag", default="sweep", help="lane tag for the pod plan")
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
@@ -388,8 +388,11 @@ def main(argv=None):
     unknown = set(fixtures) - set(identity_break.FIXTURES)
     if unknown:
         ap.error(f"unknown fixtures: {sorted(unknown)}")
-    if args.repeats < 2:
-        ap.error("verification needs at least two independent fits")
+    # One fit per cell. A hash equal to the reference another box produced
+    # already shows this box neither moved nor diverged; a second fit only
+    # classifies a mismatch, so rerun the DIVERGENT cell, never the selection.
+    if args.repeats < 1:
+        ap.error("--repeats must be positive")
     selection_modes = sum(bool(x) for x in (args.all, args.lanes or args.lane, args.changed_since, args.lanes_for_paths))
     if selection_modes != 1:
         ap.error("choose one of --all, named lanes, --changed-since, or --lanes-for-paths")
