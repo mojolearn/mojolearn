@@ -480,6 +480,18 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         columns in `classes_` order."""
         return self._vote(X).astype("<f8")
 
+    def _predict_with_proba(self, X):
+        """Return labels and probabilities from one exact vote matrix.
+
+        ``predict`` consumes the float32 vote while ``predict_proba`` exactly
+        widens it to float64.  Keeping both views avoids a second complete
+        forest traversal in identity/evidence tooling without changing
+        either public result.
+        """
+        vote = self._vote(X)
+        return (decode_labels(self.classes_, argmax_rows(vote)),
+                vote.astype("<f8"))
+
     def predict(self, X):
         """The argmax of the vote (first max wins) mapped through
         `classes_`: an int64 or float64 `Array` for numeric labels, a
