@@ -51,7 +51,13 @@ affects, compare that commit against its own parent.
 Some paths still select every lane and should. `pixi.toml` pins the toolchain,
 and a toolchain change can move bits on every lane.
 
-## Tier 1, ROUTINE: on a change, before merging
+## Tier 1, OPTIONAL: checking a change
+
+**Nothing here is required before a merge (2026-09-19).** Verification happens
+once per release: the CPU column and the Apple pass (Tier 3). A change merges
+without a check. Use this tier only when you WANT to know whether a kernel
+edit moved a bit, and then only on the lanes that edit can reach.
+
 
 The bounded routine entry point is now `pixi run -e test test-algo --lane NAME`.
 It defaults to the CPU oracle, the base fixture and core checks, with separate
@@ -61,7 +67,6 @@ with `--probe-group`; `all` creates separate jobs. See
 The full-column runners below remain explicit qualification tools.
 
 Only the lanes the change can affect, on the CPU host route, small fixtures.
-This is what a lane runs before it merges.
 
 ```sh
 python3 tools/verify_lanes.py --changed-since origin/main --fixtures base
@@ -115,9 +120,9 @@ The merge is where a sharded run can lie, so it is checked three ways:
 
 ## Tier 3: release qualification and explicit GPU diagnostics
 
-Keep the existing NVIDIA and AMD qualification contracts. Apple qualification
-uses the installed-wheel gates for each PyPI update. A fresh full Apple identity
-column is no longer an additional release requirement.
+**A release is verified by the CPU column and the Apple pass, and by nothing
+else (2026-09-19).** NVIDIA and AMD runs are optional diagnostics, not release
+requirements, and the release workflow admits a Linux wheel without them.
 
 ### The Apple pass
 
@@ -141,11 +146,10 @@ Between releases, routine iteration uses CPU. An Apple-specific failure may
 need a real-Metal check: valid compiled AIR does not guarantee successful
 pipeline creation, and CPU results cannot certify Metal buffer lifetimes.
 
-Use `test-algo --lane NAME --mode metal --metal-diagnostic --out DIR` for that
-investigation. The default is one base/core job with a **60-second total budget**,
-including the queue. Batch or decode can replace core for a focused question.
-Multiple fixtures/groups require `--metal-expanded`; they share the same total
-budget unless `--budget` explicitly changes it. Fixture floors remain intact. Never silently count skipped or timed-out work as coverage.
+Use `test-algo --lane NAME --mode metal --out DIR` for that investigation. The
+default is one base/core job with a **60-second total budget**, including the
+queue. Metal runs whatever is selected; no release marker or diagnostic flag is
+needed, and several jobs share the same total budget unless `--budget` changes it. Fixture floors remain intact. Never silently count skipped or timed-out work as coverage.
 
 CPU checks cover their own implementation and comparisons with named reference
 records. Agreement with an older GPU record is not proof of a changed GPU

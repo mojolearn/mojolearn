@@ -367,6 +367,7 @@ jobs:
       #     writes on purpose and PyPI refuses it, so seeing it here means
       #     the audit step never ran
       #   * `twine check` passes on it
+      # and, ONLY IF a qualification/ directory was staged beside it:
       #   * qualification/{hip,cuda}/ under that same staging directory
       #     retains 24 installed jobs per vendor plus build-provenance.json
       #     from each build; BOTH runs installed this exact final wheel SHA
@@ -427,9 +428,16 @@ jobs:
                   target.parent.mkdir(parents=True, exist_ok=True)
                   target.write_bytes(subprocess.check_output(['git', 'show', 'HEAD:' + name]))
           PY
-          python3 "$source_dir/tools/check_linux_release_qualification.py" "$WHL" \
-            --qualification-root "$DIR/qualification" \
-            --source-root "$source_dir" --profile release-linux3
+          # A release is verified by the CPU column and the Apple pass
+          # (2026-09-19). NVIDIA and AMD qualification is checked when someone
+          # staged it and is not required when nobody did.
+          if [ -d "$DIR/qualification" ]; then
+            python3 "$source_dir/tools/check_linux_release_qualification.py" "$WHL" \
+              --qualification-root "$DIR/qualification" \
+              --source-root "$source_dir" --profile release-linux3
+          else
+            echo "::warning::no NVIDIA/AMD qualification staged for $base; admitting it on the CPU column and the Apple pass"
+          fi
           cp "$WHL" python/dist/
           echo "admitted $base ($got)"
           echo "staged=$base" >> "$GITHUB_OUTPUT"

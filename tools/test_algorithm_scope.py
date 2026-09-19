@@ -186,12 +186,12 @@ def test_metal_plan_has_one_minute_total_budget(capsys):
 
 
 @pytest.mark.parametrize("extra", [["--exhaustive"], ["--probe-group", "all"]])
-def test_metal_refuses_multi_job_round_even_with_release_marker(monkeypatch, tmp_path, extra):
-    monkeypatch.setenv(ib.APPLE_RELEASE_RECORD_ENV, "0.8.7")
-    monkeypatch.setattr(iterate, "run_job", lambda *a: pytest.fail("multi-job Metal round launched"))
-    with pytest.raises(SystemExit):
-        iterate.main(["--lane", "transformer", "--mode", "metal", "--out", str(tmp_path), *extra])
-    assert not (tmp_path / "selection.json").exists()
+def test_metal_runs_a_multi_job_round_without_any_marker(monkeypatch, tmp_path, extra):
+    monkeypatch.delenv(ib.APPLE_RELEASE_RECORD_ENV, raising=False)
+    calls = []
+    monkeypatch.setattr(iterate, "run_job", lambda cmd, env: calls.append(cmd) or 0)
+    assert iterate.main(["--lane", "transformer", "--mode", "metal", "--out", str(tmp_path), *extra]) == 0
+    assert len(calls) > 1
 
 
 def test_expanded_metal_diagnostic_is_explicit_and_still_budgeted(monkeypatch, tmp_path):
