@@ -1,3 +1,16 @@
+## Latest retained checkpoint (2026-09-19)
+
+NVIDIA: **648/648** originally missing fixture-parts covered, zero differences.
+AMD: **627/630** covered, zero differences; the remaining three are two-device
+resampling **batch** witnesses for `dupes`, `negative`, and `odd`. The final
+AMD capture reached its time limit; this is missing evidence, not a mismatch.
+Both final pods were deleted and confirmed HTTP 404; no paid pod remains.
+The JSON remaining ledgers and final raw captures are retained beside this file.
+These captures predate the separate libm-removal candidate. Existing verified
+numerical captures have not been rerun or relabeled as validation of that change.
+
+The earlier checkpoints below preserve the history and their then-current counts.
+
 # NVIDIA hardware coverage follow-up
 
 The eleven newer parallel lanes now have complete two-L40S captures: nine default

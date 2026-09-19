@@ -1,0 +1,32 @@
+{
+  "scope": "Originally missing AMD two-device fixture-parts; compatible prior records outside this set are preserved, not recertified.",
+  "wanted_parts": 630,
+  "covered_parts": 627,
+  "remaining_parts": 3,
+  "different": [],
+  "remaining_jobs": [
+    {
+      "id": "par-resample-two",
+      "lane": "par-resample",
+      "devices": "0,1",
+      "fixtures": [
+        "dupes",
+        "negative",
+        "odd"
+      ],
+      "expected": {
+        "dupes": {
+          "batch": "6c49abf4d134f6ce"
+        },
+        "negative": {
+          "batch": "c0dee74a1f2626c1"
+        },
+        "odd": {
+          "batch": "c783c4d2569a5295"
+        }
+      },
+      "no_batch": false,
+      "seconds": 2000
+    }
+  ]
+}
