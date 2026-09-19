@@ -42,6 +42,7 @@ import re
 import subprocess
 import sys
 import time
+import traceback
 
 from . import _verify_reference as vref
 
@@ -215,6 +216,33 @@ def _collapse(values, errors):
 STEPFULL = "stepfull"
 
 
+def _capped(harness, text):
+    """`text` through the harness's cap, which keeps the INNERMOST frames.
+    A harness without one (an override pointed at an older file, a stub in a
+    test) gets the text whole: too long beats a cause thrown away."""
+    cap = getattr(harness, "_clip_error", None)
+    return cap(text) if callable(cap) else text
+
+
+def _error_text(harness, stage, exc):
+    """The text a refused part carries: the stage, the exception TYPE, its
+    message, and the traceback of the raise.
+
+    NEVER A HEAD CUT (2026-09-19). This used to be
+    `f"{type(exc).__name__}: {exc}"[:400]`, and on a traceback a head cut
+    keeps the outermost frames -- the harness calling in, which the cell key
+    already says -- and drops the frame that raised. A two-device MI300X run
+    refused nine `par-queries-nn` batch cells and every one of them carried
+    the same 300 characters of the worker's dispatch frame."""
+    fmt = getattr(harness, "_exc_text", None)
+    if callable(fmt):
+        return _capped(harness, fmt(stage, exc))
+    message = str(exc)
+    head = f"{type(exc).__name__}: {message.splitlines()[0] if message else ''}"
+    tail = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).rstrip("\n")
+    return _capped(harness, f"{stage + ': ' if stage else ''}{head}\n{tail}")
+
+
 def _probe_stepfull(harness, fit, lane, ml, held):
     """(value, error) for the stepfull part of one fit.
 
@@ -253,27 +281,31 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
         try:
             fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
         except Exception as exc:
-            text = f"{type(exc).__name__}: {exc}"[:400]
+            # KEEP THE INNERMOST FRAMES, not the outermost (harness
+            # `_exc_text`/`_clip_error`, 2026-09-19): a `[:400]` head cut
+            # threw away the cause of nine refused par-queries-nn cells.
+            text = _error_text(harness, None, exc)
             return {p: (None, text) for p in parts}
         vals["train"].append(harness._train_hash(fit))
         infer, model, reload, err = harness._probe_fit(fit, lane)
         if err:
             stage = err.split(":", 1)[0]
-            errs["infer" if stage == "infer" else "model"].append(err[:400])
+            err = _capped(harness, err)
+            errs["infer" if stage == "infer" else "model"].append(err)
             if stage == "infer":
-                errs["model"].append(err[:400])
+                errs["model"].append(err)
         if reload is not None and infer is not None and reload != infer:
             model = "RELOAD-MOVED"
         vals["infer"].append(infer)
         vals["model"].append(model)
         batch, berr = harness._probe_batch(fit, lane, ml, held.copy(), harness.BATCH_ALONE, False)
         if berr:
-            errs["batch"].append(berr[:400])
+            errs["batch"].append(_capped(harness, berr))
         vals["batch"].append(batch)
         # the decode part last, for the same reason the batch part is not first
         step, serr = _probe_stepfull(harness, fit, lane, ml, held)
         if serr:
-            errs[STEPFULL].append(serr[:400])
+            errs[STEPFULL].append(_capped(harness, serr))
         vals[STEPFULL].append(step)
         for part in extra_parts:
             try:
@@ -288,7 +320,7 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
                     value, error, _notes = harness._probe_part(
                         part, fit, lane, ml, held.copy(), harness.BATCH_ALONE, "")
             except Exception as exc:
-                value, error = None, f"{part}: {type(exc).__name__}: {exc}"[:400]
+                value, error = None, _error_text(harness, part, exc)
             vals[part].append(value)
             if error:
                 errs[part].append(error)
@@ -341,7 +373,7 @@ def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=
                 fit.est = est
                 batch, berr = harness._probe_batch(fit, lane, ml, held_cache[fixture].copy(), harness.BATCH_ALONE, False)
             except Exception as exc:
-                batch, berr = None, f"{type(exc).__name__}: {exc}"[:400]
+                batch, berr = None, _error_text(harness, None, exc)
             values.append(batch)
             if berr:
                 errors.append(berr)
@@ -1864,13 +1896,20 @@ def format_human(report):
     c = report["counts"]
     lines.append(f"| {'all':<{w}} | {len(report['lanes']) + report.get('model_lanes_checked', report['models_checked']):>5} | {c['IDENTICAL']:>9} | "
                  f"{c['DIVERGENT']:>9} | {c['OWED']:>4} | {c['REFUSED']:>7} | {c['N/A']:>3} |")
+    def _detail_lines(prefix, detail):
+        """`prefix: detail` with a multi-line detail's continuation indented.
+        A refusal now carries the traceback of the raise (2026-09-19); it
+        stays WHOLE here and is merely indented, never re-cut."""
+        first, _, rest = ("" if detail is None else str(detail)).partition("\n")
+        return [f"{prefix}: {first}"] + ["      " + line for line in rest.splitlines()]
+
     bad = [r for r in report["cells"] if r["state"] == vref.DIVERGENT]
     refused = [r for r in report["cells"] if r["state"] == vref.REFUSED]
     if bad:
         lines.append("")
         lines.append(f"DIVERGENT ({len(bad)}):")
         for r in bad[:40]:
-            lines.append(f"  {r['lane']}/{r['fixture']} {r['part']}: {r['detail']}")
+            lines.extend(_detail_lines(f"  {r['lane']}/{r['fixture']} {r['part']}", r["detail"]))
         if len(bad) > 40:
             lines.append(f"  ... {len(bad) - 40} more in --json")
     if refused:
@@ -1882,7 +1921,7 @@ def format_human(report):
             if key in seen:
                 continue
             seen.add(key)
-            lines.append(f"  {r['lane']} {r['part']}: {r['detail']}")
+            lines.extend(_detail_lines(f"  {r['lane']} {r['part']}", r["detail"]))
             if len(seen) >= 20:
                 break
     lines.append("")

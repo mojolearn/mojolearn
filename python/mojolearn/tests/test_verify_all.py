@@ -17,6 +17,7 @@ import json
 import os
 import subprocess
 import sys
+import traceback
 import tempfile
 from pathlib import Path
 
@@ -737,6 +738,72 @@ def test_a_harness_with_no_stepfull_part_refuses_rather_than_passing():
     assert value is None and "defines no stepfull part" in error, error
     assert vref.judge(value, vref.entry(vref.load_table(), "mamba1", "base", "stepfull"), error)[0] == vref.REFUSED
     assert va.verdict(_counts(IDENTICAL=100, REFUSED=1))[0] != va.EXIT_VERIFIED
+
+
+# ------------------------------------------- what a refused part carries
+
+
+def _harness_for_error_text():
+    if ROOT is None:
+        pytest.skip("no checkout: tools/identity_break.py is not beside this package")
+    return va.load_harness(str(ROOT / "tools" / "identity_break.py"))
+
+
+def _nested_failure():
+    """A raise a few frames deep whose message carries a SECOND traceback,
+    the shape `_parallel_pool._call` raises: 'GPU worker failed:\n<the
+    worker's own traceback>'."""
+    def innermost():
+        raise ValueError("MOJOLEARN_TEST_INNERMOST_CAUSE")
+
+    def middle():
+        innermost()
+
+    try:
+        middle()
+    except ValueError:
+        worker = traceback.format_exc()
+    try:
+        raise RuntimeError("GPU worker failed:\n" + worker)
+    except RuntimeError as exc:
+        return exc
+
+
+def test_a_refused_part_carries_the_type_message_and_traceback():
+    """A REFUSAL THAT NAMES NO CAUSE IS NOT A REFUSAL (2026-09-19). Nine
+    par-queries-nn batch cells from a two-device MI300X run carried 300
+    characters of the WORKER'S OWN dispatch frame and stopped mid-word: the
+    cut kept the outermost frames. The text must carry the exception type,
+    its message and the frames."""
+    harness = _harness_for_error_text()
+    text = harness._exc_text("batch", _nested_failure())
+    assert text.startswith("batch: RuntimeError: GPU worker failed:")
+    assert "ValueError: MOJOLEARN_TEST_INNERMOST_CAUSE" in text
+    assert "in innermost" in text and "in middle" in text
+
+
+def test_the_cap_keeps_the_innermost_frames_and_the_full_text_survives(tmp_path):
+    """THE FAILING SIDE FIRST: the old `[:300]` head cut is run here and must
+    LOSE the cause, or this test could pass against the bug it names."""
+    harness = _harness_for_error_text()
+    exc = _nested_failure()
+    old = f"batch: {type(exc).__name__}: {exc}"[:300]
+    assert "MOJOLEARN_TEST_INNERMOST_CAUSE" not in old, (
+        "the old head cut kept the cause, so this test cannot tell the fix from the bug")
+
+    text = harness._exc_text("batch", exc)
+    key = "par-demo/base batch"
+    clipped = harness._clip_error(text, key=key, limit=400)
+    assert len(clipped) <= 400
+    assert clipped.startswith("batch: RuntimeError: GPU worker failed:")
+    assert "MOJOLEARN_TEST_INNERMOST_CAUSE" in clipped, clipped
+    assert "elided" in clipped
+
+    path = harness.write_error_sidecar(str(tmp_path / "record.json"))
+    assert path and path.endswith(".errors.txt")
+    body = Path(path).read_text()
+    assert key in body and text in body, "the sidecar must carry the UNTRUNCATED text"
+    harness._FULL_ERRORS.clear()
 
 
 # ---------------------------------------------------------------- lanes and flags

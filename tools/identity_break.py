@@ -425,6 +425,15 @@ is not written (all three 2026-09-13 GPU columns carry "commit": "").
 lane has fewer than N real hashes on a compared cell, because `IDENTICAL x3`
 on a lane the CPU column should cover is the CPU binding refusing, not a
 pass.
+
+A REFUSED PART NAMES ITS CAUSE (2026-09-19). Every `*_error` field carries
+the stage, the exception TYPE, its message and the traceback of the raise,
+capped at ERROR_TEXT_LIMIT characters FROM THE OUTER END, so what a cap
+drops is the harness calling in and what it keeps is the frame that raised
+(and, for a `GPU worker failed` RuntimeError, the worker's own traceback,
+which travels at the very end). `<json>.errors.txt` beside the record holds
+every refusal untruncated; with no `--json` the full text is printed after
+the summary.
 """
 import argparse
 import hashlib
@@ -456,6 +465,99 @@ def atomic_json(path, value):
     finally:
         if os.path.exists(temporary):
             os.unlink(temporary)
+
+
+# --------------------------------------------------------------------------
+# what a refused part carries
+# --------------------------------------------------------------------------
+#
+# A CAP THAT KEPT THE WRONG END (2026-09-19, lane/lm-attention-fallback).
+# Every probe used to hand a cell `f"{stage}: {type(exc).__name__}: {exc}"`
+# cut with `[:300]`, and `[:300]` keeps the OUTERMOST frames of a traceback
+# and throws away the innermost -- the frame that actually raised. On
+# 2026-09-19 a two-device MI300X run refused `par-queries-nn`'s batch part on
+# all nine fixtures and every cell carried the same 300 characters:
+#
+#     batch: RuntimeError: GPU worker failed:
+#     Traceback (most recent call last):
+#       File ".../_parallel_worker.py", line 386, in main
+#         response = (True, execute(request))
+#                           ~~~~~~~^^^^^^^^^
+#       File ".../_parallel_worker.py", li
+#
+# -- the worker's OWN dispatch frame, cut mid-word before the operation, the
+# exception type or its message. Nine reproductions and no cause.
+#
+# Two things fix it. `_exc_text` appends the formatted traceback of the
+# raise, and `traceback.format_exception` puts `Type: message` LAST, so a
+# worker RuntimeError whose message carries a remote traceback
+# (`_parallel_pool._call` raises 'GPU worker failed:\n<worker traceback>')
+# ends this text with that remote traceback's innermost frame. `_clip_error`
+# then keeps the first line AND THE TAIL, so what survives a cap is the
+# innermost frames, and it records the untruncated text in `_FULL_ERRORS`,
+# which `write_error_sidecar` writes beside the run's JSON.
+
+#: The cap on the text a CELL carries. The full text is never capped: it is
+#: written beside the JSON. Sized to hold a nested traceback (a worker
+#: failure carries two) rather than to be small.
+ERROR_TEXT_LIMIT = 8000
+
+#: {"<lane>/<fixture> <part>": the untruncated text}. Written beside the
+#: run's JSON by `write_error_sidecar`.
+_FULL_ERRORS = {}
+
+
+def _exc_text(stage, exc):
+    """The text a refused part carries: `<stage>: <Type>: <first line of the
+    message>`, then the FULL traceback of the raise.
+
+    The traceback goes last because `traceback.format_exception` ends with
+    `Type: message`, and a worker failure's message IS the worker's own
+    traceback. `_clip_error` keeps the tail, so the innermost frame on both
+    sides of the RPC survives a cap.
+    """
+    message = str(exc)
+    head = f"{type(exc).__name__}: {message.split(chr(10), 1)[0]}"
+    if stage:
+        head = f"{stage}: {head}"
+    tail = "".join(traceback.format_exception(type(exc), exc, exc.__traceback__)).rstrip("\n")
+    return f"{head}\n{tail}"
+
+
+def _clip_error(text, key=None, limit=None):
+    """`text` capped KEEPING THE INNERMOST FRAMES, and the untruncated text
+    remembered under `key` for the sidecar.
+
+    A traceback's outer frames say where the harness called in, which the
+    cell key already says; its inner frames say what raised. So the cap keeps
+    the first line (the stage and the exception type, which the summary table
+    reads) and then the END of the text, and names how much it dropped. The
+    old `[:300]` kept exactly the half that carries no cause."""
+    if text is None:
+        return None
+    if key is not None:
+        _FULL_ERRORS[key] = text
+    limit = ERROR_TEXT_LIMIT if limit is None else limit
+    if len(text) <= limit:
+        return text
+    head = text.split("\n", 1)[0][:limit // 4]
+    note = "\n... %d characters of outer frames elided (the full text is in the .errors.txt beside the JSON) ...\n"
+    keep = limit - len(head) - len(note) - 8
+    return head + (note % (len(text) - len(head) - keep)) + text[-keep:]
+
+
+def write_error_sidecar(json_path):
+    """The untruncated text of every refusal this run recorded, beside the
+    run's JSON. Returns the path written, or None when there was nothing to
+    write. A cap that drops evidence is only acceptable while the evidence
+    is kept somewhere, and this is that somewhere."""
+    if not json_path or not _FULL_ERRORS:
+        return None
+    path = str(json_path) + ".errors.txt"
+    with open(path, "w", encoding="utf-8") as stream:
+        for key in sorted(_FULL_ERRORS):
+            stream.write(f"===== {key} =====\n{_FULL_ERRORS[key]}\n\n")
+    return path
 
 
 class CellTimer:
@@ -7066,7 +7168,7 @@ def _probe_batch(fit, name, ml, Xh, alone, sabotage):
                 return moved[:400], None
         return digest.hexdigest()[:16], None
     except Exception as exc:
-        return None, f"batch: {type(exc).__name__}: {exc}"
+        return None, _exc_text("batch", exc)
     finally:
         # drivers a declaration opened for the part (the query drivers)
         while _BATCH_CLOSE:
@@ -8713,7 +8815,7 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
                 return moved[:400], None, notes
         return digest.hexdigest()[:16], None, notes
     except Exception as exc:
-        return None, f"{part}: {type(exc).__name__}: {exc}", notes
+        return None, _exc_text(part, exc), notes
     finally:
         while _BATCH_CLOSE:
             _BATCH_CLOSE.pop()()
@@ -8991,7 +9093,7 @@ def _probe_rlpair(fit, name, ml, Xh, sabotage):
             digest.update(a.tobytes())
         return digest.hexdigest()[:16], None, sides
     except Exception as exc:
-        return None, f"rlpair: {type(exc).__name__}: {exc}", sides
+        return None, _exc_text("rlpair", exc), sides
 
 
 def _rlpair_column_verdict(values):
@@ -9282,10 +9384,10 @@ def _probe_fit_host(fit, name):
                                        f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
                 infer = _h(*fit.probe(host_model(path)))
             except Exception as exc:
-                return None, None, None, f"infer (host_model): {type(exc).__name__}: {exc}"
+                return None, None, None, _exc_text("infer (host_model)", exc)
             reload = _h(*fit.probe(getattr(type(fit.est), load)(path)))
     except Exception as exc:
-        return None, None, None, f"model: {type(exc).__name__}: {exc}"
+        return None, None, None, _exc_text("model", exc)
     if fit.model_na:
         # The same n/a as `_probe_fit` (Fit.model_na): the host answer is
         # still the infer cell, the file of caller-given bytes is not a cell.
@@ -9316,11 +9418,11 @@ def _probe_saved_host(fit, name):
                                f"not MOJOLEARN_FOREST_HOST_BINARY {binary_path()}")
         infer = _h(*fit.probe(host))
     except Exception as exc:
-        return None, None, None, f"infer (saved model): {type(exc).__name__}: {exc}"
+        return None, None, None, _exc_text("infer (saved model)", exc)
     try:
         reload = _h(*fit.probe(host_model(path)))
     except Exception as exc:
-        return infer, None, None, f"model (saved model): {type(exc).__name__}: {exc}"
+        return infer, None, None, _exc_text("model (saved model)", exc)
     if reload != infer:
         return infer, None, None, (f"model (saved model): a second host_model load of {path} predicts "
                                    f"{reload}, the first {infer}")
@@ -9342,7 +9444,7 @@ def _probe_fit(fit, name):
     try:
         infer = _h(*fit.probe(_public_est(name, fit.est)))
     except Exception as exc:
-        return None, None, None, f"infer: {type(exc).__name__}: {exc}"
+        return None, None, None, _exc_text("infer", exc)
     if fit.model_na:
         return infer, fit.model_na, None, None
     if not _has_save_load(fit.est):
@@ -9362,7 +9464,7 @@ def _probe_fit(fit, name):
             back = getattr(type(fit.est), load)(path)
             reload = _h(*fit.probe(_public_est(name, back)))
     except Exception as exc:
-        return infer, None, None, f"model: {type(exc).__name__}: {exc}"
+        return infer, None, None, _exc_text("model", exc)
     return infer, model, reload, None
 
 
@@ -9538,6 +9640,9 @@ def _run_reference(args):
         record["package"] = package
         record["resume_signature"] = signature
         atomic_json(args.json, record)
+        # The untruncated text of every refusal, beside the JSON. A cell's
+        # own error field is capped; this file never is.
+        write_error_sidecar(args.json)
 
     print(f"# identity_break  mode={mode}  {time.strftime('%Y-%m-%d %H:%M:%S')}  "
           f"{platform.platform()}")
@@ -9590,7 +9695,7 @@ def _run_reference(args):
                     oracle_errors.append(str(exc))
                     continue
                 except Exception as exc:
-                    err = f"{type(exc).__name__}: {exc}"
+                    err = _exc_text(None, exc)
                     if args.verbose:
                         traceback.print_exc()
                     break
@@ -9598,7 +9703,7 @@ def _run_reference(args):
                     inf, mod, rel, err2 = _probe_fit(p, name)
                 infers.append(inf); models.append(mod); reloads.append(rel)
                 if err2:
-                    errs2.append(err2[:300])
+                    errs2.append(_clip_error(err2, f"{name}/{f} infer-model"))
                     if args.verbose:
                         traceback.print_exc()
                 # the batch part runs after the infer and model columns so it
@@ -9610,7 +9715,7 @@ def _run_reference(args):
                         bat, err3 = _probe_batch(p, name, ml, held[f].copy(), args.batch_alone, batch_sabotage)
                 batches.append(bat)
                 if err3:
-                    errs3.append(err3[:300])
+                    errs3.append(_clip_error(err3, f"{name}/{f} batch"))
                     if args.verbose:
                         print(err3)
                 for part in extra:
@@ -9619,7 +9724,7 @@ def _run_reference(args):
                                                        extra_sabotage[part])
                     extras[part]["values"].append(val)
                     if errp:
-                        extras[part]["errors"].append(errp[:300])
+                        extras[part]["errors"].append(_clip_error(errp, f"{name}/{f} {part}"))
                         if args.verbose:
                             print(errp)
                     if extras[part]["notes"] is None:
@@ -9635,11 +9740,12 @@ def _run_reference(args):
                     rls.append(rl)
                     rl_sides = rl_sides if rl_sides is not None else sd
                     if err4:
-                        errs4.append(err4[:300])
+                        errs4.append(_clip_error(err4, f"{name}/{f} rlpair"))
                         if args.verbose:
                             print(err4)
             if err:
-                cell = dict(verdict="REFUSED", error=err[:300], hashes=hs, parts=parts)
+                cell = dict(verdict="REFUSED", error=_clip_error(err, f"{name}/{f} train"),
+                            hashes=hs, parts=parts)
                 shown = "REFUSED"
             elif oracle_errors:
                 cell = dict(verdict="DIVERGENT", hashes=hs, parts=parts, oracle_errors=oracle_errors)
@@ -9783,6 +9889,17 @@ def _run_reference(args):
     if args.json:
         dump(True)
         print(f"wrote {args.json}")
+        sidecar = write_error_sidecar(args.json)
+        if sidecar:
+            print(f"wrote {sidecar} ({len(_FULL_ERRORS)} refusal(s), untruncated)")
+    elif _FULL_ERRORS:
+        # No JSON to sit beside: the whole point is that nothing is thrown
+        # away, so the full text goes to the log the run is read from.
+        print()
+        print(f"# FULL REFUSAL TEXT ({len(_FULL_ERRORS)}); pass --json to have it written beside the record")
+        for key in sorted(_FULL_ERRORS):
+            print(f"===== {key} =====")
+            print(_FULL_ERRORS[key])
     refused_any = refused or refused2 or refused3 or refused4 or any(
         c.get(f"{part}_error") for c in cells.values() for part in extra)
     return 1 if (moved or moved2 or moved3 or batch_fails or moved4 or rl_fails or extra_fail
