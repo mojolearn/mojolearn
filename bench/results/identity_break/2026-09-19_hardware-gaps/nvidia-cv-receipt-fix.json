@@ -1,0 +1,1963 @@
+{
+  "bindings": {
+    "_mojolearn_gbdt": {
+      "path": "/root/receipt-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_gbdt.so",
+      "sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+      "vendor": "cuda"
+    }
+  },
+  "controls": [
+    "regressor:dropped-fold",
+    "regressor:changed-model",
+    "regressor:changed-prediction",
+    "regressor:aliased-device",
+    "classifier:dropped-fold",
+    "classifier:changed-model",
+    "classifier:changed-prediction",
+    "classifier:aliased-device"
+  ],
+  "devices": [
+    0,
+    1
+  ],
+  "distribution": {
+    "editable": false,
+    "import_matches_distribution": true,
+    "native_record_hashes_match": true,
+    "root": "/root/receipt-venv/lib/python3.11/site-packages",
+    "source_record_hashes_match": true,
+    "version": "0.8.8"
+  },
+  "environment": {
+    "commit": "unknown (no checkout beside this package)",
+    "device": "NVIDIA NVIDIA L40S, 580.126.09",
+    "mode": {
+      "binary": "/root/receipt-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn.so",
+      "compiled": "identical",
+      "ident_dir": "/root/receipt-venv/lib/python3.11/site-packages/mojolearn/identical",
+      "loaded": "identical",
+      "problem": "the selector reports identical but the extension running this fixture is /root/receipt-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn.so, which is NOT under /root/receipt-venv/lib/python3.11/site-packages/mojolearn/identical. A binary is in the wrong directory; nothing here can be labelled.",
+      "requested": "identical",
+      "under_identical": false
+    },
+    "mojolearn_version": "0.8.8",
+    "numpy_version": "2.4.6",
+    "platform": "Linux 6.8.0-110-generic x86_64",
+    "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+    "python": "3.11.10 CPython",
+    "vendor": "cuda (the box probe (device nodes and driver libraries))"
+  },
+  "folds": 5,
+  "inputs": {
+    "X": "03b7ca5d63f7a0b88e03bdde9f3a02c3bb994fe820144a65ea2880a43d919e62",
+    "classifier": "b156b42e7575ae672e462923bdc6240ca0dbcefaf2f856c672ab77cb75bb1c7f",
+    "regressor": "0e8e6967443a65b722fdb56aee554fe48437918b7daf62c816bbdfb672c4d22d"
+  },
+  "native_fault_controls": "OWED",
+  "package_origin": "/root/receipt-venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+  "physical_execution_trace": "OWED",
+  "protocol": "parallel-cv-v2",
+  "repeats": 2,
+  "runs": [
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8551,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8551,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8551,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8551,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8551,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.592720590531826
+    },
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8584,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8584,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8584,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8584,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8584,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 1,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.4752872604876757
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8617,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8617,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8618,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8618,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8617,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.8423568923026323
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8683,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8683,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8684,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8684,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8683,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 1,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.9946195520460606
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8751,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8751,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8752,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8752,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8751,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 0,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.9875463638454676
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0e1dfa29aedb7388d66da96af1fdd69097f81702b2186a70e05e62477b11d8de",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8827,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "5e72c14be08e9ffa52983d316256e09722219e81494a803a41860d14cf19acd5",
+          "model": "af696db30b6adcd4ba631cb5e6cfe60b032eee083bb5f2fbd407118966b0cf8e",
+          "predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "raw_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "reload_predict": "1bf8d79d17eaa592be7e9b2e4664fcd424ecff289776c4393042d60fa9ffc7ef",
+          "score": "00000000735cc13f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "2d26db927a167f46251026efc1c924477e3e6fc8aca029ab17804cadc43abd83",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8827,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "59537c77664d7c3ad5795f549d1500ec9084d9951a616acdc514cef738c2ba19",
+          "model": "ecdd32f750f3b19e3ce98adf8243cff1b6b95b0be5c527122cdd397d6c40d732",
+          "predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "raw_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "reload_predict": "721116d463320e65aa3c8e9402f7d3145e7ab3bec9a4595b37b4233ca5f50bc8",
+          "score": "00000000c6d7c03f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "36fd39995fc35253c32fc7fc5a7ef5afdbd9f0d9c2d57af4439fc5d740c6e3a2",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8828,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "4e2325d36b5713966af37fb5e041c8454b209aafe6b9e8faf617c9d2cd6c26fc",
+          "model": "c0ff95ca60fd96580723845e5c8aa0027ebaea998a4ab487c032f827678a83f0",
+          "predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "raw_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "reload_predict": "6c82ae43a11042c0fcfbae2368e44940e1c28b4a13848f3c795ddb418ea0afea",
+          "score": "000000007ad3bc3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "59afe505b29b2153f954eddc9f0ebe4fe68a9455fe1eae49402aa7ad70464db7",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8828,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "e5088da0df5ac86a593f0a5ca8108a57600e13fd242f96614ccb539c03f988bf",
+          "model": "bd48302c810051152565690fc19371d7c17d4b79f42cec3a7a98406cccc94930",
+          "predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "raw_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "reload_predict": "dd795c86db5752893718361405278a4cee5048f4c16e5801b601fc6ff6920e63",
+          "score": "00000000e8bfbf3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "cdc3e90a45744cc8cb4357d78775524fad17a188914ab301a08ef3a77c6e23c6",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8827,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "1f7045cf0545b61ef5894dd12a67fb7bfad970653ad1ebadb4da136d644b0a60",
+          "model": "f07d5682cf91d50f232bdbbae9a2e966578709889ed350ab71b8ca81c98d68c1",
+          "predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "raw_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "reload_predict": "a70a8a1fcdcbb1d40fe1be14fae31369bd1f75de0e981c0638cda203a88e115a",
+          "score": "000000006afbb63f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "regressor",
+      "repeat": 1,
+      "scores_hex": "000000006afbb63f00000000e8bfbf3f00000000735cc13f000000007ad3bc3f00000000c6d7c03f",
+      "total_seconds_including_witnesses": 1.94719441793859
+    },
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8893,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8893,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8893,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8893,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8893,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 1.4588434007018805
+    },
+    {
+      "devices": [
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8926,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8926,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8926,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8926,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8926,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 1,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 1.367724183946848
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8959,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8960,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8960,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8959,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 8959,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 1.8718925919383764
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9025,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9026,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9026,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9025,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9025,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 1,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 2.0000358913093805
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9091,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9092,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9092,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9091,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9091,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 0,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 1.9908856842666864
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "fold_records": {
+        "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "0a231b4bd4618bce385387358504625c636cc97d065489ceebb7e77b288ddbfa",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9157,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "858344b39c565a46ef2106928b5fda30e8fb4d823f4d60408495f60a3bf9afdf",
+          "model": "cf4d1bef0b8e82660b7cbdac70e408158e19fb209eb4095b0d432f32b3aa1127",
+          "predict": "e7a0822039dded45256823bb90d42c4f8d199b821f26afafc8a819ca11f0c1e6",
+          "raw_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "reload_predict": "48c0ebe062fad7ac5baf99e633c9ac5982acee3d6a078e08bc5a0640f429fe6b",
+          "score": "00000000fbfaea3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5312d166c91ca29c09732df0b68ca523ac5abaaa24defa9af2b0adecb6b18f6b",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9158,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "7f19a9cb0e6b9e74df755e91b0f73454aad3ef0803264d75955f0e961a1d26cb",
+          "model": "782c37bae7a9000f8d36885a41583e2a707e94f11f739d2f5ac6dbab1f049180",
+          "predict": "40e04a4d023c1b60fc17e32a74cbfeac185ebee4f9d758f84fc14e1de9d0ddfa",
+          "raw_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "reload_predict": "19acaec96e5b4397a4bccd181662ae68f9430de29b62705cd97be41dac002f8a",
+          "score": "000000403c3cec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "5b5dcf4bccf15ec7e3cdc7ecb1a44f549c7f9b83c0360ae2b11d513f1ffa90ca",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:66:00.0",
+                "uuid": "ee5f762be2d08c7d2e408a0eaa36536d"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9158,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "0"
+            }
+          },
+          "loss_curve": "ae5c53a4b968880fdba67c19030f6f36f387dd4d71a41de3209869bc5a8b461c",
+          "model": "6d3770840f8b3feb3b53b5593d1c31b898cbf41f4003a858b1401a722a590cc5",
+          "predict": "c919d4a7a545fd454df672d36aae648be0e9bf9449e2f82eccf1ec99a89f933f",
+          "raw_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "reload_predict": "087cb70f6584bda276df661d5865ed9d4b458664bfc28fe5516078394def36c7",
+          "score": "000000203bb1eb3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "80da6b14b2c938374868ce7da8a7d8b7ec2996d0c22f82a7bddff6ab57d6d362",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9157,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "283d27f1f0a288a42c6b7d331b6faf3bc4a82b36bcaf32184942d77dea75d93b",
+          "model": "7a86ead8052db65cc9941f864bef3be581ae53d502d704da469ab0bec8cb17f9",
+          "predict": "8d81b8ddaf323b5269d6a8dc50b56ba33ee0696cdf00d11e423734f76acbe4db",
+          "raw_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "reload_predict": "b2ab2564b734bea3064ae205f5b7f7d5347e034eee505cb75b18fc73491db459",
+          "score": "000000e0dcdcec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        },
+        "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07": {
+          "binding_sha256": "61f7f4c1dd29f2cecfc27ae4402e9fc71874710bd9bacec4cffe91349e8ec30c",
+          "fixture": "ced40ec4938a94bf81d333db8e9918949b09d8e0d22989b8664a4baf8c253c07",
+          "inventory": {
+            "devices": [
+              {
+                "name": "NVIDIA L40S",
+                "ordinal": 0,
+                "pci_bus_id": "0000:e6:00.0",
+                "uuid": "77aa98e6e8b70d93964770744bde4c3c"
+              }
+            ],
+            "driver_library": "libcuda.so.1",
+            "kind": "visible-device-inventory",
+            "pid": 9157,
+            "vendor": "cuda",
+            "visibility": {
+              "CUDA_VISIBLE_DEVICES": "1"
+            }
+          },
+          "loss_curve": "bdfa88425f15a3e384123f90da48a3675db1120dad6965012dc330ba63db52c0",
+          "model": "ffab267a4ec46ff3932c4e98d07b3257926773e9e164f238dcdef43300b5ffdf",
+          "predict": "13c42c72c19cd6d33c78800ccf0ea5cbb755760bf20dc2fd3caf05065feab2f8",
+          "raw_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "reload_predict": "0ed05fd50e62aca65facfee830b266da9079dec630ef0fb3918666341fa99afa",
+          "score": "000000e0c44eec3f",
+          "selected_arch": "sm_89",
+          "selected_arch_how": "exact match for the device (compute capability from the CUDA driver: sm_89)"
+        }
+      },
+      "model": "classifier",
+      "repeat": 1,
+      "scores_hex": "000000e0c44eec3f000000203bb1eb3f000000e0dcdcec3f000000403c3cec3f00000000fbfaea3f",
+      "total_seconds_including_witnesses": 2.0042348839342594
+    }
+  ],
+  "scope": "CV numerical, save/reload and placement checks; no capacity, throughput or complete physical execution qualification",
+  "source": {
+    "commit": null,
+    "guarded_source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
+    "kind": "guarded-source-archive",
+    "source_sha256": {
+      "__init__.py": "54e16f7fc25459a935b7ecada806dab1cc447067b48a934c80d645e34b354306",
+      "_gpu_witness.py": "619e7697c49a153b5bf40e1dde75e6a965940189e89ce5649b391527584b99f4",
+      "_parallel_cv_witness.py": "0b4a523769f21e4df9a29b5b94fe2fdc9d1d218ceb7f1c49c1c3d0e16f0cad74",
+      "_parallel_pool.py": "b9802fc2bab26b3edea192b0bd91cb83fabfb02b29e3d18dc0aa2cd116a0d8e2",
+      "_parallel_worker.py": "ffc86bae15189207b9d50418b6a6c59f6a0e8a0abc2219994604900165eb64b1",
+      "_verify_distributed.py": "e19d3ce905f9bfdce10f90f12fccb0bf08083f27ecc95476eacbc639ec927223",
+      "_verify_parallel_cv.py": "c1f8f977352a4a47fd2baa10ed14aa9250720a380455926bc702c75b5f0059ca",
+      "model_selection.py": "3dd7679e983616160de887d66883c182ce64263c98c5b2dd1d34002c5f5259dd",
+      "parallel_model_selection.py": "da7357419d6bb9dd95efd9d5172d8c7e8191a9f48c183e2ddb0a00f8f993009e"
+    }
+  },
+  "source_commit": null,
+  "status": "NUMERICS_AND_PLACEMENT_PASS",
+  "vendor": "cuda"
+}

@@ -1,0 +1,18 @@
+{
+  "source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
+  "candidate_wheel_sha256": "51a06c755c23c05e6a2d99c67a78cf014ec2947c4d4a171bad5395f68d7fd6b5",
+  "published_088": false,
+  "paused_runner": 340,
+  "jobs": [
+    {
+      "name": "distributed",
+      "exit_code": 0,
+      "seconds": 82.06708020158112
+    },
+    {
+      "name": "cv",
+      "exit_code": 0,
+      "seconds": 21.817339055240154
+    }
+  ]
+}
