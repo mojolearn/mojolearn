@@ -184,61 +184,79 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O-only. The
 # caller that sets this owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # A FLOOR, NOT A PROOF. The failure this guards against is an artifact with
+    # zero kernels; the failure the smoke test guards against is an artifact that
+    # imports and dies at the first launch.
+    #
+    # WHY 10. The two lanes behind this extension define fifteen kernels that a
+    # reader can count in the source: eight in holtwinters/impl (hw_transpose,
+    # conv1d, season_residual, season_mean, batched_ls_solver,
+    # holtwinters_seasonal_forecast, holtwinters_eval_gpu_global,
+    # holtwinters_optim_gpu_global) and seven in tsa/impl (series_sum, center,
+    # s2B_accumulation, cumsum_by_series, kpss_stationarity_check, batched_diff,
+    # batched_second_diff), before anything core/ contributes and before a
+    # parametric kernel's instantiations are counted separately. Ten sits below
+    # that with room for a few to be inlined or specialized away without turning
+    # this red, and it is unmistakably far from the zero this gate exists to
+    # catch. It is also the number bindings/build_estimators.sh uses, so the two
+    # scripts do not disagree for no reason. RAISE IT once a successful build has
+    # printed its real count on the last line: a floor set from a measurement is
+    # worth more than one set from a source count, and this one has never been
+    # measured.
+    count=$(air_blobs "$out" | wc -l | tr -d ' ')
+    # MEASURED 2026-08-24, first cold build on the M4: 8 AIR blobs. The 10 that
+    # stood here was the source-count guess this comment block asked to have
+    # replaced, and it failed a build that was in fact complete. 5 is under the
+    # measured number with slack for an instantiation to be inlined away.
+    if [ "$count" -lt 5 ]; then
+        printf 'FAILED: %s AIR blobs, want at least 5 (measured 8 on 2026-08-24).\n' "$count" >&2
+        printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one.\n' >&2
+        exit 1
+    fi
+
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # THE REAL GATE: import and LAUNCH a kernel from EACH LANE in this extension.
+    # These are THIS extension's kernels and nobody else's -- a copied smoke test
+    # from a sibling script would pass over a broken artifact here.
+    #
+    #   ExponentialSmoothing.fit  reaches hw_transpose, conv1d, season_mean,
+    #                             batched_ls_solver and the BFGS optimizer kernel
+    #   .forecast                 reaches holtwinters_seasonal_forecast
+    #   kpss_test                 reaches batched_diff, series_sum, center,
+    #                             s2B_accumulation, cumsum_by_series and
+    #                             kpss_stationarity_check
+    #   select_d                  reaches the same set, twice, through the host loop
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_tsa.so"
-    echo "built $OUTDIR/_mojolearn_tsa.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_tsa.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# A FLOOR, NOT A PROOF. The failure this guards against is an artifact with
-# zero kernels; the failure the smoke test guards against is an artifact that
-# imports and dies at the first launch.
-#
-# WHY 10. The two lanes behind this extension define fifteen kernels that a
-# reader can count in the source: eight in holtwinters/impl (hw_transpose,
-# conv1d, season_residual, season_mean, batched_ls_solver,
-# holtwinters_seasonal_forecast, holtwinters_eval_gpu_global,
-# holtwinters_optim_gpu_global) and seven in tsa/impl (series_sum, center,
-# s2B_accumulation, cumsum_by_series, kpss_stationarity_check, batched_diff,
-# batched_second_diff), before anything core/ contributes and before a
-# parametric kernel's instantiations are counted separately. Ten sits below
-# that with room for a few to be inlined or specialized away without turning
-# this red, and it is unmistakably far from the zero this gate exists to
-# catch. It is also the number bindings/build_estimators.sh uses, so the two
-# scripts do not disagree for no reason. RAISE IT once a successful build has
-# printed its real count on the last line: a floor set from a measurement is
-# worth more than one set from a source count, and this one has never been
-# measured.
-count=$(air_blobs "$out" | wc -l | tr -d ' ')
-# MEASURED 2026-08-24, first cold build on the M4: 8 AIR blobs. The 10 that
-# stood here was the source-count guess this comment block asked to have
-# replaced, and it failed a build that was in fact complete. 5 is under the
-# measured number with slack for an instantiation to be inlined away.
-if [ "$count" -lt 5 ]; then
-    printf 'FAILED: %s AIR blobs, want at least 5 (measured 8 on 2026-08-24).\n' "$count" >&2
-    printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one.\n' >&2
-    exit 1
-fi
-
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# THE REAL GATE: import and LAUNCH a kernel from EACH LANE in this extension.
-# These are THIS extension's kernels and nobody else's -- a copied smoke test
-# from a sibling script would pass over a broken artifact here.
-#
-#   ExponentialSmoothing.fit  reaches hw_transpose, conv1d, season_mean,
-#                             batched_ls_solver and the BFGS optimizer kernel
-#   .forecast                 reaches holtwinters_seasonal_forecast
-#   kpss_test                 reaches batched_diff, series_sum, center,
-#                             s2B_accumulation, cumsum_by_series and
-#                             kpss_stationarity_check
-#   select_d                  reaches the same set, twice, through the host loop
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

@@ -185,133 +185,151 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF, AND THIS NUMBER IS A PLACEHOLDER SET TO 1.
+    # ============================================================================
+    #
+    # THE FLOOR BELOW IS 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT. IT MUST BE
+    # RAISED, ON THE FIRST COLD BUILD, TO TWO THIRDS OF WHAT THAT BUILD
+    # ACTUALLY MEASURES, and the measured number written into this comment --
+    # exactly what build_training.sh's history teaches: its floor was 1 until
+    # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
+    # bindings/build.sh uses against ITS measured counts (22 measured -> floor
+    # 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
+    # floor failed a perfectly good artifact on its first run. The observed
+    # counts are printed unconditionally below, so the real value is one build
+    # away and a failure names it instead of hiding it.
+    #
+    # WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
+    # learned twice that presence-of-one is not a filter: the build that lost
+    # GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
+    # check. A floor of 1 catches the TOTAL Metal failure this gate was
+    # written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
+    # nothing else.
+    #
+    # WHAT SHOULD BE IN HERE. `gaussian_process/` launches the per-node kernel
+    # expression kernels behind `gp_kernel_matrix` (const/white/rbf/matern
+    # leaves and the sum/prod combiners), the predictive-variance kernel and
+    # the sabotage arms compiled into the lane. `cholesky/` should contribute
+    # the potrf panel kernels, the jitter, the logdet and the trsm solve;
+    # `gemm/` the identical GEMM behind the posterior mean. The subsystem
+    # prefix is the top-level directory the kernel's module lives in. If that
+    # assumption is wrong for any of these names the gate fails LOUDLY on the
+    # first build with every count printed, which is the right way to find
+    # out. cholesky/, gemm/, kde/ and core/ blobs are printed but NOT floored:
+    # whether a helper imported cross-lane (`l2_unexp_core` lives in kde/)
+    # leaves a blob under its own prefix from THIS binary is not something to
+    # assert before it has been seen once, and build_training.sh records that
+    # the identical GEMM's blobs can carry a non-gemm prefix.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in gaussian_process cholesky gemm kde core; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    for _pair in gaussian_process:15; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
+        printf 'first build to replace.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it. The whole point of the params list being
+    # written out in two places is that there are two, not three.
+    #
+    # `_gp_impl` is imported as a submodule even though
+    # `GaussianProcessRegressor` IS exported from `mojolearn/__init__.py`,
+    # because the private name is stable and this gate should not break on a
+    # re-export.
+    #
+    # THE GP ROWS ARE GP'S. Copying a sibling script's smoke rows would be a
+    # gate that cannot fail, since none of those kernels are in this artifact.
+    #
+    #   RBF fit                  -> the postfix spec rebuilt through the
+    #                               constructors, the RBF leaf kernel behind
+    #                               gp_kernel_matrix, the Cholesky factor with
+    #                               the ridge, cho_solve, logdet and the lml
+    #   .predict(return_std)     -> the cross-covariance kernel, the identical
+    #                               GEMM posterior mean, trsm_lower, the
+    #                               predictive-variance kernel and the zero
+    #                               clamp (DEVIATION 1760)
+    #   .predict() mean-only     -> the return_std=0 arm, whose var/std/clamp
+    #                               outputs must be skipped, not scribbled
+    #   Matern nu=0.7            -> the closed-forms refusal (DEVIATION 1765),
+    #                               raised in MOJO by gp_kernel_matern through
+    #                               the rebuild path, proving the constructor
+    #                               refusals are wired, not merely present
+    #   return_cov=True          -> the Python-side diagonal-only refusal
+    #                               (DEVIATION 1759)
+    #   duplicate rows, alpha=0  -> info_ != 0 as a RESULT (DEVIATION 1634)
+    #                               and predict on that fit refused BY NAME in
+    #                               Mojo, with info passed through the binding
+    #
+    # Kept small on purpose, 24 training points and 8 test points, because
+    # this runs on every build and the GPU is shared. The recovery assertion
+    # here is DELIBERATELY LOOSE (1e-2 where the lane's own bound is 2^-14)
+    # and is a smoke test, not the gate:
+    # python/mojolearn/tests/test_gp_surface.py is where recovery is asserted
+    # at the lane's bound.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_gp.so"
-    echo "built $OUTDIR/_mojolearn_gp.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_gp.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF, AND THIS NUMBER IS A PLACEHOLDER SET TO 1.
-# ============================================================================
-#
-# THE FLOOR BELOW IS 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT. IT MUST BE
-# RAISED, ON THE FIRST COLD BUILD, TO TWO THIRDS OF WHAT THAT BUILD
-# ACTUALLY MEASURES, and the measured number written into this comment --
-# exactly what build_training.sh's history teaches: its floor was 1 until
-# its first real build on 2026-09-01 measured 5 and it became 3, the ratio
-# bindings/build.sh uses against ITS measured counts (22 measured -> floor
-# 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
-# floor failed a perfectly good artifact on its first run. The observed
-# counts are printed unconditionally below, so the real value is one build
-# away and a failure names it instead of hiding it.
-#
-# WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
-# learned twice that presence-of-one is not a filter: the build that lost
-# GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
-# check. A floor of 1 catches the TOTAL Metal failure this gate was
-# written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
-# nothing else.
-#
-# WHAT SHOULD BE IN HERE. `gaussian_process/` launches the per-node kernel
-# expression kernels behind `gp_kernel_matrix` (const/white/rbf/matern
-# leaves and the sum/prod combiners), the predictive-variance kernel and
-# the sabotage arms compiled into the lane. `cholesky/` should contribute
-# the potrf panel kernels, the jitter, the logdet and the trsm solve;
-# `gemm/` the identical GEMM behind the posterior mean. The subsystem
-# prefix is the top-level directory the kernel's module lives in. If that
-# assumption is wrong for any of these names the gate fails LOUDLY on the
-# first build with every count printed, which is the right way to find
-# out. cholesky/, gemm/, kde/ and core/ blobs are printed but NOT floored:
-# whether a helper imported cross-lane (`l2_unexp_core` lives in kde/)
-# leaves a blob under its own prefix from THIS binary is not something to
-# assert before it has been seen once, and build_training.sh records that
-# the identical GEMM's blobs can carry a non-gemm prefix.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in gaussian_process cholesky gemm kde core; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-for _pair in gaussian_process:15; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
-    printf 'first build to replace.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it. The whole point of the params list being
-# written out in two places is that there are two, not three.
-#
-# `_gp_impl` is imported as a submodule even though
-# `GaussianProcessRegressor` IS exported from `mojolearn/__init__.py`,
-# because the private name is stable and this gate should not break on a
-# re-export.
-#
-# THE GP ROWS ARE GP'S. Copying a sibling script's smoke rows would be a
-# gate that cannot fail, since none of those kernels are in this artifact.
-#
-#   RBF fit                  -> the postfix spec rebuilt through the
-#                               constructors, the RBF leaf kernel behind
-#                               gp_kernel_matrix, the Cholesky factor with
-#                               the ridge, cho_solve, logdet and the lml
-#   .predict(return_std)     -> the cross-covariance kernel, the identical
-#                               GEMM posterior mean, trsm_lower, the
-#                               predictive-variance kernel and the zero
-#                               clamp (DEVIATION 1760)
-#   .predict() mean-only     -> the return_std=0 arm, whose var/std/clamp
-#                               outputs must be skipped, not scribbled
-#   Matern nu=0.7            -> the closed-forms refusal (DEVIATION 1765),
-#                               raised in MOJO by gp_kernel_matern through
-#                               the rebuild path, proving the constructor
-#                               refusals are wired, not merely present
-#   return_cov=True          -> the Python-side diagonal-only refusal
-#                               (DEVIATION 1759)
-#   duplicate rows, alpha=0  -> info_ != 0 as a RESULT (DEVIATION 1634)
-#                               and predict on that fit refused BY NAME in
-#                               Mojo, with info passed through the binding
-#
-# Kept small on purpose, 24 training points and 8 test points, because
-# this runs on every build and the GPU is shared. The recovery assertion
-# here is DELIBERATELY LOOSE (1e-2 where the lane's own bound is 2^-14)
-# and is a smoke test, not the gate:
-# python/mojolearn/tests/test_gp_surface.py is where recovery is asserted
-# at the lane's bound.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

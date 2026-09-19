@@ -198,142 +198,160 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF, AND THESE NUMBERS ARE PLACEHOLDERS SET TO 1.
+    # ============================================================================
+    #
+    # THE FLOORS BELOW ARE 1 AND 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT.
+    # THEY MUST BE RAISED, ON THE FIRST COLD BUILD, TO JUST UNDER WHAT THAT
+    # BUILD ACTUALLY MEASURES, and the measured number written into this
+    # comment. Set them at roughly two thirds of measured, the ratio
+    # bindings/build.sh uses against ITS measured counts (22 measured -> floor
+    # 15, 8 -> 3) and the ratio build_svm.sh adopted. The observed counts are
+    # printed unconditionally below, so the real value is one build away and a
+    # failure names it instead of hiding it.
+    #
+    # WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh learned
+    # twice that presence-of-one is not a filter: the build that lost GBDT kept
+    # exactly 1 of 85 gbdt_ blobs and passed a presence-of-one check. A floor of
+    # 1 catches the TOTAL Metal failure this gate was written for (the
+    # MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches nothing else.
+    # build_svm.sh's floors were written from a HAND COUNT of the source and one
+    # of them failed a perfectly good artifact on its first run; the honest
+    # starting point is therefore the smallest number that catches the known
+    # failure, plus this paragraph, rather than a guess dressed as a
+    # measurement.
+    #
+    # WHAT SHOULD BE IN HERE. `arima/` launches the batched Kalman kernels
+    # (init_batched_kalman_matrices_kernel, kalman_init_state_kernel,
+    # batched_kalman_loop_kernel), the pack/unpack pair, the Jones transform,
+    # the in-sample prediction and forecast-copy kernels, the finite-difference
+    # perturb/reset/grad kernels, and estimate_x0's least-squares kernels.
+    # `tsa/` should contribute exactly the differencing kernels behind
+    # `prepare_data`, which is the one function this lane imports from that one.
+    # The subsystem prefix is the top-level directory the kernel's module lives
+    # in, which is how build.sh's `cluster:15 neighbors:3 core:1` works. If that
+    # assumption is wrong for these two names the gate fails LOUDLY on the first
+    # build with both counts printed, which is the right way to find out.
+    #
+    # core/ and gemm/ blobs are printed but NOT floored: nothing in this lane
+    # calls a GEMM, and whether the identity helpers leave a `core` prefixed
+    # blob at all is not something to assert before it has been seen once.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in arima tsa core gemm; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    # MEASURED 2026-09-01 ON THE FIRST COLD BUILD: 12 AIR blobs, ALL under
+    # `arima`, and ZERO under `tsa`. The `tsa:1` floor guessed that
+    # `prepare_data` would emit its own device kernel from this binary; it does
+    # not, and the gate said so loudly with both counts printed, which is what
+    # it is for. The floor is now `arima:8`, two thirds of the measured 12, and
+    # `tsa` is dropped rather than set to 0 so a future zero under `arima` still
+    # fails.
+    for _pair in arima:8; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
+        printf 'first build to replace.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it. The whole point of the thirteen-entry list
+    # being written out in two places is that there are two, not three.
+    #
+    # `_arima_impl` is imported as a submodule even though `ARIMA` IS exported
+    # from `mojolearn/__init__.py`, because the private name is stable and this
+    # gate should not break on a re-export.
+    #
+    # THE ARIMA ROWS ARE ARIMA'S. Copying a sibling script's smoke rows would be
+    # a gate that cannot fail, since none of those kernels are in this artifact.
+    #
+    #   ARIMA((1,0,0)).fit      -> estimate_x0's AR least squares (the
+    #                              Householder QR), test_invparams, the INVERSE
+    #                              Jones transform, the batched L-BFGS with its
+    #                              shared line search, the perturb/reset/grad
+    #                              finite-difference kernels, the whole Kalman
+    #                              loop once per evaluation, the FORWARD
+    #                              transform, pack and unpack
+    #   .predict                -> in_sample_prediction_kernel with dD == 0
+    #   .forecast               -> the forecast half of the Kalman loop and
+    #                              copy_forecast_kernel, neither of which any
+    #                              in-sample row reaches
+    #   ARIMA((1,1,1))          -> the DIFFERENCING path: prepare_data (the tsa
+    #                              blobs), the dD == 1 arm of the in-sample
+    #                              kernel, finalize_forecast, and the MA block
+    #                              of estimate_x0
+    #   the two refusals        -> method='css' and a mismatched exog, which cost no device
+    #                              work and prove the refusals are wired, not
+    #                              merely present
+    #
+    # Kept small on purpose, batch 3 and 96 observations, because this runs on
+    # every build, a fit is hundreds of Kalman passes, and the GPU is shared.
+    # The recovery assertion here is DELIBERATELY LOOSE (0.35 on a planted 0.6
+    # at n = 96) and is a smoke test, not the gate:
+    # python/mojolearn/tests/test_arima_surface.py is where recovery is asserted
+    # against a stated multiple of the standard error at the length the lane's
+    # own fixtures use.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_arima.so"
-    echo "built $OUTDIR/_mojolearn_arima.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_arima.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF, AND THESE NUMBERS ARE PLACEHOLDERS SET TO 1.
-# ============================================================================
-#
-# THE FLOORS BELOW ARE 1 AND 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT.
-# THEY MUST BE RAISED, ON THE FIRST COLD BUILD, TO JUST UNDER WHAT THAT
-# BUILD ACTUALLY MEASURES, and the measured number written into this
-# comment. Set them at roughly two thirds of measured, the ratio
-# bindings/build.sh uses against ITS measured counts (22 measured -> floor
-# 15, 8 -> 3) and the ratio build_svm.sh adopted. The observed counts are
-# printed unconditionally below, so the real value is one build away and a
-# failure names it instead of hiding it.
-#
-# WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh learned
-# twice that presence-of-one is not a filter: the build that lost GBDT kept
-# exactly 1 of 85 gbdt_ blobs and passed a presence-of-one check. A floor of
-# 1 catches the TOTAL Metal failure this gate was written for (the
-# MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches nothing else.
-# build_svm.sh's floors were written from a HAND COUNT of the source and one
-# of them failed a perfectly good artifact on its first run; the honest
-# starting point is therefore the smallest number that catches the known
-# failure, plus this paragraph, rather than a guess dressed as a
-# measurement.
-#
-# WHAT SHOULD BE IN HERE. `arima/` launches the batched Kalman kernels
-# (init_batched_kalman_matrices_kernel, kalman_init_state_kernel,
-# batched_kalman_loop_kernel), the pack/unpack pair, the Jones transform,
-# the in-sample prediction and forecast-copy kernels, the finite-difference
-# perturb/reset/grad kernels, and estimate_x0's least-squares kernels.
-# `tsa/` should contribute exactly the differencing kernels behind
-# `prepare_data`, which is the one function this lane imports from that one.
-# The subsystem prefix is the top-level directory the kernel's module lives
-# in, which is how build.sh's `cluster:15 neighbors:3 core:1` works. If that
-# assumption is wrong for these two names the gate fails LOUDLY on the first
-# build with both counts printed, which is the right way to find out.
-#
-# core/ and gemm/ blobs are printed but NOT floored: nothing in this lane
-# calls a GEMM, and whether the identity helpers leave a `core` prefixed
-# blob at all is not something to assert before it has been seen once.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in arima tsa core gemm; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-# MEASURED 2026-09-01 ON THE FIRST COLD BUILD: 12 AIR blobs, ALL under
-# `arima`, and ZERO under `tsa`. The `tsa:1` floor guessed that
-# `prepare_data` would emit its own device kernel from this binary; it does
-# not, and the gate said so loudly with both counts printed, which is what
-# it is for. The floor is now `arima:8`, two thirds of the measured 12, and
-# `tsa` is dropped rather than set to 0 so a future zero under `arima` still
-# fails.
-for _pair in arima:8; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
-    printf 'first build to replace.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it. The whole point of the thirteen-entry list
-# being written out in two places is that there are two, not three.
-#
-# `_arima_impl` is imported as a submodule even though `ARIMA` IS exported
-# from `mojolearn/__init__.py`, because the private name is stable and this
-# gate should not break on a re-export.
-#
-# THE ARIMA ROWS ARE ARIMA'S. Copying a sibling script's smoke rows would be
-# a gate that cannot fail, since none of those kernels are in this artifact.
-#
-#   ARIMA((1,0,0)).fit      -> estimate_x0's AR least squares (the
-#                              Householder QR), test_invparams, the INVERSE
-#                              Jones transform, the batched L-BFGS with its
-#                              shared line search, the perturb/reset/grad
-#                              finite-difference kernels, the whole Kalman
-#                              loop once per evaluation, the FORWARD
-#                              transform, pack and unpack
-#   .predict                -> in_sample_prediction_kernel with dD == 0
-#   .forecast               -> the forecast half of the Kalman loop and
-#                              copy_forecast_kernel, neither of which any
-#                              in-sample row reaches
-#   ARIMA((1,1,1))          -> the DIFFERENCING path: prepare_data (the tsa
-#                              blobs), the dD == 1 arm of the in-sample
-#                              kernel, finalize_forecast, and the MA block
-#                              of estimate_x0
-#   the two refusals        -> method='css' and a mismatched exog, which cost no device
-#                              work and prove the refusals are wired, not
-#                              merely present
-#
-# Kept small on purpose, batch 3 and 96 observations, because this runs on
-# every build, a fit is hundreds of Kalman passes, and the GPU is shared.
-# The recovery assertion here is DELIBERATELY LOOSE (0.35 on a planted 0.6
-# at n = 96) and is a smoke test, not the gate:
-# python/mojolearn/tests/test_arima_surface.py is where recovery is asserted
-# against a stated multiple of the standard error at the length the lane's
-# own fixtures use.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

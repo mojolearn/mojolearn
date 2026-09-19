@@ -170,138 +170,156 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF. RAISED FROM THE PLACEHOLDER ON THE FIRST COLD BUILD.
+    # ============================================================================
+    #
+    # THE FIRST COLD BUILD (2026-09-01, fast tier) MEASURED 16 mamba-prefix AIR
+    # blobs (24 total with gemm's 8); the floor below is two thirds of that,
+    # rounded down: 10. THAT MEASUREMENT PREDATES THE MAMBA-3 ENTRY POINTS
+    # (added later on 2026-09-01: mamba3_forward / mamba3_decode_step pull in
+    # the m3_* kernel set of mamba3.mojo + mamba3_siso.mojo), so the observed
+    # count grew exactly as predicted: THE FIRST POST-MAMBA3 BUILD (2026-09-01
+    # evening, fast tier) MEASURED 24 mamba-prefix AIR blobs (32 total with
+    # gemm's 8), and the floor below is two thirds of that, rounded down: 16.
+    # The placeholder-then-raise discipline is --
+    # exactly what build_training.sh's history teaches: its floor was 1 until
+    # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
+    # bindings/build.sh uses against ITS measured counts (22 measured -> floor
+    # 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
+    # floor failed a perfectly good artifact on its first run. The observed
+    # counts are printed unconditionally below, so the real value is one build
+    # away and a failure names it instead of hiding it.
+    #
+    # WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
+    # learned twice that presence-of-one is not a filter: the build that lost
+    # GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
+    # check. A floor of 1 catches the TOTAL Metal failure this gate was
+    # written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
+    # nothing else.
+    #
+    # WHAT SHOULD BE IN HERE. `mamba/` launches the Mamba-1 kernels
+    # (mamba_rms_norm_kernel, causal_conv1d_fn_kernel + window,
+    # mamba_a_from_a_log_kernel, split_x_proj, softplus_delta, z_gate,
+    # residual_add, the selective scan) and the Mamba-2 set (m2_conv,
+    # m2_assemble_*, m2_dt, m2_buffer_update, m2_skip, m2_gate, and the SSD
+    # core's m2_discretize / m2_chunk_cumsum / m2_seg_l / m2_cb_g / m2_ydiag /
+    # m2_decay / m2_cstate / m2_statepass / m2_yoff_y) and, since the mamba3
+    # entry points landed, the Mamba-3 set (m3_a_dt, m3_bcnorm,
+    # m3_assemble_*, m3_buffer_update and the SISO core's m3_* kernels in
+    # mamba3_siso.mojo). The subsystem prefix
+    # is the top-level directory the kernel's module lives in, so `mamba` is
+    # the floored prefix. gemm/, core/ and checks/ blobs are printed but NOT
+    # floored: build_training.sh records that the identical GEMM's blobs can
+    # carry a non-gemm prefix, and whether a cross-lane helper leaves a blob
+    # under its own prefix is not something to assert before it has been seen
+    # once.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in mamba gemm core checks; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    for _pair in mamba:16; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
+        printf 'first build to replace.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it. The whole point of the addrs/params lists
+    # being written out in two places is that there are two, not three.
+    #
+    # THE MAMBA ROWS ARE MAMBA'S. Copying a sibling script's smoke rows would
+    # be a gate that cannot fail, since none of those kernels are in this
+    # artifact.
+    #
+    #   Mamba1 forward           -> RMSNorm, in_proj GEMM, the conv + window,
+    #                               x_proj/dt_proj GEMMs, softplus, the scan,
+    #                               gate, out_proj GEMM, residual
+    #   Mamba1 step x4           -> the same spelling at L = 1 with the state
+    #                               carried; compared LOOSELY to the prefill
+    #                               rows (the bitwise decode==prefill claim
+    #                               belongs to the lane gate and to
+    #                               test_mamba_surface.py under identical, not
+    #                               to a fast-tier smoke)
+    #   float64 x                -> the dtype refusal, BY NAME, in Python
+    #   d_model = 40             -> the multiple-of-32 refusal, by name (the
+    #                               wrapper's copy of Mamba2Dims.of's rule)
+    #   Mamba2 forward L=1       -> the whole M2 chain incl. one padded chunk;
+    #                               buf_len bookkeeping read back (1)
+    #   Mamba2 step              -> prefill resumption at L = 1; buf_len -> 2
+    #   Mamba3 forward L=1       -> norm, in_proj GEMM, A/dt, B/C norms, the
+    #                               SISO core (rotation, segsum, state pass),
+    #                               gate, out_proj GEMM, residual; buf_len 1
+    #   Mamba3 step              -> prefill resumption at L = 1; buf_len -> 2;
+    #                               the four reports' shapes; a pending
+    #                               Input_States continuation consumed
+    #
+    # Kept small on purpose (d_model 8 and 32, B <= 2, L <= 4) because this
+    # runs on every build and the GPU is shared. The recovery assertions here
+    # are DELIBERATELY LOOSE and are a smoke test, not the gate:
+    # python/mojolearn/tests/test_mamba_surface.py is where the corpus
+    # tolerances and the identical-tier bitwise arms are asserted.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_mamba.so"
-    echo "built $OUTDIR/_mojolearn_mamba.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_mamba.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF. RAISED FROM THE PLACEHOLDER ON THE FIRST COLD BUILD.
-# ============================================================================
-#
-# THE FIRST COLD BUILD (2026-09-01, fast tier) MEASURED 16 mamba-prefix AIR
-# blobs (24 total with gemm's 8); the floor below is two thirds of that,
-# rounded down: 10. THAT MEASUREMENT PREDATES THE MAMBA-3 ENTRY POINTS
-# (added later on 2026-09-01: mamba3_forward / mamba3_decode_step pull in
-# the m3_* kernel set of mamba3.mojo + mamba3_siso.mojo), so the observed
-# count grew exactly as predicted: THE FIRST POST-MAMBA3 BUILD (2026-09-01
-# evening, fast tier) MEASURED 24 mamba-prefix AIR blobs (32 total with
-# gemm's 8), and the floor below is two thirds of that, rounded down: 16.
-# The placeholder-then-raise discipline is --
-# exactly what build_training.sh's history teaches: its floor was 1 until
-# its first real build on 2026-09-01 measured 5 and it became 3, the ratio
-# bindings/build.sh uses against ITS measured counts (22 measured -> floor
-# 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
-# floor failed a perfectly good artifact on its first run. The observed
-# counts are printed unconditionally below, so the real value is one build
-# away and a failure names it instead of hiding it.
-#
-# WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
-# learned twice that presence-of-one is not a filter: the build that lost
-# GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
-# check. A floor of 1 catches the TOTAL Metal failure this gate was
-# written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
-# nothing else.
-#
-# WHAT SHOULD BE IN HERE. `mamba/` launches the Mamba-1 kernels
-# (mamba_rms_norm_kernel, causal_conv1d_fn_kernel + window,
-# mamba_a_from_a_log_kernel, split_x_proj, softplus_delta, z_gate,
-# residual_add, the selective scan) and the Mamba-2 set (m2_conv,
-# m2_assemble_*, m2_dt, m2_buffer_update, m2_skip, m2_gate, and the SSD
-# core's m2_discretize / m2_chunk_cumsum / m2_seg_l / m2_cb_g / m2_ydiag /
-# m2_decay / m2_cstate / m2_statepass / m2_yoff_y) and, since the mamba3
-# entry points landed, the Mamba-3 set (m3_a_dt, m3_bcnorm,
-# m3_assemble_*, m3_buffer_update and the SISO core's m3_* kernels in
-# mamba3_siso.mojo). The subsystem prefix
-# is the top-level directory the kernel's module lives in, so `mamba` is
-# the floored prefix. gemm/, core/ and checks/ blobs are printed but NOT
-# floored: build_training.sh records that the identical GEMM's blobs can
-# carry a non-gemm prefix, and whether a cross-lane helper leaves a blob
-# under its own prefix is not something to assert before it has been seen
-# once.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in mamba gemm core checks; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-for _pair in mamba:16; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
-    printf 'first build to replace.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it. The whole point of the addrs/params lists
-# being written out in two places is that there are two, not three.
-#
-# THE MAMBA ROWS ARE MAMBA'S. Copying a sibling script's smoke rows would
-# be a gate that cannot fail, since none of those kernels are in this
-# artifact.
-#
-#   Mamba1 forward           -> RMSNorm, in_proj GEMM, the conv + window,
-#                               x_proj/dt_proj GEMMs, softplus, the scan,
-#                               gate, out_proj GEMM, residual
-#   Mamba1 step x4           -> the same spelling at L = 1 with the state
-#                               carried; compared LOOSELY to the prefill
-#                               rows (the bitwise decode==prefill claim
-#                               belongs to the lane gate and to
-#                               test_mamba_surface.py under identical, not
-#                               to a fast-tier smoke)
-#   float64 x                -> the dtype refusal, BY NAME, in Python
-#   d_model = 40             -> the multiple-of-32 refusal, by name (the
-#                               wrapper's copy of Mamba2Dims.of's rule)
-#   Mamba2 forward L=1       -> the whole M2 chain incl. one padded chunk;
-#                               buf_len bookkeeping read back (1)
-#   Mamba2 step              -> prefill resumption at L = 1; buf_len -> 2
-#   Mamba3 forward L=1       -> norm, in_proj GEMM, A/dt, B/C norms, the
-#                               SISO core (rotation, segsum, state pass),
-#                               gate, out_proj GEMM, residual; buf_len 1
-#   Mamba3 step              -> prefill resumption at L = 1; buf_len -> 2;
-#                               the four reports' shapes; a pending
-#                               Input_States continuation consumed
-#
-# Kept small on purpose (d_model 8 and 32, B <= 2, L <= 4) because this
-# runs on every build and the GPU is shared. The recovery assertions here
-# are DELIBERATELY LOOSE and are a smoke test, not the gate:
-# python/mojolearn/tests/test_mamba_surface.py is where the corpus
-# tolerances and the identical-tier bitwise arms are asserted.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

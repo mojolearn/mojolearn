@@ -204,140 +204,158 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF -- AND THESE PARTICULAR NUMBERS HAVE NEVER BEEN
+    # MEASURED, BECAUSE THE AUTHOR OF THIS SCRIPT WAS NOT ALLOWED TO BUILD.
+    # ============================================================================
+    #
+    # build.sh learned twice that presence-of-one is not a filter: the build that
+    # lost GBDT kept exactly 1 of 85 gbdt_ blobs and passed. So the floors sit
+    # well above 1, and they are PER SUBSYSTEM, so that one lane's kernels going
+    # missing cannot be hidden by the other lane's still being there.
+    #
+    # WHERE THE NUMBERS COME FROM. Counted by hand from the source, not from an
+    # artifact: `svm/` launches 33 distinct kernel functions across
+    # impl/svm/*.mojo, impl/distance/kernel_matrices.mojo and
+    # checks/device_select.mojo, plus the parameterized
+    # `smo_block_solve_kernel` at six instantiation sites in smosolver.mojo.
+    # `isolation_forest/` launches 5 (build_isolation_trees_global,
+    # compute_path_lengths_global, anomaly_score, predict_labels,
+    # xorwow_device). The floors below are roughly 60% of the hand count, which
+    # is the same ratio build.sh chose against ITS measured counts (22 measured
+    # -> floor 15, 8 -> 3).
+    #
+    # THE FIRST REAL BUILD SHOULD REPLACE THESE WITH TWO THIRDS OF WHAT IT
+    # ACTUALLY MEASURES, and write the measured number in this comment. The
+    # observed counts are printed unconditionally below so that number is one
+    # build away and a failure names the real value instead of hiding it.
+    #
+    # The subsystem prefix is the top-level directory the kernel's module lives
+    # in, which is how build.sh's `cluster:15 neighbors:3 core:1` works. If that
+    # assumption is wrong for these two names the gate fails LOUDLY on the first
+    # build with both counts printed, which is the right way to find out.
+    #
+    # gemm/ and core/ blobs also land here -- the LINEAR and RBF kernel matrices
+    # go through `identical_gemm_into` under IDENTICAL and `core.gemm.gemm_nt`
+    # under FAST -- and they are printed but NOT floored, because the FAST arm
+    # reaches MAX's matmul and its blobs need not carry a `gemm` prefix at all.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in svm isolation_forest gemm core; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    # FLOORS ARE MEASURED, NOT REASONED. First cold build 2026-08-24 printed
+    # svm 13, isolation_forest 3, gemm 0, core 0. The 20 that stood here was a
+    # source count of `enqueue_function` sites and it FAILED a perfectly good
+    # artifact on the first run; the author wrote that it was a guess and asked
+    # for it to be replaced by the real number, which is what these are.
+    #
+    # Set at roughly two thirds of measured, the ratio bindings/build.sh uses
+    # (it floors 15 against a measured 22, and 3 against 8). That leaves room
+    # for an instantiation to be inlined away without a false red, while still
+    # being unmistakably far from the 0 this gate exists to catch. gemm and core
+    # measured 0 here and are deliberately NOT floored: under FAST the kernel
+    # matrix routes through MAX's own matmul, whose blobs need not carry a
+    # `gemm` prefix. The counts are printed above either way.
+    #
+    # THE GATE THAT ACTUALLY PROVES THE ARTIFACT IS run_smoke BELOW. A blob
+    # count is a pre-filter, and build.sh records an artifact that kept 1 of 85
+    # gbdt blobs and passed a presence-of-one check.
+    for _pair in svm:8 isolation_forest:2; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was written from a source count, never from a build.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it.
+    #
+    # `_svm_impl` and `_iforest_impl` are imported as submodules here even
+    # though `SVC`, `SVR` and `IsolationForest` ARE exported from
+    # `mojolearn/__init__.py`, because the private names are stable and this
+    # gate should not break on a re-export.
+    #
+    # THE SVM ROW IS SVM'S AND THE FOREST ROW IS THE FOREST'S. Copying a sibling
+    # script's smoke rows would be a gate that cannot fail, since none of those
+    # kernels are in this artifact.
+    #
+    #   SVC(kernel='linear')  -> ovr_labels, the gemm kernel matrix, the working
+    #                            set select/sort chain, smo_block_solve, update_f,
+    #                            the flag/scan/scatter compaction, CalcB's serial
+    #                            reductions, gather_rows, decision_kernel
+    #   SVC(kernel='rbf')     -> adds row_norm_l2sq and rbf_kernel_expanded, the
+    #                            two kernels the linear arm never touches
+    #   SVR(kernel='linear')  -> adds svr_init_kernel and combine_coefs_svr,
+    #                            the only two kernels in this artifact that NO
+    #                            classifier row can reach, plus UpdateF's second
+    #                            launch on f + n_rows
+    #   IsolationForest       -> xorwow init inside build_isolation_trees_global,
+    #                            compute_path_lengths_global, anomaly_score
+    #     .decision_function  -> the contamination quantile path (offset_ != -0.5)
+    #     .predict            -> predict_labels_kernel, the only kernel the score
+    #                            paths do not reach
+    #
+    # Kept small on purpose -- 128 rows -- because this runs on every build and
+    # the GPU is shared.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_svm.so"
-    echo "built $OUTDIR/_mojolearn_svm.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_svm.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF -- AND THESE PARTICULAR NUMBERS HAVE NEVER BEEN
-# MEASURED, BECAUSE THE AUTHOR OF THIS SCRIPT WAS NOT ALLOWED TO BUILD.
-# ============================================================================
-#
-# build.sh learned twice that presence-of-one is not a filter: the build that
-# lost GBDT kept exactly 1 of 85 gbdt_ blobs and passed. So the floors sit
-# well above 1, and they are PER SUBSYSTEM, so that one lane's kernels going
-# missing cannot be hidden by the other lane's still being there.
-#
-# WHERE THE NUMBERS COME FROM. Counted by hand from the source, not from an
-# artifact: `svm/` launches 33 distinct kernel functions across
-# impl/svm/*.mojo, impl/distance/kernel_matrices.mojo and
-# checks/device_select.mojo, plus the parameterized
-# `smo_block_solve_kernel` at six instantiation sites in smosolver.mojo.
-# `isolation_forest/` launches 5 (build_isolation_trees_global,
-# compute_path_lengths_global, anomaly_score, predict_labels,
-# xorwow_device). The floors below are roughly 60% of the hand count, which
-# is the same ratio build.sh chose against ITS measured counts (22 measured
-# -> floor 15, 8 -> 3).
-#
-# THE FIRST REAL BUILD SHOULD REPLACE THESE WITH TWO THIRDS OF WHAT IT
-# ACTUALLY MEASURES, and write the measured number in this comment. The
-# observed counts are printed unconditionally below so that number is one
-# build away and a failure names the real value instead of hiding it.
-#
-# The subsystem prefix is the top-level directory the kernel's module lives
-# in, which is how build.sh's `cluster:15 neighbors:3 core:1` works. If that
-# assumption is wrong for these two names the gate fails LOUDLY on the first
-# build with both counts printed, which is the right way to find out.
-#
-# gemm/ and core/ blobs also land here -- the LINEAR and RBF kernel matrices
-# go through `identical_gemm_into` under IDENTICAL and `core.gemm.gemm_nt`
-# under FAST -- and they are printed but NOT floored, because the FAST arm
-# reaches MAX's matmul and its blobs need not carry a `gemm` prefix at all.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in svm isolation_forest gemm core; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-# FLOORS ARE MEASURED, NOT REASONED. First cold build 2026-08-24 printed
-# svm 13, isolation_forest 3, gemm 0, core 0. The 20 that stood here was a
-# source count of `enqueue_function` sites and it FAILED a perfectly good
-# artifact on the first run; the author wrote that it was a guess and asked
-# for it to be replaced by the real number, which is what these are.
-#
-# Set at roughly two thirds of measured, the ratio bindings/build.sh uses
-# (it floors 15 against a measured 22, and 3 against 8). That leaves room
-# for an instantiation to be inlined away without a false red, while still
-# being unmistakably far from the 0 this gate exists to catch. gemm and core
-# measured 0 here and are deliberately NOT floored: under FAST the kernel
-# matrix routes through MAX's own matmul, whose blobs need not carry a
-# `gemm` prefix. The counts are printed above either way.
-#
-# THE GATE THAT ACTUALLY PROVES THE ARTIFACT IS run_smoke BELOW. A blob
-# count is a pre-filter, and build.sh records an artifact that kept 1 of 85
-# gbdt blobs and passed a presence-of-one check.
-for _pair in svm:8 isolation_forest:2; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was written from a source count, never from a build.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it.
-#
-# `_svm_impl` and `_iforest_impl` are imported as submodules here even
-# though `SVC`, `SVR` and `IsolationForest` ARE exported from
-# `mojolearn/__init__.py`, because the private names are stable and this
-# gate should not break on a re-export.
-#
-# THE SVM ROW IS SVM'S AND THE FOREST ROW IS THE FOREST'S. Copying a sibling
-# script's smoke rows would be a gate that cannot fail, since none of those
-# kernels are in this artifact.
-#
-#   SVC(kernel='linear')  -> ovr_labels, the gemm kernel matrix, the working
-#                            set select/sort chain, smo_block_solve, update_f,
-#                            the flag/scan/scatter compaction, CalcB's serial
-#                            reductions, gather_rows, decision_kernel
-#   SVC(kernel='rbf')     -> adds row_norm_l2sq and rbf_kernel_expanded, the
-#                            two kernels the linear arm never touches
-#   SVR(kernel='linear')  -> adds svr_init_kernel and combine_coefs_svr,
-#                            the only two kernels in this artifact that NO
-#                            classifier row can reach, plus UpdateF's second
-#                            launch on f + n_rows
-#   IsolationForest       -> xorwow init inside build_isolation_trees_global,
-#                            compute_path_lengths_global, anomaly_score
-#     .decision_function  -> the contamination quantile path (offset_ != -0.5)
-#     .predict            -> predict_labels_kernel, the only kernel the score
-#                            paths do not reach
-#
-# Kept small on purpose -- 128 rows -- because this runs on every build and
-# the GPU is shared.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

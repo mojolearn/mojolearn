@@ -183,139 +183,157 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF -- AND THESE PARTICULAR NUMBERS HAVE NEVER BEEN
+    # MEASURED, BECAUSE THE AUTHOR OF THIS SCRIPT WAS NOT ALLOWED TO BUILD.
+    # ============================================================================
+    #
+    # THE FLOOR WAS 1 UNTIL THE FIRST REAL BUILD, 2026-09-01, and it is now 3.
+    # `build.sh` learned twice that presence-of-one is not a filter: the build
+    # that lost GBDT kept exactly 1 of 85 gbdt_ blobs and passed. A floor of 1
+    # caught only the TOTAL loss this script's MACOSX_DEPLOYMENT_TARGET
+    # paragraph is about, and nothing subtler.
+    #
+    # MEASURED, Apple M4, FAST build, `MOJOLEARN_NUMERIC_MODE` unset:
+    #
+    #     training 5     gemm 8     core 0     total 13
+    #
+    # so the floor is two thirds of 5, which is 3. That is the ratio
+    # `bindings/build.sh` uses against ITS measured counts (22 measured -> floor
+    # 15, 8 -> 3). Setting a floor from a SOURCE count instead is what failed a
+    # perfectly good svm artifact on its first run, and it is what the paragraph
+    # below would have done: it counted 20 kernel FUNCTIONS in the source and
+    # five blobs is what the artifact actually carries.
+    #
+    # WHY 5 AND NOT 20, since the gap is large enough to look like a loss and is
+    # not one. `gemm` carries 8 blobs in the same artifact, and every reduction
+    # in both contracts is delegated to `identical_gemm_into`, so the loss and
+    # optimizer folds are compiled under that prefix rather than `training`.
+    # Add the sabotage-only kernels the compiler drops from a clean build, and
+    # 5 + 8 is the shape to expect. The gemm blobs stay UNFLOORED for the reason
+    # given below -- under FAST that route can reach MAX's own matmul and need
+    # not carry a `gemm` prefix at all -- so a floor over their sum would be a
+    # floor that changes meaning with the numeric mode.
+    #
+    # THE FLOOR IS NOT KNOWN TO BE CAPABLE OF FAILING, and that is stated rather
+    # than implied: showing it red would mean deliberately shipping a poisoned
+    # build. What IS verified is the arithmetic against the real artifact --
+    # 5 >= 3 -- and the total-loss case it is really aimed at, which
+    # `build.sh` has observed twice in the wild.
+    #
+    # What is in here, counted by hand from the source rather than from an
+    # artifact, so treat it as an expectation and not as the floor: `training/`
+    # launches 20 distinct kernel functions -- 13 in checks/loss.mojo
+    # (ce_row_max, ce_shift_exp, ce_logdenom, ce_nll, ce_logp, ce_smooth,
+    # ce_row_nll, ce_row_smooth, ce_divide, ce_weights, ce_dlogits,
+    # ce_serial_fold, plus the parameterized row-max instantiation) and 7 in
+    # checks/optimizer.mojo (adam_update, sgd_update, sqrt_vec, clip_finish,
+    # clip_scale, sab_chunk_sumsq, sab_combine). Several of those are
+    # SABOTAGE-ONLY and are unreachable in a clean build, so the compiler may
+    # drop them and the measured count is expected to be LOWER than 20.
+    #
+    # gemm/ and core/ blobs also land here -- every reduction in both contracts
+    # is delegated to `identical_gemm_into` -- and they are printed but NOT
+    # floored, because under FAST that route reaches MAX's own matmul and its
+    # blobs need not carry a `gemm` prefix at all.
+    #
+    # THE GATE THAT ACTUALLY PROVES THE ARTIFACT IS run_smoke BELOW. A blob
+    # count is a pre-filter.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in training gemm core; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    for _pair in training:3; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it. `_training_impl` is imported as a submodule
+    # because the private name is stable and this gate should not break on a
+    # re-export landing in `mojolearn/__init__.py`.
+    #
+    # EVERY ROW IS TRAINING'S. Copying a sibling script's smoke rows would be a
+    # gate that cannot fail, since none of those kernels are in this artifact.
+    #
+    #   Adam            -> adam_update_kernel, the whole host-scalar path
+    #   AdamW           -> the same kernel on its decoupled-decay arm, which is
+    #                      an ORDER and not a coefficient (contract 7.4)
+    #   SGD + momentum  -> sgd_update_kernel on BOTH arms of the per-tensor
+    #                      `buf_initialized` flag: step 1 COPIES the gradient
+    #                      into the buffer, step 2 runs the recurrence. One step
+    #                      only would leave the recurrence unlaunched.
+    #   clip_grad_norm_ -> sqrt_vec, clip_finish, clip_scale, plus the two
+    #                      delegated GEMM folds at m = n = 1
+    #   cross_entropy   -> ce_row_max, ce_shift_exp, ce_logdenom, ce_nll,
+    #                      ce_row_nll, ce_divide and the vocabulary fold
+    #     smoothing     -> ce_logp, ce_smooth, ce_row_smooth, the kernels the
+    #                      eps == 0 path never touches (contract 6.2(c))
+    #     with grad     -> ce_weights, ce_dlogits
+    #
+    # Kept small on purpose -- a 3-tensor 40-element model and a 6 x 5 loss --
+    # because this runs on every build and the GPU is shared. NOTHING HERE
+    # ASSERTS A BIT: it is a launch gate, and the bitwise arms live in
+    # `python/mojolearn/tests/test_training_surface.py`, which needs the
+    # IDENTICAL build this smoke test is skipped for.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_training.so"
-    echo "built $OUTDIR/_mojolearn_training.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_training.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF -- AND THESE PARTICULAR NUMBERS HAVE NEVER BEEN
-# MEASURED, BECAUSE THE AUTHOR OF THIS SCRIPT WAS NOT ALLOWED TO BUILD.
-# ============================================================================
-#
-# THE FLOOR WAS 1 UNTIL THE FIRST REAL BUILD, 2026-09-01, and it is now 3.
-# `build.sh` learned twice that presence-of-one is not a filter: the build
-# that lost GBDT kept exactly 1 of 85 gbdt_ blobs and passed. A floor of 1
-# caught only the TOTAL loss this script's MACOSX_DEPLOYMENT_TARGET
-# paragraph is about, and nothing subtler.
-#
-# MEASURED, Apple M4, FAST build, `MOJOLEARN_NUMERIC_MODE` unset:
-#
-#     training 5     gemm 8     core 0     total 13
-#
-# so the floor is two thirds of 5, which is 3. That is the ratio
-# `bindings/build.sh` uses against ITS measured counts (22 measured -> floor
-# 15, 8 -> 3). Setting a floor from a SOURCE count instead is what failed a
-# perfectly good svm artifact on its first run, and it is what the paragraph
-# below would have done: it counted 20 kernel FUNCTIONS in the source and
-# five blobs is what the artifact actually carries.
-#
-# WHY 5 AND NOT 20, since the gap is large enough to look like a loss and is
-# not one. `gemm` carries 8 blobs in the same artifact, and every reduction
-# in both contracts is delegated to `identical_gemm_into`, so the loss and
-# optimizer folds are compiled under that prefix rather than `training`.
-# Add the sabotage-only kernels the compiler drops from a clean build, and
-# 5 + 8 is the shape to expect. The gemm blobs stay UNFLOORED for the reason
-# given below -- under FAST that route can reach MAX's own matmul and need
-# not carry a `gemm` prefix at all -- so a floor over their sum would be a
-# floor that changes meaning with the numeric mode.
-#
-# THE FLOOR IS NOT KNOWN TO BE CAPABLE OF FAILING, and that is stated rather
-# than implied: showing it red would mean deliberately shipping a poisoned
-# build. What IS verified is the arithmetic against the real artifact --
-# 5 >= 3 -- and the total-loss case it is really aimed at, which
-# `build.sh` has observed twice in the wild.
-#
-# What is in here, counted by hand from the source rather than from an
-# artifact, so treat it as an expectation and not as the floor: `training/`
-# launches 20 distinct kernel functions -- 13 in checks/loss.mojo
-# (ce_row_max, ce_shift_exp, ce_logdenom, ce_nll, ce_logp, ce_smooth,
-# ce_row_nll, ce_row_smooth, ce_divide, ce_weights, ce_dlogits,
-# ce_serial_fold, plus the parameterized row-max instantiation) and 7 in
-# checks/optimizer.mojo (adam_update, sgd_update, sqrt_vec, clip_finish,
-# clip_scale, sab_chunk_sumsq, sab_combine). Several of those are
-# SABOTAGE-ONLY and are unreachable in a clean build, so the compiler may
-# drop them and the measured count is expected to be LOWER than 20.
-#
-# gemm/ and core/ blobs also land here -- every reduction in both contracts
-# is delegated to `identical_gemm_into` -- and they are printed but NOT
-# floored, because under FAST that route reaches MAX's own matmul and its
-# blobs need not carry a `gemm` prefix at all.
-#
-# THE GATE THAT ACTUALLY PROVES THE ARTIFACT IS run_smoke BELOW. A blob
-# count is a pre-filter.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in training gemm core; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-for _pair in training:3; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it. `_training_impl` is imported as a submodule
-# because the private name is stable and this gate should not break on a
-# re-export landing in `mojolearn/__init__.py`.
-#
-# EVERY ROW IS TRAINING'S. Copying a sibling script's smoke rows would be a
-# gate that cannot fail, since none of those kernels are in this artifact.
-#
-#   Adam            -> adam_update_kernel, the whole host-scalar path
-#   AdamW           -> the same kernel on its decoupled-decay arm, which is
-#                      an ORDER and not a coefficient (contract 7.4)
-#   SGD + momentum  -> sgd_update_kernel on BOTH arms of the per-tensor
-#                      `buf_initialized` flag: step 1 COPIES the gradient
-#                      into the buffer, step 2 runs the recurrence. One step
-#                      only would leave the recurrence unlaunched.
-#   clip_grad_norm_ -> sqrt_vec, clip_finish, clip_scale, plus the two
-#                      delegated GEMM folds at m = n = 1
-#   cross_entropy   -> ce_row_max, ce_shift_exp, ce_logdenom, ce_nll,
-#                      ce_row_nll, ce_divide and the vocabulary fold
-#     smoothing     -> ce_logp, ce_smooth, ce_row_smooth, the kernels the
-#                      eps == 0 path never touches (contract 6.2(c))
-#     with grad     -> ce_weights, ce_dlogits
-#
-# Kept small on purpose -- a 3-tensor 40-element model and a 6 x 5 loss --
-# because this runs on every build and the GPU is shared. NOTHING HERE
-# ASSERTS A BIT: it is a launch gate, and the bitwise arms live in
-# `python/mojolearn/tests/test_training_surface.py`, which needs the
-# IDENTICAL build this smoke test is skipped for.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

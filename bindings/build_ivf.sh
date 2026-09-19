@@ -173,86 +173,104 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF, AND THIS NUMBER IS A PLACEHOLDER SET TO 1.
+    # ============================================================================
+    #
+    # THE FLOOR BELOW IS 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT. IT MUST BE
+    # RAISED, ON THE FIRST COLD BUILD, TO TWO THIRDS OF WHAT THAT BUILD
+    # ACTUALLY MEASURES, and the measured number written into this comment --
+    # exactly what build_training.sh's history teaches: its floor was 1 until
+    # its first real build on 2026-09-01 measured 5 and it became 3, the ratio
+    # bindings/build.sh uses against ITS measured counts (22 measured -> floor
+    # 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
+    # floor failed a perfectly good artifact on its first run. The observed
+    # counts are printed unconditionally below, so the real value is one build
+    # away and a failure names it instead of hiding it.
+    #
+    # WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
+    # learned twice that presence-of-one is not a filter: the build that lost
+    # GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
+    # check. A floor of 1 catches the TOTAL Metal failure this gate was
+    # written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
+    # nothing else.
+    #
+    # WHAT SHOULD BE IN HERE. This family's own kernels under its top-level
+    # directory prefix; helpers imported cross-lane are printed but NOT
+    # floored. THE FLOOR IS 1 AND THE FIRST COLD BUILD ON A BOX MUST RAISE
+    # IT to two thirds of what it measures (build_gp.sh's history says why 1
+    # is not a gate). The compile check of 2026-09-14 on one Apple M4 went
+    # through `mojo build` directly and measured no blob count.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in ivf cluster neighbors core; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    for _pair in ivf:1; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
+        printf 'first build to replace.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH, through the Python wrappers (the reason
+    # build_gp.sh gives: a hand-rolled ABI here would be a third copy of it).
+    # Kept small because this runs on every build and the GPU is shared; the
+    # family's own Python surface test asserts the bits.
+    # ============================================================================
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_ivf.so"
-    echo "built $OUTDIR/_mojolearn_ivf.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_ivf.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF, AND THIS NUMBER IS A PLACEHOLDER SET TO 1.
-# ============================================================================
-#
-# THE FLOOR BELOW IS 1 BECAUSE THIS SCRIPT HAS NEVER BEEN BUILT. IT MUST BE
-# RAISED, ON THE FIRST COLD BUILD, TO TWO THIRDS OF WHAT THAT BUILD
-# ACTUALLY MEASURES, and the measured number written into this comment --
-# exactly what build_training.sh's history teaches: its floor was 1 until
-# its first real build on 2026-09-01 measured 5 and it became 3, the ratio
-# bindings/build.sh uses against ITS measured counts (22 measured -> floor
-# 15, 8 -> 3) and the ratio build_svm.sh adopted after a hand-counted
-# floor failed a perfectly good artifact on its first run. The observed
-# counts are printed unconditionally below, so the real value is one build
-# away and a failure names it instead of hiding it.
-#
-# WHY A FLOOR OF 1 IS NOT ENOUGH AND MUST NOT BE LEFT HERE. build.sh
-# learned twice that presence-of-one is not a filter: the build that lost
-# GBDT kept exactly 1 of 85 gbdt_ blobs and passed a presence-of-one
-# check. A floor of 1 catches the TOTAL Metal failure this gate was
-# written for (the MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches
-# nothing else.
-#
-# WHAT SHOULD BE IN HERE. This family's own kernels under its top-level
-# directory prefix; helpers imported cross-lane are printed but NOT
-# floored. THE FLOOR IS 1 AND THE FIRST COLD BUILD ON A BOX MUST RAISE
-# IT to two thirds of what it measures (build_gp.sh's history says why 1
-# is not a gate). The compile check of 2026-09-14 on one Apple M4 went
-# through `mojo build` directly and measured no blob count.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in ivf cluster neighbors core; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-for _pair in ivf:1; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
-    printf 'first build to replace.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH, through the Python wrappers (the reason
-# build_gp.sh gives: a hand-rolled ABI here would be a third copy of it).
-# Kept small because this runs on every build and the GPU is shared; the
-# family's own Python surface test asserts the bits.
-# ============================================================================
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

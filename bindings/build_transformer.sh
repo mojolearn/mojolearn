@@ -168,126 +168,144 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O only. The
 # caller that sets MOJOLEARN_SKIP_BUILD_GATE owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF. THE FLOOR IS MEASURED AND PINNED.
+    # ============================================================================
+    #
+    # THE FIRST BUILD RAN 2026-09-02 on the M4 (Apple tier, `sh
+    # bindings/build_transformer.sh`, rc 0) and measured 15 AIR blobs:
+    # transformer 7, gemm 8, mamba 0, core 0, checks 0. The floor below is two
+    # thirds of the measured transformer-prefix count rounded down (7 -> 4),
+    # the ratio bindings/build.sh, build_mamba.sh and build_training.sh use
+    # against THEIR measured counts. mamba 0 is what the header below
+    # predicted was not worth asserting in advance: residual_add_kernel is
+    # imported from the mamba lane (contract section 0) and leaves no blob
+    # under its own prefix, so mamba stays printed and unfloored.
+    #
+    # WHY A FLOOR OF 1 MUST NOT BE LEFT HERE. build.sh learned twice that
+    # presence-of-one is not a filter: the build that lost GBDT kept exactly 1
+    # of 85 gbdt_ blobs and passed a presence-of-one check. A floor of 1
+    # catches the TOTAL Metal failure this gate was written for (the
+    # MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches nothing else.
+    #
+    # WHAT SHOULD BE IN HERE. The blob names carry the kernel's MODULE PATH
+    # (measured on the built _mojolearn_mamba.so: `mamba_impl_mamba_ssm_...`,
+    # `gemm_checks_gemm_identical_...`), so the floored prefix for this binding
+    # is `transformer` (`transformer/impl/llama/
+    # modeling_llama.mojo`'s kernels: llama_rms_norm_kernel,
+    # llama_rope_table_kernel, apply_rotary_pos_emb_kernel, kv_append_kernel,
+    # the gather/scatter copies, the attn_* softmax chain, silu_kernel,
+    # mlp_gated_kernel). gemm/ blobs (identical_gemm), mamba/ blobs
+    # (residual_add_kernel is IMPORTED from the mamba lane, contract section
+    # 0), core/ and checks/ blobs are printed but NOT floored: whether a
+    # cross-lane helper leaves a blob under its own prefix is not something to
+    # assert before it has been seen once.
+    _air=$(air_blobs "$out")
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    printf '  AIR blobs by subsystem (total %s):\n' "$_total"
+    for _sub in transformer mamba gemm core checks; do
+        printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
+    done
+
+    _failed=0
+    # floor MEASURED (header above): 7 transformer-prefix blobs on the first
+    # build, floored at two thirds.
+    for _pair in transformer:4; do
+        _s=${_pair%%:*}
+        _min=${_pair#*:}
+        _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
+        if [ "$_n" -lt "$_min" ]; then
+            printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
+            _failed=1
+        fi
+    done
+    if [ "$_failed" -ne 0 ]; then
+        printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
+        printf '\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
+        printf '\n' >&2
+        printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
+        printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
+        printf 'first build to replace.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
+    # would publish a wheel whose tag and binary disagree, which is exactly the
+    # failure the flag exists to prevent.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
+    # imported fine and died at the first kernel.
+    # ============================================================================
+    #
+    # THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
+    # build_estimators.sh gives: the entry points take bare addresses plus a
+    # packed params list, and a hand-rolled call here would encode that ABI a
+    # second time and drift from it. The whole point of the addrs/params lists
+    # being written out in two places is that there are two, not three.
+    #
+    # THE TRANSFORMER ROWS ARE THE TRANSFORMER'S. Copying a sibling script's
+    # smoke rows would be a gate that cannot fail, since none of those kernels
+    # are in this artifact.
+    #
+    #   forward B2 L4            -> RMSNorm x2, the seven OP_NT GEMMs, the rope
+    #                               table + rotation, kv append, the eager
+    #                               softmax chain (scale, mask, max, exp,
+    #                               denom, weights, context), silu, gate,
+    #                               both residual adds; cached_tokens -> 4
+    #   4 decode steps           -> the same spelling at L = 1 with the cache
+    #                               carried; compared LOOSELY to the prefill
+    #                               rows (the bitwise decode==prefill claim
+    #                               belongs to the lane gate and to
+    #                               test_transformer_surface.py under
+    #                               identical, not to a fast-tier smoke);
+    #                               cached_tokens -> 4
+    #   float64 x                -> the dtype refusal, BY NAME, in Python
+    #   n_heads that does not    -> the d_model == n_heads*head_dim refusal
+    #     divide d_model            (the wrapper's copy of LlamaDims.validate's
+    #                               rule; the Mojo original stays the authority)
+    #   a step past max_tokens   -> the capacity refusal, raised IN MOJO by
+    #                               name, reached from Python
+    #
+    # Kept small on purpose (d_model 32, n_heads 2, n_kv 1 -- so GQA's n_rep=2
+    # index map is in the smoke -- B 2, L 4, capacity 8) because this runs on
+    # every build and the GPU is shared. The recovery assertions here are
+    # DELIBERATELY LOOSE and are a smoke test, not the gate:
+    # python/mojolearn/tests/test_transformer_surface.py is where the reference
+    # tolerances and the identical-tier bitwise arms are asserted.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_transformer.so"
-    echo "built $OUTDIR/_mojolearn_transformer.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_transformer.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF. THE FLOOR IS MEASURED AND PINNED.
-# ============================================================================
-#
-# THE FIRST BUILD RAN 2026-09-02 on the M4 (Apple tier, `sh
-# bindings/build_transformer.sh`, rc 0) and measured 15 AIR blobs:
-# transformer 7, gemm 8, mamba 0, core 0, checks 0. The floor below is two
-# thirds of the measured transformer-prefix count rounded down (7 -> 4),
-# the ratio bindings/build.sh, build_mamba.sh and build_training.sh use
-# against THEIR measured counts. mamba 0 is what the header below
-# predicted was not worth asserting in advance: residual_add_kernel is
-# imported from the mamba lane (contract section 0) and leaves no blob
-# under its own prefix, so mamba stays printed and unfloored.
-#
-# WHY A FLOOR OF 1 MUST NOT BE LEFT HERE. build.sh learned twice that
-# presence-of-one is not a filter: the build that lost GBDT kept exactly 1
-# of 85 gbdt_ blobs and passed a presence-of-one check. A floor of 1
-# catches the TOTAL Metal failure this gate was written for (the
-# MACOSX_DEPLOYMENT_TARGET bug, 0 blobs) and catches nothing else.
-#
-# WHAT SHOULD BE IN HERE. The blob names carry the kernel's MODULE PATH
-# (measured on the built _mojolearn_mamba.so: `mamba_impl_mamba_ssm_...`,
-# `gemm_checks_gemm_identical_...`), so the floored prefix for this binding
-# is `transformer` (`transformer/impl/llama/
-# modeling_llama.mojo`'s kernels: llama_rms_norm_kernel,
-# llama_rope_table_kernel, apply_rotary_pos_emb_kernel, kv_append_kernel,
-# the gather/scatter copies, the attn_* softmax chain, silu_kernel,
-# mlp_gated_kernel). gemm/ blobs (identical_gemm), mamba/ blobs
-# (residual_add_kernel is IMPORTED from the mamba lane, contract section
-# 0), core/ and checks/ blobs are printed but NOT floored: whether a
-# cross-lane helper leaves a blob under its own prefix is not something to
-# assert before it has been seen once.
-_air=$(air_blobs "$out")
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-printf '  AIR blobs by subsystem (total %s):\n' "$_total"
-for _sub in transformer mamba gemm core checks; do
-    printf '    %-18s %s\n' "$_sub" "$(printf '%s\n' "$_air" | grep -c "^${_sub}" || true)"
-done
-
-_failed=0
-# floor MEASURED (header above): 7 transformer-prefix blobs on the first
-# build, floored at two thirds.
-for _pair in transformer:4; do
-    _s=${_pair%%:*}
-    _min=${_pair#*:}
-    _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
-    if [ "$_n" -lt "$_min" ]; then
-        printf 'FAILED: %s has %s AIR blobs, want at least %s.\n' "$_s" "$_n" "$_min" >&2
-        _failed=1
-    fi
-done
-if [ "$_failed" -ne 0 ]; then
-    printf 'If these are 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one:\n' >&2
-    printf '\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \\;\n" >&2
-    printf '\n' >&2
-    printf 'If they are nonzero but under the floor, the floor may simply be\n' >&2
-    printf 'wrong: it was never measured, it was set to 1 and left for the\n' >&2
-    printf 'first build to replace.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. A silently dropped -Xlinker
-# would publish a wheel whose tag and binary disagree, which is exactly the
-# failure the flag exists to prevent.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH. Every broken build in this bug's history
-# imported fine and died at the first kernel.
-# ============================================================================
-#
-# THROUGH THE PYTHON WRAPPERS, NOT THE RAW BINDINGS, for the reason
-# build_estimators.sh gives: the entry points take bare addresses plus a
-# packed params list, and a hand-rolled call here would encode that ABI a
-# second time and drift from it. The whole point of the addrs/params lists
-# being written out in two places is that there are two, not three.
-#
-# THE TRANSFORMER ROWS ARE THE TRANSFORMER'S. Copying a sibling script's
-# smoke rows would be a gate that cannot fail, since none of those kernels
-# are in this artifact.
-#
-#   forward B2 L4            -> RMSNorm x2, the seven OP_NT GEMMs, the rope
-#                               table + rotation, kv append, the eager
-#                               softmax chain (scale, mask, max, exp,
-#                               denom, weights, context), silu, gate,
-#                               both residual adds; cached_tokens -> 4
-#   4 decode steps           -> the same spelling at L = 1 with the cache
-#                               carried; compared LOOSELY to the prefill
-#                               rows (the bitwise decode==prefill claim
-#                               belongs to the lane gate and to
-#                               test_transformer_surface.py under
-#                               identical, not to a fast-tier smoke);
-#                               cached_tokens -> 4
-#   float64 x                -> the dtype refusal, BY NAME, in Python
-#   n_heads that does not    -> the d_model == n_heads*head_dim refusal
-#     divide d_model            (the wrapper's copy of LlamaDims.validate's
-#                               rule; the Mojo original stays the authority)
-#   a step past max_tokens   -> the capacity refusal, raised IN MOJO by
-#                               name, reached from Python
-#
-# Kept small on purpose (d_model 32, n_heads 2, n_kv 1 -- so GQA's n_rep=2
-# index map is in the smoke -- B 2, L 4, capacity 8) because this runs on
-# every build and the GPU is shared. The recovery assertions here are
-# DELIBERATELY LOOSE and are a smoke test, not the gate:
-# python/mojolearn/tests/test_transformer_surface.py is where the reference
-# tolerances and the identical-tier bitwise arms are asserted.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

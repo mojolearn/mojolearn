@@ -207,101 +207,119 @@ air_blobs() {
         | sort -u
 }
 
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # THE AIR-BLOB FLOOR: 8 gemm-prefixed blobs, AND IT IS A FILTER, NOT A PROOF.
+    # ============================================================================
+    #
+    # build.sh's lesson, learned twice: a "does it have at least one" floor was
+    # SATISFIED by a known-broken artifact -- the build that lost GBDT kept
+    # exactly 1 of 85 gbdt_ blobs. So the floor has to sit well above 1, and even
+    # then it only lets a hopeless build skip the smoke test.
+    #
+    # WHERE 8 COMES FROM. Ten distinct kernel instantiations are reachable from
+    # `identical_gemm_with_plan` in gemm/checks/gemm_identical.mojo:
+    #
+    #     identical_gemm_flat_kernel                            1
+    #     identical_gemm_tiled_kernel[TM, TN, KS], five of them:
+    #         16/16/32, 8/32/32, 32/8/16, 16/16/8, 4/4/32       5
+    #     identical_gemm_leaf_kernel        (SPLITK level 0)    1
+    #     identical_gemm_fold_kernel        (SPLITK fused fold) 1
+    #     identical_gemm_fold_level_kernel  (STAGED, one level) 1
+    #     identical_gemm_emit_kernel        (STAGED output)     1
+    #
+    # 8 is that count with two of slack, so a compiler that merges or drops one
+    # instantiation does not fail a good build, while a suppressed build (0) and a
+    # nearly-suppressed one both fail. It is deliberately NOT 10: a floor tuned to
+    # the exact count today becomes a false alarm the next time an execution plan
+    # is added or removed, and the execution plan is EXPLICITLY outside the
+    # profile version (contract preamble) so it is expected to move.
+    #
+    # The count is over blobs whose name starts `gemm`, not over all blobs, which
+    # is build.sh's per-subsystem shape rather than build_estimators.sh's bare
+    # total. A bare total can be met by blobs the MAX runtime brought along.
+    _air=$(air_blobs "$out")
+    _gemm=$(printf '%s\n' "$_air" | grep -c '^gemm' || true)
+    _total=$(printf '%s\n' "$_air" | grep -c . || true)
+    if [ "$_gemm" -lt 8 ]; then
+        printf 'FAILED: %s gemm AIR blobs (of %s total), want at least 8.\n' \
+            "$_gemm" "$_total" >&2
+        printf '\nThe blobs that ARE in the artifact:\n' >&2
+        printf '%s\n' "$_air" | sed 's/^/    /' >&2
+        printf '\nIf this is 0, suspect the environment and the cache before the\n' >&2
+        printf 'source: MACOSX_DEPLOYMENT_TARGET set anywhere in the environment,\n' >&2
+        printf 'then empty 134-byte metallibs in $MODULAR_HOME/cache/.mojo_cache:\n' >&2
+        printf '\n  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \;\n\n" >&2
+        printf 'If it is nonzero but the names above do not start with "gemm",\n' >&2
+        printf 'the prefix in this check is wrong and the fix is one line here.\n' >&2
+        exit 1
+    fi
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. The linker flag is the only
+    # thing setting it, and a silently dropped -Xlinker would publish a wheel
+    # whose tag and binary disagree.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: LAUNCH THESE KERNELS, AND CHECK THAT THIS MODULE'S POLICY
+    # ACTUALLY FIRES.
+    # ============================================================================
+    #
+    # Every broken build in this bug's history imported fine and died at the first
+    # launch, so nothing short of launching proves anything. The shapes below
+    # reach EVERY EXECUTION PLAN `choose_gemm_plan` can return -- all five of them
+    # -- because a smoke test that only ever hits one plan prices the others at
+    # zero, and the execution plan is the part of this system that is EXPLICITLY
+    # free to change (contract preamble), so it is the part most likely to break
+    # quietly:
+    #
+    #     8 x 8 x 64      m,n < 16, n < 32, m < 32     -> PLAN_FLAT
+    #     64 x 64 x 64    m,n >= 16                    -> PLAN_TILE_16_16_32
+    #     32 x 32 x 1024  m*n <= 4096 and P = 8 >= 4   -> PLAN_SPLITK
+    #     8 x 64 x 64     m < 16, n >= 32              -> PLAN_TILE_8_32_32
+    #     16 x 16 x 300   m,n >= 16; P = 3 ragged      -> PLAN_TILE_16_16_32
+    #     32 x 1 x 24     the gemv below, m >= 32      -> PLAN_TILE_32_8_16
+    #
+    # `16 x 16 x 300` is the contract's own named ragged odd-P shape (section
+    # 12.1: "(k, L) = (300, 128), giving P = 3 with a ragged 44-element last
+    # leaf"), and `32 x 32 x 1024` is the only one that launches the leaf and fold
+    # kernels at all -- without it four of the ten blobs counted above are never
+    # executed.
+    #
+    # The three POLICY assertions at the end are reach checks, not output checks.
+    # DEVIATION 911's refusal, DEVIATION 913's refusal and the dtype refusal are
+    # each a branch that a passing build could contain and never take; a gate that
+    # does not make them fire cannot tell a live guard from an inert one.
+    #
+    # Sizes are tiny on purpose: this runs on every build and the GPU is shared.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_linalg.so"
-    echo "built $OUTDIR/_mojolearn_linalg.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_linalg.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# THE AIR-BLOB FLOOR: 8 gemm-prefixed blobs, AND IT IS A FILTER, NOT A PROOF.
-# ============================================================================
-#
-# build.sh's lesson, learned twice: a "does it have at least one" floor was
-# SATISFIED by a known-broken artifact -- the build that lost GBDT kept
-# exactly 1 of 85 gbdt_ blobs. So the floor has to sit well above 1, and even
-# then it only lets a hopeless build skip the smoke test.
-#
-# WHERE 8 COMES FROM. Ten distinct kernel instantiations are reachable from
-# `identical_gemm_with_plan` in gemm/checks/gemm_identical.mojo:
-#
-#     identical_gemm_flat_kernel                            1
-#     identical_gemm_tiled_kernel[TM, TN, KS], five of them:
-#         16/16/32, 8/32/32, 32/8/16, 16/16/8, 4/4/32       5
-#     identical_gemm_leaf_kernel        (SPLITK level 0)    1
-#     identical_gemm_fold_kernel        (SPLITK fused fold) 1
-#     identical_gemm_fold_level_kernel  (STAGED, one level) 1
-#     identical_gemm_emit_kernel        (STAGED output)     1
-#
-# 8 is that count with two of slack, so a compiler that merges or drops one
-# instantiation does not fail a good build, while a suppressed build (0) and a
-# nearly-suppressed one both fail. It is deliberately NOT 10: a floor tuned to
-# the exact count today becomes a false alarm the next time an execution plan
-# is added or removed, and the execution plan is EXPLICITLY outside the
-# profile version (contract preamble) so it is expected to move.
-#
-# The count is over blobs whose name starts `gemm`, not over all blobs, which
-# is build.sh's per-subsystem shape rather than build_estimators.sh's bare
-# total. A bare total can be met by blobs the MAX runtime brought along.
-_air=$(air_blobs "$out")
-_gemm=$(printf '%s\n' "$_air" | grep -c '^gemm' || true)
-_total=$(printf '%s\n' "$_air" | grep -c . || true)
-if [ "$_gemm" -lt 8 ]; then
-    printf 'FAILED: %s gemm AIR blobs (of %s total), want at least 8.\n' \
-        "$_gemm" "$_total" >&2
-    printf '\nThe blobs that ARE in the artifact:\n' >&2
-    printf '%s\n' "$_air" | sed 's/^/    /' >&2
-    printf '\nIf this is 0, suspect the environment and the cache before the\n' >&2
-    printf 'source: MACOSX_DEPLOYMENT_TARGET set anywhere in the environment,\n' >&2
-    printf 'then empty 134-byte metallibs in $MODULAR_HOME/cache/.mojo_cache:\n' >&2
-    printf '\n  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf "    -exec sh -c 'head -c4 \"\$1\" | grep -q MTLB && echo \"\$1\"' _ {} \;\n\n" >&2
-    printf 'If it is nonzero but the names above do not start with "gemm",\n' >&2
-    printf 'the prefix in this check is wrong and the fix is one line here.\n' >&2
-    exit 1
-fi
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. The linker flag is the only
-# thing setting it, and a silently dropped -Xlinker would publish a wheel
-# whose tag and binary disagree.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: LAUNCH THESE KERNELS, AND CHECK THAT THIS MODULE'S POLICY
-# ACTUALLY FIRES.
-# ============================================================================
-#
-# Every broken build in this bug's history imported fine and died at the first
-# launch, so nothing short of launching proves anything. The shapes below
-# reach EVERY EXECUTION PLAN `choose_gemm_plan` can return -- all five of them
-# -- because a smoke test that only ever hits one plan prices the others at
-# zero, and the execution plan is the part of this system that is EXPLICITLY
-# free to change (contract preamble), so it is the part most likely to break
-# quietly:
-#
-#     8 x 8 x 64      m,n < 16, n < 32, m < 32     -> PLAN_FLAT
-#     64 x 64 x 64    m,n >= 16                    -> PLAN_TILE_16_16_32
-#     32 x 32 x 1024  m*n <= 4096 and P = 8 >= 4   -> PLAN_SPLITK
-#     8 x 64 x 64     m < 16, n >= 32              -> PLAN_TILE_8_32_32
-#     16 x 16 x 300   m,n >= 16; P = 3 ragged      -> PLAN_TILE_16_16_32
-#     32 x 1 x 24     the gemv below, m >= 32      -> PLAN_TILE_32_8_16
-#
-# `16 x 16 x 300` is the contract's own named ragged odd-P shape (section
-# 12.1: "(k, L) = (300, 128), giving P = 3 with a ragged 44-element last
-# leaf"), and `32 x 32 x 1024` is the only one that launches the leaf and fold
-# kernels at all -- without it four of the ten blobs counted above are never
-# executed.
-#
-# The three POLICY assertions at the end are reach checks, not output checks.
-# DEVIATION 911's refusal, DEVIATION 913's refusal and the dtype refusal are
-# each a branch that a passing build could contain and never take; a gate that
-# does not make them fire cannot tell a live guard from an inert one.
-#
-# Sizes are tiny on purpose: this runs on every build and the GPU is shared.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

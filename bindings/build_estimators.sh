@@ -184,32 +184,50 @@ air_blobs() {
 # the siblings' not-yet-built .so files; and the AIR/otool checks are
 # Mach-O-only. The caller that sets this owns end-to-end verification
 # (the E1 bootstrap runs the traced-fit driver after all five builds).
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # A FLOOR, NOT A PROOF. The failure this guards against is an artifact with
+    # zero kernels; the failure run_smoke guards against is an artifact that
+    # imports and dies at the first launch.
+    count=$(air_blobs "$out" | wc -l | tr -d ' ')
+    if [ "$count" -lt 10 ]; then
+        printf 'FAILED: %s AIR blobs, want at least 10.\n' "$count" >&2
+        printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
+        printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
+        printf 'metallibs -- one poisoned build serves them to every later one.\n' >&2
+        exit 1
+    fi
+
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # THE REAL GATE: import and LAUNCH one kernel from each estimator in this
+    # extension. Every broken build in this bug's history imported fine.
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_estimators.so"
-    echo "built $OUTDIR/_mojolearn_estimators.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_estimators.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# A FLOOR, NOT A PROOF. The failure this guards against is an artifact with
-# zero kernels; the failure run_smoke guards against is an artifact that
-# imports and dies at the first launch.
-count=$(air_blobs "$out" | wc -l | tr -d ' ')
-if [ "$count" -lt 10 ]; then
-    printf 'FAILED: %s AIR blobs, want at least 10.\n' "$count" >&2
-    printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment\n' >&2
-    printf 'and then $MODULAR_HOME/cache/.mojo_cache for empty 134-byte\n' >&2
-    printf 'metallibs -- one poisoned build serves them to every later one.\n' >&2
-    exit 1
-fi
-
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# THE REAL GATE: import and LAUNCH one kernel from each estimator in this
-# extension. Every broken build in this bug's history imported fine.
 MOJOLEARN_SMOKE_SO="$out" python3 - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()

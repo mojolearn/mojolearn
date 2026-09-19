@@ -207,81 +207,99 @@ air_blobs() {
 # multi-binding build (a fresh linux box, E1) they fail on the siblings'
 # not-yet-built .so files; and the AIR/otool checks are Mach-O-only. The
 # caller that sets this owns end-to-end verification.
+# THE BINARY CHECKS RUN EVEN WHEN THE SMOKE CANNOT (2026-09-19).
+#
+# This script used to `export MOJOLEARN_SKIP_BUILD_GATE=1` for itself on the
+# identical and deterministic tiers, and the skip below then turned off ALL
+# THREE checks. So the gate that exists because a ZERO-KERNEL ARTIFACT
+# shipped for hours ran only on `fast` builds -- never on the identical ones
+# whose cross-vendor claim is the entire product.
+#
+# Only the kernel-launch smoke needs the rest of the package (it imports
+# mojolearn, which during a multi-binding build reaches siblings that are not
+# built yet). The AIR blob floor is `strings` on the artifact and the minos
+# check is `otool`; neither imports anything, both cost milliseconds, and
+# both catch exactly the failure that shipped. They run here unconditionally
+# on Darwin, and only the smoke is skipped.
+if [ "$(uname)" = "Darwin" ]; then
+
+    # ============================================================================
+    # A FLOOR, NOT A PROOF, AND A DELIBERATELY UNAMBITIOUS ONE.
+    # ============================================================================
+    # The failure this guards against is an artifact with ZERO kernels; the
+    # failure run_smoke guards against is an artifact that imports and dies at the
+    # first launch.
+    #
+    # 10 IS THE SIBLING'S NUMBER, NOT A MEASURED ONE FOR THIS MODULE, and it is
+    # set that way on purpose. This module was written without ever being built
+    # (the author of these files does not run builds), so any per-lane threshold
+    # invented here would be a guess that can FALSE-FAIL a good artifact, which is
+    # worse than a weak filter. bindings/build_estimators.sh proved 10 safe for a
+    # module with a comparable set of kernel families, and this one carries
+    # strictly more of them (metrics groups A-D, spectral's Laplacian/SpMV/Lanczos,
+    # plus the imported cluster k-means, core row-norm, gemm and neighbors kernels
+    # both lanes call).
+    #
+    # THE FOLLOW-UP THE OPERATOR OWNS: this script prints the real count and the
+    # per-prefix breakdown below. Read them once on a cold cache and raise this
+    # floor to a measured number, and add per-prefix floors in the shape of
+    # bindings/build.sh's `for _pair in cluster:15 neighbors:3 core:1` loop. Note
+    # WHY that has to be measured rather than guessed: build.sh records a
+    # known-broken artifact that kept exactly 1 of 85 `gbdt_` blobs and PASSED a
+    # presence-of-one check, so a per-prefix floor of 1 would be theatre.
+    AIR_FLOOR=10
+
+    count=$(air_blobs "$out" | wc -l | tr -d ' ')
+    if [ "$count" -lt "$AIR_FLOOR" ]; then
+        printf 'FAILED: %s AIR blobs, want at least %s.\n' "$count" "$AIR_FLOOR" >&2
+        printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment,\n' >&2
+        printf 'then drop --target-accelerator from TARGET_FLAGS (bindings/build.sh\n' >&2
+        printf 'measured that flag at 0 blobs), and then look in\n' >&2
+        printf '$MODULAR_HOME/cache/.mojo_cache for empty 134-byte metallibs --\n' >&2
+        printf 'one poisoned build serves them to every later one. Find them with\n' >&2
+        printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
+        printf '    -exec sh -c '"'"'head -c4 "$1" | grep -q MTLB && echo "$1"'"'"' _ {} \\;\n' >&2
+        exit 1
+    fi
+
+    echo "  AIR blobs by prefix (READ THIS ONCE AND RAISE AIR_FLOOR TO A MEASURED NUMBER):"
+    air_blobs "$out" | sed -e 's/_[0-9a-f]\{16\}air$//' -e 's/_.*$//' \
+        | sort | uniq -c | sed 's/^/    /'
+
+    # THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. The linker flag is the only
+    # thing setting it, and a silently dropped `-Xlinker` would publish a wheel
+    # whose tag and binary disagree.
+    got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
+    if [ "$got" != "$MACOS_FLOOR" ]; then
+        printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
+        exit 1
+    fi
+
+    # ============================================================================
+    # THE REAL GATE: import and LAUNCH from BOTH LANES IN THIS EXTENSION.
+    # ============================================================================
+    # Every broken build in this bug's history imported fine. These calls are
+    # THROUGH THE PYTHON WRAPPERS, not the raw bindings, because the extension's
+    # entry points take bare addresses plus a packed `params` list and a
+    # hand-rolled call here would encode that ABI a second time and drift from it.
+    #
+    # `_metrics_impl` and `_spectral_impl` are imported as submodules rather than
+    # through the package's export list, exactly as build_estimators.sh does, so
+    # this gate does not depend on `mojolearn/__init__.py` having been wired yet.
+    # WHEN THE OPERATOR WIRES `mojolearn.metrics` AND `mojolearn.cluster.
+    # SpectralClustering`, SWITCH THESE IMPORTS TO THE PUBLIC NAMES.
+    #
+    # Kept small -- 96 rows -- because this runs on every build and the GPU is
+    # shared. The spectral fit is the expensive one (a thick-restart Lanczos with
+    # max_iterations = 10n).
+fi
+
 if [ -n "${MOJOLEARN_SKIP_BUILD_GATE:-}" ] || [ "$(uname)" != "Darwin" ]; then
     mv "$out" "$OUTDIR/_mojolearn_metrics.so"
-    echo "built $OUTDIR/_mojolearn_metrics.so (gate skipped: non-Darwin or MOJOLEARN_SKIP_BUILD_GATE)"
+    echo "built $OUTDIR/_mojolearn_metrics.so (kernel-launch smoke skipped; binary checks ran)"
     exit 0
 fi
 
-# ============================================================================
-# A FLOOR, NOT A PROOF, AND A DELIBERATELY UNAMBITIOUS ONE.
-# ============================================================================
-# The failure this guards against is an artifact with ZERO kernels; the
-# failure run_smoke guards against is an artifact that imports and dies at the
-# first launch.
-#
-# 10 IS THE SIBLING'S NUMBER, NOT A MEASURED ONE FOR THIS MODULE, and it is
-# set that way on purpose. This module was written without ever being built
-# (the author of these files does not run builds), so any per-lane threshold
-# invented here would be a guess that can FALSE-FAIL a good artifact, which is
-# worse than a weak filter. bindings/build_estimators.sh proved 10 safe for a
-# module with a comparable set of kernel families, and this one carries
-# strictly more of them (metrics groups A-D, spectral's Laplacian/SpMV/Lanczos,
-# plus the imported cluster k-means, core row-norm, gemm and neighbors kernels
-# both lanes call).
-#
-# THE FOLLOW-UP THE OPERATOR OWNS: this script prints the real count and the
-# per-prefix breakdown below. Read them once on a cold cache and raise this
-# floor to a measured number, and add per-prefix floors in the shape of
-# bindings/build.sh's `for _pair in cluster:15 neighbors:3 core:1` loop. Note
-# WHY that has to be measured rather than guessed: build.sh records a
-# known-broken artifact that kept exactly 1 of 85 `gbdt_` blobs and PASSED a
-# presence-of-one check, so a per-prefix floor of 1 would be theatre.
-AIR_FLOOR=10
-
-count=$(air_blobs "$out" | wc -l | tr -d ' ')
-if [ "$count" -lt "$AIR_FLOOR" ]; then
-    printf 'FAILED: %s AIR blobs, want at least %s.\n' "$count" "$AIR_FLOOR" >&2
-    printf 'If this is 0, check MACOSX_DEPLOYMENT_TARGET in the environment,\n' >&2
-    printf 'then drop --target-accelerator from TARGET_FLAGS (bindings/build.sh\n' >&2
-    printf 'measured that flag at 0 blobs), and then look in\n' >&2
-    printf '$MODULAR_HOME/cache/.mojo_cache for empty 134-byte metallibs --\n' >&2
-    printf 'one poisoned build serves them to every later one. Find them with\n' >&2
-    printf '  find "$MODULAR_HOME/cache/.mojo_cache" -type f -size -200c \\\n' >&2
-    printf '    -exec sh -c '"'"'head -c4 "$1" | grep -q MTLB && echo "$1"'"'"' _ {} \\;\n' >&2
-    exit 1
-fi
-
-echo "  AIR blobs by prefix (READ THIS ONCE AND RAISE AIR_FLOOR TO A MEASURED NUMBER):"
-air_blobs "$out" | sed -e 's/_[0-9a-f]\{16\}air$//' -e 's/_.*$//' \
-    | sort | uniq -c | sed 's/^/    /'
-
-# THE MACH-O FLOOR IS READ BACK, NOT ASSUMED. The linker flag is the only
-# thing setting it, and a silently dropped `-Xlinker` would publish a wheel
-# whose tag and binary disagree.
-got=$(otool -l "$out" | awk '/LC_BUILD_VERSION/{f=1} f && /minos/{print $2; exit}')
-if [ "$got" != "$MACOS_FLOOR" ]; then
-    printf 'FAILED: minos is %s, want %s.\n' "$got" "$MACOS_FLOOR" >&2
-    exit 1
-fi
-
-# ============================================================================
-# THE REAL GATE: import and LAUNCH from BOTH LANES IN THIS EXTENSION.
-# ============================================================================
-# Every broken build in this bug's history imported fine. These calls are
-# THROUGH THE PYTHON WRAPPERS, not the raw bindings, because the extension's
-# entry points take bare addresses plus a packed `params` list and a
-# hand-rolled call here would encode that ABI a second time and drift from it.
-#
-# `_metrics_impl` and `_spectral_impl` are imported as submodules rather than
-# through the package's export list, exactly as build_estimators.sh does, so
-# this gate does not depend on `mojolearn/__init__.py` having been wired yet.
-# WHEN THE OPERATOR WIRES `mojolearn.metrics` AND `mojolearn.cluster.
-# SpectralClustering`, SWITCH THESE IMPORTS TO THE PUBLIC NAMES.
-#
-# Kept small -- 96 rows -- because this runs on every build and the GPU is
-# shared. The spectral fit is the expensive one (a thick-restart Lanczos with
-# max_iterations = 10n).
 MOJOLEARN_SMOKE_SO="$out" "${MOJOLEARN_PYTHON:-python3}" - <<'PY'
 import os, shutil, sys, tempfile
 tmp = tempfile.mkdtemp()
