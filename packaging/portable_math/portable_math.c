@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <float.h>
+#include "powers_of_ten.h"
 #if defined(__x86_64__)
 #include <immintrin.h>
 #endif
@@ -96,7 +97,18 @@ double mojolearn_log2(double input) {
     return out+(double)e;
 }
 float mojolearn_log2f(float x) { return (float)mojolearn_log2((double)x); }
-double mojolearn_log10(double x) { return mojolearn_log(x)*0.434294481903251827651; }
+double mojolearn_log10(double x) {
+    /* Runtime formatting truncates log10 to an integer. Do not undershoot a
+       decimal power by one ulp when multiplying a rounded log by LOG10E. */
+    int low=0, high=616;
+    while (low<high) {
+        int middle=low+(high-low)/2;
+        if (x==powers_of_ten[middle]) return (double)(middle-307);
+        if (x<powers_of_ten[middle]) high=middle;
+        else low=middle+1;
+    }
+    return mojolearn_log(x)*0.434294481903251827651;
+}
 double mojolearn_exp(double x) {
     if (x!=x) return x;
     if (x>709.782712893384) return value(UINT64_C(0x7ff0000000000000));

@@ -18,7 +18,8 @@ wheel files are checked for external host math imports.
 
 `portable_math.c` translates the existing `checks/numerics.mojo` FP64 log,
 log2, and exp polynomials, with explicit FMA and contraction disabled elsewhere.
-CPU sqrt is hardware rounded. log10 scales the pinned log; log2f rounds the
+CPU sqrt is hardware rounded. log10 scales the pinned log and preserves exact
+normal decimal-power results for runtime formatting; log2f rounds the
 pinned double log2 to float. Binary decomposition, scaling, splitting, and integer
 rounding use owned bit operations. The Python wrapper implements classification,
 sign, integer rounding, products, exact summation, and binary scaling without math.

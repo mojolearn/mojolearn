@@ -38,7 +38,9 @@ def build(output, cc=None):
     if sys.platform == "darwin":
         subprocess.run(["codesign", "--force", "--sign", "-", str(output)], check=True,
                        stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-    return {"source_sha256": sha(source), "output_sha256": sha(output), "command": args}
+    return {"source_sha256": sha(source),
+            "constants_sha256": sha(source.with_name("powers_of_ten.h")),
+            "output_sha256": sha(output), "command": args}
 
 
 def patch(path):

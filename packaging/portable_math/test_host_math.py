@@ -158,3 +158,12 @@ def test_schedule_scaling_avoids_float_power():
         if abs(expected) < 2**-126:
             expected = 0.0
         assert bits(_f32_round(q)) == bits(expected)
+
+
+def test_runtime_log10_decimal_boundaries():
+    import subprocess
+    owned.log(2)
+    checker = Path(__file__).with_name('check_log10.py')
+    result = subprocess.run([os.sys.executable, str(checker), owned._lib._name],
+                            check=True, capture_output=True, text=True)
+    assert json.loads(result.stdout)['normal_decimal_powers_exact'] == 616
