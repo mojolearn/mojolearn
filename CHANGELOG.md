@@ -54,6 +54,21 @@ Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
   for bit on 294 oracle cases.
 - The score-noise add in both pointwise scorers is now a pinned fma under
   IDENTICAL (IDENTITY_PATHS row 96); no recorded lane reached it.
+- CPU host path: the symmetric Logloss fit now restates the Bayesian,
+  Bernoulli and Poisson bootstraps and the score noise, so a CPU-only
+  verifier can check a default-constructed Logloss fit (the
+  gbdt-catboost-defaults lane). Ordered boosting and every border type have
+  CPU host paths too; weighted and one-hot Ordered fits
+  are GPU only and refused by name on the CPU.
+- Multi-GPU: `fit_boosting` accepts Ordered fits and every border type
+  (feature histograms partitioned by whole packed groups; the permutations,
+  folds, cursors, leaves and border selection stay on the root device). New
+  identity lanes par-ordered and par-border-types. The two-GPU columns are
+  owed; see docs/lanes/LANE_STATUS_catboost-parity.md for a logical-shard
+  finding on the Plain partition.
+- New identity lanes: gbdt-catboost-defaults, gbdt-ordered,
+  gbdt-ordered-bayesian-noise, gbdt-border-types, gbdt-bfa-quantile,
+  par-ordered, par-border-types.
 
 ## 0.8.8 (published 2026-09-19)
 

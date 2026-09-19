@@ -18,11 +18,16 @@
 #                 MOJOLEARN_BORDER_TYPES_SABOTAGE; the three new lanes must
 #                 read DIVERGENT from the clean arm and the six guards
 #                 IDENTICAL (the two arms act only on the new branches).
-#   ARM par       with two or more GPUs visible, par-ordered and
-#                 par-ordered-rmse at MOJOLEARN_PAR_DEVICES=0,1: fit_boosting's
-#                 partitioned fold histograms must equal the one-device fit
-#                 (the lane asserts it) and hash equal to the clean arm's
-#                 gbdt-ordered Logloss model on the same box.
+#   ARM par       with two or more GPUs visible, par-ordered,
+#                 par-ordered-rmse, par-border-types, par-boosting and
+#                 par-boosting-reg at MOJOLEARN_PAR_DEVICES=0,1: fit_boosting's
+#                 partitioned histograms must equal the one-device fit (each
+#                 lane asserts it), and the two-device column must hash equal
+#                 to the one-device column. par-boosting and par-boosting-reg
+#                 ride along because the logical-shard diagnostic on the M4
+#                 read intermittent two-shard divergence on the greedy
+#                 (Plain) partition (docs/lanes/LANE_STATUS_catboost-parity.md);
+#                 the par arm runs three repeats for that reason.
 #   host check    `check-border-types` (294 CatBoost border cases, host code)
 #                 and its sabotage, which must fail.
 #
@@ -70,7 +75,7 @@ fi
 say "gpu_archs=${MOJOLEARN_GPU_ARCHS:-unset} column=${MOJOLEARN_TARGET_COLUMN:-unset}"
 
 BUILD_ENV="env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-8}"
-NEW=gbdt-ordered,gbdt-ordered-bayesian-noise,gbdt-border-types,gbdt-bfa-quantile
+NEW=gbdt-ordered,gbdt-ordered-bayesian-noise,gbdt-border-types,gbdt-bfa-quantile,gbdt-catboost-defaults
 GUARDS=gbdt-symmetric,gbdt-rmse,gbdt-ordered-rmse,gbdt-pointwise-l2-bayesian-eval,gbdt-depthwise,gbdt-lossguide
 LABEL=${MOJOLEARN_IDENTITY_VENDOR_LABEL:-${MOJOLEARN_TARGET_COLUMN:-box}-${MOJOLEARN_GPU_ARCHS:-arch}}
 IB="env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py"
@@ -94,9 +99,9 @@ if command -v nvidia-smi >/dev/null 2>&1; then _ndev=$(nvidia-smi -L 2>/dev/null
 if [ "$_ndev" -lt 1 ] && command -v rocm-smi >/dev/null 2>&1; then _ndev=$(rocm-smi --showid 2>/dev/null | grep -c 'GPU\['); fi
 say "devices=$_ndev"
 if [ "$_ndev" -ge 2 ]; then
-    run ib_par env MOJOLEARN_PAR_DEVICES=0,1 $IB --lanes par-ordered,par-ordered-rmse --vendor "$LABEL-par2" --json "$OUT/identity_break.$LABEL.par2.json"
+    run ib_par env MOJOLEARN_PAR_DEVICES=0,1 $IB --repeats 3 --lanes par-ordered,par-ordered-rmse,par-border-types,par-boosting,par-boosting-reg --vendor "$LABEL-par2" --json "$OUT/identity_break.$LABEL.par2.json"
     say "ib_par_exit=$(awk -F'\t' '$1=="ib_par"{print $2}' "$OUT/status.tsv") (expected 0; the lanes assert partitioned == one-device)"
-    run ib_par1 env MOJOLEARN_PAR_DEVICES=0 $IB --lanes par-ordered,par-ordered-rmse --vendor "$LABEL-par1" --json "$OUT/identity_break.$LABEL.par1.json"
+    run ib_par1 env MOJOLEARN_PAR_DEVICES=0 $IB --repeats 3 --lanes par-ordered,par-ordered-rmse,par-border-types,par-boosting,par-boosting-reg --vendor "$LABEL-par1" --json "$OUT/identity_break.$LABEL.par1.json"
     run diff_par $IB --diff "$OUT/identity_break.$LABEL.par1.json" "$OUT/identity_break.$LABEL.par2.json"
     say "diff_par_exit=$(awk -F'\t' '$1=="diff_par"{print $2}' "$OUT/status.tsv") (expected 0: one device IDENTICAL to two)"
 else
@@ -110,6 +115,12 @@ run diff_sab $IB --diff "$OUT/identity_break.$LABEL.json" "$OUT/identity_break.$
 say "diff_sab_exit=$(awk -F'\t' '$1=="diff_sab"{print $2}' "$OUT/status.tsv") (expected non-zero: DIVERGENT on the three new lanes only)"
 grep -E "^summary|DIVERGENT" "$OUT/logs/diff_sab.log" 2>/dev/null | head -60 >> "$G"
 run build_gbdt_clean_again $BUILD_ENV sh bindings/build_gbdt.sh
+
+# ARM defaults-sabotage: the Python-side negative control of the defaults
+# lane (the auto learning rate reads the CPU rows); its train cell must move
+run ib_defsab env MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE=1 MOJOLEARN_HOST_ALLOW_SABOTAGE=1 $IB --lanes gbdt-catboost-defaults --vendor "$LABEL-defsab" --json "$OUT/identity_break.$LABEL.defsab.json"
+run diff_defsab $IB --diff "$OUT/identity_break.$LABEL.json" "$OUT/identity_break.$LABEL.defsab.json"
+say "diff_defsab_exit=$(awk -F'\t' '$1=="diff_defsab"{print $2}' "$OUT/status.tsv") (expected non-zero: gbdt-catboost-defaults train DIVERGENT)"
 
 # host checks
 run border_types pixi run check-border-types
