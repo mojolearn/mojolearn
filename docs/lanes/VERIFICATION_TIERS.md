@@ -119,6 +119,24 @@ Keep the existing NVIDIA and AMD qualification contracts. Apple qualification
 uses the installed-wheel gates for each PyPI update. A fresh full Apple identity
 column is no longer an additional release requirement.
 
+### The Apple pass
+
+```sh
+pixi run -e test apple-pass                 # every lane that runs on Metal
+python3 tools/verify_lanes.py --changed-since origin/main --apple-pass
+```
+
+This is the whole Apple check (2026-09-19). Metal answers ONE question: is its
+end model the reference's. So each cell is fitted once and hashes train, infer
+and save/reload; the batch, decode and gradient probes check batching logic,
+which the CPU column carries on rented pods and one light NVIDIA pass confirms
+on `base`. Fixtures are `base` (the ordinary path), `denormal` (where Apple is
+known to differ, R2) and `odd` (every tile tail); the other six vary properties
+the CPU column already covers on all nine. Lanes whose arithmetic never reaches
+Metal are left out and named. The budget is 600 seconds total, and exhausting
+it is a failure, never reduced coverage. `--apple-pass` refuses anything that
+widens it (more repeats, probe groups, `--exhaustive`, another backend).
+
 Between releases, routine iteration uses CPU. An Apple-specific failure may
 need a real-Metal check: valid compiled AIR does not guarantee successful
 pipeline creation, and CPU results cannot certify Metal buffer lifetimes.

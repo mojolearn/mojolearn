@@ -92,7 +92,9 @@ Measured on the M4 (`bench/results/identity_break/2026-09-18_installed-apple-pro
 inference/save/reload is 149 s (24%) and the batch, rlpair, batchgrad,
 batchscale, ragged and stepfull probes are the other 76%. The end-model check
 of the same cells at one repeat is therefore about 74 s, and about 8 s on the
-base fixture alone.
+base fixture alone. `tools/verify_lanes.py --apple-pass` (`pixi run -e test
+apple-pass`) is that selection on `base,denormal,odd` under a 600-second
+budget; see [VERIFICATION_TIERS.md](lanes/VERIFICATION_TIERS.md#the-apple-pass).
 
 ## Scheduler
 
