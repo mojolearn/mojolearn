@@ -518,28 +518,28 @@ A blank cell means no lane of this algorithm has that kind.
 | ordered-gradient-sum | amd,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-ordered-sum-completion/cpu-sabotage.json` | n/a n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction) | yes |
 | par-arima | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/c-classical/cpu-x86.sabotage.json` | part | yes |
 | par-boosting | amd,apple,nvidia | - | none | - | part | NO |
-| par-boosting-clf | nvidia | - | none | - | part | NO |
+| par-boosting-clf | amd,nvidia | - | none | - | part | NO |
 | par-boosting-pointwise | amd,apple,nvidia | - | none | - | part | NO |
-| par-boosting-reg | nvidia | - | none | - | part | NO |
+| par-boosting-reg | amd,nvidia | - | none | - | part | NO |
 | par-byte-lm | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-model-pool | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-offload | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-cd | amd,apple,nvidia | - | none | - | part | NO |
-| par-cd-elasticnet | nvidia | - | none | - | part | NO |
+| par-cd-elasticnet | amd,nvidia | - | none | - | part | NO |
 | par-cholesky | amd,apple,nvidia | - | none | - | part | NO |
 | par-dbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-feature-freq | amd,apple,nvidia | - | none | - | part | NO |
 | par-forest | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
 | par-forest-et | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
-| par-forest-et-clf | nvidia | training | declared | - | part | NO |
+| par-forest-et-clf | amd,nvidia | training | declared | - | part | NO |
 | par-forest-pool | amd,nvidia | - | none | - | part | NO |
-| par-forest-reg | nvidia | training | declared | - | part | NO |
+| par-forest-reg | amd,nvidia | training | declared | - | part | NO |
 | par-gmm | amd,apple,nvidia | - | none | - | part | NO |
 | par-gp | amd,apple,nvidia | - | none | - | part | NO |
 | par-gram | amd,apple,nvidia | - | none | - | part | NO |
-| par-gram-ols | nvidia | - | none | - | part | NO |
-| par-gram-pca | nvidia | - | none | - | part | NO |
-| par-gram-tsvd | nvidia | - | none | - | part | NO |
+| par-gram-ols | amd,nvidia | - | none | - | part | NO |
+| par-gram-pca | amd,nvidia | - | none | - | part | NO |
+| par-gram-tsvd | amd,nvidia | - | none | - | part | NO |
 | par-graph-agglomerative | amd,apple,nvidia | - | none | - | part | NO |
 | par-graph-spectral | amd,apple,nvidia | - | none | - | n/a n/a:transductive (the par-graph-spectral lane fits without prediction_data; SpectralClustering.predict is the spectral lane's) | NO |
 | par-graph-umap | amd,apple,nvidia | - | none | - | part | NO |
@@ -555,7 +555,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-ordered-rmse | amd,apple,nvidia | - | none | - | part | NO |
 | par-queries-kde | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-queries-knn | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
-| par-queries-nn | nvidia | training | declared | - | part | NO |
+| par-queries-nn | amd,nvidia | training | declared | - | part | NO |
 | par-queries-radius | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-rbf-sampler | amd,nvidia | training | declared | - | part | NO |
 | par-reference-knn | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
@@ -564,9 +564,9 @@ A blank cell means no lane of this algorithm has that kind.
 | par-samba | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_cpu-par-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | par-samba-clip | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_cpu-par-samba/cpu-apple-m4.sabotage.json` | part | yes |
 | par-scaler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.sabotage.json` | part | yes |
-| par-scaler-minmax | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.sabotage.json` | part | yes |
+| par-scaler-minmax | amd,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.sabotage.json` | part | yes |
 | par-svm | amd,apple,nvidia | - | none | - | part | NO |
-| par-svm-svr | nvidia | - | none | - | part | NO |
+| par-svm-svr | amd,nvidia | - | none | - | part | NO |
 | pca | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca/pca/cpu-sabotage.json` | part | yes |
 | pca-full-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca-full-whiten/pca-full-whiten/cpu-sabotage.json` | part | yes |
 | pca-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca-whiten/pca-whiten/cpu-sabotage.json` | part | yes |
