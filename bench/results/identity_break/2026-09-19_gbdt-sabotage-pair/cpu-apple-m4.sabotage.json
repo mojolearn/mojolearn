@@ -1,0 +1,978 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "a2c20c8c018f010ea9cd6e587cfb5c94ce631083",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "gbdt-symmetric/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0c9691148c71de30",
+    "0c9691148c71de30"
+   ],
+   "parts": [
+    {
+     "predict": "275b941c0f31a1c9",
+     "proba": "57f901ec34240b7c"
+    },
+    {
+     "predict": "275b941c0f31a1c9",
+     "proba": "57f901ec34240b7c"
+    }
+   ],
+   "infer": [
+    "12d2573c42bd5dc6",
+    "12d2573c42bd5dc6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "8d3acba782a49378",
+    "8d3acba782a49378"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "12d2573c42bd5dc6",
+    "12d2573c42bd5dc6"
+   ],
+   "batch": [
+    "38f26df0ee8e97b4",
+    "38f26df0ee8e97b4"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 5.2136472089914605,
+    "stages": {
+     "repeat=1/train": 2.607047084005899,
+     "repeat=1/infer-save-reload": 0.056602790995384566,
+     "repeat=1/batch": 0.18456049999804236,
+     "repeat=2/train": 2.216139000011026,
+     "repeat=2/infer-save-reload": 0.020376125001348555,
+     "repeat=2/batch": 0.12835975000052713
+    }
+   }
+  },
+  "gbdt-ordered/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4449636a59b28c36",
+    "4449636a59b28c36"
+   ],
+   "parts": [
+    {
+     "predict": "9c142bdce0d6841a",
+     "proba": "14bff17e40792969",
+     "test_loss_curve": "cff66a11e6ad68b8",
+     "best_iteration": "9546741c3e816fac",
+     "rmse": "6da89019ae82bcc6",
+     "rmse_loss_curve": "e868cf8a843303e6"
+    },
+    {
+     "predict": "9c142bdce0d6841a",
+     "proba": "14bff17e40792969",
+     "test_loss_curve": "cff66a11e6ad68b8",
+     "best_iteration": "9546741c3e816fac",
+     "rmse": "6da89019ae82bcc6",
+     "rmse_loss_curve": "e868cf8a843303e6"
+    }
+   ],
+   "infer": [
+    "fce2851d28ae08db",
+    "fce2851d28ae08db"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a7ad5ff13d7ea180",
+    "a7ad5ff13d7ea180"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fce2851d28ae08db",
+    "fce2851d28ae08db"
+   ],
+   "batch": [
+    "2dd2028d1139e0f6",
+    "2dd2028d1139e0f6"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 123.98279874998843,
+    "stages": {
+     "repeat=1/train": 53.89814516699698,
+     "repeat=1/infer-save-reload": 0.02906250000523869,
+     "repeat=1/batch": 0.25135550000413787,
+     "repeat=2/train": 69.5810657920083,
+     "repeat=2/infer-save-reload": 0.030031665999558754,
+     "repeat=2/batch": 0.191443874995457
+    }
+   }
+  },
+  "gbdt-ordered-bayesian-noise/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a9fc1aefbf2bba33",
+    "a9fc1aefbf2bba33"
+   ],
+   "parts": [
+    {
+     "predict": "7564b048a8478401",
+     "newton_cosine": "a5695a92c6cc3d2e"
+    },
+    {
+     "predict": "7564b048a8478401",
+     "newton_cosine": "a5695a92c6cc3d2e"
+    }
+   ],
+   "infer": [
+    "d6af29c471d5aebe",
+    "d6af29c471d5aebe"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "722941ad934dcb31",
+    "722941ad934dcb31"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d6af29c471d5aebe",
+    "d6af29c471d5aebe"
+   ],
+   "batch": [
+    "f26492a099d7be36",
+    "f26492a099d7be36"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 176.00742870800605,
+    "stages": {
+     "repeat=1/train": 88.25758537500224,
+     "repeat=1/infer-save-reload": 0.012660583000979386,
+     "repeat=1/batch": 0.10402479200274684,
+     "repeat=2/train": 87.5114930409909,
+     "repeat=2/infer-save-reload": 0.017522333000670187,
+     "repeat=2/batch": 0.10162612500425894
+    }
+   }
+  },
+  "gbdt-catboost-defaults/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "be841e5c5fc5b8d6",
+    "be841e5c5fc5b8d6"
+   ],
+   "parts": [
+    {
+     "predict": "c485a93970c63ee5",
+     "learning_rate": "4d1a03eb57e71d03",
+     "classifier_proba": "27d4d450d5c09588",
+     "auto_rate_fit": "90185c04625435a1"
+    },
+    {
+     "predict": "c485a93970c63ee5",
+     "learning_rate": "4d1a03eb57e71d03",
+     "classifier_proba": "27d4d450d5c09588",
+     "auto_rate_fit": "90185c04625435a1"
+    }
+   ],
+   "infer": [
+    "3eee4ac9039c19c0",
+    "3eee4ac9039c19c0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "14f0aba984aec86b",
+    "14f0aba984aec86b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3eee4ac9039c19c0",
+    "3eee4ac9039c19c0"
+   ],
+   "batch": [
+    "321d88526c4904a8",
+    "321d88526c4904a8"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 3.3210780000081286,
+    "stages": {
+     "repeat=1/train": 1.5438839580019703,
+     "repeat=1/infer-save-reload": 0.017758041998604313,
+     "repeat=1/batch": 0.14842791599221528,
+     "repeat=2/train": 1.496195165993413,
+     "repeat=2/infer-save-reload": 0.017322917003184557,
+     "repeat=2/batch": 0.09709854199900292
+    }
+   }
+  },
+  "gbdt-bfa-quantile/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3ea9f7c92c6a4f57",
+    "3ea9f7c92c6a4f57"
+   ],
+   "parts": [
+    {
+     "MAE": "c0182acd55506753",
+     "Quantile": "9575762260380166",
+     "MAPE": "917599f8a84617b9",
+     "Ordered-MAE": "13776fcebbc48934"
+    },
+    {
+     "MAE": "c0182acd55506753",
+     "Quantile": "9575762260380166",
+     "MAPE": "917599f8a84617b9",
+     "Ordered-MAE": "13776fcebbc48934"
+    }
+   ],
+   "infer": [
+    "0b63d3b0a7e4501e",
+    "0b63d3b0a7e4501e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9551a6f2f6aafd32",
+    "9551a6f2f6aafd32"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0b63d3b0a7e4501e",
+    "0b63d3b0a7e4501e"
+   ],
+   "batch": [
+    "0a1513223fe607cc",
+    "0a1513223fe607cc"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 2.6159191249898868,
+    "stages": {
+     "repeat=1/train": 1.2485679169913055,
+     "repeat=1/infer-save-reload": 0.012980542000150308,
+     "repeat=1/batch": 0.1183608339924831,
+     "repeat=2/train": 1.1632767090050038,
+     "repeat=2/infer-save-reload": 0.009602542006177828,
+     "repeat=2/batch": 0.06267104200378526
+    }
+   }
+  },
+  "gbdt-border-types/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "25e617332ca5c366",
+    "25e617332ca5c366"
+   ],
+   "parts": [
+    {
+     "Median": "3e2cee7d8576c2dd",
+     "Median-heldout": "b256ea78667e268a",
+     "Uniform": "cde70ae11a817a39",
+     "Uniform-heldout": "cdc409e949c1f5fa",
+     "UniformAndQuantiles": "03436354c5c103a4",
+     "UniformAndQuantiles-heldout": "fbb6f3a170432dfd",
+     "MaxLogSum": "678dd9192b368a1b",
+     "MaxLogSum-heldout": "e8f127cf6444d5db",
+     "MinEntropy": "3e2cee7d8576c2dd",
+     "MinEntropy-heldout": "b256ea78667e268a",
+     "GreedyMinEntropy": "ae71a05e7ebc7a91",
+     "GreedyMinEntropy-heldout": "f6a1fb4404f47fa4"
+    },
+    {
+     "Median": "3e2cee7d8576c2dd",
+     "Median-heldout": "b256ea78667e268a",
+     "Uniform": "cde70ae11a817a39",
+     "Uniform-heldout": "cdc409e949c1f5fa",
+     "UniformAndQuantiles": "03436354c5c103a4",
+     "UniformAndQuantiles-heldout": "fbb6f3a170432dfd",
+     "MaxLogSum": "678dd9192b368a1b",
+     "MaxLogSum-heldout": "e8f127cf6444d5db",
+     "MinEntropy": "3e2cee7d8576c2dd",
+     "MinEntropy-heldout": "b256ea78667e268a",
+     "GreedyMinEntropy": "ae71a05e7ebc7a91",
+     "GreedyMinEntropy-heldout": "f6a1fb4404f47fa4"
+    }
+   ],
+   "infer": [
+    "b256ea78667e268a",
+    "b256ea78667e268a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "49021d0c13b53fa0",
+    "49021d0c13b53fa0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b256ea78667e268a",
+    "b256ea78667e268a"
+   ],
+   "batch": [
+    "cfd3896826ec2173",
+    "cfd3896826ec2173"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 5.51619620899146,
+    "stages": {
+     "repeat=1/train": 2.5155450830061454,
+     "repeat=1/infer-save-reload": 0.006893290992593393,
+     "repeat=1/batch": 0.06300737500714604,
+     "repeat=2/train": 2.7948240840050858,
+     "repeat=2/infer-save-reload": 0.007942083000671118,
+     "repeat=2/batch": 0.12757562499609776
+    }
+   }
+  },
+  "gbdt-ordered-rmse/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9dd143f4e8d00735",
+    "9dd143f4e8d00735"
+   ],
+   "parts": [
+    {
+     "predict": "af90e6d725eaeb5f"
+    },
+    {
+     "predict": "af90e6d725eaeb5f"
+    }
+   ],
+   "infer": [
+    "eca7b2b0109cc61c",
+    "eca7b2b0109cc61c"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7cce1e66213e0fda",
+    "7cce1e66213e0fda"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "eca7b2b0109cc61c",
+    "eca7b2b0109cc61c"
+   ],
+   "batch": [
+    "360e72516040992d",
+    "360e72516040992d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 10.889367542011314,
+    "stages": {
+     "repeat=1/train": 4.897669207988656,
+     "repeat=1/infer-save-reload": 0.020383458002470434,
+     "repeat=1/batch": 0.1102285840024706,
+     "repeat=2/train": 5.642492667000624,
+     "repeat=2/infer-save-reload": 0.026369957995484583,
+     "repeat=2/batch": 0.19141433300683275
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "9e01846a01b2350c755490e76b5a13157912e566298cb6361aa9851a31280d8a",
+    "size": 380760,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "57893aae0cf668f7a33238d2dd9caaa868d6aeee6c0e319f286c4560766979ec",
+    "size": 534488,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "4c11728fa084de9a05acb7e3161e933f913c75990f0815580c9e817e4661431e",
+    "size": 899000,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "96a9c02f866241cb2268889f2899d371e4220df87756e5ea2a813f5c39122254",
+    "size": 229344,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "e7e2dd7e8d6620f8f37d3b2adabd35b89b4708dc35b33d6ec628e949587f758c",
+    "size": 209184,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "c3a13f77a95b03a1b47ca70a97c4388e1f8d7ecf5a564f108f6596f8dcf42eb5",
+    "size": 665104,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "a1bc4d8fc3ae5a26f9e84434cf1978160d467c2e1eca534a34271c6b265e8741",
+    "size": 353304,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "2578035d32d2228ed749b1fb6c0714f565d4d82cad33c3004eb5752ca0785288",
+    "size": 500600,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "85eef2e2dda6797639f4bdfbeda14a2b34afbb3a132054c221e513010020f6f0",
+    "size": 1452264,
+    "sabotage": true
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "224efc08b645fc5ea3f78fb7ace7e65163e88122982e549dd3ed03e07322daf5",
+    "size": 451240,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "b7c1322c865fac620ba31b5bcd2adfd81013052bb3a76719f1e16f15b392cb1d",
+    "size": 288184,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "4426bc574006ed1c125301dba0aa6752d62fdbcc399600f4bb6961b3e346b2cb",
+    "size": 444584,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "6f51af4297cb3cf2bd9a2a9824c366edd7f65648cc397da0ab711403692d9874",
+    "size": 312880,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "c2aad18ac69defc74ef3abec888625a53ff6ab4e653ce3687464399504eb95b0",
+    "size": 450280,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "ff73a5ff36897aee2ce0732409fb35fe47c664229478fc1e28c5598f028a088e",
+    "size": 286160,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "cd66682c316ec27d8632e0f5e8c0f217fb952fe4c00596c43fcfc6f5fc651878",
+    "size": 352560,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "8ccf5c1cf74dacbe6f4c9fe3b76b5c35f2f607db083d2c3b1f366c22da3606f5",
+    "size": 349528,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "8319d12fed9cce63b5d6e458965fb8ada50cfc15f102758d38f68c95bc25acda",
+    "size": 1057416,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "99d42e5eacff3ef6f4d2426e4cd7091f7676b037a582e909bc3204c85c75db19",
+    "size": 780904,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "6da42b15a7de34e6540d5bbb6be1cc757f679efe1da2f5ba6278ccd6d84c62fc",
+    "size": 433560,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "910ddd35b31333950e3f6b8b848fb48acc2a2db1409fcc7edfb8162cf0f22060",
+    "size": 251872,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "389b1767c065fd5975202deb5a2dc7bc74f14416a84fac3ef3089d76a2f28057",
+    "size": 615816,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "74e6e2d7f54e3937d8267afa9954d59861ca84d86bc5f9182c2b02d8bdae302c",
+    "size": 235536,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "1d823e5fbdbe422ae628359eb256ee2e606e64124dc2cb10e1d0a6451e348dbb",
+    "size": 325880,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "ed5fcdb9e0d865ae5a7c4f788cd02884c1092aafa725b3e6577d445175603677",
+    "size": 528968,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "f3005712048835077c4b3ebcd3a62530dd9bfcd12d3f0cfc8ef6cfdec97521f2",
+    "size": 291448,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "f1e4acdc7733a6f31e02ada2bfded15c77aab680dab2c0a6744b1f2a14bc684f",
+    "size": 397496,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "27185fabca2bb6b912e148815a63327794476c2cfe72630f49a64360264e4642",
+    "size": 438048,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "999c8861a678b8bb1b5a20d7eb325729031a9c756c209f3f4f40bd7b853957c4",
+    "size": 413688,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "7a0b12024b6f323ae7fb8fce13bcb2c24f22c2bbd9ffe3cf18bd513a97dd4317",
+    "size": 424320,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "9123eca97c52d8e0e9afc6e60f4ccc206278552687b5951570e73946b0d75b77",
+    "size": 540840,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "c8937ac180331d85f6f854b7ecfad7cdc2d15b874da10374056da98938324682",
+    "size": 312904,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/pkg/cpu-package/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "16cd1fcc2f5f91f5b2ba9a177922c95e5aa30648891fdf16c65940ddf3847ea9",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "lanes": "gbdt-bfa-quantile,gbdt-border-types,gbdt-catboost-defaults,gbdt-ordered,gbdt-ordered-bayesian-noise,gbdt-ordered-rmse,gbdt-symmetric",
+   "skip": "",
+   "fixtures": "base",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "c52ba94a3205aa65209528c48880327c8532458fc6fc1394e350cfc4e41a1db5",
+  "provenance": {
+   "commit": "a2c20c8c018f010ea9cd6e587cfb5c94ce631083",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    }
+   }
+  }
+ }
+}
