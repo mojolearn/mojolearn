@@ -63,6 +63,8 @@ from std.math import exp, fma, inf, isnan
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
 from gemm.host.identical_gemm import (
     contract_leaf_size,
     fold_balanced_tree,
@@ -71,6 +73,7 @@ from gemm.host.identical_gemm import (
     leaf_end,
 )
 from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
+from core.host_predict_threads import HostF32Ptr, host_predict_chunk
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
@@ -914,6 +917,117 @@ def smo_oracle_decision[
             acc = _flush[dt](acc + Scalar[dt](0.5))
         out.append(_flush[dt](acc + res.b))
     return out^
+
+
+def smo_oracle_decision_into(
+    dual: HostF32Ptr,
+    support: HostF32Ptr,
+    n_support: Int,
+    query: HostF32Ptr,
+    n_query: Int,
+    n_features: Int,
+    kp: KernelParams,
+    b: Float32,
+    output: HostF32Ptr,
+    tasks: Int,
+) raises:
+    """Float32 ``smo_oracle_decision`` over borrowed model/query memory.
+
+    Support rows already arrive gathered in support order at the Python
+    boundary, so this door avoids copying them into Lists and gathering them
+    again through an identity index. Query rows are independent; tasks own
+    contiguous row ranges while every dot product retains the contract leaf
+    partition, ascending FMA chain, balanced fold, and ascending support
+    accumulation of ``smo_oracle_decision``.
+    """
+    var query_norms = List[Float32](length=n_query, fill=Float32(0.0))
+    var support_norms = List[Float32](length=n_support, fill=Float32(0.0))
+    if kp.kernel == KERNEL_RBF:
+        for i in range(n_query):
+            var acc = Float32(0.0)
+            for c in range(n_features):
+                var v = ftz(query.unsafe_load(i * n_features + c))
+                acc = ftz(identical_mul_add(v, v, acc))
+            query_norms[i] = ftz(acc)
+        for j in range(n_support):
+            var acc = Float32(0.0)
+            for c in range(n_features):
+                var v = ftz(support.unsafe_load(j * n_features + c))
+                acc = ftz(identical_mul_add(v, v, acc))
+            support_norms[j] = ftz(acc)
+
+    var task_count = tasks
+    if task_count < 1:
+        task_count = 1
+    if task_count > n_query:
+        task_count = n_query
+    var chunk = host_predict_chunk(n_query, task_count)
+    var qnp = query_norms.unsafe_ptr()
+    var snp = support_norms.unsafe_ptr()
+    var failed = List[Int](length=task_count, fill=0)
+    var fp = failed.unsafe_ptr()
+
+    def _rows(c: Int) {imm dual, imm support, imm query, imm output, imm qnp, imm snp, imm fp, imm chunk, imm n_query, imm n_support, imm n_features, imm kp, imm b}:
+        try:
+            var lo = c * chunk
+            var hi = min(lo + chunk, n_query)
+            var leaf = contract_leaf_size(n_features)
+            var pcount = leaf_count(n_features, leaf)
+            for i in range(lo, hi):
+                var acc = Float32(0.0)
+                # The fold copies its input, so one row-local leaf workspace
+                # can be overwritten for every support-vector cell.
+                var partials = List[Float32](length=pcount, fill=Float32(0.0))
+                for j in range(n_support):
+                    for t in range(pcount):
+                        var dot = Float32(0.0)
+                        comptime if SMO_ORACLE_HOST_SABOTAGE:
+                            var begin = leaf_begin(t, leaf)
+                            var end = leaf_end(t, leaf, n_features)
+                            for q in range(end - begin):
+                                var f = end - 1 - q
+                                dot = ftz(identical_mul_add(
+                                    ftz(query.unsafe_load(i * n_features + f)),
+                                    ftz(support.unsafe_load(j * n_features + f)), dot,
+                                ))
+                        else:
+                            for f in range(leaf_begin(t, leaf), leaf_end(t, leaf, n_features)):
+                                dot = ftz(identical_mul_add(
+                                    ftz(query.unsafe_load(i * n_features + f)),
+                                    ftz(support.unsafe_load(j * n_features + f)), dot,
+                                ))
+                        partials[t] = ftz(dot)
+                    var kij = fold_balanced_tree(partials)
+                    if kp.kernel == KERNEL_POLYNOMIAL:
+                        var pv = ftz(identical_mul_add(
+                            Float32(kp.gamma), ftz(kij), Float32(kp.coef0)
+                        ))
+                        kij = Float32(1.0)
+                        for _ in range(kp.degree):
+                            kij = ftz(identical_mul(kij, pv))
+                        comptime if SMO_ORACLE_HOST_SABOTAGE:
+                            kij = ftz(kij + Float32(0.5))
+                    elif kp.kernel == KERNEL_RBF:
+                        var s = ftz(
+                            ftz(ftz(qnp[i]) + ftz(snp[j]))
+                            - ftz(Float32(2.0) * ftz(kij))
+                        )
+                        kij = ftz(identical_exp(ftz((-Float32(kp.gamma)) * s)))
+                    acc = ftz(identical_mul_add(kij, dual.unsafe_load(j), acc))
+                comptime if SMO_ORACLE_HOST_SABOTAGE:
+                    acc = ftz(acc + Float32(0.5))
+                output.unsafe_store(i, ftz(acc + b))
+                _ = partials^
+        except:
+            fp[c] = 1
+
+    if task_count == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, task_count)
+    for c in range(task_count):
+        if failed[c] != 0:
+            raise Error("svm host: decision row chunk " + String(c) + " raised")
 
 
 def global_kkt_gap[
