@@ -1,11 +1,41 @@
 {
-  "status": "COMPLETED_CLASSICAL_JOBS_ONLY",
+  "status": "INCOMPLETE",
   "source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
   "vendor": "hip",
   "wheel_sha256": "51a06c755c23c05e6a2d99c67a78cf014ec2947c4d4a171bad5395f68d7fd6b5",
   "plan_sha256": "e182f4d95aede0f9851423bc8042772910e117f1d2dac8e3f0f4cc2d813a94a7",
   "expected_jobs": 32,
   "jobs": [
+    {
+      "id": "distributed",
+      "exit_code": 0,
+      "seconds": 58.97680067201145,
+      "complete": true,
+      "errors": []
+    },
+    {
+      "id": "cv",
+      "exit_code": 0,
+      "seconds": 20.25236764003057,
+      "complete": true,
+      "errors": []
+    },
+    {
+      "id": "loaded-lm-0-1",
+      "exit_code": 0,
+      "seconds": 97.33668906602543,
+      "complete": true,
+      "errors": [],
+      "matching_parts": 144
+    },
+    {
+      "id": "loaded-lm-1-0",
+      "exit_code": 0,
+      "seconds": 97.53337408299558,
+      "complete": true,
+      "errors": [],
+      "matching_parts": 144
+    },
     {
       "id": "par-arima-two",
       "exit_code": 0,
@@ -205,6 +235,52 @@
       "cells": 9
     },
     {
+      "id": "par-queries-radius-two",
+      "exit_code": 1,
+      "seconds": 32.23246675997507,
+      "matching_parts": 3,
+      "errors": [
+        [
+          "base",
+          "model",
+          [],
+          "2ee81955e923d21f"
+        ],
+        [
+          "denormal",
+          "model",
+          [],
+          "c6abf4949fd3ef45"
+        ],
+        [
+          "denormal_ftz",
+          "model",
+          [],
+          "83650c2063c0b192"
+        ],
+        [
+          "dupes",
+          "model",
+          [],
+          "5167cd08ec11b8bd"
+        ],
+        [
+          "negative",
+          "model",
+          [],
+          "86a355173ea5999a"
+        ],
+        [
+          "odd",
+          "model",
+          [],
+          "5f50d73e7a4f1146"
+        ]
+      ],
+      "complete": true,
+      "cells": 9
+    },
+    {
       "id": "par-scaler-two",
       "exit_code": 0,
       "seconds": 64.90743518806994,
@@ -230,7 +306,112 @@
       "errors": [],
       "complete": true,
       "cells": 9
+    },
+    {
+      "id": "par-graph-umap-two",
+      "exit_code": 124,
+      "seconds": 320.4734614540357,
+      "matching_parts": 20,
+      "errors": [
+        [
+          "denormal_ftz",
+          "batch",
+          [],
+          "6afb90d3cdd5b32f"
+        ],
+        [
+          "denormal_ftz",
+          "infer",
+          [],
+          "d3b17552fe76de7e"
+        ],
+        [
+          "denormal_ftz",
+          "model",
+          [],
+          "5889a802cc5cd9cc"
+        ],
+        [
+          "denormal_ftz",
+          "train",
+          [],
+          "ccfec6d66ea17fb3"
+        ],
+        [
+          "dupes",
+          "batch",
+          [],
+          "f3da34387964fee6"
+        ],
+        [
+          "dupes",
+          "infer",
+          [],
+          "01d01e040df02560"
+        ],
+        [
+          "dupes",
+          "model",
+          [],
+          "9b11e3caf5fdbf13"
+        ],
+        [
+          "dupes",
+          "train",
+          [],
+          "9ec2f266855a6302"
+        ],
+        [
+          "negative",
+          "batch",
+          [],
+          "c66407069061568f"
+        ],
+        [
+          "negative",
+          "infer",
+          [],
+          "dd796bb63a2bc9c3"
+        ],
+        [
+          "negative",
+          "model",
+          [],
+          "29643ed48b1ea061"
+        ],
+        [
+          "negative",
+          "train",
+          [],
+          "0d3ab3dcad302a48"
+        ],
+        [
+          "odd",
+          "batch",
+          [],
+          "ee25637280e38b12"
+        ],
+        [
+          "odd",
+          "infer",
+          [],
+          "3da4ff5741c4cbff"
+        ],
+        [
+          "odd",
+          "model",
+          [],
+          "338703ec3d735a5d"
+        ],
+        [
+          "odd",
+          "train",
+          [],
+          "9b9d0fa9ad02e0e4"
+        ]
+      ],
+      "complete": false,
+      "cells": 5
     }
-  ],
-  "scope": "Completed missing-part AMD jobs; partial and failed receipts retained separately"
+  ]
 }

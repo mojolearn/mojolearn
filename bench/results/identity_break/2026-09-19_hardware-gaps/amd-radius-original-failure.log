@@ -1,0 +1,116 @@
+26698 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x116880000000, nodemask=1)
+# vendor=amd-gfx942 commit=c3b5783cfee741673e6dd17fcb34f377ea50c6f5 (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-09-19 02:43:56  Linux-6.8.0-138-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START par-queries-radius/base repeat=1/train
+26711 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x314480000000, nodemask=1)
+26712 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701780000000, nodemask=1)
+# DONE par-queries-radius/base repeat=1/train 1.260s
+# CELL par-queries-radius/base REFUSED 1.260s
+# START par-queries-radius/ties repeat=1/train
+26747 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5375c0000000, nodemask=1)
+26748 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50b4c0000000, nodemask=1)
+# DONE par-queries-radius/ties repeat=1/train 2.117s
+# START par-queries-radius/ties repeat=1/infer-save-reload
+26790 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73d680000000, nodemask=1)
+26789 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x503340000000, nodemask=1)
+26825 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x111b40000000, nodemask=1)
+26826 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x116780000000, nodemask=1)
+# DONE par-queries-radius/ties repeat=1/infer-save-reload 2.495s
+# START par-queries-radius/ties repeat=2/train
+26864 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51cb80000000, nodemask=1)
+26863 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3000c0000000, nodemask=1)
+# DONE par-queries-radius/ties repeat=2/train 1.308s
+# START par-queries-radius/ties repeat=2/infer-save-reload
+26908 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x504600000000, nodemask=1)
+26909 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x512880000000, nodemask=1)
+26948 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73aac0000000, nodemask=1)
+26947 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538280000000, nodemask=1)
+# DONE par-queries-radius/ties repeat=2/infer-save-reload 2.492s
+# CELL par-queries-radius/ties STABLE 8.412s
+# START par-queries-radius/hashed repeat=1/train
+26983 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13a580000000, nodemask=1)
+26984 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x72ab00000000, nodemask=1)
+# DONE par-queries-radius/hashed repeat=1/train 1.297s
+# START par-queries-radius/hashed repeat=1/infer-save-reload
+27020 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x300800000000, nodemask=1)
+27019 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534680000000, nodemask=1)
+27055 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x509900000000, nodemask=1)
+27056 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x133540000000, nodemask=1)
+# DONE par-queries-radius/hashed repeat=1/infer-save-reload 2.510s
+# START par-queries-radius/hashed repeat=2/train
+27092 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x13ba80000000, nodemask=1)
+27091 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x327940000000, nodemask=1)
+# DONE par-queries-radius/hashed repeat=2/train 1.257s
+# START par-queries-radius/hashed repeat=2/infer-save-reload
+27127 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33f940000000, nodemask=1)
+27128 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x703bc0000000, nodemask=1)
+27164 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3290c0000000, nodemask=1)
+27163 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x710100000000, nodemask=1)
+# DONE par-queries-radius/hashed repeat=2/infer-save-reload 2.505s
+# CELL par-queries-radius/hashed STABLE 7.568s
+# START par-queries-radius/wide repeat=1/train
+27199 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x333200000000, nodemask=1)
+27200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x708140000000, nodemask=1)
+# DONE par-queries-radius/wide repeat=1/train 1.277s
+# START par-queries-radius/wide repeat=1/infer-save-reload
+27235 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x502d00000000, nodemask=1)
+27236 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x330c80000000, nodemask=1)
+27271 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70a2c0000000, nodemask=1)
+27272 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51a400000000, nodemask=1)
+# DONE par-queries-radius/wide repeat=1/infer-save-reload 2.587s
+# START par-queries-radius/wide repeat=2/train
+27308 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x102c40000000, nodemask=1)
+27307 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x52d5c0000000, nodemask=1)
+# DONE par-queries-radius/wide repeat=2/train 1.239s
+# START par-queries-radius/wide repeat=2/infer-save-reload
+27355 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535100000000, nodemask=1)
+27354 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x30fc00000000, nodemask=1)
+27392 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x523c40000000, nodemask=1)
+27391 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x51ba80000000, nodemask=1)
+# DONE par-queries-radius/wide repeat=2/infer-save-reload 2.526s
+# CELL par-queries-radius/wide STABLE 7.630s
+# START par-queries-radius/denormal repeat=1/train
+27427 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11cf80000000, nodemask=1)
+27428 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x73a5c0000000, nodemask=1)
+# DONE par-queries-radius/denormal repeat=1/train 1.266s
+# CELL par-queries-radius/denormal REFUSED 1.266s
+# START par-queries-radius/denormal_ftz repeat=1/train
+27464 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x518b00000000, nodemask=1)
+27463 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x315ac0000000, nodemask=1)
+# DONE par-queries-radius/denormal_ftz repeat=1/train 1.288s
+# CELL par-queries-radius/denormal_ftz REFUSED 1.288s
+# START par-queries-radius/dupes repeat=1/train
+27499 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538d80000000, nodemask=1)
+27500 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5162c0000000, nodemask=1)
+# DONE par-queries-radius/dupes repeat=1/train 1.276s
+# CELL par-queries-radius/dupes REFUSED 1.276s
+# START par-queries-radius/odd repeat=1/train
+27536 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x312c00000000, nodemask=1)
+27535 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31b340000000, nodemask=1)
+# DONE par-queries-radius/odd repeat=1/train 1.254s
+# CELL par-queries-radius/odd REFUSED 1.254s
+# START par-queries-radius/negative repeat=1/train
+27572 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x502300000000, nodemask=1)
+27571 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x716dc0000000, nodemask=1)
+# DONE par-queries-radius/negative repeat=1/train 1.270s
+# CELL par-queries-radius/negative REFUSED 1.270s
+| par-queries-radius     | REFUSED          | d4e4484a004f4042 | cdc57602d696879d | 4ea06c29cad72c3a | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| par-queries-radius infer | REFUSED          | 5f3eec45e2afb437 | 362bee6da9e01a6a | 2561486a5ba9ea00 | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| par-queries-radius model | REFUSED          | 57306f414d5af0b4 | d6588b0e2d717746 | 76078d052fa5fc25 | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+| par-queries-radius batch | REFUSED          | n/a:skipped (--no-batch) | n/a:skipped (--no-batch) | n/a:skipped (--no-batch) | REFUSED          | REFUSED          | REFUSED          | REFUSED          | REFUSED          |
+
+cells=9 stable=3 moved=0 refused=6
+infer: stable=3
+model: stable=3
+batch: n/a=3
+n/a: par-queries-radius batch n/a:skipped (--no-batch)
+REFUSED par-queries-radius/base: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+REFUSED par-queries-radius/denormal: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+REFUSED par-queries-radius/denormal_ftz: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+REFUSED par-queries-radius/dupes: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+REFUSED par-queries-radius/odd: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+REFUSED par-queries-radius/negative: TypeError: int() argument must be a string, a bytes-like object or a real number, not 'Array'
+wrote /root/gemm_leg_out/release-build/par-queries-radius-two.json
