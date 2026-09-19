@@ -15,6 +15,14 @@ Publication is not claimed here.
 - 228 registered lanes on this main snapshot. The frozen release has 229:
   main removed the explicit `kmeans-cosine` refusal lane, not a working cosine
   implementation.
+  - RECOUNTED 2026-09-19: main carries **236**. The 228 above is correct AT ITS
+    OWN COMMIT `c7442abed` and is kept so the audit stays reproducible; eight
+    lanes landed after it, none removed. They are the kernel-family variants
+    `kernel-ridge-laplacian`, `kernel-ridge-poly`, `kernel-ridge-sigmoid`,
+    `nystroem-laplacian`, `nystroem-poly`, `nystroem-sigmoid`, and the two
+    tokenizer lanes `bpe-vocabulary` and `tokenized-corpus`. Any count here
+    ages the moment a lane lands: read it from `identity_break.LANES` by
+    import, as `tools/lane_select.py` does, never from this file.
 
 The old scanner missed every API under the nested `models` package. It now
 reads package and child-module export lists without importing them, resolves
