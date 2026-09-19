@@ -1,0 +1,110 @@
+{
+  "status": "COMPLETED_CLASSICAL_JOBS_ONLY",
+  "source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
+  "vendor": "hip",
+  "wheel_sha256": "51a06c755c23c05e6a2d99c67a78cf014ec2947c4d4a171bad5395f68d7fd6b5",
+  "plan_sha256": "e182f4d95aede0f9851423bc8042772910e117f1d2dac8e3f0f4cc2d813a94a7",
+  "expected_jobs": 32,
+  "jobs": [
+    {
+      "id": "par-arima-two",
+      "exit_code": 0,
+      "seconds": 32.09001129202079,
+      "matching_parts": 9,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-boosting-clf-two",
+      "exit_code": 0,
+      "seconds": 44.76772246998735,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-boosting-reg-two",
+      "exit_code": 0,
+      "seconds": 41.76212735509034,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-cd-two",
+      "exit_code": 0,
+      "seconds": 33.2423156760633,
+      "matching_parts": 9,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-cd-elasticnet-two",
+      "exit_code": 0,
+      "seconds": 33.39333984896075,
+      "matching_parts": 36,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-cholesky-two",
+      "exit_code": 0,
+      "seconds": 132.2152367340168,
+      "matching_parts": 9,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-dbscan-two",
+      "exit_code": 0,
+      "seconds": 38.74775306403171,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-forest-et-clf-two",
+      "exit_code": 0,
+      "seconds": 27.73057403205894,
+      "matching_parts": 36,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-forest-reg-two",
+      "exit_code": 0,
+      "seconds": 27.73039990302641,
+      "matching_parts": 36,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-gmm-two",
+      "exit_code": 0,
+      "seconds": 172.59682484995574,
+      "matching_parts": 9,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-gp-two",
+      "exit_code": 0,
+      "seconds": 61.84919158509001,
+      "matching_parts": 9,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    }
+  ],
+  "scope": "Completed missing-part AMD jobs; partial and remaining jobs are retained externally"
+}

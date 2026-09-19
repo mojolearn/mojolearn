@@ -76,3 +76,7 @@ traces remain outside these claims. Classical AMD missing-part captures continue
 NVIDIA single-device resampling is complete. The previous H100 pod was deleted
 and confirmed absent; eight two-device resampling batch witnesses are being
 captured in a final bounded gap-only pass.
+
+Eleven AMD classical missing-part captures are now retained, covering234 new
+fixture-parts with zero mismatches. The completed-job summary lists the exact
+lanes and counts; the remaining AMD jobs are still running.
