@@ -160,12 +160,15 @@ def transformer_host_forward(
     window: Int,
     k_in: List[Float32],
     v_in: List[Float32],
+    emit_cache: Bool = True,
 ) raises -> TransformerHostForward:
     """`transformer_forward` (and, at L = 1, `transformer_decode_step`) on
     the host. `k_in`/`v_in` are the caller's caches in the device layout,
     `b * n_kv * cap * head_dim` floats (cap = window, or smax); an empty
     pair is a zero cache (the stateless prefill, `transformer_forward_fresh`,
-    passes that with smax = L and s0 = 0)."""
+    passes that with smax = L and s0 = 0). `emit_cache=False` is the fresh
+    prefill's output contract: it still computes and consumes the same cache
+    during attention, but does not copy that cache into the returned record."""
     var dims = w.dims.copy()
     var nkv = dims.n_kv_heads
     var hd = dims.head_dim
@@ -211,6 +214,14 @@ def transformer_host_forward(
     var out = TransformerHostForward()
     out.y = st.residual2_out.copy()
     out.cached_tokens = cache.used
+    # A fresh/stateless prefill has no caller-visible cache.  The public
+    # bindings used to materialize two B*n_kv*capacity*head_dim lists here
+    # and immediately discard them.  Keep the default for direct callers
+    # and carried decoding, but let that production entry avoid the copies.
+    if not emit_cache:
+        _ = st^
+        _ = rope^
+        return out^
     if window > 0:
         out.k_cache = cache.k.copy()
         out.v_cache = cache.v.copy()
