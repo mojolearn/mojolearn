@@ -9616,6 +9616,34 @@ def _run_reference(args):
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
                       rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS))
+        # A DEGENERATE CELL READS AS COVERAGE (2026-09-19). `verify_lanes.py`
+        # asks `lane_applicability.check()` whether a lane can state its
+        # proposition on the column being run, and REFUSES the ones that
+        # cannot. Running THIS FILE directly bypasses that: on 2026-09-19 the
+        # three host-routed lanes were run against an Apple column and each
+        # produced NINE STABLE CELLS, which in any summary is indistinguishable
+        # from coverage. The column now says so about itself, so a reader and
+        # `_verify_reference.admit` can both see it without re-deriving the
+        # rule. Recorded, not refused: a record that names its own weakness is
+        # worth more than one that was never written.
+        try:
+            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            import lane_applicability as _la
+            _la.use_harness(sys.modules[__name__])   # never exec this file twice
+            # FROM THE LOADED BACKEND, NOT A FLAG. `identity_break.py` has no
+            # `--backend`; the first draft of this check read one and was
+            # therefore INERT -- it could never fire, which is the same defect
+            # it exists to catch. `ml.vendor()` is what actually ran.
+            _col = dict(cpu="cpu-host", metal="apple-metal",
+                        cuda="nvidia-1gpu", hip="amd-1gpu").get(str(ml.vendor()))
+            if _col:
+                _deg = set(_la.degenerate(_col))
+                _hit = sorted({k.split("/", 1)[0] for k in cells} & _deg)
+                if _hit:
+                    record["degenerate_lanes"] = _hit
+                    record["degenerate_column"] = _col
+        except Exception as exc:        # never lose a column over this check
+            record["degenerate_check_error"] = f"{type(exc).__name__}: {exc}"[:200]
         host_infer = _host_infer_lanes()
         if host_infer is not None:
             record["host_infer"] = "all" if host_infer is True else sorted(host_infer)

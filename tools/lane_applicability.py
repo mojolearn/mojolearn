@@ -156,6 +156,20 @@ _IB = None
 _HS = None
 
 
+def use_harness(mod):
+    """Use an ALREADY-LOADED harness instead of executing the file again.
+
+    `identity_break.py` calls this on itself so it can ask whether the lanes
+    it is about to RECORD can state their proposition on the column it is
+    recording (2026-09-19). Without it, importing this module from inside the
+    harness would exec ~10k lines a second time under a second name and
+    re-register all 247 lanes, and the two registries could then drift inside
+    one process -- which is the exact class of bug this file exists to catch.
+    """
+    global _IB
+    _IB = mod
+
+
 def identity_break():
     """The harness, IMPORTED. The registry is the source of the lane set; no
     grep of `@lane(` sees the 23 lanes that register by call."""
