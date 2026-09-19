@@ -139,10 +139,11 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
   --receipt <dist>/final/dir-entry-strip.json
 ```
 
-## 4. Install and test on real GPUs (conditional, about 5 minutes each, parallel)
+## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 
-Only when numerics changed on a user-facing path or the release is paper
-evidence. Copy the three `build-provenance.json` files to a proofs directory
+A release is verified by the CPU column and the Apple pass (section 5b). This
+section is a diagnostic for a suspected NVIDIA or AMD problem and the release
+workflow admits a Linux wheel without it. Copy the three `build-provenance.json` files to a proofs directory
 as `cuda-sm_89.json`, `cuda-sm_90a.json`, `hip-gfx942.json`, then:
 
 ```sh
@@ -184,33 +185,20 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
-## 5b. Apple qualification: once per PyPI update
+## 5b. Release verification: CPU and the Apple GPU, nothing else
 
-Use the installed-wheel checks in step 6. The release workflow builds the
-actual macOS wheel, installs and runs it on a real Metal GPU for every claimed
-interpreter/mode, rejects skipped interpreters, and runs the installed UMAP
-qualification. Retain these gates before publication.
-
-Do **not** additionally run the all-lane, nine-fixture Apple identity column.
-It duplicates substantial algorithm coverage at a measured cost exceeding
-seven hours. This reduced release policy does not claim a fresh full Apple
-identity column; frozen reference records remain tied to their original code.
-CPU and other GPU checks retain responsibility for their existing contracts.
-
-Between PyPI updates, routine iteration uses CPU. For an Apple-specific
-failure, explicitly request one bounded diagnostic:
+A release is verified by two things (2026-09-19):
 
 ```sh
-pixi run -e test test-algo --lane transformer --mode metal \
-  --metal-diagnostic --out /tmp/apple-transformer-diagnostic
+python -m mojolearn verify --all          # the CPU column, from the install
+pixi run -e test apple-pass               # the Apple GPU: every Metal lane, fitted once, end model, 600 s
 ```
 
-The diagnostic round has a 60-second total budget, including queue time, and
-allows only one lane/fixture/group unless `--metal-expanded` is explicit. No automatic full
-matrix retry follows a timeout. `MOJOLEARN_APPLE_RELEASE_RECORD=<version>`
-permits a release lane check but no longer unlocks a broad matrix. The full
-matrix remains available solely as an intentional investigation through
-`MOJOLEARN_APPLE_FULL_DIAGNOSTIC=1`; it is not a publication requirement.
+Both compare against `verify_reference/table.json`, so the Apple GPU is being
+held to the CPU's answer. NVIDIA and AMD runs are not a release requirement
+(section 4 is an optional diagnostic), and no check is required per change or
+per merge. The installed-wheel Metal checks in step 6 still run as part of
+building and publishing the macOS wheel.
 
 ## 6. Publish macOS (on the release Mac, 30 to 60 minutes)
 

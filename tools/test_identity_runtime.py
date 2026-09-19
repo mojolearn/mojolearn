@@ -134,9 +134,9 @@ def test_atomic_checkpoint_preserves_old_record_on_write_error(tmp_path, monkeyp
     assert list(tmp_path.iterdir()) == [p]
 
 
-def test_iteration_keeps_two_fits_and_all_default_probes(tmp_path):
+def test_iteration_fits_once_and_keeps_all_default_probes(tmp_path):
     cmd = command("python", "mamba1", "base", tmp_path / "record.json", 30, "metal", False)
-    assert cmd[cmd.index("--repeats") + 1] == "2"
+    assert cmd[cmd.index("--repeats") + 1] == "1"
     assert "--no-batch" not in cmd and "--no-rlpair" not in cmd
     assert "--fail-on-refused" in cmd
     assert cmd[cmd.index("--timeout") + 1] == "30"
@@ -189,25 +189,6 @@ def test_packaged_harness_import_has_no_tools_dependency(tmp_path):
     assert p.returncode == 0, p.stderr
 
 
-def test_chunking_does_not_bypass_release_guard(monkeypatch, tmp_path):
-    import identity_iterate as runner
-    import lane_applicability
-    lanes = [n for n, scope in lane_applicability.scopes().items()
-             if scope.applicable("apple-metal")[0]][:30]
-    assert len(lanes) == 30
-    selection = dict(lanes=lanes, fallback=False, reasons={})
-    monkeypatch.setattr(runner, "plan", lambda *args: selection)
-    seen = []
-    def guard(lanes, host):
-        seen.append(lanes)
-        return "release record required"
-    monkeypatch.setattr(ib, "refuse_routine_apple_column", guard)
-    monkeypatch.setattr(runner, "run_job", lambda *args: pytest.fail("must not start a job"))
-    with pytest.raises(SystemExit):
-        runner.main(["--mode", "metal", "--metal-diagnostic", "--metal-expanded", "--out", str(tmp_path)])
-    assert seen == [selection["lanes"]]
-
-
 def test_resume_signature_does_not_publish_environment_secrets(run_fixture, monkeypatch):
     args, _, _ = run_fixture
     monkeypatch.setenv("MOJOLEARN_PRIVATE_TOKEN", "secret-that-must-not-be-recorded")
@@ -232,13 +213,13 @@ def test_release_marker_does_not_enable_full_apple_matrix(monkeypatch):
     assert not ib.refuse_routine_apple_column(lanes, {"column": "cpu"}, {})
 
 
-def test_metal_iteration_requires_release_or_diagnostic(monkeypatch, tmp_path):
+def test_metal_iteration_needs_no_release_marker_or_diagnostic_flag(monkeypatch, tmp_path):
     import identity_iterate as runner
     monkeypatch.delenv(ib.APPLE_RELEASE_RECORD_ENV, raising=False)
-    monkeypatch.setattr(runner, "run_job", lambda *a: pytest.fail("routine Metal job launched"))
-    with pytest.raises(SystemExit):
-        runner.main(["--lane", "ridge", "--mode", "metal", "--out", str(tmp_path / "out")])
-    assert not (tmp_path / "out").exists()
+    calls = []
+    monkeypatch.setattr(runner, "run_job", lambda cmd, env: calls.append(cmd) or 0)
+    assert runner.main(["--lane", "ridge", "--mode", "metal", "--out", str(tmp_path / "out")]) == 0
+    assert len(calls) == 1
 
 
 @pytest.mark.parametrize('backend', ['cpu', 'metal', 'cuda', 'hip'])

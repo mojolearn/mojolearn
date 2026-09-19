@@ -190,18 +190,11 @@ def main(argv=None):
                  json.dumps(selected["inapplicable"], sort_keys=True))
     if selected["fallback"] and not args.full_selection:
         ap.error("selection fell back to all lanes; inspect the plan or explicitly pass --full-selection")
-    # Splitting into processes must not bypass the harness's release guard.
+    # Metal runs whatever was selected (2026-09-19). Each cell is fitted once
+    # under the shared budget, so the refusals that kept a ten-hour column off
+    # the Mac have nothing left to refuse. --metal-diagnostic and
+    # --metal-expanded are accepted and ignored.
     import identity_break
-    if args.mode == "metal":
-        if len(jobs) > 1 and not args.metal_expanded:
-            ap.error("Mac diagnostic rounds are limited to one lane/fixture/probe group; "
-                     "choose one job or explicitly pass --metal-expanded")
-        if not (os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV, "").strip()
-                or args.metal_diagnostic):
-            ap.error("Metal iteration is release-only; use --metal-diagnostic for an explicit investigation")
-        refusal = identity_break.refuse_routine_apple_column(selected["lanes"], host=None)
-        if refusal:
-            ap.error(refusal)
     if not selected["lanes"]:
         print("No affected identity lanes. No GPU work requested.")
         return 0

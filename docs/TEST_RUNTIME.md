@@ -61,8 +61,8 @@ unchanged. Skipped probes are recorded N/A with their skip reason.
 Changed-path selection is also supported by `test-identity-changed --base REF`.
 Naming a lane does not prove coverage of a shared numerical primitive. A
 selector fallback refuses execution unless `--full-selection` is explicit.
-`--mode metal` requires a release marker or `--metal-diagnostic`, and remains
-subject to the broad-matrix guard;
+`--mode metal` runs whatever is selected, with no release marker or diagnostic
+flag (2026-09-19);
 `--mode run` reserves CPU capacity but uses the installation's chosen backend,
 for legacy callers. Prefer explicit `--mode cuda` (NVIDIA) or `--mode hip`
 (AMD), which reserve the GPU lease and check the loaded backend. None is the
@@ -186,7 +186,7 @@ Unknown paths and shared numerical dependencies retain conservative selection.
 
 ```sh
 pixi run -e test test-algo --lane transformer --mode metal \
-  --metal-diagnostic --out /tmp/apple-transformer-core
+  --out /tmp/apple-transformer-core
 ```
 
 The default runs one base fixture and one core group, with one fit, under a
@@ -194,9 +194,8 @@ The default runs one base fixture and one core group, with one fit, under a
 `--probe-group batch` or `--probe-group rlpair`. An arbitrary single fixture
 can be selected with `--fixtures NAME` without broadening the round.
 
-The runner refuses multiple jobs unless `--metal-expanded` is explicit, even
-with a release marker. Expanded jobs still share the one-minute budget unless
-`--budget` is also changed. This does not change installed-wheel release gates.
+Several jobs share the one-minute budget unless `--budget` is also changed.
+`--metal-diagnostic` and `--metal-expanded` are accepted and ignored. This does not change installed-wheel release gates.
 No Apple runtime speedup is implied: this limits the amount tested per round.
 
 ## The same controls on CPU, AMD and NVIDIA

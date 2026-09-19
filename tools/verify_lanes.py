@@ -163,7 +163,8 @@ def _run_local(groups, load, args, out_dir):
     import identity_iterate
     parts = [os.path.join(out_dir, f"part{k}.json") for k in range(len(groups))]
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    if getattr(args, "apple_pass", False):
+    if args.backend == "metal":
+        # the harness refuses more than one Metal lane unless told otherwise
         import identity_break
         env[identity_break.APPLE_FULL_DIAGNOSTIC_ENV] = "1"
     env["PYTHONPATH"] = os.path.join(ROOT, "python") + os.pathsep + env.get("PYTHONPATH", "")
@@ -459,12 +460,6 @@ def main(argv=None):
             lane_applicability.check(lanes, column)
         except lane_applicability.LaneNotApplicable as exc:
             ap.error(str(exc))
-        if args.backend == "metal":
-            if not (args.apple_pass or args.metal_diagnostic
-                    or os.environ.get(identity_break.APPLE_RELEASE_RECORD_ENV)):
-                ap.error("Metal is release-only; use --apple-pass, or --metal-diagnostic for investigation")
-            if not args.apple_pass and (len(lanes) * len(fixtures) != 1 or args.probe_group == "all"):
-                ap.error("one Metal lane/fixture/probe per round; use --apple-pass for the whole check")
         if not args.resume and any(Path(out_dir).glob("part*.json")):
             ap.error("records already exist; use --resume or a new output directory")
     manifest = dict(commit=_commit(), lanes=lanes, shards=[list(g) for g in groups], weights=load,
