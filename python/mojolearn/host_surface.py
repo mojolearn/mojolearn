@@ -818,6 +818,19 @@ TRAINING_LANE_NAMES = {
     # shard's own predict and forecast are this family's and the tsa
     # family's host bindings. Before that all four entries refused by name
     # on every CPU install and had no lane at all.
+    #
+    # MEASURED 2026-09-19 on the M4's CPU column, one core, at --repeats 2,
+    # against arima and tsa host bindings built from this source in the same
+    # session: both lanes STABLE on all four columns (train, infer, model,
+    # batch); every one of those eight cells MOVED under
+    # MOJOLEARN_HOST_SABOTAGE=1 rebuilds of those two families, so the lanes
+    # reach the host arithmetic and are not hashing Python; the batch part
+    # read BATCH_MOVED on both under MOJOLEARN_IDENTITY_BATCH_SABOTAGE=1; and
+    # five deliberate breaks of the DRIVER (a shard handed the series one to
+    # its left, the merge pairing reversed, and a shard dropped) made both
+    # cells REFUSE -- three of them through the in-cell oracle by byte count
+    # ("predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ:
+    # 1836 bytes of 8192"), two through the drivers' own shape guard.
     "par-forecast-arima": "the series-sharded ARIMA prediction and forecast drivers",
     "par-forecast-holtwinters": "the series-sharded Holt-Winters prediction and forecast drivers",
     # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
