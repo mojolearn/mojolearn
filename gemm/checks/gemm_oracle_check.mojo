@@ -78,6 +78,7 @@ from gemm.checks.gemm_oracle import (
     gemm_oracle,
     gemm_oracle_at_leaf,
     gemm_oracle_cell,
+    gemm_oracle_right_zero_padded,
     gemm_oracle_serial,
     leaf_begin,
     leaf_count,
@@ -1933,6 +1934,75 @@ def check_serial_oracle_is_the_one_leaf_case() raises:
     print("check_serial_oracle_is_the_one_leaf_case OK [" + _mode_name() + "]")
 
 
+def check_right_zero_padding_elision() raises:
+    """Compressing a shared exact-zero k suffix preserves every output bit.
+
+    The lengths straddle both v1 leaves at k=256 and include empty, partial,
+    exact-boundary and full cases. Signed zeros in the real prefix exercise
+    the observable zero-FMA normalization that the compressed spelling must
+    retain.
+    """
+    comptime k = 256
+    comptime m = 3
+    comptime n = 4
+    var lengths = List[Int](
+        [0, 1, 7, 127, 128, 129, 255, 256]
+    )
+    for op in List[Int]([OP_NN, OP_NT, OP_TN]):
+        for real in lengths:
+            var a = List[Float32]()
+            var b = List[Float32]()
+            if op == OP_TN:
+                for p in range(k):
+                    for i in range(m):
+                        var v = Float32(0.0)
+                        if p < real:
+                            v = Float32((p * 5 + i * 3) % 11 - 5) * Float32(0.25)
+                            if (p + i) % 17 == 0:
+                                v = Float32(-0.0)
+                        a.append(v)
+            else:
+                for i in range(m):
+                    for p in range(k):
+                        var v = Float32(0.0)
+                        if p < real:
+                            v = Float32((p * 5 + i * 3) % 11 - 5) * Float32(0.25)
+                            if (p + i) % 17 == 0:
+                                v = Float32(-0.0)
+                        a.append(v)
+            if op == OP_NT:
+                for j in range(n):
+                    for p in range(k):
+                        var v = Float32(0.0)
+                        if p < real:
+                            v = Float32((p * 7 + j * 2) % 13 - 6) * Float32(0.125)
+                            if (p + j) % 19 == 0:
+                                v = Float32(-0.0)
+                        b.append(v)
+            else:
+                for p in range(k):
+                    for j in range(n):
+                        var v = Float32(0.0)
+                        if p < real:
+                            v = Float32((p * 7 + j * 2) % 13 - 6) * Float32(0.125)
+                            if (p + j) % 19 == 0:
+                                v = Float32(-0.0)
+                        b.append(v)
+            var full = gemm_oracle(a, b, op, m, n, k)
+            var compressed = gemm_oracle_right_zero_padded(
+                a, b, op, m, n, k, real
+            )
+            for q in range(m * n):
+                if _bits(full[q]) != _bits(compressed[q]):
+                    raise Error(
+                        "right-zero elision moved op=" + op_name(op)
+                        + " real_k=" + String(real) + " cell=" + String(q)
+                        + ": full " + _show(full[q]) + " compressed "
+                        + _show(compressed[q])
+                    )
+    print("check_right_zero_padding_elision OK [" + _mode_name() + "]")
+
+
 # ===========================================================================
 # F7: THE ODD-LEAF CARRY, SEPARATED FROM ZERO PADDING
 # ===========================================================================
@@ -2531,6 +2601,7 @@ def main() raises:
     check_fold_tree_addressing()
     check_oracle_matches_the_contract_spelling()
     check_serial_oracle_is_the_one_leaf_case()
+    check_right_zero_padding_elision()
     check_orientations_agree()
     check_f1_serial_vs_splitk()
     check_f2_partition_count()

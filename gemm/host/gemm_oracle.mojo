@@ -618,6 +618,96 @@ def gemm_oracle(
     return gemm_oracle_at_leaf(a, b, op, m, n, k, contract_leaf_size(k))
 
 
+def oracle_leaf_partial_right_zero_padded(
+    a: List[Float32],
+    b: List[Float32],
+    op: Int,
+    i: Int,
+    j: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+    real_k: Int,
+    p_begin: Int,
+    p_end: Int,
+) -> Float32:
+    """One v1 leaf when both operands are exact +0.0 at ``p >= real_k``.
+
+    The logical ``k``, leaf boundaries and fold tree do not change. Only the
+    repeated zero products are compressed. In the normal order a padded tail
+    still performs one zero FMA: it observably turns a real prefix ending at
+    -0.0 into +0.0. Every later zero FMA is then bitwise inert. In the legacy
+    descending sabotage order the padding precedes the real terms and leaves
+    the +0.0 seed unchanged, so there is no trailing operation to simulate.
+    """
+    var active_end = p_end
+    if active_end > real_k:
+        active_end = real_k
+    if active_end < p_begin:
+        active_end = p_begin
+    var acc = Float32(0.0)
+    comptime if GEMM_ORACLE_SABOTAGE_ORDER_ARM:
+        for q in range(active_end - p_begin):
+            var p = active_end - 1 - q
+            acc = ftz(
+                identical_mul_add(
+                    ftz(_a_at(a, op, i, p, m, k)),
+                    ftz(_b_at(b, op, p, j, n, k)),
+                    acc,
+                )
+            )
+    else:
+        for p in range(p_begin, active_end):
+            acc = ftz(
+                identical_mul_add(
+                    ftz(_a_at(a, op, i, p, m, k)),
+                    ftz(_b_at(b, op, p, j, n, k)),
+                    acc,
+                )
+            )
+        if active_end < p_end:
+            acc = ftz(
+                identical_mul_add(Float32(0.0), Float32(0.0), acc)
+            )
+    comptime if GEMM_ORACLE_SABOTAGE_VALUE_ARM:
+        return gemm_oracle_sabotage_value_flip(ftz(acc))
+    return ftz(acc)
+
+
+def gemm_oracle_right_zero_padded(
+    a: List[Float32],
+    b: List[Float32],
+    op: Int,
+    m: Int,
+    n: Int,
+    k: Int,
+    real_k: Int,
+) raises -> List[Float32]:
+    """The normative ``m x n`` v1 product with a shared exact-zero suffix.
+
+    Bitwise equal to ``gemm_oracle(..., k)`` when both logical operands read
+    +0.0 for every contraction position in ``[real_k, k)``. This is not a
+    smaller GEMM: leaf size and the balanced fold remain functions of ``k``.
+    """
+    if real_k < 0 or real_k > k:
+        raise Error("gemm_oracle_right_zero_padded: real_k must be in [0, k]")
+    var leaf = contract_leaf_size(k)
+    var pcount = leaf_count(k, leaf)
+    var out = List[Float32]()
+    for i in range(m):
+        for j in range(n):
+            var partials = List[Float32]()
+            for t in range(pcount):
+                partials.append(
+                    oracle_leaf_partial_right_zero_padded(
+                        a, b, op, i, j, m, n, k, real_k,
+                        leaf_begin(t, leaf), leaf_end(t, leaf, k),
+                    )
+                )
+            out.append(fold_balanced_tree(partials))
+    return out^
+
+
 def gemm_oracle_serial_cell(
     a: List[Float32],
     b: List[Float32],

@@ -73,7 +73,13 @@ from checks.numerics import (
     identical_silu,
     identical_softplus,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
+from gemm.checks.gemm_oracle import (
+    OP_NN,
+    OP_NT,
+    OP_TN,
+    gemm_oracle,
+    gemm_oracle_right_zero_padded,
+)
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba2_fixture import (
     M2_CHUNK_SIZE,
@@ -508,7 +514,9 @@ def ssd_core_oracle(
 
                 # ---- S16: chunk_states = B_decay^T . X_d over chunk
                 #      positions (k = Q = 256), output [P, N] per (b,c,h).
-                var cstate = gemm_oracle(xd_chunk, bd, OP_TN, p_dim, n_state, q)
+                var cstate = gemm_oracle_right_zero_padded(
+                    xd_chunk, bd, OP_TN, p_dim, n_state, q, real
+                )
                 var cbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
                 for i in range(p_dim * n_state):
                     st.cstate_out[cbase + i] = cstate[i]

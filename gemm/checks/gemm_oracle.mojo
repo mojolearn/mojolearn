@@ -24,6 +24,7 @@ from gemm.host.gemm_oracle import (
     fold_node_is_carry,
     fold_node_total,
     gemm_oracle,
+    gemm_oracle_right_zero_padded,
     gemm_oracle_at_leaf,
     gemm_oracle_cell,
     gemm_oracle_serial,
@@ -33,4 +34,5 @@ from gemm.host.gemm_oracle import (
     leaf_end,
     op_name,
     oracle_leaf_partial,
+    oracle_leaf_partial_right_zero_padded,
 )
