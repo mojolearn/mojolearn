@@ -27,9 +27,9 @@ The four kinds, for one lane:
 ## The numbers
 
 - Lanes: **241** (190 single-device, 51 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **251**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **166** of 251.
-- Source public API entries with NO IDENTITY LANE AT ALL: **33**.
+- Source public API entries enumerated from the public API: **244**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **165** of 244.
+- Source public API entries with NO IDENTITY LANE AT ALL: **27**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
 
@@ -37,10 +37,10 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 200 | 51 |
-| cpu verifier | 182 | 69 |
-| sabotage seen to move a build | 180 | 71 |
-| batch part or named n/a | 216 | 35 |
+| gpu column | 199 | 45 |
+| cpu verifier | 181 | 63 |
+| sabotage seen to move a build | 179 | 65 |
+| batch part or named n/a | 215 | 29 |
 
 Per kind, over the lanes:
 
@@ -87,13 +87,7 @@ means a CPU path exists and only the identity lane is missing.
 | `models.ParallelCausalLM` | class | - | `python/mojolearn/models/parallel_causal_lm.py` |
 | `models.SafetensorsFile` | class | - | `python/mojolearn/models/safetensors.py` |
 | `models.Tokenizer` | class | - | `python/mojolearn/models/tokenizer.py` |
-| `models.causal_lm.CausalLM` | class | - | `python/mojolearn/models/causal_lm.py` |
-| `models.config.plan_for` | function | - | `python/mojolearn/models/config.py` |
-| `models.parallel_causal_lm.ParallelCausalLM` | class | - | `python/mojolearn/models/parallel_causal_lm.py` |
 | `models.plan_for` | function | - | `python/mojolearn/models/config.py` |
-| `models.safetensors.Checkpoint` | class | - | `python/mojolearn/models/safetensors.py` |
-| `models.safetensors.SafetensorsFile` | class | - | `python/mojolearn/models/safetensors.py` |
-| `models.tokenizer.Tokenizer` | class | - | `python/mojolearn/models/tokenizer.py` |
 | `models.tokenizer.pattern_name` | function | - | `python/mojolearn/models/tokenizer.py` |
 | `models.tokenizer.pretokenize` | function | - | `python/mojolearn/models/tokenizer.py` |
 | `parallel_forecasting.forecast_arima` | function | - | `python/mojolearn/parallel_forecasting.py` |
@@ -252,7 +246,6 @@ A blank cell means no lane of this algorithm has that kind.
 | `lm_corpus.tokenizer_for` | 1 |  | training | seen(build) | n/a | NO |
 | `lowbit.format_of` | **0** |  |  |  |  | NO |
 | `lowbit.is_packed` | **0** |  |  |  |  | NO |
-| `lowbit.materialize` (alias of `unpack`) | 4 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `lowbit.materialize_one` | **0** |  |  |  |  | NO |
 | `lowbit.pack` | 12 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `lowbit.pack_one` | **0** |  |  |  |  | NO |
@@ -297,13 +290,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `models.ParallelCausalLM` | **0** |  |  |  |  | NO |
 | `models.SafetensorsFile` | **0** |  |  |  |  | NO |
 | `models.Tokenizer` | **0** |  |  |  |  | NO |
-| `models.causal_lm.CausalLM` | **0** |  |  |  |  | NO |
-| `models.config.plan_for` | **0** |  |  |  |  | NO |
-| `models.parallel_causal_lm.ParallelCausalLM` | **0** |  |  |  |  | NO |
 | `models.plan_for` | **0** |  |  |  |  | NO |
-| `models.safetensors.Checkpoint` | **0** |  |  |  |  | NO |
-| `models.safetensors.SafetensorsFile` | **0** |  |  |  |  | NO |
-| `models.tokenizer.Tokenizer` | **0** |  |  |  |  | NO |
 | `models.tokenizer.pattern_name` | **0** |  |  |  |  | NO |
 | `models.tokenizer.pretokenize` | **0** |  |  |  |  | NO |
 | `neural_network.SmallMLPTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |

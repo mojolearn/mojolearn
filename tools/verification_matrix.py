@@ -707,6 +707,42 @@ def algorithm_rows(harness, lanes, surface, harness_refs, family_of):
                    else "UNDECLARED" if rowset else ""),
             four=bool(rowset) and any(has_four(r) for r in rowset),
         )
+    # COLLAPSE PACKAGE RE-EXPORTS (2026-09-19). A public package's
+    # `__init__.py` says `from .causal_lm import CausalLM`, so
+    # `models.CausalLM` and `models.causal_lm.CausalLM` ARE THE SAME OBJECT.
+    # Verified by identity, not inferred: all six `models.*` pairs answer
+    # True to `is`. `package_export` already resolves both to one `target`;
+    # what was missing is that the ROW was still keyed by name, so one class
+    # counted twice.
+    #
+    # It inflated the public-surface total and, worse, it inflated the GAP.
+    # The 2026-09-19 audit read "35 entries with no identity lane", and SIX
+    # of those were a second name for an object whose other name sat in the
+    # same list. A number that double-counts is not a measure of what is
+    # untested, and this one was about to send an agent to write lanes for
+    # classes that already had a name in the queue.
+    #
+    # The kept name is the SHORTEST, which is the one a caller writes
+    # (`models.CausalLM`, not `models.causal_lm.CausalLM`); the others are
+    # listed in `reexport_of` so the collapse can be audited rather than
+    # taken on trust.
+    by_target = {}
+    for name, row in algos.items():
+        key = (row.get("where"), row.get("alias") or name.split(".")[-1])
+        by_target.setdefault(key, []).append(name)
+    for (where, _), names in by_target.items():
+        if len(names) < 2 or not where:
+            continue
+        # only collapse names inside ONE package, never across the surface
+        if len({n.split(".")[0] for n in names}) != 1:
+            continue
+        keep = min(names, key=lambda n: (n.count("."), len(n)))
+        merged = sorted({l for n in names for l in algos[n]["lanes"]})
+        algos[keep]["lanes"] = merged
+        algos[keep]["reexport_of"] = sorted(n for n in names if n != keep)
+        for n in names:
+            if n != keep:
+                del algos[n]
     return algos
 
 
