@@ -126,6 +126,7 @@ The restatement is a prediction until measured. The CPU identity gate
 """
 from std.math import sqrt
 from std.sys.compile import is_defined
+from std.builtin.sort import sort
 
 from checks.kernel_matrix import (
     K_LIB_WEIGHTED_VERTEX_DEG,
@@ -492,16 +493,19 @@ def host_weighted_degree(
 
 
 def host_sorted_row(row: List[Int32]) -> List[Int32]:
-    """A CSR row in ascending column order (insertion sort; the columns of
-    one row are unique)."""
+    """A CSR row in ascending column order; the columns are unique.
+
+    The weighted RBC path needs this exact order before distributing the
+    columns across the pinned reduction's lanes.  Use the standard host sort
+    rather than insertion sort: a dense epsilon neighbourhood can contain
+    every sample, and doing a quadratic sort independently for every row
+    made the CPU product and its identity proof needlessly quadratic on top
+    of neighbourhood construction.  Sorting integer column ids performs no
+    floating-point arithmetic and therefore cannot move the weighted fold's
+    bits.
+    """
     var out = row.copy()
-    for a in range(1, len(out)):
-        var v = out[a]
-        var b = a - 1
-        while b >= 0 and out[b] > v:
-            out[b + 1] = out[b]
-            b -= 1
-        out[b + 1] = v
+    sort(out)
     return out^
 
 
