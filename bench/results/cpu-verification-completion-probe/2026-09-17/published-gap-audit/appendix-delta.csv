@@ -1,0 +1,32 @@
+lane,why_not_in_appendix
+bpe-vocabulary,added after publication
+gemm-bf16,low-bit GEMM profile, added after publication
+gemm-int8,low-bit GEMM profile, added after publication
+gp-optimize,added after publication
+gp-optimize-restarts,added after publication
+kernel-ridge-laplacian,kernel variant of a lane the appendix already maps
+kernel-ridge-poly,kernel variant of a lane the appendix already maps
+kernel-ridge-sigmoid,kernel variant of a lane the appendix already maps
+language-model-config,configuration object, not an algorithm
+linalg-eigh,decomposition exposed under its own name, 2026-09-19
+linalg-qr,decomposition exposed under its own name, 2026-09-19
+linalg-svdvals,decomposition exposed under its own name, 2026-09-19
+mamba1-bf16w,weight-format variant of a lane the appendix already maps
+mamba1-int8w,weight-format variant of a lane the appendix already maps
+mamba2-bf16w,weight-format variant of a lane the appendix already maps
+mamba2-int8w,weight-format variant of a lane the appendix already maps
+mamba3-bf16w,weight-format variant of a lane the appendix already maps
+mamba3-int8w,weight-format variant of a lane the appendix already maps
+metrics-homogeneity-completeness,added after publication
+mlp-bf16w,weight-format variant of a lane the appendix already maps
+mlp-int8w,weight-format variant of a lane the appendix already maps
+nystroem-laplacian,kernel variant of a lane the appendix already maps
+nystroem-poly,kernel variant of a lane the appendix already maps
+nystroem-sigmoid,kernel variant of a lane the appendix already maps
+ordered-gradient-sum,added after publication
+par-ivf,multi-device driver lane
+samba-bf16w,weight-format variant of a lane the appendix already maps
+samba-int8w,weight-format variant of a lane the appendix already maps
+tokenized-corpus,added after publication
+transformer-bf16w,weight-format variant of a lane the appendix already maps
+transformer-int8w,weight-format variant of a lane the appendix already maps

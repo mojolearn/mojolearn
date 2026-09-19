@@ -20,6 +20,17 @@ not run new numerical qualification. Counts below describe different scopes.
 | Historical appendix entries | 246 | Old catalog of algorithm/variant/API labels, not the harness denominator |
 | Current harness routes absent from that appendix mapping | 26 | Catalog maintenance is owed |
 
+> **DERIVED SINCE 2026-09-19.** That 26 was counted by hand and has already
+> moved: `python3 tools/appendix_delta.py` reads `identity_break.LANES` by
+> import and reports **31** today, the five additions being `linalg-qr`,
+> `linalg-eigh`, `linalg-svdvals`, `par-ivf` and `language-model-config`.
+> The companion `appendix-delta.csv` carries a REASON per lane, because
+> most are weight-format or kernel variants of an algorithm the appendix
+> already maps, and one is a configuration object -- counting them as new
+> algorithms is the arithmetic the paragraph below refuses. **246 stays
+> frozen**: it records what was published, and a row added to it rewrites
+> a published claim.
+
 The 246-entry catalog maps 244 entries to harness routes. HostForest and HostGBDT
 are the other two: representative bundled saved models and dedicated gates
 cover them. They are not two unimplemented algorithms. Nor can we add 26 to 246
