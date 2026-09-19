@@ -9,7 +9,8 @@ GPU hashes remain a conflict, and an actual result mismatch remains DIVERGENT.
 
 The targeted reference update is limited to 12 GPU parallel lanes with 148 missing numerical reference entries, nine existing
 fixtures and two repeats on Apple, NVIDIA and AMD. Raw records and the strict
-three-column comparison accompany admission. Existing references outside those
+comparison accompany admission. Eleven lanes have three-GPU agreement; resampling
+has complete Apple/AMD agreement and its partial NVIDIA capture is not admitted. Existing references outside those
 lanes are preserved. These results do not add CPU routes, prove physical multi-GPU
 execution, or establish the paper's broader every-variant four-device claim.
 
@@ -17,3 +18,9 @@ Native libraries are inherited unchanged from published 0.8.7. The new overlay
 path checks unchanged native compile inputs and records package/native sources
 separately. Each final platform wheel requires one bounded installed smoke;
 unrelated algorithms and unchanged native builds are not repeated.
+
+The admitted record is `bench/results/identity_break/2026-09-18_parallel-reference-gaps/`.
+It fills exactly 148 missing numerical entries without changing any existing
+numerical reference. All other lane cells remain unchanged. Focused validation:
+121 verifier/coverage tests, 20 packaging tests, six light-policy tests, and the
+generated documentation/version check. The prepared publisher defaults to light.

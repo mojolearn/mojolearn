@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|------------|------------------|------------------|------------------|
+| par-nystroem/base            | IDENTICAL x3 | aae6380f2f56be82 | aae6380f2f56be82 | aae6380f2f56be82 |
+| par-nystroem/denormal        | IDENTICAL x3 | ec590e2c3bd3531b | ec590e2c3bd3531b | ec590e2c3bd3531b |
+| par-nystroem/denormal_ftz    | IDENTICAL x3 | 7a6ea946ad1a60a8 | 7a6ea946ad1a60a8 | 7a6ea946ad1a60a8 |
+| par-nystroem/dupes           | IDENTICAL x3 | aae6380f2f56be82 | aae6380f2f56be82 | aae6380f2f56be82 |
+| par-nystroem/hashed          | IDENTICAL x3 | 02892320d4f84705 | 02892320d4f84705 | 02892320d4f84705 |
+| par-nystroem/negative        | IDENTICAL x3 | a9079a52c3854fc1 | a9079a52c3854fc1 | a9079a52c3854fc1 |
+| par-nystroem/odd             | IDENTICAL x3 | b00ab3f7ed67c9bf | b00ab3f7ed67c9bf | b00ab3f7ed67c9bf |
+| par-nystroem/ties            | IDENTICAL x3 | 97fda97320e4388d | 97fda97320e4388d | 97fda97320e4388d |
+| par-nystroem/wide            | IDENTICAL x3 | e1e61f3ff6e03ef8 | e1e61f3ff6e03ef8 | e1e61f3ff6e03ef8 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| par-nystroem/base            | infer  | IDENTICAL x3 | 2dbdb63a8dcc0c48 | 2dbdb63a8dcc0c48 | 2dbdb63a8dcc0c48 |
+| par-nystroem/base            | model  | IDENTICAL x3 | a5466ab1415a655f | a5466ab1415a655f | a5466ab1415a655f |
+| par-nystroem/base            | batch  | IDENTICAL x3 | 0624cb5240294709 | 0624cb5240294709 | 0624cb5240294709 |
+| par-nystroem/base            | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/denormal        | infer  | IDENTICAL x3 | 0990abeba452b473 | 0990abeba452b473 | 0990abeba452b473 |
+| par-nystroem/denormal        | model  | IDENTICAL x3 | c7130b301bdeb477 | c7130b301bdeb477 | c7130b301bdeb477 |
+| par-nystroem/denormal        | batch  | IDENTICAL x3 | 4d1d99cd53b5e54a | 4d1d99cd53b5e54a | 4d1d99cd53b5e54a |
+| par-nystroem/denormal        | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/denormal_ftz    | infer  | IDENTICAL x3 | 0990abeba452b473 | 0990abeba452b473 | 0990abeba452b473 |
+| par-nystroem/denormal_ftz    | model  | IDENTICAL x3 | b58cccd4538cf27f | b58cccd4538cf27f | b58cccd4538cf27f |
+| par-nystroem/denormal_ftz    | batch  | IDENTICAL x3 | 4d1d99cd53b5e54a | 4d1d99cd53b5e54a | 4d1d99cd53b5e54a |
+| par-nystroem/denormal_ftz    | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/dupes           | infer  | IDENTICAL x3 | 2dbdb63a8dcc0c48 | 2dbdb63a8dcc0c48 | 2dbdb63a8dcc0c48 |
+| par-nystroem/dupes           | model  | IDENTICAL x3 | a5466ab1415a655f | a5466ab1415a655f | a5466ab1415a655f |
+| par-nystroem/dupes           | batch  | IDENTICAL x3 | 0624cb5240294709 | 0624cb5240294709 | 0624cb5240294709 |
+| par-nystroem/dupes           | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/hashed          | infer  | IDENTICAL x3 | c68b66ccd1cf02e8 | c68b66ccd1cf02e8 | c68b66ccd1cf02e8 |
+| par-nystroem/hashed          | model  | IDENTICAL x3 | 47b1d119b7711ead | 47b1d119b7711ead | 47b1d119b7711ead |
+| par-nystroem/hashed          | batch  | IDENTICAL x3 | 1705ab1ff92ddb8b | 1705ab1ff92ddb8b | 1705ab1ff92ddb8b |
+| par-nystroem/hashed          | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/negative        | infer  | IDENTICAL x3 | adb2029a96fbdc15 | adb2029a96fbdc15 | adb2029a96fbdc15 |
+| par-nystroem/negative        | model  | IDENTICAL x3 | a08c0eb59e7d2805 | a08c0eb59e7d2805 | a08c0eb59e7d2805 |
+| par-nystroem/negative        | batch  | IDENTICAL x3 | 346efc342404e395 | 346efc342404e395 | 346efc342404e395 |
+| par-nystroem/negative        | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/odd             | infer  | IDENTICAL x3 | e98e2c933562f4d1 | e98e2c933562f4d1 | e98e2c933562f4d1 |
+| par-nystroem/odd             | model  | IDENTICAL x3 | 1ea3d7c5c0589289 | 1ea3d7c5c0589289 | 1ea3d7c5c0589289 |
+| par-nystroem/odd             | batch  | IDENTICAL x3 | 016621899148ff93 | 016621899148ff93 | 016621899148ff93 |
+| par-nystroem/odd             | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/ties            | infer  | IDENTICAL x3 | da003c13c9ae6377 | da003c13c9ae6377 | da003c13c9ae6377 |
+| par-nystroem/ties            | model  | IDENTICAL x3 | 83da63df2246dc62 | 83da63df2246dc62 | 83da63df2246dc62 |
+| par-nystroem/ties            | batch  | IDENTICAL x3 | 6e36d683a22843f5 | 6e36d683a22843f5 | 6e36d683a22843f5 |
+| par-nystroem/ties            | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-nystroem/wide            | infer  | IDENTICAL x3 | 92d3ae4a690748e3 | 92d3ae4a690748e3 | 92d3ae4a690748e3 |
+| par-nystroem/wide            | model  | IDENTICAL x3 | 83ea4650e2b1e3c0 | 83ea4650e2b1e3c0 | 83ea4650e2b1e3c0 |
+| par-nystroem/wide            | batch  | IDENTICAL x3 | fa20d57225f7cfcf | fa20d57225f7cfcf | fa20d57225f7cfcf |
+| par-nystroem/wide            | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): NOT-COMPARED=9
+require-columns 3 over ['par-nystroem']: OK

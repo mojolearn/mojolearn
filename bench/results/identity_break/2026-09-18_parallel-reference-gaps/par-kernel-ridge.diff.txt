@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|------------|------------------|------------------|------------------|
+| par-kernel-ridge/base        | IDENTICAL x3 | e243a5ab9bfb9ff5 | e243a5ab9bfb9ff5 | e243a5ab9bfb9ff5 |
+| par-kernel-ridge/denormal    | IDENTICAL x3 | 021f596e13389e34 | 021f596e13389e34 | 021f596e13389e34 |
+| par-kernel-ridge/denormal_ftz | IDENTICAL x3 | 021f596e13389e34 | 021f596e13389e34 | 021f596e13389e34 |
+| par-kernel-ridge/dupes       | IDENTICAL x3 | 74f913d1e444dd2c | 74f913d1e444dd2c | 74f913d1e444dd2c |
+| par-kernel-ridge/hashed      | IDENTICAL x3 | 9724eb1fe4ac3ba8 | 9724eb1fe4ac3ba8 | 9724eb1fe4ac3ba8 |
+| par-kernel-ridge/negative    | IDENTICAL x3 | 615029952e8564af | 615029952e8564af | 615029952e8564af |
+| par-kernel-ridge/odd         | IDENTICAL x3 | ed8548d95da45760 | ed8548d95da45760 | ed8548d95da45760 |
+| par-kernel-ridge/ties        | IDENTICAL x3 | cb949195fbe57da4 | cb949195fbe57da4 | cb949195fbe57da4 |
+| par-kernel-ridge/wide        | IDENTICAL x3 | 778d274001c930f3 | 778d274001c930f3 | 778d274001c930f3 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| par-kernel-ridge/base        | infer  | IDENTICAL x3 | debe00d116acc0e0 | debe00d116acc0e0 | debe00d116acc0e0 |
+| par-kernel-ridge/base        | model  | IDENTICAL x3 | 9a6ab1c1cacac805 | 9a6ab1c1cacac805 | 9a6ab1c1cacac805 |
+| par-kernel-ridge/base        | batch  | IDENTICAL x3 | 6763a1e46d080fa1 | 6763a1e46d080fa1 | 6763a1e46d080fa1 |
+| par-kernel-ridge/base        | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/denormal    | infer  | IDENTICAL x3 | c6b85f3201238961 | c6b85f3201238961 | c6b85f3201238961 |
+| par-kernel-ridge/denormal    | model  | IDENTICAL x3 | 6c8e7be0f6ef2188 | 6c8e7be0f6ef2188 | 6c8e7be0f6ef2188 |
+| par-kernel-ridge/denormal    | batch  | IDENTICAL x3 | 61a579018c7f9c91 | 61a579018c7f9c91 | 61a579018c7f9c91 |
+| par-kernel-ridge/denormal    | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/denormal_ftz | infer  | IDENTICAL x3 | c6b85f3201238961 | c6b85f3201238961 | c6b85f3201238961 |
+| par-kernel-ridge/denormal_ftz | model  | IDENTICAL x3 | 24be7c6ab594923d | 24be7c6ab594923d | 24be7c6ab594923d |
+| par-kernel-ridge/denormal_ftz | batch  | IDENTICAL x3 | 61a579018c7f9c91 | 61a579018c7f9c91 | 61a579018c7f9c91 |
+| par-kernel-ridge/denormal_ftz | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/dupes       | infer  | IDENTICAL x3 | 6a917442c8867fc0 | 6a917442c8867fc0 | 6a917442c8867fc0 |
+| par-kernel-ridge/dupes       | model  | IDENTICAL x3 | 47bfec674163e0c7 | 47bfec674163e0c7 | 47bfec674163e0c7 |
+| par-kernel-ridge/dupes       | batch  | IDENTICAL x3 | 1674f75d1b15edc2 | 1674f75d1b15edc2 | 1674f75d1b15edc2 |
+| par-kernel-ridge/dupes       | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/hashed      | infer  | IDENTICAL x3 | 0cea735359aaede1 | 0cea735359aaede1 | 0cea735359aaede1 |
+| par-kernel-ridge/hashed      | model  | IDENTICAL x3 | 1f87a429e9107ba1 | 1f87a429e9107ba1 | 1f87a429e9107ba1 |
+| par-kernel-ridge/hashed      | batch  | IDENTICAL x3 | 86478e83304fcc7d | 86478e83304fcc7d | 86478e83304fcc7d |
+| par-kernel-ridge/hashed      | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/negative    | infer  | IDENTICAL x3 | 11e7372259fb0002 | 11e7372259fb0002 | 11e7372259fb0002 |
+| par-kernel-ridge/negative    | model  | IDENTICAL x3 | cb2d09094c04cbb1 | cb2d09094c04cbb1 | cb2d09094c04cbb1 |
+| par-kernel-ridge/negative    | batch  | IDENTICAL x3 | a10cc498407c239a | a10cc498407c239a | a10cc498407c239a |
+| par-kernel-ridge/negative    | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/odd         | infer  | IDENTICAL x3 | 0f217cc91b475113 | 0f217cc91b475113 | 0f217cc91b475113 |
+| par-kernel-ridge/odd         | model  | IDENTICAL x3 | b74150c13b8412d7 | b74150c13b8412d7 | b74150c13b8412d7 |
+| par-kernel-ridge/odd         | batch  | IDENTICAL x3 | a5852d6fb4d951f2 | a5852d6fb4d951f2 | a5852d6fb4d951f2 |
+| par-kernel-ridge/odd         | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/ties        | infer  | IDENTICAL x3 | df5816c733355692 | df5816c733355692 | df5816c733355692 |
+| par-kernel-ridge/ties        | model  | IDENTICAL x3 | 56eb82130d1dfdc6 | 56eb82130d1dfdc6 | 56eb82130d1dfdc6 |
+| par-kernel-ridge/ties        | batch  | IDENTICAL x3 | 841571214fc43760 | 841571214fc43760 | 841571214fc43760 |
+| par-kernel-ridge/ties        | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kernel-ridge/wide        | infer  | IDENTICAL x3 | 933d43107f4dd76d | 933d43107f4dd76d | 933d43107f4dd76d |
+| par-kernel-ridge/wide        | model  | IDENTICAL x3 | 233aabd6c5216872 | 233aabd6c5216872 | 233aabd6c5216872 |
+| par-kernel-ridge/wide        | batch  | IDENTICAL x3 | c76cee1eb7ceeda5 | c76cee1eb7ceeda5 | c76cee1eb7ceeda5 |
+| par-kernel-ridge/wide        | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): NOT-COMPARED=9
+require-columns 3 over ['par-kernel-ridge']: OK

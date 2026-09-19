@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|------------|------------------|------------------|------------------|
+| par-graph-agglomerative/base | IDENTICAL x3 | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f |
+| par-graph-agglomerative/denormal | IDENTICAL x3 | 32a85ba63aeea62c | 32a85ba63aeea62c | 32a85ba63aeea62c |
+| par-graph-agglomerative/denormal_ftz | IDENTICAL x3 | 32a85ba63aeea62c | 32a85ba63aeea62c | 32a85ba63aeea62c |
+| par-graph-agglomerative/dupes | IDENTICAL x3 | 6c9e7daffb48878f | 6c9e7daffb48878f | 6c9e7daffb48878f |
+| par-graph-agglomerative/hashed | IDENTICAL x3 | c8df70938834dd47 | c8df70938834dd47 | c8df70938834dd47 |
+| par-graph-agglomerative/negative | IDENTICAL x3 | 66ecfd892fa3e932 | 66ecfd892fa3e932 | 66ecfd892fa3e932 |
+| par-graph-agglomerative/odd  | IDENTICAL x3 | 7ef92e7a27f33416 | 7ef92e7a27f33416 | 7ef92e7a27f33416 |
+| par-graph-agglomerative/ties | IDENTICAL x3 | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c |
+| par-graph-agglomerative/wide | IDENTICAL x3 | b3ac8c835fd42259 | b3ac8c835fd42259 | b3ac8c835fd42259 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| par-graph-agglomerative/base | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/base | model  | IDENTICAL x3 | 9bb9f86300c44f5f | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| par-graph-agglomerative/base | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/base | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/denormal | infer  | IDENTICAL x3 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 |
+| par-graph-agglomerative/denormal | model  | IDENTICAL x3 | 0749a7721feb2709 | 0749a7721feb2709 | 0749a7721feb2709 |
+| par-graph-agglomerative/denormal | batch  | IDENTICAL x3 | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 |
+| par-graph-agglomerative/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/denormal_ftz | infer  | IDENTICAL x3 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 | 2b2d3f329eec69f7 |
+| par-graph-agglomerative/denormal_ftz | model  | IDENTICAL x3 | 60f83b3658dd10ab | 60f83b3658dd10ab | 60f83b3658dd10ab |
+| par-graph-agglomerative/denormal_ftz | batch  | IDENTICAL x3 | a2740d2ed4d74812 | a2740d2ed4d74812 | a2740d2ed4d74812 |
+| par-graph-agglomerative/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/dupes | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/dupes | model  | IDENTICAL x3 | 9bb9f86300c44f5f | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| par-graph-agglomerative/dupes | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/dupes | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/hashed | infer  | IDENTICAL x3 | 26e420cf82c51709 | 26e420cf82c51709 | 26e420cf82c51709 |
+| par-graph-agglomerative/hashed | model  | IDENTICAL x3 | a18b7b9941cdcfc6 | a18b7b9941cdcfc6 | a18b7b9941cdcfc6 |
+| par-graph-agglomerative/hashed | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/hashed | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/negative | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/negative | model  | IDENTICAL x3 | 573732d2cc0397a8 | 573732d2cc0397a8 | 573732d2cc0397a8 |
+| par-graph-agglomerative/negative | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/odd  | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/odd  | model  | IDENTICAL x3 | dc518a35765a3b5c | dc518a35765a3b5c | dc518a35765a3b5c |
+| par-graph-agglomerative/odd  | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/odd  | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/ties | infer  | IDENTICAL x3 | d161892b4ef55128 | d161892b4ef55128 | d161892b4ef55128 |
+| par-graph-agglomerative/ties | model  | IDENTICAL x3 | 64a8cd1101ec17ba | 64a8cd1101ec17ba | 64a8cd1101ec17ba |
+| par-graph-agglomerative/ties | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/ties | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/wide | infer  | IDENTICAL x3 | 3a6472714f51d8ab | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/wide | model  | IDENTICAL x3 | 921238d7a4940b9c | 921238d7a4940b9c | 921238d7a4940b9c |
+| par-graph-agglomerative/wide | batch  | IDENTICAL x3 | a8e67882b424a053 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/wide | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): N/A=9
+require-columns 3 over ['par-graph-agglomerative']: OK

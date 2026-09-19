@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       |
+|------------------------------|------------|------------------|------------------|
+| par-resample/base            | IDENTICAL x2 | 16b7c5812583951d | 16b7c5812583951d |
+| par-resample/denormal        | IDENTICAL x2 | afe735a9eaf62c84 | afe735a9eaf62c84 |
+| par-resample/denormal_ftz    | IDENTICAL x2 | afe735a9eaf62c84 | afe735a9eaf62c84 |
+| par-resample/dupes           | IDENTICAL x2 | efd0083badfd7ff2 | efd0083badfd7ff2 |
+| par-resample/hashed          | IDENTICAL x2 | 7bf2b557d8949793 | 7bf2b557d8949793 |
+| par-resample/negative        | IDENTICAL x2 | 1018b1bbba5e41e4 | 1018b1bbba5e41e4 |
+| par-resample/odd             | IDENTICAL x2 | f6838acea7906089 | f6838acea7906089 |
+| par-resample/ties            | IDENTICAL x2 | ee360747ea316f42 | ee360747ea316f42 |
+| par-resample/wide            | IDENTICAL x2 | aba528d158fe9172 | aba528d158fe9172 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-resample/base            | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/base            | batch  | IDENTICAL x2 | e234c2830f21479b | e234c2830f21479b |
+| par-resample/base            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/denormal        | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/denormal        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/denormal        | batch  | IDENTICAL x2 | 2cc6cdaaad3d21eb | 2cc6cdaaad3d21eb |
+| par-resample/denormal        | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/denormal_ftz    | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/denormal_ftz    | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/denormal_ftz    | batch  | IDENTICAL x2 | 2cc6cdaaad3d21eb | 2cc6cdaaad3d21eb |
+| par-resample/denormal_ftz    | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/dupes           | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/dupes           | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/dupes           | batch  | IDENTICAL x2 | 6c49abf4d134f6ce | 6c49abf4d134f6ce |
+| par-resample/dupes           | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/hashed          | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/hashed          | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/hashed          | batch  | IDENTICAL x2 | 9a2ef0b0ae72b989 | 9a2ef0b0ae72b989 |
+| par-resample/hashed          | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/negative        | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/negative        | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/negative        | batch  | IDENTICAL x2 | c0dee74a1f2626c1 | c0dee74a1f2626c1 |
+| par-resample/negative        | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/odd             | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/odd             | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/odd             | batch  | IDENTICAL x2 | c783c4d2569a5295 | c783c4d2569a5295 |
+| par-resample/odd             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/ties            | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/ties            | batch  | IDENTICAL x2 | a5f0ee3a2c5e0107 | a5f0ee3a2c5e0107 |
+| par-resample/ties            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/wide            | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/wide            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/wide            | batch  | IDENTICAL x2 | 5519df53ffdded2e | 5519df53ffdded2e |
+| par-resample/wide            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+
+summary (infer/model): N/A=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): N/A=9
+require-columns 2 over ['par-resample']: OK

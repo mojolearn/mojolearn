@@ -1,0 +1,59 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+| lane/fixture                 | verdict    | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|------------|------------------|------------------|------------------|
+| par-kmeans/base              | IDENTICAL x3 | 5aa44cc11034dec9 | 5aa44cc11034dec9 | 5aa44cc11034dec9 |
+| par-kmeans/denormal          | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| par-kmeans/denormal_ftz      | IDENTICAL x3 | 993fe5caff144b0c | 993fe5caff144b0c | 993fe5caff144b0c |
+| par-kmeans/dupes             | IDENTICAL x3 | 2ae942d45a51757a | 2ae942d45a51757a | 2ae942d45a51757a |
+| par-kmeans/hashed            | IDENTICAL x3 | 0a570e84b0002723 | 0a570e84b0002723 | 0a570e84b0002723 |
+| par-kmeans/negative          | IDENTICAL x3 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 | d4cc38e75f8e2d75 |
+| par-kmeans/odd               | IDENTICAL x3 | 43d8a3d3859f4143 | 43d8a3d3859f4143 | 43d8a3d3859f4143 |
+| par-kmeans/ties              | IDENTICAL x3 | 3de3e103006de69c | 3de3e103006de69c | 3de3e103006de69c |
+| par-kmeans/wide              | IDENTICAL x3 | 6f0529fcb3d60536 | 6f0529fcb3d60536 | 6f0529fcb3d60536 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | apple-m4         | amd-gfx942       | nvidia-gpu       |
+|------------------------------|--------|--------------|------------------|------------------|------------------|
+| par-kmeans/base              | infer  | IDENTICAL x3 | 3d50c4c50bf078b2 | 3d50c4c50bf078b2 | 3d50c4c50bf078b2 |
+| par-kmeans/base              | model  | IDENTICAL x3 | 355598f468300bee | 355598f468300bee | 355598f468300bee |
+| par-kmeans/base              | batch  | IDENTICAL x3 | ce34789a012168b5 | ce34789a012168b5 | ce34789a012168b5 |
+| par-kmeans/base              | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/denormal          | infer  | IDENTICAL x3 | 9b15ee1cac8ce636 | 9b15ee1cac8ce636 | 9b15ee1cac8ce636 |
+| par-kmeans/denormal          | model  | IDENTICAL x3 | 8646c7d4fc16c75e | 8646c7d4fc16c75e | 8646c7d4fc16c75e |
+| par-kmeans/denormal          | batch  | IDENTICAL x3 | cd11da38d7d996eb | cd11da38d7d996eb | cd11da38d7d996eb |
+| par-kmeans/denormal          | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/denormal_ftz      | infer  | IDENTICAL x3 | 9b15ee1cac8ce636 | 9b15ee1cac8ce636 | 9b15ee1cac8ce636 |
+| par-kmeans/denormal_ftz      | model  | IDENTICAL x3 | 8646c7d4fc16c75e | 8646c7d4fc16c75e | 8646c7d4fc16c75e |
+| par-kmeans/denormal_ftz      | batch  | IDENTICAL x3 | cd11da38d7d996eb | cd11da38d7d996eb | cd11da38d7d996eb |
+| par-kmeans/denormal_ftz      | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/dupes             | infer  | IDENTICAL x3 | 45007c31b3127822 | 45007c31b3127822 | 45007c31b3127822 |
+| par-kmeans/dupes             | model  | IDENTICAL x3 | daa4518508a79e25 | daa4518508a79e25 | daa4518508a79e25 |
+| par-kmeans/dupes             | batch  | IDENTICAL x3 | 226990012f870f93 | 226990012f870f93 | 226990012f870f93 |
+| par-kmeans/dupes             | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/hashed            | infer  | IDENTICAL x3 | 5d6e4fa66a2f59bb | 5d6e4fa66a2f59bb | 5d6e4fa66a2f59bb |
+| par-kmeans/hashed            | model  | IDENTICAL x3 | d6356da8f36cfff4 | d6356da8f36cfff4 | d6356da8f36cfff4 |
+| par-kmeans/hashed            | batch  | IDENTICAL x3 | 2821adc81c87c1a6 | 2821adc81c87c1a6 | 2821adc81c87c1a6 |
+| par-kmeans/hashed            | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/negative          | infer  | IDENTICAL x3 | 2ceb107b327d1b74 | 2ceb107b327d1b74 | 2ceb107b327d1b74 |
+| par-kmeans/negative          | model  | IDENTICAL x3 | 5749d537f980d312 | 5749d537f980d312 | 5749d537f980d312 |
+| par-kmeans/negative          | batch  | IDENTICAL x3 | a1cee1687356c069 | a1cee1687356c069 | a1cee1687356c069 |
+| par-kmeans/negative          | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/odd               | infer  | IDENTICAL x3 | 191287260610940c | 191287260610940c | 191287260610940c |
+| par-kmeans/odd               | model  | IDENTICAL x3 | 5fdc9f5ac45877c9 | 5fdc9f5ac45877c9 | 5fdc9f5ac45877c9 |
+| par-kmeans/odd               | batch  | IDENTICAL x3 | 06c7a23bc000d13d | 06c7a23bc000d13d | 06c7a23bc000d13d |
+| par-kmeans/odd               | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/ties              | infer  | IDENTICAL x3 | 0e9dcaedec0fcadc | 0e9dcaedec0fcadc | 0e9dcaedec0fcadc |
+| par-kmeans/ties              | model  | IDENTICAL x3 | 74275c5f94fd56a2 | 74275c5f94fd56a2 | 74275c5f94fd56a2 |
+| par-kmeans/ties              | batch  | IDENTICAL x3 | ff636ffbdf6153fe | ff636ffbdf6153fe | ff636ffbdf6153fe |
+| par-kmeans/ties              | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+| par-kmeans/wide              | infer  | IDENTICAL x3 | 576a17d0775573bc | 576a17d0775573bc | 576a17d0775573bc |
+| par-kmeans/wide              | model  | IDENTICAL x3 | 1c5abd185e53aaf6 | 1c5abd185e53aaf6 | 1c5abd185e53aaf6 |
+| par-kmeans/wide              | batch  | IDENTICAL x3 | 1893d1e955539a1c | 1893d1e955539a1c | 1893d1e955539a1c |
+| par-kmeans/wide              | stepfull | NOT-COMPARED | n/a:no-decode-state | n/a:no-decode-state | (no column)      |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (stepfull): NOT-COMPARED=9
+require-columns 3 over ['par-kmeans']: OK
