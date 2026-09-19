@@ -174,6 +174,47 @@ build() {
         MOJOLEARN_COMPILE_JOBS="$JOBS" sh "bindings/$1.sh"
 }
 
+# ------------------------------------------- THE HOST MATH LIBRARY, OR NOTHING IMPORTS
+# MEASURED ON THIS LEG'S FIRST POD, f7qt7xpx8f6raq, 2026-09-19, exactly as the
+# NVIDIA sibling measured it on 9laka4vs9h2zli the same morning: phase A's
+# column died ONE SECOND in, before any GPU work, at
+#
+#   OSError: python/mojolearn/.libs/libMojolearnMath.so: cannot open shared
+#   object file: No such file or directory
+#
+# with both its bindings built and NOT ONE CELL recorded. The vendor read-back
+# above carried the same traceback and was the first thing to say so.
+#
+# `python/mojolearn/_portable_math.py` dlopens that library, and
+# `_training_impl.py`'s `def kaiming_uniform(self, shape, fan_in,
+# a=math.sqrt(5.0))` evaluates it as a DEFAULT ARGUMENT at class definition
+# time, so `import mojolearn` needs it unconditionally. It is not lazy and no
+# lane can avoid it -- this is NOT a GPU, a vendor or a lane-list problem, and
+# it fails identically on AMD and NVIDIA.
+#
+# Nothing under bindings/ builds it, `python/mojolearn/.libs/` is gitignored so
+# `git archive` ships nothing, and the only thing in the tree that compiles it
+# is `packaging/macos/build_release_wheel.sh`, which does not run on Linux. A
+# developer Mac has it sitting in the checkout from some past wheel build and
+# never notices; a freshly rented box cannot import the package at all.
+#
+# This calls the tree's OWN recipe, `packaging/portable_math/stage.py`'s
+# build(), rather than retyping its compiler flags here -- those flags
+# (-ffp-contract=off, -fno-fast-math, -nostdlib) are the arithmetic contract,
+# and a second copy of them is a second answer to it.
+run portable_math timeout "$(cap 300)" env PYTHONPATH=/root/mojolearn/packaging/portable_math \
+    pixi run python -c "import pathlib, stage; stage.build(pathlib.Path('/root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so'))"
+say "portable_math_exit=$(awk -F'	' '$1=="portable_math"{print $2}' "$OUT/status.tsv")"
+ls -l python/mojolearn/.libs/ >> "$G" 2>&1
+
+# FAIL FAST, AND BEFORE THE EXPENSIVE HALF. If the package still cannot
+# import, every phase below is a one-second traceback and the lease is spent
+# discovering that twice. The probe is also the vendor witness: on the first
+# pod it printed `IMPORT_OK hip`, which is the backend this column claims.
+run import_probe timeout "$(cap 300)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
+    pixi run python -c "import mojolearn; print('IMPORT_OK', mojolearn.vendor(), mojolearn.__version__)"
+say "import_probe=$(tail -1 "$OUT/logs/import_probe.log" 2>/dev/null)"
+
 # --------------------------------------------------- PHASE A builds, then the column
 # bindings/build.sh is the shared kernels and fixtures every lane reaches;
 # bindings/build_gbdt.sh is _mojolearn_gbdt, which every phase A lane binds
