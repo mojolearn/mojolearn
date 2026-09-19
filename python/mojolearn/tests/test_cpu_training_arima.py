@@ -44,6 +44,13 @@ ORACLE = "arima/host/arima_oracle.mojo"
 LANES = ("arima", "arima-011", "arima-seasonal-c")
 #: lane/arima-exog (2026-09-15), declared after par-arima.
 EXOG_LANES = ("arima-exog", "arima-exog-seasonal")
+#: lane/forecast-predict-cpu-route (2026-09-19), declared last: the driver
+#: behind `parallel_forecasting.forecast_arima` / `.predict_arima`, which had
+#: no lane at all until `forecast_predict` joined `_parallel_pool
+#: .CPU_OPERATIONS`. Pinned here because this tuple is the arima family's
+#: CONTRACT, and a lane appearing in it without a test moving is how a family
+#: grows a member nobody checked.
+FORECAST_LANES = ("par-forecast-arima",)
 GPU_IMPORTS = re.compile(r"^\s*from\s+(max\.gpu|std\.gpu)", re.M)
 
 
@@ -54,7 +61,7 @@ def _read(rel):
 def test_manifest_declares_the_arima_family():
     fam = host_surface.family("arima")
     assert fam["routes"] == "_mojolearn_arima"
-    assert fam["training_lanes"] == LANES + ("par-arima",) + EXOG_LANES
+    assert fam["training_lanes"] == LANES + ("par-arima",) + EXOG_LANES + FORECAST_LANES
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert (ROOT / host_surface.build_shim("arima")).is_file()
     assert (ROOT / host_surface.binding_source("arima")).is_file()
