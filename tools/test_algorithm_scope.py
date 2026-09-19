@@ -218,3 +218,12 @@ def test_apple_pass_is_metal_core_one_fit_three_fixtures(monkeypatch, capsys):
 def test_apple_pass_refuses_anything_that_widens_it(extra):
     with pytest.raises(SystemExit):
         verify_lanes.main(["--lane", "ridge", "--apple-pass", "--plan", *extra])
+
+
+def test_cpu_pass_is_local_cpu_with_the_apple_pass_cells(monkeypatch, capsys):
+    monkeypatch.delenv("MAC_SLOTS", raising=False)
+    assert verify_lanes.main(["--lanes", "ridge,ols,kmeans,knn,lasso", "--cpu-pass", "--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "backend=cpu jobs=5" in out and "runpod" not in out
+    assert f"--fixtures {verify_lanes.APPLE_PASS_FIXTURES}" in out
+    assert "--repeats 1" in out and "--no-batch" in out and "--no-rlpair" in out

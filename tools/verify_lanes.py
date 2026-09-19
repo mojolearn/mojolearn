@@ -367,6 +367,9 @@ def main(argv=None):
     ap.add_argument("--resume", action="store_true")
     ap.add_argument("--full-selection", action="store_true", help="explicitly accept selector fallback")
     ap.add_argument("--metal-diagnostic", action="store_true")
+    ap.add_argument("--cpu-pass", action="store_true",
+                    help="the CPU half of a release, locally: the Apple pass's cells on the CPU route, "
+                         "one shard per Mac CPU slot, nothing rented")
     ap.add_argument("--apple-pass", action="store_true",
                     help="the whole Apple check: Metal, one fit per cell, the end model only "
                          f"(train, infer, save/reload), fixtures {APPLE_PASS_FIXTURES}, "
@@ -383,6 +386,16 @@ def main(argv=None):
     ap.add_argument("--build", default="core,estimators", help="host families for the pod plan")
     ap.add_argument("extra", nargs="*", help="legacy extra arguments are rejected; use explicit scope controls")
     args = ap.parse_args(argv)
+    if args.cpu_pass:
+        # The CPU half of a release, on this machine: the same cells as the
+        # Apple pass, spread over the Mac's CPU slots. Nothing is rented.
+        if args.apple_pass or args.probe_group != "core" or args.repeats != 1 or args.exhaustive:
+            ap.error("--cpu-pass is CPU, core probes, one fit; it takes --fixtures and --budget only")
+        args.backend = "cpu"
+        args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
+        args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
+        args.timeout = args.wait_timeout = args.budget
+        args.shards = args.jobs = int(os.environ.get("MAC_SLOTS", "5"))
     if args.apple_pass:
         # The batch and decode probes check batching logic, which the CPU and
         # NVIDIA columns carry; here Metal answers one question, whether its
@@ -425,16 +438,16 @@ def main(argv=None):
         ap.error("choose one of --all, named lanes, --changed-since, or --lanes-for-paths")
 
     lanes, sel, _ = _selection(args)
-    if args.apple_pass and not (args.lanes or args.lane):
-        # A lane whose arithmetic never reaches Metal says nothing here. Named
-        # lanes still refuse below; a derived selection drops them, out loud.
+    if (args.apple_pass or args.cpu_pass) and not (args.lanes or args.lane):
+        # A lane whose arithmetic never reaches this backend says nothing
+        # here. Named lanes still refuse below; a derived selection drops
+        # them, out loud.
         import lane_applicability
-        skip = lane_applicability.degenerate("apple-metal")
+        skip = lane_applicability.degenerate("apple-metal" if args.apple_pass else "cpu-host")
         dropped = [n for n in lanes if n in skip]
         lanes = [n for n in lanes if n not in skip]
         if dropped:
-            print(f"# --apple-pass leaves out {len(dropped)} lane(s) that cannot run on Metal "
-                  f"(CPU-route or multi-GPU): {','.join(dropped)}")
+            print(f"# leaving out {len(dropped)} lane(s) that cannot run on {args.backend}: {','.join(dropped)}")
     print(f"# {len(lanes)} of {len(lane_select.all_lanes())} lanes selected")
     print(f"# {len(fixtures)} fixture(s): {args.fixtures}; "
           f"{len(lanes) * len(fixtures)} cells, {len(lanes) * len(fixtures) * args.repeats} independent fits")

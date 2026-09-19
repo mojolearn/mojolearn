@@ -190,9 +190,16 @@ without uploading.
 A release is verified by two things (2026-09-19):
 
 ```sh
-python -m mojolearn verify --all          # the CPU column, from the install
+pixi run -e test release-check            # both, on this Mac, nothing rented
+# which is:
+pixi run -e test cpu-pass                 # the CPU route, 5 local slots, same cells as the Apple pass
 pixi run -e test apple-pass               # the Apple GPU: every Metal lane, fitted once, end model, 600 s
 ```
+
+Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
+release. Each pass is `base,denormal,odd`, fitted once, end model only, with a
+600-second budget; add `--changed-since <last release tag>` to either
+`tools/verify_lanes.py` command to check only the lanes the release touched.
 
 Both compare against `verify_reference/table.json`, so the Apple GPU is being
 held to the CPU's answer. NVIDIA and AMD runs are not a release requirement
