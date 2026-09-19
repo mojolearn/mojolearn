@@ -2612,11 +2612,25 @@ PUBLIC_PENDING_LANES = {
     # committed record and no shipped table cell describes it yet, and a
     # public lane with no reference makes an installed `verify --all` read
     # OWED for something it could have been told not to ask. It joins
-    # `public_reference_lanes()` the day a record carries it. The three
-    # `linalg-*` lanes admitted on 2026-09-18 are in the SAME position and
-    # are NOT listed here -- see the report of this lane; leaving them is a
-    # deliberate refusal to paper over another lane's debt, not an oversight.
+    # `public_reference_lanes()` the day a record carries it.
     "language-model-config": "no reference",
+
+    # lane/linalg-public (2026-09-19), THE SAME DEBT, paid the same day it was
+    # incurred. Adding these three to the linalg family's `training_lanes`
+    # this morning made them public reference lanes, and no GPU column has
+    # ever run them, so the shipped table carries no cell for any of them --
+    # `test_public_reference_lanes_are_derived_and_every_pending_reason_is_true`
+    # named `linalg-eigh` and `linalg-qr` and failed from that commit onward.
+    # MEASURED, not assumed: `python -m mojolearn verify --all` on this host
+    # reads 27 OWED and 0 DIVERGENT for the linalg section, against 108
+    # VERIFIED / 0 DIVERGENT for the estimators beside them. They are
+    # bit-reproducible on CPU and sabotage-proven; the CROSS-VENDOR claim
+    # this tree exists to make is NOT yet established for them, and the
+    # honest way to say that is here rather than in a lane's docstring.
+    # They leave this table the day one GPU column carries them.
+    "linalg-qr": "no reference",
+    "linalg-eigh": "no reference",
+    "linalg-svdvals": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

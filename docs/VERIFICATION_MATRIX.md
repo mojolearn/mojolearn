@@ -26,10 +26,10 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **239** (189 single-device, 50 `par-*` multi-GPU drivers).
+- Lanes: **241** (190 single-device, 51 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **251**.
 - Source public API entries with ALL FOUR kinds on at least one lane: **165** of 251.
-- Source public API entries with NO IDENTITY LANE AT ALL: **35**.
+- Source public API entries with NO IDENTITY LANE AT ALL: **33**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **2**.
 
@@ -38,7 +38,7 @@ Per kind, over the public API entries:
 | kind | API entries that have it | missing |
 |---|---|---|
 | gpu column | 199 | 52 |
-| cpu verifier | 173 | 78 |
+| cpu verifier | 182 | 69 |
 | sabotage seen to move a build | 180 | 71 |
 | batch part or named n/a | 214 | 37 |
 
@@ -46,12 +46,12 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 224 | 15 |
-| gpu column on all three classes | 175 | 64 |
-| cpu verifier declared | 203 | 36 |
-| sabotage seen to move a build | 203 | 36 |
-| batch part or named n/a | 239 | 0 |
-| ALL FOUR | 188 | 51 |
+| gpu column (any class) | 224 | 17 |
+| gpu column on all three classes | 175 | 66 |
+| cpu verifier declared | 208 | 33 |
+| sabotage seen to move a build | 203 | 38 |
+| batch part or named n/a | 239 | 2 |
+| ALL FOUR | 188 | 53 |
 
 Sabotage, split by what was actually watched:
 
@@ -59,7 +59,7 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 203 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 4 | the family declares a define; no committed pair moves this lane |
+| declared | 6 | the family declares a define; no committed pair moves this lane |
 | none | 32 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -71,7 +71,6 @@ means a CPU path exists and only the identity lane is missing.
 
 | algorithm | kind | host family | defined in |
 |---|---|---|---|
-| `DistributedIVFIndex` | class | - | `python/mojolearn/parallel_ivf.py` |
 | `HostForest` | class | - | `python/mojolearn/_forest_host.py` |
 | `HostGBDT` | class | - | `python/mojolearn/_gbdt_host.py` |
 | `host_predict` | function | - | `python/mojolearn/_forest_host.py` |
@@ -103,7 +102,6 @@ means a CPU path exists and only the identity lane is missing.
 | `parallel_forecasting.predict_exponential_smoothing` | function | - | `python/mojolearn/parallel_forecasting.py` |
 | `parallel_gaussian_process.fit_gaussian_process_classifier` | function | - | `python/mojolearn/parallel_gaussian_process.py` |
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | function | - | `python/mojolearn/parallel_gaussian_process.py` |
-| `parallel_ivf.DistributedIVFIndex` | class | - | `python/mojolearn/parallel_ivf.py` |
 | `parallel_model_selection.cross_val_score` | function | - | `python/mojolearn/parallel_model_selection.py` |
 | `transformer.TransformerDecodeSession` | class | - | `python/mojolearn/_transformer_impl.py` |
 
@@ -142,11 +140,11 @@ A blank cell means no lane of this algorithm has that kind.
 | `AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `AgglomerativeClustering` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `BpeTokenizer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `ByteLanguageModelConfig` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `ByteLanguageModelConfig` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ConstantKernel` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `DBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `DistributedIVFIndex` | **0** |  |  |  |  | NO |
+| `DistributedIVFIndex` | 1 |  | training | declared | UNDECLARED | NO |
 | `ElasticNet` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExperimentalTwoLevelFeatureFreq` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -163,16 +161,16 @@ A blank cell means no lane of this algorithm has that kind.
 | `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HostForest` | **0** |  |  |  |  | NO |
 | `HostGBDT` | **0** |  |  |  |  | NO |
-| `IVFIndex` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `IVFIndex` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `IsolationForest` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KMeans` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KNeighborsClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KNeighborsRegressor` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KernelDensity` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KernelRidge` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LanguageModelHostTrainer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `LanguageModelInference` | 17 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LanguageModelInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LanguageModelTrainer` (alias of `SmallByteLanguageModelTrainer`) | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Lasso` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LinearRegression` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -230,10 +228,10 @@ A blank cell means no lane of this algorithm has that kind.
 | `kernel_methods.Nystroem` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `kernel_methods.RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `kpss_test` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `language_model.ByteLanguageModelConfig` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `language_model.LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `language_model.ByteLanguageModelConfig` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `language_model.LanguageModelConfig` (alias of `ByteLanguageModelConfig`) | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.LanguageModelHostTrainer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `language_model.LanguageModelInference` | 17 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `language_model.LanguageModelInference` | 18 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.LanguageModelTrainer` (alias of `SmallByteLanguageModelTrainer`) | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `language_model.SmallByteLanguageModelTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `linalg.Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -247,11 +245,11 @@ A blank cell means no lane of this algorithm has that kind.
 | `linalg.quantize_int8` | 1 | apple | training | seen(build) | n/a | yes |
 | `linalg.svdvals` | 1 |  | training | seen(build) | n/a | NO |
 | `linalg.to_bf16` | 1 | apple | training | seen(build) | n/a | yes |
-| `lm_corpus.TokenBatches` | 1 |  |  | seen(build) | n/a | NO |
-| `lm_corpus.TokenizedCorpus` | 1 |  |  | seen(build) | n/a | NO |
-| `lm_corpus.prepare` | 1 |  |  | seen(build) | n/a | NO |
-| `lm_corpus.require_vocabulary` | 1 |  |  | seen(build) | n/a | NO |
-| `lm_corpus.tokenizer_for` | 1 |  |  | seen(build) | n/a | NO |
+| `lm_corpus.TokenBatches` | 1 |  | training | seen(build) | n/a | NO |
+| `lm_corpus.TokenizedCorpus` | 1 |  | training | seen(build) | n/a | NO |
+| `lm_corpus.prepare` | 1 |  | training | seen(build) | n/a | NO |
+| `lm_corpus.require_vocabulary` | 1 |  | training | seen(build) | n/a | NO |
+| `lm_corpus.tokenizer_for` | 1 |  | training | seen(build) | n/a | NO |
 | `lowbit.format_of` | **0** |  |  |  |  | NO |
 | `lowbit.is_packed` | **0** |  |  |  |  | NO |
 | `lowbit.materialize` (alias of `unpack`) | 4 | apple | training | seen(build) | n/a | yes |
@@ -347,7 +345,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_graph.fit_graph` | 3 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_graph.transform_umap` | 1 | amd,apple,nvidia |  | none | part | NO |
-| `parallel_ivf.DistributedIVFIndex` | **0** |  |  |  |  | NO |
+| `parallel_ivf.DistributedIVFIndex` | 1 |  | training | declared | UNDECLARED | NO |
 | `parallel_model_selection.cross_val_score` | **0** |  |  |  |  | NO |
 | `parallel_neighbors.ParallelQueries` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_neighbors_reference.ReferenceShardedNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -363,9 +361,9 @@ A blank cell means no lane of this algorithm has that kind.
 | `resample.permutation_test` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `select_d` | 1 |  | training | seen(build) | part | NO |
 | `tokenizer.BpeTokenizer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `tokenizer.BpeVocabularyTrainer` | 2 |  |  | seen(build) | n/a | NO |
+| `tokenizer.BpeVocabularyTrainer` | 2 |  | training | seen(build) | n/a | NO |
 | `tokenizer.GPT2Tokenizer` (alias of `BpeTokenizer`) | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `tokenizer.TrainedBpeVocabulary` | 1 |  |  | seen(build) | n/a | NO |
+| `tokenizer.TrainedBpeVocabulary` | 1 |  | training | seen(build) | n/a | NO |
 | `training.Adam` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.AdamW` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.ConstantLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -400,8 +398,8 @@ A blank cell means no lane of this algorithm has that kind.
 | arima-exog-seasonal | - | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-public-promotion/cpu-sabotage.json` | part | NO |
 | arima-seasonal-c | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/arima-seasonal-c/arima-seasonal-c/cpu-sabotage.json` | part | yes |
 | bootstrap | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/bootstrap/bootstrap/cpu-sabotage.json` | part | yes |
-| bpe-trainer | - | - | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/e-python-lanes/cpu-x86.sabotage.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
-| bpe-vocabulary | - | - | seen(build) | `bench/results/identity_break/2026-09-18_bpe-builder-native/m4.trainer.sabotage-build.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
+| bpe-trainer | - | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/e-python-lanes/cpu-x86.sabotage.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
+| bpe-vocabulary | - | training | seen(build) | `bench/results/identity_break/2026-09-18_bpe-builder-native/m4.trainer.sabotage-build.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
 | byte-lm | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-neural-completion/records/byte-lm/cpu-sabotage.json` | part | yes |
 | byte-lm-host-infer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-infer/byte-lm-host-infer/cpu-sabotage.json` | part | yes |
 | byte-lm-host-infer-threaded | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-infer-threaded/byte-lm-host-infer-threaded/cpu-sabotage.json` | part | yes |
@@ -501,6 +499,7 @@ A blank cell means no lane of this algorithm has that kind.
 | knn-reg-distance | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-reg-distance/knn-reg-distance/cpu-sabotage.json` | part | yes |
 | knn-sqeuclidean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-sqeuclidean/knn-sqeuclidean/cpu-sabotage.json` | part | yes |
 | kpss | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
+| language-model-config | - | training | declared | - | UNDECLARED | NO |
 | lasso | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/lasso/lasso/cpu-sabotage.json` | part | yes |
 | linalg-eigh | - | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | NO |
 | linalg-qr | - | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | NO |
@@ -570,6 +569,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-hdbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-holtwinters | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/c-classical/cpu-x86.sabotage.json` | part | yes |
 | par-iforest | amd,apple,nvidia | - | none | - | part | NO |
+| par-ivf | - | training | declared | - | UNDECLARED | NO |
 | par-kernel-ridge | amd,apple,nvidia | - | none | - | part | NO |
 | par-kmeans | amd,apple,nvidia | - | none | - | part | NO |
 | par-logistic | amd,apple,nvidia | - | none | - | part | NO |
@@ -623,7 +623,7 @@ A blank cell means no lane of this algorithm has that kind.
 | svc-poly | amd,apple | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | svr | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
 | svr-linear | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-svm/cpu-x86-sabotage.json` | part | yes |
-| tokenized-corpus | - | - | seen(build) | `bench/results/identity_break/2026-09-18_bpe-builder-native/m4.trainer.sabotage-build.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
+| tokenized-corpus | - | training | seen(build) | `bench/results/identity_break/2026-09-18_bpe-builder-native/m4.trainer.sabotage-build.json` | n/a n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output) | NO |
 | tokenizer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_clean-third-party/m4-owed/cpu-apple-m4.host-sabotage.json` | part | yes |
 | training-primitives | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/training-primitives/training-primitives/cpu-sabotage.json` | part | yes |
 | transformer | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-transformer/cpu-apple-m4.sabotage.json` | part | yes |
@@ -635,25 +635,45 @@ A blank cell means no lane of this algorithm has that kind.
 
 ## Lanes missing each kind, by name
 
-**No GPU column at all: 15**
+A `par-*` lane IS NOT A CPU GAP AND NEVER WILL BE. It is a multi-device
+driver whose whole claim, written in `identity_break._par_devices`, is
+that a TWO-DEVICE column hashes equal to the one-device column cell for
+cell. A CPU column has zero devices, so that claim there is not false,
+it is NOT EXPRESSIBLE -- and an inexpressible claim listed beside real
+gaps is noise that hides them. On 2026-09-19 it hid them at a ratio of
+36 to 3. These lanes need a SECOND GPU, not another CPU run, and no CPU
+work will ever close them; they are counted below under their own
+heading and excluded from the two CPU-axis gap lists by construction.
 
-> arima-exog, arima-exog-seasonal, bpe-trainer, bpe-vocabulary, cross-val-folds, gbdt-adapter-score-weighted, linalg-eigh, linalg-qr, linalg-svdvals, metrics-fowlkes-mallows, metrics-homogeneity-completeness, ordered-gradient-sum, rf-score-weighted, select-d, tokenized-corpus
+**No GPU column at all: 17**
+
+> arima-exog, arima-exog-seasonal, bpe-trainer, bpe-vocabulary, cross-val-folds, gbdt-adapter-score-weighted, language-model-config, linalg-eigh, linalg-qr, linalg-svdvals, metrics-fowlkes-mallows, metrics-homogeneity-completeness, ordered-gradient-sum, par-ivf, rf-score-weighted, select-d, tokenized-corpus
 
 **GPU column on fewer than three classes: 49**
 
 > gbdt-categorical-ctr-tables, gbdt-pair-logit, gbdt-query-rmse, gbdt-tensor-ctr-tables, gbdt-yeti-rank, gemm-bf16, gemm-int8, gmm-random-init-sample, gmm-sample, gp-normalize-y, gp-optimize, gp-optimize-restarts, gp-sample-y, gp-sample-y-normalize, gpc, gpc-multiclass, ivf-extend, kernel-ridge-laplacian, kernel-ridge-poly, kernel-ridge-sigmoid, mamba1-bf16w, mamba1-int8w, mamba2-bf16w, mamba2-int8w, mamba3-bf16w, mamba3-int8w, mlp-bf16w, mlp-int8w, nystroem-laplacian, nystroem-poly, nystroem-sigmoid, par-boosting-clf, par-boosting-reg, par-cd-elasticnet, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gram-ols, par-gram-pca, par-gram-tsvd, par-queries-nn, par-rbf-sampler, par-scaler-minmax, par-svm-svr, samba-bf16w, samba-int8w, svc-poly, transformer-bf16w, transformer-int8w
 
-**No CPU verifier declared: 36**
+**No CPU verifier declared: 1**
 
-> bpe-trainer, bpe-vocabulary, cross-val-folds, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-pool, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-resample, par-svm, par-svm-svr, tokenized-corpus
+> cross-val-folds
 
-**Sabotage not seen to move a build: 36**
+> (plus 32 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-> par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
+**Sabotage not seen to move a build: 1**
 
-**Batch undeclared: 0**
+> language-model-config
 
-> none
+> (plus 37 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
+
+**Batch undeclared: 2**
+
+> language-model-config, par-ivf
+
+## The multi-GPU driver lanes, which a CPU column cannot judge
+
+51 `par-*` lanes exist and 37 of them are waiting on a two-device column. THE WORK THEY NEED IS A SECOND GPU (RunPod `GPU_COUNT=2`, one `nvidia-2gpu` or `amd-2gpu` column), not a CPU verifier and not another CPU sabotage build. Nothing about them is owed by the CPU column and nothing on a CPU box can discharge it.
+
+> par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-ivf, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 
 ## Public names not counted as algorithms
 
