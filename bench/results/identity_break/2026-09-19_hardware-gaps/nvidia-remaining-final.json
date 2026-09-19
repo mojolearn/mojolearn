@@ -1,0 +1,8 @@
+{
+  "scope": "Originally missing NVIDIA two-device fixture-parts plus the incomplete single-device resampling capture; compatible prior records outside this set are preserved, not recertified.",
+  "wanted_parts": 648,
+  "covered_parts": 648,
+  "remaining_parts": 0,
+  "different": [],
+  "remaining_jobs": []
+}
