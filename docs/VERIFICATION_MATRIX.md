@@ -40,7 +40,7 @@ Per kind, over the public API entries:
 | gpu column | 199 | 52 |
 | cpu verifier | 182 | 69 |
 | sabotage seen to move a build | 180 | 71 |
-| batch part or named n/a | 214 | 37 |
+| batch part or named n/a | 216 | 35 |
 
 Per kind, over the lanes:
 
@@ -49,17 +49,17 @@ Per kind, over the lanes:
 | gpu column (any class) | 224 | 17 |
 | gpu column on all three classes | 175 | 66 |
 | cpu verifier declared | 208 | 33 |
-| sabotage seen to move a build | 203 | 38 |
-| batch part or named n/a | 239 | 2 |
+| sabotage seen to move a build | 204 | 37 |
+| batch part or named n/a | 241 | 0 |
 | ALL FOUR | 188 | 53 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 203 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 204 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 6 | the family declares a define; no committed pair moves this lane |
+| declared | 5 | the family declares a define; no committed pair moves this lane |
 | none | 32 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -144,7 +144,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ConstantKernel` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `DBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `DistributedIVFIndex` | 1 |  | training | declared | UNDECLARED | NO |
+| `DistributedIVFIndex` | 1 |  | training | declared | part | NO |
 | `ElasticNet` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExperimentalTwoLevelFeatureFreq` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -345,7 +345,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_graph.fit_graph` | 3 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_graph.transform_umap` | 1 | amd,apple,nvidia |  | none | part | NO |
-| `parallel_ivf.DistributedIVFIndex` | 1 |  | training | declared | UNDECLARED | NO |
+| `parallel_ivf.DistributedIVFIndex` | 1 |  | training | declared | part | NO |
 | `parallel_model_selection.cross_val_score` | **0** |  |  |  |  | NO |
 | `parallel_neighbors.ParallelQueries` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_neighbors_reference.ReferenceShardedNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -499,7 +499,7 @@ A blank cell means no lane of this algorithm has that kind.
 | knn-reg-distance | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-reg-distance/knn-reg-distance/cpu-sabotage.json` | part | yes |
 | knn-sqeuclidean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-sqeuclidean/knn-sqeuclidean/cpu-sabotage.json` | part | yes |
 | kpss | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
-| language-model-config | - | training | declared | - | UNDECLARED | NO |
+| language-model-config | - | training | seen(build) | `bench/results/identity_break/2026-09-19_language-model-config/cpu-sabotage.json` | n/a n/a:no-input-rows (a frozen config object; its shapes and offsets are functions of the config, and the lane passes no data) | NO |
 | lasso | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/lasso/lasso/cpu-sabotage.json` | part | yes |
 | linalg-eigh | - | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | NO |
 | linalg-qr | - | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | NO |
@@ -569,7 +569,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-hdbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-holtwinters | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/c-classical/cpu-x86.sabotage.json` | part | yes |
 | par-iforest | amd,apple,nvidia | - | none | - | part | NO |
-| par-ivf | - | training | declared | - | UNDECLARED | NO |
+| par-ivf | - | training | declared | - | part | NO |
 | par-kernel-ridge | amd,apple,nvidia | - | none | - | part | NO |
 | par-kmeans | amd,apple,nvidia | - | none | - | part | NO |
 | par-logistic | amd,apple,nvidia | - | none | - | part | NO |
@@ -659,15 +659,15 @@ heading and excluded from the two CPU-axis gap lists by construction.
 
 > (plus 32 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Sabotage not seen to move a build: 1**
+**Sabotage not seen to move a build: 0**
 
-> language-model-config
+> none
 
 > (plus 37 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Batch undeclared: 2**
+**Batch undeclared: 0**
 
-> language-model-config, par-ivf
+> none
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 

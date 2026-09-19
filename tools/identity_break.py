@@ -6536,6 +6536,12 @@ _batch_decl(_batch_cross_val, "cross-val")
 # and asks nothing for a row's answer, so there is no batch axis to vary
 # (lane/data-ordering-determinism, 2026-09-16).
 _batch_decl("n/a:function", "cross-val-folds")
+# `language-model-config` (lane/laneless-public-classes, 2026-09-19) is a
+# FROZEN DATACLASS. `parameter_shapes`, `offsets`, `n_total` and `profile`
+# are functions of the CONFIG, not of any input rows -- the lane passes no
+# data at all -- so there is no batch axis to hold a whole-batch answer
+# against, and no smaller batch to ask for.
+_batch_decl("n/a:no-input-rows (a frozen config object; its shapes and offsets are functions of the config, and the lane passes no data)", "language-model-config")
 _batch_decl(_batch_bootstrap_lane, "bootstrap")
 _batch_decl(_batch_permutation_lane, "permutation-test")
 _batch_decl("n/a:scalar-fold (resample.monte_carlo_integrate returns only integral, mean, volume and closed_form "
@@ -6630,7 +6636,11 @@ def _batch_embedding(ml, e, Xh):
     return [_BatchRows("forward", idx, lambda r: (np.asarray(e.forward(np.ascontiguousarray(idh[r[:, 0]]))),))]
 
 
-_batch_decl(_batch_ivf, "ivf", "ivf-euclidean")
+# `par-ivf` (lane/laneless-public-classes, 2026-09-19) runs the SAME query
+# through the distributed driver, so it takes the SAME batch part as its
+# base lane -- the pattern every other `par-*` lane follows (par-iforest
+# with iforest, par-svm with svc, par-gp with gp).
+_batch_decl(_batch_ivf, "ivf", "ivf-euclidean", "par-ivf")
 
 
 def _batch_ivf_extend(ml, e, Xh):
