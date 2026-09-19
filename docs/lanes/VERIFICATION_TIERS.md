@@ -138,8 +138,10 @@ which the CPU column carries on rented pods and one light NVIDIA pass confirms
 on `base`. Fixtures are `base` (the ordinary path), `denormal` (where Apple is
 known to differ, R2) and `odd` (every tile tail); the other six vary properties
 the CPU column already covers on all nine. Lanes whose arithmetic never reaches
-Metal are left out and named. The budget is 600 seconds total, and exhausting
-it is a failure, never reduced coverage. `--apple-pass` refuses anything that
+Metal are left out and named. With no selection it checks the lanes changed
+since the newest `v*` tag. It checkpoints every finished cell and the same
+command resumes after an interruption; the one-hour budget is a hang guard, and
+exhausting it is an incomplete run, never reduced coverage. `--apple-pass` refuses anything that
 widens it (more repeats, probe groups, `--exhaustive`, another backend).
 
 Between releases, routine iteration uses CPU. An Apple-specific failure may

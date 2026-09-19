@@ -218,3 +218,38 @@ def test_apple_pass_is_metal_core_one_fit_three_fixtures(monkeypatch, capsys):
 def test_apple_pass_refuses_anything_that_widens_it(extra):
     with pytest.raises(SystemExit):
         verify_lanes.main(["--lane", "ridge", "--apple-pass", "--plan", *extra])
+
+
+def test_cpu_pass_is_local_cpu_with_the_apple_pass_cells(monkeypatch, capsys):
+    monkeypatch.delenv("MAC_SLOTS", raising=False)
+    assert verify_lanes.main(["--lanes", "ridge,ols,kmeans,knn,lasso", "--cpu-pass", "--plan"]) == 0
+    out = capsys.readouterr().out
+    assert "backend=cpu jobs=5" in out and "runpod" not in out
+    assert f"--fixtures {verify_lanes.APPLE_PASS_FIXTURES}" in out
+    assert "--repeats 1" in out and "--no-batch" in out and "--no-rlpair" in out
+
+
+def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, capsys):
+    monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "v9.9.9")
+    seen = {}
+    def selection(args):
+        seen.update(changed_since=args.changed_since, all=args.all, full=args.full_selection)
+        return ["ridge"], dict(mode="derived", fallback=False), None
+    monkeypatch.setattr(verify_lanes, "_selection", selection)
+    assert verify_lanes.main(["--cpu-pass", "--plan"]) == 0
+    assert seen == dict(changed_since="v9.9.9", all=False, full=True)
+    assert "lanes changed since v9.9.9" in capsys.readouterr().out
+
+
+def test_a_pass_with_no_release_tag_runs_every_lane_and_an_untouched_release_passes(monkeypatch, capsys):
+    monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "")
+    monkeypatch.setattr(verify_lanes, "_selection", lambda args: ([], dict(mode="all", fallback=False), None)
+                        if args.all else pytest.fail("no tag must mean --all"))
+    assert verify_lanes.main(["--apple-pass", "--plan"]) == 0
+    assert "touched no lane" in capsys.readouterr().out
+
+
+def test_a_pass_keeps_its_records_by_commit_outside_the_checkout_and_resumes(monkeypatch, tmp_path):
+    monkeypatch.setenv("MOJOLEARN_RELEASE_CHECK_DIR", str(tmp_path))
+    monkeypatch.setattr(verify_lanes, "_commit", lambda: "0123456789abcdef")
+    assert verify_lanes.pass_out_dir("metal") == str(tmp_path / "0123456789ab" / "metal")
