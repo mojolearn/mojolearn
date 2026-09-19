@@ -56,3 +56,11 @@ c3b5783cfee741673e6dd17fcb34f377ea50c6f5 passed on the explicitly private
 receipt-fix candidate. All 123 native/runtime files match the published wheel.
 See `bench/results/identity_break/2026-09-19_hardware-gaps/` for the receipt and
 candidate audit. AMD execution and external kernel traces remain open.
+
+AMD MI300X follow-up now passes this numerical/placement profile too. Receipts
+are retained with the `amd-` prefix in
+`bench/results/identity_break/2026-09-19_hardware-gaps/`. Distributed/CV canonical
+cross-vendor comparisons both return MATCH; loaded-LM both layouts match all
+144 baseline parts each. AMD used the private receipt-fix candidate with
+unchanged native/runtime bytes. This supersedes the AMD placement debt above
+for these tiny profiles; external kernel traces remain open.

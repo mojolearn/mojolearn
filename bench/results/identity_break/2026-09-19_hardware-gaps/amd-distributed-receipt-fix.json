@@ -1,0 +1,4876 @@
+{
+  "bindings": {
+    "_mojolearn_arima": {
+      "path": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_arima.so",
+      "sha256": "627b6393d30c232bc9b0f8d2941dbd24e34c7bd7a0dbcbb96f78f1feb5962a9e",
+      "vendor": "hip"
+    },
+    "_mojolearn_gp": {
+      "path": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_gp.so",
+      "sha256": "182e5457ce1321b7cf6fab6d2d77c0941604f3d330b7d6b84e47066432919d69",
+      "vendor": "hip"
+    },
+    "_mojolearn_ivf": {
+      "path": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_ivf.so",
+      "sha256": "3921f00f574f8bcca9efbefb567b7c2d2c5be2277c2a38588d5d09f1bc198180",
+      "vendor": "hip"
+    },
+    "_mojolearn_tsa": {
+      "path": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_tsa.so",
+      "sha256": "ecf30f419ec3107aa4fa50417321c2ceb2a8ac9774dc21f437ab7d397ce9de5c",
+      "vendor": "hip"
+    }
+  },
+  "cells": [
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        0
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        1
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        2,
+        3
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        4
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        5
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        6
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        7
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        8,
+        9
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        10
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 0,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        11
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        12
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        13
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        14,
+        15
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        16
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        17
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        18
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        19
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        20,
+        21
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        22
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        0,
+        1
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 1,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        23
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        24
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        25
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        26,
+        27
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        28
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 0,
+      "worker_groups": [
+        29
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "case": "arima",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "5eded97b34b08f4c0d9c8c2fa889363783373a5dd756d2af979b909dcbe48706",
+          "shape": [
+            5,
+            36
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        30
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "case": "holtwinters",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "24116aad038e5c27e210a67958a6973404b9026a3ea86c74741a4124a8807f80",
+          "shape": [
+            5,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        31
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "case": "gpc",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f8",
+          "sha256": "1ae0a6a5d0c39da0c7a5d17d77b99fbee48c4e3d157ab8506b11818492055d1b",
+          "shape": [
+            5,
+            3
+          ]
+        },
+        {
+          "dtype": "<i8",
+          "sha256": "6e3ada058bd0030f215d5489c9dce8784c97cb980da8d448b5f9385005b0faa1",
+          "shape": [
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        32,
+        33
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "case": "ivf",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "217bafefa6c75dbaf4f1fdb3b21b427041af241a62fdf6e9a73ae5d6fac7ff3a",
+          "shape": [
+            7,
+            5
+          ]
+        },
+        {
+          "dtype": "<i4",
+          "sha256": "7acfcf5461cb3115182ea0265d687ce1028a84c416adf945d4150f81457a307f",
+          "shape": [
+            7,
+            5
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        34
+      ]
+    },
+    {
+      "actual": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "case": "gpc_fit",
+      "devices": [
+        1,
+        0
+      ],
+      "expected": [
+        {
+          "dtype": "<f4",
+          "sha256": "ce10c781b2e5c141ac09e643314eccc03cfb65d7dc9c7a5c8df4612f90fa1c0a",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "ade415669a1d43155eff013c7e0458947062391016167ef7dfab0d34a6a6138d",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "c896bb47bcb21e88e20b06e14fd34f4a4cb7a546769093f3701913ab97f3e74e",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bf7ca983fbe7a49bbae80c59d9a86d703aa6a2dc6c5b00ff192a5c4d022dad7b",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "4e9f1cf63b19853749924b2a375e24a50a592abda0f4737bbc04ff0ae2cba3f7",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "b8669891e58281eef8a08c1eb67bd41c6bc41df97bdbde5a7a6b3ef62b2dd281",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "a3e818e62abee2e11004bf44433f513064a045f0f51adef3c75b5faaa776b1b4",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "78760abdd721fa84c9450b4da4fa3f4aaf82424b4073995b44f529109ae8cb8f",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93ffbfc491203a5042ce8729e8bde71460b23b81ce1c3b71292976bcdb6a42bd",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "93edaba5e880bff52b3a6abb6798908151f2191b78b1db38f2f1f86d0a124892",
+          "shape": [
+            9,
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "0faadd1b2d061ba4e8443380081b54deb259d98e1ea48a84c6f7ab66a337c7a2",
+          "shape": [
+            9
+          ]
+        },
+        {
+          "dtype": "<f4",
+          "sha256": "bc0d4f97510b4200d4c52369f99a1684fe0674e165a7d009037eb230b9e7a69e",
+          "shape": [
+            9
+          ]
+        }
+      ],
+      "layout": 2,
+      "match": true,
+      "repeat": 1,
+      "worker_groups": [
+        35
+      ]
+    }
+  ],
+  "controls": [
+    {
+      "case": "arima",
+      "detected": true,
+      "error": "ValueError('forecast workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "arima",
+      "detected": true,
+      "error": "ValueError('ARIMA worker returned an invalid prediction shape or dtype')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "holtwinters",
+      "detected": true,
+      "error": "ValueError('forecast workers returned an incomplete batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "holtwinters",
+      "detected": true,
+      "error": "ValueError('Holt-Winters worker returned an invalid prediction shape or dtype')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc",
+      "detected": true,
+      "error": "ValueError('GPC workers returned an incomplete class batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc",
+      "detected": true,
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "ivf",
+      "detected": true,
+      "error": "ValueError('incomplete IVF result shards')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "ivf",
+      "detected": true,
+      "error": "ValueError('invalid IVF candidate count')",
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc_fit",
+      "detected": true,
+      "error": "ValueError('GPC workers returned an incomplete class batch')",
+      "fault": "drop_result",
+      "kind": "transport",
+      "triggered": true
+    },
+    {
+      "case": "gpc_fit",
+      "detected": true,
+      "fault": "reverse_results",
+      "kind": "transport",
+      "triggered": true
+    }
+  ],
+  "devices": [
+    0,
+    1
+  ],
+  "distribution": {
+    "editable": false,
+    "import_matches_distribution": true,
+    "native_record_hashes_match": true,
+    "root": "/root/gap-plan-venv/lib/python3.10/site-packages",
+    "source_record_hashes_match": true,
+    "version": "0.8.8"
+  },
+  "elapsed_seconds": 58.54730629990809,
+  "environment": {
+    "commit": "unknown (no checkout beside this package)",
+    "device": "AMD card1,AMD Instinct MI300X,0x74a1,Advanced Micro Devices Inc. [AMD/ATI],MI3SRIOV,0x74a1,0x00,6,53458,gfx942",
+    "mode": {
+      "binary": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn.so",
+      "compiled": "identical",
+      "ident_dir": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/identical",
+      "loaded": "identical",
+      "problem": "the selector reports identical but the extension running this fixture is /root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn.so, which is NOT under /root/gap-plan-venv/lib/python3.10/site-packages/mojolearn/identical. A binary is in the wrong directory; nothing here can be labelled.",
+      "requested": "identical",
+      "under_identical": false
+    },
+    "mojolearn_version": "0.8.8",
+    "numpy_version": "2.2.6",
+    "platform": "Linux 6.8.0-138-generic x86_64",
+    "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+    "python": "3.10.12 CPython",
+    "vendor": "hip (the box probe (device nodes and driver libraries))"
+  },
+  "guarded_source_commit": "c3b5783cfee741673e6dd17fcb34f377ea50c6f5",
+  "inputs": {
+    "arima": {
+      "dtype": "<f4",
+      "sha256": "f8fef8e983e5c8301ce5e191581cb42b21694f5e9dafeaf17ed6c92b920a2ece",
+      "shape": [
+        5,
+        32
+      ]
+    },
+    "gpc_x": {
+      "dtype": "<f4",
+      "sha256": "1f97be7841818e405ed316fe96b8657dd13791651d70a3692c3dc2a21b9373e2",
+      "shape": [
+        9,
+        3
+      ]
+    },
+    "gpc_y": {
+      "dtype": "<i4",
+      "sha256": "f0f05679062d8d21b52c291de821383c6faaf59c2f7c71b89ea2026f69128725",
+      "shape": [
+        9
+      ]
+    },
+    "holtwinters": {
+      "dtype": "<f4",
+      "sha256": "830f5fd74f2ab05fc60bc9c3d698c15c51fd03f4f99ada52b0e8ea5b2171421b",
+      "shape": [
+        5,
+        24
+      ]
+    },
+    "ivf": {
+      "dtype": "<f4",
+      "sha256": "933142afeeee49f03fabfd2f11f20777c2420814eda1fe9bc0f19fc3c1c0dd9f",
+      "shape": [
+        65,
+        17
+      ]
+    }
+  },
+  "native_fault_controls": "OWED",
+  "package": "/root/gap-plan-venv/lib/python3.10/site-packages/mojolearn",
+  "physical_execution_trace": "OWED",
+  "protocol": "distributed-classical-v2",
+  "repeats": 2,
+  "source_commit": null,
+  "source_files": {
+    "__init__.py": "54e16f7fc25459a935b7ecada806dab1cc447067b48a934c80d645e34b354306",
+    "_gpu_witness.py": "619e7697c49a153b5bf40e1dde75e6a965940189e89ce5649b391527584b99f4",
+    "_parallel_pool.py": "b9802fc2bab26b3edea192b0bd91cb83fabfb02b29e3d18dc0aa2cd116a0d8e2",
+    "_parallel_worker.py": "ffc86bae15189207b9d50418b6a6c59f6a0e8a0abc2219994604900165eb64b1",
+    "_verify_distributed.py": "e19d3ce905f9bfdce10f90f12fccb0bf08083f27ecc95476eacbc639ec927223",
+    "parallel_forecasting.py": "f7dd67fb1a810c90375ef6fc98655471f93f87ffc2c62da763c5a2d9816db147",
+    "parallel_gaussian_process.py": "e785bd7a36b02b93430b5b24e9df1df993c5b72af75fcbeb66a9bb2a1b16d18a",
+    "parallel_ivf.py": "af614fe755620f8e0c92d6b6df45801c920b7bdecad40b6d1b119ddc687fdd1d"
+  },
+  "status": "NUMERICAL_MATCH_EXECUTION_TRACE_OWED",
+  "vendor": "hip",
+  "worker_calls": [
+    {
+      "group": 0,
+      "operation": "forecast_predict",
+      "pid": 1588
+    },
+    {
+      "group": 0,
+      "operation": "forecast_predict",
+      "pid": 1588
+    },
+    {
+      "group": 0,
+      "operation": "forecast_predict",
+      "pid": 1588
+    },
+    {
+      "group": 1,
+      "operation": "forecast_predict",
+      "pid": 1607
+    },
+    {
+      "group": 1,
+      "operation": "forecast_predict",
+      "pid": 1607
+    },
+    {
+      "group": 1,
+      "operation": "forecast_predict",
+      "pid": 1607
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 1626
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 1626
+    },
+    {
+      "group": 2,
+      "operation": "gpc_class_predict",
+      "pid": 1626
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 1645
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 1645
+    },
+    {
+      "group": 3,
+      "operation": "gpc_class_predict",
+      "pid": 1645
+    },
+    {
+      "group": 4,
+      "operation": "ivf_store",
+      "pid": 1664
+    },
+    {
+      "group": 4,
+      "operation": "ivf_search_stored",
+      "pid": 1664
+    },
+    {
+      "group": 4,
+      "operation": "ivf_finalize",
+      "pid": 1664
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 1683
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 1683
+    },
+    {
+      "group": 5,
+      "operation": "gpc_class_fit",
+      "pid": 1683
+    },
+    {
+      "group": 6,
+      "operation": "forecast_predict",
+      "pid": 1702
+    },
+    {
+      "group": 6,
+      "operation": "forecast_predict",
+      "pid": 1702
+    },
+    {
+      "group": 6,
+      "operation": "forecast_predict",
+      "pid": 1702
+    },
+    {
+      "group": 7,
+      "operation": "forecast_predict",
+      "pid": 1721
+    },
+    {
+      "group": 7,
+      "operation": "forecast_predict",
+      "pid": 1721
+    },
+    {
+      "group": 7,
+      "operation": "forecast_predict",
+      "pid": 1721
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 1740
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 1740
+    },
+    {
+      "group": 8,
+      "operation": "gpc_class_predict",
+      "pid": 1740
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 1759
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 1759
+    },
+    {
+      "group": 9,
+      "operation": "gpc_class_predict",
+      "pid": 1759
+    },
+    {
+      "group": 10,
+      "operation": "ivf_store",
+      "pid": 1778
+    },
+    {
+      "group": 10,
+      "operation": "ivf_search_stored",
+      "pid": 1778
+    },
+    {
+      "group": 10,
+      "operation": "ivf_finalize",
+      "pid": 1778
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 1797
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 1797
+    },
+    {
+      "group": 11,
+      "operation": "gpc_class_fit",
+      "pid": 1797
+    },
+    {
+      "group": 12,
+      "operation": "forecast_predict",
+      "pid": 1816
+    },
+    {
+      "group": 12,
+      "operation": "forecast_predict",
+      "pid": 1817
+    },
+    {
+      "group": 12,
+      "operation": "forecast_predict",
+      "pid": 1816
+    },
+    {
+      "group": 13,
+      "operation": "forecast_predict",
+      "pid": 1855
+    },
+    {
+      "group": 13,
+      "operation": "forecast_predict",
+      "pid": 1854
+    },
+    {
+      "group": 13,
+      "operation": "forecast_predict",
+      "pid": 1854
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 1894
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 1895
+    },
+    {
+      "group": 14,
+      "operation": "gpc_class_predict",
+      "pid": 1894
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 1944
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 1945
+    },
+    {
+      "group": 15,
+      "operation": "gpc_class_predict",
+      "pid": 1944
+    },
+    {
+      "group": 16,
+      "operation": "ivf_store",
+      "pid": 1982
+    },
+    {
+      "group": 16,
+      "operation": "ivf_store",
+      "pid": 1983
+    },
+    {
+      "group": 16,
+      "operation": "ivf_search_stored",
+      "pid": 1983
+    },
+    {
+      "group": 16,
+      "operation": "ivf_search_stored",
+      "pid": 1982
+    },
+    {
+      "group": 16,
+      "operation": "ivf_finalize",
+      "pid": 1982
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 2022
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 2023
+    },
+    {
+      "group": 17,
+      "operation": "gpc_class_fit",
+      "pid": 2022
+    },
+    {
+      "group": 18,
+      "operation": "forecast_predict",
+      "pid": 2069
+    },
+    {
+      "group": 18,
+      "operation": "forecast_predict",
+      "pid": 2070
+    },
+    {
+      "group": 18,
+      "operation": "forecast_predict",
+      "pid": 2069
+    },
+    {
+      "group": 19,
+      "operation": "forecast_predict",
+      "pid": 2108
+    },
+    {
+      "group": 19,
+      "operation": "forecast_predict",
+      "pid": 2109
+    },
+    {
+      "group": 19,
+      "operation": "forecast_predict",
+      "pid": 2108
+    },
+    {
+      "group": 20,
+      "operation": "gpc_class_predict",
+      "pid": 2147
+    },
+    {
+      "group": 20,
+      "operation": "gpc_class_predict",
+      "pid": 2146
+    },
+    {
+      "group": 20,
+      "operation": "gpc_class_predict",
+      "pid": 2146
+    },
+    {
+      "group": 21,
+      "operation": "gpc_class_predict",
+      "pid": 2185
+    },
+    {
+      "group": 21,
+      "operation": "gpc_class_predict",
+      "pid": 2184
+    },
+    {
+      "group": 21,
+      "operation": "gpc_class_predict",
+      "pid": 2184
+    },
+    {
+      "group": 22,
+      "operation": "ivf_store",
+      "pid": 2222
+    },
+    {
+      "group": 22,
+      "operation": "ivf_store",
+      "pid": 2223
+    },
+    {
+      "group": 22,
+      "operation": "ivf_search_stored",
+      "pid": 2223
+    },
+    {
+      "group": 22,
+      "operation": "ivf_search_stored",
+      "pid": 2222
+    },
+    {
+      "group": 22,
+      "operation": "ivf_finalize",
+      "pid": 2222
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_fit",
+      "pid": 2260
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_fit",
+      "pid": 2261
+    },
+    {
+      "group": 23,
+      "operation": "gpc_class_fit",
+      "pid": 2260
+    },
+    {
+      "group": 24,
+      "operation": "forecast_predict",
+      "pid": 2299
+    },
+    {
+      "group": 24,
+      "operation": "forecast_predict",
+      "pid": 2298
+    },
+    {
+      "group": 24,
+      "operation": "forecast_predict",
+      "pid": 2298
+    },
+    {
+      "group": 25,
+      "operation": "forecast_predict",
+      "pid": 2337
+    },
+    {
+      "group": 25,
+      "operation": "forecast_predict",
+      "pid": 2336
+    },
+    {
+      "group": 25,
+      "operation": "forecast_predict",
+      "pid": 2336
+    },
+    {
+      "group": 26,
+      "operation": "gpc_class_predict",
+      "pid": 2375
+    },
+    {
+      "group": 26,
+      "operation": "gpc_class_predict",
+      "pid": 2374
+    },
+    {
+      "group": 26,
+      "operation": "gpc_class_predict",
+      "pid": 2374
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_predict",
+      "pid": 2412
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_predict",
+      "pid": 2413
+    },
+    {
+      "group": 27,
+      "operation": "gpc_class_predict",
+      "pid": 2412
+    },
+    {
+      "group": 28,
+      "operation": "ivf_store",
+      "pid": 2450
+    },
+    {
+      "group": 28,
+      "operation": "ivf_store",
+      "pid": 2451
+    },
+    {
+      "group": 28,
+      "operation": "ivf_search_stored",
+      "pid": 2451
+    },
+    {
+      "group": 28,
+      "operation": "ivf_search_stored",
+      "pid": 2450
+    },
+    {
+      "group": 28,
+      "operation": "ivf_finalize",
+      "pid": 2450
+    },
+    {
+      "group": 29,
+      "operation": "gpc_class_fit",
+      "pid": 2488
+    },
+    {
+      "group": 29,
+      "operation": "gpc_class_fit",
+      "pid": 2489
+    },
+    {
+      "group": 29,
+      "operation": "gpc_class_fit",
+      "pid": 2488
+    },
+    {
+      "group": 30,
+      "operation": "forecast_predict",
+      "pid": 2526
+    },
+    {
+      "group": 30,
+      "operation": "forecast_predict",
+      "pid": 2527
+    },
+    {
+      "group": 30,
+      "operation": "forecast_predict",
+      "pid": 2526
+    },
+    {
+      "group": 31,
+      "operation": "forecast_predict",
+      "pid": 2564
+    },
+    {
+      "group": 31,
+      "operation": "forecast_predict",
+      "pid": 2565
+    },
+    {
+      "group": 31,
+      "operation": "forecast_predict",
+      "pid": 2564
+    },
+    {
+      "group": 32,
+      "operation": "gpc_class_predict",
+      "pid": 2603
+    },
+    {
+      "group": 32,
+      "operation": "gpc_class_predict",
+      "pid": 2602
+    },
+    {
+      "group": 32,
+      "operation": "gpc_class_predict",
+      "pid": 2602
+    },
+    {
+      "group": 33,
+      "operation": "gpc_class_predict",
+      "pid": 2642
+    },
+    {
+      "group": 33,
+      "operation": "gpc_class_predict",
+      "pid": 2643
+    },
+    {
+      "group": 33,
+      "operation": "gpc_class_predict",
+      "pid": 2642
+    },
+    {
+      "group": 34,
+      "operation": "ivf_store",
+      "pid": 2692
+    },
+    {
+      "group": 34,
+      "operation": "ivf_store",
+      "pid": 2693
+    },
+    {
+      "group": 34,
+      "operation": "ivf_search_stored",
+      "pid": 2692
+    },
+    {
+      "group": 34,
+      "operation": "ivf_search_stored",
+      "pid": 2693
+    },
+    {
+      "group": 34,
+      "operation": "ivf_finalize",
+      "pid": 2692
+    },
+    {
+      "group": 35,
+      "operation": "gpc_class_fit",
+      "pid": 2730
+    },
+    {
+      "group": 35,
+      "operation": "gpc_class_fit",
+      "pid": 2731
+    },
+    {
+      "group": 35,
+      "operation": "gpc_class_fit",
+      "pid": 2730
+    },
+    {
+      "group": 36,
+      "operation": "forecast_predict",
+      "pid": 2768
+    },
+    {
+      "group": 36,
+      "operation": "forecast_predict",
+      "pid": 2769
+    },
+    {
+      "group": 36,
+      "operation": "forecast_predict",
+      "pid": 2768
+    },
+    {
+      "group": 37,
+      "operation": "forecast_predict",
+      "pid": 2806
+    },
+    {
+      "group": 37,
+      "operation": "forecast_predict",
+      "pid": 2807
+    },
+    {
+      "group": 37,
+      "operation": "forecast_predict",
+      "pid": 2806
+    },
+    {
+      "group": 38,
+      "operation": "forecast_predict",
+      "pid": 2844
+    },
+    {
+      "group": 38,
+      "operation": "forecast_predict",
+      "pid": 2845
+    },
+    {
+      "group": 38,
+      "operation": "forecast_predict",
+      "pid": 2844
+    },
+    {
+      "group": 39,
+      "operation": "forecast_predict",
+      "pid": 2893
+    },
+    {
+      "group": 39,
+      "operation": "forecast_predict",
+      "pid": 2894
+    },
+    {
+      "group": 39,
+      "operation": "forecast_predict",
+      "pid": 2893
+    },
+    {
+      "group": 40,
+      "operation": "gpc_class_predict",
+      "pid": 2934
+    },
+    {
+      "group": 40,
+      "operation": "gpc_class_predict",
+      "pid": 2935
+    },
+    {
+      "group": 40,
+      "operation": "gpc_class_predict",
+      "pid": 2934
+    },
+    {
+      "group": 41,
+      "operation": "gpc_class_predict",
+      "pid": 2973
+    },
+    {
+      "group": 41,
+      "operation": "gpc_class_predict",
+      "pid": 2972
+    },
+    {
+      "group": 41,
+      "operation": "gpc_class_predict",
+      "pid": 2972
+    },
+    {
+      "group": 42,
+      "operation": "gpc_class_predict",
+      "pid": 3013
+    },
+    {
+      "group": 42,
+      "operation": "gpc_class_predict",
+      "pid": 3012
+    },
+    {
+      "group": 42,
+      "operation": "gpc_class_predict",
+      "pid": 3012
+    },
+    {
+      "group": 43,
+      "operation": "ivf_store",
+      "pid": 3060
+    },
+    {
+      "group": 43,
+      "operation": "ivf_store",
+      "pid": 3061
+    },
+    {
+      "group": 43,
+      "operation": "ivf_search_stored",
+      "pid": 3061
+    },
+    {
+      "group": 43,
+      "operation": "ivf_search_stored",
+      "pid": 3060
+    },
+    {
+      "group": 44,
+      "operation": "ivf_store",
+      "pid": 3098
+    },
+    {
+      "group": 44,
+      "operation": "ivf_store",
+      "pid": 3099
+    },
+    {
+      "group": 44,
+      "operation": "ivf_search_stored",
+      "pid": 3098
+    },
+    {
+      "group": 44,
+      "operation": "ivf_search_stored",
+      "pid": 3099
+    },
+    {
+      "group": 45,
+      "operation": "gpc_class_fit",
+      "pid": 3136
+    },
+    {
+      "group": 45,
+      "operation": "gpc_class_fit",
+      "pid": 3137
+    },
+    {
+      "group": 45,
+      "operation": "gpc_class_fit",
+      "pid": 3136
+    },
+    {
+      "group": 46,
+      "operation": "gpc_class_fit",
+      "pid": 3175
+    },
+    {
+      "group": 46,
+      "operation": "gpc_class_fit",
+      "pid": 3174
+    },
+    {
+      "group": 46,
+      "operation": "gpc_class_fit",
+      "pid": 3174
+    }
+  ],
+  "worker_groups": [
+    {
+      "devices": [
+        0
+      ],
+      "group": 0,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1588,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 1,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1607,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 2,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1626,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 3,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1645,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 4,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1664,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 5,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1683,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 6,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1702,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 7,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1721,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 8,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1740,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 9,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1759,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 10,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1778,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0
+      ],
+      "group": 11,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1797,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 12,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1816,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1817,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 13,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1854,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1855,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 14,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1894,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1895,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 15,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1944,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1945,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 16,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1982,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 1983,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 17,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2022,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2023,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 18,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2069,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2070,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 19,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2108,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2109,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 20,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2146,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2147,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 21,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2184,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2185,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 22,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2222,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2223,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 23,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2260,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2261,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 24,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2298,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2299,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 25,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2336,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2337,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 26,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2374,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2375,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 27,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2412,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2413,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 28,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2450,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2451,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 29,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2488,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2489,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 30,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2526,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2527,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 31,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2564,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2565,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 32,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2602,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2603,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 33,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2642,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2643,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 34,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2692,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2693,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        1,
+        0
+      ],
+      "group": 35,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2730,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2731,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 36,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2768,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2769,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 37,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2806,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2807,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 38,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2844,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2845,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 39,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2893,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2894,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 40,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2934,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2935,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 41,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2972,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 2973,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 42,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3012,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3013,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 43,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3060,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3061,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 44,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3098,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3099,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 45,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3136,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3137,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    },
+    {
+      "devices": [
+        0,
+        1
+      ],
+      "group": 46,
+      "inventory": [
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:65:00.0",
+              "uuid": "63643833343638633332323463316336"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3174,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "0"
+          }
+        },
+        {
+          "devices": [
+            {
+              "name": "AMD Instinct MI300X",
+              "ordinal": 0,
+              "pci_bus_id": "0000:85:00.0",
+              "uuid": "38336364383233636536316464303934"
+            }
+          ],
+          "driver_library": "libamdhip64.so.6",
+          "kind": "visible-device-inventory",
+          "pid": 3175,
+          "vendor": "hip",
+          "visibility": {
+            "HIP_VISIBLE_DEVICES": "1"
+          }
+        }
+      ]
+    }
+  ]
+}

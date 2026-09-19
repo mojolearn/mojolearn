@@ -61,3 +61,18 @@ completed layer-run RPC. This closes NVIDIA numerical and placement evidence
 for this profile; external kernel traces remain owed. The published wheel was
 used unchanged. AMD reservation was attempted after stock appeared, but the
 provider rejected creation as unavailable; no AMD pod was created.
+
+## AMD placement checkpoint
+
+AMD MI300X now passes distributed (30 numerical cases, ten transport controls)
+and CV (twelve runs, eight comparator controls). Canonical receipt comparisons
+against NVIDIA both return MATCH. Both AMD loaded-LM layouts also match all
+144 baseline parts across 24 cases, with distinct owner devices and completed
+layer-run RPCs. These AMD captures use the explicitly private receipt-fix
+candidate described above. The `amd-*` receipts and
+`cross-vendor-receipt-comparison.json` retain this evidence. External kernel
+traces remain outside these claims. Classical AMD missing-part captures continue.
+
+NVIDIA single-device resampling is complete. The previous H100 pod was deleted
+and confirmed absent; eight two-device resampling batch witnesses are being
+captured in a final bounded gap-only pass.

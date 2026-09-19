@@ -170,3 +170,11 @@ This used the private receipt-serialization fix candidate, not published 0.8.8
 bytes; its native/runtime files are unchanged. Earlier NVIDIA execution debt
 is superseded for this numerical/placement profile. AMD and external kernel
 traces remain open. The implementation and receipt fix are now on main.
+
+AMD MI300X follow-up now passes this numerical/placement profile too. Receipts
+are retained with the `amd-` prefix in
+`bench/results/identity_break/2026-09-19_hardware-gaps/`. Distributed/CV canonical
+cross-vendor comparisons both return MATCH; loaded-LM both layouts match all
+144 baseline parts each. AMD used the private receipt-fix candidate with
+unchanged native/runtime bytes. This supersedes the AMD placement debt above
+for these tiny profiles; external kernel traces remain open.
