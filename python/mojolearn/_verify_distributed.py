@@ -222,8 +222,8 @@ def main(argv=None):
         pass
     if args.require_installed and (not distribution or not distribution['import_matches_distribution'] or distribution['editable']):
         ap.error('import does not match an installed mojolearn distribution')
-    from mojolearn._verify import environment
-    receipt = {'protocol': PROTOCOL, 'environment': environment(), 'repeats': 2, 'status': 'RUNNING',
+    from mojolearn._verify import environment_json
+    receipt = {'protocol': PROTOCOL, 'environment': environment_json(), 'repeats': 2, 'status': 'RUNNING',
                'physical_execution_trace': 'OWED', 'native_fault_controls': 'OWED',
                'vendor': vendor,
                'package': str(package), 'distribution': distribution,

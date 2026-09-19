@@ -577,6 +577,13 @@ def environment(mode=None):
     }
 
 
+def environment_json(mode=None):
+    """Environment receipt with the complete mode witness as JSON data."""
+    result = environment(mode)
+    result["mode"] = result["mode"].as_dict()
+    return result
+
+
 def _vendor_text():
     """'cuda (the box probe ...)' and so on: what `_backend.vendor()` read
     back from the loaded binaries, and how the directory was chosen. Printed
