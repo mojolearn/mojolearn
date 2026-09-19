@@ -1,12 +1,30 @@
-# One par-* two-device pair, and four lanes the lease did not reach
+# A par-forecast-arima pair that `admit` REFUSES, kept as a diagnostic
 
-WHAT THIS PROVES. `par-forecast-arima/base` on an RTX 4090 pair, commit
-900038b24: the one-device column (`par_devices: 0`) and the two-device
-column (`par_devices: 0,1`) agree on EVERY part -- hashes, infer, model,
-reload, batch, and the predict/forecast sub-parts. That equality IS the
-driver's claim (`_par_devices`: "a two-device column ... must hash equal,
-cell for cell, to the one-device column of the same commit"), and a
-two-device column alone asserts nothing, which is why both halves are here.
+CREDITS NOTHING. READ THIS FIRST. Both files here carry
+`complete: false`, and `_verify_reference.admit()` refuses each of them by
+name -- "incomplete identity_break checkpoint" -- with AND without
+`par_axis=True`. So `par_two_device` reads neither, `par-forecast-arima`
+still has NO two-device column, and nothing in the matrix may be credited
+from this directory. The lane needs its run FINISHED, not redone.
+
+The header of this file used to read "One par-* two-device pair landed"
+and opened with WHAT THIS PROVES. That was wrong and is corrected here
+rather than quietly rewritten: the observation underneath it is true, and
+the conclusion drawn from it was not.
+
+THE TRUE OBSERVATION. `par-forecast-arima/base` on an RTX 4090 pair,
+commit 900038b24: the one-device half (`par_devices: 0`) and the
+two-device half (`par_devices: 0,1`) agree on every part present --
+hashes, infer, model, reload, batch, and the predict/forecast sub-parts.
+That equality is what the driver claims (`_par_devices`: "a two-device
+column ... must hash equal, cell for cell, to the one-device column of the
+same commit").
+
+WHY THAT IS STILL NOT EVIDENCE. The run was cut off by a timeout, so these
+are checkpoints, not columns. A truncated column's hashes can be read, but
+the admission rule refuses it, and a hash a rule refuses is not evidence
+however much it agrees. Reporting bytes that agree as a lane closed is the
+same error as reading a green exit from a diff over one cell.
 
 WHAT IT DOES NOT PROVE. The leg was launched for FIVE lanes
 (par-border-types, par-forecast-arima, par-forecast-holtwinters, par-ivf,
