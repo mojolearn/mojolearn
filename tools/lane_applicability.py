@@ -24,7 +24,14 @@ Two consequences this file measures rather than asserts:
   cell exercises a sharding driver with one shard and cannot fail for the
   reason the lane exists. The same shape appears for a lane whose arithmetic
   is the CPU host route: on an Apple or NVIDIA column it measures that box's
-  CPU and says nothing about Metal or CUDA.
+  CPU and says nothing about Metal or CUDA. Its limit is the PURE-PYTHON lane,
+  which stands on no Mojo binding at all: `cross-val-folds` hashes integer
+  fold bookkeeping that no vendor can move, so five of the six columns are
+  vacuous and the sixth, cpu-host, is the only one where it says anything.
+  DEGENERACY CUTS BOTH WAYS, and until 2026-09-19 this file only cut one: a
+  lane with no binding was refused on cpu-host for "no CPU route" (a rule
+  written for GPU-only lanes) and admitted on all five GPU columns, so the one
+  meaningful cell was the one that never ran.
 
   THE ORACLE is what a passing cell was compared against. Three classes, and
   they are not equally strong:
@@ -66,6 +73,13 @@ something else already enforces:
                  answer, and the binding names each public class's door file
                  mentions: a class whose door names only `*_host` bindings
                  computes on the CPU wherever it runs.
+  no binding     the same two sources read for ABSENCE: no host family
+                 declares the lane, and no package file behind the doors it
+                 opens names a `_mojolearn_*` binding. host_surface states the
+                 same fact in `PUBLIC_HOST_ONLY_LANES` (a family name, or None
+                 for "no native host binding is required"), and the two are
+                 CHECKED against each other exactly as the device claim is
+                 checked against the `par-` prefix.
   the record     `identity_break.record_excluded_lanes()`, the harness's own
                  statement of what a release record does not cover.
 
@@ -386,6 +400,92 @@ def _host_only_names(ml_attrs):
     return out
 
 
+_PACKAGE_BINDINGS = None
+
+
+def _package_bindings():
+    """(module stem -> the `_mojolearn_*` bindings its file names, public name
+    -> the module stems that define it), over the WHOLE package.
+
+    `_door_bindings` above answers "which bindings is this name's door built
+    on", and drops a file naming more than three because harvesting from a
+    registry gives every name every binding. This pair answers the opposite
+    question, "does this file name a binding AT ALL", where a registry's many
+    bindings are a `yes` and that threshold would throw the answer away."""
+    global _PACKAGE_BINDINGS
+    if _PACKAGE_BINDINGS is not None:
+        return _PACKAGE_BINDINGS
+    binding_re = re.compile(r"_mojolearn[a-z0-9_]*")
+    modules, names = {}, {}
+    for fn in sorted(os.listdir(PKG)):
+        if not fn.endswith(".py"):
+            continue
+        try:
+            text = open(os.path.join(PKG, fn), encoding="utf-8").read()
+            tree = ast.parse(text)
+        except (OSError, SyntaxError):
+            continue
+        stem = fn[:-3]
+        modules[stem] = set(binding_re.findall(text))
+        for node in tree.body:
+            if isinstance(node, (ast.ClassDef, ast.FunctionDef)):
+                names.setdefault(node.name, set()).add(stem)
+    _PACKAGE_BINDINGS = (modules, names)
+    return _PACKAGE_BINDINGS
+
+
+def _pure_python(ml_attrs, has_cpu_route):
+    """Whether the lane's arithmetic stands on NO Mojo binding of any kind.
+
+    THE HOLE THIS CLOSES (2026-09-19). `cross-val-folds` hashes
+    `model_selection._default_folds`, integer index bookkeeping in Python, and
+    `python/mojolearn/model_selection.py` names no binding at all. No host
+    FAMILY can declare a lane it builds no binding for, so `covered_lanes()`
+    does not hold it, and the rule below read that absence as "the CPU column
+    has no arithmetic to run and the cell REFUSES". It does not refuse: it is
+    the one lane that answers on a CPU-only wheel with no binding installed,
+    which is its own docstring's claim, and the sabotage record at
+    `2026-09-17_sabotage-sweep/e-python-lanes/cpu-x86.sabotage.json` is a CPU
+    cell that ran. So the rule refused it on the ONE column where its
+    proposition is meaningful and admitted it on five columns where no GPU
+    code runs at all, which is backwards in both directions at once.
+
+    A lane with no binding anywhere is not degenerate on the CPU column; it is
+    a PURE-PYTHON lane, meaningful on exactly the host column and vacuous on
+    every other, which is the same shape as `host_only` one step further out.
+
+    DERIVED, never a list of names, and from two facts that must BOTH hold:
+
+      no family   `host_surface.covered_lanes()` does not hold it, so nothing
+                  in the tree builds a binding for its arithmetic.
+      no binding  every public name the lane opens resolves to a package file,
+                  and not one of those files names a `_mojolearn_*` binding.
+
+    NEITHER ALONE IS RIGHT, measured on this registry. Six lanes pass the
+    second and fail the first -- `mlp`, `par-mlp`, `optim-sgd`,
+    `optim-adam-clip`, `training-primitives`, `cross-entropy-arms` -- because
+    `training.py` and `_mlp_impl.py` are re-export shims over
+    `_training_impl`, which is where the bindings are named; a file-level scan
+    that stopped there would have called six binding-backed lanes pure Python.
+    And the 21 factory lanes that open no `ml.<name>` at all pass the second
+    vacuously: an empty door set is no evidence, so it answers False.
+    """
+    if has_cpu_route or not ml_attrs:
+        return False
+    modules, names = _package_bindings()
+    reached = set()
+    for attr in ml_attrs:
+        if attr in modules:
+            reached.add(attr)
+        elif attr in names:
+            reached |= names[attr]
+        else:
+            # A door this file cannot resolve to a package file is not
+            # evidence of absence; the lane keeps whatever it had.
+            return False
+    return not any(modules[stem] for stem in reached)
+
+
 _COVERED = None
 
 
@@ -404,13 +504,15 @@ class Scope:
     """What a lane needs for its proposition to be expressible, derived."""
 
     def __init__(self, name, claim_devices, oracle, oracle_evidence,
-                 host_only, has_cpu_route, is_function, record_excluded, ml_attrs):
+                 host_only, has_cpu_route, is_function, record_excluded, ml_attrs,
+                 pure_python=False):
         self.name = name
         self.claim_devices = claim_devices
         self.oracle = oracle
         self.oracle_evidence = oracle_evidence
         self.host_only = host_only
         self.has_cpu_route = has_cpu_route
+        self.pure_python = pure_python
         self.is_function = is_function
         self.record_excluded = record_excluded
         self.ml_attrs = ml_attrs
@@ -448,6 +550,8 @@ class Scope:
     def kind(self):
         if self.claim_devices >= 2:
             return "multi-device-driver"
+        if self.pure_python:
+            return "pure-python-host"
         if self.host_only:
             return "cpu-host-route-only"
         if self.is_function:
@@ -471,12 +575,18 @@ class Scope:
                 f"{col.devices} device(s). Its claim, in `_par_devices`'s own docstring, is that a "
                 f"two-device column hashes equal cell for cell to the one-device column; with one "
                 f"shard that equality is not false, it is not expressible. {rest}")
+        if self.pure_python and col.route != "host":
+            return False, (
+                f"DEGENERATE (vacuous): the lane stands on no Mojo binding of any kind "
+                f"({', '.join(self.ml_attrs)} names none), so on the {col.name} column it runs the "
+                f"same Python on that box's CPU and says nothing whatever about {col.backend}. Its "
+                f"proposition is stateable on the cpu-host column and on no other")
         if self.host_only and col.route != "host":
             return False, (
                 f"DEGENERATE: the lane's arithmetic is the CPU host route ({', '.join(sorted(self.host_only))}), "
                 f"so on the {col.name} column it measures that box's CPU and says nothing about "
                 f"{col.backend}")
-        if not self.has_cpu_route and col.route == "host":
+        if not self.has_cpu_route and not self.pure_python and col.route == "host":
             return False, (
                 "DEGENERATE: host_surface declares no CPU route for this lane, so the CPU column "
                 "has no arithmetic to run and the cell REFUSES rather than answering. A refusal and "
@@ -494,6 +604,7 @@ def scopes():
     if _SCOPES is not None:
         return _SCOPES
     ib = identity_break()
+    hs = host_surface()
     excluded = set(ib.record_excluded_lanes())
     covered = covered_lanes()
     out = {}
@@ -521,7 +632,26 @@ def scopes():
             is_function=_is_function_lane(node),
             record_excluded=name in excluded,
             ml_attrs=sorted(ml_attrs),
+            pure_python=_pure_python(ml_attrs, name in covered),
         )
+    # THE DERIVED PURE-PYTHON ANSWER IS CHECKED AGAINST host_surface's OWN
+    # DECLARATION, the same way the device claim is checked against the lane
+    # name. `PUBLIC_HOST_ONLY_LANES` maps a host-only lane to the family whose
+    # binding it needs, or to None for "pure Python: no native host binding is
+    # required". That is the package stating the fact; this file deriving it
+    # from the doors is a second witness, and the two disagreeing is a defect
+    # in one of them, never something to resolve quietly here.
+    declared = {n for n, fam in getattr(hs, "PUBLIC_HOST_ONLY_LANES", {}).items() if fam is None}
+    derived = {n for n, sc in out.items() if sc.pure_python}
+    for name in sorted(declared - derived):
+        disagreements.append(
+            f"{name}: host_surface.PUBLIC_HOST_ONLY_LANES declares it pure Python (no host "
+            f"binding required); the doors say otherwise"
+            + (" (it is not a registered lane)" if name not in out else ""))
+    for name in sorted(derived - declared):
+        disagreements.append(
+            f"{name}: derived pure Python (no host family declares it and no package file behind "
+            f"its doors names a binding); host_surface.PUBLIC_HOST_ONLY_LANES does not declare it")
     _SCOPES = out
     _SCOPES_DISAGREE[:] = disagreements
     return out
@@ -594,7 +724,9 @@ def _selfcheck():
             fails.append(msg)
 
     want(len(s) == len(identity_break().LANES), "scopes() lost lanes")
-    want(not _SCOPES_DISAGREE, "derived device claim disagrees with the lane names: " + "; ".join(_SCOPES_DISAGREE))
+    want(not _SCOPES_DISAGREE,
+         "a derived answer disagrees with the declaration it is checked against: "
+         + "; ".join(_SCOPES_DISAGREE))
 
     # 1. THE REFUSAL FIRES. A driver lane on a one-device column must raise.
     try:
@@ -634,6 +766,65 @@ def _selfcheck():
          "gp-optimize has a CPU host gradient route; it must read cross-route")
     want(s["kmeans"].anchor == "cross-route",
          "kmeans has a CPU host route and no in-cell oracle; it must read cross-route")
+
+    # 6b. THE PURE-PYTHON LANE IS MEANINGFUL ON THE CPU COLUMN AND VACUOUS ON
+    #     THE GPU ONES (2026-09-19). Until this arm the rule held exactly the
+    #     opposite for `cross-val-folds`: refused on cpu-host as DEGENERATE
+    #     ("host_surface declares no CPU route"), admitted on all five GPU
+    #     columns where no GPU code runs at all. Both halves are asserted here,
+    #     because fixing only the refusal would leave five vacuous cells.
+    want(s["cross-val-folds"].pure_python,
+         "cross-val-folds stands on no binding at all; it must read pure_python")
+    try:
+        check(["cross-val-folds"], "cpu-host")
+    except LaneNotApplicable as exc:
+        fails.append("check() REFUSED the pure-Python lane on the one column its "
+                     "proposition is stateable on: " + str(exc).splitlines()[1].strip())
+    try:
+        check(["cross-val-folds"], "apple-metal")
+        fails.append("check() did NOT refuse the pure-Python lane on a GPU column")
+    except LaneNotApplicable as exc:
+        want("vacuous" in str(exc) and "metal" in str(exc),
+             "the GPU refusal did not say the cell is vacuous on that backend")
+
+    # 6c. THE CPU EXEMPTION IS NARROW, watched on BOTH sides of the one branch
+    #     this change touched. The exemption is for "stands on no binding
+    #     anywhere", not for "host_surface does not cover it", and the second
+    #     must still be refused.
+    #
+    #     ON A CONSTRUCTED SCOPE, and deliberately. Measured 2026-09-19: every
+    #     registered lane that `covered_lanes()` misses is either one of the 32
+    #     `par-*` drivers, where the DEVICE rule above fires first and this
+    #     branch is never reached, or `cross-val-folds` itself. So no lane in
+    #     the registry can watch this branch refuse, and an arm that picked one
+    #     would be watching the device rule under another name. The rule is the
+    #     real `Scope.applicable`; only the inputs are made up.
+    backed = Scope(name="<constructed>", claim_devices=1, oracle="recorded", oracle_evidence=[],
+                   host_only=set(), has_cpu_route=False, is_function=True, record_excluded=True,
+                   ml_attrs=["Constructed"], pure_python=False)
+    ok, why = backed.applicable("cpu-host")
+    want(not ok and "no CPU route" in why,
+         "an uncovered binding-backed lane must still be REFUSED on the CPU column: " + why)
+    backed.pure_python = True
+    ok, why = backed.applicable("cpu-host")
+    want(ok, "a pure-Python lane must RUN on the CPU column, not refuse: " + why)
+    ok, why = backed.applicable("nvidia-1gpu")
+    want(not ok and "vacuous" in why,
+         "a pure-Python lane must be degenerate on a GPU column: " + why)
+
+    # 6d. THE PURE-PYTHON ANSWER IS NOT host_surface's DECLARATION REPEATED.
+    #     The four tokenizer lanes are host-only AND declared in the same dict,
+    #     with a family name rather than None; they stand on a binding and must
+    #     not read pure. `mlp` and `training-primitives` open doors whose own
+    #     file names no binding (`training.py` and `_mlp_impl.py` are shims
+    #     over `_training_impl`) and must not read pure either.
+    for n in ("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus",
+              "mlp", "par-mlp", "optim-sgd", "training-primitives", "cross-entropy-arms"):
+        want(not s[n].pure_python, f"{n} stands on a binding; it must not read pure_python")
+    pure = sorted(n for n, sc in s.items() if sc.pure_python)
+    want(pure == ["cross-val-folds"],
+         "the pure-Python set must be exactly cross-val-folds on this registry; it is "
+         + (", ".join(pure) if pure else "empty"))
 
     # 6. THE DERIVATION IS NOT READING THE LANE NAMES. Renaming a driver lane
     #    must not change its answer, and a lane renamed TO `par-` must not
