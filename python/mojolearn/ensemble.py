@@ -3,26 +3,30 @@
 """Gradient-boosted trees on the GPU, with CatBoost as the reference: its three growth
 policies (oblivious SymmetricTree, Depthwise, Lossguide), its losses.
 
-**THE DEFAULTS ARE CatBoost's, NOT scikit-learn's**, and several of them
-change results rather than just speed:
+**UNDER grow_policy='SymmetricTree' (THE DEFAULT) EVERY DEFAULT IS CatBoost's
+GPU LEARNER'S** (`task_type='GPU'`, catboost 1.2.10 at the pinned reference
+54a8143a), not scikit-learn's, and several of them change results rather
+than just speed (lane/catboost-parity, 2026-09-19; before that date two of
+them were not, see CHANGELOG):
 
-    learning_rate   CatBoost 0.03      sklearn 0.1
-    n_estimators    CatBoost 1000      sklearn 100   (OURS IS 100, see below)
-    max_depth       CatBoost 6         sklearn 3
-    l2_leaf_reg     CatBoost 3.0       sklearn (none)
-    border_count    CatBoost 128       sklearn (none)
+    n_estimators    1000                       boosting_options.cpp:13
+    learning_rate   auto from the pool, as     options_helper.cpp:252-288
+                    theirs (0.03 otherwise)    boosting_options.cpp:10
+    max_depth       6                          oblivious_tree_options.cpp:12
+    l2_leaf_reg     3.0 (0 for YetiRank)       catboost_options.cpp:34-37
+    border_count    128 on GPU (254 on CPU)    data_processing_options.cpp:16
+    random_strength 1.0                        oblivious_tree_options.cpp:17
+    bootstrap_type  Bayesian, temperature 1    bootstrap_options.h:16-18
 
-**TWO OF OURS ARE NOT CatBoost's, and the table above used to hide it.**
-`n_estimators` is 100 here and 1000 in CatBoost
-(`boosting_options.cpp:13`). `learning_rate` is 0.03 here, which is
-CatBoost's CONSTRUCTOR value (`boosting_options.cpp:10`) but not the
-value a CatBoost user gets: with `learning_rate` unset CatBoost fits it
-from the pool, `exp(A*log(n) + B)` scaled by the iteration count
-(`libs/train_lib/options_helper.cpp:252-288`), which at 800k rows and
-1000 iterations is about 0.097 and at 100 iterations about 0.38. That
-retune is not implemented. So these defaults equal a CatBoost user who
-passed `learning_rate=0.03, iterations=100` explicitly -- they are not
-"CatBoost's defaults", and any comparison run should pin both arms.
+The learning rate is fitted from the pool exactly when CatBoost fits it:
+`learning_rate`, `l2_leaf_reg`, `leaf_estimation_method` and
+`leaf_estimation_iterations` all unset and the loss one of RMSE, Logloss or
+MultiClass; it is `exp(A*log(n) + B)` scaled by the iteration count, with
+the GPU coefficients, rounded to six decimals and capped at 0.5
+(`learning_rate_` holds the value used). A comparison run should still pin
+both arms explicitly. Depthwise and Lossguide keep the library's earlier
+defaults (100 iterations, 0.03, no noise, no bootstrap, Plain); see the
+parameter list.
 
 The DEFAULT tree shape is OBLIVIOUS (symmetric): every node at a level takes
 the same split, which is CatBoost's default structure and not scikit-learn's.
@@ -341,6 +345,122 @@ _REQUIRED_PARAM = {
 #: (`weak_objective_impl.h:30`).
 BOOTSTRAP_TYPES = ("Bayesian", "Bernoulli", "Poisson", "No")
 
+# ---------------------------------------------------------------------------
+# CATBOOST'S GPU DEFAULTS FOR THE OBLIVIOUS (SymmetricTree) LEARNER
+# (lane/catboost-parity, 2026-09-19). Every line cites the pinned reference
+# 54a8143a (catboost 1.2.10). Depthwise and Lossguide keep this library's
+# older defaults, which are listed beside each one; see the class docstring.
+# ---------------------------------------------------------------------------
+
+#: `IterationCount("iterations", 1000)` (`boosting_options.cpp:13`).
+_CATBOOST_ITERATIONS = 1000
+#: `LearningRate("learning_rate", 0.03)` (`boosting_options.cpp:10`): the
+#: value when the auto-selection below does not apply.
+_CATBOOST_LEARNING_RATE = 0.03
+#: `RandomStrength("random_strength", 1.0)` (`oblivious_tree_options.cpp:17`).
+_CATBOOST_RANDOM_STRENGTH = 1.0
+#: `BootstrapType("type", EBootstrapType::Bayesian)` (`bootstrap_options.h:18`).
+#: The MVS default of `SetNotSpecifiedOptionsToDefaults` is CPU only
+#: (`catboost_options.cpp:782-787`, `TaskType == ETaskType::CPU`).
+_CATBOOST_BOOTSTRAP = "Bayesian"
+#: The older defaults Depthwise and Lossguide keep.
+_LEGACY_ITERATIONS = 100
+_LEGACY_LEARNING_RATE = 0.03
+_LEGACY_RANDOM_STRENGTH = 0.0
+
+#: The ranking losses: their GPU bootstrap samples WHOLE QUERIES, which this
+#: implementation does not restate (the native trainer refuses any bootstrap
+#: for them), so CatBoost's default Bayesian bootstrap is refused by name
+#: for these rather than silently replaced by no bootstrap.
+_QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank")
+
+#: `TAutoLRParamsGuesser` (`libs/train_lib/options_helper.cpp:176-243`), the
+#: GPU rows (`:221-243`), keyed (target type, use_best_model,
+#: boost_from_average) -> (DatasetSizeCoeff A, DatasetSizeConst B,
+#: IterCountCoeff C, IterCountConst D). `GetTargetType` (`:179-192`) maps
+#: Logloss (and MultiLogloss / MultiCrossEntropy, absent here) to Logloss,
+#: MultiClass to MultiClass, RMSE to RMSE and every other loss to Unknown,
+#: which has no row and keeps 0.03.
+_GPU_AUTO_LEARNING_RATE = {
+    ("Logloss", True, True): (0.04, -3.226, -0.488, 0.758),
+    ("Logloss", False, True): (0.427, -7.316, -0.907, 2.354),
+    ("Logloss", True, False): (-0.085, -2.055, -0.414, 0.427),
+    ("Logloss", False, False): (-0.055, -3.01, -0.896, 2.366),
+    ("MultiClass", True, False): (0.101, -2.95, -0.437, 1.136),
+    ("MultiClass", False, False): (0.204, -4.144, -0.833, 2.889),
+    ("RMSE", True, True): (0.108, -3.525, -0.285, 0.058),
+    ("RMSE", False, True): (0.131, -4.114, -0.597, 1.693),
+    ("RMSE", True, False): (0.051, -3.001, -0.449, 0.859),
+    ("RMSE", False, False): (0.047, -3.034, -0.591, 1.554),
+}
+
+#: The CPU rows of the same table (`:196-219`). Not used to fit anything:
+#: it is here so the formula can be checked against the learning rate a
+#: CatBoost CPU install reports from `get_all_params()`, the one arm of
+#: their auto-selection this Mac can run (tests/test_gbdt_catboost_defaults.py).
+_CPU_AUTO_LEARNING_RATE = {
+    ("Logloss", True, True): (0.246, -5.127, -0.451, 0.978),
+    ("Logloss", False, True): (0.408, -7.299, -0.928, 2.701),
+    ("Logloss", True, False): (0.247, -5.158, -0.435, 0.934),
+    ("Logloss", False, False): (0.427, -7.525, -0.917, 2.63),
+    ("MultiClass", True, False): (0.02, -2.364, -0.382, 0.924),
+    ("MultiClass", False, False): (0.051, -2.889, -0.845, 2.928),
+    ("RMSE", True, True): (0.157, -4.062, -0.61, 1.557),
+    ("RMSE", False, True): (0.158, -4.287, -0.813, 2.571),
+    ("RMSE", True, False): (0.189, -4.383, -0.623, 1.439),
+    ("RMSE", False, False): (0.178, -4.473, -0.76, 2.133),
+}
+
+#: `AdjustBoostFromAverageDefaultValue`'s list (`options_helper.cpp:353-374`):
+#: an unset `boost_from_average` becomes True for these on a single host
+#: with no baseline. Only the auto learning-rate key reads this in Python;
+#: the native trainer resolves the fit's own value (`gbdt/train.mojo`), where
+#: MAE, Quantile and MAPE still resolve False (their constant needs the
+#: unimplemented `CalcSampleQuantile`, a gap named there).
+_BOOST_FROM_AVERAGE_LOSSES = ("RMSE", "MAE", "Quantile", "MAPE")
+
+
+def _c_round(number, precision):
+    """Their `Round` (`options_helper.cpp:15-18`): `round(number * 10^p) /
+    10^p` with C `round`, which rounds halves AWAY from zero (Python's
+    `round` rounds them to even)."""
+    multiplier = 10.0 ** precision
+    scaled = number * multiplier
+    rounded = math.floor(abs(scaled) + 0.5)
+    return math.copysign(rounded, scaled) / multiplier
+
+
+def catboost_auto_learning_rate(loss, n_rows, iterations, use_best_model,
+                                boost_from_average, table=None):
+    """`TAutoLRParamsGuesser::GetLearningRate` (`options_helper.cpp:252-262`)
+    for the GPU learner, or None where their `NeedToUpdate` (`:245-249`) has
+    no row for the key.
+
+        customIterationConstant  = exp(C * log(iterations) + D)
+        defaultIterationConstant = exp(C * log(1000) + D)
+        defaultLearningRate      = exp(A * log(n_rows) + B)
+        learning_rate = Round(min(default * custom / defaultIter, 0.5), 6)
+
+    stored in their `TOption<float>` (`boosting_options.h:26`), so the fit
+    receives it rounded to float32. `exp` and `log` are this package's
+    portable binary64 routines rather than the host libm theirs call, so a
+    value within one ulp of a sixth-decimal rounding boundary could round the
+    other way; no such key was found on the checked grid.
+    """
+    target = {"Logloss": "Logloss", "MultiClass": "MultiClass",
+              "RMSE": "RMSE"}.get(loss)
+    if target is None:
+        return None
+    coeffs = (table or _GPU_AUTO_LEARNING_RATE).get(
+        (target, bool(use_best_model), bool(boost_from_average)))
+    if coeffs is None:
+        return None
+    a, b, c, d = coeffs
+    custom = math.exp(c * math.log(float(iterations)) + d)
+    default_iter = math.exp(c * math.log(1000.0) + d)
+    default_rate = math.exp(a * math.log(float(n_rows)) + b)
+    return _c_round(min(default_rate * custom / default_iter, 0.5), 6)
+
 #: `ELeavesEstimation`, for the override. `None` means let the loss decide.
 LEAF_ESTIMATION_GRADIENT = 0
 LEAF_ESTIMATION_NEWTON = 1
@@ -489,7 +609,22 @@ def _tri(v):
 
 def _validate_search_options(random_strength, use_pointwise_searcher,
                              grow_policy, score_function):
-    """Shared constructor/fit guards; these conflicts apply in every mode."""
+    """Shared constructor/fit guards; these conflicts apply in every mode.
+
+    Returns the strength the fit uses. None is UNSET and resolves to
+    CatBoost's 1.0 (`oblivious_tree_options.cpp:17`) under SymmetricTree
+    with a noise-bearing score function, and to 0.0 under L2 / NewtonL2
+    (whose calcer has no noise term, so 0.0 is the model CatBoost fits) and
+    under Depthwise and Lossguide (the library's earlier default, kept)."""
+    if use_pointwise_searcher and grow_policy != "SymmetricTree":
+        raise ValueError(
+            "mojolearn: use_pointwise_searcher=True is an OBLIVIOUS searcher; "
+            f"grow_policy={grow_policy!r} requires the greedy subsets searcher"
+        )
+    if random_strength is None:
+        if grow_policy == "SymmetricTree" and score_function not in ("L2", "NewtonL2"):
+            return _CATBOOST_RANDOM_STRENGTH
+        return _LEGACY_RANDOM_STRENGTH
     valid_type = (not is_bool(random_strength)
                   and isinstance(random_strength, numbers.Real))
     try:
@@ -501,11 +636,6 @@ def _validate_search_options(random_strength, use_pointwise_searcher,
         raise ValueError(
             "mojolearn: random_strength must be finite, nonnegative and "
             "<= Float32.MAX_FINITE"
-        )
-    if use_pointwise_searcher and grow_policy != "SymmetricTree":
-        raise ValueError(
-            "mojolearn: use_pointwise_searcher=True is an OBLIVIOUS searcher; "
-            f"grow_policy={grow_policy!r} requires the greedy subsets searcher"
         )
     if strength != 0.0 and score_function in ("L2", "NewtonL2"):
         raise ValueError(
@@ -588,8 +718,11 @@ class GradientBoosting(NumericModeMixin):
         parameter: `Lq` needs `loss_q`, `Huber` needs `loss_delta`,
         `Tweedie` needs `loss_variance_power`, `Expectile` needs
         `loss_alpha`.
-    n_estimators : int, default 100
-        CatBoost's `iterations`.
+    n_estimators : int or None, default None
+        CatBoost's `iterations`. None is 1000 under SymmetricTree, their
+        default (`boosting_options.cpp:13`), and 100 under Depthwise and
+        Lossguide, this library's earlier default, which those policies
+        keep.
     max_depth : int, default 6
         CatBoost's `depth`. Under `grow_policy='SymmetricTree'` the tree
         is oblivious, so this is exactly `2 ** max_depth` leaves; under
@@ -648,13 +781,23 @@ class GradientBoosting(NumericModeMixin):
         size test with `Policy != SymmetricTree` (`:685`) and DISCARDS the
         value on oblivious trees; this refuses any value but 1 there
         rather than accepting what it would drop.
-    learning_rate : float, default 0.03
-        CatBoost's default (`boosting_options.cpp:10`), not scikit-learn's
-        0.1.
+    learning_rate : float or None, default None
+        None under SymmetricTree is CatBoost's GPU auto-selection
+        (`UpdateLearningRate`, `libs/train_lib/options_helper.cpp:269-288`):
+        when `l2_leaf_reg`, `leaf_estimation_method` and
+        `leaf_estimation_iterations` are also unset and the loss is RMSE,
+        Logloss or MultiClass, the rate is
+        `Round(min(exp(A*log(n_rows) + B) * exp(C*log(n_estimators) + D) /
+        exp(C*log(1000) + D), 0.5), 6)` with the GPU coefficients keyed on
+        the loss, the resolved `use_best_model` and the resolved
+        `boost_from_average` (`:221-243`, `:252-262`); otherwise 0.03
+        (`boosting_options.cpp:10`). Under Depthwise and Lossguide None is
+        0.03. The value a fit used is `learning_rate_`.
     l2_leaf_reg : float or None, default None
         None takes the loss's CatBoost default: 3.0, and 0 for YetiRank
         (`catboost_options.cpp:34-37`, `:166-172`). An explicit value is used
-        as given.
+        as given, and (as theirs, `options_helper.cpp:278`) turns the
+        learning-rate auto-selection off.
     border_count : int, default 128
         Quantization bins per numeric feature.
     random_state : int, default 0
@@ -672,14 +815,23 @@ class GradientBoosting(NumericModeMixin):
         with CatBoost's own message (`catboost_options.cpp:588-601`;
         their second derivative is zero there).
     leaf_estimation_iterations : int, optional
-        None (default) means the loss decides.
+        None (default) means the loss decides, and then, under
+        SymmetricTree, CatBoost's `UpdateLeavesEstimationIterations`
+        (`options_helper.cpp:290-307`) applies: fewer than 200 iterations
+        (`IsSmallIterationCount`, `catboost_options.h:88-90`) on fewer than
+        20 features sets it to 1.
     bootstrap_type : {'Bayesian','Bernoulli','Poisson','No'}, optional
-        None means no row sampling. 'Bernoulli' is the familiar `subsample`
-        knob; 'Bayesian' is CatBoost's GPU default and uses
-        `bagging_temperature` instead.
+        None under SymmetricTree is 'Bayesian', CatBoost's GPU default
+        (`bootstrap_options.h:18`; the MVS default of
+        `catboost_options.cpp:782-787` is CPU only). For the ranking losses
+        (QueryRMSE, PairLogit, YetiRank) that default samples whole queries,
+        which is not implemented here, so an unset value is REFUSED BY NAME
+        for them: pass 'No'. None under Depthwise and Lossguide means no row
+        sampling, as before. 'Bernoulli' is the familiar `subsample` knob;
+        'Bayesian' uses `bagging_temperature` instead.
     bagging_temperature : float, default 1.0
-        Bayesian only. CatBoost refuses `subsample` beside it and so does
-        this.
+        Bayesian only (`bootstrap_options.h:16`). CatBoost refuses
+        `subsample` beside it and so does this.
     subsample : float, optional
         Bernoulli and Poisson only. Default 0.66
         (`bootstrap_options.h:15`).
@@ -752,18 +904,20 @@ class GradientBoosting(NumericModeMixin):
         (`data_processing_options.cpp:26`). 'Min' puts it below every
         border, 'Max' above; 'Forbidden' RAISES on a NaN instead of binning
         it, which is CatBoost's behavior.
-    random_strength : float, default 0.0
+    random_strength : float or None, default None
         CatBoost's `random_strength` (`oblivious_tree_options.cpp:17`).
-        **THIS DEFAULT IS NOT CatBoost's, which is 1.0**, and the difference
-        is deliberate rather than an oversight: on the greedy searcher this
-        wrapper runs by default, CatBoost's own noise cancels in the gain
-        (`compute_scores.cu:84-134`), so a non-zero value there changes only
-        float rounding. It is a live knob on `use_pointwise_searcher=True`,
-        where the noise is drawn before the bootstrap
-        (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`).
-        Refused above 0.0 with `score_function='L2'` or `'NewtonL2'`,
-        because the L2 calcer both run has no noise term and CatBoost
-        itself would discard it.
+        None under SymmetricTree is their default, 1.0 (it was 0.0 here
+        until 2026-09-19); under Depthwise and Lossguide it is 0.0, as
+        before. On the greedy searcher CatBoost's own noise largely cancels
+        in the gain (`compute_scores.cu:84-134`); it is a live knob on
+        `use_pointwise_searcher=True`, where the noise is drawn before the
+        bootstrap
+        (`oblivious_tree_doc_parallel_structure_searcher.cpp:200-218`). An
+        explicit value
+        above 0.0 is refused with `score_function='L2'` or `'NewtonL2'`,
+        because the L2 calcer both run has no noise term and CatBoost itself
+        would discard it; an UNSET value resolves to 0.0 there, which is the
+        model CatBoost fits.
     use_pointwise_searcher : bool, default False
         Grow with `TDocParallelObliviousTreeSearcher`, CatBoost's
         single-target symmetric learner, instead of the greedy subsets
@@ -824,9 +978,9 @@ class GradientBoosting(NumericModeMixin):
     def __init__(
         self,
         loss="RMSE",
-        n_estimators=100,
+        n_estimators=None,
         max_depth=6,
-        learning_rate=0.03,
+        learning_rate=None,
         l2_leaf_reg=None,
         border_count=128,
         random_state=0,
@@ -849,7 +1003,7 @@ class GradientBoosting(NumericModeMixin):
         best_model_min_trees=1,
         score_function=None,
         nan_mode="Min",
-        random_strength=0.0,
+        random_strength=None,
         use_pointwise_searcher=False,
         boost_from_average=None,
         border_build_max_samples=200000,
@@ -874,13 +1028,43 @@ class GradientBoosting(NumericModeMixin):
                     f"mojolearn: {loss} requires {py_name}= "
                     f"(CatBoost's {cb_name!r}, which it makes mandatory)"
                 )
+        # ---- CatBoost's GPU defaults for the oblivious learner, resolved
+        # where they do not depend on the pool (lane/catboost-parity). The
+        # pool-dependent ones -- the learning rate, the small-iteration
+        # leaf count -- resolve in `fit`, as theirs do in
+        # `SetDataDependentDefaults` (`options_helper.cpp:403-435`).
+        symmetric_policy = grow_policy == "SymmetricTree"
+        bootstrap_defaulted = bootstrap_type is None and symmetric_policy
+        if n_estimators is None:
+            n_estimators = (_CATBOOST_ITERATIONS if symmetric_policy
+                            else _LEGACY_ITERATIONS)
+        if bootstrap_type is None and symmetric_policy:
+            if loss in _QUERYWISE_LOSSES:
+                raise NotImplementedError(
+                    f"mojolearn: CatBoost's GPU default for loss={loss!r} is a "
+                    "Bayesian bootstrap over whole queries "
+                    "(bootstrap_options.h:18), which this implementation does "
+                    "not restate; the default is refused by name rather than "
+                    "replaced by no bootstrap. Pass bootstrap_type='No'."
+                )
+            bootstrap_type = _CATBOOST_BOOTSTRAP
         if bootstrap_type is not None and bootstrap_type not in BOOTSTRAP_TYPES:
             raise ValueError(
                 f"mojolearn: bootstrap_type must be one of "
                 f"{BOOTSTRAP_TYPES}, got {bootstrap_type!r}"
             )
         if bootstrap_type == "Bayesian" and subsample is not None:
-            # CatBoost's own validator (`catboost_options.cpp:795`)
+            # CatBoost's own validators: `catboost_options.cpp:795` for the
+            # default ("default bootstrap type (bayesian) doesn't support
+            # 'subsample' option") and `bootstrap_options.cpp:15-18` for an
+            # explicit Bayesian
+            if bootstrap_defaulted:
+                raise ValueError(
+                    "mojolearn: the default bootstrap_type='Bayesian' "
+                    "(CatBoost's GPU default, bootstrap_options.h:18) does "
+                    "not support subsample; pass bootstrap_type='Bernoulli' "
+                    "or 'Poisson' with it"
+                )
             raise ValueError(
                 "mojolearn: bootstrap_type='Bayesian' does not support "
                 "subsample; it takes bagging_temperature"
@@ -1053,9 +1237,12 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
                 f"{nan_mode!r}"
             )
-        random_strength = _validate_search_options(
+        # validated here, KEPT UNSET: None resolves at `_params` against the
+        # score function and policy the fit actually runs
+        checked_strength = _validate_search_options(
             random_strength, use_pointwise_searcher, grow_policy, score_function
         )
+        random_strength = None if random_strength is None else checked_strength
         if border_build_max_samples < 0:
             raise ValueError(
                 f"mojolearn: border_build_max_samples must be >= 0 (0 means "
@@ -1126,7 +1313,8 @@ class GradientBoosting(NumericModeMixin):
         self.best_model_min_trees = int(best_model_min_trees)
         self.score_function = score_function
         self.nan_mode = nan_mode
-        self.random_strength = float(random_strength)
+        self.random_strength = (None if random_strength is None
+                                else float(random_strength))
         self.use_pointwise_searcher = bool(use_pointwise_searcher)
         # their tri-state (`AdjustBoostFromAverageDefaultValue`): None is
         # unset and resolves inside `train` -- auto-True for RMSE (their
@@ -1153,6 +1341,9 @@ class GradientBoosting(NumericModeMixin):
         self.test_loss_curve_ = None
         self.best_iteration_ = None
         self.stopped_early_ = None
+        #: the learning rate the last fit used (CatBoost's auto-selection
+        #: resolved against that fit's pool), None before a fit
+        self.learning_rate_ = None
         self.n_features_in_ = None
         #: 1 for every single-output loss; `n_classes - 1` for MultiClass,
         #: because the last class's approx is pinned at zero and is not
@@ -1171,8 +1362,54 @@ class GradientBoosting(NumericModeMixin):
     # rather than trusting it. Optional ordered tails AFTER the counted
     # weights are min_split_gain, min_child_hessian, then feature_fraction.
     # Trailing defaults are omitted, preserving all existing caller layouts.
+    def _resolved_learning_rate(self, n_rows, n_eval_rows=0,
+                                eval_target_constant=False):
+        """The learning rate a fit on `n_rows` rows uses (`learning_rate_`).
+
+        An explicit value is used as given. Unset under Depthwise and
+        Lossguide it is 0.03. Unset under SymmetricTree it is CatBoost's
+        `UpdateLearningRate` (`options_helper.cpp:269-288`): auto-selected
+        from the GPU table only while `l2_leaf_reg`, `leaf_estimation_method`
+        and `leaf_estimation_iterations` are unset too (`:273-278`), keyed on
+        `use_best_model` as `UpdateUseBestModel` resolves it (`:100-113`,
+        True with an eval set whose target is not constant) and on
+        `boost_from_average` as `AdjustBoostFromAverageDefaultValue`
+        resolves it (`:353-374`); 0.03 where their table has no row."""
+        if self.learning_rate is not None:
+            return float(self.learning_rate)
+        if self.grow_policy != "SymmetricTree":
+            return _LEGACY_LEARNING_RATE
+        if (self.l2_leaf_reg is not None
+                or self.leaf_estimation_method is not None
+                or self.leaf_estimation_iterations is not None):
+            return _CATBOOST_LEARNING_RATE
+        use_best = self.use_best_model
+        if use_best is None:
+            use_best = n_eval_rows > 0 and not eval_target_constant
+        bfa = self.boost_from_average
+        if bfa is None:
+            bfa = self.loss in _BOOST_FROM_AVERAGE_LOSSES
+        rate = catboost_auto_learning_rate(
+            self.loss, n_rows, int(self.n_estimators), use_best, bfa)
+        return _CATBOOST_LEARNING_RATE if rate is None else rate
+
+    def _resolved_leaf_iterations(self, n_features):
+        """`UpdateLeavesEstimationIterations` (`options_helper.cpp:290-307`)
+        under SymmetricTree: an unset count becomes 1 when there are fewer
+        than 200 iterations (`IsSmallIterationCount`,
+        `catboost_options.h:88-90`) and fewer than 20 features. It runs
+        AFTER the learning-rate auto-selection in their
+        `SetDataDependentDefaults` (`:416-429`), so this 1 does not count
+        as a set option there, and it does not here either. None otherwise
+        (the loss decides natively)."""
+        iters = self.leaf_estimation_iterations
+        if (iters is None and self.grow_policy == "SymmetricTree"
+                and int(self.n_estimators) < 200 and n_features < 20):
+            return 1
+        return iters
+
     def _params(self, n_rows, n_features, n_flags, n_weights=0,
-                n_eval_rows=0):
+                n_eval_rows=0, eval_target_constant=False):
         strength = _validate_search_options(
             self.random_strength, self.use_pointwise_searcher,
             self.grow_policy, self.score_function,
@@ -1185,7 +1422,9 @@ class GradientBoosting(NumericModeMixin):
         method_code = (
             -1 if method is None else _LEAF_ESTIMATION_NAMES[method]
         )
-        iters = self.leaf_estimation_iterations
+        iters = self._resolved_leaf_iterations(n_features)
+        rate = self._resolved_learning_rate(
+            n_rows, n_eval_rows, eval_target_constant)
         tail = []
         fraction = getattr(self, "feature_fraction", 1.0)
         if fraction != 1.0:
@@ -1205,7 +1444,7 @@ class GradientBoosting(NumericModeMixin):
             int(self.border_count),                     # 4
             int(self.n_estimators),                     # 5
             int(self.max_depth),                        # 6
-            float(self.learning_rate),                  # 7
+            float(rate),                                # 7  resolved
             float((0.0 if self.loss == "YetiRank" else 3.0)
                   if self.l2_leaf_reg is None
                   else self.l2_leaf_reg),               # 8, None -> the loss's default
@@ -1488,9 +1727,19 @@ class GradientBoosting(NumericModeMixin):
                     "within the training class range"
                 )
 
+        # their `IsConstTarget(testDataMetaInfo)` (`options_helper.cpp:
+        # 316-318`), which `UpdateUseBestModel` and so the learning-rate key
+        # read; `min`/`max` over the storage view (DEVIATION 2331's scan)
+        eval_constant = False
+        if n_eval_rows:
+            ev = flat_view(ea, "f")
+            eval_constant = min(ev) == max(ev)
         params = self._params(
-            n_rows, n_features, n_flags, n_weights, n_eval_rows
+            n_rows, n_features, n_flags, n_weights, n_eval_rows,
+            eval_target_constant=eval_constant,
         )
+        #: the learning rate this fit used, after CatBoost's auto-selection
+        self.learning_rate_ = float(params[7])
         # THE GROUP TAIL. `subgroup_id` and `pairs` are refused before
         # anything crosses; `group_id` becomes run lengths and rides after
         # the three optional float slots, which are filled with their

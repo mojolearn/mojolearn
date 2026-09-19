@@ -30,10 +30,15 @@ class _Dummy:
 
 class RefuseIgnoredKnobs(unittest.TestCase):
     def test_bagging_temperature_without_bayesian_is_refused(self):
-        for bt in (None, "No", "Bernoulli", "Poisson"):
+        for bt in ("No", "Bernoulli", "Poisson"):
             kw = dict(subsample=0.5) if bt in ("Bernoulli", "Poisson") else {}
             with self.assertRaisesRegex(ValueError, "bagging_temperature is read only by bootstrap_type='Bayesian'"):
                 GradientBoosting(bootstrap_type=bt, bagging_temperature=0.5, **kw)
+        # unset is Bayesian under SymmetricTree (CatBoost's GPU default,
+        # lane/catboost-parity) and no sampling under the other policies
+        self.assertEqual(GradientBoosting(bagging_temperature=0.5).bootstrap_type, "Bayesian")
+        with self.assertRaisesRegex(ValueError, "bagging_temperature is read only by bootstrap_type='Bayesian'"):
+            GradientBoosting(grow_policy="Depthwise", bagging_temperature=0.5)
 
     def test_bagging_temperature_with_bayesian_is_accepted(self):
         m = GradientBoosting(bootstrap_type="Bayesian", bagging_temperature=0.5)
@@ -46,9 +51,14 @@ class RefuseIgnoredKnobs(unittest.TestCase):
         GradientBoosting(bootstrap_type="Bernoulli", subsample=0.7)
 
     def test_subsample_without_bernoulli_or_poisson_is_refused(self):
-        for bt in (None, "No"):
-            with self.assertRaisesRegex(ValueError, "subsample is read only by bootstrap_type='Bernoulli' or 'Poisson'"):
-                GradientBoosting(bootstrap_type=bt, subsample=0.5)
+        with self.assertRaisesRegex(ValueError, "subsample is read only by bootstrap_type='Bernoulli' or 'Poisson'"):
+            GradientBoosting(bootstrap_type="No", subsample=0.5)
+        with self.assertRaisesRegex(ValueError, "subsample is read only by bootstrap_type='Bernoulli' or 'Poisson'"):
+            GradientBoosting(grow_policy="Depthwise", subsample=0.5)
+        # unset under SymmetricTree is CatBoost's default Bayesian, which
+        # refuses subsample in their words (catboost_options.cpp:795)
+        with self.assertRaisesRegex(ValueError, "default bootstrap_type='Bayesian'.*does not support subsample"):
+            GradientBoosting(subsample=0.5)
         # Bayesian + subsample keeps CatBoost's own refusal text
         with self.assertRaisesRegex(ValueError, "does not support subsample"):
             GradientBoosting(bootstrap_type="Bayesian", subsample=0.5)

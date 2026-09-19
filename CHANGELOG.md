@@ -3,6 +3,38 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (lane/catboost-parity)
+
+**BEHAVIOR CHANGE: `GradientBoosting`'s SymmetricTree defaults are now CatBoost's
+GPU learner's** (catboost 1.2.10, pinned source 54a8143a). A default-constructed
+model fits a different, larger model than before; pass the old values
+explicitly to keep an old result. Old -> new, SymmetricTree only:
+
+- `n_estimators` 100 -> 1000 (`boosting_options.cpp:13`).
+- `learning_rate` 0.03 -> CatBoost's auto-selection from the pool when
+  `learning_rate`, `l2_leaf_reg`, `leaf_estimation_method` and
+  `leaf_estimation_iterations` are unset and the loss is RMSE, Logloss or
+  MultiClass (GPU coefficient rows, `options_helper.cpp:221-288`); 0.03
+  otherwise. The value used is `learning_rate_`.
+- `random_strength` 0.0 -> 1.0 (`oblivious_tree_options.cpp:17`); unset under
+  the L2/NewtonL2 scores, which carry no noise term, it resolves to 0.0.
+- `bootstrap_type` no sampling -> Bayesian with `bagging_temperature` 1.0
+  (`bootstrap_options.h:16-18`). For QueryRMSE, PairLogit and YetiRank that
+  default samples whole queries, which is not implemented, so an unset
+  bootstrap is refused by name for those losses (pass `bootstrap_type='No'`).
+- `leaf_estimation_iterations` unset -> 1 when there are fewer than 200
+  iterations and fewer than 20 features (`options_helper.cpp:290-307`).
+
+Depthwise and Lossguide keep 100 iterations, 0.03, no noise and no
+bootstrap. `GradientBoostingClassifier` and `GradientBoostingRegressor` now
+defer every default to `GradientBoosting` (their `l2_leaf_reg` default is
+None rather than 3.0, because an explicit l2 turns the learning-rate
+auto-selection off). Every GBDT lane of `tools/identity_break.py` and
+`tools/repeat_run_stability.py` passes its earlier configuration explicitly,
+and the covered lanes reproduce their shipped reference hashes on the CPU
+route under those pins. A CPU-only install still refuses the new defaults'
+Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
+
 ## 0.8.8 (published 2026-09-19)
 
 A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
