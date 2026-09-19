@@ -1,0 +1,3588 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "5ef48dec4a87ae79b960ae2473db43c565066cc5",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-adapter-score-weighted/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ae3c39664f27e85c",
+    "ae3c39664f27e85c"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "738958ba1ce0f434",
+     "reg_zeroed": "187066242eb7dd1e",
+     "reg_unit": "1cb7e17e251f1db0",
+     "reg_unweighted": "1cb7e17e251f1db0"
+    },
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "738958ba1ce0f434",
+     "reg_zeroed": "187066242eb7dd1e",
+     "reg_unit": "1cb7e17e251f1db0",
+     "reg_unweighted": "1cb7e17e251f1db0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.3844531250651926,
+    "stages": {
+     "repeat=1/train": 2.3039153499994427,
+     "repeat=1/infer-save-reload": 1.4239922165870667e-05,
+     "repeat=1/batch": 0.00015453016385436058,
+     "repeat=2/train": 0.07895305706188083,
+     "repeat=2/infer-save-reload": 2.353987656533718e-05,
+     "repeat=2/batch": 0.0008247788064181805
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49d69cf33455deff",
+    "49d69cf33455deff"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "fc6986bca557ac3b",
+     "clf_zeroed": "fc6986bca557ac3b",
+     "clf_unit": "fc6986bca557ac3b",
+     "clf_unweighted": "fc6986bca557ac3b",
+     "reg_weighted": "b00132a4e864ff00",
+     "reg_zeroed": "e65dba029ce99d8b",
+     "reg_unit": "473a67a62c74dbca",
+     "reg_unweighted": "473a67a62c74dbca"
+    },
+    {
+     "clf_weighted": "fc6986bca557ac3b",
+     "clf_zeroed": "fc6986bca557ac3b",
+     "clf_unit": "fc6986bca557ac3b",
+     "clf_unweighted": "fc6986bca557ac3b",
+     "reg_weighted": "b00132a4e864ff00",
+     "reg_zeroed": "e65dba029ce99d8b",
+     "reg_unit": "473a67a62c74dbca",
+     "reg_unweighted": "473a67a62c74dbca"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.3464147141203284,
+    "stages": {
+     "repeat=1/train": 0.2761428679805249,
+     "repeat=1/infer-save-reload": 8.210074156522751e-06,
+     "repeat=1/batch": 0.0001403100322932005,
+     "repeat=2/train": 0.0697361167985946,
+     "repeat=2/infer-save-reload": 8.630100637674332e-06,
+     "repeat=2/batch": 0.0001385889481753111
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "21cb86d4d5b0cf68",
+    "21cb86d4d5b0cf68"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "be6579e18db55251",
+     "clf_zeroed": "83889c76cd909188",
+     "clf_unit": "e4afe12827e3539a",
+     "clf_unweighted": "e4afe12827e3539a",
+     "reg_weighted": "7b6cd91f32cec688",
+     "reg_zeroed": "74c620d740106981",
+     "reg_unit": "5f130488ddf9fcec",
+     "reg_unweighted": "5f130488ddf9fcec"
+    },
+    {
+     "clf_weighted": "be6579e18db55251",
+     "clf_zeroed": "83889c76cd909188",
+     "clf_unit": "e4afe12827e3539a",
+     "clf_unweighted": "e4afe12827e3539a",
+     "reg_weighted": "7b6cd91f32cec688",
+     "reg_zeroed": "74c620d740106981",
+     "reg_unit": "5f130488ddf9fcec",
+     "reg_unweighted": "5f130488ddf9fcec"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16241139802150428,
+    "stages": {
+     "repeat=1/train": 0.08037610491737723,
+     "repeat=1/infer-save-reload": 8.440110832452774e-06,
+     "repeat=1/batch": 0.00010763993486762047,
+     "repeat=2/train": 0.08151938393712044,
+     "repeat=2/infer-save-reload": 8.350005373358727e-06,
+     "repeat=2/batch": 0.0001638690009713173
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e9bcf5b8c20ea67",
+    "9e9bcf5b8c20ea67"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "ee97f55dae0df74e",
+     "clf_zeroed": "7ba5a5b02c9c7831",
+     "clf_unit": "b0821a8cb7ee9c40",
+     "clf_unweighted": "b0821a8cb7ee9c40",
+     "reg_weighted": "0491238e035e87c5",
+     "reg_zeroed": "bc02ba7ca39c7261",
+     "reg_unit": "4320ac3f0d214b46",
+     "reg_unweighted": "4320ac3f0d214b46"
+    },
+    {
+     "clf_weighted": "ee97f55dae0df74e",
+     "clf_zeroed": "7ba5a5b02c9c7831",
+     "clf_unit": "b0821a8cb7ee9c40",
+     "clf_unweighted": "b0821a8cb7ee9c40",
+     "reg_weighted": "0491238e035e87c5",
+     "reg_zeroed": "bc02ba7ca39c7261",
+     "reg_unit": "4320ac3f0d214b46",
+     "reg_unweighted": "4320ac3f0d214b46"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1586720128543675,
+    "stages": {
+     "repeat=1/train": 0.080293876118958,
+     "repeat=1/infer-save-reload": 9.119976311922073e-06,
+     "repeat=1/batch": 0.00015330989845097065,
+     "repeat=2/train": 0.07777467812411487,
+     "repeat=2/infer-save-reload": 9.100185707211494e-06,
+     "repeat=2/batch": 0.00015162001363933086
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "711523108c778756",
+    "711523108c778756"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "54a5e054e38a14ef",
+     "reg_zeroed": "a8b865358653326b",
+     "reg_unit": "70bcfafec349df2a",
+     "reg_unweighted": "70bcfafec349df2a"
+    },
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "54a5e054e38a14ef",
+     "reg_zeroed": "a8b865358653326b",
+     "reg_unit": "70bcfafec349df2a",
+     "reg_unweighted": "70bcfafec349df2a"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15797009295783937,
+    "stages": {
+     "repeat=1/train": 0.07936955592595041,
+     "repeat=1/infer-save-reload": 8.319970220327377e-06,
+     "repeat=1/batch": 0.0001382199116051197,
+     "repeat=2/train": 0.07806095690466464,
+     "repeat=2/infer-save-reload": 8.390052244067192e-06,
+     "repeat=2/batch": 0.0001414800062775612
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "711523108c778756",
+    "711523108c778756"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "54a5e054e38a14ef",
+     "reg_zeroed": "a8b865358653326b",
+     "reg_unit": "70bcfafec349df2a",
+     "reg_unweighted": "70bcfafec349df2a"
+    },
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "54a5e054e38a14ef",
+     "reg_zeroed": "a8b865358653326b",
+     "reg_unit": "70bcfafec349df2a",
+     "reg_unweighted": "70bcfafec349df2a"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.14996903110295534,
+    "stages": {
+     "repeat=1/train": 0.07561972993426025,
+     "repeat=1/infer-save-reload": 8.440110832452774e-06,
+     "repeat=1/batch": 0.00015265913680195808,
+     "repeat=2/train": 0.07389817293733358,
+     "repeat=2/infer-save-reload": 7.91996717453003e-06,
+     "repeat=2/batch": 7.826881483197212e-05
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f699f0bcb8e65f40",
+    "f699f0bcb8e65f40"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "2e85e0c3d25c931a",
+     "reg_zeroed": "927f6204c5f875b3",
+     "reg_unit": "4eddab87f2efd739",
+     "reg_unweighted": "4eddab87f2efd739"
+    },
+    {
+     "clf_weighted": "f6765d2c5c7c6b4b",
+     "clf_zeroed": "48885d4eef168107",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "2e85e0c3d25c931a",
+     "reg_zeroed": "927f6204c5f875b3",
+     "reg_unit": "4eddab87f2efd739",
+     "reg_unweighted": "4eddab87f2efd739"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.14962111203931272,
+    "stages": {
+     "repeat=1/train": 0.07479771110229194,
+     "repeat=1/infer-save-reload": 7.849885150790215e-06,
+     "repeat=1/batch": 8.052983321249485e-05,
+     "repeat=2/train": 0.07449285103939474,
+     "repeat=2/infer-save-reload": 7.699942216277122e-06,
+     "repeat=2/batch": 6.953999400138855e-05
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8df47bf3ffefa2cb",
+    "8df47bf3ffefa2cb"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "9af7ae112bc0497f",
+     "clf_zeroed": "744c59ee411314d6",
+     "clf_unit": "1cf75db1f587cef5",
+     "clf_unweighted": "1cf75db1f587cef5",
+     "reg_weighted": "880bfa7b1882e1bc",
+     "reg_zeroed": "f9ebb96cb8477762",
+     "reg_unit": "21077db0f6deb121",
+     "reg_unweighted": "21077db0f6deb121"
+    },
+    {
+     "clf_weighted": "9af7ae112bc0497f",
+     "clf_zeroed": "744c59ee411314d6",
+     "clf_unit": "1cf75db1f587cef5",
+     "clf_unweighted": "1cf75db1f587cef5",
+     "reg_weighted": "880bfa7b1882e1bc",
+     "reg_zeroed": "f9ebb96cb8477762",
+     "reg_unit": "21077db0f6deb121",
+     "reg_unweighted": "21077db0f6deb121"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15933131193742156,
+    "stages": {
+     "repeat=1/train": 0.07990118488669395,
+     "repeat=1/infer-save-reload": 8.560018613934517e-06,
+     "repeat=1/batch": 6.823008880019188e-05,
+     "repeat=2/train": 0.0790919370483607,
+     "repeat=2/infer-save-reload": 1.0619871318340302e-05,
+     "repeat=2/batch": 6.466987542808056e-05
+    }
+   }
+  },
+  "gbdt-adapter-score-weighted/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bd79a273c43a8f2e",
+    "bd79a273c43a8f2e"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "7161e36d936ab61f",
+     "clf_zeroed": "28648d8b07019cae",
+     "clf_unit": "8ccca3e4192cacee",
+     "clf_unweighted": "8ccca3e4192cacee",
+     "reg_weighted": "0880d088443e40e6",
+     "reg_zeroed": "dd20233cfbb6784c",
+     "reg_unit": "6907571aefa8b2a8",
+     "reg_unweighted": "6907571aefa8b2a8"
+    },
+    {
+     "clf_weighted": "7161e36d936ab61f",
+     "clf_zeroed": "28648d8b07019cae",
+     "clf_unit": "8ccca3e4192cacee",
+     "clf_unweighted": "8ccca3e4192cacee",
+     "reg_weighted": "0880d088443e40e6",
+     "reg_zeroed": "dd20233cfbb6784c",
+     "reg_unit": "6907571aefa8b2a8",
+     "reg_unweighted": "6907571aefa8b2a8"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1531194190029055,
+    "stages": {
+     "repeat=1/train": 0.07663742988370359,
+     "repeat=1/infer-save-reload": 7.479917258024216e-06,
+     "repeat=1/batch": 0.00010008900426328182,
+     "repeat=2/train": 0.07611402007751167,
+     "repeat=2/infer-save-reload": 7.460126653313637e-06,
+     "repeat=2/batch": 7.092999294400215e-05
+    }
+   }
+  },
+  "rf-score-weighted/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d744878e7c0e31ee",
+    "d744878e7c0e31ee"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "344c62eb4cd64fb3",
+     "clf_zeroed": "ec813dada65f3025",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "47f8b7489bc932ae",
+     "reg_zeroed": "fb08a5de7864ad65",
+     "reg_unit": "a0adfc1ac03e495d",
+     "reg_unweighted": "a0adfc1ac03e495d"
+    },
+    {
+     "clf_weighted": "344c62eb4cd64fb3",
+     "clf_zeroed": "ec813dada65f3025",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "47f8b7489bc932ae",
+     "reg_zeroed": "fb08a5de7864ad65",
+     "reg_unit": "a0adfc1ac03e495d",
+     "reg_unweighted": "a0adfc1ac03e495d"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.8477135058492422,
+    "stages": {
+     "repeat=1/train": 0.7801420770119876,
+     "repeat=1/infer-save-reload": 8.680159226059914e-06,
+     "repeat=1/batch": 0.00015859981067478657,
+     "repeat=2/train": 0.06699925917200744,
+     "repeat=2/infer-save-reload": 8.440110832452774e-06,
+     "repeat=2/batch": 0.00015628011897206306
+    }
+   }
+  },
+  "rf-score-weighted/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2a6b131a1f7b1ab0",
+    "2a6b131a1f7b1ab0"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "cbc76b59a573869e",
+     "clf_zeroed": "7f518a670ae08aae",
+     "clf_unit": "2775727c8552ae43",
+     "clf_unweighted": "2775727c8552ae43",
+     "reg_weighted": "c34bd00b1d6f90db",
+     "reg_zeroed": "868d29547102c3f7",
+     "reg_unit": "08fc66a8cb94ce2b",
+     "reg_unweighted": "08fc66a8cb94ce2b"
+    },
+    {
+     "clf_weighted": "cbc76b59a573869e",
+     "clf_zeroed": "7f518a670ae08aae",
+     "clf_unit": "2775727c8552ae43",
+     "clf_unweighted": "2775727c8552ae43",
+     "reg_weighted": "c34bd00b1d6f90db",
+     "reg_zeroed": "868d29547102c3f7",
+     "reg_unit": "08fc66a8cb94ce2b",
+     "reg_unweighted": "08fc66a8cb94ce2b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16506023611873388,
+    "stages": {
+     "repeat=1/train": 0.07216950389556587,
+     "repeat=1/infer-save-reload": 8.869916200637817e-06,
+     "repeat=1/batch": 0.00017337012104690075,
+     "repeat=2/train": 0.09213401190936565,
+     "repeat=2/infer-save-reload": 8.509960025548935e-06,
+     "repeat=2/batch": 0.00017471006140112877
+    }
+   }
+  },
+  "rf-score-weighted/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a9b926cc7e2e9c7c",
+    "a9b926cc7e2e9c7c"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "ecc46e242c8dd47d",
+     "clf_zeroed": "af1c01e3a6e5107b",
+     "clf_unit": "40df6fec722707c2",
+     "clf_unweighted": "40df6fec722707c2",
+     "reg_weighted": "71439a66a6402bf5",
+     "reg_zeroed": "b262c444908328ad",
+     "reg_unit": "6aba8f05e35d6c32",
+     "reg_unweighted": "6aba8f05e35d6c32"
+    },
+    {
+     "clf_weighted": "ecc46e242c8dd47d",
+     "clf_zeroed": "af1c01e3a6e5107b",
+     "clf_unit": "40df6fec722707c2",
+     "clf_unweighted": "40df6fec722707c2",
+     "reg_weighted": "71439a66a6402bf5",
+     "reg_zeroed": "b262c444908328ad",
+     "reg_unit": "6aba8f05e35d6c32",
+     "reg_unweighted": "6aba8f05e35d6c32"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18511567497625947,
+    "stages": {
+     "repeat=1/train": 0.09527642000466585,
+     "repeat=1/infer-save-reload": 7.5499992817640305e-06,
+     "repeat=1/batch": 0.0001748800277709961,
+     "repeat=2/train": 0.08922667498700321,
+     "repeat=2/infer-save-reload": 7.2801485657691956e-06,
+     "repeat=2/batch": 0.0001830297987908125
+    }
+   }
+  },
+  "rf-score-weighted/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49be8ea935a47640",
+    "49be8ea935a47640"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "2c1b57ec6e068dde",
+     "clf_zeroed": "2c0e863332bdaeb2",
+     "clf_unit": "a00ed31f08d08874",
+     "clf_unweighted": "a00ed31f08d08874",
+     "reg_weighted": "42f06f60804054f9",
+     "reg_zeroed": "0e6a6b8110b78758",
+     "reg_unit": "5950fe9897edc56c",
+     "reg_unweighted": "5950fe9897edc56c"
+    },
+    {
+     "clf_weighted": "2c1b57ec6e068dde",
+     "clf_zeroed": "2c0e863332bdaeb2",
+     "clf_unit": "a00ed31f08d08874",
+     "clf_unweighted": "a00ed31f08d08874",
+     "reg_weighted": "42f06f60804054f9",
+     "reg_zeroed": "0e6a6b8110b78758",
+     "reg_unit": "5950fe9897edc56c",
+     "reg_unweighted": "5950fe9897edc56c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.18220208794809878,
+    "stages": {
+     "repeat=1/train": 0.09037398500367999,
+     "repeat=1/infer-save-reload": 7.91996717453003e-06,
+     "repeat=1/batch": 0.00015005003660917282,
+     "repeat=2/train": 0.09121895395219326,
+     "repeat=2/infer-save-reload": 8.109956979751587e-06,
+     "repeat=2/batch": 0.00014818995259702206
+    }
+   }
+  },
+  "rf-score-weighted/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e604694e3d59965",
+    "9e604694e3d59965"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    },
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.17532613477669656,
+    "stages": {
+     "repeat=1/train": 0.08997670491226017,
+     "repeat=1/infer-save-reload": 8.119968697428703e-06,
+     "repeat=1/batch": 0.00013891002163290977,
+     "repeat=2/train": 0.08473425009287894,
+     "repeat=2/infer-save-reload": 8.407002314925194e-05,
+     "repeat=2/batch": 8.06199386715889e-05
+    }
+   }
+  },
+  "rf-score-weighted/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e604694e3d59965",
+    "9e604694e3d59965"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    },
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15072829113341868,
+    "stages": {
+     "repeat=1/train": 0.0829790229909122,
+     "repeat=1/infer-save-reload": 8.590053766965866e-06,
+     "repeat=1/batch": 0.00012349896132946014,
+     "repeat=2/train": 0.06730672996491194,
+     "repeat=2/infer-save-reload": 8.089933544397354e-06,
+     "repeat=2/batch": 0.00010350998491048813
+    }
+   }
+  },
+  "rf-score-weighted/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3bfaf189588ac303",
+    "3bfaf189588ac303"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "6c39a52bcfbd6dda",
+     "clf_zeroed": "8e7174300dccd83c",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "01b3db535b6e4ac2",
+     "reg_zeroed": "e23af95953588a38",
+     "reg_unit": "c087808c8beb7b7b",
+     "reg_unweighted": "c087808c8beb7b7b"
+    },
+    {
+     "clf_weighted": "6c39a52bcfbd6dda",
+     "clf_zeroed": "8e7174300dccd83c",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "01b3db535b6e4ac2",
+     "reg_zeroed": "e23af95953588a38",
+     "reg_unit": "c087808c8beb7b7b",
+     "reg_unweighted": "c087808c8beb7b7b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13585037691518664,
+    "stages": {
+     "repeat=1/train": 0.0680358880199492,
+     "repeat=1/infer-save-reload": 9.12998802959919e-06,
+     "repeat=1/batch": 9.132991544902325e-05,
+     "repeat=2/train": 0.06741462904028594,
+     "repeat=2/infer-save-reload": 8.950009942054749e-06,
+     "repeat=2/batch": 9.590992704033852e-05
+    }
+   }
+  },
+  "rf-score-weighted/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9330f1998e6d104a",
+    "9330f1998e6d104a"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "65473869e8bb01b4",
+     "clf_zeroed": "c74cc8611942e728",
+     "clf_unit": "eaa9275e21353a5c",
+     "clf_unweighted": "eaa9275e21353a5c",
+     "reg_weighted": "241e7de48e689c9e",
+     "reg_zeroed": "9ed6446b711a8c7c",
+     "reg_unit": "b86633a73a482e8c",
+     "reg_unweighted": "b86633a73a482e8c"
+    },
+    {
+     "clf_weighted": "65473869e8bb01b4",
+     "clf_zeroed": "c74cc8611942e728",
+     "clf_unit": "eaa9275e21353a5c",
+     "clf_unweighted": "eaa9275e21353a5c",
+     "reg_weighted": "241e7de48e689c9e",
+     "reg_zeroed": "9ed6446b711a8c7c",
+     "reg_unit": "b86633a73a482e8c",
+     "reg_unweighted": "b86633a73a482e8c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13144388189539313,
+    "stages": {
+     "repeat=1/train": 0.06606524018570781,
+     "repeat=1/infer-save-reload": 9.189825505018234e-06,
+     "repeat=1/batch": 7.006991654634476e-05,
+     "repeat=2/train": 0.06503827194683254,
+     "repeat=2/infer-save-reload": 9.060138836503029e-06,
+     "repeat=2/batch": 6.063003093004227e-05
+    }
+   }
+  },
+  "rf-score-weighted/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb7a95587869a8ea",
+    "fb7a95587869a8ea"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "cdf5603019b89128",
+     "clf_zeroed": "b3bb5e2aff5f8227",
+     "clf_unit": "e16ceb52f2e22f1c",
+     "clf_unweighted": "e16ceb52f2e22f1c",
+     "reg_weighted": "5916b2094e5c6a1d",
+     "reg_zeroed": "ebf656f4dcb752e1",
+     "reg_unit": "c6c39438a746e2c5",
+     "reg_unweighted": "c6c39438a746e2c5"
+    },
+    {
+     "clf_weighted": "cdf5603019b89128",
+     "clf_zeroed": "b3bb5e2aff5f8227",
+     "clf_unit": "e16ceb52f2e22f1c",
+     "clf_unweighted": "e16ceb52f2e22f1c",
+     "reg_weighted": "5916b2094e5c6a1d",
+     "reg_zeroed": "ebf656f4dcb752e1",
+     "reg_unit": "c6c39438a746e2c5",
+     "reg_unweighted": "c6c39438a746e2c5"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1735791671089828,
+    "stages": {
+     "repeat=1/train": 0.09087534388527274,
+     "repeat=1/infer-save-reload": 7.969792932271957e-06,
+     "repeat=1/batch": 0.0002602098975330591,
+     "repeat=2/train": 0.08199048298411071,
+     "repeat=2/infer-save-reload": 7.950002327561378e-06,
+     "repeat=2/batch": 0.00014045997522771358
+    }
+   }
+  },
+  "arima-exog/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f628c52654e2724",
+    "2f628c52654e2724"
+   ],
+   "parts": [
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    },
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    }
+   ],
+   "infer": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "270897d998bb6557",
+    "270897d998bb6557"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "batch": [
+    "d840092861e7cf68",
+    "d840092861e7cf68"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.2263845270499587,
+    "stages": {
+     "repeat=1/train": 1.1105124989990145,
+     "repeat=1/infer-save-reload": 0.013575805816799402,
+     "repeat=1/batch": 0.008004131959751248,
+     "repeat=2/train": 0.0750119611620903,
+     "repeat=2/infer-save-reload": 0.01099371793679893,
+     "repeat=2/batch": 0.007982922019436955
+    }
+   }
+  },
+  "arima-exog/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e313860637dab58",
+    "2e313860637dab58"
+   ],
+   "parts": [
+    {
+     "beta": "84225724698b30a8",
+     "ar": "fd44ef0286eb72b3",
+     "mu": "eb16e460f9ecb2c0",
+     "sigma2": "28bc9499dd1a84d7",
+     "forecast": "79a9d65f30ce6b4b"
+    },
+    {
+     "beta": "84225724698b30a8",
+     "ar": "fd44ef0286eb72b3",
+     "mu": "eb16e460f9ecb2c0",
+     "sigma2": "28bc9499dd1a84d7",
+     "forecast": "79a9d65f30ce6b4b"
+    }
+   ],
+   "infer": [
+    "0a54764aac3e8750",
+    "0a54764aac3e8750"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "af6358733525c1c0",
+    "af6358733525c1c0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0a54764aac3e8750",
+    "0a54764aac3e8750"
+   ],
+   "batch": [
+    "bdeada0870bfb5a6",
+    "bdeada0870bfb5a6"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.5152523170690984,
+    "stages": {
+     "repeat=1/train": 0.24526451202109456,
+     "repeat=1/infer-save-reload": 0.009706899989396334,
+     "repeat=1/batch": 0.0071529820561409,
+     "repeat=2/train": 0.2329410440288484,
+     "repeat=2/infer-save-reload": 0.01204637810587883,
+     "repeat=2/batch": 0.007822291925549507
+    }
+   }
+  },
+  "arima-exog/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f61694f0445b2d3d",
+    "f61694f0445b2d3d"
+   ],
+   "parts": [
+    {
+     "beta": "6ad1a3f1614025f3",
+     "ar": "fa01f482b9a791ba",
+     "mu": "c2259a4a2a4bc76e",
+     "sigma2": "3b8d098f55c90272",
+     "forecast": "6e00f5ac47394303"
+    },
+    {
+     "beta": "6ad1a3f1614025f3",
+     "ar": "fa01f482b9a791ba",
+     "mu": "c2259a4a2a4bc76e",
+     "sigma2": "3b8d098f55c90272",
+     "forecast": "6e00f5ac47394303"
+    }
+   ],
+   "infer": [
+    "d1f6dae58ca38fc6",
+    "d1f6dae58ca38fc6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7a8acb745895f97b",
+    "7a8acb745895f97b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d1f6dae58ca38fc6",
+    "d1f6dae58ca38fc6"
+   ],
+   "batch": [
+    "407326029acbf498",
+    "407326029acbf498"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.5619467229116708,
+    "stages": {
+     "repeat=1/train": 0.7643487639725208,
+     "repeat=1/infer-save-reload": 0.009763820096850395,
+     "repeat=1/batch": 0.007144971983507276,
+     "repeat=2/train": 0.7635112649295479,
+     "repeat=2/infer-save-reload": 0.009710279991850257,
+     "repeat=2/batch": 0.007184482179582119
+    }
+   }
+  },
+  "arima-exog/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a17b576410730c15",
+    "a17b576410730c15"
+   ],
+   "parts": [
+    {
+     "beta": "8a0c0662bf13ebc5",
+     "ar": "fb7676a23bad2763",
+     "mu": "85f11e5c905c0ab8",
+     "sigma2": "3d6923d939c4c478",
+     "forecast": "16fd28ebeb04b790"
+    },
+    {
+     "beta": "8a0c0662bf13ebc5",
+     "ar": "fb7676a23bad2763",
+     "mu": "85f11e5c905c0ab8",
+     "sigma2": "3d6923d939c4c478",
+     "forecast": "16fd28ebeb04b790"
+    }
+   ],
+   "infer": [
+    "fa4ad43b61573ad3",
+    "fa4ad43b61573ad3"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f7dae018bf993756",
+    "f7dae018bf993756"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fa4ad43b61573ad3",
+    "fa4ad43b61573ad3"
+   ],
+   "batch": [
+    "9fe0205a307595c4",
+    "9fe0205a307595c4"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.2993376040831208,
+    "stages": {
+     "repeat=1/train": 0.1317779910750687,
+     "repeat=1/infer-save-reload": 0.009701899951323867,
+     "repeat=1/batch": 0.0071829529479146,
+     "repeat=2/train": 0.13205382996238768,
+     "repeat=2/infer-save-reload": 0.010536839021369815,
+     "repeat=2/batch": 0.007787912152707577
+    }
+   }
+  },
+  "arima-exog/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a540e07412fe0435",
+    "a540e07412fe0435"
+   ],
+   "parts": [
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    },
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    }
+   ],
+   "infer": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c3ab2dffbd90daa2",
+    "c3ab2dffbd90daa2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "batch": [
+    "86579187256ea38f",
+    "86579187256ea38f"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3954787531401962,
+    "stages": {
+     "repeat=1/train": 0.1812865890096873,
+     "repeat=1/infer-save-reload": 0.00981059018522501,
+     "repeat=1/batch": 0.007255112053826451,
+     "repeat=2/train": 0.17967613018117845,
+     "repeat=2/infer-save-reload": 0.00977609003894031,
+     "repeat=2/batch": 0.007376611931249499
+    }
+   }
+  },
+  "arima-exog/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a540e07412fe0435",
+    "a540e07412fe0435"
+   ],
+   "parts": [
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    },
+    {
+     "beta": "534a49a56a61dff4",
+     "ar": "77478628e58e960c",
+     "mu": "e85425508f19ffc6",
+     "sigma2": "6b4250d5cc0660ef",
+     "forecast": "70243823299d1bc5"
+    }
+   ],
+   "infer": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d31fdb6ed28b378b",
+    "d31fdb6ed28b378b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c6b5b3538692eba0",
+    "c6b5b3538692eba0"
+   ],
+   "batch": [
+    "86579187256ea38f",
+    "86579187256ea38f"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.39599254191853106,
+    "stages": {
+     "repeat=1/train": 0.18131246813572943,
+     "repeat=1/infer-save-reload": 0.010040780063718557,
+     "repeat=1/batch": 0.007141172187402844,
+     "repeat=2/train": 0.18028548010624945,
+     "repeat=2/infer-save-reload": 0.009769350057467818,
+     "repeat=2/batch": 0.00715790200047195
+    }
+   }
+  },
+  "arima-exog/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f628c52654e2724",
+    "2f628c52654e2724"
+   ],
+   "parts": [
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    },
+    {
+     "beta": "110f8011432c5427",
+     "ar": "7c33eaee24925bae",
+     "mu": "fe71cdf2f19e5183",
+     "sigma2": "50c9ac17de346183",
+     "forecast": "8ba434bdacc7018c"
+    }
+   ],
+   "infer": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "270897d998bb6557",
+    "270897d998bb6557"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "47a42389a7c18a25",
+    "47a42389a7c18a25"
+   ],
+   "batch": [
+    "d840092861e7cf68",
+    "d840092861e7cf68"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.17958617000840604,
+    "stages": {
+     "repeat=1/train": 0.07187825394794345,
+     "repeat=1/infer-save-reload": 0.010614158818498254,
+     "repeat=1/batch": 0.007545961998403072,
+     "repeat=2/train": 0.07090520486235619,
+     "repeat=2/infer-save-reload": 0.010583378840237856,
+     "repeat=2/batch": 0.007762231165543199
+    }
+   }
+  },
+  "arima-exog/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a724e4c3c77b9c2d",
+    "a724e4c3c77b9c2d"
+   ],
+   "parts": [
+    {
+     "beta": "16dce30161818de4",
+     "ar": "13bd88e75cca88d8",
+     "mu": "1fb173ca0b812ad3",
+     "sigma2": "ca5a21dfa983aa84",
+     "forecast": "f18878081bdde08a"
+    },
+    {
+     "beta": "16dce30161818de4",
+     "ar": "13bd88e75cca88d8",
+     "mu": "1fb173ca0b812ad3",
+     "sigma2": "ca5a21dfa983aa84",
+     "forecast": "f18878081bdde08a"
+    }
+   ],
+   "infer": [
+    "0d8696d7fda83e82",
+    "0d8696d7fda83e82"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ed44afca33203821",
+    "ed44afca33203821"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0d8696d7fda83e82",
+    "0d8696d7fda83e82"
+   ],
+   "batch": [
+    "a36825b2a47ca167",
+    "a36825b2a47ca167"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.17853159201331437,
+    "stages": {
+     "repeat=1/train": 0.07228203397244215,
+     "repeat=1/infer-save-reload": 0.009760729037225246,
+     "repeat=1/batch": 0.00714765302836895,
+     "repeat=2/train": 0.07214404386468232,
+     "repeat=2/infer-save-reload": 0.009788338793441653,
+     "repeat=2/batch": 0.007138753077015281
+    }
+   }
+  },
+  "arima-exog/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1a99c270f6b43778",
+    "1a99c270f6b43778"
+   ],
+   "parts": [
+    {
+     "beta": "6e043f76f2c81ae2",
+     "ar": "69ff23922541ac93",
+     "mu": "916f91644552ecfa",
+     "sigma2": "58c91bedb0b90afe",
+     "forecast": "f2fae5ee95b7fa35"
+    },
+    {
+     "beta": "6e043f76f2c81ae2",
+     "ar": "69ff23922541ac93",
+     "mu": "916f91644552ecfa",
+     "sigma2": "58c91bedb0b90afe",
+     "forecast": "f2fae5ee95b7fa35"
+    }
+   ],
+   "infer": [
+    "24118bc0349bd37f",
+    "24118bc0349bd37f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "88e854113c47b02e",
+    "88e854113c47b02e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "24118bc0349bd37f",
+    "24118bc0349bd37f"
+   ],
+   "batch": [
+    "3dc3207ebf330ebb",
+    "3dc3207ebf330ebb"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 5.031398894032463,
+    "stages": {
+     "repeat=1/train": 2.497796755982563,
+     "repeat=1/infer-save-reload": 0.009776159888133407,
+     "repeat=1/batch": 0.007158032152801752,
+     "repeat=2/train": 2.4993025849107653,
+     "repeat=2/infer-save-reload": 0.009891729801893234,
+     "repeat=2/batch": 0.007171781966462731
+    }
+   }
+  },
+  "arima-exog-seasonal/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "716663af2f675e1e",
+    "716663af2f675e1e"
+   ],
+   "parts": [
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    },
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    }
+   ],
+   "infer": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6dd538a7ed348bcd",
+    "6dd538a7ed348bcd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "batch": [
+    "8cfb82c8b1e5204a",
+    "8cfb82c8b1e5204a"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 7.353551595937461,
+    "stages": {
+     "repeat=1/train": 3.6363208058755845,
+     "repeat=1/infer-save-reload": 0.03536713216453791,
+     "repeat=1/batch": 0.031147997127845883,
+     "repeat=2/train": 3.5838918711524457,
+     "repeat=2/infer-save-reload": 0.0345153131056577,
+     "repeat=2/batch": 0.03197514684870839
+    }
+   }
+  },
+  "arima-exog-seasonal/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "637a2f39d5d40eea",
+    "637a2f39d5d40eea"
+   ],
+   "parts": [
+    {
+     "beta": "3a71e1f81edc4206",
+     "ar": "d802c2439e13ac80",
+     "sar": "1d121cd073b46060",
+     "sigma2": "f1c488b21f90704c",
+     "forecast": "653cc5b36156caa1"
+    },
+    {
+     "beta": "3a71e1f81edc4206",
+     "ar": "d802c2439e13ac80",
+     "sar": "1d121cd073b46060",
+     "sigma2": "f1c488b21f90704c",
+     "forecast": "653cc5b36156caa1"
+    }
+   ],
+   "infer": [
+    "9a23b875558b8979",
+    "9a23b875558b8979"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "14bf7fc49e25c5bc",
+    "14bf7fc49e25c5bc"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9a23b875558b8979",
+    "9a23b875558b8979"
+   ],
+   "batch": [
+    "7f49a8b78175bfe2",
+    "7f49a8b78175bfe2"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 17.091435007052496,
+    "stages": {
+     "repeat=1/train": 8.4903424968943,
+     "repeat=1/infer-save-reload": 0.034549572970718145,
+     "repeat=1/batch": 0.031113256933167577,
+     "repeat=2/train": 8.469591958913952,
+     "repeat=2/infer-save-reload": 0.03442782303318381,
+     "repeat=2/batch": 0.03108866815455258
+    }
+   }
+  },
+  "arima-exog-seasonal/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb5e4a7881fb445",
+    "ddb5e4a7881fb445"
+   ],
+   "parts": [
+    {
+     "beta": "30ea79fe578d419c",
+     "ar": "70e6426e99ec0d7b",
+     "sar": "1fed08598dc19e2f",
+     "sigma2": "5c7586fa056e8009",
+     "forecast": "cea4f888b21f95e8"
+    },
+    {
+     "beta": "30ea79fe578d419c",
+     "ar": "70e6426e99ec0d7b",
+     "sar": "1fed08598dc19e2f",
+     "sigma2": "5c7586fa056e8009",
+     "forecast": "cea4f888b21f95e8"
+    }
+   ],
+   "infer": [
+    "92a5f3575f52162e",
+    "92a5f3575f52162e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "98dacdf7f83a0ea7",
+    "98dacdf7f83a0ea7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "92a5f3575f52162e",
+    "92a5f3575f52162e"
+   ],
+   "batch": [
+    "8c9c124041fa0231",
+    "8c9c124041fa0231"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.2180755061563104,
+    "stages": {
+     "repeat=1/train": 0.5432632670272142,
+     "repeat=1/infer-save-reload": 0.03509581298567355,
+     "repeat=1/batch": 0.03110180702060461,
+     "repeat=2/train": 0.5427271679509431,
+     "repeat=2/infer-save-reload": 0.03449785406701267,
+     "repeat=2/batch": 0.031107557006180286
+    }
+   }
+  },
+  "arima-exog-seasonal/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "69c50e293c60f173",
+    "69c50e293c60f173"
+   ],
+   "parts": [
+    {
+     "beta": "988c2df8ffc2d9c9",
+     "ar": "811f4e025c249ad3",
+     "sar": "7724d97d1f0332ca",
+     "sigma2": "4daa753eb239dbcd",
+     "forecast": "e82607a31953243a"
+    },
+    {
+     "beta": "988c2df8ffc2d9c9",
+     "ar": "811f4e025c249ad3",
+     "sar": "7724d97d1f0332ca",
+     "sigma2": "4daa753eb239dbcd",
+     "forecast": "e82607a31953243a"
+    }
+   ],
+   "infer": [
+    "2e93bf12d7b45b77",
+    "2e93bf12d7b45b77"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1fe0449adb2ddf02",
+    "1fe0449adb2ddf02"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2e93bf12d7b45b77",
+    "2e93bf12d7b45b77"
+   ],
+   "batch": [
+    "aa36d0df25f89009",
+    "aa36d0df25f89009"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.8659842328634113,
+    "stages": {
+     "repeat=1/train": 0.866600536974147,
+     "repeat=1/infer-save-reload": 0.03460379387252033,
+     "repeat=1/batch": 0.031155937118455768,
+     "repeat=2/train": 0.8672066649887711,
+     "repeat=2/infer-save-reload": 0.03448253404349089,
+     "repeat=2/batch": 0.03159778704866767
+    }
+   }
+  },
+  "arima-exog-seasonal/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db005efa7d2bc517",
+    "db005efa7d2bc517"
+   ],
+   "parts": [
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    },
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    }
+   ],
+   "infer": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "47916d777fdf7a1e",
+    "47916d777fdf7a1e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "batch": [
+    "c366fcb72f5a1cde",
+    "c366fcb72f5a1cde"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 8.82647910201922,
+    "stages": {
+     "repeat=1/train": 4.345725137973204,
+     "repeat=1/infer-save-reload": 0.03476466401480138,
+     "repeat=1/batch": 0.031904995907098055,
+     "repeat=2/train": 4.347604955080897,
+     "repeat=2/infer-save-reload": 0.03475438407622278,
+     "repeat=2/batch": 0.031380316009745
+    }
+   }
+  },
+  "arima-exog-seasonal/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db005efa7d2bc517",
+    "db005efa7d2bc517"
+   ],
+   "parts": [
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    },
+    {
+     "beta": "1dc879a17a3844f4",
+     "ar": "607001119da0e6d3",
+     "sar": "12f70a877442358f",
+     "sigma2": "55091546be445640",
+     "forecast": "5292d7d2fb6bc1f9"
+    }
+   ],
+   "infer": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "655c915176e34b1b",
+    "655c915176e34b1b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "73bddff16649e238",
+    "73bddff16649e238"
+   ],
+   "batch": [
+    "c366fcb72f5a1cde",
+    "c366fcb72f5a1cde"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 8.84850810887292,
+    "stages": {
+     "repeat=1/train": 4.353046788834035,
+     "repeat=1/infer-save-reload": 0.034847242990508676,
+     "repeat=1/batch": 0.032635715790092945,
+     "repeat=2/train": 4.3615569598041475,
+     "repeat=2/infer-save-reload": 0.03476022416725755,
+     "repeat=2/batch": 0.03132133698090911
+    }
+   }
+  },
+  "arima-exog-seasonal/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "716663af2f675e1e",
+    "716663af2f675e1e"
+   ],
+   "parts": [
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    },
+    {
+     "beta": "f66f17d98df35c4b",
+     "ar": "35138f1f81b5982f",
+     "sar": "5fa2c7d88021a7f9",
+     "sigma2": "382ffe29a5f4d9d4",
+     "forecast": "a5ece65cc11335d8"
+    }
+   ],
+   "infer": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6dd538a7ed348bcd",
+    "6dd538a7ed348bcd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0392c5518c63ed4d",
+    "0392c5518c63ed4d"
+   ],
+   "batch": [
+    "8cfb82c8b1e5204a",
+    "8cfb82c8b1e5204a"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 7.319205090869218,
+    "stages": {
+     "repeat=1/train": 3.590877642855048,
+     "repeat=1/infer-save-reload": 0.034489153884351254,
+     "repeat=1/batch": 0.031217337120324373,
+     "repeat=2/train": 3.596443567192182,
+     "repeat=2/infer-save-reload": 0.03477800288237631,
+     "repeat=2/batch": 0.03105834685266018
+    }
+   }
+  },
+  "arima-exog-seasonal/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ea94414246da114",
+    "6ea94414246da114"
+   ],
+   "parts": [
+    {
+     "beta": "d48172f58cf9ee0c",
+     "ar": "82f70436a2074ddd",
+     "sar": "97b0e1889fc04e18",
+     "sigma2": "81792ed1d6af81ef",
+     "forecast": "8df70df20173bb1e"
+    },
+    {
+     "beta": "d48172f58cf9ee0c",
+     "ar": "82f70436a2074ddd",
+     "sar": "97b0e1889fc04e18",
+     "sigma2": "81792ed1d6af81ef",
+     "forecast": "8df70df20173bb1e"
+    }
+   ],
+   "infer": [
+    "8600ec544f57bd54",
+    "8600ec544f57bd54"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "611c9b29cdf16288",
+    "611c9b29cdf16288"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8600ec544f57bd54",
+    "8600ec544f57bd54"
+   ],
+   "batch": [
+    "5a4988eab5262e8a",
+    "5a4988eab5262e8a"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1340957838110626,
+    "stages": {
+     "repeat=1/train": 0.501629760954529,
+     "repeat=1/infer-save-reload": 0.034220193047076464,
+     "repeat=1/batch": 0.031083917943760753,
+     "repeat=2/train": 0.5018035199027508,
+     "repeat=2/infer-save-reload": 0.03419594396837056,
+     "repeat=2/batch": 0.0309703778475523
+    }
+   }
+  },
+  "arima-exog-seasonal/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e92d02b880f0954",
+    "9e92d02b880f0954"
+   ],
+   "parts": [
+    {
+     "beta": "64e44c3d6c2ab0f6",
+     "ar": "9b7d2b4440fe4d86",
+     "sar": "53ded7459fd3e1eb",
+     "sigma2": "1ac52e0ce58b1c02",
+     "forecast": "336d64b0185a52b6"
+    },
+    {
+     "beta": "64e44c3d6c2ab0f6",
+     "ar": "9b7d2b4440fe4d86",
+     "sar": "53ded7459fd3e1eb",
+     "sigma2": "1ac52e0ce58b1c02",
+     "forecast": "336d64b0185a52b6"
+    }
+   ],
+   "infer": [
+    "6fbe1b03160ddf99",
+    "6fbe1b03160ddf99"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6df61f9b0e3d912b",
+    "6df61f9b0e3d912b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6fbe1b03160ddf99",
+    "6fbe1b03160ddf99"
+   ],
+   "batch": [
+    "3f405565a07aedbc",
+    "3f405565a07aedbc"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 15.170753920916468,
+    "stages": {
+     "repeat=1/train": 7.537088971119374,
+     "repeat=1/infer-save-reload": 0.03483062400482595,
+     "repeat=1/batch": 0.031082216883078218,
+     "repeat=2/train": 7.501909228973091,
+     "repeat=2/infer-save-reload": 0.03447418287396431,
+     "repeat=2/batch": 0.031089897034689784
+    }
+   }
+  },
+  "gp-normalize-y/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "295a3a943bb1e6c1",
+    "295a3a943bb1e6c1"
+   ],
+   "parts": [
+    {
+     "alpha": "99ea2dee4e6d2896",
+     "L": "02bd406c9f990a9e",
+     "lml": "f680b96967ef824f",
+     "y_stats": "6181230773d43398",
+     "mean": "0a3bcf20f137a9ce",
+     "std": "28f14bb51d5d2208"
+    },
+    {
+     "alpha": "99ea2dee4e6d2896",
+     "L": "02bd406c9f990a9e",
+     "lml": "f680b96967ef824f",
+     "y_stats": "6181230773d43398",
+     "mean": "0a3bcf20f137a9ce",
+     "std": "28f14bb51d5d2208"
+    }
+   ],
+   "infer": [
+    "7c5123dc7a512038",
+    "7c5123dc7a512038"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "988bc1c3b51246a4",
+    "988bc1c3b51246a4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "7c5123dc7a512038",
+    "7c5123dc7a512038"
+   ],
+   "batch": [
+    "10f20ff36a173c93",
+    "10f20ff36a173c93"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.6231999332085252,
+    "stages": {
+     "repeat=1/train": 0.4831346310675144,
+     "repeat=1/infer-save-reload": 0.006500283954665065,
+     "repeat=1/batch": 0.08525656000711024,
+     "repeat=2/train": 0.0073255018796771765,
+     "repeat=2/infer-save-reload": 0.006354142911732197,
+     "repeat=2/batch": 0.0343782939016819
+    }
+   }
+  },
+  "gp-normalize-y/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dcd3de359f3c2074",
+    "dcd3de359f3c2074"
+   ],
+   "parts": [
+    {
+     "alpha": "7beef4788d8279fe",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "5367004b6c047da0",
+     "y_stats": "5c96cd80880f6aec",
+     "mean": "16c8dedc29b88ec0",
+     "std": "a791fecae00e7a26"
+    },
+    {
+     "alpha": "7beef4788d8279fe",
+     "L": "ad07c62b4f7b82e9",
+     "lml": "5367004b6c047da0",
+     "y_stats": "5c96cd80880f6aec",
+     "mean": "16c8dedc29b88ec0",
+     "std": "a791fecae00e7a26"
+    }
+   ],
+   "infer": [
+    "0e6c262796044cb8",
+    "0e6c262796044cb8"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4af86e76b34e092c",
+    "4af86e76b34e092c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0e6c262796044cb8",
+    "0e6c262796044cb8"
+   ],
+   "batch": [
+    "d3aaf331f5414e4b",
+    "d3aaf331f5414e4b"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09548873989842832,
+    "stages": {
+     "repeat=1/train": 0.007518871920183301,
+     "repeat=1/infer-save-reload": 0.006208063801750541,
+     "repeat=1/batch": 0.034225903917104006,
+     "repeat=2/train": 0.007057512179017067,
+     "repeat=2/infer-save-reload": 0.006099764024838805,
+     "repeat=2/batch": 0.03418409405276179
+    }
+   }
+  },
+  "gp-normalize-y/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b3faa0b97f15bcba",
+    "b3faa0b97f15bcba"
+   ],
+   "parts": [
+    {
+     "alpha": "5cbd97cf1f7b908a",
+     "L": "946d09425efb81ba",
+     "lml": "64c03bce10a7d379",
+     "y_stats": "df1a1df4fee79f48",
+     "mean": "b422429e3b010653",
+     "std": "e7ebcdea4972bf71"
+    },
+    {
+     "alpha": "5cbd97cf1f7b908a",
+     "L": "946d09425efb81ba",
+     "lml": "64c03bce10a7d379",
+     "y_stats": "df1a1df4fee79f48",
+     "mean": "b422429e3b010653",
+     "std": "e7ebcdea4972bf71"
+    }
+   ],
+   "infer": [
+    "b77bf4a2d0da8736",
+    "b77bf4a2d0da8736"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "78eb0a3ce16ce7c5",
+    "78eb0a3ce16ce7c5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b77bf4a2d0da8736",
+    "b77bf4a2d0da8736"
+   ],
+   "batch": [
+    "83463eae32c0bbe9",
+    "83463eae32c0bbe9"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09791046706959605,
+    "stages": {
+     "repeat=1/train": 0.00726192188449204,
+     "repeat=1/infer-save-reload": 0.006148464046418667,
+     "repeat=1/batch": 0.0343928940128535,
+     "repeat=2/train": 0.007158251944929361,
+     "repeat=2/infer-save-reload": 0.006546773016452789,
+     "repeat=2/batch": 0.036193212028592825
+    }
+   }
+  },
+  "gp-normalize-y/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f637d262c88b131",
+    "3f637d262c88b131"
+   ],
+   "parts": [
+    {
+     "alpha": "9838313e745ebbfd",
+     "L": "59b7041f1a10bfbd",
+     "lml": "b0f25403a8be1053",
+     "y_stats": "66452123cae8da9d",
+     "mean": "2ce5ffb4d2bb9cf8",
+     "std": "ca03137acb0df93a"
+    },
+    {
+     "alpha": "9838313e745ebbfd",
+     "L": "59b7041f1a10bfbd",
+     "lml": "b0f25403a8be1053",
+     "y_stats": "66452123cae8da9d",
+     "mean": "2ce5ffb4d2bb9cf8",
+     "std": "ca03137acb0df93a"
+    }
+   ],
+   "infer": [
+    "13332a5abc671f44",
+    "13332a5abc671f44"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7aaddfff81162cc0",
+    "7aaddfff81162cc0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "13332a5abc671f44",
+    "13332a5abc671f44"
+   ],
+   "batch": [
+    "f83ca2d738dfbae9",
+    "f83ca2d738dfbae9"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09565247897990048,
+    "stages": {
+     "repeat=1/train": 0.0073420219123363495,
+     "repeat=1/infer-save-reload": 0.00618922314606607,
+     "repeat=1/batch": 0.03439234406687319,
+     "repeat=2/train": 0.007097003050148487,
+     "repeat=2/infer-save-reload": 0.006137782940641046,
+     "repeat=2/batch": 0.034291493939235806
+    }
+   }
+  },
+  "gp-normalize-y/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "563ede6c2700528e",
+    "563ede6c2700528e"
+   ],
+   "parts": [
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    },
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    }
+   ],
+   "infer": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7838eff1539fb489",
+    "7838eff1539fb489"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "batch": [
+    "00079f14e3f462fc",
+    "00079f14e3f462fc"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09571882896125317,
+    "stages": {
+     "repeat=1/train": 0.007563791936263442,
+     "repeat=1/infer-save-reload": 0.006302152993157506,
+     "repeat=1/batch": 0.03416156396269798,
+     "repeat=2/train": 0.007085883058607578,
+     "repeat=2/infer-save-reload": 0.006099432939663529,
+     "repeat=2/batch": 0.0341682939324528
+    }
+   }
+  },
+  "gp-normalize-y/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "563ede6c2700528e",
+    "563ede6c2700528e"
+   ],
+   "parts": [
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    },
+    {
+     "alpha": "87348100684fad22",
+     "L": "375621676b406cb8",
+     "lml": "34cdd37e91b15adf",
+     "y_stats": "79ef631b6b3643ad",
+     "mean": "1ffe9cb55183d533",
+     "std": "bd583e86732471b2"
+    }
+   ],
+   "infer": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5f20cf42422bf2e9",
+    "5f20cf42422bf2e9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c9c056f09a65ff3b",
+    "c9c056f09a65ff3b"
+   ],
+   "batch": [
+    "00079f14e3f462fc",
+    "00079f14e3f462fc"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09622896905057132,
+    "stages": {
+     "repeat=1/train": 0.00731570296920836,
+     "repeat=1/infer-save-reload": 0.006151273148134351,
+     "repeat=1/batch": 0.034582264022901654,
+     "repeat=2/train": 0.007370981853455305,
+     "repeat=2/infer-save-reload": 0.006212502950802445,
+     "repeat=2/batch": 0.034382464131340384
+    }
+   }
+  },
+  "gp-normalize-y/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "56127db3c25510e4",
+    "56127db3c25510e4"
+   ],
+   "parts": [
+    {
+     "alpha": "bae345f5569ba006",
+     "L": "02bd406c9f990a9e",
+     "lml": "704be96816c492a8",
+     "y_stats": "6200c2aabdfea397",
+     "mean": "c84b922c45f5d862",
+     "std": "5577692a5b4c546d"
+    },
+    {
+     "alpha": "bae345f5569ba006",
+     "L": "02bd406c9f990a9e",
+     "lml": "704be96816c492a8",
+     "y_stats": "6200c2aabdfea397",
+     "mean": "c84b922c45f5d862",
+     "std": "5577692a5b4c546d"
+    }
+   ],
+   "infer": [
+    "3c0b639788527068",
+    "3c0b639788527068"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "db1cd41ce6fd1b37",
+    "db1cd41ce6fd1b37"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c0b639788527068",
+    "3c0b639788527068"
+   ],
+   "batch": [
+    "cd8dc4dd4d12cb25",
+    "cd8dc4dd4d12cb25"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09594168793410063,
+    "stages": {
+     "repeat=1/train": 0.0075932221952825785,
+     "repeat=1/infer-save-reload": 0.006146653089672327,
+     "repeat=1/batch": 0.03444541385397315,
+     "repeat=2/train": 0.007095822133123875,
+     "repeat=2/infer-save-reload": 0.00609488389454782,
+     "repeat=2/batch": 0.034366162959486246
+    }
+   }
+  },
+  "gp-normalize-y/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c3c46d3bdd248167",
+    "c3c46d3bdd248167"
+   ],
+   "parts": [
+    {
+     "alpha": "c80a04cd6e8d0f46",
+     "L": "5bf7024831e3bbca",
+     "lml": "fca822554645173b",
+     "y_stats": "a7c6bd52a10522a6",
+     "mean": "1ee1cbebae1efc62",
+     "std": "7510b7807cb1b4aa"
+    },
+    {
+     "alpha": "c80a04cd6e8d0f46",
+     "L": "5bf7024831e3bbca",
+     "lml": "fca822554645173b",
+     "y_stats": "a7c6bd52a10522a6",
+     "mean": "1ee1cbebae1efc62",
+     "std": "7510b7807cb1b4aa"
+    }
+   ],
+   "infer": [
+    "e8873986c9e0f24f",
+    "e8873986c9e0f24f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "767941378d3c368a",
+    "767941378d3c368a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e8873986c9e0f24f",
+    "e8873986c9e0f24f"
+   ],
+   "batch": [
+    "290d32315445165d",
+    "290d32315445165d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09999574488028884,
+    "stages": {
+     "repeat=1/train": 0.007671311963349581,
+     "repeat=1/infer-save-reload": 0.006319923093542457,
+     "repeat=1/batch": 0.03628175216726959,
+     "repeat=2/train": 0.007384672062471509,
+     "repeat=2/infer-save-reload": 0.006249333964660764,
+     "repeat=2/batch": 0.035896321991458535
+    }
+   }
+  },
+  "gp-normalize-y/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c162a835d708df60",
+    "c162a835d708df60"
+   ],
+   "parts": [
+    {
+     "alpha": "d09b2f28b16f837c",
+     "L": "440e3cd9e3d290ed",
+     "lml": "b00206d92824d997",
+     "y_stats": "58b2b45f5d932d2e",
+     "mean": "ec44b984575a978d",
+     "std": "2b7b926dd5323998"
+    },
+    {
+     "alpha": "d09b2f28b16f837c",
+     "L": "440e3cd9e3d290ed",
+     "lml": "b00206d92824d997",
+     "y_stats": "58b2b45f5d932d2e",
+     "mean": "ec44b984575a978d",
+     "std": "2b7b926dd5323998"
+    }
+   ],
+   "infer": [
+    "e8c9793a64ffecd4",
+    "e8c9793a64ffecd4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f8b1eb8570f5e01b",
+    "f8b1eb8570f5e01b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e8c9793a64ffecd4",
+    "e8c9793a64ffecd4"
+   ],
+   "batch": [
+    "d4b37ced285cc86d",
+    "d4b37ced285cc86d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.1001160650048405,
+    "stages": {
+     "repeat=1/train": 0.007733562029898167,
+     "repeat=1/infer-save-reload": 0.006339583080261946,
+     "repeat=1/batch": 0.03599908296018839,
+     "repeat=2/train": 0.0075019230134785175,
+     "repeat=2/infer-save-reload": 0.006342282984405756,
+     "repeat=2/batch": 0.03600076190195978
+    }
+   }
+  },
+  "gp-sample-y-normalize/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b5ad01b81c59fdf3",
+    "b5ad01b81c59fdf3"
+   ],
+   "parts": [
+    {
+     "sample": "0f15eca073153327"
+    },
+    {
+     "sample": "0f15eca073153327"
+    }
+   ],
+   "infer": [
+    "0c4beaeb3b1aeb90",
+    "0c4beaeb3b1aeb90"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "988bc1c3b51246a4",
+    "988bc1c3b51246a4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0c4beaeb3b1aeb90",
+    "0c4beaeb3b1aeb90"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.040554587030783296,
+    "stages": {
+     "repeat=1/train": 0.011923447018489242,
+     "repeat=1/infer-save-reload": 0.00866511114872992,
+     "repeat=1/batch": 0.0001338701695203781,
+     "repeat=2/train": 0.011160577880218625,
+     "repeat=2/infer-save-reload": 0.008383120875805616,
+     "repeat=2/batch": 0.00010044989176094532
+    }
+   }
+  },
+  "gp-sample-y-normalize/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "43811dbad15ad2f0",
+    "43811dbad15ad2f0"
+   ],
+   "parts": [
+    {
+     "sample": "dd71571d50c7beee"
+    },
+    {
+     "sample": "dd71571d50c7beee"
+    }
+   ],
+   "infer": [
+    "37a77ee22082dc29",
+    "37a77ee22082dc29"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4af86e76b34e092c",
+    "4af86e76b34e092c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "37a77ee22082dc29",
+    "37a77ee22082dc29"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04099344601854682,
+    "stages": {
+     "repeat=1/train": 0.011544856941327453,
+     "repeat=1/infer-save-reload": 0.008920090971514583,
+     "repeat=1/batch": 0.00013376004062592983,
+     "repeat=2/train": 0.011607978027313948,
+     "repeat=2/infer-save-reload": 0.008480690885335207,
+     "repeat=2/batch": 0.00010577915236353874
+    }
+   }
+  },
+  "gp-sample-y-normalize/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "455f431e3dcb0773",
+    "455f431e3dcb0773"
+   ],
+   "parts": [
+    {
+     "sample": "cb8911d89e8c2e10"
+    },
+    {
+     "sample": "cb8911d89e8c2e10"
+    }
+   ],
+   "infer": [
+    "c0c2a3bec4606a09",
+    "c0c2a3bec4606a09"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "78eb0a3ce16ce7c5",
+    "78eb0a3ce16ce7c5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c0c2a3bec4606a09",
+    "c0c2a3bec4606a09"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.041482456028461456,
+    "stages": {
+     "repeat=1/train": 0.012458696030080318,
+     "repeat=1/infer-save-reload": 0.008739151060581207,
+     "repeat=1/batch": 0.00016831979155540466,
+     "repeat=2/train": 0.011273488169535995,
+     "repeat=2/infer-save-reload": 0.00851821107789874,
+     "repeat=2/batch": 0.00012230989523231983
+    }
+   }
+  },
+  "gp-sample-y-normalize/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c11bb0e6d158bfe3",
+    "c11bb0e6d158bfe3"
+   ],
+   "parts": [
+    {
+     "sample": "db1fee82160f6733"
+    },
+    {
+     "sample": "db1fee82160f6733"
+    }
+   ],
+   "infer": [
+    "296d00db02a3dc55",
+    "296d00db02a3dc55"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7aaddfff81162cc0",
+    "7aaddfff81162cc0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "296d00db02a3dc55",
+    "296d00db02a3dc55"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.039791128132492304,
+    "stages": {
+     "repeat=1/train": 0.011437568115070462,
+     "repeat=1/infer-save-reload": 0.00844584102742374,
+     "repeat=1/batch": 0.00012031011283397675,
+     "repeat=2/train": 0.01114615797996521,
+     "repeat=2/infer-save-reload": 0.008354892022907734,
+     "repeat=2/batch": 9.323912672698498e-05
+    }
+   }
+  },
+  "gp-sample-y-normalize/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33512fcfac39fb55",
+    "33512fcfac39fb55"
+   ],
+   "parts": [
+    {
+     "sample": "3d651db2b51ea0b9"
+    },
+    {
+     "sample": "3d651db2b51ea0b9"
+    }
+   ],
+   "infer": [
+    "d83e1344b5034607",
+    "d83e1344b5034607"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7838eff1539fb489",
+    "7838eff1539fb489"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d83e1344b5034607",
+    "d83e1344b5034607"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04000844690017402,
+    "stages": {
+     "repeat=1/train": 0.011454246938228607,
+     "repeat=1/infer-save-reload": 0.008660721126943827,
+     "repeat=1/batch": 0.0001145100686699152,
+     "repeat=2/train": 0.011128747835755348,
+     "repeat=2/infer-save-reload": 0.008376532001420856,
+     "repeat=2/batch": 9.634997695684433e-05
+    }
+   }
+  },
+  "gp-sample-y-normalize/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33512fcfac39fb55",
+    "33512fcfac39fb55"
+   ],
+   "parts": [
+    {
+     "sample": "3d651db2b51ea0b9"
+    },
+    {
+     "sample": "3d651db2b51ea0b9"
+    }
+   ],
+   "infer": [
+    "d83e1344b5034607",
+    "d83e1344b5034607"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "5f20cf42422bf2e9",
+    "5f20cf42422bf2e9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d83e1344b5034607",
+    "d83e1344b5034607"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.041164366994053125,
+    "stages": {
+     "repeat=1/train": 0.01167206815443933,
+     "repeat=1/infer-save-reload": 0.009122140007093549,
+     "repeat=1/batch": 0.000138930045068264,
+     "repeat=2/train": 0.011392698157578707,
+     "repeat=2/infer-save-reload": 0.008545101154595613,
+     "repeat=2/batch": 0.00010980991646647453
+    }
+   }
+  },
+  "gp-sample-y-normalize/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "78ae9a8195ece8f9",
+    "78ae9a8195ece8f9"
+   ],
+   "parts": [
+    {
+     "sample": "c1d9c1bf7da20a93"
+    },
+    {
+     "sample": "c1d9c1bf7da20a93"
+    }
+   ],
+   "infer": [
+    "64889722931adde7",
+    "64889722931adde7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "db1cd41ce6fd1b37",
+    "db1cd41ce6fd1b37"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "64889722931adde7",
+    "64889722931adde7"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.040043727960437536,
+    "stages": {
+     "repeat=1/train": 0.01164053799584508,
+     "repeat=1/infer-save-reload": 0.008444732055068016,
+     "repeat=1/batch": 0.00012216996401548386,
+     "repeat=2/train": 0.011149548925459385,
+     "repeat=2/infer-save-reload": 0.008415720891207457,
+     "repeat=2/batch": 9.980984032154083e-05
+    }
+   }
+  },
+  "gp-sample-y-normalize/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b4dd92087d7a5b3a",
+    "b4dd92087d7a5b3a"
+   ],
+   "parts": [
+    {
+     "sample": "fbfcd3bc1ceb1bd3"
+    },
+    {
+     "sample": "fbfcd3bc1ceb1bd3"
+    }
+   ],
+   "infer": [
+    "1ed38e7596ec035d",
+    "1ed38e7596ec035d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "767941378d3c368a",
+    "767941378d3c368a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1ed38e7596ec035d",
+    "1ed38e7596ec035d"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04010087694041431,
+    "stages": {
+     "repeat=1/train": 0.011497888015583158,
+     "repeat=1/infer-save-reload": 0.008533491054549813,
+     "repeat=1/batch": 9.29699745029211e-05,
+     "repeat=2/train": 0.011250237934291363,
+     "repeat=2/infer-save-reload": 0.008469000924378633,
+     "repeat=2/batch": 7.347879000008106e-05
+    }
+   }
+  },
+  "gp-sample-y-normalize/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0644e14fb6f52191",
+    "0644e14fb6f52191"
+   ],
+   "parts": [
+    {
+     "sample": "340aa4588e3b0ced"
+    },
+    {
+     "sample": "340aa4588e3b0ced"
+    }
+   ],
+   "infer": [
+    "de0542b579ff2843",
+    "de0542b579ff2843"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f8b1eb8570f5e01b",
+    "f8b1eb8570f5e01b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "de0542b579ff2843",
+    "de0542b579ff2843"
+   ],
+   "batch": [
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)",
+    "n/a:jointly-correlated (sample_y draws all rows of a call from one joint posterior)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.03980094799771905,
+    "stages": {
+     "repeat=1/train": 0.011441977927461267,
+     "repeat=1/infer-save-reload": 0.008431381080299616,
+     "repeat=1/batch": 0.00012069987133145332,
+     "repeat=2/train": 0.011182267917320132,
+     "repeat=2/infer-save-reload": 0.008341970853507519,
+     "repeat=2/batch": 0.00010756007395684719
+    }
+   }
+  },
+  "ordered-gradient-sum/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a742b6c812b94347",
+    "a742b6c812b94347"
+   ],
+   "parts": [
+    {
+     "gradients": "c2250542117d9f75"
+    },
+    {
+     "gradients": "c2250542117d9f75"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01898882002569735,
+    "stages": {
+     "repeat=1/train": 0.016742072068154812,
+     "repeat=1/infer-save-reload": 8.639879524707794e-06,
+     "repeat=1/batch": 0.0001442700158804655,
+     "repeat=2/train": 0.0018739979714155197,
+     "repeat=2/infer-save-reload": 7.180031388998032e-06,
+     "repeat=2/batch": 5.55599108338356e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e625f92c8f010b8b",
+    "e625f92c8f010b8b"
+   ],
+   "parts": [
+    {
+     "gradients": "5d2ad68ca84b0043"
+    },
+    {
+     "gradients": "5d2ad68ca84b0043"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004110096022486687,
+    "stages": {
+     "repeat=1/train": 0.0019806779455393553,
+     "repeat=1/infer-save-reload": 7.260125130414963e-06,
+     "repeat=1/batch": 5.6320102885365486e-05,
+     "repeat=2/train": 0.0018816578667610884,
+     "repeat=2/infer-save-reload": 6.910180673003197e-06,
+     "repeat=2/batch": 4.903017543256283e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "46ae184b0eb32ecd",
+    "46ae184b0eb32ecd"
+   ],
+   "parts": [
+    {
+     "gradients": "e50111a86d37f9a0"
+    },
+    {
+     "gradients": "e50111a86d37f9a0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004127925960347056,
+    "stages": {
+     "repeat=1/train": 0.0019817878492176533,
+     "repeat=1/infer-save-reload": 7.160007953643799e-06,
+     "repeat=1/batch": 5.966983735561371e-05,
+     "repeat=2/train": 0.001887998078018427,
+     "repeat=2/infer-save-reload": 7.160007953643799e-06,
+     "repeat=2/batch": 5.500996485352516e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a742b6c812b94347",
+    "a742b6c812b94347"
+   ],
+   "parts": [
+    {
+     "gradients": "c2250542117d9f75"
+    },
+    {
+     "gradients": "c2250542117d9f75"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004237395012751222,
+    "stages": {
+     "repeat=1/train": 0.0020138181280344725,
+     "repeat=1/infer-save-reload": 8.11018981039524e-06,
+     "repeat=1/batch": 6.59001525491476e-05,
+     "repeat=2/train": 0.001946358010172844,
+     "repeat=2/infer-save-reload": 7.58003443479538e-06,
+     "repeat=2/batch": 5.862000398337841e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a742b6c812b94347",
+    "a742b6c812b94347"
+   ],
+   "parts": [
+    {
+     "gradients": "c2250542117d9f75"
+    },
+    {
+     "gradients": "c2250542117d9f75"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004135556053370237,
+    "stages": {
+     "repeat=1/train": 0.001980647910386324,
+     "repeat=1/infer-save-reload": 7.5499992817640305e-06,
+     "repeat=1/batch": 5.800998769700527e-05,
+     "repeat=2/train": 0.0018946779891848564,
+     "repeat=2/infer-save-reload": 7.6000578701496124e-06,
+     "repeat=2/batch": 5.405000410974026e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f177e887cf2c4061",
+    "f177e887cf2c4061"
+   ],
+   "parts": [
+    {
+     "gradients": "62f22526040e3e12"
+    },
+    {
+     "gradients": "62f22526040e3e12"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004179615993052721,
+    "stages": {
+     "repeat=1/train": 0.0019155479967594147,
+     "repeat=1/infer-save-reload": 7.089925929903984e-06,
+     "repeat=1/batch": 7.518986240029335e-05,
+     "repeat=2/train": 0.0019917080644518137,
+     "repeat=2/infer-save-reload": 7.069902494549751e-06,
+     "repeat=2/batch": 5.343998782336712e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a742b6c812b94347",
+    "a742b6c812b94347"
+   ],
+   "parts": [
+    {
+     "gradients": "c2250542117d9f75"
+    },
+    {
+     "gradients": "c2250542117d9f75"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005172985140234232,
+    "stages": {
+     "repeat=1/train": 0.0024036369286477566,
+     "repeat=1/infer-save-reload": 7.870141416788101e-06,
+     "repeat=1/batch": 9.52200498431921e-05,
+     "repeat=2/train": 0.002174577908590436,
+     "repeat=2/infer-save-reload": 1.2509990483522415e-05,
+     "repeat=2/batch": 0.00024667009711265564
+    }
+   }
+  },
+  "ordered-gradient-sum/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "415e287d325868c6",
+    "415e287d325868c6"
+   ],
+   "parts": [
+    {
+     "gradients": "059d968d9a535803"
+    },
+    {
+     "gradients": "059d968d9a535803"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004699524957686663,
+    "stages": {
+     "repeat=1/train": 0.0024771769531071186,
+     "repeat=1/infer-save-reload": 9.089941158890724e-06,
+     "repeat=1/batch": 4.2850151658058167e-05,
+     "repeat=2/train": 0.001963708084076643,
+     "repeat=2/infer-save-reload": 7.760012522339821e-06,
+     "repeat=2/batch": 4.175002686679363e-05
+    }
+   }
+  },
+  "ordered-gradient-sum/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "868313e90eef7ea7",
+    "868313e90eef7ea7"
+   ],
+   "parts": [
+    {
+     "gradients": "6ceedd4a716a5f86"
+    },
+    {
+     "gradients": "6ceedd4a716a5f86"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)",
+    "n/a:ordered-shard-reduction (the specified shard order defines the sum; no per-row prediction)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004857645137235522,
+    "stages": {
+     "repeat=1/train": 0.002525527961552143,
+     "repeat=1/infer-save-reload": 8.329981938004494e-06,
+     "repeat=1/batch": 5.879998207092285e-05,
+     "repeat=2/train": 0.0020438579376786947,
+     "repeat=2/infer-save-reload": 7.379800081253052e-06,
+     "repeat=2/batch": 5.4279807955026627e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "469edfb5427db98ff70bab6caa5063f049366ce8083363c1f4696e44b7755f36",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "7b72156f58e2cd082deb4383d735b4ce875ee61cbee609d60643c5a738f56aa3",
+    "size": 842344
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "8114137c252a582e3f66b3141b3c353a878dbf2db4c136d5337d6f93a5bb62e6",
+    "size": 9038336
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "e79fd53a669fc2c5265d7a00dd58bcfe4475119773e28bb4e0543c263395b8a1",
+    "size": 300640
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "114ace013e9e189f83b3f6527b7c0859bc27ffe537d7b8ea2ef7ad8cb8348f20",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "4b1b5a8d9c8de14aa60d9664e09fcc98b8fd450d742888876f6ce798d4ac624a",
+    "size": 8479704
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "a318d13cd35fe4175e27bcd711cb25120fcf56c9d976ed04fb55da6ceb298a55",
+    "size": 3371640
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "64dda16e7e032d6c9db7ba28b3853c9b882362d0539114613df9b7623057c1bd",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "202eecba0900100ae697da4c58d6caa7334285bb4e5495ac6bf6d45cf4af7748",
+    "size": 2070264
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "f3fab83fd21b25b28ca992ecd66fae7fc53a3941fd9119024fb4627a9f370f78",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "33b827a29b0c98a8903887f339449f5e2c6cdb339180bf896100156e2be455b3",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "552a806d6c748241d8a967bd8a26efc5b4b4ee4cfdd33cb46652ad32e8468de1",
+    "size": 4952824
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "a661f46ba2a113d146982febb661eb2d45fc0539436816d16c9eeb1796706d30",
+    "size": 10394056
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "01e16183defc54d6d0d13adb83977e4f57d1f6dc70508837de94f81f13c2676d",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "3ae36ba879ddabbd67e0c1634ec326a6079134ce0927156e23b6b497eab7be52",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "d8a854828e11ae8d0cdeedcee9cec814341541bfe2d99d23503895f5798043ca",
+    "size": 2186776
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "3525efdb75c0baa0ccbd83348807e44116221b468a173151d3e3263d26b13eca",
+    "size": 3036448
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "4ec748415811b9d61a4f5fc4fd05b14c93146c527c60816f4efcb5074ddb79ae",
+    "size": 3495072
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "f6194554b6592d24285e5fb2e410bdb49d876bdf8ff42ccc516daf5fbf0dd6c9",
+    "size": 3165480
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "cd961fe04df697923c090fa289f1ab934d603816677a8653fcd6913aed1bfb39",
+    "size": 8066120
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "dc1cf94791edfc57fb774c69535735de3387a6acb6f19b8bd29caabec0af0a0f",
+    "size": 1869808
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "66d7868e2a1429a5bccd545e97b42e9ec93d27cc762673a0cece22e334363995",
+    "size": 738112
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "c59c9f9dd9d43be02adcbea65f0fffcf11ba090af7ea9d18dfa9b923ed2dca05",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "lanes": "arima-exog,arima-exog-seasonal,gbdt-adapter-score-weighted,gp-normalize-y,gp-sample-y-normalize,ordered-gradient-sum,rf-score-weighted",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "e6c5dcc8c95fc8bb1f006f449b04cf178fabfced7917179a4d27cfa9e694232b",
+  "provenance": {
+   "commit": "5ef48dec4a87ae79b960ae2473db43c565066cc5",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
