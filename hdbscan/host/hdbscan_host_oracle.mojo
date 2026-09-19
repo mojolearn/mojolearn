@@ -58,8 +58,14 @@ distance, and with it the whole graph, differs.
 """
 
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 from hdbscan.checks.hdbscan_sabotage import HDB_SAB_NONE, mr_max3, mr_scale
 from hdbscan.checks.mutual_reachability_dense import refuse_nonfinite_host
 from hdbscan.impl.condensed_hierarchy import CondensedHierarchy
@@ -562,17 +568,50 @@ def hdbh_mutual_reachability(
     var norms = host_row_norms_pinned(x, m, n)
     var inv_alpha = identical_div(Float32(1.0), alpha)
     var mr = List[Float32](length=m * m, fill=Float32(0.0))
+    var xp = host_list_ptr(x)
+    var np = host_list_ptr(norms)
+    var cp = host_list_ptr(core)
+    var mp = host_list_ptr(mr)
+    var tasks = host_predict_task_count(m)
+    var chunk = host_predict_chunk(m, tasks)
+
+    def _rows(c: Int) {imm xp, imm np, imm cp, imm mp, imm chunk, imm m, imm n, imm inv_alpha}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, m)
+        for row in range(lo, hi):
+            mp.unsafe_store(row * m + row, HDBH_FLOAT32_MAX)
+            # Expanded L2 is symmetric.  One task owns each undirected
+            # edge and writes its two directed dense cells.
+            for col in range(row + 1, m):
+                # `host_pinned_distance`, over pointers so row tasks share
+                # only immutable inputs and write disjoint dense cells.
+                var acc = Float32(0.0)
+                for f in range(n):
+                    var qv = ftz(xp.unsafe_load(row * n + f))
+                    var yv = ftz(xp.unsafe_load(col * n + f))
+                    acc = ftz(identical_mul_add(qv, yv, acc))
+                var d = ftz(identical_mul_add(
+                    Float32(-2.0), acc,
+                    ftz(ftz(np.unsafe_load(row)) + ftz(np.unsafe_load(col))),
+                ))
+                if d <= Float32(0.0):
+                    d = Float32(0.0)
+                d = ftz(identical_sqrt(d))
+                var value = mr_max3(
+                    cp.unsafe_load(row), cp.unsafe_load(col),
+                    mr_scale(inv_alpha, d), HDB_SAB_NONE,
+                )
+                mp.unsafe_store(row * m + col, value)
+                mp.unsafe_store(col * m + row, value)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     var n_nan = 0
-    for row in range(m):
-        for col in range(m):
-            var cell = row * m + col
-            if row == col:
-                mr[cell] = HDBH_FLOAT32_MAX
-                continue
-            var d = host_pinned_distance(x, norms, n, row, col, True)
-            if d != d:
-                n_nan += 1
-            mr[cell] = mr_max3(core[row], core[col], mr_scale(inv_alpha, d), HDB_SAB_NONE)
+    for cell in range(m * m):
+        if mr[cell] != mr[cell]:
+            n_nan += 1
     if n_nan != 0:
         raise Error(
             "hierarchy.pairwise_distances: " + String(n_nan) + " of "
