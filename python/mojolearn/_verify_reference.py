@@ -341,6 +341,18 @@ def admit(j, path, par_axis=False):
         return "non-default fixture size or wide mode"
     if not par_axis and str(pkg.get("par_devices") or "0") != "0":
         return f"par_devices {pkg.get('par_devices')}"
+    # A COLUMN PRODUCED DURING SOMEONE ELSE'S GPU RUN IS NOT EVIDENCE
+    # (2026-09-19). Concurrent Metal on one M4 returns NaN, constant and zero
+    # output that still hashes STABLY -- a wrong answer with no sabotage in
+    # it, which is why four sharded processes produced 1049 phantom DIVERGENT
+    # parts this morning and the same lanes run solo came back VERIFIED.
+    # `identity_break` records `gpu_slot` and `mac_slot.py` marks its own
+    # children, so the dangerous state names itself and is refused here.
+    # ABSENCE IS FINE: every column recorded before today lacks the field,
+    # and refusing those would discard the whole existing corpus over a
+    # question they were never asked.
+    if str(j.get("gpu_slot") or "").startswith("HELD BY ANOTHER RUN"):
+        return "concurrent GPU work: " + str(j.get("gpu_slot"))
     host = j.get("host") or {}
     for fam in (host.get("families") or {}).values():
         if isinstance(fam, dict) and fam.get("sabotage"):
