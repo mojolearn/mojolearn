@@ -47,7 +47,7 @@ Per kind, over the lanes:
 | kind | lanes that have it | missing |
 |---|---|---|
 | gpu column (any class) | 250 | 6 |
-| gpu column on all three classes | 230 | 26 |
+| gpu column on all three classes | 235 | 21 |
 | cpu verifier declared | 221 | 35 |
 | sabotage seen to move a build | 210 | 46 |
 | batch part or named n/a | 256 | 0 |
@@ -391,9 +391,9 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-adapter-clf | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-clf/gbdt-adapter-clf/cpu-sabotage.json` | part | yes |
 | gbdt-adapter-reg | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-reg/gbdt-adapter-reg/cpu-sabotage.json` | part | yes |
 | gbdt-adapter-score-weighted | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-adapter-score-weighted/cpu-sabotage.json` | n/a n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg) | yes |
-| gbdt-bfa-quantile | apple | training | declared | - | part | NO |
-| gbdt-border-types | apple | training | declared | - | part | NO |
-| gbdt-catboost-defaults | apple | training | declared | - | part | NO |
+| gbdt-bfa-quantile | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-border-types | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-catboost-defaults | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-categorical-ctr | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-categorical-ctr/gbdt-categorical-ctr/cpu-sabotage.json` | part | yes |
 | gbdt-categorical-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-categorical-ctr-tables/gbdt-categorical-ctr-tables/cpu-sabotage.json` | part | yes |
 | gbdt-depthwise | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-depthwise/gbdt-depthwise/cpu-sabotage.json` | part | yes |
@@ -404,8 +404,8 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-multiclass | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-multiclass/gbdt-multiclass/cpu-sabotage.json` | part | yes |
 | gbdt-nan-modes | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-nan-modes/cpu-sabotage.json` | part | yes |
 | gbdt-onevsall | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-onevsall/gbdt-onevsall/cpu-sabotage.json` | part | yes |
-| gbdt-ordered | apple | training | declared | - | part | NO |
-| gbdt-ordered-bayesian-noise | apple | training | declared | - | part | NO |
+| gbdt-ordered | amd,apple,nvidia | training | declared | - | part | NO |
+| gbdt-ordered-bayesian-noise | amd,apple,nvidia | training | declared | - | part | NO |
 | gbdt-ordered-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-ordered-rmse/gbdt-ordered-rmse/cpu-sabotage.json` | part | yes |
 | gbdt-pair-logit | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-pair-logit/cpu-sabotage.json` | part | yes |
 | gbdt-parametric-losses | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-parametric-losses/cpu-sabotage.json` | part | yes |
@@ -653,9 +653,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 3 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 5**
+**GPU column on fewer than three classes: 0**
 
-> gbdt-bfa-quantile, gbdt-border-types, gbdt-catboost-defaults, gbdt-ordered, gbdt-ordered-bayesian-noise
+> none
 
 > (plus 15 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
