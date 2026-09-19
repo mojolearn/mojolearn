@@ -15,12 +15,29 @@ VARIANTS = [f'{family}-{kernel}' for family in ('kernel-ridge', 'nystroem')
             for kernel in ('poly', 'sigmoid', 'laplacian')]
 
 
-def test_variants_are_declared_but_qualification_is_pending():
+def test_variants_are_public_but_saved_model_qualification_is_still_pending():
+    """The six kernel variants are declared, covered and now PUBLIC, and their
+    saved-model debt is untouched by that.
+
+    They were promoted 2026-09-19 when the RTX 4090 column was admitted to the
+    shipped table, so the old `not ... & public_reference_lanes()` reading is
+    inverted here rather than deleted: it still fails if one silently drops out
+    of the public set.
+
+    The last line is the one that has NOT changed, and the reason is worth
+    keeping in front of a reader. An identity-table cell and a `classical_host`
+    saved-model recording are different artifacts. The NVIDIA identity column
+    paid the first; the only kernel-variant saved-model recordings in the tree
+    are Apple's, so it could not pay the second. A lane can be a public
+    reference lane and still owe a saved-model recording, and collapsing the
+    two would overstate what an install can replay.
+    """
     from mojolearn._verify_all import load_harness
     harness = load_harness()
     assert set(VARIANTS) <= set(harness.LANES) & set(harness.BATCH)
     assert set(VARIANTS) <= set(host_surface.covered_lanes())
-    assert not set(VARIANTS) & set(host_surface.public_reference_lanes())
+    assert set(VARIANTS) <= set(host_surface.public_reference_lanes())
+    assert set(VARIANTS) <= set(host_surface.PUBLIC_REFERENCE_PROMOTED)
     assert set(VARIANTS) <= set(host_surface.saved_model_inference_owed())
 
 

@@ -566,13 +566,62 @@ def test_the_analysis_functions_are_reachable_on_a_cpu_only_install():
     assert shared in forecast["host_modules"]
 
 
+def test_promoted_reference_lanes_still_carry_the_classes_that_promoted_them():
+    """The eighteen admitted 2026-09-19 are public, and the shipped table still
+    shows the evidence that made them public.
+
+    A promotion is a claim an installed wheel makes to a user: `verify --all`
+    on a CPU-only box selects these lanes and compares them against the
+    bundled table. If a later table edit drops a vendor class from one part of
+    one fixture, the claim stops being true and nothing else in this file would
+    notice -- the candidate assertion cannot, because the list it reads is now
+    empty. This is that missing direction, and it reads the SHIPPED TABLE for
+    the same reason the candidate check did: a record in the tree is not what
+    an install checks against.
+
+    Intersected over parts, never unioned. A union would pass on a lane whose
+    nine fixtures each rest on a different single column.
+    """
+    promoted = host_surface.PUBLIC_REFERENCE_PROMOTED
+    assert promoted, "the promoted list is empty"
+    assert len(set(promoted)) == len(promoted), "a lane is named twice"
+
+    live = set(host_surface.public_reference_lanes())
+    missing = [lane for lane in promoted if lane not in live]
+    assert missing == [], (
+        "promoted lanes that public_reference_lanes() no longer returns, so the wheel stopped "
+        f"checking what it was promoted for: {missing}")
+
+    assert not (set(promoted) & set(host_surface.public_reference_candidates())), (
+        "a lane is both promoted and still a candidate")
+
+    table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
+    required = set(TRAINING_GPU_CLASSES)
+    short = {}
+    for lane in promoted:
+        have = _classes_on_every_part(table, lane)
+        if not required <= have:
+            short[lane] = sorted(required - have)
+    assert short == {}, (
+        "the shipped table no longer carries every vendor class on every part of every fixture for "
+        "these promoted lanes, so an installed wheel is making a public identity claim the bundled "
+        "evidence does not support. Either restore the columns or demote the lane:\n  "
+        + "\n  ".join(f"{lane}: missing {', '.join(cls)}" for lane, cls in sorted(short.items())))
+
+
 def test_public_reference_candidates_meet_every_condition_to_be_promoted():
     """Each candidate is a real lane, is diffed against the record columns,
     is served only by shipping families, and is not already live. A candidate
     that fails one of these could not be promoted by the run that is owed."""
     candidates = host_surface.public_reference_candidates()
-    assert candidates, "the candidate list is empty"
     assert len(set(candidates)) == len(candidates), "a lane is named twice"
+    if not candidates:
+        # EMPTY IS THIS MECHANISM'S SUCCESS STATE (2026-09-19): every lane that
+        # was waiting on a column got one. It is not "nothing to check" -- the
+        # checking moves to the promoted set below, which is what keeps the
+        # admission falsifiable. Without this, emptying the list would silently
+        # retire the only assertion standing behind eighteen public claims.
+        return
 
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))

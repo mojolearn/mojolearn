@@ -3033,64 +3033,68 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: against the table's own refs through `_part_value` at two repeats, the two
 #: columns match on 612 of 612 comparable parts across the eighteen lanes,
 #: with ZERO disagreements, so the admission adds columns and changes no
-#: cell. What stands between them and the table is one scoped
-#: `verify --all --emit-reference --reference-table` -- the same operation
-#: 91a2a68d5 used to add 63 GBDT cells without touching an existing one --
-#: and that writes the file every installed verifier checks against, so it is
-#: a release-time decision and deliberately NOT taken by this lane. Nobody
-#: needs to rent anything for these eighteen. When that admission lands, the
-#: assertion in test_host_surface fails and names them.
-PUBLIC_REFERENCE_CANDIDATES = (
-    # Strict all-nine CPU/Apple/AMD references admitted 2026-09-18; the
-    # NVIDIA column exists (2026-09-19_gpu-class-gaps) and is not yet
-    # admitted to the table. Installed verifier replay is also owed.
-    "kernel-ridge-poly",
-    "kernel-ridge-sigmoid",
-    "kernel-ridge-laplacian",
-    "nystroem-poly",
-    "nystroem-sigmoid",
-    "nystroem-laplacian",
+#: cell.
+#:
+#: THAT ADMISSION LANDED (2026-09-19, this lane). The scoped, additive
+#: `verify --all --emit-reference --reference-table --batch-checks` -- the
+#: same operation 91a2a68d5 used to add 63 GBDT cells without touching an
+#: existing one -- ran from the committed records with no binding and no
+#: rented box, and the result was diffed against the shipped table before it
+#: was installed: 0 reference hashes changed, 0 vendor classes lost, 0 cells
+#: removed, 0 non-candidate lanes' admission witness touched, the global
+#: harness witness unchanged, and exactly 162 cells (18 lanes x 9 fixtures)
+#: GAINING a class. The merge guard earned its keep on the first attempt: run
+#: without `--batch-checks` it REFUSED rather than drop `gbdt-query-rmse`'s
+#: batchgrad/batchscale/ragged cells.
+#:
+#: So the list is EMPTY, and empty is this mechanism's success state, not a
+#: deletion: every lane that was waiting on a column is now a public
+#: reference lane, and `public_reference_lanes()` derives them because
+#: nothing excludes them any more. The eighteen are kept by name in
+#: `PUBLIC_REFERENCE_PROMOTED` so the condition that admitted them stays
+#: checkable -- a table edit that took a class back off any part of any
+#: fixture fails test_host_surface rather than quietly un-proving a public
+#: claim. A NEW candidate belongs here, with the column it waits on named,
+#: rather than nowhere.
+#:
+#: What this did NOT discharge: `SAVED_MODEL_INFERENCE_OWED` keeps all six
+#: kernel/nystroem entries. Their debt is an NVIDIA `classical_host` record,
+#: a different artifact from an identity-table cell -- the only kernel-variant
+#: saved-model recordings in the tree are Apple's
+#: (bench/results/classical_host/2026-09-18-apple-kernel-variants) -- so the
+#: RTX 4090 identity column could not and did not pay it. Promoting a lane's
+#: identity claim and discharging its saved-model replay debt are two
+#: different promises; this took the first only.
+PUBLIC_REFERENCE_CANDIDATES = ()
 
-    # CPU diagnostics match all nine fixtures. "The bundled table has only
-    # Apple GPU witnesses for these optimizers" was true when it was written
-    # and is NOT true now (re-measured 2026-09-19): both carry amd + apple +
-    # cpu on every part of all nine. HIP is no longer owed; CUDA is, and the
-    # column for it is the one named above.
-    "gp-optimize",
-    "gp-optimize-restarts",
-    # `svc-poly` is here rather than promoted for a reason that is not about
-    # its arithmetic. It was held on TWO columns (apple and cpu, from
-    # 2026-09-15_inference-svm); the 2026-09-18 AMD column made that three,
-    # so the sentence CLASSICAL_RECORDED and this comment both carried --
-    # "its NVIDIA and AMD recordings are owed" -- is now half wrong. Only
-    # NVIDIA is owed, and only into the table.
-    "svc-poly",
-    # The same condition, and the same remedy, for nine more
-    # (lane/ship-cpu-host-families, 2026-09-16). Each read IDENTICAL in the
-    # measured CPU-only run, so it is NOT their arithmetic that holds them.
-    # "Every IDENTICAL cell they have rests on the APPLE column alone" was
-    # the 2026-09-16 state; re-measured 2026-09-19 all nine carry amd on
-    # every part and six of them carry apple on every part too. The three
-    # that do not are gbdt-query-rmse (apple absent on 24 of 36 parts),
-    # gmm-sample and gmm-random-init-sample (15 of 27 each) -- a lane whose
-    # UNION reads three classes while single fixtures rest on one, which is
-    # why the promotion check intersects over parts instead of unioning.
-    # Those three owe an Apple column as well as the NVIDIA one -- and that
-    # column is in the tree too, not owed to a Mac: 2026-09-15_gmm-sample,
-    # 2026-09-18_installed-apple-properties and the gbdt-pair-logit records
-    # together cover all nine fixtures for all three, every one admissible
-    # at two repeats, and their part values AGREE with the shipped refs on
-    # 142 of 150 parts with the other 8 being `n/a:no-save` from a column
-    # recorded before those lanes emitted a model part. Nothing disagrees.
+#: The eighteen promoted 2026-09-19 by the admission described above, kept by
+#: name so the evidence stays load-bearing rather than becoming prose. Each
+#: carries amd + apple + cpu + nvidia on EVERY part of ALL NINE fixtures in
+#: the shipped table; test_host_surface asserts that of every entry, which is
+#: what makes a later regression fail here instead of in a user's install.
+#: Intersected over parts, never unioned -- three of them (gbdt-query-rmse,
+#: gmm-sample, gmm-random-init-sample) had a UNION that read three classes
+#: while single fixtures rested on one, and a union test would have promoted
+#: them a day early.
+PUBLIC_REFERENCE_PROMOTED = (
     "gbdt-query-rmse",
     "gmm-random-init-sample",
     "gmm-sample",
     "gp-normalize-y",
+    "gp-optimize",
+    "gp-optimize-restarts",
     "gp-sample-y",
     "gp-sample-y-normalize",
     "gpc",
     "gpc-multiclass",
     "ivf-extend",
+    "kernel-ridge-laplacian",
+    "kernel-ridge-poly",
+    "kernel-ridge-sigmoid",
+    "nystroem-laplacian",
+    "nystroem-poly",
+    "nystroem-sigmoid",
+    "svc-poly",
 )
 
 #: Implemented saved-model CPU inference with recording or qualification debt.
