@@ -747,32 +747,82 @@ def _out_or_new(out, m, n, who):
 # arithmetic is `decomposition/host/linalg_public.mojo`, which adds none of
 # its own on top of the shipping oracles.
 #
-# HOST ROUTE ON EVERY BOX, GPU INCLUDED. Unlike `matmul`, these bind
-# `_mojolearn_linalg_host` always. Two reasons, both deliberate. The device
-# kernels behind them (`qr_factor`, `one_sided_jacobi_svd_kernel`,
-# `jacobi_eigh_kernel`) take a `DeviceContext` and are reached through an
-# estimator that owns one; there is no one-shot device door for them yet,
-# and inventing one here would be a second way to run the same arithmetic.
-# And the CPU column is where a decomposition's identity is cheapest to
-# check, which is the whole argument of docs/lanes for CPU-side coverage.
-# `mojolearn.linalg.qr(...)` therefore returns THE SAME BITS on a laptop and
-# on an H100 by construction, because it is the same code on both.
+# THE DEVICE ON A GPU BOX, THE HOST ON A CPU-ONLY ONE, ONE SET OF NAMES.
+#
+# THIS PARAGRAPH REPLACES A WRONG ONE (2026-09-19). Until this edit these
+# three called `_mojolearn_linalg_host` UNCONDITIONALLY, on a GPU box
+# included, and the comment here said that was deliberate "because there is
+# no one-shot device door for them yet, and inventing one here would be a
+# second way to run the same arithmetic". The first half described a missing
+# file rather than a decision; the second half was backwards. What it cost
+# is exact and was measured the same day: a Metal round recorded the vendor
+# `arm64`, because the host binding is what served it. A decomposition that
+# only ever runs on the host can never have a GPU column, can never be held
+# against another vendor, and so cannot take part in the only claim this
+# library makes. THIS IS A GPU-FIRST LIBRARY AND THESE ARE NOW GPU DOORS.
+#
+# `_door()` picks the binding the way `_cholesky_impl.py`'s does:
+#
+#     a GPU install   `_mojolearn_linalg`       the device kernels
+#                                               (decomposition/
+#                                               linalg_public_device.mojo)
+#     a CPU-only one  `_mojolearn_linalg_host`  the host oracles
+#                                               (decomposition/host/
+#                                               linalg_public.mojo)
+#
+# SAME NAMES, SAME ADDRESS AND PARAM CONTRACTS, SAME ANSWER. The two routes
+# run the same arithmetic reached two ways -- the host oracles are the
+# serial replay of exactly these kernels -- and the ordering they read is
+# ONE function (`eigh_ascending`, `svdvals_descending`), not a copy each.
+# That is what makes "the device and the host agree bit for bit" a
+# statement a run can check rather than a hope.
+#
+# `HostQR`-style second names do not exist and should not: a caller who
+# wants the host route on a GPU box is asking for the device/host
+# comparison, which is a verification job and reaches the host binding
+# directly through `_host_load()`.
 
 _LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
 _host_binding_cache = None
 
 
 def _host_load():
-    """`_mojolearn_linalg_host`, the route these three always take.
+    """`_mojolearn_linalg_host`: THE VERIFIER, and the whole route only on a
+    box with no GPU.
+
+    This docstring used to say the host binding was the route these three
+    took everywhere, on purpose. It is not, and the ranking is the other way
+    round: **the device kernels are the product and the host oracles exist
+    to confirm what the device computed.** `decomposition/host/
+    linalg_public.mojo` and the oracles under it re-derive the device's
+    answer serially so the two can be diffed; that is what they are for.
 
     A GPU install ships this binding beside the device one (it is in
-    `python/mojolearn/host_surface.py`'s families), so this is not a
-    CPU-only path; it is the host path, taken on purpose everywhere.
+    `python/mojolearn/host_surface.py`'s families), which is why the
+    comparison can be made in ONE process on ONE box -- and why `qr`,
+    `eigh` and `svdvals` are checkable in a way an estimator that ships only
+    one route is not.
     """
     global _host_binding_cache
     if _host_binding_cache is None:
         _host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
     return _host_binding_cache
+
+
+def _door():
+    """The module that serves `qr_r`, `eigh` and `svdvals` for THIS install:
+    the device binding where there is a GPU, the host binding where there is
+    not. Chosen by ROUTE, never probed -- `_cholesky_impl.Cholesky._door`'s
+    shape and its reason.
+
+    The device binding is IDENTICAL-only (`_backend._IDENTICAL_ONLY`), so
+    `numeric_mode='fast'` on a GPU box is refused here by name rather than
+    quietly answered by the host. Before 2026-09-19 it was quietly answered
+    by the host, which is the behaviour this door exists to end.
+    """
+    if _backend._CPU_ONLY is not None:
+        return _host_load()
+    return _load()
 
 
 def _two_d(x, name):
@@ -819,6 +869,13 @@ def qr(a, mode="r"):
         R, row major, upper triangular. Its signs are the reflector's, the
         same convention LAPACK's ``geqrf`` leaves; ``R.T @ R`` equals
         ``a.T @ a`` to float32.
+
+    Notes
+    -----
+    Runs `core/householder_qr.mojo::qr_factor` ON THE DEVICE where there is
+    one (`decomposition/linalg_public_device.mojo`), and the host replay of
+    that same factorization on a CPU-only install. The two are held to each
+    other bit for bit, which is the point of having both.
     """
     if mode != "r":
         raise ValueError(
@@ -830,12 +887,13 @@ def qr(a, mode="r"):
     a_arr, rows, cols = _two_d(a, "a")
     _refuse_wide(rows, cols, "qr")
     out = empty((cols, cols), "<f4")
-    # ORDER MATCHES bindings/_mojolearn_linalg_host.mojo::qr_r_binding:
+    # ORDER MATCHES qr_r_binding IN BOTH BINDINGS, bindings/
+    # _mojolearn_linalg.mojo (device) and _mojolearn_linalg_host.mojo:
     # addrs are (a, r_out) and params are (n_rows, n_cols). Swapping the two
     # addresses writes R over the caller's matrix, which is corruption and
     # not an exception.
-    _host_load().qr_r([addr_ro(a_arr, name="a"), addr(out, name="r_out")],
-                      [int(rows), int(cols)])
+    _door().qr_r([addr_ro(a_arr, name="a"), addr(out, name="r_out")],
+                 [int(rows), int(cols)])
     return out
 
 
@@ -867,7 +925,15 @@ def eigh(a):
     ------
     RuntimeError
         If the Jacobi sweep did not converge. An unconverged decomposition is
-        not returned as though it were one (DEVIATION 590).
+        not returned as though it were one (DEVIATION 590). On the device
+        route a kernel that NEVER RAN is reported as its own failure and not
+        as a convergence failure, so a broken build is never read as bad
+        data.
+
+    Notes
+    -----
+    Runs `jacobi_eigh_kernel` and `sign_flip_kernel` ON THE DEVICE where
+    there is one, and their host replay on a CPU-only install.
     """
     a_arr, rows, cols = _two_d(a, "a")
     if rows != cols:
@@ -877,9 +943,9 @@ def eigh(a):
     w = empty((rows,), "<f4")
     v = empty((rows, rows), "<f4")
     scalars = empty((2,), "<f8")
-    _host_load().eigh([addr_ro(a_arr, name="a"), addr(w, name="w_out"),
-                       addr(v, name="v_out"), addr(scalars, name="scalars_out")],
-                      [int(rows)])
+    _door().eigh([addr_ro(a_arr, name="a"), addr(w, name="w_out"),
+                  addr(v, name="v_out"), addr(scalars, name="scalars_out")],
+                 [int(rows)])
     return w, v
 
 
@@ -889,7 +955,9 @@ def svdvals(a):
     The route is `PCA(svd_solver='full')`'s without the centering -- the
     Householder QR of ``a``, then the one-sided Jacobi SVD of R. The singular
     values of R ARE those of ``a`` because Q is orthogonal, and that identity
-    is why this can exist without forming Q at all.
+    is why this can exist without forming Q at all. Both kernels run ON THE
+    DEVICE where there is one, and as their host replay on a CPU-only
+    install.
 
     Parameters
     ----------
@@ -911,6 +979,6 @@ def svdvals(a):
     a_arr, rows, cols = _two_d(a, "a")
     _refuse_wide(rows, cols, "svdvals")
     out = empty((cols,), "<f4")
-    _host_load().svdvals([addr_ro(a_arr, name="a"), addr(out, name="s_out")],
-                         [int(rows), int(cols)])
+    _door().svdvals([addr_ro(a_arr, name="a"), addr(out, name="s_out")],
+                    [int(rows), int(cols)])
     return out

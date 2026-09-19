@@ -54,12 +54,30 @@ WHAT IS REFUSED BY NAME, AND WHY IT IS A REFUSAL AND NOT A GAP:
         `svd` entry at all rather than an `svd` that returns two of three.
 
 ONE COPY OF THE SPECTRUM SORT. `host_order_truncate_spectrum`
-(`pca_oracle.mojo:504`) already sorts a spectrum descending with a selection
-sort on `>`; `_argsort_desc` here is that same selection sort with the same
-comparison, lifted so the ascending entry can reverse it, and
+(`pca_oracle.mojo`) already sorts a spectrum descending with a selection sort
+on `>`; `_argsort_desc` here is that same selection sort with the same
+comparison, lifted so the ascending entry can reverse it. THERE IS NO GATE
+HOLDING THE TWO EQUAL. This header claimed one -- a
 `check_linalg_public_orders_match_the_oracle` in
-`decomposition/checks/linalg_public_check.mojo` fails if the two ever
-disagree on a fixture.
+`decomposition/checks/linalg_public_check.mojo` -- and that file has never
+existed (2026-09-19). A named check that is not in the tree is worse than an
+admitted gap, because a reader stops looking. What DOES hold the two sorts
+equal today is that they are the same seven lines with the same comparison,
+read side by side, and that is an argument rather than a measurement.
+
+WHICH OF THE TWO ROUTES IS THE PRODUCT (settled 2026-09-19, and this file
+was built the wrong way round first). `decomposition/linalg_public_device.mojo`
+reaches the same three decompositions through the shipping KERNELS, and THAT
+is what `mojolearn.linalg.qr/eigh/svdvals` runs wherever there is a GPU.
+THIS FILE IS THE VERIFIER: it re-derives serially what the device computes,
+so the two can be held against each other bit for bit, and it is the whole
+route only on a box with no GPU. The doors were written on top of these
+oracles first, which is exactly why they came out with no GPU column at all
+-- not an oversight at the end but a choice of layer at the start.
+
+`eigh_ascending` and `svdvals_descending` below are shared by both routes on
+purpose: the fold order is the oracles' business, the ORDER a public name
+promises is settled once, here.
 """
 from decomposition.host.pca_oracle import (
     JACOBI_SWEEPS,
@@ -177,18 +195,56 @@ def host_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     var diag = List[Float32]()
     for i in range(n):
         diag.append(work[i * n + i])
-    # descending, then walked backwards: ONE ordering in the tree, read in
-    # the direction the public name promises.
-    var order = _argsort_desc(diag, n)
+    return eigh_ascending(diag, vecs, n, got.converged, got.executed)
 
+
+def eigh_ascending(
+    diagonal: List[Float32],
+    vectors: List[Float32],
+    n: Int,
+    converged: Bool,
+    executed: Int,
+) -> EighHostResult:
+    """numpy's ASCENDING `(w, v)` out of what a finished Jacobi sweep leaves.
+
+    `diagonal` is the eigenvalues on the consumed matrix's diagonal and
+    `vectors` the ALREADY SIGN-FLIPPED basis with eigenvector `i` in COLUMN
+    `i` -- what `host_jacobi_eigh` + `host_sign_flip` leave on the host and
+    what `jacobi_eigh_kernel` + `sign_flip_kernel` leave on the device.
+
+    THIS IS THE ONE COPY OF THE PERMUTATION, and that is the point of it
+    being a function. `host_eigh` and
+    `decomposition/linalg_public_device.mojo::device_eigh` both call it, so
+    the host route and the device route CANNOT acquire two orders. Two
+    orders under one public name is the failure a hash names as a
+    divergence without ever saying which side moved.
+
+    Descending, then walked backwards: ONE ordering in the tree, read in the
+    direction the public name promises.
+    """
+    var order = _argsort_desc(diagonal, n)
     var w = List[Float32]()
     var v = List[Float32](length=n * n, fill=Float32(0.0))
     for c in range(n):
         var src = order[n - 1 - c]
-        w.append(diag[src])
+        w.append(diagonal[src])
         for r in range(n):
-            v[r * n + c] = vecs[r * n + src]
-    return EighHostResult(w^, v^, got.converged, got.executed)
+            v[r * n + c] = vectors[r * n + src]
+    return EighHostResult(w^, v^, converged, executed)
+
+
+def svdvals_descending(values: List[Float32], n_cols: Int) -> List[Float32]:
+    """numpy's DESCENDING singular values out of what a finished one-sided
+    Jacobi leaves, which is unordered on both routes.
+
+    The other half of `eigh_ascending`'s argument, for the same reason:
+    `host_svdvals` and `device_svdvals` read one permutation, not two.
+    """
+    var order = _argsort_desc(values, n_cols)
+    var s = List[Float32]()
+    for c in range(n_cols):
+        s.append(values[order[c]])
+    return s^
 
 
 def host_svdvals(a: List[Float32], n_rows: Int, n_cols: Int) raises -> List[Float32]:
@@ -214,8 +270,4 @@ def host_svdvals(a: List[Float32], n_rows: Int, n_cols: Int) raises -> List[Floa
             + ". An unconverged decomposition is not returned as if it were"
             " one; see DEVIATION 590"
         )
-    var order = _argsort_desc(got.s, n_cols)
-    var s = List[Float32]()
-    for c in range(n_cols):
-        s.append(got.s[order[c]])
-    return s^
+    return svdvals_descending(got.s, n_cols)

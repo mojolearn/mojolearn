@@ -56,7 +56,7 @@ wrapper reads it once.
 """
 
 # DEVIATION 2486: shared byte-preserving host copies.
-from bindings.hostptr import f32_ptr, i8_ptr, i32_ptr, u16_ptr
+from bindings.hostptr import f32_ptr, f64_ptr, i8_ptr, i32_ptr, read_f32, u16_ptr
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -66,6 +66,11 @@ from checks.vendor import COMPILED_VENDOR
 
 from max.gpu.host import DeviceContext
 
+from decomposition.linalg_public_device import (
+    device_eigh,
+    device_qr_r,
+    device_svdvals,
+)
 from gemm.host_entry import identical_gemm_host
 from gemm.checks.gemm_lowbit import (
     LowbitWorkspace,
@@ -518,6 +523,108 @@ def from_bf16_binding(
         ctx.synchronize()
     return PythonObject(count)
 
+# ---------------------------------------------------------------- linalg door
+# THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES, ON THE DEVICE (2026-09-19).
+#
+# THE ADDRESS AND PARAM CONTRACTS BELOW ARE THE HOST BINDING'S, WORD FOR
+# WORD. `bindings/_mojolearn_linalg_host.mojo` carries the same three names
+# over `decomposition/host/linalg_public.mojo`, and
+# `python/mojolearn/_linalg_impl.py` calls whichever of the two this install
+# has: the device binding on a GPU box, the host binding on a CPU-only one,
+# through ONE `_door()` and under ONE set of public names. The two
+# signatures must therefore stay identical -- a caller cannot see which
+# binding answered, so a parameter that means one thing here and another
+# there is a wrong answer with no symptom.
+#
+# The arithmetic is `decomposition/linalg_public_device.mojo`, which adds
+# none of its own: it launches the kernels `PCA(svd_solver='full')` launches
+# and shares the host twin's ordering functions.
+
+
+def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`device_qr_r(a, n_rows, n_cols)`. `addrs`: 0 a, 1 r_out (n_cols x
+    n_cols). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    if len(addrs) != 2:
+        raise Error(
+            "qr_r: addrs must contain 2 addresses (a, r_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "qr_r: params must contain 2 values (n_rows, n_cols), got "
+            + String(len(params))
+        )
+    var rp = f32_ptr(Int(py=addrs[1]))
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    with GILReleased(Python()):
+        var r = device_qr_r(a, n_rows, n_cols)
+        for i in range(n_cols * n_cols):
+            rp.unsafe_store(i, r[i])
+        _ = r^
+    _ = a^
+    return PythonObject(n_cols)
+
+
+def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`device_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
+    (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
+    `params`: 0 n. Returns n."""
+    if len(addrs) != 4:
+        raise Error(
+            "eigh: addrs must contain 4 addresses (a, w_out, v_out,"
+            " scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 1:
+        raise Error(
+            "eigh: params must contain 1 value (n), got " + String(len(params))
+        )
+    var wp = f32_ptr(Int(py=addrs[1]))
+    var vp = f32_ptr(Int(py=addrs[2]))
+    var sp = f64_ptr(Int(py=addrs[3]))
+    var n = Int(py=params[0])
+    var a = read_f32(Int(py=addrs[0]), max(0, n * n))
+    with GILReleased(Python()):
+        var got = device_eigh(a, n)
+        for i in range(n):
+            wp.unsafe_store(i, got.w[i])
+        for i in range(n * n):
+            vp.unsafe_store(i, got.v[i])
+        sp.unsafe_store(0, Float64(1.0) if got.converged else Float64(0.0))
+        sp.unsafe_store(1, Float64(got.executed))
+        _ = got^
+    _ = a^
+    return PythonObject(n)
+
+
+def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`device_svdvals(a, n_rows, n_cols)`. `addrs`: 0 a, 1 s_out (n_cols,
+    DESCENDING). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    if len(addrs) != 2:
+        raise Error(
+            "svdvals: addrs must contain 2 addresses (a, s_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "svdvals: params must contain 2 values (n_rows, n_cols), got "
+            + String(len(params))
+        )
+    var sp = f32_ptr(Int(py=addrs[1]))
+    var n_rows = Int(py=params[0])
+    var n_cols = Int(py=params[1])
+    var a = read_f32(Int(py=addrs[0]), max(0, n_rows * n_cols))
+    with GILReleased(Python()):
+        var s = device_svdvals(a, n_rows, n_cols)
+        for i in range(n_cols):
+            sp.unsafe_store(i, s[i])
+        _ = s^
+    _ = a^
+    return PythonObject(n_cols)
+
+
 @export
 def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
     try:
@@ -535,6 +642,9 @@ def PyInit__mojolearn_linalg() abi("C") -> PythonObject:
         m.def_function[dequantize_int8_binding]("dequantize_int8")
         m.def_function[to_bf16_binding]("to_bf16")
         m.def_function[from_bf16_binding]("from_bf16")
+        m.def_function[qr_r_binding]("qr_r")
+        m.def_function[eigh_binding]("eigh")
+        m.def_function[svdvals_binding]("svdvals")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_linalg: ", e))
