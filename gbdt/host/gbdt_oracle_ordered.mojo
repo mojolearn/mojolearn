@@ -1104,6 +1104,7 @@ from gbdt.data.ordered_plan import (
 )
 from gbdt.host.gbdt_oracle import (
     GbdtHostParams,
+    gbdt_bootstrap_seeds,
     _deterministic_sum_lanes,
     gbdt_host_grid,
 )
@@ -1115,7 +1116,6 @@ from gbdt.host.gbdt_oracle_losses import (
     _estimate_leaves_for_loss,
     _loss_row,
     _loss_value,
-    gbdt_bootstrap_seeds,
 )
 from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,

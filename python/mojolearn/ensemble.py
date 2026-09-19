@@ -441,6 +441,24 @@ _CPU_AUTO_LEARNING_RATE = {
 _BOOST_FROM_AVERAGE_LOSSES = ("RMSE", "MAE", "Quantile", "MAPE")
 
 
+#: THE NEGATIVE CONTROL of the SymmetricTree defaults (the
+#: gbdt-catboost-defaults lane, lane/catboost-parity): with
+#: `MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE=1` AND `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`
+#: the auto learning rate reads CatBoost's CPU coefficient rows instead of
+#: the GPU learner's. Every resolved default stays a plausible CatBoost
+#: default, so nothing but the hash can tell. The lane's sabotage arm must
+#: read DIVERGENT on its train cell (its 50-tree fit reads the rate below
+#: the 0.5 cap: 0.475 on the GPU rows, 0.216 on the CPU rows); its probed
+#: 20-tree fit is capped at 0.5 under both tables, so infer and model stay. No build script, workflow or gate sets it
+#: (the `MOJOLEARN_FOLD_ORDER_SABOTAGE` rule, `model_selection.py`).
+_CATBOOST_DEFAULTS_SABOTAGE = "MOJOLEARN_CATBOOST_DEFAULTS_SABOTAGE"
+
+
+def _catboost_defaults_sabotaged():
+    return (os.environ.get(_CATBOOST_DEFAULTS_SABOTAGE) == "1"
+            and os.environ.get("MOJOLEARN_HOST_ALLOW_SABOTAGE") == "1")
+
+
 def _c_round(number, precision):
     """Their `Round` (`options_helper.cpp:15-18`): `round(number * 10^p) /
     10^p` with C `round`, which rounds halves AWAY from zero (Python's
@@ -1601,8 +1619,12 @@ class GradientBoosting(NumericModeMixin):
         bfa = self.boost_from_average
         if bfa is None:
             bfa = self.loss in _BOOST_FROM_AVERAGE_LOSSES
+        table = None
+        if _catboost_defaults_sabotaged():
+            # the negative control: their CPU learner's coefficient rows
+            table = _CPU_AUTO_LEARNING_RATE
         rate = catboost_auto_learning_rate(
-            self.loss, n_rows, int(self.n_estimators), use_best, bfa)
+            self.loss, n_rows, int(self.n_estimators), use_best, bfa, table)
         return _CATBOOST_LEARNING_RATE if rate is None else rate
 
     def _resolved_boosting_type(self, n_rows):

@@ -140,7 +140,8 @@ def test_oracle_imports_no_gpu_module():
     assert imports == [
         "checks.numerics", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
-        "gbdt.gpu_data.grid_policy", "gbdt.grid_creator.binarization",
+        "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
+        "gbdt.grid_creator.binarization",
         "gbdt.options.data_processing_options",
         "std.math", "std.memory", "std.sys.compile",
     ], imports
