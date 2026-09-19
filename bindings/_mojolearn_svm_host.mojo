@@ -9,9 +9,11 @@ HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
 serial ... one thread, one loop, ascending", the arm
 `svc_check::check_device_matches_oracle` holds the device to bit for bit
 under IDENTICAL (working-set sequence, alpha and f per outer iteration, b,
-dual coefficients, support indices, decision function); the decision is
-`smo_oracle_decision`. The guards are the GPU entry's, in the GPU entry's
-order and words (`svm/estimator.mojo::svc_fit_host_borrowed`, then
+dual coefficients, support indices, decision function); prediction uses
+`smo_oracle_decision_into`, the borrowed-pointer, row-parallel door over the
+same per-row arithmetic as `smo_oracle_decision`. The guards are the GPU
+entry's, in the GPU entry's order and words
+(`svm/estimator.mojo::svc_fit_host_borrowed`, then
 `svm/impl/svc_impl.mojo::svc_fit_borrowed` and `_svc_label_model`), through
 the same host-only functions of `svm/impl/svm_parameter.mojo` and
 `unique_labels_sorted` of `svc_impl.mojo`; the one-vs-rest targets are
@@ -52,6 +54,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
+from core.host_predict_threads import host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -81,7 +84,7 @@ from isolation_forest.impl.rng.xorwow import (
 from svm.host.smo_oracle import (
     SMO_ORACLE_HOST_SABOTAGE,
     OracleResult,
-    smo_oracle_decision,
+    smo_oracle_decision_into,
     smo_oracle_fit,
 )
 from svm.impl.svc_impl import unique_labels_sorted
@@ -304,7 +307,7 @@ def svc_predict_binding(
     params: PythonObject,
 ) raises -> PythonObject:
     """`SVC.decision_function` / `SVC.predict` on the host by
-    `smo_oracle_decision` over the support matrix handed back in. Writes
+    `smo_oracle_decision_into` over the support matrix handed back in. Writes
     `n_rows` float32 to `out_addr` and returns `n_rows`.
 
     `params` is, in this exact order (mirrored in
@@ -366,28 +369,24 @@ def svc_predict_binding(
                 " positive number of MiB, got " + String(buffer_mib)
             )
         var kp = _kernel_params(kernel, gamma, degree, coef0)
-        var x = read_f32(x_address, n_rows * n_cols)
-        var res = OracleResult[DType.float32]()
-        res.b = b
-        var support = List[Float32]()
-        if n_support > 0:
-            res.dual_coefs = read_f32(dual_address, n_support)
-            support = read_f32(support_address, n_support * n_cols)
-            for j in range(n_support):
-                res.support_idx.append(Int32(j))
-        # `smo_oracle_decision` gathers the support rows from the training
-        # matrix by `support_idx`; the support matrix IS those rows in that
-        # order, so it is passed as the "training" matrix with the identity
-        # index. The arithmetic is `decision_kernel`'s.
-        var dec = smo_oracle_decision[DType.float32](
-            res, support, n_support, x, n_rows, n_cols, kp
-        )
-        for i in range(n_rows):
-            var val = dec[i]
+        var xp = f32_ptr(x_address)
+        if n_support == 0:
+            for i in range(n_rows):
+                op[i] = label0 if predict_class and b < Float32(0.0) else (
+                    label1 if predict_class else b
+                )
+        else:
+            # Borrow all three arrays and write decisions directly into the
+            # caller's output. Class prediction safely maps those completed
+            # rows in place; no model/query/output List is materialized.
+            smo_oracle_decision_into(
+                f32_ptr(dual_address), f32_ptr(support_address), n_support,
+                xp, n_rows, n_cols, kp, b, op,
+                host_predict_task_count(n_rows),
+            )
             if predict_class:
-                op[i] = label0 if val < Float32(0.0) else label1
-            else:
-                op[i] = val
+                for i in range(n_rows):
+                    op[i] = label0 if op[i] < Float32(0.0) else label1
     return PythonObject(n_rows)
 
 
@@ -511,7 +510,7 @@ def svr_predict_binding(
     out_addr: PythonObject,
     params: PythonObject,
 ) raises -> PythonObject:
-    """`SVR.predict` on the host: `smo_oracle_decision` over the support
+    """`SVR.predict` on the host: `smo_oracle_decision_into` over the support
     matrix handed back in, `sum_j K(x, sv_j) dual_j + b`, the class
     epilogue off (the reference's `svcPredict(..., predict_class = false)`).
     Writes `n_rows` float32 to `out_addr` and returns `n_rows`.
@@ -560,23 +559,15 @@ def svr_predict_binding(
                 " positive number of MiB, got " + String(buffer_mib)
             )
         var kp = _kernel_params(kernel, gamma)
-        var x = read_f32(x_address, n_rows * n_cols)
-        var res = OracleResult[DType.float32]()
-        res.b = b
-        var support = List[Float32]()
-        if n_support > 0:
-            res.dual_coefs = read_f32(dual_address, n_support)
-            support = read_f32(support_address, n_support * n_cols)
-            for j in range(n_support):
-                res.support_idx.append(Int32(j))
-        # The support matrix IS the support rows in support order, so it is
-        # the oracle's "training" matrix under the identity index, as in
-        # `svc_predict_binding`.
-        var dec = smo_oracle_decision[DType.float32](
-            res, support, n_support, x, n_rows, n_cols, kp
-        )
-        for i in range(n_rows):
-            op[i] = dec[i]
+        if n_support == 0:
+            for i in range(n_rows):
+                op[i] = b
+        else:
+            smo_oracle_decision_into(
+                f32_ptr(dual_address), f32_ptr(support_address), n_support,
+                f32_ptr(x_address), n_rows, n_cols, kp, b, op,
+                host_predict_task_count(n_rows),
+            )
     return PythonObject(n_rows)
 
 
