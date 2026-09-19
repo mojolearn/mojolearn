@@ -28,7 +28,7 @@
     },
     {
       "file": "mojolearn/.dylibs/libMojolearnMath.dylib",
-      "sha256": "09a557f09c8657c675e0a8a03313346f622aa3c21741146f1dbd013f45aff541",
+      "sha256": "e7c9c2168774eaa2ac602c3a94e2390fe2cab7f760aef202e0d06549ef6aa742",
       "math_imports": [],
       "math_dependencies": []
     },
@@ -404,8 +404,9 @@
       "directory": "mojolearn/.dylibs",
       "helper": "libMojolearnMath.dylib",
       "build": {
-        "source_sha256": "b70b3a84b4be6e55ef48526c2443132cbc2873fd9ddc7c7d1ec21c5db92b14e4",
-        "output_sha256": "09a557f09c8657c675e0a8a03313346f622aa3c21741146f1dbd013f45aff541",
+        "source_sha256": "2f3026ef468254ee2f785327a4c1ccde46f63abf03e14782ec9e864e814a28e9",
+        "constants_sha256": "d2a0d4a86a78c87df53a21da122b2a53a67ef3634d021d000ec5d979de32317a",
+        "output_sha256": "e7c9c2168774eaa2ac602c3a94e2390fe2cab7f760aef202e0d06549ef6aa742",
         "command": [
           "clang",
           "-O2",
@@ -421,71 +422,35 @@
       "runtime_changes": [
         {
           "file": "libAsyncRTMojoBindings.dylib",
-          "before_sha256": "75dd7937074b686b6c6458128d91aaf008957adf30463e459db730bb7e243f03",
+          "before_sha256": "45b4fd689edcd95e4fc2bc34921ceee2c54744b15cb12f0061d0a76a5b200f62",
           "after_sha256": "45b4fd689edcd95e4fc2bc34921ceee2c54744b15cb12f0061d0a76a5b200f62",
-          "rewritten_imports": [
-            [
-              "_log2f",
-              "_mojolearn_log2f"
-            ],
-            [
-              "_log10",
-              "_mojolearn_log10"
-            ]
-          ],
+          "rewritten_imports": [],
           "removed_dependencies": []
         },
         {
           "file": "libAsyncRTRuntimeGlobals.dylib",
-          "before_sha256": "49daf6e7c8e0b7f2eb51236a7a832b85250edd58c972ba252e732c1ce7024d16",
+          "before_sha256": "727fc22b82b4f28d6160773f39cc11837260378c296abbe858d2915aa8251c14",
           "after_sha256": "727fc22b82b4f28d6160773f39cc11837260378c296abbe858d2915aa8251c14",
-          "rewritten_imports": [
-            [
-              "_log",
-              "_mojolearn_log"
-            ],
-            [
-              "_log2",
-              "_mojolearn_log2"
-            ],
-            [
-              "_log10",
-              "_mojolearn_log10"
-            ]
-          ],
+          "rewritten_imports": [],
           "removed_dependencies": []
         },
         {
           "file": "libKGENCompilerRTShared.dylib",
-          "before_sha256": "d54e09c00705f0ecea9746f9bb4ed2b6b63aec84e2452473a412e8e72419370a",
+          "before_sha256": "2870f6ff52a7a38a6a1e787881a41505d1e207cf83cbb65b6dfa114b8f8056f1",
           "after_sha256": "2870f6ff52a7a38a6a1e787881a41505d1e207cf83cbb65b6dfa114b8f8056f1",
-          "rewritten_imports": [
-            [
-              "_log2f",
-              "_mojolearn_log2f"
-            ],
-            [
-              "_log10",
-              "_mojolearn_log10"
-            ]
-          ],
+          "rewritten_imports": [],
           "removed_dependencies": []
         },
         {
           "file": "libMSupportGlobals.dylib",
-          "before_sha256": "3d4f45efe2949eeb8a5ef458f027817ab1ae2034822285fc4ec385a6d1986c00",
+          "before_sha256": "370737053a3f51004e230621dd60215b8829ebc601f60654172047002e97816c",
           "after_sha256": "370737053a3f51004e230621dd60215b8829ebc601f60654172047002e97816c",
-          "rewritten_imports": [
-            [
-              "_log10",
-              "_mojolearn_log10"
-            ]
-          ],
+          "rewritten_imports": [],
           "removed_dependencies": []
         }
       ]
     }
   ],
-  "python_and_owned_math_source_commit": "1e46c9ba17a1aba87080895841e6f20e527f6f64",
+  "python_and_owned_math_source_commit": "747970c2f17d5272b4b272ac91e97f21a36f3752",
   "private_candidate": true
 }

@@ -61,8 +61,8 @@ python -m pytest -q packaging/portable_math/test_wheel.py
 
 Validation for this change is retained under
 `bench/results/portable_math/2026-09-19/`: installed macOS/ARM64 and Linux/x86-64
-(emulated locally) tests, identical arithmetic digests, exact comparison to the
+(initial emulation, then physical AMD host) tests, identical arithmetic digests, exact comparison to the
 existing compiled Mojo GP primitives, full wheel import/dependency inventories,
-a direct PEP 517 wheel build, and a small real Apple GPU GP/forest smoke.
-No new NVIDIA/AMD GPU qualification is claimed for the patched runtimes.
+a direct PEP 517 wheel build, and small real Apple/AMD GPU GP/forest smokes with matching output hashes.
+No full matrix recertification or new NVIDIA GPU smoke is claimed for the patched runtimes.
 Published 0.8.8 remains unchanged; these are private candidates for a later release.
