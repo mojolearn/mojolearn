@@ -688,12 +688,52 @@ already fixed for `par-*`. THEY ARE NOT UNVERIFIED: each is checked on
 the cpu-host column, which is the one column its proposition is
 stateable on.
 
-| byte-lm-host-infer | cpu: training | sabotage: seen(build) |
-| byte-lm-host-infer-threaded | cpu: training | sabotage: seen(build) |
-| byte-lm-host-train | cpu: training | sabotage: seen(build) |
-| cross-val-folds | cpu: host-only | sabotage: seen(build) |
-| language-model-config | cpu: training | sabotage: seen(build) |
-| saved-model-host-infer | cpu: training | sabotage: seen(build) |
+### "Then why not just add the GPU column?"
+
+Because the ALGORITHM already has one, in a different lane, and these
+lanes are the other half of the same measurement.
+
+mojolearn keeps TWO SPELLINGS of these algorithms on purpose. There are
+the device kernels, and there is an independent host restatement of
+them -- `gbdt/host/gbdt_oracle.mojo` says it in its own first line: "a
+SECOND spelling of the device trainer", where "every device KERNEL the
+fit reaches is RESTATED below, with the file and line it MIRRORS". Only
+code that is host code ON THE DEVICE PATH TOO is reused; every kernel is
+written again.
+
+So the work divides: the device lane verifies the device spelling, one
+of these lanes verifies the host spelling, and THE CROSS-VENDOR CLAIM IS
+THAT THE TWO AGREE BITWISE. `saved-model-host-infer` is the host half of
+what `rf-clf`, `rf-reg`, `et-clf` and `et-reg` cover on three vendors;
+`language-model-config` is the host half of `byte-lm`, `transformer`,
+`samba` and `mamba3`; `cross-val-folds` is the fold partition underneath
+`cross-val`. None of those algorithms is missing a GPU column.
+
+CONSOLIDATING THE TWO SPELLINGS WOULD DESTROY THE ORACLE. If the host
+path called the device code, "the CPU agrees with the GPU" would be one
+function agreeing with itself -- a check that cannot fail, and the thing
+this whole document exists to prevent. The duplication IS the
+measurement. It is also why nothing statically proves the two spellings
+match: you cannot prove it, you compare their bits, and the lane that
+compares them is the drift guard. A device kernel that changes without
+its host restatement changing makes that lane's columns disagree.
+
+Renting a GPU for a lane in this table buys a CPU run at GPU prices.
+
+**RECORDED IS NOT THE SAME AS MEANINGFUL.** 3 of these
+carry GPU columns anyway, recorded before this classification existed.
+They are not extra assurance: each is a GPU box that ran its own CPU.
+They are marked below so a reader does not count them as vendor
+coverage, and they are not evidence for any vendor claim.
+
+| lane | cpu | sabotage | GPU columns recorded |
+|---|---|---|---|
+| byte-lm-host-infer | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| byte-lm-host-infer-threaded | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| byte-lm-host-train | training | seen(build) | amd,apple,nvidia (assert nothing) |
+| cross-val-folds | host-only | seen(build) | none, correctly |
+| language-model-config | training | seen(build) | none, correctly |
+| saved-model-host-infer | training | seen(build) | none, correctly |
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 
