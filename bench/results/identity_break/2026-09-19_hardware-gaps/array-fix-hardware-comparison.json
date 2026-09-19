@@ -1,0 +1,83 @@
+{
+  "status": "MATCH",
+  "source_commit": "1aa581748cc09e14982baf36e81b509ffe49f1ea",
+  "candidate_sha256": "61a53d9e673628f0f46ad3f65d000fdb80d4865f416f96e3ef59f813c2c99dc1",
+  "capture_sha256": "7d397633fbe88f4bcfcfaf65c04d554bf6fd46040360a90478a1085f6472c5c7",
+  "matching_parts": 18,
+  "newly_missing_parts": 6,
+  "scope": "All train/infer/model hashes already captured for the six formerly refused fixtures match existing references; no additional captures",
+  "checks": [
+    [
+      "par-queries-radius/base",
+      "train"
+    ],
+    [
+      "par-queries-radius/base",
+      "infer"
+    ],
+    [
+      "par-queries-radius/base",
+      "model"
+    ],
+    [
+      "par-queries-radius/denormal",
+      "train"
+    ],
+    [
+      "par-queries-radius/denormal",
+      "infer"
+    ],
+    [
+      "par-queries-radius/denormal",
+      "model"
+    ],
+    [
+      "par-queries-radius/denormal_ftz",
+      "train"
+    ],
+    [
+      "par-queries-radius/denormal_ftz",
+      "infer"
+    ],
+    [
+      "par-queries-radius/denormal_ftz",
+      "model"
+    ],
+    [
+      "par-queries-radius/dupes",
+      "train"
+    ],
+    [
+      "par-queries-radius/dupes",
+      "infer"
+    ],
+    [
+      "par-queries-radius/dupes",
+      "model"
+    ],
+    [
+      "par-queries-radius/odd",
+      "train"
+    ],
+    [
+      "par-queries-radius/odd",
+      "infer"
+    ],
+    [
+      "par-queries-radius/odd",
+      "model"
+    ],
+    [
+      "par-queries-radius/negative",
+      "train"
+    ],
+    [
+      "par-queries-radius/negative",
+      "infer"
+    ],
+    [
+      "par-queries-radius/negative",
+      "model"
+    ]
+  ]
+}

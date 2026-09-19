@@ -17,3 +17,9 @@ cases plus a nonempty zero-copy write check). A broader existing test could
 not run in that worktree because its native conversion binding was absent;
 no native rebuild or numerical suite was launched. Hardware rerun targets
 only the six refused fixtures; the three matching fixtures remain retained.
+
+The installed fixed candidate now completes all six formerly refused AMD
+fixtures (two repeats each). All eighteen captured train/infer/model hashes
+match the existing references; six of these close the missing model witnesses.
+See `amd-array-fix-par-queries-radius-two.json` and
+`array-fix-hardware-comparison.json`. No reference digest changed.
