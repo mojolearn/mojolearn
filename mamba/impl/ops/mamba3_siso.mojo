@@ -107,7 +107,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
+from checks.kernel_matrix import COLUMN_AMD, COLUMN_NVIDIA, TARGET_COLUMN, column_max_block_size, lib_smem_page_fits_for
 
 from checks.numerics import (
     ftz,
@@ -926,25 +926,30 @@ def m3_state_increment_kernel(
         acc = ftz(identical_mul_add(vsv, ksv, acc))
     increments.unsafe_store(cell, acc)
 
-# Eight P rows by 32 N columns. Shared memory carries only independently
+# P_TILE P rows by N_TILE N columns. Shared memory carries only independently
 # rounded operands; each thread retains all Q products in their original order.
 # Compared with shared-V, K is reused across eight P owners and decayed V
 # across 32 N owners. The final ragged chunk still contributes Q padded terms.
-def m3_state_increment_tiled_kernel(
+def m3_state_increment_tiled_kernel[P_TILE: Int = 8, N_TILE: Int = 32](
     increments: MutPointer[Float32, MutAnyOrigin],
     kscale_work: MutPointer[Float32, MutAnyOrigin],
     v_work: MutPointer[Float32, MutAnyOrigin],
     decay: MutPointer[Float32, MutAnyOrigin],
     b_in: Int32, t_in: Int32, nh_in: Int32, nc_in: Int32, q_in: Int32,
 ):
-    var sv = stack_allocation[512, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
-    var sk = stack_allocation[2048, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    comptime assert P_TILE * N_TILE == 256
+    comptime assert M3_HEADDIM % P_TILE == 0
+    comptime assert M3_D_STATE % N_TILE == 0
+    var sv = stack_allocation[M3_CHUNK_SIZE * P_TILE, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
+    var sk = stack_allocation[M3_CHUNK_SIZE * N_TILE, Scalar[DType.float32], address_space=AddressSpace.SHARED]()
     var tid = Int(thread_idx.x)
     var tile = Int(block_idx.x)
-    var nbase = (tile % 4) * 32
-    tile = tile // 4
-    var pbase = (tile % 8) * 8
-    tile = tile // 8
+    comptime n_tiles = M3_D_STATE // N_TILE
+    comptime p_tiles = M3_HEADDIM // P_TILE
+    var nbase = (tile % n_tiles) * N_TILE
+    tile = tile // n_tiles
+    var pbase = (tile % p_tiles) * P_TILE
+    tile = tile // p_tiles
     var nh = Int(nh_in)
     var nc = Int(nc_in)
     var qv = Int(q_in)
@@ -955,29 +960,29 @@ def m3_state_increment_tiled_kernel(
     var c0 = c * qv
     var dbase = ((bb * nh + hh) * nc + c) * (qv + 1)
     var ix = tid
-    while ix < qv * 8:
-        var j = ix // 8
-        var pp = pbase + ix % 8
+    while ix < qv * P_TILE:
+        var j = ix // P_TILE
+        var pp = pbase + ix % P_TILE
         var v = Float32(0.0)
         if c0 + j < tw:
             v = ftz(pinned_mul(ftz(v_work.unsafe_load(((bb * tw + c0 + j) * nh + hh) * M3_HEADDIM + pp)), decay.unsafe_load(dbase + j)))
         sv[ix] = v
         ix += 256
     ix = tid
-    while ix < qv * 32:
-        var j = ix // 32
-        var nn = nbase + ix % 32
+    while ix < qv * N_TILE:
+        var j = ix // N_TILE
+        var nn = nbase + ix % N_TILE
         var k = Float32(0.0)
         if c0 + j < tw:
             k = ftz(kscale_work.unsafe_load(((bb * tw + c0 + j) * nh + hh) * M3_D_STATE + nn))
         sk[ix] = k
         ix += 256
     barrier()
-    var pp = tid // 32
-    var nn = tid % 32
+    var pp = tid // N_TILE
+    var nn = tid % N_TILE
     var acc = Float32(0.0)
     for j in range(qv):
-        acc = ftz(identical_mul_add(sv[j * 8 + pp], sk[j * 32 + nn], acc))
+        acc = ftz(identical_mul_add(sv[j * P_TILE + pp], sk[j * N_TILE + nn], acc))
     var cell = (((bb * nc + c) * nh + hh) * M3_HEADDIM + pbase + pp) * M3_D_STATE + nbase + nn
     increments.unsafe_store(cell, acc)
 
@@ -1909,16 +1914,27 @@ def m3_siso_forward(
         comptime if column_max_block_size(TARGET_COLUMN) >= 256 and lib_smem_page_fits_for[TARGET_COLUMN, 10240]():
             comptime if is_defined["MOJOLEARN_MAMBA3_TILED_INCREMENT"]():
                 use_increment_tile = True
-            elif TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE"]():
+            elif (TARGET_COLUMN == COLUMN_NVIDIA or TARGET_COLUMN == COLUMN_AMD) and not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_TILE"]():
                 use_increment_tile = b * nc * nh >= 128
         if use_increment_tile:
-            ctx.enqueue_function[m3_state_increment_tiled_kernel](
-                pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
-                v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
-                Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
-                grid_dim=(b * nc * nh * 32, 1, 1),
-                block_dim=(256, 1, 1),
-            )
+            # AMD MI300X: six-way interleaved medians were 0.349/0.374 of
+            # its prior shared-V path. NVIDIA RTX 4090: 0.957/0.951 of the
+            # prior 8x32 tile. Both used the two large public shapes, and
+            # every direct scalar/shared-V/8x32/16x16 cell was equal.
+            comptime if TARGET_COLUMN == COLUMN_AMD or TARGET_COLUMN == COLUMN_NVIDIA or is_defined["MOJOLEARN_MAMBA3_BALANCED_INCREMENT_TILE"]():
+                ctx.enqueue_function[m3_state_increment_tiled_kernel[16, 16]](
+                    pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                    v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                    Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                    grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[m3_state_increment_tiled_kernel[8, 32]](
+                    pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),
+                    v_work.unsafe_ptr(), qk_s.unsafe_ptr(),
+                    Int32(b), Int32(t_work), Int32(nh), Int32(nc), Int32(qv),
+                    grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1),
+                )
         elif not is_defined["MOJOLEARN_MAMBA3_LEGACY_INCREMENT_V"]() and lib_smem_page_fits_for[TARGET_COLUMN, 512]():
             ctx.enqueue_function[m3_state_increment_shared_v_kernel](
                 pass_states.unsafe_ptr(), kscale_work.unsafe_ptr(),

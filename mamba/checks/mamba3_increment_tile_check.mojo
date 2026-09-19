@@ -33,16 +33,19 @@ def run_case(ctx: DeviceContext, b: Int, t: Int, nh: Int, q: Int, adverse: Bool)
     var a = ctx.enqueue_create_buffer[DType.float32](count)
     var c = ctx.enqueue_create_buffer[DType.float32](count)
     var z = ctx.enqueue_create_buffer[DType.float32](count)
+    var balanced = ctx.enqueue_create_buffer[DType.float32](count)
     ctx.enqueue_function[m3_state_increment_kernel](a.unsafe_ptr(), kd.unsafe_ptr(), vd.unsafe_ptr(), dd.unsafe_ptr(), Int32(b), Int32(t), Int32(nh), Int32(nc), Int32(q), grid_dim=((count + 255) // 256, 1, 1), block_dim=(256, 1, 1))
     ctx.enqueue_function[m3_state_increment_shared_v_kernel](c.unsafe_ptr(), kd.unsafe_ptr(), vd.unsafe_ptr(), dd.unsafe_ptr(), Int32(b), Int32(t), Int32(nh), Int32(nc), Int32(q), grid_dim=((count + 255) // 256, 1, 1), block_dim=(256, 1, 1))
-    ctx.enqueue_function[m3_state_increment_tiled_kernel](z.unsafe_ptr(), kd.unsafe_ptr(), vd.unsafe_ptr(), dd.unsafe_ptr(), Int32(b), Int32(t), Int32(nh), Int32(nc), Int32(q), grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1))
+    ctx.enqueue_function[m3_state_increment_tiled_kernel[8, 32]](z.unsafe_ptr(), kd.unsafe_ptr(), vd.unsafe_ptr(), dd.unsafe_ptr(), Int32(b), Int32(t), Int32(nh), Int32(nc), Int32(q), grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1))
+    ctx.enqueue_function[m3_state_increment_tiled_kernel[16, 16]](balanced.unsafe_ptr(), kd.unsafe_ptr(), vd.unsafe_ptr(), dd.unsafe_ptr(), Int32(b), Int32(t), Int32(nh), Int32(nc), Int32(q), grid_dim=(b * nc * nh * 32, 1, 1), block_dim=(256, 1, 1))
     ctx.synchronize()
     var ah = m3_download(ctx, a, count)
     var ch = m3_download(ctx, c, count)
     var zh = m3_download(ctx, z, count)
+    var bh = m3_download(ctx, balanced, count)
     for i in range(count):
         var expected = bitcast[DType.uint32](ah[i])
-        if bitcast[DType.uint32](ch[i]) != expected or bitcast[DType.uint32](zh[i]) != expected:
+        if bitcast[DType.uint32](ch[i]) != expected or bitcast[DType.uint32](zh[i]) != expected or bitcast[DType.uint32](bh[i]) != expected:
             raise Error("increment tile mismatch at " + String(i) + " t=" + String(t) + " q=" + String(q) + " adverse=" + String(adverse))
     print("M3_INCREMENT_TILE_CASE_PASS", b, t, nh, q, adverse, count)
     _ = kd^
@@ -51,6 +54,7 @@ def run_case(ctx: DeviceContext, b: Int, t: Int, nh: Int, q: Int, adverse: Bool)
     _ = a^
     _ = c^
     _ = z^
+    _ = balanced^
     return count
 
 
