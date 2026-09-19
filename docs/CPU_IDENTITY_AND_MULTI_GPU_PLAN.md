@@ -20,6 +20,56 @@ The frozen 0.8.7 artifact remains separate. Ship it only after its existing
 release gates pass; these new implementations belong in a subsequently built
 and qualified wheel. Do not merge current main into the frozen release branch.
 
+## THE RULE: a CPU column owes nothing for a multi-device lane
+
+**A `par-*` lane is GPU-only. It is not a CPU gap, it will never be a CPU gap,
+and no amount of CPU work can close one.**
+
+A `par-*` lane is a multi-device driver. Its entire claim, written in
+`identity_break._par_devices`, is that a **two-device** column hashes equal to
+the one-device column *cell for cell*. A CPU column has zero devices. On it,
+that claim is not false — it is **not expressible**. The harness already knows
+this and says so when it refuses one:
+
+> DEGENERATE (device axis): a multi-device driver lane on a column with 0
+> device(s) ... with one shard that equality is not false, it is not
+> expressible.
+
+What they need is **a second GPU** — one `nvidia-2gpu` or `amd-2gpu` column
+(RunPod `GPU_COUNT=2`). Not a CPU verifier. Not a CPU sabotage build. Not a
+host binding. Nothing that happens on a CPU box discharges any part of it.
+
+### Why this is written down as a rule and enforced in code
+
+Prose did not hold. The paragraph above in *Objective and scope* has said
+since 2026-09-18 that "distributed CPU drivers are not completion
+requirements", and `tools/verification_matrix.py` went on listing every
+`par-*` lane in its CPU-axis gap counts anyway. On 2026-09-19 that read:
+
+| CPU-axis gap heading | reported | actually owed by CPU |
+|---|---|---|
+| Sabotage not seen to move a build | 39 | **0** |
+| No CPU verifier declared | 36 | **4** |
+
+Thirty-six inexpressible claims were sitting on top of three real ones
+(`bpe-trainer`, `bpe-vocabulary`, `tokenized-corpus` — a host-surface tuple
+that was never extended when the binding gained its entries). The noise hid
+the signal at better than ten to one, and the real gaps had been invisible
+for a day.
+
+So the rule now lives where a change has to walk past it:
+`tools/verification_matrix.py` holds `par-*` lanes out of both CPU-axis gap
+counts by construction and reports them once, under their own heading, naming
+the second GPU as the work. A number in this file is a description; the tool
+is the thing that cannot be forgotten.
+
+### What a CPU column IS owed
+
+Everything else: every single-device lane's arithmetic, reproduced by a host
+binding and held against the GPU bytes, with a negative control that has been
+**seen** to move. That is the claim CPU work exists to support, and it is the
+only one it can support.
+
 ## A. CPU identity work remaining
 
 ### A1. Finish the current release proof

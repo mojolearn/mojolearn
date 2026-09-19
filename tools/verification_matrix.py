@@ -871,17 +871,46 @@ def render(data):
 
     w("## Lanes missing each kind, by name")
     w("")
-    for label, pred in (
-            ("No GPU column at all", lambda r: not r["gpu"]),
-            ("GPU column on fewer than three classes", lambda r: 0 < len(r["gpu"]) < 3),
-            ("No CPU verifier declared", lambda r: not r["cpu"]),
-            ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)"),
-            ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED")):
-        hit = [r for r in lanes if pred(r)]
+    w("A `par-*` lane IS NOT A CPU GAP AND NEVER WILL BE. It is a multi-device")
+    w("driver whose whole claim, written in `identity_break._par_devices`, is")
+    w("that a TWO-DEVICE column hashes equal to the one-device column cell for")
+    w("cell. A CPU column has zero devices, so that claim there is not false,")
+    w("it is NOT EXPRESSIBLE -- and an inexpressible claim listed beside real")
+    w("gaps is noise that hides them. On 2026-09-19 it hid them at a ratio of")
+    w("36 to 3. These lanes need a SECOND GPU, not another CPU run, and no CPU")
+    w("work will ever close them; they are counted below under their own")
+    w("heading and excluded from the two CPU-axis gap lists by construction.")
+    w("")
+    for label, pred, cpu_axis in (
+            ("No GPU column at all", lambda r: not r["gpu"], False),
+            ("GPU column on fewer than three classes", lambda r: 0 < len(r["gpu"]) < 3, False),
+            ("No CPU verifier declared", lambda r: not r["cpu"], True),
+            ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)", True),
+            ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED", False)):
+        hit = [r for r in lanes if pred(r) and not (cpu_axis and r["two_device"])]
         w(f"**{label}: {len(hit)}**")
         w("")
         w("> " + (", ".join(r["lane"] for r in hit) if hit else "none"))
         w("")
+        if cpu_axis:
+            held = [r for r in lanes if pred(r) and r["two_device"]]
+            w(f"> (plus {len(held)} `par-*` multi-GPU driver lanes, held out of "
+              "this count: a CPU column cannot state their claim. They are "
+              "listed once below.)")
+            w("")
+
+    drivers = [r for r in lanes if r["two_device"]]
+    waiting = [r for r in drivers if r["sabotage"] != "seen(build)" or not r["cpu"]]
+    w("## The multi-GPU driver lanes, which a CPU column cannot judge")
+    w("")
+    w(f"{len(drivers)} `par-*` lanes exist and {len(waiting)} of them are waiting "
+      "on a two-device column. THE WORK THEY NEED IS A SECOND GPU (RunPod "
+      "`GPU_COUNT=2`, one `nvidia-2gpu` or `amd-2gpu` column), not a CPU "
+      "verifier and not another CPU sabotage build. Nothing about them is "
+      "owed by the CPU column and nothing on a CPU box can discharge it.")
+    w("")
+    w("> " + (", ".join(r["lane"] for r in waiting) if waiting else "none"))
+    w("")
 
     w("## Public names not counted as algorithms")
     w("")
