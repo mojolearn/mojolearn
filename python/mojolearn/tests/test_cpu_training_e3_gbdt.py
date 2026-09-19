@@ -165,7 +165,7 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "if left_sz < right_sz:" in text, "the sibling tie computes the right child"
     assert "clean.append(ftz(values[i]))" in text, "the phase B border search input flush"
     assert "borders.append(ftz(half_below + half_above))" in text, "the phase B border midpoint flush"
-    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode)" in text, (
+    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)" in text, (
         "the grid must take the phase B border search, not the imported calc_quantization"
     )
 

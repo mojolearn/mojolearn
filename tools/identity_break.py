@@ -1250,6 +1250,30 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
+#: The six non-default `feature_border_type`s (lane/catboost-parity); the
+#: default, GreedyLogSum, is every other GBDT lane's border search.
+_GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
+                      "MinEntropy", "GreedyMinEntropy")
+
+
+@lane("gbdt-border-types")
+def _(ml, X, yc, yr, Xh=None):
+    """One symmetric Logloss fit per non-default feature_border_type (8
+    trees of depth 4 at 32 borders, the recorded GBDT configuration of
+    `_gbdt`), each hashed on the training AND held-out rows, so every
+    type's borders reach the train column; the infer, model and batch
+    columns probe the Median fit. Border selection is host code shared by
+    the device fit and the CPU host path (`select_borders`)."""
+    parts, first = {}, None
+    for bt in _GBDT_BORDER_TYPES:
+        m = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, border_count=32,
+                  loss="Logloss", feature_border_type=bt).fit(X, yc)
+        parts[bt] = _h(m.predict(X))
+        parts[bt + "-heldout"] = _h(m.predict(Xh))
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 def _km_probe(X, Xh):
     """The k-means lanes' infer probe (2026-09-15). `predict` on the TRAINING
     rows must be `labels_` bit for bit, because it is the fit's own final
@@ -6095,7 +6119,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
-            "par-forest-reg", "par-boosting-reg")
+            "par-forest-reg", "par-boosting-reg", "gbdt-border-types")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

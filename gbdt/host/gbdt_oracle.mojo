@@ -151,6 +151,8 @@ from gbdt.grid_creator.binarization import (
     _heap_push,
     _sort_ascending,
     _update_best_split,
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    select_borders,
 )
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
@@ -220,6 +222,9 @@ struct GbdtHostParams(ImplicitlyCopyable, Movable):
     var nan_mode: Int
     var logloss_border: Float32
     var leaf_estimation_iterations: Int
+    #: `feature_border_type` (`binarization.mojo` BORDER_TYPE_*),
+    #: GreedyLogSum (0) unless the fit named another
+    var border_type: Int
 
 
 @fieldwise_init
@@ -585,7 +590,8 @@ def _best_split_phase_b(
 
 
 def _calc_quantization_phase_b(
-    var values: List[Float32], border_count: Int, nan_mode_option: Int
+    var values: List[Float32], border_count: Int, nan_mode_option: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[Float32], Int]:
     """`calc_quantization` (`gbdt/data/quantization.mojo:136-177`) as the
     device fit's PHASE B computes it: inside `_dp_task` on a
@@ -634,7 +640,13 @@ def _calc_quantization_phase_b(
 
     var borders = List[Float32]()
     if non_nan_border_count > 0:
-        borders = _best_split_phase_b(values^, non_nan_border_count)
+        if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
+            borders = _best_split_phase_b(values^, non_nan_border_count)
+        else:
+            # the six other border types flush BY BITS themselves, so the
+            # device fit's phase B and this restatement call the SAME
+            # function on the same column (`select_borders`)
+            borders = select_borders(values^, non_nan_border_count, border_type)
 
     if nan_mode == NAN_MODE_MIN:
         var with_nan = List[Float32]()
@@ -656,6 +668,7 @@ def gbdt_host_grid(
     border_build_max_samples: Int,
     random_seed: UInt64,
     nan_mode: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> GbdtHostGrid:
     """`_quantize_training_columns` for an all-float, one-permutation fit
     (`gbdt/train.mojo:1966-2241`). The full-data path hands
@@ -700,7 +713,7 @@ def gbdt_host_grid(
                         break
                 if not sample_has:
                     col[0] = Float32(0.0) / Float32(0.0)
-        var q = _calc_quantization_phase_b(col^, border_count, nan_mode)
+        var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)
         var nb = len(q[0])
         if nb > border_count + 1:
             raise Error(
@@ -1328,6 +1341,7 @@ def gbdt_host_fit(
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, params.border_count,
         params.border_build_max_samples, params.random_seed, params.nan_mode,
+        params.border_type,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
     if len(one_hot_in) == n_features:

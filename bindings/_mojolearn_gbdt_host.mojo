@@ -142,6 +142,10 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    border_type_from_name,
+)
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
@@ -578,11 +582,18 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4:
+    if len(strs) != 4 and len(strs) != 5:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode], got " + String(len(strs))
+            " nan_mode] and optionally feature_border_type, got "
+            + String(len(strs))
         )
+    # `feature_border_type`, the optional fifth string (lane/catboost-parity);
+    # the seven types are the device fit's own host functions
+    # (`calc_quantization` / `select_borders`), restated nowhere
+    var border_type = BORDER_TYPE_GREEDY_LOG_SUM
+    if len(strs) == 5:
+        border_type = border_type_from_name(String(py=strs[4]))
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
     _ = f32_ptr(Int(py=weights_addr))
@@ -768,6 +779,8 @@ def gbdt_fit_binding(
         )
     if is_rmse and grow_code != 0:
         _refuse("loss='RMSE' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
+    if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
+        _refuse("feature_border_type under use_pointwise_searcher")
     if use_pointwise:
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
@@ -944,6 +957,7 @@ def gbdt_fit_binding(
     var p = GbdtHostParams(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
+        border_type,
     )
     var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0), border)
     # the non-symmetric fit's estimator and bootstrap: Logloss, Newton at the

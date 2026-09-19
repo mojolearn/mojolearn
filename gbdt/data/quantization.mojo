@@ -61,7 +61,11 @@ be kept in step.
 
 from std.math import inf
 
-from gbdt.grid_creator.binarization import best_split
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    best_split,
+    select_borders,
+)
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
     NAN_MODE_MAX,
@@ -133,12 +137,17 @@ def substitute_nans(mut values: List[Float32], treatment: Int):
 
 
 def calc_quantization(
-    var values: List[Float32], border_count: Int, nan_mode_option: Int
+    var values: List[Float32], border_count: Int, nan_mode_option: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[Float32], Int]:
     """`CalcQuantization` (`quantization.cpp:300-346`).
 
     Returns the borders WITH the sentinel already in them, and the mode the
     column RESOLVED to. `values` is consumed, as their `featureValues` is.
+    `border_type` is `feature_border_type` (`binarization.mojo`'s
+    `BORDER_TYPE_*`): the default is `best_split`, exactly as before; the
+    other six are `select_borders`, whose flush does not depend on the
+    calling thread's floating point mode.
     """
     # Upstream CalcQuantizationAndNanMode checks this BEFORE BestSplit
     # filters NaNs (54a8143a, libs/data/quantization.cpp:315-320).
@@ -156,7 +165,12 @@ def calc_quantization(
     var borders = List[Float32]()
     if non_nan_border_count > 0:
         # `BestSplit` already drops NaNs -- their `filterNans`
-        borders = best_split(values^, non_nan_border_count)
+        if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
+            borders = best_split(values^, non_nan_border_count)
+        else:
+            borders = select_borders(
+                values^, non_nan_border_count, border_type
+            )
 
     if nan_mode == NAN_MODE_MIN:
         # `numeric_limits<float>::lowest()`, which is -FLT_MAX and NOT

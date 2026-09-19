@@ -290,7 +290,8 @@ def gbdt_fit_binding(
     for 0.46% of float32 values, and a class weight is a user's number,
     not ours to round.
 
-    `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, their
+    `strs` is `[loss, bootstrap_type, od_type, nan_mode]`, optionally
+    followed by `feature_border_type` (lane/catboost-parity), their
     `ELossFunction`, `EBootstrapType`, `EOverfittingDetectorType` and
     `ENanMode` spellings. An empty `bootstrap_type` means none, and an
     empty `od_type` means UNSET -- which is not the same as `None`: their
@@ -335,11 +336,19 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4:
+    if len(strs) != 4 and len(strs) != 5:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode], got " + String(len(strs))
+            " nan_mode] and optionally feature_border_type, got "
+            + String(len(strs))
         )
+    # the optional fifth string, their `feature_border_type` (empty or
+    # absent is GreedyLogSum); an older wrapper sends four
+    var border_type_name = String("GreedyLogSum")
+    if len(strs) == 5:
+        border_type_name = String(py=strs[4])
+        if border_type_name == "":
+            border_type_name = String("GreedyLogSum")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     # unread when n_weights / n_flags is 0; the wrapper passes the X
@@ -463,6 +472,7 @@ def gbdt_fit_binding(
         min_split_gain,
         min_child_hessian,
         feature_fraction,
+        border_type_name,
     )
     var n_eval_rows = Int(py=params[20])
 

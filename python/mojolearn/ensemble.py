@@ -15,6 +15,7 @@ them were not, see CHANGELOG):
     max_depth       6                          oblivious_tree_options.cpp:12
     l2_leaf_reg     3.0 (0 for YetiRank)       catboost_options.cpp:34-37
     border_count    128 on GPU (254 on CPU)    data_processing_options.cpp:16
+    feature_border_type  GreedyLogSum          data_processing_options.cpp:15
     random_strength 1.0                        oblivious_tree_options.cpp:17
     bootstrap_type  Bayesian, temperature 1    bootstrap_options.h:16-18
 
@@ -339,6 +340,13 @@ _REQUIRED_PARAM = {
     "Tweedie": ("variance_power", "loss_variance_power"),
     "Expectile": ("alpha", "loss_alpha"),
 }
+
+#: Their `EBorderSelectionType` spellings (`enums.h`), the seven
+#: `feature_border_type`s `MakeBinarizer` dispatches
+#: (`library/cpp/grid_creator/binarization.cpp:114-134`). GreedyLogSum is
+#: their default for float features (`data_processing_options.cpp:15`).
+BORDER_TYPES = ("GreedyLogSum", "Median", "Uniform", "UniformAndQuantiles",
+                "MaxLogSum", "MinEntropy", "GreedyMinEntropy")
 
 #: `EBootstrapType` spellings reachable from their GPU oblivious searcher.
 #: MVS is absent because their own searcher asserts it away
@@ -799,7 +807,23 @@ class GradientBoosting(NumericModeMixin):
         as given, and (as theirs, `options_helper.cpp:278`) turns the
         learning-rate auto-selection off.
     border_count : int, default 128
-        Quantization bins per numeric feature.
+        Quantization bins per numeric feature (their GPU default,
+        `data_processing_options.cpp:16`; 254 on their CPU).
+    feature_border_type : str, default 'GreedyLogSum'
+        How the numeric borders are chosen, CatBoost's `feature_border_type`
+        (`data_processing_options.cpp:15`), one of `BORDER_TYPES`, each the
+        binarizer `MakeBinarizer` dispatches
+        (`library/cpp/grid_creator/binarization.cpp:114-134`): GreedyLogSum
+        and GreedyMinEntropy (greedy bin splitting under the two penalties),
+        MaxLogSum and MinEntropy (the exact dynamic program), Median
+        (quantiles), Uniform (equal width) and UniformAndQuantiles (half of
+        each). Border selection runs on the host in CatBoost and here, and
+        it is the same host function on every vendor and on the CPU host
+        path, so every type holds the identical-mode contract; all seven
+        reproduce CatBoost 1.2.10's own borders bit for bit on 294 cases
+        (`checks/border_types_check.mojo`). CTR columns keep their own
+        grids. A value below 2**-126 is binned as zero under every type (the
+        flush GreedyLogSum's border build already applies).
     random_state : int, default 0
     loss_alpha : float, optional
         Quantile level for `Quantile` and `LogLinQuantile` (default 0.5),
@@ -1016,6 +1040,7 @@ class GradientBoosting(NumericModeMixin):
         min_split_gain=None,
         min_child_hessian=None,
         feature_fraction=1.0,
+        feature_border_type="GreedyLogSum",
     ):
         if loss not in LOSSES:
             raise ValueError(
@@ -1237,6 +1262,11 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: nan_mode must be one of {NAN_MODES}, got "
                 f"{nan_mode!r}"
             )
+        if feature_border_type not in BORDER_TYPES:
+            raise ValueError(
+                f"mojolearn: feature_border_type must be one of "
+                f"{BORDER_TYPES}, got {feature_border_type!r}"
+            )
         # validated here, KEPT UNSET: None resolves at `_params` against the
         # score function and policy the fit actually runs
         checked_strength = _validate_search_options(
@@ -1335,6 +1365,7 @@ class GradientBoosting(NumericModeMixin):
         self.min_split_gain = None if min_split_gain is None else float(min_split_gain)
         self.min_child_hessian = min_child_hessian
         self.feature_fraction = feature_fraction
+        self.feature_border_type = feature_border_type
 
         self.model_ = None
         self.loss_curve_ = None
@@ -1800,6 +1831,16 @@ class GradientBoosting(NumericModeMixin):
             self.od_type or "",
             self.nan_mode,
         ]
+        # the optional fifth string: sent only when it is not the default,
+        # so a default fit keeps the four-string call every binding reads
+        border_type = getattr(self, "feature_border_type", "GreedyLogSum")
+        if border_type not in BORDER_TYPES:
+            raise ValueError(
+                f"mojolearn: feature_border_type must be one of "
+                f"{BORDER_TYPES}, got {border_type!r}"
+            )
+        if border_type != "GreedyLogSum":
+            strs.append(border_type)
 
         # THE EVAL ADDRESSES ARE UNREAD WHEN params[20] IS 0, and the
         # learn buffer stands in so nothing has to allocate a throwaway --
