@@ -24,6 +24,11 @@ explicitly to keep an old result. Old -> new, SymmetricTree only:
   bootstrap is refused by name for those losses (pass `bootstrap_type='No'`).
 - `leaf_estimation_iterations` unset -> 1 when there are fewer than 200
   iterations and fewer than 20 features (`options_helper.cpp:290-307`).
+- `boost_from_average` unset on MAE, Quantile and MAPE: False -> True
+  (`options_helper.cpp:353-374`; all policies, as theirs). Their starting
+  constant (`CalcSampleQuantile` with the 1e-6 delta adjust, and the MAPE
+  weighted median) is now implemented and reproduces CatBoost 1.2.10 CPU's
+  bias bit for bit on 40 cases. A model whose bias is -0.0 now writes it.
 
 Depthwise and Lossguide keep 100 iterations, 0.03, no noise and no
 bootstrap. `GradientBoostingClassifier` and `GradientBoostingRegressor` now

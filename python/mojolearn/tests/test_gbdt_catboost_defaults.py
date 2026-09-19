@@ -244,3 +244,75 @@ def test_ordered_fit_takes_an_eval_set():
     assert m.boosting_type_ == 'Ordered'
     assert args[6][20] == 4          # n_eval_rows
     assert args[7][5] == 'Ordered'
+
+
+# ---- boost_from_average on MAE / Quantile / MAPE (lane/catboost-parity) ----
+# `get_scale_and_bias()[1]` of CatBoost 1.2.10 CPU (iterations=1, depth=2,
+# boost_from_average=True, thread_count=1) on the cases `_bias_cases` draws,
+# as float64 bits, recorded on this Mac 2026-09-19. Both branches of their
+# CalcSampleQuantile (below and at 100 rows), rounded targets (the delta
+# adjust's tie arms, and a MAPE median on a -0.0 target).
+CATBOOST_CPU_BIAS_BITS = [
+    '000000c01677f63f',
+    '000000602b1bc3bf',
+    '000000c01677f63f',
+    '000000803a77e23f',
+    '000000e0fdffef3f',
+    '000000e0fdffefbf',
+    '000000e0fdffef3f',
+    '0000000000000080',
+    '000000c035d4eb3f',
+    '00000000f496fcbf',
+    '000000c035d4eb3f',
+    '00000000076ad83f',
+    '000000000100f03f',
+    '000000e0fdffefbf',
+    '000000000100f03f',
+    '000000000000f03f',
+    '00000060b24ce13f',
+    '00000000b650f5bf',
+    '00000060b24ce13f',
+    '00000000166cb13f',
+    '000000a0f7c6b0be',
+    '00000000ffffffbf',
+    '000000a0f7c6b0be',
+    '000000000000e039',
+    '000000c0593def3f',
+    '000000c08956f2bf',
+    '000000c0593def3f',
+    '000000803bd1d23f',
+    '000000000100f03f',
+    '000000e0fdffefbf',
+    '000000000100f03f',
+    '0000000000000000',
+    '000000c0f63af03f',
+    '0000008012e6f0bf',
+    '000000c0f63af03f',
+    '0000008058e5d73f',
+    '000000e0fdffef3f',
+    '000000e0fdffefbf',
+    '000000e0fdffef3f',
+    '000000000000c839',
+]
+
+
+def _bias_cases():
+    rng = np.random.default_rng(3)
+    for n in (37, 99, 100, 1000, 5003):
+        for kind in ("cont", "ties"):
+            X = rng.normal(size=(n, 4)).astype(np.float32)
+            y = rng.normal(size=n).astype(np.float32) * 3 + 1
+            if kind == "ties":
+                y = np.round(y).astype(np.float32)
+            for loss, alpha in (("MAE", None), ("Quantile", 0.25), ("Quantile", 0.5), ("MAPE", None)):
+                yield X, y, loss, alpha
+
+
+def test_boost_from_average_bias_is_catboost_cpu_bits():
+    got = []
+    for X, y, loss, alpha in _bias_cases():
+        extra = {} if alpha is None else {"loss_alpha": alpha}
+        m = GradientBoosting(n_estimators=1, max_depth=2, loss=loss, random_strength=0.0,
+                             bootstrap_type="No", **extra).fit(X, y)
+        got.append(np.float64(m.bias_).tobytes().hex())
+    assert got == CATBOOST_CPU_BIAS_BITS

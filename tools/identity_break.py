@@ -1174,6 +1174,10 @@ def _gbdt_legacy_kw(cls, kw):
             and "leaf_estimation_method" not in out
             and loss in _GBDT_LEGACY_LEAF_ITERATIONS):
         out["leaf_estimation_iterations"] = _GBDT_LEGACY_LEAF_ITERATIONS[loss]
+    if loss in ("MAE", "Quantile", "MAPE"):
+        # unset resolved False for these three until 2026-09-19, when their
+        # CalcSampleQuantile constant landed and unset became their True
+        out.setdefault("boost_from_average", False)
     return out
 
 
@@ -1294,6 +1298,27 @@ def _(ml, X, yc, yr, Xh=None):
     nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), newton_cosine=_h(nc.predict(X))),
                 m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-bfa-quantile")
+def _(ml, X, yc, yr, Xh=None):
+    """boost_from_average at CatBoost's default for MAE, Quantile and MAPE
+    (unset is True for them since 2026-09-19): the starting point is their
+    CalcSampleQuantile constant with the delta adjust
+    (`gbdt/metrics/sample_quantile.mojo`, host code the device fit and the
+    CPU host path share). Plain MAE, Quantile at alpha 0.25, MAPE, and one
+    Ordered MAE fit, 8 trees of depth 4 each."""
+    y = _pos(yr)
+    parts, first = {}, None
+    for name, kw in (("MAE", dict(loss="MAE")),
+                     ("Quantile", dict(loss="Quantile", loss_alpha=0.25)),
+                     ("MAPE", dict(loss="MAPE")),
+                     ("Ordered-MAE", dict(loss="MAE", boosting_type="Ordered"))):
+        m = ml.GradientBoosting(n_estimators=8, max_depth=4, learning_rate=0.03,
+                                random_strength=0.0, bootstrap_type="No", **kw).fit(X, y)
+        parts[name] = _h(m.predict(X))
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
 @lane("gbdt-border-types")
@@ -6175,7 +6200,7 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
-            "gbdt-ordered-bayesian-noise", "par-ordered")
+            "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

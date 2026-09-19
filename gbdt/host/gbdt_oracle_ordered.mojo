@@ -1108,6 +1108,9 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_grid,
 )
 from gbdt.host.gbdt_oracle_losses import (
+    GBDT_OBJ_MAE,
+    GBDT_OBJ_MAPE,
+    GBDT_OBJ_QUANTILE,
     GbdtHostLoss,
     _estimate_leaves_for_loss,
     _loss_row,
@@ -1118,6 +1121,10 @@ from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,
     _rmse_starting_approx,
     gbdt_rmse_host_model_text,
+)
+from gbdt.metrics.sample_quantile import (
+    calculate_optimal_const_approx_for_mape,
+    calculate_weighted_target_quantile,
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
@@ -1348,7 +1355,24 @@ def gbdt_ordered_host_fit(
     # ---- 2. the starting point ----
     var start = Float64(0.0)
     if opts.boost_from_average:
-        start = _rmse_starting_approx(y, n_rows)
+        if loss.objective == GBDT_OBJ_MAPE:
+            # `CalculateOptimalConstApproxForMAPE` (`sample_quantile.mojo`)
+            start = Float64(
+                calculate_optimal_const_approx_for_mape(y, List[Float32](), False)
+            )
+        elif loss.objective == GBDT_OBJ_MAE or loss.objective == GBDT_OBJ_QUANTILE:
+            # `CalculateWeightedTargetQuantile` with their 1e-6 delta
+            start = Float64(
+                calculate_weighted_target_quantile(
+                    y, List[Float32](), False,
+                    0.5 if loss.objective == GBDT_OBJ_MAE else Float64(
+                        loss.estimator_alpha
+                    ),
+                    1e-6,
+                )
+            )
+        else:
+            start = _rmse_starting_approx(y, n_rows)
     var start_value = Float32(start)
 
     # ---- 3. the plan ----

@@ -852,6 +852,7 @@ def gbdt_losses_host_fit(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    start: Float64 = 0.0,
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -934,7 +935,10 @@ def gbdt_losses_host_fit(
     var max_leaves = 1 << max_depth
     var lr = params.learning_rate
 
-    var cursor = List[Float32](length=n_rows, fill=Float32(0.0))
+    # the starting point `boost_from_average` sets (`start_value`, the
+    # binding's `calc_sample_quantile` constant for MAE / Quantile / MAPE,
+    # lane/catboost-parity); 0 without it
+    var cursor = List[Float32](length=n_rows, fill=Float32(start))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_blocks = mse_blocks

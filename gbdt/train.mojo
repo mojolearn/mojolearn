@@ -197,6 +197,9 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_YETI_RANK,
+    OBJECTIVE_MAE,
+    OBJECTIVE_MAPE,
+    OBJECTIVE_QUANTILE,
     OBJECTIVE_RMSE,
     objective_from_name,
 )
@@ -1831,36 +1834,44 @@ def train(
     var objective = loss_desc.loss_function
     check_child_hessian_objective(min_child_hessian, objective)
 
-    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
-    # implemented 2026-08-22. Their rule, verbatim: if the option is SET,
+    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp:
+    # 353-374`), implemented 2026-08-22, completed 2026-09-19
+    # (lane/catboost-parity). Their rule, verbatim: if the option is SET,
     # keep it; else set TRUE on a single host with no baseline and no
     # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
-    # this implementation does not have). Logloss is NOT on the list. This implementation has
-    # no baseline column and no continuation, so those guards are
-    # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
-    # constant needs the unimplemented CalcSampleQuantile -- a named gap, not
-    # their rule.
+    # this implementation does not have). Logloss is NOT on the list. This
+    # implementation has no baseline column and no continuation, so those
+    # guards are trivially met. MAE, Quantile and MAPE resolved FALSE here
+    # until their constant (CalcSampleQuantile) existed; it does now
+    # (`gbdt/metrics/sample_quantile.mojo`), so they take their rule.
     var bfa: Bool
     if boost_from_average == 1:
         if not (
             objective == OBJECTIVE_RMSE
             or objective == OBJECTIVE_LOGLOSS
             or objective == OBJECTIVE_CROSSENTROPY
+            or objective == OBJECTIVE_QUANTILE
+            or objective == OBJECTIVE_MAE
+            or objective == OBJECTIVE_MAPE
         ):
-            # their CB_ENSURE names the allowed list; ours additionally
-            # names the unimplemented-constant gap for the quantile family
+            # their CB_ENSURE's list (`catboost_options.cpp:705-709`), the
+            # losses of it this implementation trains
             raise Error(
-                "boost_from_average: implemented for RMSE, Logloss and"
-                " CrossEntropy only. Their list also allows Quantile,"
-                " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
-                ".cpp:705-709); those need the unimplemented CalcSampleQuantile"
-                " and are refused by name."
+                "You can use boost_from_average only for these loss"
+                " functions now: RMSE, Logloss, CrossEntropy, Quantile, MAE,"
+                " MAPE (catboost_options.cpp:705-709; their MultiQuantile,"
+                " MultiRMSE and RMSPE are not trained here)."
             )
         bfa = True
     elif boost_from_average == 0:
         bfa = False
     elif boost_from_average == -1:
-        bfa = objective == OBJECTIVE_RMSE
+        bfa = (
+            objective == OBJECTIVE_RMSE
+            or objective == OBJECTIVE_QUANTILE
+            or objective == OBJECTIVE_MAE
+            or objective == OBJECTIVE_MAPE
+        )
     else:
         raise Error(
             "boost_from_average must be -1 (their data-dependent"
@@ -2092,7 +2103,7 @@ def train(
             # `StartingPoint = CalcOptimumConstApprox(...)`
             # (`dynamic_boosting.h:563-573`), the plain fit's own helper
             o_start = calc_one_dimensional_optimum_const_approx(
-                objective, t_host, w_host, True
+                objective, t_host, w_host, True, Float64(loss_desc.get_alpha())
             )
             o_model.bias = o_start
             _ = h_t^
