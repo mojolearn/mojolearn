@@ -167,3 +167,93 @@ def test_float64_is_refused_and_never_cast(fn):
     a = _matrix(16, 4).astype(np.float64)
     with pytest.raises(TypeError, match="float32"):
         getattr(linalg, fn)(a)
+
+
+# ===========================================================================
+# THE DEVICE ROUTE AND THE HOST ROUTE AGREE, BIT FOR BIT
+#
+# THIS IS THE CHECK THIS FILE'S OWN HEADER ONCE CLAIMED AND DID NOT HAVE.
+# `decomposition/host/linalg_public.mojo` asserted, from 2026-09-19 morning
+# until that evening, that a `check_linalg_public_orders_match_the_oracle` in
+# `decomposition/checks/linalg_public_check.mojo` held the two spectrum sorts
+# equal. Neither the symbol nor the file has ever existed. A named check that
+# is not in the tree is WORSE than an admitted gap, because a reader stops
+# looking -- so here is a real one.
+#
+# WHAT IT HOLDS. `qr`, `eigh` and `svdvals` run the DEVICE kernels on a GPU
+# install and the HOST oracle on a CPU-only one, chosen by
+# `_linalg_impl._door()`. Two routes through two implementations is exactly
+# where a cross-vendor library goes quietly wrong, and the product claim is
+# that they do not merely agree to a tolerance -- they agree in the BYTES.
+#
+# It compares `.tobytes()`, never `allclose`. A tolerance here would pass on
+# the day the two routes started rounding differently, which is the one day
+# this test exists for.
+# ===========================================================================
+
+
+def _both_routes():
+    """(device_module, host_module) or None when this box has one route.
+
+    On a CPU-only install `_door()` answers the host binding for both, so
+    there is nothing to compare and the test SKIPS rather than passing
+    vacuously -- a cell that cannot fail reads exactly like coverage.
+    """
+    from mojolearn import _backend, _linalg_impl
+    if _backend._CPU_ONLY is not None:
+        return None
+    try:
+        device = _linalg_impl._door()
+        host = _linalg_impl._host_load()
+    except Exception:
+        return None
+    return None if device is host else (device, host)
+
+
+needs_both = pytest.mark.skipif(
+    _both_routes() is None,
+    reason="one route on this box (CPU-only install, or no GPU binding built)")
+
+
+@needs_both
+@pytest.mark.parametrize("rows,cols", [(48, 5), (16, 4)])
+def test_qr_device_equals_host_byte_for_byte(rows, cols):
+    """Both QR slice arms. `host_qr_slice_count` halves from QR_MAX_SLICES,
+    so 48x5 takes the two-slice arm and 16x4 the one-slice arm; they are
+    different code on BOTH routes and agreement on one says nothing about
+    the other."""
+    a = _matrix(rows, cols)
+    device, host = _both_routes()
+    d = np.zeros(cols * cols, np.float32)
+    h = np.zeros(cols * cols, np.float32)
+    device.qr_r([a.ctypes.data, d.ctypes.data], [rows, cols])
+    host.qr_r([a.ctypes.data, h.ctypes.data], [rows, cols])
+    assert d.tobytes() == h.tobytes(), "device and host QR disagree in the bytes"
+
+
+@needs_both
+def test_svdvals_device_equals_host_byte_for_byte():
+    a = _matrix(48, 5)
+    device, host = _both_routes()
+    d = np.zeros(5, np.float32)
+    h = np.zeros(5, np.float32)
+    device.svdvals([a.ctypes.data, d.ctypes.data], [48, 5])
+    host.svdvals([a.ctypes.data, h.ctypes.data], [48, 5])
+    assert d.tobytes() == h.tobytes()
+
+
+@needs_both
+def test_eigh_device_equals_host_byte_for_byte():
+    """Includes the sign flip: without it two routes agreeing on every value
+    could still hand back `v` and `-v`, which `.tobytes()` catches and a
+    subspace comparison would not."""
+    a = _matrix(64, 5)
+    sym = a.T @ a
+    sym = np.ascontiguousarray(((sym + sym.T) * np.float32(0.5)).astype(np.float32))
+    device, host = _both_routes()
+    dw, dv, ds = np.zeros(5, np.float32), np.zeros(25, np.float32), np.zeros(2, np.float64)
+    hw, hv, hs = np.zeros(5, np.float32), np.zeros(25, np.float32), np.zeros(2, np.float64)
+    device.eigh([sym.ctypes.data, dw.ctypes.data, dv.ctypes.data, ds.ctypes.data], [5])
+    host.eigh([sym.ctypes.data, hw.ctypes.data, hv.ctypes.data, hs.ctypes.data], [5])
+    assert dw.tobytes() == hw.tobytes(), "eigenvalues disagree in the bytes"
+    assert dv.tobytes() == hv.tobytes(), "eigenvectors disagree in the bytes"
