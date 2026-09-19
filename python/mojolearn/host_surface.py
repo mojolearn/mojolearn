@@ -2562,16 +2562,6 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    # lane/catboost-parity (2026-09-19). New lanes, so no committed record and
-    # no shipped table cell describes them; the Apple M4 Metal column and the
-    # CPU column agree at the branch (docs/lanes/LANE_STATUS_catboost-parity.md)
-    # and the NVIDIA and AMD columns are owed. They join
-    # `public_reference_lanes()` the day a record carries them.
-    "gbdt-border-types": "no reference",
-    "gbdt-ordered": "no reference",
-    "gbdt-ordered-bayesian-noise": "no reference",
-    "gbdt-bfa-quantile": "no reference",
-    "gbdt-catboost-defaults": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent
