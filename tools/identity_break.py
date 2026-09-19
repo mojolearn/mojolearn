@@ -6026,6 +6026,17 @@ def _batch_gemm_transposed(ml, e, Xh):
 
 _batch_decl(_batch_gemm_pinned, "gemm-pinned")
 _batch_decl("n/a:profile lane; the products are hashed whole", "gemm-bf16", "gemm-int8")
+# lane/linalg-public (2026-09-19). A factorization is a GLOBAL REDUCTION over
+# every row of its input: the Householder QR folds each column's norm across
+# all n_rows, and the Jacobi sweeps run to convergence on the whole matrix.
+# Splitting the rows does not give a batch of the same call, it gives a
+# DIFFERENT MATRIX with a different factorization, and there is no per-row
+# output to hold against a whole-batch one. `eigh` has no row axis at all --
+# its input is n x n and both axes are the same object.
+_batch_decl("n/a:whole-matrix-decomposition (a factorization reduces over every row; "
+            "splitting the rows gives a different matrix, not a batch of the same call, "
+            "and there is no per-row output)",
+            "linalg-qr", "linalg-eigh", "linalg-svdvals")
 _batch_decl("n/a:weight-format lane; the batch part is measured on its base lane", "mlp-bf16w", "mlp-int8w", "samba-bf16w", "samba-int8w")
 _batch_decl(_batch_gemm_transposed, "gemm-transposed")
 # The function, tokenizer, optimizer and byte LM trainer lanes
