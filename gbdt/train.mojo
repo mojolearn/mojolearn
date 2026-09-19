@@ -24,6 +24,7 @@ from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from ensemble.instruments import StageTimes as HostStageTimes
 from gbdt.gpu_data.compressed_index_builder import build_layout
+from max.gpu.host.device_attribute import DeviceAttribute
 from gbdt.gpu_data.kernel.binarize import (
     BINARIZE_BLOCK_SIZE,
     BINARIZE_DOCS_PER_THREAD,
@@ -41,7 +42,11 @@ from gbdt.data.permutation import (
     DEFAULT_PERMUTATION_COUNT,
     ctrs_estimation_permutation,
 )
-from gbdt.grid_creator.binarization import best_split
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    best_split,
+    border_type_from_name,
+)
 from gbdt.models.ctr_value_table import (
     TCtrValueTable,
     build_ctr_tables,
@@ -62,6 +67,14 @@ from gbdt.methods.doc_parallel_boosting import (
     make_test_arm,
     model_approx_dim,
     predict,
+)
+from gbdt.methods.ordered_boosting import OrderedBoostingOptions, fit_ordered
+from gbdt.data.ordered_plan import (
+    ORDERED_MIN_FOLD_SIZE,
+    ordered_permutation_block_size,
+)
+from gbdt.metrics.optimal_const_for_loss import (
+    calc_one_dimensional_optimum_const_approx,
 )
 from gbdt.overfitting_detector.overfitting_detector import (
     OD_NONE,
@@ -184,6 +197,9 @@ from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_PAIR_LOGIT,
     OBJECTIVE_QUERY_RMSE,
     OBJECTIVE_YETI_RANK,
+    OBJECTIVE_MAE,
+    OBJECTIVE_MAPE,
+    OBJECTIVE_QUANTILE,
     OBJECTIVE_RMSE,
     objective_from_name,
 )
@@ -209,6 +225,7 @@ from gbdt.options.catboost_options import (
     GROW_LOSSGUIDE,
     GROW_SYMMETRIC,
     SCORE_FUNCTION_COSINE,
+    SCORE_FUNCTION_NEWTON_COSINE,
     TCatFeatureParams,
     grow_policy_from_name,
     grow_policy_name,
@@ -789,6 +806,21 @@ def train(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    # `feature_border_type` (`data_processing_options.cpp:15`, default
+    # GreedyLogSum), their seven `EBorderSelectionType` spellings; the
+    # float columns' border search (`gbdt/grid_creator/binarization.mojo`)
+    feature_border_type: String = String("GreedyLogSum"),
+    # `boosting_type` (`boosting_options.cpp:16`), "Plain" or "Ordered", as
+    # the CALLER resolved it (their GPU default is data-dependent,
+    # `catboost_options.cpp:802-807` then `defaults_helper.h:33-42`, and the
+    # Python wrapper resolves it); Ordered runs `gbdt/methods/
+    # ordered_boosting.mojo::fit_ordered`
+    boosting_type: String = String("Plain"),
+    # `fold_len_multiplier` (`boosting_options.cpp:11`, default 2) and
+    # `fold_permutation_block` (`:12`, 0 unset: 64 on GPU,
+    # `cuda/train_lib/train.cpp:115-118`); read by Ordered only
+    fold_len_multiplier: Float64 = 2.0,
+    fold_permutation_block: Int = 0,
 ) raises -> TrainedModel:
     """Borders -> device quantization -> fit, one call.
 
@@ -966,6 +998,7 @@ def train(
     var t_phase = host_times.start()
     # ---- the grow policy, resolved and refused BY NAME where theirs is ----
     var policy = grow_policy_from_name(grow_policy)
+    var border_type_code = border_type_from_name(feature_border_type)
     check_feature_fraction(feature_fraction)
     if feature_fraction < 1:
         for flag in cat_features:
@@ -1041,6 +1074,57 @@ def train(
     var is_querywise = (
         objective_code == OBJECTIVE_QUERY_RMSE or is_pair_logit or is_yeti_rank
     )
+    # ---- `boosting_type`, and what an Ordered fit refuses BY NAME ----
+    # (lane/catboost-parity; `gbdt/methods/ordered_boosting.mojo` carries
+    # the account). Decided here, before a border is computed.
+    if boosting_type != "Plain" and boosting_type != "Ordered":
+        raise Error(
+            "boosting_type must be 'Plain' or 'Ordered', got '"
+            + boosting_type + "'"
+        )
+    var ordered = boosting_type == "Ordered"
+    if ordered:
+        if policy != GROW_SYMMETRIC:
+            raise Error(
+                "Ordered boosting is not supported for nonsymmetric trees."
+                " (catboost_options.cpp:757-759)"
+            )
+        if (
+            objective_code == OBJECTIVE_MULTICLASS
+            or objective_code == OBJECTIVE_MULTICLASS_OVA
+        ):
+            raise Error(
+                "On GPU loss " + loss + " can't be used with ordered boosting"
+                " (catboost_options.cpp:949-967: their GPU trains this loss"
+                " doc-parallel and Plain only)"
+            )
+        if not (
+            score_function == SCORE_FUNCTION_COSINE
+            or score_function == SCORE_FUNCTION_NEWTON_COSINE
+        ):
+            raise Error(
+                "Score function can't be used with ordered boosting"
+                " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
+                " the two with an ordered kernel"
+            )
+        if is_querywise:
+            raise Error(
+                "boosting_type='Ordered' with loss='" + loss + "' is not"
+                " implemented here: the reference's folds follow the query"
+                " grouping (dynamic_boosting.h:189-223), which this Ordered"
+                " arm does not restate"
+            )
+        if use_pointwise_searcher:
+            raise Error(
+                "use_pointwise_searcher selects the doc-parallel Plain"
+                " searcher; an Ordered fit always runs the feature-parallel"
+                " fold searcher (feature_parallel_pointwise_oblivious_tree.h)"
+            )
+        if feature_fraction < 1:
+            raise Error(
+                "boosting_type='Ordered' with feature_fraction < 1 is not"
+                " implemented here"
+            )
     if len(group_sizes) > 0:
         var covered = 0
         for g in range(len(group_sizes)):
@@ -1268,6 +1352,33 @@ def train(
                 has_permutation_features = True
                 break
 
+    var ordered_ctr_column = False
+    if ordered and len(cat_features) == n_features:
+        for f in range(n_features):
+            if not cat_features[f]:
+                continue
+            var maxc_o = 0
+            for r in range(n_rows):
+                var c_o = dense_category_code(
+                    x_src.unsafe_load(f * n_rows + r), f, r
+                )
+                if c_o > maxc_o:
+                    maxc_o = c_o
+            if maxc_o + 1 > cat_params.one_hot_max_size:
+                ordered_ctr_column = True
+                break
+    if ordered_ctr_column:
+        # a categorical column above `one_hot_max_size` builds CTRs, and
+        # those are the one categorical arm Ordered does not restate; a
+        # column the dispatch makes one-hot is an ordinary split candidate
+        raise Error(
+            "boosting_type='Ordered' with a categorical feature that builds"
+            " CTRs (cardinality above one_hot_max_size) is not implemented"
+            " here: the reference builds a permutation-dependent CTR dataset"
+            " per permutation (feature_parallel_dataset_builder.cpp:124-160),"
+            " which this Ordered arm does not restate; use"
+            " boosting_type='Plain'"
+        )
     var perm_count = permutation_count
     if perm_count == -1:
         perm_count = DEFAULT_PERMUTATION_COUNT
@@ -1552,6 +1663,7 @@ def train(
         dep_ordinal_of_column, dep_by_perm, ctr_grids, n_rows,
         border_count, border_build_max_samples, random_seed, nan_mode,
         column_ptrs=column_ptrs,
+        border_type=border_type_code,
     )
     var borders = grid[0].copy()
     var fold_counts = grid[1].copy()
@@ -1722,36 +1834,44 @@ def train(
     var objective = loss_desc.loss_function
     check_child_hessian_objective(min_child_hessian, objective)
 
-    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp`),
-    # implemented 2026-08-22. Their rule, verbatim: if the option is SET,
+    # ---- `AdjustBoostFromAverageDefaultValue` (`options_helper.cpp:
+    # 353-374`), implemented 2026-08-22, completed 2026-09-19
+    # (lane/catboost-parity). Their rule, verbatim: if the option is SET,
     # keep it; else set TRUE on a single host with no baseline and no
     # continuation for RMSE, MAE, Quantile, MAPE (and three multi losses
-    # this implementation does not have). Logloss is NOT on the list. This implementation has
-    # no baseline column and no continuation, so those guards are
-    # trivially met; MAE/Quantile/MAPE resolve FALSE here because their
-    # constant needs the unimplemented CalcSampleQuantile -- a named gap, not
-    # their rule.
+    # this implementation does not have). Logloss is NOT on the list. This
+    # implementation has no baseline column and no continuation, so those
+    # guards are trivially met. MAE, Quantile and MAPE resolved FALSE here
+    # until their constant (CalcSampleQuantile) existed; it does now
+    # (`gbdt/metrics/sample_quantile.mojo`), so they take their rule.
     var bfa: Bool
     if boost_from_average == 1:
         if not (
             objective == OBJECTIVE_RMSE
             or objective == OBJECTIVE_LOGLOSS
             or objective == OBJECTIVE_CROSSENTROPY
+            or objective == OBJECTIVE_QUANTILE
+            or objective == OBJECTIVE_MAE
+            or objective == OBJECTIVE_MAPE
         ):
-            # their CB_ENSURE names the allowed list; ours additionally
-            # names the unimplemented-constant gap for the quantile family
+            # their CB_ENSURE's list (`catboost_options.cpp:705-709`), the
+            # losses of it this implementation trains
             raise Error(
-                "boost_from_average: implemented for RMSE, Logloss and"
-                " CrossEntropy only. Their list also allows Quantile,"
-                " MultiQuantile, MAE, MAPE, MultiRMSE (catboost_options"
-                ".cpp:705-709); those need the unimplemented CalcSampleQuantile"
-                " and are refused by name."
+                "You can use boost_from_average only for these loss"
+                " functions now: RMSE, Logloss, CrossEntropy, Quantile, MAE,"
+                " MAPE (catboost_options.cpp:705-709; their MultiQuantile,"
+                " MultiRMSE and RMSPE are not trained here)."
             )
         bfa = True
     elif boost_from_average == 0:
         bfa = False
     elif boost_from_average == -1:
-        bfa = objective == OBJECTIVE_RMSE
+        bfa = (
+            objective == OBJECTIVE_RMSE
+            or objective == OBJECTIVE_QUANTILE
+            or objective == OBJECTIVE_MAE
+            or objective == OBJECTIVE_MAPE
+        )
     else:
         raise Error(
             "boost_from_average must be -1 (their data-dependent"
@@ -1801,6 +1921,7 @@ def train(
         method_override=leaf_estimation_method,
         iterations_override=leaf_estimation_iterations,
         l2_override=l2_leaf_reg,
+        ordered=ordered,
     )
     # `GradientBoosting(l2_leaf_reg=None)` resolves to the loss's default in
     # the wrapper (`catboost_options.cpp:34-37`, 3.0; 0 for YetiRank,
@@ -1961,6 +2082,92 @@ def train(
         approx_dim, 1 + approx_dim, max_depth,
     )
 
+    # ---- ORDERED BOOSTING (lane/catboost-parity) ----------------------
+    # Everything above -- borders, the compressed index, the targets and
+    # weights, the loss and its leaf estimator, the bootstrap -- is shared
+    # with the Plain fit; the loop is `fit_ordered`.
+    if ordered:
+        var o_model = TAdditiveModel()
+        var o_start = Float64(0.0)
+        if bfa:
+            var h_t = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+            var h_w = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+            ctx.enqueue_copy(dst_ptr=h_t.unsafe_ptr(), src_buf=targets)
+            ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=weights)
+            ctx.synchronize()
+            var t_host = List[Float32](capacity=n_rows)
+            var w_host = List[Float32](capacity=n_rows)
+            for i in range(n_rows):
+                t_host.append(h_t.unsafe_ptr().unsafe_load(i))
+                w_host.append(h_w.unsafe_ptr().unsafe_load(i))
+            # `StartingPoint = CalcOptimumConstApprox(...)`
+            # (`dynamic_boosting.h:563-573`), the plain fit's own helper
+            o_start = calc_one_dimensional_optimum_const_approx(
+                objective, t_host, w_host, True, Float64(loss_desc.get_alpha())
+            )
+            o_model.bias = o_start
+            _ = h_t^
+            _ = h_w^
+        var o_opts = OrderedBoostingOptions(
+            objective,
+            loss_desc.kernel_alpha(),
+            loss_desc.get_alpha(),
+            loss_desc.get_logloss_border(),
+            estimation.method,
+            estimation.iterations,
+            score_function,
+            learning_rate,
+            resolved_l2,
+            random_strength,
+            random_seed,
+            boot_kind,
+            boot_param,
+            DEFAULT_PERMUTATION_COUNT if permutation_count == -1
+            else permutation_count,
+            fold_len_multiplier,
+            ordered_permutation_block_size(n_rows, fold_permutation_block),
+            ORDERED_MIN_FOLD_SIZE,
+            Float32(o_start),
+        )
+        var o_layout = build_layout(fold_counts, column_one_hot)
+        var o_out = fit_ordered(
+            ctx, o_layout, cindex, targets, weights, n_rows, n_estimators,
+            max_depth, ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT),
+            column_one_hot, o_opts, o_model, trace, test_arm,
+            od_kind, od_pvalue, od_wait,
+        )
+        # `ShrinkToBestIteration`, the Plain fit's own block below
+        if want_best_model == 1 and len(o_out.test_losses) > 0:
+            var o_min_best = -1
+            var o_min_err = Float64(0.0)
+            for i in range(len(o_out.test_losses)):
+                if i + 1 < best_model_min_trees:
+                    continue
+                if o_min_best < 0 or o_out.test_losses[i] < o_min_err:
+                    o_min_err = o_out.test_losses[i]
+                    o_min_best = i
+            var o_best_iter = o_min_best + 1
+            if 0 < o_best_iter and o_best_iter < o_model.size():
+                o_model.shrink(o_best_iter)
+        host_times.stop_host("train_ordered_fit", t_phase)
+        host_times.stop_host("train_total", t_train)
+        host_times.report()
+        return TrainedModel(
+            o_model^,
+            fold_counts^,
+            column_one_hot^,
+            borders^,
+            column_nan_treatment^,
+            o_out.learn_losses.copy(),
+            o_out.test_losses.copy(),
+            o_out.best_iteration,
+            o_out.stopped_early,
+            ctr_column_count,
+            ctr_tables^,
+            TTensorCtrRegistry(len(fold_counts)),
+        )
+
+
     host_times.stop_host("train_pre_fit", t_phase)
     t_phase = host_times.start()
     var model = TAdditiveModel()
@@ -2081,6 +2288,9 @@ def _quantize_training_columns(
     column_ptrs: List[MutPointer[Float32, MutUntrackedOrigin]] = List[
         MutPointer[Float32, MutUntrackedOrigin]
     ](),
+    # `feature_border_type` (`binarization.mojo` BORDER_TYPE_*), for the
+    # float columns only: the CTR columns keep their own grids
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[List[Float32]], List[Int], List[Int]]:
     """Shared grid builder for ordinary training and reusable numeric pools.
 
@@ -2355,15 +2565,16 @@ def _quantize_training_columns(
         var bc2 = border_count
         var nm2 = nan_mode_opt
         var cap2 = out_cap
+        var bt2 = border_type
 
         def _dp_task(
             k: Int
-        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2}:
+        ) {imm sfp2, imm obp, imm ocp, imm omp, imm nr2, imm bc2, imm nm2, imm cap2, imm bt2}:
             try:
                 var col2 = List[Float32]()
                 col2.resize(nr2, Float32(0.0))
                 memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
-                var q2 = calc_quantization(col2^, bc2, nm2)
+                var q2 = calc_quantization(col2^, bc2, nm2, bt2)
                 var nb = len(q2[0])
                 if nb > cap2:
                     ocp.unsafe_store(k, -2)

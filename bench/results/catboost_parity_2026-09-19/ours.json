@@ -1,0 +1,79 @@
+{
+ "meta": {
+  "settings": {
+   "iterations": 300,
+   "depth": 6,
+   "learning_rate": 0.1,
+   "l2_leaf_reg": 3.0,
+   "border_count": 128,
+   "random_strength": 0.0,
+   "bootstrap_type": "No",
+   "leaf_estimation_method": "Newton",
+   "leaf_estimation_iterations": 10,
+   "boost_from_average": false,
+   "score_function": "Cosine",
+   "nan_mode": "Min",
+   "random_seed": 0
+  },
+  "n_train": 200000,
+  "n_test": 500000,
+  "data": "/Users/andrewhendel/datasets/gbm-bench/higgs/higgs_speed.npz",
+  "arm": "ours"
+ },
+ "Plain/GreedyLogSum": {
+  "auc": 0.8139655448832259,
+  "logloss": 0.5243618117487008,
+  "trees": 300,
+  "seconds": 9.4,
+  "boosting_type_": "Plain"
+ },
+ "Ordered/GreedyLogSum": {
+  "auc": 0.811792746482453,
+  "logloss": 0.5267867101427975,
+  "trees": 300,
+  "seconds": 243.1,
+  "boosting_type_": "Ordered"
+ },
+ "Plain/Median": {
+  "auc": 0.8145354255090703,
+  "logloss": 0.5236836556801232,
+  "trees": 300,
+  "seconds": 10.1,
+  "boosting_type_": "Plain"
+ },
+ "Plain/Uniform": {
+  "auc": 0.8101514416487476,
+  "logloss": 0.5289700667788574,
+  "trees": 300,
+  "seconds": 9.4,
+  "boosting_type_": "Plain"
+ },
+ "Plain/UniformAndQuantiles": {
+  "auc": 0.8140961746581769,
+  "logloss": 0.5241685529826986,
+  "trees": 300,
+  "seconds": 9.5,
+  "boosting_type_": "Plain"
+ },
+ "Plain/MaxLogSum": {
+  "auc": 0.8141812312488784,
+  "logloss": 0.5240348355265916,
+  "trees": 300,
+  "seconds": 14.2,
+  "boosting_type_": "Plain"
+ },
+ "Plain/MinEntropy": {
+  "auc": 0.8143307904920581,
+  "logloss": 0.5238063587653538,
+  "trees": 300,
+  "seconds": 14.2,
+  "boosting_type_": "Plain"
+ },
+ "Plain/GreedyMinEntropy": {
+  "auc": 0.8139655448832259,
+  "logloss": 0.5243618117487008,
+  "trees": 300,
+  "seconds": 10.3,
+  "boosting_type_": "Plain"
+ }
+}

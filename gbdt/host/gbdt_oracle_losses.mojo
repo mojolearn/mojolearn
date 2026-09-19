@@ -106,6 +106,13 @@ from gbdt.host.gbdt_oracle_yeti import yeti_rank_eval, yeti_rank_search_pass
 from gbdt.data.yeti_rank_tasks import YetiRankTasks, yeti_rank_tasks
 from gbdt.data.permutation import TRandom
 from gbdt.host.gbdt_oracle import (
+    GBDT_BOOT_BAYESIAN,
+    GBDT_BOOT_BERNOULLI,
+    GBDT_BOOT_BLOCK,
+    GBDT_BOOT_POISSON,
+    GBDT_BOOT_SEEDS,
+    _bootstrap_pass,
+    gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
     GBDT_ORACLE_HOST_SABOTAGE,
@@ -156,12 +163,6 @@ comptime GBDT_LEAF_GRADIENT = 0
 comptime GBDT_LEAF_NEWTON = 1
 comptime GBDT_LEAF_EXACT = 2
 
-#: `BOOTSTRAP_KERNEL_*` (`bootstrap.mojo:106-108`); -1 is no bootstrap.
-comptime GBDT_BOOT_BERNOULLI = 1
-comptime GBDT_BOOT_POISSON = 2
-#: `BOOTSTRAP_BLOCK_SIZE`, `BOOTSTRAP_SEED_COUNT` (`bootstrap.mojo:112-115`).
-comptime GBDT_BOOT_BLOCK = 256
-comptime GBDT_BOOT_SEEDS = 65536
 
 #: `NEED_WEIGHTS_BLOCK`, `BINARY_SEARCH_ITERATIONS` (`exact_estimation.mojo`),
 #: `EXACT_SORT_FIRST_BIT` (`leaves_estimation_helper.mojo`), and
@@ -395,80 +396,6 @@ def _loss_value(
                 ).score
         fv_partials[b] = _halving_fold(s_score)
     return _deterministic_sum_lanes(fv_partials, 1, blocks)[0]
-
-
-# ===========================================================================
-# THE BOOTSTRAP (`gbdt/gpu_util/kernel/bootstrap.mojo`)
-# ===========================================================================
-
-
-def gbdt_bootstrap_seeds(base_seed: UInt64) -> List[UInt64]:
-    """`create_bootstrap_seeds` (`bootstrap.mojo:249-275`): splitmix64."""
-    var seeds = List[UInt64](capacity=GBDT_BOOT_SEEDS)
-    var x = base_seed
-    for _ in range(GBDT_BOOT_SEEDS):
-        x += UInt64(0x9E3779B97F4A7C15)
-        var z = x
-        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
-        z = z ^ (z >> 31)
-        seeds.append(z)
-    return seeds^
-
-
-def _bootstrap_pass(
-    kind: Int,
-    mut seeds: List[UInt64],
-    mut stats: List[Float32],
-    n_rows: Int,
-    param: Float32,
-) raises -> Tuple[Float32, Float32]:
-    """`launch_bootstrap` + `bootstrap_kernel` (`bootstrap.mojo:118-246`,
-    `:292-348`) at two stat planes, then `deterministic_sum_lanes_kernel[2]`
-    over the block magnitudes. Returns the two folded magnitudes."""
-    var by_rows = (n_rows + GBDT_BOOT_BLOCK - 1) // GBDT_BOOT_BLOCK
-    var blocks = GBDT_BOOT_SEEDS // GBDT_BOOT_BLOCK
-    if by_rows < blocks:
-        blocks = by_rows
-    if blocks < 1:
-        blocks = 1
-    var stride = blocks * GBDT_BOOT_BLOCK
-    var mag_part = List[Float32](length=2 * blocks, fill=Float32(0.0))
-    for b in range(blocks):
-        var s_w = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
-        var s_g = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_BOOT_BLOCK):
-            var gid = b * GBDT_BOOT_BLOCK + tid
-            var s = seeds[gid]
-            var mag_w = Float32(0.0)
-            var mag_g = Float32(0.0)
-            var i = gid
-            while i < n_rows:
-                var bw: Float32
-                if kind == GBDT_BOOT_BERNOULLI:
-                    var draw = next_uniform_f(s)
-                    s = draw[1]
-                    bw = Float32(1.0) if draw[0] < param else Float32(0.0)
-                elif kind == GBDT_BOOT_POISSON:
-                    var draw = next_poisson_f(s, param)
-                    s = draw[1]
-                    bw = draw[0]
-                else:
-                    raise Error("gbdt host: bootstrap kind " + String(kind) + " is not restated")
-                var w = stats[i] * bw
-                stats[i] = w
-                mag_w += abs(w)
-                var g = stats[n_rows + i] * bw
-                stats[n_rows + i] = g
-                mag_g += abs(g)
-                i += stride
-            seeds[gid] = s
-            s_w[tid] = mag_w
-            s_g[tid] = mag_g
-        mag_part[2 * b] = _halving_fold(s_w)
-        mag_part[2 * b + 1] = _halving_fold(s_g)
-    var mags = _deterministic_sum_lanes(mag_part, 2, blocks)
-    return (mags[0], mags[1])
 
 
 # ===========================================================================
@@ -852,6 +779,7 @@ def gbdt_losses_host_fit(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    start: Float64 = 0.0,
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -904,6 +832,7 @@ def gbdt_losses_host_fit(
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, params.border_count,
         params.border_build_max_samples, params.random_seed, params.nan_mode,
+        params.border_type,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)
@@ -933,7 +862,10 @@ def gbdt_losses_host_fit(
     var max_leaves = 1 << max_depth
     var lr = params.learning_rate
 
-    var cursor = List[Float32](length=n_rows, fill=Float32(0.0))
+    # the starting point `boost_from_average` sets (`start_value`, the
+    # binding's `calc_sample_quantile` constant for MAE / Quantile / MAPE,
+    # lane/catboost-parity); 0 without it
+    var cursor = List[Float32](length=n_rows, fill=Float32(start))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_blocks = mse_blocks

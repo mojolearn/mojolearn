@@ -124,7 +124,7 @@ predictions move with it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 """
-from std.math import floor, isfinite, log2
+from std.math import exp, floor, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -133,9 +133,16 @@ from checks.numerics import (
     identical_exp,
     identical_log,
     identical_mul_add,
+    identical_pow,
     identical_sqrt,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_util.kernel.random_gen import (
+    advance_seed_k,
+    next_normal_f,
+    next_poisson_f,
+    next_uniform_f,
+)
 from gbdt.data.quantization import (
     NAN_TREATMENT_AS_FALSE,
     NAN_TREATMENT_AS_IS,
@@ -151,6 +158,8 @@ from gbdt.grid_creator.binarization import (
     _heap_push,
     _sort_ascending,
     _update_best_split,
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    select_borders,
 )
 from gbdt.options.data_processing_options import (
     NAN_MODE_FORBIDDEN,
@@ -168,6 +177,15 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_HALF_BYTE,
     POLICY_ONE_BYTE,
 )
+
+
+#: `BOOTSTRAP_KERNEL_*` (`bootstrap.mojo:106-108`); -1 is no bootstrap.
+comptime GBDT_BOOT_BAYESIAN = 0
+comptime GBDT_BOOT_BERNOULLI = 1
+comptime GBDT_BOOT_POISSON = 2
+#: `BOOTSTRAP_BLOCK_SIZE`, `BOOTSTRAP_SEED_COUNT` (`bootstrap.mojo:112-115`).
+comptime GBDT_BOOT_BLOCK = 256
+comptime GBDT_BOOT_SEEDS = 65536
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -220,6 +238,9 @@ struct GbdtHostParams(ImplicitlyCopyable, Movable):
     var nan_mode: Int
     var logloss_border: Float32
     var leaf_estimation_iterations: Int
+    #: `feature_border_type` (`binarization.mojo` BORDER_TYPE_*),
+    #: GreedyLogSum (0) unless the fit named another
+    var border_type: Int
 
 
 @fieldwise_init
@@ -585,7 +606,8 @@ def _best_split_phase_b(
 
 
 def _calc_quantization_phase_b(
-    var values: List[Float32], border_count: Int, nan_mode_option: Int
+    var values: List[Float32], border_count: Int, nan_mode_option: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> Tuple[List[Float32], Int]:
     """`calc_quantization` (`gbdt/data/quantization.mojo:136-177`) as the
     device fit's PHASE B computes it: inside `_dp_task` on a
@@ -634,7 +656,13 @@ def _calc_quantization_phase_b(
 
     var borders = List[Float32]()
     if non_nan_border_count > 0:
-        borders = _best_split_phase_b(values^, non_nan_border_count)
+        if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
+            borders = _best_split_phase_b(values^, non_nan_border_count)
+        else:
+            # the six other border types flush BY BITS themselves, so the
+            # device fit's phase B and this restatement call the SAME
+            # function on the same column (`select_borders`)
+            borders = select_borders(values^, non_nan_border_count, border_type)
 
     if nan_mode == NAN_MODE_MIN:
         var with_nan = List[Float32]()
@@ -656,6 +684,7 @@ def gbdt_host_grid(
     border_build_max_samples: Int,
     random_seed: UInt64,
     nan_mode: Int,
+    border_type: Int = BORDER_TYPE_GREEDY_LOG_SUM,
 ) raises -> GbdtHostGrid:
     """`_quantize_training_columns` for an all-float, one-permutation fit
     (`gbdt/train.mojo:1966-2241`). The full-data path hands
@@ -700,7 +729,7 @@ def gbdt_host_grid(
                         break
                 if not sample_has:
                     col[0] = Float32(0.0) / Float32(0.0)
-        var q = _calc_quantization_phase_b(col^, border_count, nan_mode)
+        var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)
         var nb = len(q[0])
         if nb > border_count + 1:
             raise Error(
@@ -1081,11 +1110,17 @@ def _cosine_gain(
     n_live: Int,
     bin_feature_id: Int,
     lambda_l2: Float32,
+    score_std_dev: Float32 = Float32(0.0),
+    level_seed: UInt64 = 0,
+    feature_id: Int = 0,
 ) -> Float32:
     """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
     (`compute_scores.mojo:140-224`): the leaves in dense order, the clamped
-    weights, the two `AddLeaf`s per leaf, the sqrt normalization, no noise
-    (`random_strength` 0), feature weight 1.0."""
+    weights, the two `AddLeaf`s per leaf, the sqrt normalization, the score
+    noise when `score_std_dev` is not zero (one normal draw per FEATURE off
+    `advance_seed_k(level_seed + feature, 4)`, subtracted from the score and
+    from the zero score-before by the pinned fma, `:204-219`; lane/catboost-
+    parity), feature weight 1.0."""
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     for i in range(n_live):
@@ -1103,7 +1138,156 @@ def _cosine_gain(
         final_score = ftz(score / identical_sqrt(denum_sqr))
     else:
         final_score = -GBDT_FLOAT32_MAX
+    if score_std_dev != Float32(0.0):
+        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
+        var draw = next_normal_f(seed)
+        var neg_draw = -draw[0]
+        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
     return ftz(ftz(final_score - score_before) * Float32(1.0))
+
+
+# ===========================================================================
+# THE BOOTSTRAP (`gbdt/gpu_util/kernel/bootstrap.mojo`)
+# ===========================================================================
+
+
+def gbdt_bootstrap_seeds(base_seed: UInt64) -> List[UInt64]:
+    """`create_bootstrap_seeds` (`bootstrap.mojo:249-275`): splitmix64."""
+    var seeds = List[UInt64](capacity=GBDT_BOOT_SEEDS)
+    var x = base_seed
+    for _ in range(GBDT_BOOT_SEEDS):
+        x += UInt64(0x9E3779B97F4A7C15)
+        var z = x
+        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+        z = z ^ (z >> 31)
+        seeds.append(z)
+    return seeds^
+
+
+def _bootstrap_pass(
+    kind: Int,
+    mut seeds: List[UInt64],
+    mut stats: List[Float32],
+    n_rows: Int,
+    param: Float32,
+) raises -> Tuple[Float32, Float32]:
+    """`launch_bootstrap` + `bootstrap_kernel` (`bootstrap.mojo:118-246`,
+    `:292-348`) at two stat planes, then `deterministic_sum_lanes_kernel[2]`
+    over the block magnitudes. Returns the two folded magnitudes."""
+    var by_rows = (n_rows + GBDT_BOOT_BLOCK - 1) // GBDT_BOOT_BLOCK
+    var blocks = GBDT_BOOT_SEEDS // GBDT_BOOT_BLOCK
+    if by_rows < blocks:
+        blocks = by_rows
+    if blocks < 1:
+        blocks = 1
+    var stride = blocks * GBDT_BOOT_BLOCK
+    var mag_part = List[Float32](length=2 * blocks, fill=Float32(0.0))
+    for b in range(blocks):
+        var s_w = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
+        var s_g = List[Float32](length=GBDT_BOOT_BLOCK, fill=Float32(0.0))
+        for tid in range(GBDT_BOOT_BLOCK):
+            var gid = b * GBDT_BOOT_BLOCK + tid
+            var s = seeds[gid]
+            var mag_w = Float32(0.0)
+            var mag_g = Float32(0.0)
+            var i = gid
+            while i < n_rows:
+                var bw: Float32
+                if kind == GBDT_BOOT_BAYESIAN:
+                    # `bootstrap_kernel[BAYESIAN]` (lane/catboost-parity):
+                    # `-log(u + 1e-20)`, raised to the temperature unless 1
+                    var draw = next_uniform_f(s)
+                    s = draw[1]
+                    var tmp = -identical_log(draw[0] + Float32(1e-20))
+                    bw = tmp
+                    if param != Float32(1.0):
+                        bw = identical_pow(tmp, param)
+                elif kind == GBDT_BOOT_BERNOULLI:
+                    var draw = next_uniform_f(s)
+                    s = draw[1]
+                    bw = Float32(1.0) if draw[0] < param else Float32(0.0)
+                elif kind == GBDT_BOOT_POISSON:
+                    var draw = next_poisson_f(s, param)
+                    s = draw[1]
+                    bw = draw[0]
+                else:
+                    raise Error("gbdt host: bootstrap kind " + String(kind) + " is not restated")
+                var w = stats[i] * bw
+                stats[i] = w
+                mag_w += abs(w)
+                var g = stats[n_rows + i] * bw
+                stats[n_rows + i] = g
+                mag_g += abs(g)
+                i += stride
+            seeds[gid] = s
+            s_w[tid] = mag_w
+            s_g[tid] = mag_g
+        mag_part[2 * b] = _halving_fold(s_w)
+        mag_part[2 * b + 1] = _halving_fold(s_g)
+    var mags = _deterministic_sum_lanes(mag_part, 2, blocks)
+    return (mags[0], mags[1])
+
+
+# ===========================================================================
+# THE SCORE NOISE MAGNITUDE (`compute_target_std_dev`), shared by the
+# symmetric, Depthwise and Lossguide host arms (moved here from
+# gbdt_oracle_depthwise.mojo, lane/catboost-parity)
+# ===========================================================================
+
+
+def _target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
+    """`compute_target_std_dev` (`greedy_search_helper.mojo:224-280`) over
+    `compute_target_variance_kernel` (`compute_scores.mojo:274-318`) at stat
+    count 2: `min(4 * 32, ceil(n / 512))` blocks of 512 threads striding the
+    rows, the flushed per-thread accumulations of rows with weight above
+    1e-15, the per-block halving folds stored flushed, the three-lane fold,
+    then `sqrt(sum2 / (weight + 1e-100))` in double."""
+    comptime B = 512
+    var n_blocks = (n_rows + B - 1) // B
+    if 4 * 32 < n_blocks:
+        n_blocks = 4 * 32
+    if n_blocks < 1:
+        n_blocks = 1
+    var stride = n_blocks * B
+    var partials = List[Float32](length=3 * n_blocks, fill=Float32(0.0))
+    for b in range(n_blocks):
+        var s0 = List[Float32](length=B, fill=Float32(0.0))
+        var s1 = List[Float32](length=B, fill=Float32(0.0))
+        var s2 = List[Float32](length=B, fill=Float32(0.0))
+        for tid in range(B):
+            var weighted_sum = Float32(0.0)
+            var weighted_sum2 = Float32(0.0)
+            var total_weight = Float32(0.0)
+            var i = B * b + tid
+            while i < n_rows:
+                var w = stats[i]
+                if w > Float32(1e-15):
+                    var wt = stats[n_rows + i]
+                    weighted_sum = ftz(weighted_sum + wt)
+                    weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
+                    total_weight = ftz(total_weight + w)
+                i += stride
+            s0[tid] = weighted_sum
+            s1[tid] = weighted_sum2
+            s2[tid] = total_weight
+        partials[3 * b] = ftz(_halving_fold_512(s0))
+        partials[3 * b + 1] = ftz(_halving_fold_512(s1))
+        partials[3 * b + 2] = ftz(_halving_fold_512(s2))
+    var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
+    var sum2 = Float64(l2[1])
+    var weight = Float64(l2[2])
+    return sqrt(sum2 / (weight + 1e-100))
+
+
+def _halving_fold_512(mut slab: List[Float32]) -> Float32:
+    var step = len(slab) // 2
+    while step > 0:
+        for t in range(step):
+            slab[t] = slab[t] + slab[t + step]
+        step //= 2
+    return slab[0]
 
 
 # ===========================================================================
@@ -1306,9 +1490,23 @@ def gbdt_host_fit(
     n_features: Int,
     params: GbdtHostParams,
     one_hot_in: List[Bool] = List[Bool](),
+    bootstrap_kind: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
+    random_strength: Float32 = Float32(0.0),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
+
+    `bootstrap_kind` (`GBDT_BOOT_*`, -1 none) and `random_strength` are the
+    stochastic arm CatBoost's GPU defaults select (Bayesian at temperature
+    1, strength 1; lane/catboost-parity, the gbdt-catboost-defaults lane):
+    the per-tree `noise_rand` draw, `_bootstrap_pass` on both planes (whose
+    magnitudes then set the fixed-point scale), the tree's
+    `compute_target_std_dev` over the bootstrapped planes times the
+    strength and `calc_score_model_length_mult`, one `level_rand` draw per
+    level and the per-feature noise in `_cosine_gain`. The leaves are
+    estimated on the learn target, not the bootstrapped planes, as the
+    device's `_estimate_and_apply` does.
 
     `one_hot_in` (empty for none) names the ONE-HOT columns
     (gbdt/host/gbdt_oracle_onehot.mojo resolves them from the flags): their
@@ -1328,6 +1526,7 @@ def gbdt_host_fit(
     var grid = gbdt_host_grid(
         x_colmajor, n_rows, n_features, params.border_count,
         params.border_build_max_samples, params.random_seed, params.nan_mode,
+        params.border_type,
     )
     var one_hot = List[Bool](length=n_features, fill=False)
     if len(one_hot_in) == n_features:
@@ -1397,12 +1596,46 @@ def gbdt_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
 
+    # the stochastic arm (`doc_parallel_boosting.mojo:1470-1523`): the
+    # bootstrap seeds and the per-tree noise stream, both off `random_seed`
+    var bootstrap_on = bootstrap_kind >= 0
+    var boot_seeds = List[UInt64]()
+    if bootstrap_on:
+        boot_seeds = gbdt_bootstrap_seeds(params.random_seed)
+    var noise_rand = TRandom(params.random_seed)
+
     for iteration in range(params.n_estimators):
         # ---- the gradients, the learn loss and the magnitudes ----
         _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
+        # `calc_score_model_length_mult` (`random_score_helper.mojo:
+        # 219-243`, host libm as theirs) and the per-tree seed, drawn every
+        # tree whether or not the noise is on
+        var noise_mult = Float64(0.0)
+        if random_strength != Float32(0.0):
+            var model_left = exp(
+                log(Float64(n_rows))
+                - Float64(iteration) * Float64(params.learning_rate)
+            )
+            noise_mult = model_left / (1.0 + model_left)
+        var tree_seed = noise_rand.next_uniform_l()
+        if bootstrap_on:
+            var bm = _bootstrap_pass(
+                bootstrap_kind, boot_seeds, stats, n_rows, bootstrap_param
+            )
+            mags[0] = bm[0]
+            mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        # `run_tree_layout`'s ScoreStdDev (`greedy_search_helper.mojo:
+        # 5038-5051`) over the bootstrapped planes, and its level stream
+        var score_std_dev = Float32(0.0)
+        if random_strength != Float32(0.0):
+            score_std_dev = Float32(
+                Float64(Float32(noise_mult * Float64(random_strength)))
+                * _target_std_dev(stats, n_rows)
+            )
+        var level_rand = TRandom(tree_seed)
 
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`; edit both) ----
@@ -1422,6 +1655,8 @@ def gbdt_host_fit(
         var winners_bf = List[UInt32]()
         var n_live = 1
         for depth in range(max_depth):
+            # `Random.NextUniformL()`, one draw per level before the launch
+            var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
             var compute = List[Int]()
@@ -1495,7 +1730,8 @@ def gbdt_host_fit(
             var best_bin = GBDT_SENTINEL
             for bf in range(hist_cells):
                 var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg
+                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
+                    score_std_dev, level_seed, bf_feature[bf],
                 )
                 if gain > best_gain:
                     best_gain = gain

@@ -349,6 +349,17 @@ struct GbdtFitParams(Copyable, Movable):
     var min_child_hessian: Float64
     #: Numeric per-tree feature fraction, independent portable sampling stream.
     var feature_fraction: Float64
+    #: their `feature_border_type` spelling (`data_processing_options.cpp:
+    #: 15`, default GreedyLogSum); empty is the default. The float columns'
+    #: border search, `gbdt/grid_creator/binarization.mojo`.
+    var feature_border_type: String
+    #: their `boosting_type` (`boosting_options.cpp:16`), "Plain" or
+    #: "Ordered", RESOLVED by the caller (lane/catboost-parity)
+    var boosting_type: String
+    #: `fold_len_multiplier` (`boosting_options.cpp:11`, default 2.0)
+    var fold_len_multiplier: Float64
+    #: `fold_permutation_block` (`boosting_options.cpp:12`), 0 unset
+    var fold_permutation_block: Int
 
 
 def default_gbdt_fit_params() -> GbdtFitParams:
@@ -385,6 +396,11 @@ def default_gbdt_fit_params() -> GbdtFitParams:
         List[Float32](),
         # grow_policy SymmetricTree, max_leaves unset, min_data_in_leaf 1
         String("SymmetricTree"), -1, 1, Float64(-1), Float64(-1), Float64(1),
+        # feature_border_type: their default, GreedyLogSum
+        String("GreedyLogSum"),
+        # boosting_type Plain, fold_len_multiplier 2, fold_permutation_block
+        # unset
+        String("Plain"), Float64(2.0), 0,
     )
 
 
@@ -582,6 +598,10 @@ def gbdt_fit(
         min_split_gain=params.min_split_gain,
         min_child_hessian=params.min_child_hessian,
         feature_fraction=params.feature_fraction,
+        feature_border_type=params.feature_border_type,
+        boosting_type=params.boosting_type,
+        fold_len_multiplier=params.fold_len_multiplier,
+        fold_permutation_block=params.fold_permutation_block,
         x_borrow=x_borrow,
         group_sizes=group_sizes,
         pair_winners=pair_winners,

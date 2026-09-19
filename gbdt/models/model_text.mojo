@@ -405,8 +405,10 @@ def model_text(tm: TrainedModel) raises -> String:
     # the model's bias (their `SetBias`, set under `boost_from_average`).
     # Written ONLY when non-zero, the `ctr_columns` rule: a zero-bias
     # model's file stays byte-identical to what this format wrote before
-    # the field existed.
-    if tm.model.bias != 0.0:
+    # the field existed. "Non-zero" is BY BITS (lane/catboost-parity,
+    # 2026-09-19): their MAPE constant can be -0.0 (a median landing on a
+    # -0.0 target), a bias CatBoost reports and `!= 0.0` would drop.
+    if bitcast[DType.uint64](tm.model.bias) != UInt64(0):
         out += String("bias ") + f64_token(tm.model.bias) + "\n"
     # CTR COLUMN COUNT. Written ONLY when non-zero, so a float-only model's
     # file is byte-identical to what this format wrote before the field

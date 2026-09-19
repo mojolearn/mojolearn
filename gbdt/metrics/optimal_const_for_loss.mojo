@@ -11,12 +11,13 @@ WHAT IS IMPLEMENTED AND WHAT IS NOT, by their switch
 
     RMSE                 IMPLEMENTED  (CalculateWeightedTargetAverage)
     Logloss/CrossEntropy IMPLEMENTED  (Logit of the weighted average)
-    Quantile/MAE         NOT YET (CalculateWeightedTargetQuantile needs
-                                  CalcSampleQuantile, a weighted-quantile
-                                  walk with their delta adjust -- refused
-                                  by name below, never approximated)
-    MAPE / RMSPE / LogCosh / multi-dim
-                         NOT YET (same rule)
+    Quantile/MAE         IMPLEMENTED  (CalculateWeightedTargetQuantile over
+                                  CalcSampleQuantile with their delta adjust,
+                                  `gbdt/metrics/sample_quantile.mojo`,
+                                  lane/catboost-parity)
+    MAPE                 IMPLEMENTED  (CalculateOptimalConstApproxForMAPE)
+    RMSPE / LogCosh / multi-dim
+                         NOT YET (refused by name below, never approximated)
 
 THE FLOAT32 TRUNCATION IS THEIRS AND IT IS LOAD-BEARING for bit parity:
 `CalculateWeightedTargetAverage` accumulates in double and RETURNS FLOAT
@@ -48,8 +49,19 @@ from checks.numerics import portable_log64
 from gbdt.targets.kernel.pointwise_targets import (
     OBJECTIVE_CROSSENTROPY,
     OBJECTIVE_LOGLOSS,
+    OBJECTIVE_MAE,
+    OBJECTIVE_MAPE,
+    OBJECTIVE_QUANTILE,
     OBJECTIVE_RMSE,
 )
+from gbdt.metrics.sample_quantile import (
+    calculate_optimal_const_approx_for_mape,
+    calculate_weighted_target_quantile,
+)
+
+#: their Quantile / MAE `delta` loss parameter's default
+#: (`optimal_const_for_loss.h:198`), which this surface does not expose
+comptime QUANTILE_CONST_DELTA = 1e-6
 
 
 def calculate_weighted_target_average(
@@ -95,6 +107,9 @@ def calc_one_dimensional_optimum_const_approx(
     target: List[Float32],
     weights: List[Float32],
     has_weights: Bool,
+    # the Quantile level from the loss params map, default 0.5
+    # (`optimal_const_for_loss.h:196-197`); MAE's is 0.5
+    alpha: Float64 = 0.5,
 ) raises -> Float64:
     """`NCB::CalcOneDimensionalOptimumConstApprox`'s implemented arms.
 
@@ -130,10 +145,22 @@ def calc_one_dimensional_optimum_const_approx(
         # DEVIATION 2262 (was the host libm through `external_call`) --
         # see the module docstring for the ULP consequence.
         return -portable_log64(1.0 / best_probability - 1.0)
+    if objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
+        # their `inline float` return, widened back by `TMaybe<double>`
+        return Float64(
+            calculate_weighted_target_quantile(
+                target, weights, has_weights,
+                0.5 if objective == OBJECTIVE_MAE else alpha,
+                QUANTILE_CONST_DELTA,
+            )
+        )
+    if objective == OBJECTIVE_MAPE:
+        return Float64(
+            calculate_optimal_const_approx_for_mape(target, weights, has_weights)
+        )
     raise Error(
-        "boost_from_average is not implemented for this loss yet: only RMSE,"
-        " Logloss and CrossEntropy have CalcOptimumConstApprox arms here."
-        " Their Quantile/MAE arm needs CalcSampleQuantile (a weighted"
-        " quantile with a delta adjust) and is refused by name rather than"
-        " approximated."
+        "boost_from_average is not implemented for this loss yet: RMSE,"
+        " Logloss, CrossEntropy, Quantile, MAE and MAPE have"
+        " CalcOptimumConstApprox arms here; the rest are refused by name"
+        " rather than approximated."
     )

@@ -59,6 +59,13 @@ import traceback
 
 import numpy as np
 
+#: lane/catboost-parity (2026-09-19): GradientBoosting's SymmetricTree
+#: defaults became CatBoost's GPU ones. These probes were recorded under the
+#: earlier defaults and pass them explicitly (the Logloss probe also its loss's
+#: own ten Newton steps, which the small-iteration rule would otherwise
+#: replace with one), so no recorded answer moves with a default.
+_GBDT_PINNED = dict(learning_rate=0.03, random_strength=0.0, bootstrap_type="No")
+
 
 def _h(*arrays):
     """One hash over several outputs, order-significant, raw bytes."""
@@ -131,7 +138,8 @@ def _et_clf(ml):
 def _gbdt_dw(ml):
     X, y = _clf()
     m = ml.GradientBoosting(
-        n_estimators=20, max_depth=6, grow_policy="Depthwise", loss="Logloss"
+        n_estimators=20, max_depth=6, grow_policy="Depthwise", loss="Logloss",
+        **_GBDT_PINNED
     )
     m.fit(X, y)
     return _h(m.predict(X))
@@ -141,7 +149,8 @@ def _gbdt_dw(ml):
 def _gbdt_lg(ml):
     X, y = _clf()
     m = ml.GradientBoosting(
-        n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss"
+        n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
+        **_GBDT_PINNED
     )
     m.fit(X, y)
     return _h(m.predict(X))
@@ -150,7 +159,8 @@ def _gbdt_lg(ml):
 @lane("gbdt-symmetric")
 def _gbdt_sym(ml):
     X, y = _clf()
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss")
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss",
+                            leaf_estimation_iterations=10, **_GBDT_PINNED)
     m.fit(X, y)
     return _h(m.predict(X))
 
@@ -252,7 +262,8 @@ def _et_reg(ml):
 @lane("gbdt-rmse")
 def _gbdt_rmse(ml):
     X, y = _reg()
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE")
+    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE",
+                            **_GBDT_PINNED)
     m.fit(X, y)
     return _h(m.predict(X))
 

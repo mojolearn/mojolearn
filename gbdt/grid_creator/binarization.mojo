@@ -45,7 +45,7 @@ The border between two bins is the MIDPOINT of the values either side
 from std.math import log
 from std.sys.compile import is_defined
 
-from checks.numerics import portable_log64
+from checks.numerics import ftz, portable_log64
 
 comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
 """DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear
@@ -470,7 +470,30 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
 def best_split_min_entropy(
     var values: List[Float32], max_borders_count: Int
 ) raises -> List[Float32]:
-    """Their `MinEntropy` border selection, which is `TExactBinarizer`.
+    """Their `MinEntropy` border selection for the CTR grids; see
+    `_exact_best_split`, which carries the whole account. This entry is the
+    CTR path's, unchanged in behavior since before the numeric border types
+    arrived (lane/catboost-parity): no subnormal flush."""
+    return _exact_best_split[PENALTY_MIN_ENTROPY](
+        values^, max_borders_count, False
+    )
+
+
+def _exact_best_split[
+    penalty: Int
+](
+    var values: List[Float32], max_borders_count: Int, flush: Bool
+) raises -> List[Float32]:
+    """Their `TExactBinarizer<penalty>` (`binarization.cpp:1151-1160`), the
+    `MinEntropy` and `MaxLogSum` border selections.
+
+    `flush` models a denormals-as-zero reader BY BITS (`ftz`) on the values
+    as they enter and on the threshold midpoints, which is what the numeric
+    border build's phase B worker does to a column (see
+    `gbdt/host/gbdt_oracle.mojo::_calc_quantization_phase_b`); the CTR
+    grids pass False, as they always have. The penalty is a comptime
+    parameter so the MinEntropy instantiation is the code this function
+    was before it took one.
 
     WHY THIS EXISTS SEPARATELY FROM `best_split`. `best_split` is
     `GreedyLogSum`, CatBoost's default for NUMERIC features. It is not the
@@ -532,7 +555,7 @@ def best_split_min_entropy(
     var clean = List[Float32]()
     for i in range(len(values)):
         if values[i] == values[i]:
-            clean.append(values[i])
+            clean.append(ftz(values[i]) if flush else values[i])
     if len(clean) == 0:
         return List[Float32]()
 
@@ -563,7 +586,7 @@ def best_split_min_entropy(
             thresholds[i] = i
         for i in range(wsize - 1, bins - 1):
             thresholds[i] = wsize - 1
-        return _thresholds_to_borders(thresholds, uniques)
+        return _thresholds_to_borders(thresholds, uniques, flush)
 
     var sweights = List[Float64]()
     var running = 0.0
@@ -580,7 +603,7 @@ def best_split_min_entropy(
 
     var current_error = List[Float64]()
     for i in range(dsize):
-        current_error.append(_penalty_min_entropy(sweights[i]))
+        current_error.append(_exact_penalty[penalty](sweights[i]))
     var prev_error: List[Float64]
 
     var bs1 = List[Int]()
@@ -599,12 +622,12 @@ def best_split_min_entropy(
         # their "First forward loop" (`:451`)
         var fi = 0
         for j in range(dsize):
-            var best_error = prev_error[fi] + _penalty_min_entropy(
+            var best_error = prev_error[fi] + _exact_penalty[penalty](
                 sweights[l + j + 1] - sweights[l + fi]
             )
             fi += 1
             while fi <= j:
-                var new_error = prev_error[fi] + _penalty_min_entropy(
+                var new_error = prev_error[fi] + _exact_penalty[penalty](
                     sweights[l + j + 1] - sweights[l + fi]
                 )
                 if new_error > best_error + EPS:
@@ -630,7 +653,7 @@ def best_split_min_entropy(
             while vi + 1 < maxi:
                 var new_error = prev_error[
                     dsize - vi - 1
-                ] + _penalty_min_entropy(
+                ] + _exact_penalty[penalty](
                     sweights[l + dsize - j] - sweights[l + dsize - vi - 1]
                 )
                 if new_error + EPS < best_error:
@@ -644,7 +667,7 @@ def best_split_min_entropy(
                 while vi + 1 < maxi:
                     var new_error = prev_error[
                         dsize - vi - 1
-                    ] + _penalty_min_entropy(
+                    ] + _exact_penalty[penalty](
                         sweights[l + dsize - j] - sweights[l + dsize - vi - 1]
                     )
                     if new_error > best_error + EPS:
@@ -678,7 +701,7 @@ def best_split_min_entropy(
                     while ri + 1 < maxi:
                         var new_error = prev_error[
                             ri
-                        ] + _penalty_min_entropy(
+                        ] + _exact_penalty[penalty](
                             sweights[l + j + 1] - sweights[l + ri]
                         )
                         if new_error + EPS < best_error:
@@ -692,7 +715,7 @@ def best_split_min_entropy(
                         while ri + 1 < maxi:
                             var new_error = prev_error[
                                 ri
-                            ] + _penalty_min_entropy(
+                            ] + _exact_penalty[penalty](
                                 sweights[l + j + 1] - sweights[l + ri]
                             )
                             if new_error > best_error + EPS:
@@ -721,7 +744,7 @@ def best_split_min_entropy(
                     while qi + 1 < maxi:
                         var new_error = prev_error[
                             dsize - qi - 1
-                        ] + _penalty_min_entropy(
+                        ] + _exact_penalty[penalty](
                             sweights[l + dsize - jj]
                             - sweights[l + dsize - qi - 1]
                         )
@@ -736,7 +759,7 @@ def best_split_min_entropy(
                         while qi + 1 < maxi:
                             var new_error = prev_error[
                                 dsize - qi - 1
-                            ] + _penalty_min_entropy(
+                            ] + _exact_penalty[penalty](
                                 sweights[l + dsize - jj]
                                 - sweights[l + dsize - qi - 1]
                             )
@@ -758,11 +781,11 @@ def best_split_min_entropy(
     var l_last = bins - 2
     var j_last = dsize - 1
     var best_index = 0
-    var best_error = prev_error[0] + _penalty_min_entropy(
+    var best_error = prev_error[0] + _exact_penalty[penalty](
         sweights[l_last + j_last + 1] - sweights[l_last]
     )
     for i in range(1, j_last + 1):
-        var new_error = prev_error[i] + _penalty_min_entropy(
+        var new_error = prev_error[i] + _exact_penalty[penalty](
             sweights[l_last + j_last + 1] - sweights[l_last + i]
         )
         # `<`: the FIRST index wins a tie here, opposite to the scans above
@@ -781,11 +804,11 @@ def best_split_min_entropy(
     for i in range(len(thresholds)):
         thresholds[i] += i
 
-    return _thresholds_to_borders(thresholds, uniques)
+    return _thresholds_to_borders(thresholds, uniques, flush)
 
 
 def _thresholds_to_borders(
-    thresholds: List[Int], uniques: List[Float32]
+    thresholds: List[Int], uniques: List[Float32], flush: Bool = False
 ) raises -> List[Float32]:
     """Their threshold-to-border conversion (`binarization.cpp:679-694`).
 
@@ -800,6 +823,8 @@ def _thresholds_to_borders(
         if t + 1 == len(uniques):
             continue
         var b = (uniques[t] + uniques[t + 1]) / 2
+        if flush:
+            b = ftz(ftz(uniques[t] + uniques[t + 1]) / 2)
         var seen = False
         for m in range(len(out)):
             if out[m] == b:
@@ -808,4 +833,350 @@ def _thresholds_to_borders(
         if not seen:
             out.append(b)
     _sort_ascending(out)
+    return out^
+
+
+# ===========================================================================
+# THE SEVEN NUMERIC BORDER TYPES (`feature_border_type`, lane/catboost-parity
+# 2026-09-19). Their `MakeBinarizer` (`binarization.cpp:114-134`):
+#
+#     UniformAndQuantiles -> TMedianPlusUniformBinarizer      (:1224-1260)
+#     GreedyLogSum        -> TGreedyBinarizer<MaxSumLog>      (:1677-1715)
+#     GreedyMinEntropy    -> TGreedyBinarizer<MinEntropy>     (:1677-1715)
+#     MaxLogSum           -> TExactBinarizer<MaxSumLog>       (:1151-1160)
+#     MinEntropy          -> TExactBinarizer<MinEntropy>      (:1151-1160)
+#     Median              -> TMedianBinarizer                 (:1201-1222)
+#     Uniform             -> TUniformBinarizer                (:1262-1310)
+#
+# The dense float path reaches each with no default value and no initial
+# borders, so those two arms of theirs are absent here, and every result
+# goes through `SetQuantization` (`:888-951`): -0.0 becomes +0.0, the set is
+# sorted. GreedyLogSum is `best_split` above, UNCHANGED: it is the default,
+# and its bits are the ones every recorded lane holds.
+#
+# THE FLUSH. The six other types run with `flush=True` on BOTH the device
+# fit's border build and the host oracle, applying `ftz` BY BITS to the
+# values as they enter and to every float32 intermediate a border is made
+# from. The device fit's phase B worker reads subnormals as signed zeros
+# (the measurement in `gbdt/host/gbdt_oracle.mojo::_calc_quantization_phase_b`)
+# and `best_split` relies on that thread mode; these types do not rely on
+# it, so the border is the same whatever a runner's MXCSR or FPCR says.
+# Against CatBoost this is the same deviation GreedyLogSum already carries:
+# a column of subnormals is binned as zeros.
+# ===========================================================================
+
+comptime BORDER_TYPES_SABOTAGE = is_defined["MOJOLEARN_BORDER_TYPES_SABOTAGE"]()
+"""THE NEGATIVE CONTROL of the six non-default types:
+`-D MOJOLEARN_BORDER_TYPES_SABOTAGE=1` drops the MIDDLE border
+`select_borders` returns (the one a split most often takes; the largest,
+tried first, moved only the saved model's border table on the identity
+lane), on every type it serves and never on GreedyLogSum
+(`best_split` is not touched). `checks/border_types_check.mojo` must then
+fail every non-default case that has a border and pass every GreedyLogSum
+case, and the gbdt-border-types identity lane must move."""
+
+comptime BORDER_TYPE_GREEDY_LOG_SUM = 0
+comptime BORDER_TYPE_MEDIAN = 1
+comptime BORDER_TYPE_UNIFORM = 2
+comptime BORDER_TYPE_UNIFORM_AND_QUANTILES = 3
+comptime BORDER_TYPE_MAX_LOG_SUM = 4
+comptime BORDER_TYPE_MIN_ENTROPY = 5
+comptime BORDER_TYPE_GREEDY_MIN_ENTROPY = 6
+
+comptime PENALTY_MIN_ENTROPY = 0
+comptime PENALTY_MAX_SUM_LOG = 1
+
+
+def border_type_from_name(name: String) raises -> Int:
+    """Their `EBorderSelectionType` spellings (`enums.h`). Empty is the
+    default, GreedyLogSum (`data_processing_options.cpp:15`)."""
+    if name == "" or name == "GreedyLogSum":
+        return BORDER_TYPE_GREEDY_LOG_SUM
+    if name == "Median":
+        return BORDER_TYPE_MEDIAN
+    if name == "Uniform":
+        return BORDER_TYPE_UNIFORM
+    if name == "UniformAndQuantiles":
+        return BORDER_TYPE_UNIFORM_AND_QUANTILES
+    if name == "MaxLogSum":
+        return BORDER_TYPE_MAX_LOG_SUM
+    if name == "MinEntropy":
+        return BORDER_TYPE_MIN_ENTROPY
+    if name == "GreedyMinEntropy":
+        return BORDER_TYPE_GREEDY_MIN_ENTROPY
+    raise Error(
+        "unknown feature_border_type '" + name + "': GreedyLogSum, Median,"
+        " Uniform, UniformAndQuantiles, MaxLogSum, MinEntropy, GreedyMinEntropy"
+    )
+
+
+def border_type_name(code: Int) -> String:
+    if code == BORDER_TYPE_MEDIAN:
+        return "Median"
+    if code == BORDER_TYPE_UNIFORM:
+        return "Uniform"
+    if code == BORDER_TYPE_UNIFORM_AND_QUANTILES:
+        return "UniformAndQuantiles"
+    if code == BORDER_TYPE_MAX_LOG_SUM:
+        return "MaxLogSum"
+    if code == BORDER_TYPE_MIN_ENTROPY:
+        return "MinEntropy"
+    if code == BORDER_TYPE_GREEDY_MIN_ENTROPY:
+        return "GreedyMinEntropy"
+    return "GreedyLogSum"
+
+
+@no_inline
+def _penalty_max_sum_log_portable(weight: Float64) -> Float64:
+    """`Penalty<EPenaltyType::MaxSumLog>` (`binarization.cpp:179`) through
+    `portable_log64`, for the two NUMERIC types that reach it outside
+    `best_split` (MaxLogSum's dynamic program). The dynamic program
+    compares costs reached by DIFFERENT summation paths, which is the case
+    `_penalty_min_entropy`'s docstring measured a host libm moving; the
+    portable log gives every host the same bits (DEVIATION 2263's reason,
+    applied to the second penalty)."""
+    return -portable_log64(weight + 1e-8)
+
+
+@always_inline
+def _exact_penalty[penalty: Int](weight: Float64) -> Float64:
+    comptime if penalty == PENALTY_MIN_ENTROPY:
+        return _penalty_min_entropy(weight)
+    else:
+        return _penalty_max_sum_log_portable(weight)
+
+
+# ---- TGreedyBinarizer<MinEntropy> ------------------------------------------
+
+
+def _greedy_split_score[
+    penalty: Int
+](bin_start: Int, bin_end: Int, split_pos: Int) -> Float64:
+    """`TFeatureBin<penalty>::CalcSplitScore` (`binarization.cpp:1398-1406`)
+    over integer bin sizes. Their edge value is `-infinity`; this is
+    `-1.0e308`, `_calc_split_score`'s stand-in, which orders the same
+    against every finite score."""
+    if split_pos == bin_start or split_pos == bin_end:
+        return -1.0e308
+    var left = -_exact_penalty[penalty](Float64(split_pos - bin_start))
+    var right = -_exact_penalty[penalty](Float64(bin_end - split_pos))
+    var curr = -_exact_penalty[penalty](Float64(bin_end - bin_start))
+    return left + right - curr
+
+
+def _greedy_update[penalty: Int](mut b: TFeatureBin, values: List[Float32]):
+    """`UpdateBestSplitProperties` (`:1408-1423`): the lower and upper bound
+    of the midpoint value, binary searches as theirs, the left candidate on
+    a tie (`scoreLeft >= scoreRight`)."""
+    var mid = b.bin_start + (b.bin_end - b.bin_start) // 2
+    var mid_value = values[mid]
+    var lb = b.bin_start
+    var hi = mid
+    while lb < hi:
+        var m = lb + (hi - lb) // 2
+        if values[m] < mid_value:
+            lb = m + 1
+        else:
+            hi = m
+    var ub = mid
+    var hi2 = b.bin_end
+    while ub < hi2:
+        var m2 = ub + (hi2 - ub) // 2
+        if values[m2] <= mid_value:
+            ub = m2 + 1
+        else:
+            hi2 = m2
+    var score_left = _greedy_split_score[penalty](b.bin_start, b.bin_end, lb)
+    var score_right = _greedy_split_score[penalty](b.bin_start, b.bin_end, ub)
+    if score_left >= score_right:
+        b.best_split = lb
+        b.best_score = score_left
+    else:
+        b.best_split = ub
+        b.best_score = score_right
+
+
+def _greedy_best_split[
+    penalty: Int
+](values: List[Float32], max_borders_count: Int) raises -> List[Float32]:
+    """`TGreedyBinarizer<penalty>::BestSplit` with no default value
+    (`:1698-1714`) over already-flushed values: sort, `GreedySplit`
+    (`:1500-1520`, the libc++ heap `best_split` reproduces), then each bin
+    but the first contributes its LEFT border, `0.5f * below + 0.5f *
+    above` (`IFeatureBin::LeftBorder`, `:1360-1373`)."""
+    var clean = values.copy()
+    _sort_ascending(clean)
+    var root = TFeatureBin()
+    root.bin_start = 0
+    root.bin_end = len(clean)
+    root.best_split = 0
+    root.best_score = 0.0
+    _greedy_update[penalty](root, clean)
+    var bins = List[TFeatureBin]()
+    _heap_push(bins, root)
+    while len(bins) <= max_borders_count and bins[0].can_split():
+        var top = bins[0].copy()
+        _heap_pop(bins)
+        var left = TFeatureBin()
+        left.bin_start = top.bin_start
+        left.bin_end = top.best_split
+        _greedy_update[penalty](left, clean)
+        top.bin_start = top.best_split
+        _greedy_update[penalty](top, clean)
+        _heap_push(bins, left)
+        _heap_push(bins, top)
+    var out = List[Float32]()
+    for i in range(len(bins)):
+        if bins[i].is_first():
+            continue
+        var s = bins[i].bin_start
+        var half_below = ftz(Float32(0.5) * clean[s - 1])
+        var half_above = ftz(Float32(0.5) * clean[s])
+        out.append(ftz(half_below + half_above))
+    return out^
+
+
+# ---- TMedianBinarizer, TUniformBinarizer, TMedianPlusUniformBinarizer -------
+
+
+def _lower_bound(sorted: List[Float32], value: Float32) -> Int:
+    """`LowerBound`: the first index holding a value `>= value`."""
+    var lo = 0
+    var hi = len(sorted)
+    while lo < hi:
+        var m = lo + (hi - lo) // 2
+        if sorted[m] < value:
+            lo = m + 1
+        else:
+            hi = m
+    return lo
+
+
+def _regular_border(border: Float32, sorted: List[Float32]) -> Float32:
+    """`RegularBorder` (`binarization.cpp:698-733`) with no initial borders:
+    the border BEFORE the first element holding `border`, the float32
+    midpoint of it and its predecessor, or the predecessor itself on a
+    wrong-side rounding. The two edge arms (a border past the last value, a
+    border at or below the first) are theirs verbatim."""
+    var lb = _lower_bound(sorted, border)
+    var n = len(sorted)
+    if lb == n:
+        var back = sorted[n - 1]
+        return max(ftz(Float32(2.0) * back), ftz(back + Float32(1.0)))
+    if lb == 0:
+        var front = sorted[0]
+        return min(ftz(Float32(0.5) * front), ftz(Float32(2.0) * front))
+    var res = ftz(ftz(sorted[lb] + sorted[lb - 1]) * Float32(0.5))
+    if res == sorted[lb]:
+        res = sorted[lb - 1]
+    return res
+
+
+def _median_borders(
+    sorted: List[Float32], max_borders_count: Int, mut out: List[Float32]
+):
+    """`GenerateMedianBorders` (`binarization.cpp:1046-1063`): border i sits
+    before the value at the `(i + 1) / (count + 1)` quantile index, integer
+    arithmetic in 64 bits as theirs, skipped where that value is the
+    minimum."""
+    var total = len(sorted)
+    if total == 0 or sorted[0] == sorted[total - 1]:
+        return
+    for i in range(max_borders_count):
+        var i1 = (i + 1) * total // (max_borders_count + 1)
+        if i1 > total - 1:
+            i1 = total - 1
+        var val1 = sorted[i1]
+        if val1 != sorted[0]:
+            out.append(_regular_border(val1, sorted))
+
+
+def _uniform_value(
+    min_value: Float32, max_value: Float32, i: Int, parts: Int
+) -> Float32:
+    """`minValue + (i + 1) * (maxValue - minValue) / (parts)`, which C++
+    evaluates in FLOAT (`int * float` is float, `:1289`, `:1249`), one
+    rounding per operation, each flushed as the worker would."""
+    var span = ftz(max_value - min_value)
+    var scaled = ftz(Float32(i + 1) * span)
+    var step = ftz(scaled / Float32(parts))
+    return ftz(min_value + step)
+
+
+def select_borders(
+    var values: List[Float32], max_borders_count: Int, border_type: Int
+) raises -> List[Float32]:
+    """Their `NSplitSelection::BestSplit` (`binarization.cpp:71-110`) for the
+    six NON-default numeric border types, `flush` always on (see the block
+    above). NaNs are dropped first (their `filterNans`); an empty column has
+    no borders. The result is sorted ascending, duplicates merged and
+    -0.0 written as +0.0 (`SetQuantization`, `:897-904`)."""
+    if border_type == BORDER_TYPE_GREEDY_LOG_SUM:
+        raise Error(
+            "select_borders is the non-default arm; GreedyLogSum is best_split"
+        )
+    var clean = List[Float32]()
+    for i in range(len(values)):
+        if values[i] == values[i]:
+            clean.append(ftz(values[i]))
+    var raw = List[Float32]()
+    if len(clean) == 0 or max_borders_count <= 0:
+        return raw^
+    if border_type == BORDER_TYPE_MIN_ENTROPY:
+        raw = _exact_best_split[PENALTY_MIN_ENTROPY](
+            clean^, max_borders_count, True
+        )
+    elif border_type == BORDER_TYPE_MAX_LOG_SUM:
+        raw = _exact_best_split[PENALTY_MAX_SUM_LOG](
+            clean^, max_borders_count, True
+        )
+    elif border_type == BORDER_TYPE_GREEDY_MIN_ENTROPY:
+        raw = _greedy_best_split[PENALTY_MIN_ENTROPY](clean, max_borders_count)
+    elif border_type == BORDER_TYPE_MEDIAN:
+        _sort_ascending(clean)
+        _median_borders(clean, max_borders_count, raw)
+    elif border_type == BORDER_TYPE_UNIFORM:
+        # `TUniformBinarizer::BestSplit` (`:1262-1310`): MinMaxElement, no
+        # sort, `maxBordersCount` evenly spaced values strictly inside
+        var lo = clean[0]
+        var hi = clean[0]
+        for i in range(1, len(clean)):
+            if clean[i] < lo:
+                lo = clean[i]
+            if hi < clean[i]:
+                hi = clean[i]
+        if lo == hi:
+            return List[Float32]()
+        for i in range(max_borders_count):
+            raw.append(_uniform_value(lo, hi, i, max_borders_count + 1))
+    elif border_type == BORDER_TYPE_UNIFORM_AND_QUANTILES:
+        # `TMedianPlusUniformBinarizer::BestSplit` (`:1224-1260`): the median
+        # borders take `count - count / 2`, the uniform ones `count / 2`, each
+        # uniform value then regularized onto the data like a median one
+        _sort_ascending(clean)
+        var n = len(clean)
+        if clean[0] == clean[n - 1]:
+            return List[Float32]()
+        var half = max_borders_count // 2
+        _median_borders(clean, max_borders_count - half, raw)
+        for i in range(half):
+            raw.append(
+                _regular_border(
+                    _uniform_value(clean[0], clean[n - 1], i, half + 1), clean
+                )
+            )
+    else:
+        raise Error("unknown border type code " + String(border_type))
+    # `SetQuantization`: -0.0 -> +0.0, then the set, sorted
+    for i in range(len(raw)):
+        if raw[i] == Float32(0.0):
+            raw[i] = Float32(0.0)
+    _sort_ascending(raw)
+    var out = List[Float32]()
+    for i in range(len(raw)):
+        if i == 0 or raw[i] != raw[i - 1]:
+            out.append(raw[i])
+    comptime if BORDER_TYPES_SABOTAGE:
+        if len(out) > 0:
+            _ = out.pop(len(out) // 2)
     return out^

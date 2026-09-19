@@ -1245,7 +1245,7 @@ def fit_with_test(
             for i in range(n_rows):
                 w_host.append(h_w.unsafe_ptr().unsafe_load(i))
         starting_approx = calc_one_dimensional_optimum_const_approx(
-            objective, t_host, w_host, has_weights
+            objective, t_host, w_host, has_weights, Float64(estimator_alpha)
         )
         # their `modelToExport.SetBias` (`:434`), set here so an early
         # stop or a raise mid-fit cannot produce a seeded-cursor model

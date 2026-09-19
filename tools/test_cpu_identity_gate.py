@@ -463,7 +463,7 @@ class SabotageDefinesTests(unittest.TestCase):
     def setUp(self):
         self.manifest = gate.load_manifest()
 
-    def test_every_family_carries_the_host_define_and_three_carry_their_own(self):
+    def test_every_family_carries_the_host_define_and_four_carry_their_own(self):
         own = {}
         for family in self.manifest['families']():
             defines = self.manifest['sabotage_build_defines'](family).split()
@@ -485,7 +485,14 @@ class SabotageDefinesTests(unittest.TestCase):
         # clean hash on all nine fixtures under it (0ff2da2cf430c48a clean and
         # sabotaged, M4, --repeats 2). MOJOLEARN_LOWBIT_CONVERT_SABOTAGE moves
         # it (-> d58be6e94de78728), and the gate's set now builds with both.
+        # gbdt carries three since lane/catboost-parity (2026-09-19): the
+        # border types' own arm (select_borders' middle border, which no
+        # GreedyLogSum lane reaches), Ordered boosting's and the quantile
+        # constant's.
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
+                               'gbdt': ['-D', 'MOJOLEARN_BORDER_TYPES_SABOTAGE=1',
+                                        '-D', 'MOJOLEARN_ORDERED_SABOTAGE=1',
+                                        '-D', 'MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1'],
                                'linalg': ['-D', 'MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
                                              '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})

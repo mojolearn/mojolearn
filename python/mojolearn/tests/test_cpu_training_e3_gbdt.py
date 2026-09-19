@@ -140,7 +140,8 @@ def test_oracle_imports_no_gpu_module():
     assert imports == [
         "checks.numerics", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
-        "gbdt.gpu_data.grid_policy", "gbdt.grid_creator.binarization",
+        "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
+        "gbdt.grid_creator.binarization",
         "gbdt.options.data_processing_options",
         "std.math", "std.memory", "std.sys.compile",
     ], imports
@@ -165,7 +166,7 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "if left_sz < right_sz:" in text, "the sibling tie computes the right child"
     assert "clean.append(ftz(values[i]))" in text, "the phase B border search input flush"
     assert "borders.append(ftz(half_below + half_above))" in text, "the phase B border midpoint flush"
-    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode)" in text, (
+    assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)" in text, (
         "the grid must take the phase B border search, not the imported calc_quantization"
     )
 

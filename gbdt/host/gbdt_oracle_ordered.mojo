@@ -88,6 +88,13 @@ from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
 from gbdt.grid_creator.binarization import best_split
+from gbdt.data.permutation import TRandom
+from gbdt.gpu_util.kernel.random_gen import (
+    advance_seed_k,
+    next_normal_f,
+    next_poisson_f,
+    next_uniform_f,
+)
 from gbdt.host.gbdt_oracle import (
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostGrid,
@@ -390,6 +397,13 @@ def _ordered_tree_structure(
     shift_of: List[UInt32],
     mask_of: List[UInt32],
     plain_l2: Bool = False,
+    # the per-tree noise (`fit_oblivious_tree_structure`'s `score_std_dev`
+    # and `seed`): a `TRandom(seed)` draw per LEVEL is the level's
+    # `global_seed`, and each candidate's noise is the normal of
+    # `advance_seed_k(global_seed + feature, 4)`, pinned-fma'd onto the
+    # score (`pointwise_scores.mojo`'s dynamic cosine kernel)
+    score_std_dev: Float32 = Float32(0.0),
+    seed: UInt64 = UInt64(0),
 ) raises -> List[_OrdSplit]:
     """The doc-parallel oblivious searcher's level loop. `fold_count > 1`
     with `plain_l2` False is the ordered fold arm (the dynamic cosine
@@ -424,7 +438,9 @@ def _ordered_tree_structure(
     var structure = List[_OrdSplit]()
     var score_before = Float32(0.0)
     var docs = List[Int](length=doc_count, fill=0)
+    var level_rand = TRandom(seed)
     for depth in range(max_depth):
+        var global_seed = level_rand.next_uniform_l()
         for i in range(doc_count):
             docs[i] = doc_ids[s.indices[i]]
         var part_count = 1 << depth
@@ -434,8 +450,13 @@ def _ordered_tree_structure(
         var best_bin = UInt32(0)
         var best_score = GBDT_ORD_FLOAT32_MAX
         var best_gain = GBDT_ORD_FLOAT32_MAX
+        # `compute_optimal_split_dev`'s per-helper seed advance
+        # (`pointwise_scores_calcer.mojo`): helper i scores with the i-th
+        # draw of `TRandom(level seed)`
+        var helper_rand = TRandom(global_seed)
         for h in range(len(helpers)):
             ref hp = helpers[h]
+            var helper_seed = helper_rand.next_uniform_l()
             var hist_line = hp.hist_line
             var n_feat = len(hp.gids)
             var group = 8 if hp.policy == POLICY_HALF_BYTE else 4
@@ -622,6 +643,12 @@ def _ordered_tree_structure(
                             score = GBDT_ORD_FLOAT32_MAX
                         score *= Float32(1.0)
                         var noisy = score
+                        if score_std_dev != Float32(0.0):
+                            var nseed = advance_seed_k(
+                                helper_seed + UInt64(UInt32(bf_feature[b])), 4
+                            )
+                            var draw = next_normal_f(nseed)
+                            noisy = identical_mul_add(draw[0], score_std_dev, noisy)
                         var gain = (noisy - score_before) * Float32(1.0)
                         if gain < th_gain:
                             th_score = noisy
@@ -1025,3 +1052,558 @@ def gbdt_ordered_rmse_host_fit(
         List[Float64](), -1, False,
     )
     return gbdt_host_model_text(model)
+
+
+# ===========================================================================
+# GradientBoosting(boosting_type='Ordered') ON THE HOST (lane/catboost-parity,
+# 2026-09-19): the second spelling of `gbdt/train.mojo`'s Ordered branch and
+# `gbdt/methods/ordered_boosting.mojo::fit_ordered`, for the CPU column.
+#
+# WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build)
+#
+#   1. the grid: `gbdt_host_grid` (the device's phase B border build, every
+#      `feature_border_type`, the NaN modes, the border subsample), the
+#      layout and the binarize, as the plain host fits read them;
+#   2. `boost_from_average` on RMSE: `_rmse_starting_approx`, the bias;
+#   3. the plan: `ordered_plan.ordered_permutations` and the block size, the
+#      SAME host functions the device fit calls, and `_ordered_folds`;
+#   4. per tree: the learn-permutation draw and the tree seed from the
+#      `ORDERED_STREAM_SALT` stream; per fold the search planes at the fold
+#      cursor (`_loss_row`, unit weights: plane 0 the weight or `w * der2`
+#      under NewtonCosine, plane 1 `w * der`); the score noise's quality-slice
+#      terms folded by `_deterministic_sum_lanes`; the bootstrap draws over the
+#      concatenated positions (`bootstrap_kernel`'s grid, one plane of ones)
+#      applied to the quality slices; the magnitudes and `choose_scale`; the
+#      fold structure search with its noise (`_ordered_tree_structure`);
+#   5. per (learn permutation, fold) and for the estimation permutation: the
+#      prefix gather, `partition_from_bins`' stable counting sort, the loss's
+#      leaf estimator (`gbdt_oracle_losses._estimate_leaves_for_loss`, the
+#      walker the plain host fits restate), and `_ordered_apply_kernel`;
+#   6. the learn loss at the estimation cursor (`_loss_value`).
+#
+# COVERED: RMSE, Logloss, CrossEntropy and the pointwise losses at UNIT
+# weights, SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
+# random_strength, any permutation count, border type and NaN mode, with
+# boost_from_average only on RMSE; an eval set with the detector and
+# use_best_model (step 8 of `fit_ordered`). Everything else is refused by name in the
+# binding (`_mojolearn_gbdt_host.mojo`).
+#
+# THE NEGATIVE CONTROL: `-D MOJOLEARN_ORDERED_SABOTAGE=1` (the device arm's
+# own define) estimates every fold's leaves on the whole fold, quality slice
+# included, as the device arm does; `-D MOJOLEARN_HOST_SABOTAGE=1` moves every leaf through the
+# walker's regularizer.
+# ===========================================================================
+
+from std.sys.compile import is_defined
+from std.memory import bitcast
+from gbdt.data.ordered_plan import (
+    ORDERED_BOOTSTRAP_SALT,
+    ORDERED_STREAM_SALT,
+    ordered_model_length_mult,
+    ordered_permutations,
+)
+from gbdt.host.gbdt_oracle import (
+    GbdtHostParams,
+    gbdt_bootstrap_seeds,
+    _deterministic_sum_lanes,
+    gbdt_host_grid,
+)
+from gbdt.host.gbdt_oracle_losses import (
+    GBDT_OBJ_MAE,
+    GBDT_OBJ_MAPE,
+    GBDT_OBJ_QUANTILE,
+    GbdtHostLoss,
+    _estimate_leaves_for_loss,
+    _loss_row,
+    _loss_value,
+)
+from gbdt.host.gbdt_oracle_rmse import (
+    GbdtRmseHostFit,
+    _rmse_starting_approx,
+    gbdt_rmse_host_model_text,
+)
+from gbdt.metrics.sample_quantile import (
+    calculate_optimal_const_approx_for_mape,
+    calculate_weighted_target_quantile,
+)
+from checks.numerics import identical_log, identical_pow
+from std.math import sqrt
+from gbdt.overfitting_detector.overfitting_detector import (
+    make_overfitting_detector,
+)
+
+comptime GBDT_ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
+comptime GBDT_ORD_BOOT_BLOCK = 256
+comptime GBDT_ORD_BOOT_SEEDS = 65536
+#: `BOOTSTRAP_KERNEL_*` (`bootstrap.mojo`)
+comptime GBDT_ORD_BOOT_BAYESIAN = 0
+comptime GBDT_ORD_BOOT_BERNOULLI = 1
+comptime GBDT_ORD_BOOT_POISSON = 2
+
+
+@fieldwise_init
+struct GbdtOrderedHostOptions(ImplicitlyCopyable, Movable):
+    """What the Ordered branch of `train` resolves beyond `GbdtHostParams`
+    and `GbdtHostLoss`."""
+
+    var score_function_newton: Bool
+    var random_strength: Float32
+    var bootstrap_kind: Int
+    var bootstrap_param: Float32
+    var permutation_count: Int
+    var fold_len_multiplier: Float64
+    var permutation_block: Int
+    var min_fold_size: Int
+    var boost_from_average: Bool
+
+
+@fieldwise_init
+struct GbdtOrderedHostFit(Movable):
+    var text: String
+    var losses: List[Float64]
+    var test_losses: List[Float64]
+    var best_iteration: Int
+    var stopped_early: Bool
+
+
+@fieldwise_init
+struct GbdtOrderedHostEval(Movable):
+    """The held-out set and what reads it, as `train` resolves them: the
+    rows (column-major), the detector (`od_type_from_name` codes), and the
+    RESOLVED `use_best_model` (1 on, 0 off) with `best_model_min_trees`."""
+
+    var x_colmajor: List[Float32]
+    var y: List[Float32]
+    var n_rows: Int
+    var od_type: Int
+    var od_pvalue: Float64
+    var od_wait: Int
+    var want_best_model: Int
+    var best_model_min_trees: Int
+
+
+def _ordered_bootstrap_draws(
+    kind: Int, mut seeds: List[UInt64], total: Int, param: Float32
+) raises -> List[Float32]:
+    """`launch_bootstrap` over one plane of ones (`bootstrap_kernel`,
+    `bootstrap.mojo:120-246`): grid `min(65536 / 256, ceil(total / 256))`
+    blocks of 256, one grid-stride walk per thread, the per-thread seed
+    written back. Returns the draws (`1.0 * draw`)."""
+    var by_rows = (total + GBDT_ORD_BOOT_BLOCK - 1) // GBDT_ORD_BOOT_BLOCK
+    var blocks = GBDT_ORD_BOOT_SEEDS // GBDT_ORD_BOOT_BLOCK
+    if by_rows < blocks:
+        blocks = by_rows
+    if blocks < 1:
+        blocks = 1
+    var stride = blocks * GBDT_ORD_BOOT_BLOCK
+    var draws = List[Float32](length=total, fill=Float32(1.0))
+    for gid in range(stride):
+        var s = seeds[gid]
+        var i = gid
+        while i < total:
+            var bw: Float32
+            if kind == GBDT_ORD_BOOT_BAYESIAN:
+                var d = next_uniform_f(s)
+                s = d[1]
+                var tmp = -identical_log(d[0] + Float32(1e-20))
+                bw = tmp
+                if param != Float32(1.0):
+                    bw = identical_pow(tmp, param)
+            elif kind == GBDT_ORD_BOOT_BERNOULLI:
+                var d = next_uniform_f(s)
+                s = d[1]
+                bw = Float32(1.0) if d[0] < param else Float32(0.0)
+            elif kind == GBDT_ORD_BOOT_POISSON:
+                var d = next_poisson_f(s, param)
+                s = d[1]
+                bw = d[0]
+            else:
+                raise Error("ordered host: bootstrap kind " + String(kind))
+            draws[i] = draws[i] * bw
+            i += stride
+        seeds[gid] = s
+    return draws^
+
+
+def _ordered_task_host(
+    loss: GbdtHostLoss,
+    estimate_size: Int,
+    apply_size: Int,
+    n_leaves: Int,
+    y: List[Float32],
+    permutation: List[Int],
+    bins: List[Int],
+    mut cursor: List[Float32],
+    rate: Float32,
+    l2: Float32,
+) raises -> List[Float32]:
+    """`_ordered_estimate_task` (`ordered_boosting.mojo`): the prefix gather
+    in permutation order, `partition_from_bins`' stable counting sort, the
+    loss's estimator at the cursor, then `_ordered_apply_kernel` over
+    `[0, apply_size)`."""
+    if estimate_size < 1 or estimate_size > apply_size:
+        raise Error("ordered estimation requires 0 < prefix <= cursor size")
+    var gy = List[Float32](length=estimate_size, fill=Float32(0.0))
+    var gc = List[Float32](length=estimate_size, fill=Float32(0.0))
+    var gb = List[Int](length=estimate_size, fill=0)
+    for i in range(estimate_size):
+        var row = permutation[i]
+        gy[i] = y[row]
+        gc[i] = cursor[i]
+        gb[i] = bins[row]
+    var sizes = List[Int](length=n_leaves, fill=0)
+    for r in range(estimate_size):
+        sizes[gb[r]] += 1
+    var offsets = List[Int](length=n_leaves, fill=0)
+    var running = 0
+    for i in range(n_leaves):
+        offsets[i] = running
+        running += sizes[i]
+    var fill = offsets.copy()
+    var row_index = List[Int](length=estimate_size, fill=0)
+    for r in range(estimate_size):
+        row_index[fill[gb[r]]] = r
+        fill[gb[r]] += 1
+    var leaves = _estimate_leaves_for_loss(
+        loss, gy, gc, row_index, offsets, sizes, estimate_size, l2
+    )
+    for i in range(apply_size):
+        var leaf = bins[permutation[i]]
+        var scaled = identical_mul(leaves[leaf], rate)
+        cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])
+    return leaves^
+
+
+@no_inline
+def _add_tree_values(
+    mut cursor: List[Float32], bins: List[Int], values: List[Float32]
+):
+    """`compute_bins_and_add_kernel`'s add (`add_bin_values.mojo`):
+    `cursor += values[bin]`, the STORED model values. `@no_inline` IS LOAD
+    BEARING: inlined, the host compiler contracted `cursor + leaf * rate`
+    into one fma, one rounding where the device kernel rounds the stored
+    product first -- measured on the M4, 258 of 800 held-out rows one ulp
+    apart after the first tree (lane/catboost-parity)."""
+    for r in range(len(bins)):
+        cursor[r] = cursor[r] + values[bins[r]]
+
+
+def gbdt_ordered_host_fit(
+    x_colmajor: List[Float32],
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    params: GbdtHostParams,
+    loss: GbdtHostLoss,
+    opts: GbdtOrderedHostOptions,
+    eval: GbdtOrderedHostEval,
+) raises -> GbdtOrderedHostFit:
+    """Train `params.n_estimators` trees by Ordered boosting on the host and
+    return the model text (bias included), the learn and held-out losses,
+    the best iteration and the detector's verdict, as `gbdt_fit` returns
+    them. `eval.n_rows == 0` is no held-out set."""
+    if n_rows < 4:
+        raise Error(
+            "Error: pool has just " + String(n_rows) + " groups or docs,"
+            " can't use #1 GPUs to learn on such small pool"
+        )
+    var max_depth = params.max_depth
+    if params.n_estimators < 1 or max_depth < 1 or max_depth > 16:
+        raise Error("ordered boosting needs n_estimators >= 1 and depth 1..16")
+    # ---- 1. the grid, the layout, the binarize, the helpers ----
+    var grid = gbdt_host_grid(
+        x_colmajor, n_rows, n_features, params.border_count,
+        params.border_build_max_samples, params.random_seed, params.nan_mode,
+        params.border_type,
+    )
+    var layout = build_layout(grid.fold_counts)
+    var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
+    var blocks = blocks_for(layout, n_rows)
+    var helpers = List[_PwHelper]()
+    for b in range(len(blocks)):
+        ref blk = blocks[b]
+        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
+            raise Error(
+                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for Ordered"
+                " boosting on a feature with exactly one border (the"
+                " BinaryFeatures histogram policy, feature "
+                + String(blk.feature_ids[0]) + ")"
+            )
+        var gids = List[Int]()
+        var offs = List[Int]()
+        var firsts = List[Int]()
+        var folds = List[Int]()
+        var hist_line = 0
+        for k in range(blk.count()):
+            var f = blk.feature_ids[k]
+            gids.append(f)
+            offs.append(Int(layout.features[f].offset) * n_rows)
+            firsts.append(Int(blk.fold_offset[k]))
+            folds.append(Int(blk.folds[k]))
+            hist_line += Int(blk.folds[k])
+        helpers.append(_PwHelper(
+            blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
+        ))
+    var feat_offset = List[Int](length=n_features, fill=0)
+    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
+    for f in range(n_features):
+        feat_offset[f] = Int(layout.features[f].offset) * n_rows
+        feat_shift[f] = layout.features[f].shift
+        feat_mask[f] = layout.features[f].mask
+
+    # ---- 2. the starting point ----
+    var start = Float64(0.0)
+    if opts.boost_from_average:
+        if loss.objective == GBDT_OBJ_MAPE:
+            # `CalculateOptimalConstApproxForMAPE` (`sample_quantile.mojo`)
+            start = Float64(
+                calculate_optimal_const_approx_for_mape(y, List[Float32](), False)
+            )
+        elif loss.objective == GBDT_OBJ_MAE or loss.objective == GBDT_OBJ_QUANTILE:
+            # `CalculateWeightedTargetQuantile` with their 1e-6 delta
+            start = Float64(
+                calculate_weighted_target_quantile(
+                    y, List[Float32](), False,
+                    0.5 if loss.objective == GBDT_OBJ_MAE else Float64(
+                        loss.estimator_alpha
+                    ),
+                    1e-6,
+                )
+            )
+        else:
+            start = _rmse_starting_approx(y, n_rows)
+    var start_value = Float32(start)
+
+    # ---- 3. the plan ----
+    var n = n_rows
+    var perms_u32 = ordered_permutations(
+        n, opts.permutation_count, opts.permutation_block, params.random_seed
+    )
+    var perm_count = len(perms_u32)
+    var perms = List[List[Int]]()
+    for p in range(perm_count):
+        var one = List[Int](capacity=n)
+        for i in range(n):
+            one.append(Int(perms_u32[p][i]))
+        perms.append(one^)
+    var est_p = perm_count - 1
+    var learn_count = est_p if est_p > 0 else 1
+    var bounds = _ordered_folds(n, opts.fold_len_multiplier, opts.min_fold_size)
+    var n_folds = len(bounds) // 2
+    var fold_count = 2 * n_folds
+    var fold_bits = _int_log2_floor_ceil(fold_count)
+    if fold_bits + max_depth >= 32:
+        raise Error("1 << (FoldBits + maxDepth) does not fit a ui32 bin")
+    var part_bounds = List[Int]()
+    var offsets = List[Int]()
+    var total = 0
+    part_bounds.append(0)
+    for f in range(n_folds):
+        var est_right = bounds[2 * f]
+        var qe_right = bounds[2 * f + 1]
+        offsets.append(total)
+        total += qe_right
+        part_bounds.append(part_bounds[len(part_bounds) - 1] + est_right)
+        part_bounds.append(part_bounds[len(part_bounds) - 1] + (qe_right - est_right))
+    var quality = List[Bool](length=total, fill=False)
+    var quality_count = 0
+    for f in range(n_folds):
+        for i in range(bounds[2 * f], bounds[2 * f + 1]):
+            quality[offsets[f] + i] = True
+            quality_count += 1
+    var cursors = List[List[List[Float32]]]()
+    for _ in range(learn_count):
+        var per = List[List[Float32]]()
+        for f in range(n_folds):
+            per.append(List[Float32](length=bounds[2 * f + 1], fill=start_value))
+        cursors.append(per^)
+    var est_cursor = List[Float32](length=n, fill=start_value)
+    var est_y = List[Float32](length=n, fill=Float32(0.0))
+    for i in range(n):
+        est_y[i] = y[perms[est_p][i]]
+    var bootstrap_on = opts.bootstrap_kind >= 0
+    var seeds = List[UInt64]()
+    if bootstrap_on:
+        seeds = gbdt_bootstrap_seeds(params.random_seed ^ ORDERED_BOOTSTRAP_SALT)
+    # the held-out rows against the model's own borders, the test cursor at
+    # the starting point, the detector (`fit_ordered`'s step 8)
+    var has_test = eval.n_rows > 0
+    var n_eval = eval.n_rows if has_test else 1
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(eval.x_colmajor, n_eval, n_features, grid, layout)
+    var test_cursor = List[Float32](length=n_eval, fill=start_value)
+    var detector = make_overfitting_detector(
+        eval.od_type, False, eval.od_pvalue, eval.od_wait, has_test
+    )
+    var test_losses = List[Float64]()
+    var stopped_early = False
+    var rng = TRandom(params.random_seed ^ ORDERED_STREAM_SALT)
+    var lr = params.learning_rate
+    var l2 = params.l2_leaf_reg
+
+    var tree_split_offsets = List[Int]()
+    tree_split_offsets.append(0)
+    var split_features = List[Int]()
+    var split_bins = List[Int]()
+    var tree_leaf_offsets = List[Int]()
+    tree_leaf_offsets.append(0)
+    var model_leaves = List[Float32]()
+    var losses = List[Float64]()
+    for iteration in range(params.n_estimators):
+        var learn_p = 0
+        if learn_count > 1:
+            learn_p = Int(rng.next_uniform_l() % UInt64(learn_count - 1))
+        var tree_seed = rng.next_uniform_l()
+        # ---- the fold planes ----
+        var sw = List[Float32](length=total, fill=Float32(0.0))
+        var sg = List[Float32](length=total, fill=Float32(0.0))
+        var doc_ids = List[Int](capacity=total)
+        for f in range(n_folds):
+            var r = bounds[2 * f + 1]
+            for i in range(r):
+                var row = perms[learn_p][i]
+                doc_ids.append(row)
+                # `kernel_alpha` carries Logloss's border (the binding
+                # builds the loss that way, as `_loss_row` reads it)
+                var lr_row = _loss_row(
+                    loss.objective, y[row], cursors[learn_p][f][i],
+                    loss.kernel_alpha,
+                )
+                sw[offsets[f] + i] = lr_row.der2 if opts.score_function_newton else Float32(1.0)
+                sg[offsets[f] + i] = lr_row.der
+        # ---- the score noise ----
+        var score_std = Float32(0.0)
+        if opts.random_strength != Float32(0.0):
+            var terms = List[Float32](length=total, fill=Float32(0.0))
+            for i in range(total):
+                if quality[i]:
+                    var w = sw[i]
+                    if w > Float32(0.0):
+                        var q = ftz(sg[i] / w)
+                        terms[i] = ftz(ftz(q * q) * w)
+            var s2 = _deterministic_sum_lanes(terms, 1, total)[0]
+            var mult = ordered_model_length_mult(
+                n, Float64(iteration) * Float64(lr)
+            )
+            score_std = Float32(
+                mult * sqrt(Float64(s2) / (Float64(quality_count) + 1e-100))
+                * Float64(opts.random_strength)
+            )
+        # ---- the bootstrap, quality slices only ----
+        if bootstrap_on:
+            var draws = _ordered_bootstrap_draws(
+                opts.bootstrap_kind, seeds, total, opts.bootstrap_param
+            )
+            for i in range(total):
+                if quality[i]:
+                    sw[i] = ftz(sw[i] * draws[i])
+                    sg[i] = ftz(sg[i] * draws[i])
+        # ---- the scale ----
+        var absv = List[Float32](length=2 * total, fill=Float32(0.0))
+        for i in range(total):
+            absv[2 * i] = abs(sw[i])
+            absv[2 * i + 1] = abs(sg[i])
+        var mags = _deterministic_sum_lanes(absv, 2, total)
+        var m0 = Float64(mags[0])
+        var m1 = Float64(mags[1])
+        var scale = Float32(choose_scale(m1 if m1 > m0 else m0, total))
+        # ---- the structure ----
+        var splits = _ordered_tree_structure(
+            cindex, helpers, max_depth, sw, sg, doc_ids, part_bounds,
+            fold_count, fold_bits, scale, l2, feat_offset, feat_shift,
+            feat_mask, False, score_std, tree_seed,
+        )
+        var bins = List[Int](length=n, fill=0)
+        for r in range(n):
+            var leaf = 0
+            for level in range(len(splits)):
+                var fid = splits[level].feature
+                var mask = feat_mask[fid] << feat_shift[fid]
+                var value = UInt32(splits[level].bin) << feat_shift[fid]
+                if (cindex[feat_offset[fid] + r] & mask) > value:
+                    leaf += 1 << level
+            bins[r] = leaf
+        var n_leaves = 1 << len(splits)
+        # ---- the leaves ----
+        for lp in range(learn_count):
+            for f in range(n_folds):
+                var est = bounds[2 * f]
+                comptime if GBDT_ORDERED_SABOTAGE:
+                    est = bounds[2 * f + 1]
+                _ = _ordered_task_host(
+                    loss, est, bounds[2 * f + 1], n_leaves, y, perms[lp],
+                    bins, cursors[lp][f], lr, l2,
+                )
+        var leaves = _ordered_task_host(
+            loss, n, n, n_leaves, y, perms[est_p], bins, est_cursor, lr, l2,
+        )
+        for level in range(len(splits)):
+            split_features.append(splits[level].feature)
+            split_bins.append(splits[level].bin)
+        tree_split_offsets.append(len(split_features))
+        for leaf in range(n_leaves):
+            model_leaves.append(identical_mul(leaves[leaf], lr))
+        tree_leaf_offsets.append(len(model_leaves))
+        # ---- the learn loss at the estimation cursor ----
+        var fv = _loss_value(loss, est_y, est_cursor, n)
+        losses.append(-Float64(fv) / Float64(n))
+        # ---- the held-out cursor (`_apply_last_tree_to_test`: a depth-0
+        # tree adds nothing), its loss, the detector ----
+        if has_test:
+            if len(splits) > 0:
+                var test_bins = List[Int](length=n_eval, fill=0)
+                for r in range(n_eval):
+                    var leaf = 0
+                    for level in range(len(splits)):
+                        var fid = splits[level].feature
+                        var mask = feat_mask[fid] << feat_shift[fid]
+                        var value = UInt32(splits[level].bin) << feat_shift[fid]
+                        if (test_cindex[Int(layout.features[fid].offset) * n_eval + r] & mask) > value:
+                            leaf += 1 << level
+                    test_bins[r] = leaf
+                var tree_values = List[Float32](capacity=n_leaves)
+                for leaf in range(n_leaves):
+                    tree_values.append(identical_mul(leaves[leaf], lr))
+                _add_tree_values(test_cursor, test_bins, tree_values)
+            var t_loss = -Float64(_loss_value(loss, eval.y, test_cursor, n_eval)) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
+
+    var best = 0
+    if has_test:
+        best = detector.best_iteration
+    else:
+        for i in range(1, len(losses)):
+            if losses[i] < losses[best]:
+                best = i
+    # ---- `use_best_model`: `ShrinkToBestIteration` ----
+    if eval.want_best_model == 1 and len(test_losses) > 0:
+        var min_trees_best = -1
+        var min_trees_err = Float64(0.0)
+        for i in range(len(test_losses)):
+            if i + 1 < eval.best_model_min_trees:
+                continue
+            if min_trees_best < 0 or test_losses[i] < min_trees_err:
+                min_trees_err = test_losses[i]
+                min_trees_best = i
+        var best_iter = min_trees_best + 1
+        var n_trees = len(tree_split_offsets) - 1
+        if 0 < best_iter and best_iter < n_trees:
+            while len(tree_split_offsets) - 1 > best_iter:
+                _ = tree_split_offsets.pop()
+                _ = tree_leaf_offsets.pop()
+            split_features.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+            split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+            model_leaves.resize(tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0))
+    var model = GbdtHostModel(
+        grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
+        tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
+        model_leaves^, losses.copy(), best, stopped_early,
+    )
+    var text = gbdt_rmse_host_model_text(GbdtRmseHostFit(model^, start))
+    return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early)
