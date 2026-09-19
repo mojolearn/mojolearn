@@ -436,6 +436,13 @@ TRAINING_LANE_NAMES = {
     "knn-clf-distance": "the distance-weighted k-NN classifier",
     "knn-reg-distance": "the distance-weighted k-NN regressor",
     "gemm-transposed": "the transposed GEMM ops",
+
+    # lane/linalg-public (2026-09-19): the three decompositions this tree
+    # already computed inside PCA, TruncatedSVD, Nystroem, SpectralClustering
+    # and the ARIMA least squares, under their own numpy names.
+    "linalg-qr": "the Householder QR's R factor, both slice arms",
+    "linalg-eigh": "the symmetric Jacobi eigendecomposition, ascending",
+    "linalg-svdvals": "the singular values, descending",
     "dbscan-brute-l1": "brute-force DBSCAN under manhattan distance",
     "kde-tophat-sqeuclidean": "kernel density with the tophat kernel under squared euclidean distance",
     "kde-epanechnikov-l1": "kernel density with the Epanechnikov kernel under manhattan distance",
@@ -1254,13 +1261,21 @@ FAMILIES = (
         # matrix, then solve) ships: this family is in the wheel and gp is
         # not. On a CPU-only install `Cholesky` binds `_mojolearn_linalg`,
         # so the cholesky lane reads through this binding.
-        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8"),
+        # lane/linalg-public (2026-09-19): qr, eigh and svdvals. They take
+        # the HOST route on every box, a GPU box included -- there is no
+        # one-shot device door for these kernels, they are reached through an
+        # estimator that owns a DeviceContext -- so this family IS their
+        # route, not their fallback.
+        training_lanes=("gemm-pinned", "gemm-transposed", "cholesky", "gemm-bf16", "gemm-int8",
+                        "linalg-qr", "linalg-eigh", "linalg-svdvals"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("linalg.gemm", "linalg.gemv", "Cholesky"),
-        display="pinned GEMM and the Cholesky factorization and solve",
+        classes=("linalg.gemm", "linalg.gemv", "Cholesky",
+                 "linalg.qr", "linalg.eigh", "linalg.svdvals"),
+        display="pinned GEMM, the Cholesky factorization and solve, and the QR, symmetric eigen and singular-value decompositions",
         host_modules=("gemm/host/gemm_oracle.mojo", "gemm/host/gemm_lowbit_oracle.mojo",
-                      "cholesky/host/chol_oracle.mojo"),
+                      "cholesky/host/chol_oracle.mojo",
+                      "decomposition/host/linalg_public.mojo"),
         exports=(
             "linalg_host_numeric_mode", "linalg_host_vendor", "linalg_host_column",
             "linalg_host_sabotage", "linalg_vendor", "linalg_numeric_mode",
@@ -1270,6 +1285,8 @@ FAMILIES = (
             # int8i32.v1 profiles, gemm/IDENTICAL_LOWBIT_CONTRACT.md.
             "lowbit_profile_version", "gemm_bf16", "gemm_int8", "quantize_int8",
             "dequantize_int8", "to_bf16", "from_bf16",
+            # lane/linalg-public (2026-09-19)
+            "qr_r", "eigh", "svdvals",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

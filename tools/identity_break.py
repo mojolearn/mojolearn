@@ -3452,6 +3452,66 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(nt=_h(nt), tn=_h(tn)))
 
 
+@lane("linalg-qr")
+def _(ml, X, yc, yr, Xh=None):
+    """`linalg.qr` (python/mojolearn/_linalg_impl.py) through
+    `_mojolearn_linalg_host::qr_r`: the Householder QR's R on BOTH slice
+    arms. `host_qr_slice_count` halves from QR_MAX_SLICES while a slice
+    would hold fewer than QR_SLICE_ROWS_PER_COL rows per column, so at
+    n_cols=5 a 48-row matrix takes the TWO-slice arm (the scratch pass and
+    the second reduction over it) and at n_cols=4 a 16-row matrix takes the
+    ONE-slice arm. A lane that ran only one of them would read IDENTICAL
+    while the other drifted. The third part is rank deficient by
+    construction -- a duplicated column -- which puts an exact zero on R's
+    diagonal and makes the reflector's sign choice observable."""
+    tall = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
+    small = np.ascontiguousarray(X[:16, :4]).astype(np.float32)
+    dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
+    return _fit(dict(two_slice=_h(ml.linalg.qr(tall)),
+                     one_slice=_h(ml.linalg.qr(small)),
+                     rank_deficient=_h(ml.linalg.qr(dup))))
+
+
+@lane("linalg-eigh")
+def _(ml, X, yc, yr, Xh=None):
+    """`linalg.eigh` through `_mojolearn_linalg_host::eigh`: the symmetric
+    Jacobi eigensolver under numpy's name and numpy's ASCENDING order, which
+    is the reverse of the one `PCA` reads from the same sweep. Three parts.
+    A generic Gram matrix. A matrix with a REPEATED eigenvalue (a scaled
+    identity block), where the eigenvectors within the degenerate subspace
+    are fixed only by the sweep order and the sign flip, so it is the part
+    that moves if either changes. And a DIAGONAL matrix, where the sweep
+    performs no rotation at all and the answer is the input -- the arm that
+    catches an ordering permutation applied unconditionally."""
+    g = np.ascontiguousarray(X[:64, :5]).astype(np.float32)
+    gram = np.ascontiguousarray(g.T @ g)
+    gram = np.ascontiguousarray(((gram + gram.T) * np.float32(0.5)).astype(np.float32))
+    rep = np.ascontiguousarray(np.diag(np.array([4.0, 4.0, 4.0, 1.0], np.float32)))
+    diag = np.ascontiguousarray(np.diag(np.array([3.0, 0.5, 2.0, 9.0], np.float32)))
+    out = {}
+    for name, m in (("gram", gram), ("repeated", rep), ("diagonal", diag)):
+        w, v = ml.linalg.eigh(m)
+        out[name + "_w"] = _h(w)
+        out[name + "_v"] = _h(v)
+    return _fit(out)
+
+
+@lane("linalg-svdvals")
+def _(ml, X, yc, yr, Xh=None):
+    """`linalg.svdvals` through `_mojolearn_linalg_host::svdvals`: the QR
+    then the one-sided Jacobi, read DESCENDING. The second part is rank
+    deficient (a duplicated column), so its smallest singular value is an
+    exact zero and the sort has a tie at the bottom; the third is scaled by
+    a power of two, which changes every exponent and no mantissa, so the
+    values must scale exactly and the ORDER must not move at all."""
+    a = np.ascontiguousarray(X[:48, :5]).astype(np.float32)
+    dup = np.ascontiguousarray(X[:48, [0, 1, 1, 2]]).astype(np.float32)
+    scaled = np.ascontiguousarray(a * np.float32(0.125))
+    return _fit(dict(generic=_h(ml.linalg.svdvals(a)),
+                     rank_deficient=_h(ml.linalg.svdvals(dup)),
+                     scaled=_h(ml.linalg.svdvals(scaled))))
+
+
 @lane("metrics-classification")
 def _(ml, X, yc, yr, Xh=None):
     """The nineteen metric functions the metrics lane does not call, and

@@ -733,3 +733,184 @@ def _out_or_new(out, m, n, who):
     if not pb.c_contiguous or pb.readonly:
         raise ValueError(f"mojolearn.linalg.{who}: out must be C-contiguous and writable")
     return out
+
+
+# ===========================================================================
+# THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES (lane/linalg-public,
+# 2026-09-19)
+#
+# `PCA`, `TruncatedSVD`, `Nystroem`, `SpectralClustering`, `KernelRidge` and
+# the ARIMA least squares have run a Householder QR, a one-sided Jacobi SVD
+# and a symmetric Jacobi eigensolver for months, each gated and sabotaged as
+# somebody's internal step. A caller who wanted the decomposition itself had
+# no way to ask. These three doors are that ask, and nothing more: the
+# arithmetic is `decomposition/host/linalg_public.mojo`, which adds none of
+# its own on top of the shipping oracles.
+#
+# HOST ROUTE ON EVERY BOX, GPU INCLUDED. Unlike `matmul`, these bind
+# `_mojolearn_linalg_host` always. Two reasons, both deliberate. The device
+# kernels behind them (`qr_factor`, `one_sided_jacobi_svd_kernel`,
+# `jacobi_eigh_kernel`) take a `DeviceContext` and are reached through an
+# estimator that owns one; there is no one-shot device door for them yet,
+# and inventing one here would be a second way to run the same arithmetic.
+# And the CPU column is where a decomposition's identity is cheapest to
+# check, which is the whole argument of docs/lanes for CPU-side coverage.
+# `mojolearn.linalg.qr(...)` therefore returns THE SAME BITS on a laptop and
+# on an H100 by construction, because it is the same code on both.
+
+_LINALG_HOST_BASENAME = "_mojolearn_linalg_host"
+_host_binding_cache = None
+
+
+def _host_load():
+    """`_mojolearn_linalg_host`, the route these three always take.
+
+    A GPU install ships this binding beside the device one (it is in
+    `python/mojolearn/host_surface.py`'s families), so this is not a
+    CPU-only path; it is the host path, taken on purpose everywhere.
+    """
+    global _host_binding_cache
+    if _host_binding_cache is None:
+        _host_binding_cache = _backend.load_host_module(_LINALG_HOST_BASENAME)
+    return _host_binding_cache
+
+
+def _two_d(x, name):
+    """`_operand`, plus the 2-D shape it promises, as `(arr, rows, cols)`."""
+    arr = _operand(x, name)
+    shape = getattr(arr, "shape", None)
+    if shape is None or len(shape) != 2:
+        raise ValueError(
+            f"mojolearn.linalg: {name} must be 2-D, got shape {shape!r}"
+        )
+    return arr, int(shape[0]), int(shape[1])
+
+
+def _refuse_wide(rows, cols, who):
+    if rows < cols:
+        raise ValueError(
+            f"mojolearn.linalg.{who}: needs at least as many rows as columns, "
+            f"got {rows} x {cols}. The route for a wide matrix is an LQ "
+            "factorization of the transpose, which this tree does not carry "
+            "(DEVIATION 593). It is REFUSED BY NAME rather than transposed "
+            "for you, because the singular values of the transpose are the "
+            "same and the VECTORS are not."
+        )
+
+
+def qr(a, mode="r"):
+    """`numpy.linalg.qr(a, mode='r')`: the R factor, bit-identical anywhere.
+
+    Parameters
+    ----------
+    a : float32 buffer, shape (M, N) with M >= N
+        C-contiguous or copied into C order; a non-float32 buffer is refused
+        by name and never cast (see `_operand`).
+    mode : {'r'}
+        Only ``'r'`` exists here. **Q IS NOT FORMED ANYWHERE IN THIS TREE**:
+        `core/householder_qr.mojo::qr_factor` accumulates R and drops the
+        reflectors, because no caller has ever needed Q. ``'reduced'``,
+        ``'complete'`` and ``'raw'`` are refused BY NAME so you learn Q is
+        unimplemented rather than unknown.
+
+    Returns
+    -------
+    Array, shape (N, N)
+        R, row major, upper triangular. Its signs are the reflector's, the
+        same convention LAPACK's ``geqrf`` leaves; ``R.T @ R`` equals
+        ``a.T @ a`` to float32.
+    """
+    if mode != "r":
+        raise ValueError(
+            f"mojolearn.linalg.qr: mode={mode!r} needs Q, which is not formed "
+            "anywhere in this tree -- qr_factor accumulates R and drops the "
+            "reflectors (core/householder_qr.mojo). Only mode='r' is "
+            "implemented; this is a refusal by name, not an unknown mode."
+        )
+    a_arr, rows, cols = _two_d(a, "a")
+    _refuse_wide(rows, cols, "qr")
+    out = empty((cols, cols), "<f4")
+    # ORDER MATCHES bindings/_mojolearn_linalg_host.mojo::qr_r_binding:
+    # addrs are (a, r_out) and params are (n_rows, n_cols). Swapping the two
+    # addresses writes R over the caller's matrix, which is corruption and
+    # not an exception.
+    _host_load().qr_r([addr_ro(a_arr, name="a"), addr(out, name="r_out")],
+                      [int(rows), int(cols)])
+    return out
+
+
+def eigh(a):
+    """`numpy.linalg.eigh(a)`: eigenvalues ASCENDING and their vectors.
+
+    Parameters
+    ----------
+    a : float32 buffer, shape (N, N)
+        Taken as symmetric. Only the arithmetic the Jacobi sweep performs
+        reads it; a non-symmetric matrix is not detected and not refused,
+        exactly as in `numpy.linalg.eigh`.
+
+    Returns
+    -------
+    (w, v) : Array (N,), Array (N, N)
+        ``w`` ascending, ``v[:, i]`` the unit eigenvector for ``w[i]`` --
+        numpy's layout and numpy's order. `PCA` sorts the same spectrum
+        DESCENDING for its own reasons; this door carries numpy's name so it
+        carries numpy's order, and `decomposition/host/linalg_public.mojo`
+        derives one from the other rather than sorting twice.
+
+        The sign of each vector is pinned by the same `host_sign_flip` `PCA`
+        applies, so a vector is a function of the matrix and not of the sweep
+        order; without it two boxes agreeing bit for bit could still return
+        ``v`` and ``-v``.
+
+    Raises
+    ------
+    RuntimeError
+        If the Jacobi sweep did not converge. An unconverged decomposition is
+        not returned as though it were one (DEVIATION 590).
+    """
+    a_arr, rows, cols = _two_d(a, "a")
+    if rows != cols:
+        raise ValueError(
+            f"mojolearn.linalg.eigh: a must be square, got {rows} x {cols}"
+        )
+    w = empty((rows,), "<f4")
+    v = empty((rows, rows), "<f4")
+    scalars = empty((2,), "<f8")
+    _host_load().eigh([addr_ro(a_arr, name="a"), addr(w, name="w_out"),
+                       addr(v, name="v_out"), addr(scalars, name="scalars_out")],
+                      [int(rows)])
+    return w, v
+
+
+def svdvals(a):
+    """`numpy.linalg.svdvals(a)`: the singular values, DESCENDING.
+
+    The route is `PCA(svd_solver='full')`'s without the centering -- the
+    Householder QR of ``a``, then the one-sided Jacobi SVD of R. The singular
+    values of R ARE those of ``a`` because Q is orthogonal, and that identity
+    is why this can exist without forming Q at all.
+
+    Parameters
+    ----------
+    a : float32 buffer, shape (M, N) with M >= N
+
+    Returns
+    -------
+    Array, shape (N,)
+        Descending, numpy's order.
+
+    Notes
+    -----
+    There is no `svd` returning ``(U, S, Vt)``. The one-sided Jacobi consumes
+    R into ``U_R * S``, so the left basis it holds belongs to R and not to
+    ``a``; forming ``a``'s U needs the Q this tree does not form. An `svd`
+    that returned two of three under numpy's name would be the quiet kind of
+    divergence `IDENTITY_PATHS.md` exists to prevent.
+    """
+    a_arr, rows, cols = _two_d(a, "a")
+    _refuse_wide(rows, cols, "svdvals")
+    out = empty((cols,), "<f4")
+    _host_load().svdvals([addr_ro(a_arr, name="a"), addr(out, name="s_out")],
+                         [int(rows), int(cols)])
+    return out

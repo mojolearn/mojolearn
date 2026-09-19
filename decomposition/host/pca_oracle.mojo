@@ -317,13 +317,32 @@ def host_scale_in_place(mut a: List[Float32], scale: Float32):
 
 @always_inline
 def _rot_sub(c: Float32, x: Float32, s: Float32, y: Float32) -> Float32:
-    """`c*x - s*y`, `jacobi_eigh_device.mojo::_rot_sub` under IDENTICAL."""
+    """`c*x - s*y`, `jacobi_eigh_device.mojo::_rot_sub` under IDENTICAL.
+
+    THE SABOTAGE ARM SPLITS THE FMA (added 2026-09-19, lane/linalg-public).
+    `identical_mul_add(c, x, -ftz(s*y))` rounds ONCE; `ftz(c*x) - ftz(s*y)`
+    rounds twice and differs in the last bits. This is where the Jacobi
+    rotation's arithmetic actually lives, and it had NO negative control:
+    the only arm in this file was `host_gram_splitk`'s, which the
+    eigensolver reaches only when something upstream built its matrix with
+    a gram product. `linalg.eigh` does not, so the `linalg-eigh` lane ran
+    against a sabotage build and returned a BYTE-IDENTICAL digest -- reached
+    and INERT, which reads in a column exactly like coverage. Every consumer
+    of this rotation (PCA, TruncatedSVD, Nystroem, SpectralClustering, the
+    GP, and the one-sided Jacobi SVD, which imports this pair) was equally
+    uncovered HERE and moved only because a fold above it moved.
+    """
+    comptime if PCA_ORACLE_HOST_SABOTAGE:
+        return ftz(ftz(c * x) - ftz(s * y))
     return ftz(identical_mul_add(c, x, -ftz(s * y)))
 
 
 @always_inline
 def _rot_add(s: Float32, x: Float32, c: Float32, y: Float32) -> Float32:
-    """`s*x + c*y`, `jacobi_eigh_device.mojo::_rot_add` under IDENTICAL."""
+    """`s*x + c*y`, `jacobi_eigh_device.mojo::_rot_add` under IDENTICAL.
+    The sabotage arm splits the FMA, for `_rot_sub`'s reason."""
+    comptime if PCA_ORACLE_HOST_SABOTAGE:
+        return ftz(ftz(s * x) + ftz(c * y))
     return ftz(identical_mul_add(s, x, ftz(c * y)))
 
 
@@ -393,6 +412,23 @@ def _host_jacobi_fold(a: List[Float32], n: Int, off_diagonal_only: Bool) -> Floa
                 acc = ftz(identical_mul_add(v, v, acc))
             e += JACOBI_TPB
         partials[t] = acc
+    comptime if PCA_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: the same fold, lanes added SERIALLY DESCENDING
+        # instead of through the halving tree. Wrong on purpose.
+        #
+        # ADDED 2026-09-19 (lane/linalg-public) BECAUSE THIS FOLD HAD NONE.
+        # WHAT THIS ARM DOES NOT DO, measured the day it was written: it does
+        # NOT move `linalg-eigh` on its fixture. This fold's only consumer is
+        # `limit`, the convergence THRESHOLD, and perturbing a threshold that
+        # a well-separated spectrum clears in the same sweep changes nothing
+        # observable. It is kept because a MARGINAL matrix -- one that stops
+        # within a rounding of the tolerance -- does change sweep count here,
+        # and that path deserves a control. The arm that actually moves the
+        # eigendecomposition is in `_rot_sub` / `_rot_add` below.
+        var serial = Float32(0.0)
+        for tt in range(JACOBI_TPB):
+            serial = serial + partials[JACOBI_TPB - 1 - tt]
+        return serial
     return host_halving_sum(partials)
 
 

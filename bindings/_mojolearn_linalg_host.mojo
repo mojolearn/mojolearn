@@ -64,6 +64,11 @@ from gemm.host.gemm_oracle import (
     OP_TN,
     gemm_oracle,
 )
+from decomposition.host.linalg_public import (
+    host_eigh,
+    host_qr_r,
+    host_svdvals,
+)
 from gemm.host.gemm_lowbit_oracle import (
     INT8_MAX_K,
     LOWBIT_PROFILE_VERSION,
@@ -508,6 +513,97 @@ def from_bf16_binding(
             dp[i] = x[i]
     return PythonObject(count)
 
+# ---------------------------------------------------------------- linalg door
+# THE THREE DECOMPOSITIONS UNDER THEIR OWN NAMES (lane/linalg-public,
+# 2026-09-19). Address and param contracts are repeated in each docstring
+# and in python/mojolearn/_linalg_impl.py; the arithmetic is
+# decomposition/host/linalg_public.mojo, which adds none of its own.
+
+
+def qr_r_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`host_qr_r(a, n_rows, n_cols)`. `addrs`: 0 a, 1 r_out (n_cols x
+    n_cols). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    if len(addrs) != 2:
+        raise Error(
+            "qr_r: addrs must contain 2 addresses (a, r_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "qr_r: params must contain 2 values (n_rows, n_cols), got "
+            + String(len(params))
+        )
+    var rp = f32_ptr(_index(addrs[1]))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var a = read_f32(_index(addrs[0]), n_rows * n_cols)
+    with GILReleased(Python()):
+        var r = host_qr_r(a, n_rows, n_cols)
+        for i in range(n_cols * n_cols):
+            rp.unsafe_store(i, r[i])
+        _ = r^
+    _ = a^
+    return PythonObject(n_cols)
+
+
+def eigh_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`host_eigh(a, n)`. `addrs`: 0 a, 1 w_out (n, ASCENDING), 2 v_out
+    (n x n, eigenvector i in COLUMN i), 3 scalars_out (converged, executed).
+    `params`: 0 n. Returns n."""
+    if len(addrs) != 4:
+        raise Error(
+            "eigh: addrs must contain 4 addresses (a, w_out, v_out,"
+            " scalars_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 1:
+        raise Error(
+            "eigh: params must contain 1 value (n), got " + String(len(params))
+        )
+    var wp = f32_ptr(_index(addrs[1]))
+    var vp = f32_ptr(_index(addrs[2]))
+    var sp = f64_ptr(_index(addrs[3]))
+    var n = _index(params[0])
+    var a = read_f32(_index(addrs[0]), n * n)
+    with GILReleased(Python()):
+        var got = host_eigh(a, n)
+        for i in range(n):
+            wp.unsafe_store(i, got.w[i])
+        for i in range(n * n):
+            vp.unsafe_store(i, got.v[i])
+        sp.unsafe_store(0, Float64(1.0) if got.converged else Float64(0.0))
+        sp.unsafe_store(1, Float64(got.executed))
+        _ = got^
+    _ = a^
+    return PythonObject(n)
+
+
+def svdvals_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
+    """`host_svdvals(a, n_rows, n_cols)`. `addrs`: 0 a, 1 s_out (n_cols,
+    DESCENDING). `params`: 0 n_rows, 1 n_cols. Returns n_cols."""
+    if len(addrs) != 2:
+        raise Error(
+            "svdvals: addrs must contain 2 addresses (a, s_out), got "
+            + String(len(addrs))
+        )
+    if len(params) != 2:
+        raise Error(
+            "svdvals: params must contain 2 values (n_rows, n_cols), got "
+            + String(len(params))
+        )
+    var sp = f32_ptr(_index(addrs[1]))
+    var n_rows = _index(params[0])
+    var n_cols = _index(params[1])
+    var a = read_f32(_index(addrs[0]), n_rows * n_cols)
+    with GILReleased(Python()):
+        var s = host_svdvals(a, n_rows, n_cols)
+        for i in range(n_cols):
+            sp.unsafe_store(i, s[i])
+        _ = s^
+    _ = a^
+    return PythonObject(n_cols)
+
+
 @export
 def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
     try:
@@ -530,6 +626,9 @@ def PyInit__mojolearn_linalg_host() abi("C") -> PythonObject:
         module.def_function[dequantize_int8_binding]("dequantize_int8")
         module.def_function[to_bf16_binding]("to_bf16")
         module.def_function[from_bf16_binding]("from_bf16")
+        module.def_function[qr_r_binding]("qr_r")
+        module.def_function[eigh_binding]("eigh")
+        module.def_function[svdvals_binding]("svdvals")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_linalg_host: ", error))
