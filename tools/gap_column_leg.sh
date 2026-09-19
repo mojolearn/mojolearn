@@ -4,14 +4,37 @@
 # gaps in docs/VERIFICATION_MATRIX.md. ONE BODY, EITHER VENDOR, LANES FROM
 # THE ENVIRONMENT.
 #
-#   MOJOLEARN_GAP_LANES=a,b,c MOJOLEARN_GAP_SLUG=vendor-class-gaps \
-#   MOJOLEARN_GAP_COMMIT_DIR=bench/results/identity_break/<dir>/ \
-#   MOJOLEARN_GEMM_LEG_EXTRA=tools/gap_column_leg.sh \
+# THIS FILE IS NEVER MOJOLEARN_GEMM_LEG_EXTRA ITSELF. A WRAPPER IS.
+# tools/gemm_remote_leg.sh runs the extra body as `sh /root/gemm_leg_extra.sh`
+# with NO ENVIRONMENT PASSTHROUGH, so a MOJOLEARN_GAP_* set on the driving Mac
+# reaches the pod in no form whatever. Naming this file directly therefore
+# rents a box, runs this body with an empty lane list, and exits 8. MEASURED
+# TWICE on 2026-09-19 -- pods 7whutyzv73i9ul (NVIDIA) and 3hz64m4pbs523f
+# (AMD), three minutes and about $0.16 between them -- against an earlier
+# version of these very lines, which spelled the invocation that cannot work.
+# Ship a wrapper that sets the variables and execs THIS FILE OUT OF THE PINNED
+# ARCHIVE, so the body that runs is the committed one:
+#
+#   cat > /tmp/wrap.sh <<'EOF'
+#   #!/bin/sh
+#   MOJOLEARN_GAP_LANES=a,b,c
+#   MOJOLEARN_GAP_SLUG=vendor-class-gaps
+#   MOJOLEARN_GAP_COMMIT_DIR=bench/results/identity_break/<dir>/
+#   MOJOLEARN_COMPILE_JOBS=16
+#   export MOJOLEARN_GAP_LANES MOJOLEARN_GAP_SLUG MOJOLEARN_GAP_COMMIT_DIR \
+#          MOJOLEARN_COMPILE_JOBS
+#   exec sh /root/mojolearn/tools/gap_column_leg.sh
+#   EOF
+#   MOJOLEARN_GEMM_LEG_EXTRA=/tmp/wrap.sh \
 #   sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent \
 #      --local-card <an apple.card from a previous leg>
 #
 # and, for an all-`par-*` lane list on a box rented with
-# MOJOLEARN_GEMM_LEG_GPU_COUNT=2, MOJOLEARN_GAP_TWO_DEVICE=1 as well.
+# MOJOLEARN_GEMM_LEG_GPU_COUNT=2, MOJOLEARN_GAP_TWO_DEVICE=1 in the wrapper.
+#
+# THE WRAPPER IS ALSO WHERE MOJOLEARN_COMPILE_JOBS IS PINNED. tools/bincache.py
+# keys it, so two legs that let the pod's vCPU count decide it cannot share a
+# cache entry however identical everything else is.
 #
 # WHY THIS FILE IS NOT tools/single_device_gaps_nvidia_leg.sh ANY MORE.
 # It is that file (ed0d6e48b), renamed and generalized on 2026-09-19 rather
