@@ -1311,8 +1311,9 @@ def _fit(parts, est=None, probe="n/a:function", model_na=None):
 @lane("rf-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
-                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    predict, proba = m._predict_with_proba(X)
+    return _fit(dict(predict=_h(predict), proba=_h(proba)),
+                m, lambda e: e._predict_with_proba(Xh))
 
 
 @lane("rf-reg")
@@ -1324,8 +1325,9 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("et-clf")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
-    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
-                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    predict, proba = m._predict_with_proba(X)
+    return _fit(dict(predict=_h(predict), proba=_h(proba)),
+                m, lambda e: e._predict_with_proba(Xh))
 
 
 @lane("et-reg")

@@ -292,6 +292,18 @@ class HostForest:
         vote = self._vote(X)
         return vote if self.family == 'rf' else vote.astype('<f8')
 
+    def _predict_with_proba(self, X):
+        """The two classifier views from one host traversal.
+
+        Kept in lockstep with the RF/ET estimator helper used by the identity
+        harness, including Extra Trees' exact float32-to-float64 widening.
+        """
+        if not self.is_classifier:
+            raise AttributeError(f"{self.estimator} has no predict_proba")
+        vote = self._vote(X)
+        proba = vote if self.family == 'rf' else vote.astype('<f8')
+        return decode_labels(self.classes_, argmax_rows(vote)), proba
+
     def predict(self, X):
         """Classifiers, the argmax of the vote (first max wins) mapped
         through `classes_`. Regressors, the forest mean per row, float32 for

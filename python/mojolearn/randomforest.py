@@ -681,6 +681,18 @@ class RandomForestClassifier(_RandomForestBase):
             )
         return out.reshape((n_rows, self._num_outputs))
 
+    def _predict_with_proba(self, X):
+        """Return both classifier views after one forest traversal.
+
+        This is an internal verification fast path.  ``predict`` is defined
+        as the first-max decode of ``predict_proba`` below, so retaining the
+        exact probability buffer and deriving the labels from it is byte for
+        byte the same work as the two public calls without traversing every
+        tree twice.
+        """
+        proba = self.predict_proba(X)
+        return decode_labels(self.classes_, argmax_rows(proba)), proba
+
     def predict(self, X):
         """The argmax of `predict_proba` (first max wins, as cuML's
         `randomforest.cuh:417-427`) mapped through `classes_`: an int64 or
