@@ -1,0 +1,21 @@
+{
+  "kind": "visible-device-inventory",
+  "vendor": "cuda",
+  "pid": 860,
+  "driver_library": "libcuda.so.1",
+  "devices": [
+    {
+      "ordinal": 0,
+      "uuid": "5508204a882d2f3eb825024f36edff78",
+      "pci_bus_id": "0000:5d:00.0",
+      "name": "NVIDIA H100 80GB HBM3"
+    },
+    {
+      "ordinal": 1,
+      "uuid": "adb95ab9bb917a032c9f1bf8c698ad4f",
+      "pci_bus_id": "0000:bb:00.0",
+      "name": "NVIDIA H100 80GB HBM3"
+    }
+  ],
+  "visibility": {}
+}

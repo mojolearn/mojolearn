@@ -1,0 +1,81 @@
+{
+  "status": "COMPLETED_JOBS_ONLY",
+  "source_commit": "d8047d4415b34327a28013dd9331969567ea02b7",
+  "vendor": "cuda",
+  "wheel_sha256": "3f0a7003d33c3de04349663350e37497c043f6a4b884950255dc5254295041e5",
+  "plan_sha256": "a367ea9560114ad2546a0e6ae3d776c25a4f9cfbf3068ea1a13db1b2102c9e62",
+  "expected_jobs": 10,
+  "jobs": [
+    {
+      "id": "loaded-lm-0-1",
+      "exit_code": 0,
+      "seconds": 99.61505060270429,
+      "complete": true,
+      "errors": [],
+      "matching_parts": 144
+    },
+    {
+      "id": "loaded-lm-1-0",
+      "exit_code": 0,
+      "seconds": 97.95643996633589,
+      "complete": true,
+      "errors": [],
+      "matching_parts": 144
+    },
+    {
+      "id": "par-dbscan-two",
+      "exit_code": 0,
+      "seconds": 43.97700724378228,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-graph-agglomerative-two",
+      "exit_code": 0,
+      "seconds": 29.2070392370224,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-hdbscan-two",
+      "exit_code": 0,
+      "seconds": 31.36027443781495,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-kmeans-two",
+      "exit_code": 0,
+      "seconds": 33.1116467025131,
+      "matching_parts": 27,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    },
+    {
+      "id": "par-scaler-two",
+      "exit_code": 0,
+      "seconds": 50.2883908264339,
+      "matching_parts": 5,
+      "errors": [],
+      "complete": true,
+      "cells": 5
+    },
+    {
+      "id": "par-graph-umap-two",
+      "exit_code": 0,
+      "seconds": 562.1370673011988,
+      "matching_parts": 36,
+      "errors": [],
+      "complete": true,
+      "cells": 9
+    }
+  ],
+  "scope": "Completed H100 jobs; resampling remains in progress in the original capture."
+}

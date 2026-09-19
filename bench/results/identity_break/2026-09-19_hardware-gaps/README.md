@@ -46,3 +46,18 @@ The first test pod was deleted and verified absent via HTTP404. A second bounded
 NVIDIA leg is targeting only the remaining168 reference-parts plus loaded-model
 layer distribution against the retained24-case single-device baseline. AMD
 capacity/quota remains unresolved. No release tag or PyPI artifact was changed.
+
+## H100 completion checkpoint
+
+The second leg has completed all nine UMAP fixtures, DBSCAN, graph agglomerative
+clustering, HDBSCAN, KMeans, and the remaining five scaler fixtures. All 149
+requested numerical parts match the current references. Raw captures and GPU
+inventory have the `nvidia-h100-` prefix. Only resampling remains in the targeted
+NVIDIA fixture ledger; completed older captures are retained without rerunning.
+
+Both loaded-LM layouts (0,1 and 1,0) match all 144 baseline parts across 24 tiny
+checkpoint cases. Each actual worker has a distinct physical device and a
+completed layer-run RPC. This closes NVIDIA numerical and placement evidence
+for this profile; external kernel traces remain owed. The published wheel was
+used unchanged. AMD reservation was attempted after stock appeared, but the
+provider rejected creation as unavailable; no AMD pod was created.

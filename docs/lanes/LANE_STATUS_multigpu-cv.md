@@ -160,3 +160,13 @@ Start it after SSH/arming and stop it when the owner finishes.76 focused tests
 pass, including failure cleanup, incorrect source, unsafe archive member,
 connection failure and interrupted fetch cases. No incomplete hardware result
 has been promoted to qualification.
+
+## September 19 hardware checkpoint
+
+NVIDIA installed candidate execution now passes twelve classifier/regressor
+runs across one/two/reversed devices, plus eight comparator controls. The
+receipt is `bench/results/identity_break/2026-09-19_hardware-gaps/nvidia-cv-receipt-fix.json`.
+This used the private receipt-serialization fix candidate, not published 0.8.8
+bytes; its native/runtime files are unchanged. Earlier NVIDIA execution debt
+is superseded for this numerical/placement profile. AMD and external kernel
+traces remain open. The implementation and receipt fix are now on main.

@@ -46,3 +46,13 @@ this new shipped orchestration remains owed; no rentals started in this lane.
 Fixture input byte digests are required and compared independently of outputs.
 The profile requires the complete eight-module source manifest; truncated
 manifests cannot make two partial captures appear equivalent.
+
+## September 19 hardware checkpoint
+
+NVIDIA execution now passes: 30 numerical cases and ten transport controls,
+including one/two/reversed device layouts and distinct worker inventories.
+The published wheel first exposed ModeReport JSON serialization failure; fix
+c3b5783cfee741673e6dd17fcb34f377ea50c6f5 passed on the explicitly private
+receipt-fix candidate. All 123 native/runtime files match the published wheel.
+See `bench/results/identity_break/2026-09-19_hardware-gaps/` for the receipt and
+candidate audit. AMD execution and external kernel traces remain open.
