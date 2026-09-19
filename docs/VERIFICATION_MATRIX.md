@@ -649,9 +649,9 @@ been advertising 13 gaps that cannot be closed. A $3.34 two-device
 MI300X leg was bought on 2026-09-19 before this was noticed; what it
 proved is real and is reported under the driver heading below, not here.
 
-**No GPU column at all: 3**
+**No GPU column at all: 0**
 
-> cross-val-folds, language-model-config, saved-model-host-infer
+> none
 
 > (plus 1 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
@@ -676,6 +676,26 @@ proved is real and is reported under the driver heading below, not here.
 **Batch undeclared: 0**
 
 > none
+
+## Lanes a GPU column cannot judge at all
+
+6 lanes are DEGENERATE on every GPU column. Their arithmetic is
+the CPU host route, or they stand on no Mojo binding at all, so handed
+a GPU column they run that box's CPU and say nothing whatever about the
+GPU. An NVIDIA and an AMD pod each printed that refusal verbatim on
+2026-09-19; `lane_applicability` names three more. They are held out of
+the two GPU-axis counts above because listing them there advertised six
+gaps no run on any hardware can close -- the same unreachable count
+already fixed for `par-*`. THEY ARE NOT UNVERIFIED: each is checked on
+the cpu-host column, which is the one column its proposition is
+stateable on.
+
+| byte-lm-host-infer | cpu: training | sabotage: seen(build) |
+| byte-lm-host-infer-threaded | cpu: training | sabotage: seen(build) |
+| byte-lm-host-train | cpu: training | sabotage: seen(build) |
+| cross-val-folds | cpu: - | sabotage: seen(build) |
+| language-model-config | cpu: training | sabotage: seen(build) |
+| saved-model-host-infer | cpu: training | sabotage: seen(build) |
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 

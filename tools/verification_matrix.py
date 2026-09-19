@@ -650,6 +650,37 @@ def lane_references(src):
 
 # ------------------------------------------------------------------- verdicts
 
+_GPU_VACUOUS = None
+
+
+def gpu_vacuous_lanes():
+    """Lanes DEGENERATE on every GPU column, derived (2026-09-19).
+
+    A lane whose arithmetic is the CPU host route, or which stands on no Mojo
+    binding at all, runs that box's CPU when handed a GPU column and says
+    nothing whatever about the GPU. Both an NVIDIA and an AMD pod printed
+    that refusal verbatim today for `cross-val-folds`, `language-model-config`
+    and `saved-model-host-infer`, and asking `lane_applicability` directly
+    turns up three more: the `byte-lm-host-*` trio.
+
+    So "No GPU column at all" was advertising SIX gaps that no run on any
+    hardware can close -- the same unreachable-count defect already fixed for
+    `par-*` on the CPU axis and then on the GPU axis. Held out here, and
+    reported under their own heading instead.
+
+    Derived by intersecting `lane_applicability.degenerate()` over every GPU
+    column, never a list of names: a lane that gains a device path must stop
+    being vacuous by itself.
+    """
+    global _GPU_VACUOUS
+    if _GPU_VACUOUS is None:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import lane_applicability as la
+        cols = ("apple-metal", "nvidia-1gpu", "amd-1gpu")
+        _GPU_VACUOUS = set.intersection(*(set(la.degenerate(c)) for c in cols))
+    return _GPU_VACUOUS
+
+
 def lane_rows(harness, surface_mod, cols):
     gpu = gpu_coverage(cols)
     two_dev = par_two_device(cols)
@@ -693,6 +724,7 @@ def lane_rows(harness, surface_mod, cols):
         rows[lane] = dict(
             lane=lane,
             two_device=lane.startswith("par-"),
+            gpu_vacuous=lane in gpu_vacuous_lanes(),
             # The drivers' OWN axis: vendor classes carrying a TWO-DEVICE
             # column for this lane. Empty for every non-`par-*` lane.
             par_two=sorted(two_dev.get(lane, {})),
@@ -1012,7 +1044,8 @@ def render(data):
             ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)", True, False),
             ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED", False, False)):
         hit = [r for r in lanes if pred(r)
-               and not ((cpu_axis or gpu_axis) and r["two_device"])]
+               and not ((cpu_axis or gpu_axis) and r["two_device"])
+               and not (gpu_axis and r.get("gpu_vacuous"))]
         w(f"**{label}: {len(hit)}**")
         w("")
         w("> " + (", ".join(r["lane"] for r in hit) if hit else "none"))
@@ -1024,6 +1057,28 @@ def render(data):
             w(f"> (plus {len(held)} `par-*` multi-GPU driver lanes, held out of "
               f"this count: {why}. They are listed once below.)")
             w("")
+
+    # `par-*` are vacuous on a one-device GPU column too, but they have
+    # their own heading below and the reason there is different (two
+    # devices, not a host route). Listed once, under the right one.
+    vac = [r for r in lanes if r.get("gpu_vacuous") and not r["two_device"]]
+    if vac:
+        w("## Lanes a GPU column cannot judge at all")
+        w("")
+        w(f"{len(vac)} lanes are DEGENERATE on every GPU column. Their arithmetic is")
+        w("the CPU host route, or they stand on no Mojo binding at all, so handed")
+        w("a GPU column they run that box's CPU and say nothing whatever about the")
+        w("GPU. An NVIDIA and an AMD pod each printed that refusal verbatim on")
+        w("2026-09-19; `lane_applicability` names three more. They are held out of")
+        w("the two GPU-axis counts above because listing them there advertised six")
+        w("gaps no run on any hardware can close -- the same unreachable count")
+        w("already fixed for `par-*`. THEY ARE NOT UNVERIFIED: each is checked on")
+        w("the cpu-host column, which is the one column its proposition is")
+        w("stateable on.")
+        w("")
+        for r in sorted(vac, key=lambda x: x["lane"]):
+            w(f"| {r['lane']} | cpu: {r['cpu'] or '-'} | sabotage: {r['sabotage']} |")
+        w("")
 
     drivers = [r for r in lanes if r["two_device"]]
     waiting = [r for r in drivers if r["sabotage"] != "seen(build)" or not r["cpu"]]
