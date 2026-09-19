@@ -588,6 +588,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-border-types": "gradient boosting with the six non-default feature border types",
     "gbdt-ordered": "ordered boosting (boosting_type='Ordered') with the Logloss and RMSE losses",
     "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
+    "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -921,8 +922,11 @@ GATE_SABOTAGE_OWN_DEFINES = {
     # and gbdt-ordered-bayesian-noise on the CPU column AND on Metal, to the
     # same hashes (1053bc113326b3cb and ae3714a675da4713 on base), and leaves
     # gbdt-symmetric and gbdt-ordered-rmse at their clean hashes.
+    # And the quantile constant's arm (their delta adjust skipped): it moves
+    # gbdt-bfa-quantile only.
     # A family may carry more than one own define, so every value is a tuple.
-    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE", "MOJOLEARN_ORDERED_SABOTAGE"),
+    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE", "MOJOLEARN_ORDERED_SABOTAGE",
+             "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE"),
     "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
     "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE",),
 }
@@ -1985,6 +1989,9 @@ FAMILIES = (
             # lane/catboost-parity: Ordered boosting through
             # gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit
             "gbdt-ordered", "gbdt-ordered-bayesian-noise",
+            # lane/catboost-parity: the MAE / Quantile / MAPE starting point
+            # (`gbdt/metrics/sample_quantile.mojo`, shared host code)
+            "gbdt-bfa-quantile",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2002,6 +2009,9 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
             "gbdt/data/pairs.mojo",
             "gbdt/host/gbdt_oracle_yeti.mojo", "gbdt/data/yeti_rank_tasks.mojo",
+            # lane/catboost-parity: the Ordered plan and the quantile
+            # constant, host code the device fit calls too
+            "gbdt/data/ordered_plan.mojo", "gbdt/metrics/sample_quantile.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(
@@ -2556,6 +2566,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-border-types": "no reference",
     "gbdt-ordered": "no reference",
     "gbdt-ordered-bayesian-noise": "no reference",
+    "gbdt-bfa-quantile": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

@@ -434,9 +434,10 @@ _CPU_AUTO_LEARNING_RATE = {
 #: `AdjustBoostFromAverageDefaultValue`'s list (`options_helper.cpp:353-374`):
 #: an unset `boost_from_average` becomes True for these on a single host
 #: with no baseline. Only the auto learning-rate key reads this in Python;
-#: the native trainer resolves the fit's own value (`gbdt/train.mojo`), where
-#: MAE, Quantile and MAPE still resolve False (their constant needs the
-#: unimplemented `CalcSampleQuantile`, a gap named there).
+#: the native trainer resolves the fit's own value (`gbdt/train.mojo`) by the
+#: same list. MAE, Quantile and MAPE resolved False there until 2026-09-19,
+#: when their constant (`CalcSampleQuantile`, `gbdt/metrics/sample_quantile.mojo`)
+#: landed (lane/catboost-parity).
 _BOOST_FROM_AVERAGE_LOSSES = ("RMSE", "MAE", "Quantile", "MAPE")
 
 
@@ -894,6 +895,20 @@ class GradientBoosting(NumericModeMixin):
         `Lq`'s q, `Huber`'s delta, `Tweedie`'s variance_power.
     loss_border : float, optional
         `Logloss`'s target threshold, default 0.5.
+    boost_from_average : bool or None, default None
+        Start every row at the loss's optimal constant, stored as the
+        model's `bias_`. None is CatBoost's `AdjustBoostFromAverageDefaultValue`
+        (`options_helper.cpp:353-374`): True for RMSE, MAE, Quantile and
+        MAPE, False otherwise; True is accepted for those four and Logloss
+        and CrossEntropy (`catboost_options.cpp:705-709`). The MAE,
+        Quantile and MAPE constant is their `CalcSampleQuantile` with the
+        1e-6 delta adjust, host code shared by the device fit and the CPU
+        host path; it reproduces CatBoost 1.2.10 CPU's
+        `get_scale_and_bias()[1]` by bits on 40 cases (both search
+        branches, tied targets). The Quantile level enters as the float
+        `loss_alpha` widened to double (theirs parses a double), so a level
+        a float does not hold exactly (0.3) can move a quantile that sits
+        exactly on the boundary.
     leaf_estimation_method : {'Newton','Gradient','Exact','Simple'}, optional
         None (default) means the LOSS decides, per CatBoost. 'Newton' is
         refused for Quantile, MAE, LogLinQuantile, MAPE and Lq with q < 2,

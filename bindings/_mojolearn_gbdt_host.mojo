@@ -77,6 +77,10 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.os import abort
 from std.python import Python, PythonObject
+
+#: their Quantile / MAE `delta` default (`optimal_const_for_loss.h:198`),
+#: the value `gbdt/metrics/optimal_const_for_loss.mojo` passes
+comptime QUANTILE_CONST_DELTA = 1e-6
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -131,6 +135,7 @@ from gbdt.host.gbdt_oracle_multiclass import (
     gbdt_multi_host_model_text,
 )
 from gbdt.host.gbdt_oracle_rmse import (
+    GbdtRmseHostFit,
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
 )
@@ -150,6 +155,10 @@ from gbdt.overfitting_detector.overfitting_detector import OD_NONE
 from gbdt.grid_creator.binarization import (
     BORDER_TYPE_GREEDY_LOG_SUM,
     border_type_from_name,
+)
+from gbdt.metrics.sample_quantile import (
+    calculate_optimal_const_approx_for_mape,
+    calculate_weighted_target_quantile,
 )
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
 from gbdt.host.gbdt_oracle_ordered import (
@@ -695,8 +704,14 @@ def _gbdt_fit_ordered_arm(
             " (overfitting_detector.cpp:122-124) and this refuses rather"
             " than silently never firing."
         )
-    if boost_from_average == 1 and loss != String("RMSE"):
-        _refuse_ordered_host("boost_from_average=True outside RMSE")
+    var ordered_bfa_losses = (
+        loss == String("RMSE") or loss == String("MAE")
+        or loss == String("Quantile") or loss == String("MAPE")
+    )
+    if boost_from_average == 1 and not ordered_bfa_losses:
+        _refuse_ordered_host(
+            "boost_from_average=True outside RMSE, MAE, Quantile and MAPE"
+        )
     if border_count < 1 or border_count > 255:
         _refuse_ordered_host("border_count=" + String(border_count) + " (1 to 255)")
 
@@ -767,8 +782,10 @@ def _gbdt_fit_ordered_arm(
     var perm_count = permutation_count if permutation_count != -1 else 4
     if perm_count < 1:
         raise Error("Permutation count should be positive (boosting_options.cpp:67)")
+    # `AdjustBoostFromAverageDefaultValue`: unset is True for RMSE, MAE,
+    # Quantile and MAPE (`gbdt/train.mojo`)
     var bfa = boost_from_average == 1 or (
-        boost_from_average == -1 and loss == String("RMSE")
+        boost_from_average == -1 and ordered_bfa_losses
     )
     var p = GbdtHostParams(
         border_count, border_build_max_samples, n_estimators, max_depth,
@@ -1131,7 +1148,14 @@ def gbdt_fit_binding(
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
     if random_strength != Float32(0.0) and not lossguide_knobs:
         _refuse("random_strength=" + String(random_strength) + " outside Lossguide with Logloss")
-    if boost_from_average == 1 and not is_rmse:
+    # the quantile family's constant (`sample_quantile.mojo`), shared with
+    # the device fit, lane/catboost-parity
+    var quantile_family = (
+        pw_objective == GBDT_OBJ_MAE
+        or pw_objective == GBDT_OBJ_QUANTILE
+        or pw_objective == GBDT_OBJ_MAPE
+    )
+    if boost_from_average == 1 and not is_rmse and not quantile_family:
         _refuse("boost_from_average=True")
     if feature_fraction != 1.0 and not lossguide_knobs:
         _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
@@ -1322,14 +1346,37 @@ def gbdt_fit_binding(
             losses = multi_model.losses.copy()
         elif is_pointwise:
             # gbdt/host/gbdt_oracle_losses.mojo
+            # `AdjustBoostFromAverageDefaultValue`: unset is True for MAE,
+            # Quantile and MAPE (`gbdt/train.mojo`); the constant is
+            # `calc_one_dimensional_optimum_const_approx`'s, the same host
+            # code the device fit calls
+            var pw_start = Float64(0.0)
+            if quantile_family and boost_from_average != 0:
+                if pw_objective == GBDT_OBJ_MAPE:
+                    pw_start = Float64(
+                        calculate_optimal_const_approx_for_mape(
+                            y, List[Float32](), False
+                        )
+                    )
+                else:
+                    pw_start = Float64(
+                        calculate_weighted_target_quantile(
+                            y, List[Float32](), False,
+                            0.5 if pw_objective == GBDT_OBJ_MAE else Float64(
+                                pw_loss.estimator_alpha
+                            ),
+                            QUANTILE_CONST_DELTA,
+                        )
+                    )
             var pw_model = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
+                pw_start,
             )
-            text = gbdt_host_model_text(pw_model)
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration
             stopped_early = pw_model.stopped_early
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
         elif is_rmse:
             # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
             # 1597-1600`): unset is True for RMSE

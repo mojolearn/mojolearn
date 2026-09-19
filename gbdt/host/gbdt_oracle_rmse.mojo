@@ -81,6 +81,7 @@ predictions move. The symmetric arm's walker sabotage never runs here.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-rmse lane is the measurement.
 """
+from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -584,7 +585,8 @@ def gbdt_rmse_host_model_text(fit: GbdtRmseHostFit) raises -> String:
     with the `bias` record after the `losses` header record when the bias is
     not zero (`:405-410`), the one record a seeded fit adds."""
     var base = gbdt_host_model_text(fit.model)
-    if fit.bias == 0.0:
+    # non-zero BY BITS, as `model_text` (a -0.0 bias is written)
+    if bitcast[DType.uint64](fit.bias) == UInt64(0):
         return base^
     var header = String("losses ") + String(len(fit.model.losses))
     var out = String("")
