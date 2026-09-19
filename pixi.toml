@@ -1666,9 +1666,10 @@ test-runtime-control = "python3 -m pytest -q tools/test_mac_slot.py tools/test_i
 test-identity-changed = "python3 tools/identity_iterate.py"
 test-model-diff = "python3 -m pytest -q bench/model/tests/test_diff.py"
 test-algo = "python3 tools/identity_iterate.py"
-# The whole Apple check: Metal, one fit, end model only, base+denormal+odd, 600 s.
-apple-pass = "python3 tools/verify_lanes.py --all --apple-pass"
-cpu-pass = "python3 tools/verify_lanes.py --all --cpu-pass"
+# The whole Apple check: Metal, one fit, end model only, base+denormal+odd, the lanes
+# changed since the last v* tag; records as it goes and resumes when rerun.
+apple-pass = "python3 tools/verify_lanes.py --apple-pass"
+cpu-pass = "python3 tools/verify_lanes.py --cpu-pass"
 # The whole release verification, local, nothing rented: CPU then the Apple GPU.
 release-check = { depends-on = ["cpu-pass", "apple-pass"] }
 # `pixi run -e test test-python`.

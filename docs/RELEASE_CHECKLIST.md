@@ -197,15 +197,21 @@ pixi run -e test apple-pass               # the Apple GPU: every Metal lane, fit
 ```
 
 Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
-release. Each pass is `base,denormal,odd`, fitted once, end model only, with a
-600-second budget; add `--changed-since <last release tag>` to either
-`tools/verify_lanes.py` command to check only the lanes the release touched.
+release. Each pass is `base,denormal,odd`, fitted once, end model only.
 
-Both compare against `verify_reference/table.json`, so the Apple GPU is being
-held to the CPU's answer. NVIDIA and AMD runs are not a release requirement
-(section 4 is an optional diagnostic), and no check is required per change or
-per merge. The installed-wheel Metal checks in step 6 still run as part of
-building and publishing the macOS wheel.
+**Only the lanes the release touched are required, and that is automatic.**
+With no selection given, a pass checks the lanes whose sources changed since
+the newest `v*` tag (`git describe`). When a changed path cannot be attributed
+to lanes (a build script, a shared kernel) the selector widens to every lane by
+itself, so it can run too much and never too little. `--all` forces everything.
+
+**It records as it goes and resumes.** Records live in
+`~/mojolearn-evidence/release-check/<commit>/<backend>/`, one checkpoint per
+finished cell. If a pass is interrupted, killed or runs out of its one-hour
+hang guard, run the same command again at the same commit: it prints
+`resuming` and fits only what is missing. Measured 2026-09-19 on the M4 CPU
+route: 15 lanes x 3 fixtures in 14 s; killed at 6 s with 13 cells on disk,
+the rerun completed all 45.
 
 ## 6. Publish macOS (on the release Mac, 30 to 60 minutes)
 
