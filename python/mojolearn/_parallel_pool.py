@@ -60,8 +60,37 @@ from concurrent.futures import ThreadPoolExecutor
 #: CPU column runs the partition and the merge the GPU column runs. It is
 #: NOT a device claim: at one device the partition is one shard, which is
 #: what `_par_devices`'s docstring says of every `par-*` lane.
+#:
+#: lane/lm-attention-fallback (2026-09-19) adds `forecast_predict`, the one
+#: operation the four `parallel_forecasting` drivers send. IT WAS CHECKED
+#: AGAINST THIS DOCSTRING'S BAR, NOT ASSUMED: the partition is
+#: `parallel_forecasting._ranges(count, series_per_shard)`, a Python range of
+#: SERIES; each shard is a `copy.copy` of the fitted estimator whose
+#: series-major state (`_y`/`params_`, or the packed Holt-Winters components)
+#: is sliced in Python; the merge is the driver's own `memcopy` of each
+#: shard's block at its own offset, in `zip(ranges, parts)` order. NOTHING is
+#: split inside a binding: `_parallel_worker.execute` serves the operation as
+#: the bare `state.predict(*positional)` with no capability call and no
+#: `MOJOLEARN_*_DEVICE_COUNT`, `arima/` and `holtwinters/` name no device
+#: count and no `multi_gpu` module at all (their predict and forecast entries
+#: take a single default `DeviceContext()`), and the `_run` pool is NOT
+#: cooperative, so each worker is handed exactly one device index and could
+#: not split across devices even if a kernel wanted to. That last fact holds
+#: at EVERY device count, which is why this is `CPU_OPERATIONS` and not
+#: `CPU_SINGLE_DEVICE_COOPERATIVE`: `mlp_update` is restricted to one device
+#: because its cooperative pool makes the whole device group visible to a
+#: single worker and the binding splits inside it above one; no
+#: `forecast_predict` worker ever sees more than one device. The shard's own
+#: work is served on the host by `_mojolearn_arima_host`'s `arima_predict`
+#: and `arima_forecast` (bindings/arima_host_predict.mojo) and by
+#: `_mojolearn_tsa_host`'s `holtwinters_predict` and `holtwinters_forecast`
+#: (bindings/holtwinters_host_predict.mojo), the same doors the installed
+#: forecast inference binding uses, so the CPU column runs the driver's split
+#: and merge unchanged against the same host arithmetic the GPU column's
+#: shard runs.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
+    'forecast_predict',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
     'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
     'ivf_store', 'ivf_search_stored', 'ivf_finalize',

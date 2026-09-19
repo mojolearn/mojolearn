@@ -37,6 +37,9 @@ from mojolearn import _backend, _parallel_pool, host_surface
 ROOT = Path(__file__).resolve().parents[3]
 
 LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters": "tsa",
+         # lane/lm-attention-fallback (2026-09-19): the prediction half of the
+         # same series partition, the four parallel_forecasting drivers
+         "par-forecast-arima": "arima", "par-forecast-holtwinters": "tsa",
          # wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor drivers
          "par-queries-knn": "core", "par-queries-radius": "core", "par-queries-kde": "estimators",
          "par-reference-knn": "core", "par-reference-knn-reg": "core",
@@ -109,6 +112,23 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "self._pool.map([('ivf_finalize', result, (self.metric_code_,))])" in ivf
     assert "candidates.sort()" in ivf and "mapping[local]" in ivf
     wanted.update(("ivf_store", "ivf_search_stored", "ivf_finalize"))
+    # parallel_forecasting's four drivers (lane/lm-attention-fallback,
+    # 2026-09-19). `_run` builds the ONE non-cooperative pool for every
+    # request the two predict drivers append, so the send sits in a different
+    # function from the pool and is checked by name here, as par-mlp's and
+    # DistributedIVFIndex's are. The split is `_ranges` over a range of
+    # SERIES and the merge is the driver's own memcopy in `zip(ranges, parts)`
+    # order: both are the driver's Python, and the worker runs the bare
+    # `state.predict` with no capability call and no device-count env var, so
+    # no binding restates the partition at any device count.
+    forecasting = _read("python/mojolearn/parallel_forecasting.py")
+    assert "pool = DevicePool(devices)" in forecasting and "cooperative=True" not in forecasting
+    assert forecasting.count("requests.append(('forecast_predict', part, ('predict', (start, end))))") == 2
+    assert forecasting.count("for (lo, hi), value in zip(ranges, parts):") == 2
+    assert "MOJOLEARN_" not in forecasting
+    assert "    if operation == 'forecast_predict':\n        method, positional = args\n" in worker
+    assert "        return state.predict(*positional)\n" in worker
+    wanted.add("forecast_predict")
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
     assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
     cooperative = set()

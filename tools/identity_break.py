@@ -6038,6 +6038,42 @@ def _(ml, X, yc, yr, Xh=None):
                                            "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
 
 
+@lane("par-forecast-arima")
+def _(ml, X, yc, yr, Xh=None):
+    """predict_arima and forecast_arima -- the PREDICTION drivers, which
+    par-arima does not reach (it shards a fit) -- over the same four series,
+    split THREE to a shard: the uneven 3 + 1 partition, so the last shard's
+    width differs from the first's and a one-series shard is exercised.
+
+    IN-CELL ORACLE (2026-09-19, lane/lm-attention-fallback). The drivers'
+    entire claim is that a SERIES partition moves no bit, so the unsharded
+    call is the oracle: the sharded prediction and forecast are held byte
+    for byte, in this cell, to `ARIMA.predict` and `ARIMA.forecast` of the
+    same fitted estimator. Unlike par-mlp's fold (which is not a plain
+    step), nothing here needs a replay. The two sides are two call chains --
+    a free driver function against the estimator's own door -- so a defect
+    in `_ranges`, in the per-shard `__dict__` slice, in the SHARD ORDER or
+    in the merge offsets separates them on this box with no record to lean
+    on. The infer probe re-runs the driver on the reloaded model.
+
+    Reachable on a CPU column since `forecast_predict` joined
+    `_parallel_pool.CPU_OPERATIONS`; before that all four
+    `parallel_forecasting` entries refused by name on every CPU install."""
+    from mojolearn.parallel_forecasting import predict_arima, forecast_arima
+    series = np.ascontiguousarray(X[:512, :4].T)
+    d = _par_devices()
+    m = ml.ARIMA(order=(1, 0, 0)).fit(series)
+    sharded = predict_arima(m, 0, m.n_obs_, devices=d, series_per_shard=3)
+    _same_bytes("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_))
+    ahead = forecast_arima(m, 24, devices=d, series_per_shard=3)
+    _same_bytes("forecast_arima(24)", ahead, "plain ARIMA.forecast(24)", m.forecast(24))
+    return _fit(dict(predict=_h(sharded), forecast=_h(ahead)), m,
+                lambda e: _same_bytes(
+                    f"forecast_arima({FORECAST_HORIZON})",
+                    forecast_arima(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+                    f"plain ARIMA.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+
+
 # ---------------------------------------------------------------- the neural drivers' in-cell oracle (2026-09-19)
 # THE DEGENERATE CELL THESE TWO HELPERS CLOSE. par-mlp, par-samba and
 # par-samba-clip hashed the state after a sharded run and held it to NOTHING:
@@ -6489,6 +6525,43 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("fit_exponential_smoothing forecast(24)", f, "plain forecast(24)", plain.forecast(24))
     return _fit(dict(**{n.strip("_"): _h(getattr(par, n)) for n in names}, forecast=_h(f)),
                 par, lambda e: (e.forecast(FORECAST_HORIZON),))
+
+
+@lane("par-forecast-holtwinters")
+def _(ml, X, yc, yr, Xh=None):
+    """predict_exponential_smoothing and forecast_exponential_smoothing --
+    the PREDICTION drivers, which par-holtwinters does not reach -- over the
+    same four series, three to a shard. That 3 + 1 split exercises the
+    one-series shard, whose worker returns cuML's 1-D shape instead of a
+    `(steps, ts_num)` block and whose components slice is a single column;
+    the `index=` arm asks for the third return shape on top of it.
+    In-sample prediction is refused by the driver by name, so `start = n`.
+
+    IN-CELL ORACLE (2026-09-19, lane/lm-attention-fallback): par-forecast-
+    arima's, read on this driver -- the sharded answer held byte for byte,
+    in the cell, to `ExponentialSmoothing.predict` and `.forecast` of the
+    same fitted estimator, which is what a series partition is claimed to
+    leave alone. Reachable on a CPU column only since `forecast_predict`
+    joined `_parallel_pool.CPU_OPERATIONS`."""
+    from mojolearn.parallel_forecasting import (forecast_exponential_smoothing,
+                                                predict_exponential_smoothing)
+    S = _hw_series(X)
+    d = _par_devices()
+    m = ml.ExponentialSmoothing(S, seasonal="additive", seasonal_periods=12, ts_num=4).fit()
+    sharded = predict_exponential_smoothing(m, m.n, m.n + 24, devices=d, series_per_shard=3)
+    _same_bytes("predict_exponential_smoothing(n, n + 24)", sharded,
+                "plain ExponentialSmoothing.predict(n, n + 24)", m.predict(m.n, m.n + 24))
+    ahead = forecast_exponential_smoothing(m, 24, devices=d, series_per_shard=3)
+    _same_bytes("forecast_exponential_smoothing(24)", ahead,
+                "plain ExponentialSmoothing.forecast(24)", m.forecast(24))
+    one = forecast_exponential_smoothing(m, 24, index=2, devices=d, series_per_shard=3)
+    _same_bytes("forecast_exponential_smoothing(24, index=2)", one,
+                "plain ExponentialSmoothing.forecast(24, index=2)", m.forecast(24, index=2))
+    return _fit(dict(predict=_h(sharded), forecast=_h(ahead), indexed=_h(one)), m,
+                lambda e: _same_bytes(
+                    f"forecast_exponential_smoothing({FORECAST_HORIZON})",
+                    forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+                    f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
 
 
 def _byte_lm_seed(ml):
@@ -7741,6 +7814,25 @@ def _batch_forecast(ml, e, Xh):
 
 _batch_decl(_batch_forecast, "holtwinters", "holtwinters-multiplicative", "arima", "arima-011",
             "arima-seasonal-c", "par-arima")
+
+
+def _batch_par_forecast(driver, axis, **kw):
+    """The forecasting DRIVERS' batch part (2026-09-19): `_batch_forecast`'s
+    LENGTH invariance asked through the sharded entry instead of the
+    estimator's own, so the part exercises the partition at every horizon
+    the prefix protocol asks for (1, 7 and H - 1), not only at H. There are
+    still no input rows to split: a series batch would be a different fit."""
+    def spec(ml, e, Xh):
+        import mojolearn.parallel_forecasting as pf
+        d = _par_devices()
+        fn = getattr(pf, driver)
+        return [_BatchPrefix(driver, FORECAST_HORIZON,
+                             lambda h: (fn(e, h, devices=d, series_per_shard=3, **kw),), axis=axis)]
+    return spec
+
+
+_batch_decl(_batch_par_forecast("forecast_arima", -1), "par-forecast-arima")
+_batch_decl(_batch_par_forecast("forecast_exponential_smoothing", 0), "par-forecast-holtwinters")
 
 
 def _batch_forecast_exog(ml, e, Xh):

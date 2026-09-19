@@ -807,6 +807,19 @@ TRAINING_LANE_NAMES = {
     "par-scaler-minmax": "the column-sharded min-max scaler",
     "par-arima": "series-sharded ARIMA",
     "par-holtwinters": "series-sharded Holt-Winters",
+    # lane/lm-attention-fallback (2026-09-19): the four
+    # `parallel_forecasting` drivers, the PREDICTION half of the same series
+    # partition. They send one worker operation, `forecast_predict`, whose
+    # split is `parallel_forecasting._ranges` in Python and whose merge is
+    # the driver's own ordered memcopy; nothing is split inside a binding
+    # (the worker runs the bare `state.predict`, and arima/ and holtwinters/
+    # name no device count and no multi_gpu module), so
+    # `_parallel_pool.CPU_OPERATIONS` admits it at any device count and the
+    # shard's own predict and forecast are this family's and the tsa
+    # family's host bindings. Before that all four entries refused by name
+    # on every CPU install and had no lane at all.
+    "par-forecast-arima": "the series-sharded ARIMA prediction and forecast drivers",
+    "par-forecast-holtwinters": "the series-sharded Holt-Winters prediction and forecast drivers",
     # Wave 2 (lane/cpu-training-par-wave2, 2026-09-15): the neighbor
     # drivers. ParallelQueries cuts query rows in Python (four shards of 16
     # rows); ReferenceShardedNeighbors cuts the reference into four shards
@@ -1666,7 +1679,8 @@ FAMILIES = (
         routes="_mojolearn_tsa",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d", "par-holtwinters"),
+        training_lanes=("holtwinters", "holtwinters-multiplicative", "kpss", "select-d", "par-holtwinters",
+                        "par-forecast-holtwinters"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ExponentialSmoothing", "kpss_test", "select_d"),
@@ -2369,7 +2383,7 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("arima", "arima-011", "arima-seasonal-c", "par-arima", "arima-exog",
-                        "arima-exog-seasonal"),
+                        "arima-exog-seasonal", "par-forecast-arima"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("ARIMA",),
