@@ -1,95 +1,52 @@
-## Latest retained checkpoint (2026-09-19)
+# Hardware verification gap closure
 
-NVIDIA: **648/648** originally missing fixture-parts covered, zero differences.
-AMD: **627/630** covered, zero differences; the remaining three are two-device
-resampling **batch** witnesses for `dupes`, `negative`, and `odd`. The final
-AMD capture reached its time limit; this is missing evidence, not a mismatch.
-Both final pods were deleted and confirmed HTTP 404; no paid pod remains.
-The JSON remaining ledgers and final raw captures are retained beside this file.
-These captures predate the separate libm-removal candidate. Existing verified
-numerical captures have not been rerun or relabeled as validation of that change.
+The tracked missing-part ledger is closed: **NVIDIA 648/648**, **AMD 630/630**,
+with **zero numerical differences**. `closure-ledger.json` maps every one of
+those 1,278 fixture-parts to a retained raw capture, its SHA256, and the expected
+reference hash. Previously compatible captures were reused; the full matrix
+was not rerun.
 
-The earlier checkpoints below preserve the history and their then-current counts.
+Admission checks require IDENTICAL mode, at least two repeats, matching fixture
+and heldout digests, current lane revision, the existing reference hashes, and
+the prescribed batch protocol for batch witnesses. NVIDIA includes the 18
+previously missing single-device resampling parts in addition to its two-device
+parts. AMD covers the corresponding 630 two-device parts. This is the finite
+requested fixture set, not a claim about every possible model, input or device.
 
-# NVIDIA hardware coverage follow-up
+The last AMD job captured only the three remaining resampling fixtures. Its raw
+result and job summary are `amd-resample-last-two.json` and
+`amd-resample-last-summary.json`. Both final remaining ledgers report zero.
+All rented pods were deleted and verified absent; the last pod's lifecycle
+receipt is `final-resource-cleanup.json`.
 
-The eleven newer parallel lanes now have complete two-L40S captures: nine default
-fixtures, two repeats, and 378 numerical fixture-parts matching the shipped
-references. These ran the published 0.8.8 Linux wheel (SHA and source commits in
-`new-lanes-summary.json`). GPU identities are retained in `nvidia-gpu-inventory.csv`.
-No existing reference digest changed.
+## Other closed configurations
 
-The first installed distributed/CV attempts exposed a receipt serialization bug:
-`environment()` returns a ModeReport object, which JSON cannot serialize. Commit
-c3b5783cfee741673e6dd17fcb34f377ea50c6f5 adds an explicit JSON environment snapshot.
-The two verifiers then passed on a private candidate containing that fix:
-30 distributed numerical cases and ten transport controls; twelve CV runs across
-one/two/reversed devices and eight comparator controls. Both retain distinct
-worker/device inventory. Kernel execution traces and native arithmetic fault
-controls are not claimed by these receipts.
+- Eleven newer parallel lanes: nine fixtures and two repeats, 378 numerical
+  parts on each vendor. Older lanes' missing model/batch witnesses were filled
+  without repeating their already compatible captures.
+- Distributed execution: 30 numerical cases and 10 transport controls per vendor.
+- Cross-validation: 12 one/two/reversed-device runs and eight comparator controls
+  per vendor. Canonical NVIDIA/AMD receipt comparisons match.
+- Loaded language models: 24 existing tiny checkpoint cases, both layer layouts
+  `(0,1)` and `(1,0)`, 144 baseline parts per layout on each vendor. Distinct
+  worker devices and completed layer-run RPCs were observed.
 
-The candidate shares the version label 0.8.8 but is NOT the published wheel.
-Its distinct SHA is recorded in `receipt-candidate-audit.json`; all 123 native and
-runtime files are byte-identical to the published wheel. Only the three Python
-verification/reporting modules changed. This candidate has not been published.
-36 targeted software tests passed, including preservation of mode-mismatch
-information through JSON serialization.
+These numerical/placement receipts do not claim external kernel execution
+traces, large external checkpoints, long contexts, or additional CPU training
+ports. Those are separate scopes.
 
-These records close the listed NVIDIA gaps; they do not certify all algorithms
-on every device. Historical records exist for 39 other parallel lanes, but some
-omit later model/batch checks, and their UMAP revision is outdated. A separate
-bounded capture is working on those missing parts. AMD execution of the newer
-lanes remains pending: RunPod reports no two-MI300X capacity, and DigitalOcean
-rejected an eight-MI325X request because it exceeds the account GPU quota.
-No AMD droplet was created.
+## Fixes and candidate provenance
 
-Full capture snapshots, saved CV models, initial failures and lifecycle receipts:
-`/Users/andrewhendel/mojolearn-evidence/hardware-gaps-088/`.
+`c3b5783c` fixed JSON serialization of verifier environment receipts; all 123
+existing Linux native/runtime files were unchanged. `1aa581748` fixed NumPy
+conversion of empty Arrays; all six previously failed AMD radius fixtures now
+match all 18 train/infer/model reference parts. Source transport stopped creating
+untracked bytecode during manifest validation. Distinct private wheel hashes,
+raw captures, comparisons and scoped validation are retained here.
 
-## Additional model-file evidence
+The separate libm-removal candidate is documented in
+`../../portable_math/2026-09-19/README.md`. Its small Apple/AMD smoke does not
+relabel these prior full-lane captures as new runtime qualification. Published
+0.8.8 remains unchanged; no release tag or PyPI artifact was replaced.
 
-`model-gaps-summary.json` and the `nvidia-model-*` captures close ten older
-model-file gaps, with nine fixtures and two repeats each. All270 captured
-train/infer/model parts match the current references, including90 newly recorded
-two-device model witnesses. Existing batch checks were omitted from these jobs.
-Four scaler fixtures also completed before the bounded job expired; they remain
-in the external partial capture and are excluded from the next run's requests.
-
-The first test pod was deleted and verified absent via HTTP404. A second bounded
-NVIDIA leg is targeting only the remaining168 reference-parts plus loaded-model
-layer distribution against the retained24-case single-device baseline. AMD
-capacity/quota remains unresolved. No release tag or PyPI artifact was changed.
-
-## H100 completion checkpoint
-
-The second leg has completed all nine UMAP fixtures, DBSCAN, graph agglomerative
-clustering, HDBSCAN, KMeans, and the remaining five scaler fixtures. All 149
-requested numerical parts match the current references. Raw captures and GPU
-inventory have the `nvidia-h100-` prefix. Only resampling remains in the targeted
-NVIDIA fixture ledger; completed older captures are retained without rerunning.
-
-Both loaded-LM layouts (0,1 and 1,0) match all 144 baseline parts across 24 tiny
-checkpoint cases. Each actual worker has a distinct physical device and a
-completed layer-run RPC. This closes NVIDIA numerical and placement evidence
-for this profile; external kernel traces remain owed. The published wheel was
-used unchanged. AMD reservation was attempted after stock appeared, but the
-provider rejected creation as unavailable; no AMD pod was created.
-
-## AMD placement checkpoint
-
-AMD MI300X now passes distributed (30 numerical cases, ten transport controls)
-and CV (twelve runs, eight comparator controls). Canonical receipt comparisons
-against NVIDIA both return MATCH. Both AMD loaded-LM layouts also match all
-144 baseline parts across 24 cases, with distinct owner devices and completed
-layer-run RPCs. These AMD captures use the explicitly private receipt-fix
-candidate described above. The `amd-*` receipts and
-`cross-vendor-receipt-comparison.json` retain this evidence. External kernel
-traces remain outside these claims. Classical AMD missing-part captures continue.
-
-NVIDIA single-device resampling is complete. The previous H100 pod was deleted
-and confirmed absent; eight two-device resampling batch witnesses are being
-captured in a final bounded gap-only pass.
-
-Eleven AMD classical missing-part captures are now retained, covering234 new
-fixture-parts with zero mismatches. The completed-job summary lists the exact
-lanes and counts; the remaining AMD jobs are still running.
+`HISTORY.md` preserves earlier progress reports and their then-current counts.

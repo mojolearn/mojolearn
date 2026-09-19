@@ -1,0 +1,9 @@
+{
+  "active_paid_pods": 0,
+  "last_pod": "9e5jl9cqvu8hfq",
+  "delete_http_status": 204,
+  "absence_http_status": 404,
+  "controller_exit_code": 0,
+  "lease_minutes_remaining_at_deletion": 33,
+  "scope": "Final AMD capture; previous resource deletions retained in campaign history"
+}

@@ -1,0 +1,19 @@
+{
+  "status": "CAPTURED",
+  "source_commit": "1aa581748cc09e14982baf36e81b509ffe49f1ea",
+  "vendor": "hip",
+  "wheel_sha256": "61a53d9e673628f0f46ad3f65d000fdb80d4865f416f96e3ef59f813c2c99dc1",
+  "plan_sha256": "ceb001665186bd8cef1983a75a529cc44e48574e42c3593021dbb5ed354375a6",
+  "expected_jobs": 1,
+  "jobs": [
+    {
+      "id": "par-resample-two",
+      "exit_code": 0,
+      "seconds": 596.7163604430389,
+      "matching_parts": 3,
+      "errors": [],
+      "complete": true,
+      "cells": 3
+    }
+  ]
+}
