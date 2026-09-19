@@ -76,7 +76,7 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.host.gemm_oracle import OP_NN, OP_NT, gemm_oracle, GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle, GEMM_ORACLE_HOST_SABOTAGE
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 

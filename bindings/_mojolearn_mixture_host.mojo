@@ -37,7 +37,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from bindings.mixture_host_scoring import (
     gmm_sample_binding,
     gmm_predict_binding,

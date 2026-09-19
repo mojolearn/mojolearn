@@ -3,6 +3,10 @@
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """The IDENTICAL FP32 GEMM oracle: the contract, written out, on the host.
 
+This historical module name is the compatibility and normative-reference
+location. Production host code imports ``gemm.host.identical_gemm`` so its
+role as the CPU implementation is not confused with check-only code.
+
 **NO REFERENCE FILE, and it replaces no reference call.** RAFT's standalone matrix
 product is `raft/linalg/gemm.hpp` -> `detail/cublaslt_wrappers.hpp` ->
 cuBLASLt, a CLOSED library with no source to mirror (`ENGINEERING_RULES.md` 0b-i:

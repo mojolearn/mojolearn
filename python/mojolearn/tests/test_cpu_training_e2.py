@@ -156,7 +156,7 @@ def test_manifest_covers_spectral_and_the_oracle_moved():
     text = _read(SPECTRAL_ORACLE)
     assert not GPU_IMPORTS.search(text), f"{SPECTRAL_ORACLE} imports a GPU module"
     assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M)
-    assert "from gemm.host.gemm_oracle import contract_leaf_size" in text
+    assert "from gemm.host.identical_gemm import contract_leaf_size" in text
     assert "def oracle_embedding[" in text and "def host_spectral_fit_predict_dataset(" in text
     assert "def host_coo_symmetrize(" in text
     checks = _read("spectral/checks/spectral_oracle.mojo")

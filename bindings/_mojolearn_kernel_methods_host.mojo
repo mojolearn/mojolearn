@@ -49,7 +49,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from kernel_methods.host.km_host_oracle import (
     kmh_kernel_ridge_fit,
     kmh_kernel_ridge_predict,

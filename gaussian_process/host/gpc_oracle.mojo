@@ -55,7 +55,7 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_validate_data,
     gpr_host_validate_kernel,
 )
-from gemm.host.gemm_oracle import OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_TN, gemm_oracle
 
 
 def gpc_host_fit(

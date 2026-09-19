@@ -24,7 +24,7 @@ because the generated serial loop spells only the first axis.
 from std.memory import memcpy
 from std.sys import size_of
 
-from gemm.host.gemm_oracle import OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_TN, gemm_oracle
 # the device GEMM file's host-safe fold helpers, lifted verbatim
 from mamba.host.gen.gemm_identical_parts import (
     GEMM_FOLD_LEVELS,

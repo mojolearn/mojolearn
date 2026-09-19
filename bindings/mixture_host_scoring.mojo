@@ -16,7 +16,7 @@ from std.python._cpython import GILReleased
 
 from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32
 from mixture.checks.sample import gmm_sample_host
-from gemm.host.gemm_oracle import GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE
 from std.memory import bitcast
 from mixture.host.gmm_host_oracle import (
     gmmh_predict,

@@ -57,7 +57,7 @@ from checks.kernel_matrix import (
     column_name,
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, ftz
-from gemm.host.gemm_oracle import (
+from gemm.host.identical_gemm import (
     GEMM_ORACLE_HOST_SABOTAGE,
     OP_TN,
     gemm_oracle,

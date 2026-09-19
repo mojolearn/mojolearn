@@ -43,7 +43,7 @@ from gaussian_process.host.gpr_oracle import (
     gpr_host_kernel_matrix,
     gpr_host_validate_data,
 )
-from gemm.host.gemm_oracle import OP_NN, OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
 
 
 def gpr_host_sample_y(

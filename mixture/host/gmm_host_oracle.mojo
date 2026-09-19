@@ -72,7 +72,7 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_fit,
 )
 from core.philox import philox4x32_10
-from gemm.host.gemm_oracle import OP_NN, OP_TN, gemm_oracle
+from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
 
 comptime GMMH_COV_FULL = 0
 comptime GMMH_INIT_KMEANS = 0

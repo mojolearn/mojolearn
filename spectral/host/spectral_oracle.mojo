@@ -54,7 +54,7 @@ from cluster.host.kmeans_oracle import (
     host_row_norms,
 )
 from core.knn_host_predict import KNN_HOST_METRIC_FROM_IS_SQRT, host_knn_search
-from gemm.host.gemm_oracle import contract_leaf_size
+from gemm.host.identical_gemm import contract_leaf_size
 from spectral.checks.symmetric_eig_host import (
     hflush,
     hfma,

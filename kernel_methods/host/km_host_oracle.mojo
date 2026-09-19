@@ -87,7 +87,7 @@ from decomposition.host.pca_oracle import (
     host_jacobi_eigh,
     host_sign_flip,
 )
-from gemm.host.gemm_oracle import OP_NN, OP_NT, gemm_oracle
+from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle
 from kernel_methods.checks.random_features import (
     km_basis_indices,
     km_feature_scale,

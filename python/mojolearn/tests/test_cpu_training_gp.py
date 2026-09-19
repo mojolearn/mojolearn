@@ -97,11 +97,11 @@ def test_oracles_import_no_gpu_and_no_device_module():
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
         assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{rel} imports DeviceContext"
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", gp, re.M))) == [
-        "checks.numerics", "cholesky.host.chol_oracle", "gemm.host.gemm_oracle",
+        "checks.numerics", "cholesky.host.chol_oracle", "gemm.host.identical_gemm",
         "std.memory", "std.sys.compile",
     ]
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", chol, re.M))) == [
-        "checks.numerics", "gemm.host.gemm_oracle", "std.memory",
+        "checks.numerics", "gemm.host.identical_gemm", "std.memory",
     ]
 
 
