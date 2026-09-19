@@ -32,6 +32,10 @@ def _fixture(n=256, d=4, seed=5):
 
 def _model(**kw):
     params = dict(n_estimators=10, max_depth=4, loss="QueryRMSE")
+    # pinned to the configuration these tests were written against: the
+    # SymmetricTree defaults became CatBoost's GPU ones (lane/catboost-parity,
+    # 2026-09-19), whose query bootstrap is refused by name for this loss
+    params.update(bootstrap_type="No", random_strength=0.0)
     params.update(kw)
     return GradientBoosting(**params)
 

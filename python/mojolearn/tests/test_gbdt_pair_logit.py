@@ -47,6 +47,10 @@ def _generated_pairs(rel, group):
 
 def _model(**kw):
     params = dict(n_estimators=8, max_depth=4, loss="PairLogit")
+    # pinned to the configuration these tests were written against: the
+    # SymmetricTree defaults became CatBoost's GPU ones (lane/catboost-parity,
+    # 2026-09-19), whose query bootstrap is refused by name for this loss
+    params.update(bootstrap_type="No", random_strength=0.0, leaf_estimation_iterations=10)
     params.update(kw)
     return GradientBoosting(**params)
 
@@ -88,7 +92,7 @@ def test_refusals_by_name():
     with pytest.raises(NotImplementedError, match="pairs without group_id"):
         _model().fit(X, rel, pairs=pairs)
     with pytest.raises(NotImplementedError, match="read by loss='PairLogit' only"):
-        GradientBoosting(n_estimators=2, loss="QueryRMSE").fit(X, rel, group_id=g, pairs=pairs)
+        GradientBoosting(n_estimators=2, loss="QueryRMSE", bootstrap_type="No").fit(X, rel, group_id=g, pairs=pairs)
     with pytest.raises(Exception, match="Cannot generate pairs for data without groups"):
         _model().fit(X, rel)
     with pytest.raises(Exception, match="Target data is constant"):
