@@ -60,9 +60,11 @@ integrand folds exact integers and does not move.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_div, identical_mul, identical_sqrt
 from core.segmented_sort import float_to_sortable
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,
     canonicalize_nan,
@@ -484,17 +486,33 @@ def host_bootstrap(
         )
 
     var key = resample_key(seed, RESAMPLE_KIND_BOOTSTRAP)
-    var dist = List[Float32](capacity=n_resamples)
-    if stat_needs_sort(statistic):
-        for rr in range(n_resamples):
-            dist.append(host_bootstrap_order_statistic(
-                x, n, n_features, key, r_first + rr, statistic, q_or_prop
-            ))
+    var dist = List[Float32](length=n_resamples, fill=Float32(0.0))
+    var dp = dist.unsafe_ptr()
+    var tasks = host_predict_task_count(n_resamples)
+    var chunk = host_predict_chunk(n_resamples, tasks)
+    var needs_sort = stat_needs_sort(statistic)
+    # A replicate reads only the sample and its global replicate id, and owns
+    # exactly one output slot.  Splitting contiguous replicate ranges changes
+    # no statement inside a replicate; MOJOLEARN_CPU_THREADS=1 is the serial
+    # form of this same walk.
+
+    def _replicates(c: Int) {imm x, imm dp, imm chunk, imm n_resamples, imm n, imm n_features, imm key, imm r_first, imm statistic, imm q_or_prop, imm needs_sort}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_resamples)
+        for rr in range(lo, hi):
+            if needs_sort:
+                dp.unsafe_store(rr, host_bootstrap_order_statistic(
+                    x, n, n_features, key, r_first + rr, statistic, q_or_prop
+                ))
+            else:
+                dp.unsafe_store(rr, host_bootstrap_fold_statistic(
+                    x, n, n_features, key, r_first + rr, statistic
+                ))
+
+    if tasks == 1:
+        _replicates(0)
     else:
-        for rr in range(n_resamples):
-            dist.append(host_bootstrap_fold_statistic(
-                x, n, n_features, key, r_first + rr, statistic
-            ))
+        sync_parallelize(_replicates, tasks)
     var sorted_dist = host_sorted_by_key(dist, 0, n_resamples)
 
     var theta_hat = host_point_estimate(x, n, n_features, statistic, q_or_prop)
@@ -644,11 +662,25 @@ def host_permutation_test(
         )
 
     var key = resample_key(seed, RESAMPLE_KIND_PERMUTATION)
-    var null_dist = List[Float32](capacity=n_resamples)
-    for rr in range(n_resamples):
-        null_dist.append(host_permutation_statistic(
-            pooled, key, r_first + rr, n_pooled, n_x, statistic
-        ))
+    var null_dist = List[Float32](length=n_resamples, fill=Float32(0.0))
+    var np = null_dist.unsafe_ptr()
+    var tasks = host_predict_task_count(n_resamples)
+    var chunk = host_predict_chunk(n_resamples, tasks)
+    # As above, the total order and both pinned folds remain wholly inside one
+    # replicate.  Only independent output slots are assigned to workers.
+
+    def _replicates(c: Int) {imm pooled, imm np, imm chunk, imm n_resamples, imm key, imm r_first, imm n_pooled, imm n_x, imm statistic}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_resamples)
+        for rr in range(lo, hi):
+            np.unsafe_store(rr, host_permutation_statistic(
+                pooled, key, r_first + rr, n_pooled, n_x, statistic
+            ))
+
+    if tasks == 1:
+        _replicates(0)
+    else:
+        sync_parallelize(_replicates, tasks)
 
     # The observed statistic, `estimator.mojo:1299-1333`.
     var vx = List[Float32]()
