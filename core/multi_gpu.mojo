@@ -6,7 +6,31 @@ their allocations; callers retain both contexts through every copy and join.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.gpu import block_dim, block_idx, thread_idx
+from std.os import getenv
 from std.sys.info import has_amd_gpu_accelerator
+
+
+def gbdt_shard_device_id(rank: Int) -> Int:
+    """The device a GBDT feature shard of `rank` runs on: `rank`, or 0 for
+    every rank under `MOJOLEARN_GBDT_SHARD_ONE_DEVICE=1`.
+
+    THE LOGICAL-SHARD DIAGNOSTIC (lane/catboost-parity, 2026-09-19). The
+    partitioned histogram path (`launch_feature_shards`,
+    `pointwise_feature_shards`) is a byte-preserving copy of whole packed
+    feature groups into per-shard contexts and back, with no cross-shard
+    floating-point reduction. Running every shard on device 0, each on its
+    own context, exercises that partition, the per-shard launches and the
+    reassembly on a one-GPU machine (the Apple M4), so the partitioned fit
+    can be held to the one-device fit locally. It is NOT a multi-device
+    measurement: peer copies between two physical devices, and their
+    staging on AMD, are not reached. No build, workflow or gate sets it.
+    """
+    try:
+        if String(getenv("MOJOLEARN_GBDT_SHARD_ONE_DEVICE")) == "1":
+            return 0
+    except:
+        pass
+    return rank
 
 
 def transfer_bytes[dt: DType](source_ctx: DeviceContext, target_ctx: DeviceContext,

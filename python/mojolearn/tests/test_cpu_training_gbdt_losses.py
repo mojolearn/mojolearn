@@ -105,8 +105,12 @@ def test_losses_oracle_spells_the_bit_carrying_constructs():
     assert "comptime GBDT_QUANTILE_ITERATIONS = 16" in text
     assert "residuals[pos] = ftz(g_target[pos] - g_cursor[pos])" in text
     assert "weights[pos] = ftz(Float32(1.0) / delta)" in text, "the MAPE quotient"
-    assert "x += UInt64(0x9E3779B97F4A7C15)" in text, "splitmix64 seeds"
-    assert "var stride = blocks * GBDT_BOOT_BLOCK" in text, "the bootstrap stride walk"
+    # the bootstrap moved to gbdt_oracle.mojo (lane/catboost-parity), where
+    # the symmetric Logloss fit's Bayesian arm reads it too
+    boot = _read("gbdt/host/gbdt_oracle.mojo")
+    assert "x += UInt64(0x9E3779B97F4A7C15)" in boot, "splitmix64 seeds"
+    assert "var stride = blocks * GBDT_BOOT_BLOCK" in boot, "the bootstrap stride walk"
+    assert "var tmp = -identical_log(draw[0] + Float32(1e-20))" in boot, "the Bayesian weight"
     assert "if function_value <= next_value:" in text, "AnyImprovement"
     assert "out.append(weights_cpu[leaf] + lambda_reg)" in text, "Gradient second derivatives"
     assert "comptime if GBDT_ORACLE_HOST_SABOTAGE:" in text
@@ -120,7 +124,8 @@ def test_driver_spells_the_searcher_options():
     assert "if Float64(-leaves[to_split[k]].best_gain) > params.min_split_gain:" in text
     assert "var feature_random = TRandom(base.random_seed ^ UInt64(0x4645415455524553))" in text
     assert "var j = i + Int(random.uniform(UInt64(len(eligible) - i)))" in text
-    assert "weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))" in text
+    # `_target_std_dev` moved to gbdt_oracle.mojo (lane/catboost-parity)
+    assert "weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))" in _read("gbdt/host/gbdt_oracle.mojo")
     assert "var tree_seed = noise_rand.next_uniform_l()" in text
 
 

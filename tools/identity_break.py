@@ -371,6 +371,10 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/cpu-training-small-gaps)
       metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted svc-poly
       gp-normalize-y
+    2026-09-19 (lane/catboost-parity: CatBoost's GPU defaults, Ordered
+               boosting, the seven border types, the quantile constant)
+      gbdt-catboost-defaults gbdt-ordered gbdt-ordered-bayesian-noise
+               gbdt-border-types gbdt-bfa-quantile par-ordered par-border-types
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1297,6 +1301,29 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GradientBoosting(**kw).fit(X, yc)
     nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), newton_cosine=_h(nc.predict(X))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-catboost-defaults")
+def _(ml, X, yc, yr, Xh=None):
+    """The SymmetricTree defaults this implementation takes from CatBoost's
+    GPU learner (catboost 1.2.10), everything unset but the tree count and
+    the loss: the auto learning rate off the GPU coefficient rows (read back
+    as `learning_rate_`), the Bayesian bootstrap at temperature 1,
+    random_strength 1 with its model-length decay, and the small-iteration
+    leaf rule (one Newton step below 200 trees and 20 features). 20 trees,
+    Plain (below 500 trees), Logloss, and the same fit through
+    GradientBoostingClassifier, which defers every default. At 20 trees the
+    auto rate is capped at 0.5 on every fixture, so a third fit, 50 depth-2
+    trees on the first 2000 rows, reads the formula below its cap (0.475 on
+    the GPU rows; 0.216 on the CPU rows the sabotage arm swaps in)."""
+    m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
+    c = ml.GradientBoostingClassifier(n_estimators=20).fit(X, yc)
+    a = ml.GradientBoosting(n_estimators=50, max_depth=2, loss="Logloss").fit(X[:2000], yc[:2000])
+    lr = np.asarray([m.learning_rate_, a.learning_rate_], dtype=np.float64)
+    return _fit(dict(predict=_h(m.predict(X)), learning_rate=_h(lr),
+                     classifier_proba=_h(c.predict_proba(X)),
+                     auto_rate_fit=_h(a.predict(X[:2000]))),
                 m, lambda e: (e.predict(Xh),))
 
 
@@ -4927,6 +4954,25 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
 
 
+@lane("par-border-types")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-border-types lane's six fits (feature
+    histograms partitioned by whole packed groups; border selection is host
+    code on the root), each held to the plain one-device fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    parts, first = {}, None
+    for bt in _GBDT_BORDER_TYPES:
+        kw = dict(n_estimators=8, max_depth=4, border_count=32, loss="Logloss",
+                  feature_border_type=bt)
+        par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+        plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
+        p = par.predict(X)
+        _same_bytes(f"fit_boosting {bt} predict", p, "plain predict", plain.predict(X))
+        parts[bt] = _h(p)
+        first = first or par
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 @lane("par-feature-freq")
 def _(ml, X, yc, yr, Xh=None):
     """fit_feature_freq on the gbdt-feature-freq lane's fit, held to the plain fit."""
@@ -5849,7 +5895,8 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
-            "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile")
+            "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
+            "gbdt-catboost-defaults", "par-border-types")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

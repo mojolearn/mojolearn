@@ -589,6 +589,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-ordered": "ordered boosting (boosting_type='Ordered') with the Logloss and RMSE losses",
     "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
     "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
+    "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -1992,6 +1993,9 @@ FAMILIES = (
             # lane/catboost-parity: the MAE / Quantile / MAPE starting point
             # (`gbdt/metrics/sample_quantile.mojo`, shared host code)
             "gbdt-bfa-quantile",
+            # lane/catboost-parity: the SymmetricTree defaults, the Bayesian
+            # bootstrap and score noise through gbdt_oracle.mojo::gbdt_host_fit
+            "gbdt-catboost-defaults",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2567,6 +2571,7 @@ PUBLIC_PENDING_LANES = {
     "gbdt-ordered": "no reference",
     "gbdt-ordered-bayesian-noise": "no reference",
     "gbdt-bfa-quantile": "no reference",
+    "gbdt-catboost-defaults": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

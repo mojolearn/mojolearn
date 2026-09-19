@@ -98,6 +98,9 @@ from gbdt.data.quantization import (
     NAN_TREATMENT_AS_TRUE,
 )
 from gbdt.host.gbdt_oracle import (
+    GBDT_BOOT_BAYESIAN,
+    GBDT_BOOT_BERNOULLI,
+    GBDT_BOOT_POISSON,
     GBDT_LOGLOSS_NEWTON_ITERATIONS,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostParams,
@@ -105,8 +108,6 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_model_text,
 )
 from gbdt.host.gbdt_oracle_losses import (
-    GBDT_BOOT_BERNOULLI,
-    GBDT_BOOT_POISSON,
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
     GBDT_LEAF_NEWTON,
@@ -1105,6 +1106,14 @@ def gbdt_fit_binding(
     # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
     # the searcher knobs of that lane are restated as well
     var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
+    # the symmetric Logloss fit's stochastic arm, CatBoost's GPU defaults
+    # (Bayesian bootstrap, random_strength 1): gbdt_oracle.mojo::gbdt_host_fit,
+    # lane/catboost-parity (the gbdt-catboost-defaults lane); numeric
+    # columns only, as the one-hot arm is measured without it
+    var symmetric_stochastic = (
+        grow_code == 0 and loss == String("Logloss") and not is_pointwise
+        and not is_multi and not is_rmse and n_flags == 0
+    )
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
             _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
@@ -1134,7 +1143,12 @@ def gbdt_fit_binding(
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
         )
         var lg_boot = lossguide_knobs and bootstrap_type == String("Bernoulli")
-        if not pw_boot and not lg_boot:
+        var sym_boot = symmetric_stochastic and (
+            bootstrap_type == String("Bayesian")
+            or bootstrap_type == String("Bernoulli")
+            or bootstrap_type == String("Poisson")
+        )
+        if not pw_boot and not lg_boot and not sym_boot:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
@@ -1146,8 +1160,11 @@ def gbdt_fit_binding(
         _refuse("eval_set")
     if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
-    if random_strength != Float32(0.0) and not lossguide_knobs:
-        _refuse("random_strength=" + String(random_strength) + " outside Lossguide with Logloss")
+    if random_strength != Float32(0.0) and not lossguide_knobs and not symmetric_stochastic:
+        _refuse(
+            "random_strength=" + String(random_strength)
+            + " outside Lossguide with Logloss and SymmetricTree with Logloss"
+        )
     # the quantile family's constant (`sample_quantile.mojo`), shared with
     # the device fit, lane/catboost-parity
     var quantile_family = (
@@ -1305,6 +1322,26 @@ def gbdt_fit_binding(
             leaf_method, leaf_iterations, bootstrap_type,
             Float32(Float64(py=params[19])),
         )
+    # the symmetric stochastic arm's bootstrap, `train`'s resolution
+    # (`gbdt/train.mojo`), the Ordered arm's words above
+    var sym_boot_kind = -1
+    var sym_boot_param = Float32(1.0)
+    if symmetric_stochastic:
+        var sym_subsample = Float32(Float64(py=params[19]))
+        if bootstrap_type == String("Bayesian"):
+            if sym_subsample >= Float32(0.0):
+                raise Error(
+                    "Error: default bootstrap type (bayesian) doesn't support"
+                    " 'subsample' option"
+                )
+            sym_boot_kind = GBDT_BOOT_BAYESIAN
+            sym_boot_param = Float32(Float64(py=params[18]))
+        elif bootstrap_type == String("Bernoulli"):
+            sym_boot_kind = GBDT_BOOT_BERNOULLI
+            sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
+        elif bootstrap_type == String("Poisson"):
+            sym_boot_kind = GBDT_BOOT_POISSON
+            sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
     var flags = List[UInt32]()
     for f in range(n_flags):
         flags.append(cp.unsafe_load(f))
@@ -1397,7 +1434,10 @@ def gbdt_fit_binding(
             best_iteration = model.best_iteration
             stopped_early = model.stopped_early
         elif grow_code == 0:
-            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+            var model = gbdt_host_fit(
+                x, y, n_rows, n_features, p, List[Bool](),
+                sym_boot_kind, sym_boot_param, random_strength,
+            )
             text = gbdt_host_model_text(model)
             losses = model.losses.copy()
             best_iteration = model.best_iteration

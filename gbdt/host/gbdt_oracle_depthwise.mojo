@@ -132,6 +132,9 @@ from gbdt.gpu_data.grid_policy import (
     POLICY_ONE_BYTE,
 )
 from gbdt.host.gbdt_oracle import (
+    _bootstrap_pass,
+    _target_std_dev,
+    gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
     GbdtHostParams,
@@ -153,9 +156,7 @@ from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_NEWTON,
     GbdtHostLoss,
-    _bootstrap_pass,
     _estimate_leaves_for_loss,
-    gbdt_bootstrap_seeds,
 )
 from gbdt.host.gbdt_oracle_lossguide import (
     add_leaf_l2,
@@ -457,59 +458,6 @@ def _score_leaf(
 # ===========================================================================
 # THE DRIVER: `fit_non_symmetric_tree`
 # ===========================================================================
-
-
-def _target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
-    """`compute_target_std_dev` (`greedy_search_helper.mojo:224-280`) over
-    `compute_target_variance_kernel` (`compute_scores.mojo:274-318`) at stat
-    count 2: `min(4 * 32, ceil(n / 512))` blocks of 512 threads striding the
-    rows, the flushed per-thread accumulations of rows with weight above
-    1e-15, the per-block halving folds stored flushed, the three-lane fold,
-    then `sqrt(sum2 / (weight + 1e-100))` in double."""
-    comptime B = 512
-    var n_blocks = (n_rows + B - 1) // B
-    if 4 * 32 < n_blocks:
-        n_blocks = 4 * 32
-    if n_blocks < 1:
-        n_blocks = 1
-    var stride = n_blocks * B
-    var partials = List[Float32](length=3 * n_blocks, fill=Float32(0.0))
-    for b in range(n_blocks):
-        var s0 = List[Float32](length=B, fill=Float32(0.0))
-        var s1 = List[Float32](length=B, fill=Float32(0.0))
-        var s2 = List[Float32](length=B, fill=Float32(0.0))
-        for tid in range(B):
-            var weighted_sum = Float32(0.0)
-            var weighted_sum2 = Float32(0.0)
-            var total_weight = Float32(0.0)
-            var i = B * b + tid
-            while i < n_rows:
-                var w = stats[i]
-                if w > Float32(1e-15):
-                    var wt = stats[n_rows + i]
-                    weighted_sum = ftz(weighted_sum + wt)
-                    weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
-                    total_weight = ftz(total_weight + w)
-                i += stride
-            s0[tid] = weighted_sum
-            s1[tid] = weighted_sum2
-            s2[tid] = total_weight
-        partials[3 * b] = ftz(_halving_fold_512(s0))
-        partials[3 * b + 1] = ftz(_halving_fold_512(s1))
-        partials[3 * b + 2] = ftz(_halving_fold_512(s2))
-    var l2 = _deterministic_sum_lanes(partials, 3, n_blocks)
-    var sum2 = Float64(l2[1])
-    var weight = Float64(l2[2])
-    return sqrt(sum2 / (weight + 1e-100))
-
-
-def _halving_fold_512(mut slab: List[Float32]) -> Float32:
-    var step = len(slab) // 2
-    while step > 0:
-        for t in range(step):
-            slab[t] = slab[t] + slab[t + step]
-        step //= 2
-    return slab[0]
 
 
 def _is_terminal_leaf(
