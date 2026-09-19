@@ -42,12 +42,14 @@ here pass `true` and the flag is honored anyway. The two-stream overlap is
 absent as in `lstsq.mojo`.
 """
 
+from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import diagonal_to_vector_kernel
 from core.gemm import gemm_nt, gemm_tn
 from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_INFO_UNWRITTEN,
     JACOBI_SWEEPS,
     JACOBI_TOL,
     JACOBI_ROT_TPB,
@@ -110,6 +112,7 @@ def svd_eig_traced(
     var vt = ctx.enqueue_create_buffer[DType.float32](n_cols * n_cols)
     var s_raw = ctx.enqueue_create_buffer[DType.float32](n_cols)
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
+    enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     var xa = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     var xa2 = ctx.enqueue_create_buffer[DType.float32](n_rows * n_cols)
     ctx.synchronize()
@@ -146,6 +149,15 @@ def svd_eig_traced(
     var h_info = ctx.enqueue_create_host_buffer[DType.float32](3)
     ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=info_buf)
     ctx.synchronize()
+    if h_info.unsafe_ptr().unsafe_load(0) == JACOBI_INFO_UNWRITTEN:
+        raise Error(
+            "svdEig: the device Jacobi eigensolver DID NOT WRITE its info"
+            " buffer, so it never ran or its launch failed. This is NOT a"
+            " convergence failure and must not be reported as one: the"
+            " sentinel -1.0 is a value the kernel never stores. Check that"
+            " the binding is built for this device and that the launch"
+            " above it did not fault."
+        )
     if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
         raise Error(
             "svdEig: the device Jacobi did not converge in "

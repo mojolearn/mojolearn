@@ -104,6 +104,7 @@ buffer used for a different thing is `ab`, which holds `z` (length `n_rows`)
 rather than `A^T b` (length `n_cols`) -- named in the code where it happens.
 """
 
+from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import (
@@ -115,6 +116,7 @@ from core.column_stats import (
 from core.gemm import gemm_nt, gemm_nt_gram, gemv_n
 from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_INFO_UNWRITTEN,
     JACOBI_SWEEPS,
     JACOBI_TOL,
     JACOBI_ROT_TPB,
@@ -269,6 +271,7 @@ def lstsq_min_norm_traced(
     # eigenvalues on its diagonal, which is why step 1 is recorded above and
     # not after this launch.
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
+    enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         gram.unsafe_ptr(),
@@ -294,6 +297,15 @@ def lstsq_min_norm_traced(
     # synchronize, and this keeps the buffer alive across the copy even if
     # the branch is ever made conditional.
     _ = h_info
+    if h_info.unsafe_ptr().unsafe_load(0) == JACOBI_INFO_UNWRITTEN:
+        raise Error(
+            "lstsq_min_norm: the device Jacobi eigensolver DID NOT WRITE its info"
+            " buffer, so it never ran or its launch failed. This is NOT a"
+            " convergence failure and must not be reported as one: the"
+            " sentinel -1.0 is a value the kernel never stores. Check that"
+            " the binding is built for this device and that the launch"
+            " above it did not fault."
+        )
     if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
         raise Error(
             "lstsq_min_norm: the device Jacobi did not converge in "

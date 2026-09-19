@@ -123,6 +123,7 @@ arithmetic:
    order.
 """
 
+from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 
@@ -136,6 +137,7 @@ from core.column_stats import (
 )
 from core.identity_trace import IdentityTrace
 from decomposition.checks.jacobi_eigh_device import (
+    JACOBI_INFO_UNWRITTEN,
     JACOBI_SWEEPS,
     JACOBI_TOL,
     JACOBI_ROT_TPB,
@@ -416,6 +418,7 @@ def lstsq_eig_traced(
     # 1e-10, and the 1e-10 was an ABSOLUTE test on a quantity that scales
     # with the square of the data.
     var info_buf = ctx.enqueue_create_buffer[DType.float32](3)
+    enqueue_fill(ctx, info_buf, JACOBI_INFO_UNWRITTEN)
     ctx.synchronize()
     ctx.enqueue_function[jacobi_eigh_kernel[JACOBI_ROT_TPB]](
         cov_a.unsafe_ptr(),
@@ -444,6 +447,15 @@ def lstsq_eig_traced(
     # conditional or deleted, this buffer's last use becomes the enqueue and
     # the copy writes freed host memory. Hygiene, not the OLS defect.
     _ = h_info
+    if h_info.unsafe_ptr().unsafe_load(0) == JACOBI_INFO_UNWRITTEN:
+        raise Error(
+            "lstsq_eig: the device Jacobi eigensolver DID NOT WRITE its info"
+            " buffer, so it never ran or its launch failed. This is NOT a"
+            " convergence failure and must not be reported as one: the"
+            " sentinel -1.0 is a value the kernel never stores. Check that"
+            " the binding is built for this device and that the launch"
+            " above it did not fault."
+        )
     if h_info.unsafe_ptr().unsafe_load(0) == Float32(0.0):
         raise Error(
             "lstsq_eig: the device Jacobi did not converge in "

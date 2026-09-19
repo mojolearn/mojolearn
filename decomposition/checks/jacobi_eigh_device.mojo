@@ -240,6 +240,35 @@ def _rotate_pair_block(
     a.unsafe_store(q * n + q, _rot_add(s, rpq, c, rqq))
 
 
+#: THE INFO BUFFER'S "NOBODY WROTE THIS" VALUE (2026-09-19).
+#:
+#: `jacobi_eigh_kernel` writes slot 0 as 1.0 converged / 0.0 not converged.
+#: 0.0 is ALSO what an unwritten buffer reads, so for as long as the buffer
+#: was left at whatever it was allocated with, "the kernel reported failure"
+#: and "the kernel never ran" were THE SAME READING, and the host reported
+#: the first whichever had happened.
+#:
+#: It surfaced as a refusal that contradicts itself:
+#:
+#:   lstsq_eig: the device Jacobi did not converge in 15 sweeps on the
+#:   16 x 16 Gram matrix; ||offdiag(A^T A)||_F / ||A^T A||_F is still 0.0
+#:
+#: A ratio of 0.0 IS convergence. The kernel cannot produce that pair:
+#: `converged` is false only when `2*off > tol^2 * fro2`, which forces the
+#: reported `rel = sqrt(2*off/fro2)` above `tol`, i.e. 1e-7, never 0.0. The
+#: pair is unwritten memory being read as a failure report -- and it reached
+#: `verify --all`'s comparator self-test, whose clean and perturbed arms BOTH
+#: read REFUSED, so the run could not tell a right answer from a wrong one
+#: and said so ("a VERIFIED from this installation is worth nothing").
+#:
+#: So the buffer is filled with a value the kernel never writes, and the host
+#: separates the two cases by name. Slot 0 now reads:
+#:   -1.0  the kernel did not write -- it never ran, or its launch failed
+#:    0.0  the kernel ran and reports NOT CONVERGED
+#:    1.0  the kernel ran and reports CONVERGED
+comptime JACOBI_INFO_UNWRITTEN = Float32(-1.0)
+
+
 def jacobi_eigh_kernel[rot_tpb: Int = JACOBI_ROT_TPB](
     a_io: MutPointer[Float32, MutAnyOrigin],
     v_out: MutPointer[Float32, MutAnyOrigin],
