@@ -565,6 +565,18 @@ def gemm_oracle_cell(
     var el = leaf
     if el < 1:
         el = 1
+    # A one-leaf tree has no arithmetic node.  Return that leaf through the
+    # profile's output seam directly instead of allocating a one-element
+    # partial list and copying it in `fold_balanced_tree`.  Keep the final
+    # `ftz` explicit: it is contract section 5g even though every ordinary
+    # leaf is already flushed, and it also keeps the output spelling exact
+    # under either host sabotage arm.
+    if pcount == 1:
+        return ftz(
+            oracle_leaf_partial(
+                a, b, op, i, j, m, n, k, 0, k
+            )
+        )
     var partials = List[Float32]()
     for t in range(pcount):
         partials.append(
@@ -595,6 +607,16 @@ def gemm_oracle_at_leaf(
 ) -> List[Float32]:
     """The whole `m x n` product at an explicit leaf size, row-major."""
     var c = List[Float32]()
+    # Hoist the one-leaf decision out of the cell loop.  Besides avoiding
+    # the partial-list allocation, this keeps a dense short-k product from
+    # recomputing the same leaf count for every output cell.
+    if leaf_count(k, leaf) == 1:
+        for i in range(m):
+            for j in range(n):
+                c.append(
+                    ftz(oracle_leaf_partial(a, b, op, i, j, m, n, k, 0, k))
+                )
+        return c^
     for i in range(m):
         for j in range(n):
             c.append(gemm_oracle_cell(a, b, op, i, j, m, n, k, leaf))
@@ -696,6 +718,15 @@ def gemm_oracle_right_zero_padded(
     var out = List[Float32]()
     for i in range(m):
         for j in range(n):
+            if pcount == 1:
+                out.append(
+                    ftz(
+                        oracle_leaf_partial_right_zero_padded(
+                            a, b, op, i, j, m, n, k, real_k, 0, k
+                        )
+                    )
+                )
+                continue
             var partials = List[Float32]()
             for t in range(pcount):
                 partials.append(
