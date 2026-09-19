@@ -89,8 +89,13 @@ def _save_linear(est, path, extra=None):
     return _serialize.write_npz(path, arrays)
 
 
-def _load_linear(cls, path, **kwargs):
-    arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
+def _load_linear(cls, path, arrays=None, **kwargs):
+    # Ridge has already read the archive to validate its alpha member. Reuse
+    # that exact decoded mapping instead of reopening and materializing every
+    # member a second time. LinearRegression still enters through the normal
+    # one-read path.
+    if arrays is None:
+        arrays = _serialize.read_npz(path, _LINEAR_FORMAT)
     _check_saved_by(arrays, path, cls)
     meta = _serialize.exact(arrays, "meta", "<i8")
     if meta.size != 2:
@@ -825,7 +830,7 @@ class Ridge(NumericModeMixin):
         alpha = _serialize.exact(arrays, "alpha", "<f8")
         if alpha.size != 1:
             raise ValueError(f"mojolearn: {path!r} alpha must hold one value")
-        obj, _ = _load_linear(cls, path, alpha=float(alpha[0]))
+        obj, _ = _load_linear(cls, path, arrays=arrays, alpha=float(alpha[0]))
         obj.solver_ = "eig"
         return obj
 
