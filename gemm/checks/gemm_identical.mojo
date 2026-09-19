@@ -2580,9 +2580,39 @@ def _launch_tuned[
     #: row, not an `if apple`.
     comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
     comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
-    comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, FS, PAGES]
     var g = _tile_grid(m, n, BM, BN, two_d)
     step_count_launch()
+    # Contract 7.3: a one-leaf tree has no fold node.  The tuned kernel's
+    # FS == 1 specialization parks that sole partial in registers and never
+    # allocates or walks the local-memory fold stack.  Select it from the
+    # host-computed contract partition; larger trees keep the exact same
+    # FS specialization and arithmetic as before.
+    if (
+        p_count == 1
+        and not is_defined["MOJOLEARN_GEMM_P1_FOLD_STACK_CONTROL"]()
+    ):
+        comptime one_leaf_kern = identical_gemm_tuned_kernel[
+            RPT, CPT, TC, KS, 1, PAGES
+        ]
+        ctx.enqueue_function[one_leaf_kern](
+            c.unsafe_ptr(),
+            a.unsafe_ptr(),
+            b.unsafe_ptr(),
+            Int32(m),
+            Int32(n),
+            Int32(k),
+            Int32(leaf),
+            Int32(p_count),
+            Int32(st[0]),
+            Int32(st[1]),
+            Int32(st[2]),
+            Int32(st[3]),
+            Int32(swizzle),
+            grid_dim=(g[0], g[1], 1),
+            block_dim=(NTH, 1, 1),
+        )
+        return
+    comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, FS, PAGES]
     ctx.enqueue_function[kern](
         c.unsafe_ptr(),
         a.unsafe_ptr(),
