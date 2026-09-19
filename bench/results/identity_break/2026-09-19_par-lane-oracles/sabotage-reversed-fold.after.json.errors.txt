@@ -1,0 +1,14 @@
+===== par-mlp/base train =====
+ValueError: ParallelNeuralTrainer weights_[weight1] and ordered single-device replay differ: 9 bytes of 512
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 10020, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6133, in _
+    _same_bytes(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "ordered single-device replay", np.asarray(plain.weights_[k]))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 1667, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelNeuralTrainer weights_[weight1] and ordered single-device replay differ: 9 bytes of 512
+

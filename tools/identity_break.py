@@ -6037,23 +6037,103 @@ def _(ml, X, yc, yr, Xh=None):
                                            "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
 
 
+# ---------------------------------------------------------------- the neural drivers' in-cell oracle (2026-09-19)
+# THE DEGENERATE CELL THESE TWO HELPERS CLOSE. par-mlp, par-samba and
+# par-samba-clip hashed the state after a sharded run and held it to NOTHING:
+# `tools/lane_applicability.py --oracle-counts` read them `recorded`, so the
+# cell passed by comparing today's bytes to a previous record of the same
+# code, and on a box with no record it could not fail at all. Their own
+# docstrings said why nobody had written one: the driver's contract is NOT a
+# plain step over the concatenated rows, because each shard's loss is its own
+# mean and the shard gradients are SUMMED, not averaged
+# (parallel_training.ordered_sum_gradients: "Neither this fold nor the
+# byte-LM fold divides by shard count"). A plain fit is therefore the wrong
+# oracle here, and the right one is the fold itself, rebuilt from the public
+# single-device doors: it is what `_parallel_worker` does on the far side of
+# the pool, minus the pool.
+#
+# WHAT THIS CAN AND CANNOT CATCH. The reference shares the gradient and
+# optimizer KERNELS with the driver, exactly as `par-forest`'s plain
+# RandomForestClassifier shares the tree kernels with `fit_forest`. What it
+# does not share is everything the driver exists to do: the DevicePool, the
+# frozen-snapshot serialization, the host transport, the per-shard worker's
+# state round trip, the shard ORDER of the fold and the cooperative update.
+# A defect in any of those moves the two apart inside one cell, on one box,
+# with no record. A defect in a kernel both call is invisible to it, and the
+# cross-vendor record remains the only thing that sees that.
+
+
+def _ordered_replay_mlp(plain, steps):
+    """ParallelNeuralTrainer's MLP contract rebuilt on one object through the
+    public doors: every shard's gradient from the SAME weights (loss_and_grads
+    advances no optimizer), `ordered_sum_gradients` over them in shard order,
+    one `apply_gradients`. `_parallel_worker.mlp_gradient` / `mlp_update`."""
+    from mojolearn.parallel_training import ordered_sum_gradients
+    for shards in steps:
+        parts = [plain.loss_and_grads(x, y)[1] for x, y in shards]
+        plain.apply_gradients(ordered_sum_gradients(parts))
+    return plain
+
+
+def _ordered_replay_samba(plain, steps):
+    """The same for a SambaStack, with the driver's token offsets (it advances
+    `offset` by each shard's token count within a step) and its clip: the
+    worker's `samba_gradient` / `samba_update`. Returns the LAST step's
+    reduced gradient, COPIED BEFORE the optimizer step exactly as the worker's
+    `retained` is, because `optimizer.step` clips in place and
+    `export_gradients()` carries the PRE-clip bytes. Measured 2026-09-19: with
+    the copy left out this returned the clipped gradient and the first arm
+    fired, `export_gradients[0] ... differ: 32711 bytes of 32768`.
+
+    dropout is 0 in every par-samba configuration, so the driver passes
+    `dropout_stream=None` and never draws from the generator; a configuration
+    with dropout would need the driver's own stream and is refused here rather
+    than silently compared against a different draw."""
+    from mojolearn.parallel_training import ordered_sum_gradients
+    if plain.config.dropout > 0.0:
+        raise ValueError("_ordered_replay_samba cannot replay a dropout stream")
+    reduced = None
+    for shards in steps:
+        parts, offset = [], 0
+        for x, y in shards:
+            parts.append(plain.loss_and_grads(x, y, dropout_stream=None, token_offset=offset)[1])
+            offset += int(np.asarray(x).size)
+        total = ordered_sum_gradients(parts)
+        reduced = [np.asarray(g).copy() for g in total]
+        plain.optimizer.step(total, max_norm=plain.max_norm)
+    return reduced
+
+
 @lane("par-mlp")
 def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the mlp lane's trainer: three logical
     shards of 64 rows, one ordered update per step, three steps; its
     contract is equality to its own one-device replay, not to a plain
-    step over 192 rows, so the parts are hashed and not held to mlp."""
+    step over 192 rows, so the parts are hashed and not held to mlp.
+
+    IN-CELL ORACLE (2026-09-19): the same three steps replayed on a second
+    SmallMLPTrainer built from the same weights through `_ordered_replay_mlp`,
+    every weight held to the driver's bit for bit. The parts are unchanged."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     w = [((np.arange(int(np.prod(s)), dtype=np.float32) % 7 - 3) / 32).reshape(s).astype(np.float32)
          for s in ((16, 8), (16,), (3, 16), (3,))]
-    m = ml.SmallMLPTrainer(*w, data_schedule={"dataset": "identity_break", "order": "sequential"})
+    schedule = {"dataset": "identity_break", "order": "sequential"}
+    m = ml.SmallMLPTrainer(*w, data_schedule=schedule)
+    plain = ml.SmallMLPTrainer(*w, data_schedule=schedule)
     Xm = np.ascontiguousarray(X[:576, :8])
     t = _three_class(X[:576])
+    steps = [[(Xm[192 * s + 64 * k: 192 * s + 64 * (k + 1)], t[192 * s + 64 * k: 192 * s + 64 * (k + 1)])
+              for k in range(3)] for s in range(3)]
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=3) as tr:
-        for step in range(3):
-            base = 192 * step
-            tr.train_step([(Xm[base + 64 * k: base + 64 * (k + 1)], t[base + 64 * k: base + 64 * (k + 1)]) for k in range(3)])
+        for shards in steps:
+            tr.train_step(shards)
         ck = tr.checkpoint()
+    _ordered_replay_mlp(plain, steps)
+    for k in sorted(m.weights_):
+        _same_bytes(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
+                    "ordered single-device replay", np.asarray(plain.weights_[k]))
+    _same_bytes("ParallelNeuralTrainer predict_logits", np.asarray(m.predict_logits(Xm[:256])),
+                "ordered single-device replay predict_logits", np.asarray(plain.predict_logits(Xm[:256])))
     return _fit(dict(weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
                      logits=_h(np.asarray(m.predict_logits(Xm[:256]))),
                      shards=_h(np.int64(ck["logical_shards"]))),
@@ -6063,16 +6143,30 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("par-samba")
 def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the samba lane's stack, two logical shards
-    of (2, 17) windows per step, two steps."""
+    of (2, 17) windows per step, two steps.
+
+    IN-CELL ORACLE (2026-09-19): the same two steps replayed on a second
+    SambaStack loaded from the same starting state through
+    `_ordered_replay_samba`, every parameter and the logits held to the
+    driver's bit for bit. The parts are unchanged."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    plain = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3)
+    plain.load_state_dict(m.state_dict())
     ids = _ids(X, 8, 17)
+    steps = [[(ids[4 * s + 2 * k: 4 * s + 2 * k + 2, :-1], ids[4 * s + 2 * k: 4 * s + 2 * k + 2, 1:])
+              for k in range(2)] for s in range(2)]
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
-        for step in range(2):
-            tr.train_step([(ids[4 * step + 2 * k: 4 * step + 2 * k + 2, :-1], ids[4 * step + 2 * k: 4 * step + 2 * k + 2, 1:])
-                           for k in range(2)])
-    params = m.parameters()
+        for shards in steps:
+            tr.train_step(shards)
+    _ordered_replay_samba(plain, steps)
+    params, ref = m.parameters(), plain.parameters()
+    for k in sorted(params):
+        _same_bytes(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
+                    "ordered single-device replay", np.asarray(ref[k]))
+    _same_bytes("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
+                "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1])))
     return _fit(dict(logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
                 m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
@@ -6082,19 +6176,37 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """ParallelByteLanguageModelTrainer from the byte-lm lane's starting
     state, two logical shards on one device, three steps; the state after
-    and the per-shard losses are the parts."""
+    and the per-shard losses are the parts.
+
+    IN-CELL ORACLE (2026-09-19): the trainer's own documented comparison,
+    `pool_optimizer=False`, which "retains complete optimizer replicas for
+    comparison" (parallel_training.ParallelByteLanguageModelTrainer). The
+    pooled run under test is held, through `_byte_lm_replay`, to a replicated
+    one on the first device step by step: the per-shard losses, all four state
+    arrays and the exported gradient. It catches a defect in the pooled
+    optimizer ranges, the rollback copies, the reduction buffers and the
+    cross-device ownership; a defect in the shard fold itself, which both
+    sides share, still needs the record.
+
+    THE PARTS DO NOT MOVE, and this is not an argument: `_byte_lm_seed` is
+    this lane's own seed construction verbatim and `_byte_lm_replay`'s loop is
+    this lane's own loop verbatim, and the committed 166-lane columns
+    (2026-09-14, apple-m4 / nvidia-h100 / nvidia-2xh100 / amd-mi325x) record
+    this lane's `loss`, `params` and `m` parts BIT-IDENTICAL, on all nine
+    fixtures, to the two sibling lanes that already hold their driver to this
+    same replicated reference through this same helper.
+
+    NOT RUN HERE. `bindings/_mojolearn_byte_lm_host.mojo` registers no
+    `byte_lm_parallel_*` entry, so this lane REFUSES on every CPU column (it
+    does on the committed one, `2026-09-16_cpu-par-samba`) and the new arm's
+    first binding-level run is owed on a GPU column."""
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer
-    shape = _par_byte_lm_config(ml)
-    named, _ = _byte_lm_params(shape)
-    seed = ml.SmallByteLanguageModelTrainer(named, data_schedule={"dataset": "identity_break", "order": "sequential"},
-                                            shape=shape)
+    shape, state0 = _byte_lm_seed(ml)
     ids = _ids(X, 6 * shape.batch, shape.length + 1)
-    losses = []
-    with ParallelByteLanguageModelTrainer(seed.state_dict(), devices=_par_devices(), logical_shards=2) as tr:
-        for step in range(3):
-            res = tr.train_step([ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]])
-            losses.append([np.float64(v) for v in res["losses"]])      # a dict: losses, completed_steps
-        state = tr.state_dict()
+    with ParallelByteLanguageModelTrainer(state0, devices=_par_devices(), logical_shards=2) as tr, \
+         ParallelByteLanguageModelTrainer(state0, devices=_par_devices()[:1], logical_shards=2,
+                                          pool_optimizer=False) as ref:
+        losses, state, _ = _byte_lm_replay(tr, ref, ids)
     return _fit(dict(loss=_h(np.asarray(losses)), params=_h(np.asarray(state["parameters"])),
                      m=_h(np.asarray(state["m"]))))
 
@@ -6451,19 +6563,42 @@ def _(ml, X, yc, yr, Xh=None):
     """ParallelNeuralTrainer over the par-samba lane's stack with a global
     norm clip (max_norm=0.5), the only way into the pooled clipping tensors
     (whole tensors on owners, the cross-tensor norm on the first device);
-    two logical shards of (2, 17) windows, two steps."""
+    two logical shards of (2, 17) windows, two steps.
+
+    IN-CELL ORACLE (2026-09-19): the same two steps replayed on a second
+    SambaStack loaded from the same starting state through
+    `_ordered_replay_samba`, which passes the SAME `max_norm` to the
+    single-device optimizer, so the clip is in the comparison and not beside
+    it. The retained pre-update gradient `export_gradients()` carries, every
+    parameter and the logits are held to the replay's bit for bit. The parts
+    are unchanged."""
     from mojolearn.parallel_training import ParallelNeuralTrainer
     cfg = _par_samba_config(ml)
     m = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
+    plain = ml.SambaStack(cfg, generator=ml.training.Generator(1), lr=1e-3, max_norm=0.5)
+    plain.load_state_dict(m.state_dict())
     ids = _ids(X, 8, 17)
+    steps = [[(ids[4 * s + 2 * k: 4 * s + 2 * k + 2, :-1], ids[4 * s + 2 * k: 4 * s + 2 * k + 2, 1:])
+              for k in range(2)] for s in range(2)]
     with ParallelNeuralTrainer(m, devices=_par_devices(), logical_shards=2) as tr:
         losses = []
-        for step in range(2):
-            res = tr.train_step([(ids[4 * step + 2 * k: 4 * step + 2 * k + 2, :-1], ids[4 * step + 2 * k: 4 * step + 2 * k + 2, 1:])
-                                 for k in range(2)])
+        for shards in steps:
+            res = tr.train_step(shards)
             losses.append([np.float64(v) for v in res["losses"]])
         grads = tr.export_gradients()
-    params = m.parameters()
+    reduced = _ordered_replay_samba(plain, steps)
+    params, ref = m.parameters(), plain.parameters()
+    # zip() truncates, so a short list would quietly shrink the comparison.
+    _same_bytes("export_gradients tensor count", np.int64(len(grads)),
+                "ordered single-device replay tensor count", np.int64(len(reduced)))
+    for k, (g, r) in enumerate(zip(grads, reduced)):
+        _same_bytes(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
+                    "ordered single-device replay gradient", np.asarray(r))
+    for k in sorted(params):
+        _same_bytes(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
+                    "ordered single-device replay", np.asarray(ref[k]))
+    _same_bytes("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
+                "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1])))
     return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
                      grads=_h(*[np.asarray(g) for g in grads]),
                      params=_h(*[np.asarray(params[k]) for k in sorted(params)])),

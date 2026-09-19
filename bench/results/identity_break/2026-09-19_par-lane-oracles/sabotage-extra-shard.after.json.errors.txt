@@ -1,0 +1,42 @@
+===== par-mlp/base train =====
+ValueError: ParallelNeuralTrainer weights_[bias1] and ordered single-device replay differ: 37 bytes of 64
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 10020, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6133, in _
+    _same_bytes(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "ordered single-device replay", np.asarray(plain.weights_[k]))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 1667, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelNeuralTrainer weights_[bias1] and ordered single-device replay differ: 37 bytes of 64
+
+===== par-samba-clip/base train =====
+ValueError: ParallelNeuralTrainer export_gradients[0] and ordered single-device replay gradient differ: 28166 bytes of 32768
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 10020, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6577, in _
+    _same_bytes(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "ordered single-device replay gradient", np.asarray(r))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 1667, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelNeuralTrainer export_gradients[0] and ordered single-device replay gradient differ: 28166 bytes of 32768
+
+===== par-samba/base train =====
+ValueError: ParallelNeuralTrainer parameters()[embed.weight] and ordered single-device replay differ: 21450 bytes of 32768
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 10020, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6166, in _
+    _same_bytes(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "ordered single-device replay", np.asarray(ref[k]))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 1667, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelNeuralTrainer parameters()[embed.weight] and ordered single-device replay differ: 21450 bytes of 32768
+

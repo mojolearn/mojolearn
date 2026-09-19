@@ -23,6 +23,33 @@ pass. Nothing here is hand-listed. Reproduce with
     python3 tools/lane_applicability.py --oracle-counts
     python3 tools/lane_applicability.py --selfcheck
 
+## SUPERSEDED IN PART, 2026-09-19: the oracle column below, and ten cells
+
+Every number in this file is a snapshot of a 212-lane registry on 2026-09-16.
+The registry is 254 lanes now, so re-derive before quoting any of it. Two
+things were not merely stale, they were WRONG, and both were corrected on
+2026-09-19; the reproduce lines above give the current answer.
+
+1. **The classifier under-read its own evidence.** It looked for
+   `_same_bytes` in the lane body only. Six `par-*` lanes hold two objects to
+   each other one call away -- `par-byte-lm-model-pool` and
+   `par-byte-lm-offload` inside `_byte_lm_replay`, `par-scaler`,
+   `par-scaler-minmax`, `par-reference-knn` and `par-reference-knn-reg`
+   through a `_mismatch_bytes` they RAISE -- and all six were reported here as
+   `recorded-only`, cells that cannot fail. Five lanes read the opposite way:
+   `embedding`, `gmm-sample`, `gmm-random-init-sample`, `gp-sample-y` and
+   `gp-sample-y-normalize` ask ONE object twice and were reported
+   `in-cell-independent`. Both errors are in the per-lane table at the bottom
+   of this file.
+
+2. **Four lanes really had no in-cell oracle and now do**: `par-mlp`,
+   `par-samba`, `par-samba-clip` and `par-byte-lm`. The first three hold the
+   sharded driver to the same ordered fold replayed on one object through the
+   public single-device doors; the fourth holds the pooled byte-LM trainer to
+   the replicated one the class documents for the purpose. Every `par-*` lane
+   now carries an in-cell oracle: `--oracle-counts` reads 0 `recorded` among
+   the 53, against 10 on 2026-09-16.
+
 ---
 
 ## 0. The two numbers

@@ -64,11 +64,22 @@ something else already enforces:
                  answer and a disagreement is an error, so a driver lane that
                  stops calling the helper, or a non-driver lane that starts,
                  is caught rather than assumed.
-  the oracle     every in-cell comparison that RAISES (`_same_bytes`), with
-                 its two sides resolved to their root bindings. Two sides
-                 rooted at two separately constructed objects is an
-                 independent oracle; two sides rooted at the same object is
-                 self-comparison. A lane with no such call is `recorded`.
+  the oracle     every in-cell comparison that RAISES: `_same_bytes`,
+                 `_same_state`, and a `_mismatch_bytes` whose message the
+                 caller raises (the same comparison carrying the parts, which
+                 `--repeats`-style bare calls do not). Read in the lane body
+                 AND in the harness helpers the body calls, because a
+                 comparison one call away is still inside the cell; the
+                 comparison primitives themselves are read at the call site
+                 and never followed into. Two sides are independent only when
+                 neither is DERIVED FROM the other -- `np.asarray(e.f(X))` and
+                 a slice of it are two names for one object -- and
+                 self-comparison otherwise. A lane with no such call is
+                 `recorded`. Until 2026-09-19 the walk stopped at the lane
+                 body and read only `_same_bytes`, so six `par-*` lanes that
+                 already held two objects to each other were reported as cells
+                 that cannot fail, and four lanes that ask one object twice
+                 were reported as independent.
   the CPU route  `python/mojolearn/host_surface.py`'s own covered-lane
                  answer, and the binding names each public class's door file
                  mentions: a class whose door names only `*_host` bindings
@@ -332,33 +343,215 @@ def _root_name(node):
 
 #: The in-cell comparisons that RAISE. A comparison that does not raise is not
 #: an oracle: it is a value someone may or may not look at.
-RAISING_COMPARE = ("_same_bytes",)
+#:
+#: `_same_state` is `_same_bytes` over the four byte-LM state arrays and raises
+#: the same way. `_mismatch_bytes` is the SAME comparison WITH THE RAISE TAKEN
+#: OUT (its own docstring says so): it returns the message and the caller
+#: decides, so it counts only where the caller raises on it, which
+#: `_raised_mismatches` establishes call by call. Reading it as an oracle
+#: unconditionally would count `x = _mismatch_bytes(...)` with the result
+#: dropped on the floor, which is precisely a comparison that cannot fail.
+RAISING_COMPARE = ("_same_bytes", "_same_state")
+
+#: The comparison PRIMITIVES. Their two compared sides are their own
+#: parameters, so their bodies say nothing about any caller's objects: reading
+#: `_same_bytes`'s body would find `a` held to `b` and call EVERY lane that
+#: calls it independent. They are read at the CALL SITE and never followed
+#: into. Every other harness helper is followed, because a comparison a lane
+#: reaches through a helper it calls is still a comparison inside its cell.
+COMPARE_PRIMITIVES = ("_same_bytes", "_same_state", "_mismatch_bytes")
+
+
+def _raised_mismatches(node):
+    """The `_mismatch_bytes` calls in this body whose message is RAISED.
+
+    The idiom `_mismatch_bytes` was introduced for (lane/sabotage-sweep,
+    2026-09-17) is
+
+        mismatch = _mismatch_bytes("a", x, "b", y)
+        if mismatch:
+            raise NumericalMismatch(mismatch, parts)
+
+    so that a caught disagreement carries the measured parts instead of
+    discarding them. Only the name the message was bound to and a `raise`
+    guarded by that name make it an oracle; a bare call whose result is
+    ignored is not one and must keep reading `recorded`."""
+    assigned = {}
+    for sub in ast.walk(node):
+        if (isinstance(sub, ast.Assign) and len(sub.targets) == 1
+                and isinstance(sub.targets[0], ast.Name)
+                and isinstance(sub.value, ast.Call)
+                and _root_name(sub.value.func) == "_mismatch_bytes"):
+            assigned.setdefault(sub.targets[0].id, []).append(sub.value)
+    raised = set()
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.If):
+            continue
+        if not any(isinstance(x, ast.Raise) for x in ast.walk(sub)):
+            continue
+        for t in ast.walk(sub.test):
+            if isinstance(t, ast.Name) and t.id in assigned:
+                raised.add(t.id)
+    return [call for name in raised for call in assigned[name]]
+
+
+#: Names that are INPUTS to a body, never an object under test, so they never
+#: link two derivation chains: the lane signature's own parameters and the
+#: numpy handles `_root` already unwraps. Two estimators built by two
+#: `ml.<Class>(...)` calls are two objects; that they share the package handle
+#: `ml` says nothing, and letting `ml` join their chains would read every lane
+#: that builds two estimators as a self-comparison.
+CHAIN_STOPS = frozenset(("ml", "X", "yc", "yr", "Xh", "np", "npx"))
+
+
+def _derives_from(value):
+    """The object this expression is a VIEW OF, or None when it is a fresh
+    result.
+
+    A chain may only follow a RECEIVER: `e.transform(X)`, `t[i]` and
+    `m.sample(256)` are the object `e`, `t` and `m` seen through one of their
+    own doors, so the two sides of such a comparison are one object. A FREE
+    function's result is not: `_ragged(_pq(m, q, ...))` and
+    `_ragged(m.radius_neighbors(q))` share the callee `_ragged` and share
+    nothing else, and `fit_forest(...)` is a new estimator however its
+    argument was made. Following the callee would read the sharded query
+    driver held against the plain call as a self-comparison, which is the
+    mirror of the overstatement above and just as wrong."""
+    cur = value
+    for _ in range(64):
+        if isinstance(cur, ast.Call):
+            func = cur.func
+            if isinstance(func, ast.Name):
+                if func.id in ("np", "npx") or _root_name(func) in ("np", "npx"):
+                    cur = cur.args[0] if cur.args else None
+                    continue
+                return None                       # a free function's result
+            if isinstance(func, ast.Attribute):
+                if _root_name(func) in ("np", "npx"):
+                    cur = cur.args[0] if cur.args else None
+                    continue
+                cur = func.value                  # a method: the receiver
+                continue
+            return None
+        if isinstance(cur, ast.Attribute):
+            cur = cur.value
+            continue
+        if isinstance(cur, ast.Subscript):
+            cur = cur.value
+            continue
+        if isinstance(cur, ast.Tuple) and cur.elts:
+            cur = cur.elts[0]
+            continue
+        return cur.id if isinstance(cur, ast.Name) else None
+    return None
+
+
+def _chains(node):
+    """name -> the local names its value is DERIVED from, transitively.
+
+    WHY A ROOT NAME IS NOT AN OBJECT. `_root` answers with a binding, and two
+    different bindings can be two views of ONE object: in `_km_probe`,
+    `t = np.asarray(e.transform(X))` and `at_label = t[...]` are both `e`, but
+    read as bare roots they are `t` and `at_label`, which differ, and the pair
+    reads `independent`. That is the failure mode this file exists to prevent,
+    in its own classifier: an overstated oracle. Two sides count as
+    independent only when their chains are DISJOINT."""
+    out = {}
+    sig = getattr(node, "args", None)
+    params = {a.arg for a in (list(getattr(sig, "posonlyargs", [])) + list(sig.args)
+                              + list(sig.kwonlyargs))} if sig is not None else set()
+    for sub in ast.walk(node):
+        if not isinstance(sub, ast.Assign):
+            continue
+        targets = sub.targets[0] if len(sub.targets) == 1 else None
+        if (isinstance(targets, ast.Tuple) and isinstance(sub.value, ast.Tuple)
+                and len(targets.elts) == len(sub.value.elts)):
+            pairs = zip(targets.elts, sub.value.elts)
+        else:
+            pairs = [(t, sub.value) for t in ast.walk(sub.targets[0])
+                     if isinstance(t, ast.Name)] if sub.targets else []
+        for t, v in pairs:
+            if isinstance(t, ast.Name) and t.id not in params:
+                out.setdefault(t.id, set()).add(_derives_from(v))
+
+    def chain(name, depth=0):
+        seen = {name}
+        if depth > 16:
+            return seen
+        for src in out.get(name, ()):
+            if src is None or src in CHAIN_STOPS or src == name:
+                continue
+            seen |= chain(src, depth + 1)
+        return seen
+    return chain
+
+
+def _independent(chain, a, b):
+    """Two sides are independent when neither is derived from the other."""
+    if a is None or b is None or a == b:
+        return False
+    if a in CHAIN_STOPS or b in CHAIN_STOPS:
+        return a != b
+    return not (chain(a) & chain(b))
+
+
+def _compare_pairs(node):
+    """Every raising in-cell comparison in ONE body, as
+    (root_a, root_b, label_a, label_b, independent)."""
+    calls = [sub for sub in ast.walk(node)
+             if isinstance(sub, ast.Call) and _root_name(sub.func) in RAISING_COMPARE]
+    calls += _raised_mismatches(node)
+    chain = _chains(node)
+    pairs = []
+    for sub in calls:
+        args = list(sub.args)
+        if len(args) >= 4:
+            a, b = _root(args[1]), _root(args[3])
+        elif len(args) == 2:
+            a, b = _root(args[0]), _root(args[1])
+        else:
+            continue
+        pairs.append((a, b, _literal(args[0]), _literal(args[2]) if len(args) >= 3 else "",
+                      _independent(chain, a, b)))
+    return pairs
 
 
 def _oracle(node):
     """The lane's in-cell oracle class and the evidence for it.
 
-    A `_same_bytes` call whose two sides root at two DIFFERENT bindings is an
+    A raising comparison whose two sides root at two DIFFERENT bindings is an
     independent oracle: two objects were built by two call chains and held to
     each other. Rooted at the SAME binding it is self-comparison: one fitted
     object asked through two of its own doors, which proves the doors agree
     and cannot see a defect they share. No such call at all is `recorded`:
     the cell is a hash and means nothing until `--diff` holds it against a
-    previous run of the same code."""
-    pairs = []
-    for sub in ast.walk(node):
-        if isinstance(sub, ast.Call) and _root_name(sub.func) in RAISING_COMPARE:
-            args = [a for a in sub.args]
-            if len(args) >= 4:
-                a, b = _root(args[1]), _root(args[3])
-            elif len(args) == 2:
-                a, b = _root(args[0]), _root(args[1])
-            else:
-                continue
-            pairs.append((a, b, _literal(args[0]), _literal(args[2]) if len(args) >= 3 else ""))
+    previous run of the same code.
+
+    READ THROUGH THE LANE'S OWN HELPERS (2026-09-19). Until this change the
+    walk stopped at the lane body, and that is where this file's count was
+    wrong rather than merely conservative: `par-byte-lm-model-pool` and
+    `par-byte-lm-offload` hold their driver to a replicated trainer step by
+    step inside `_byte_lm_replay`, and the k-means lanes hold `predict(X)` to
+    `labels_` inside `_km_probe` -- the very example this module's docstring
+    gives for `self`. All three read `recorded`, so ten `par-*` lanes were
+    reported as cells that cannot fail when six of them already could. A
+    one-line body that calls a named helper is the same cell as the same
+    lines inlined; only the comparison PRIMITIVES stay unfollowed, for the
+    reason `COMPARE_PRIMITIVES` gives, and a helper name with more than one
+    definition in the harness (`probe`, `body`, `_`) is ambiguous and is not
+    followed either."""
+    funcs = _harness_functions()
+    pairs = list(_compare_pairs(node))
+    for name in sorted(_closure(node)):
+        if name in COMPARE_PRIMITIVES:
+            continue
+        defs = funcs.get(name, [])
+        if len(defs) != 1:
+            continue
+        pairs += _compare_pairs(defs[0])
     if not pairs:
         return "recorded", []
-    if any(a is not None and b is not None and a != b for a, b, _, _ in pairs):
+    if any(p[4] for p in pairs):
         return "independent", pairs
     return "self", pairs
 
@@ -778,8 +971,78 @@ def _selfcheck():
     want(len(set(s[n].anchor for n in s)) == 4, "fewer than four anchor classes appear")
     want(s["gp-optimize"].anchor == "cross-route",
          "gp-optimize has a CPU host gradient route; it must read cross-route")
-    want(s["kmeans"].anchor == "cross-route",
-         "kmeans has a CPU host route and no in-cell oracle; it must read cross-route")
+    want(s["ridge"].anchor == "cross-route",
+         "ridge has a CPU host route and no in-cell oracle; it must read cross-route")
+
+    # 5b. THE COMPARISON A LANE REACHES THROUGH ITS OWN HELPER IS IN ITS CELL
+    #     (2026-09-19). The walk used to stop at the lane body, so six par-*
+    #     lanes read `recorded` -- a cell that cannot fail -- while they were
+    #     in fact holding two objects to each other one call away. Watched on
+    #     each of the three shapes that were missed, and on the negative side
+    #     of each, because a follow that cannot refuse to follow is the same
+    #     bug in a new place.
+    want(s["kmeans"].oracle == "self",
+         "kmeans holds predict(X) to labels_ inside _km_probe; it must read self, "
+         "which is the example this module's own docstring gives for `self`")
+    want(s["par-byte-lm-model-pool"].oracle == "independent",
+         "par-byte-lm-model-pool holds its pooled trainer to a replicated one inside "
+         "_byte_lm_replay; it must read independent")
+    want(s["par-scaler"].oracle == "independent",
+         "par-scaler raises NumericalMismatch on a _mismatch_bytes against the plain "
+         "scaler; a raised mismatch is a raising comparison")
+    want(s["par-queries-radius"].oracle == "independent",
+         "par-queries-radius holds the sharded driver to the plain call; sharing the "
+         "callee _ragged must not collapse the two sides into one object")
+    want(s["embedding"].oracle == "self",
+         "embedding holds the split backward to the unsplit one on ONE Embedding; two "
+         "views of one object are not two objects")
+
+    # 5c. THE CLASSIFIER REFUSES THE THREE THINGS THAT WOULD MAKE IT AGREE
+    #     WITH EVERYTHING, on bodies built here so the arms are watched
+    #     failing and not merely believed.
+    def _oracle_of(src):
+        return _oracle(ast.parse(inspect.cleandoc(src)).body[0])[0]
+
+    want(_oracle_of("""
+        def body(ml, X, yc, yr, Xh=None):
+            a = ml.Thing().fit(X)
+            b = ml.Thing().fit(X)
+            _mismatch_bytes("a", a.coef_, "b", b.coef_)
+            return _fit(dict(coef=_h(a.coef_)))
+        """) == "recorded",
+         "a _mismatch_bytes whose message is DROPPED was read as an oracle; it is the "
+         "comparison with the raise taken out and cannot fail")
+    want(_oracle_of("""
+        def body(ml, X, yc, yr, Xh=None):
+            a = ml.Thing().fit(X)
+            b = ml.Thing().fit(X)
+            m = _mismatch_bytes("a", a.coef_, "b", b.coef_)
+            if m:
+                raise NumericalMismatch(m, {})
+            return _fit(dict(coef=_h(a.coef_)))
+        """) == "independent",
+         "a _mismatch_bytes that IS raised was not read as an oracle")
+    want(_oracle_of("""
+        def body(ml, X, yc, yr, Xh=None):
+            a = ml.Thing().fit(X)
+            return _fit(dict(coef=_h(_same_bytes("x", a.coef_, "y", a.coef_)[0])))
+        """) == "self",
+         "two doors of one object were read as two objects")
+    want(_oracle_of("""
+        def body(ml, X, yc, yr, Xh=None):
+            a = ml.Thing().fit(X)
+            t = a.transform(X)
+            u = t[:8]
+            _same_bytes("u", u, "t", t[:8])
+            return _fit(dict(t=_h(t)))
+        """) == "self",
+         "a view of a view was read as an independent object")
+    want(_oracle_of("""
+        def body(ml, X, yc, yr, Xh=None):
+            a = ml.Thing().fit(X)
+            return _fit(dict(coef=_h(a.coef_)))
+        """) == "recorded",
+         "a body with no comparison at all was given an oracle")
 
     # 6b. THE PURE-PYTHON LANE IS MEANINGFUL ON THE CPU COLUMN AND VACUOUS ON
     #     THE GPU ONES (2026-09-19). Until this arm the rule held exactly the

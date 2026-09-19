@@ -1,0 +1,54 @@
+===== par-byte-lm-model-pool/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 9903, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6426, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6400, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/model_pool_training.py", line 58, in _open
+    binding = _ModelPoolBinding(helper._binding())
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/model_pool_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+
+===== par-byte-lm-offload/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 9903, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6444, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6400, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/offload_training.py", line 56, in _open
+    binding = _OffloadBinding(_load(self._shape))
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/offload_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+
+===== par-byte-lm/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 9903, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6095, in _
+    res = tr.train_step([ids[4 * step: 4 * step + 2], ids[4 * step + 2: 4 * step + 4]])
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/6adbf712-1c53-4eac-81bc-38f0285a776b/scratchpad/cpuwork/cpu-package/mojolearn/parallel_training.py", line 63, in _open
+    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+

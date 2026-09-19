@@ -1,0 +1,14 @@
+===== par-samba-clip/base train =====
+ValueError: ParallelNeuralTrainer export_gradients[0] and ordered single-device replay gradient differ: 16707 bytes of 32768
+Traceback (most recent call last):
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 10020, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 6577, in _
+    _same_bytes(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                "ordered single-device replay gradient", np.asarray(r))
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/tools/identity_break.py", line 1667, in _same_bytes
+    raise ValueError(message)
+ValueError: ParallelNeuralTrainer export_gradients[0] and ordered single-device replay gradient differ: 16707 bytes of 32768
+
