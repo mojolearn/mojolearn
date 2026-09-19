@@ -17,8 +17,20 @@
 #                                     ivf-extend, kernel-ridge, nystroem and
 #                                     svc-poly lanes. AN AMD COLUMN ADDS THEM
 #                                     NOTHING -- they already have one. They
-#                                     are the NVIDIA leg's phase A and they
-#                                     are deliberately absent here.
+#                                     are the NVIDIA leg's REASON for phase A
+#                                     and they are deliberately absent here.
+#
+# CORRECTION TO THIS FILE'S OWN COMMIT MESSAGE (10e299356), which said "NOT
+# ONE LANE overlaps with the NVIDIA leg's phase A". THAT IS FALSE and the
+# truth is the stronger claim. The NVIDIA leg's LANES_A is those 18 PLUS the
+# four gbdt CTR and ranking lanes, which it carries because they are free once
+# _mojolearn_gbdt is built -- and those four are in THIS file's LANES_A too.
+# The overlap with this leg is not four lanes, it is EIGHTEEN, ALL of them, and
+# it is the design: a lane that has apple alone needs an AMD column AND an
+# NVIDIA column to reach three classes, so every one of the eighteen must
+# appear in BOTH legs. Four of them ride in the NVIDIA leg's phase A and the
+# other fourteen are its phase B. What does not overlap is the eighteen
+# apple+amd lanes above, and those are the ones an AMD column cannot help.
 #   apple ALONE                  18   the four gbdt CTR/ranking lanes and the
 #                                     fourteen gemm and weight-format lanes.
 #                                     THESE ARE THIS LEG'S WHOLE POINT: an AMD
