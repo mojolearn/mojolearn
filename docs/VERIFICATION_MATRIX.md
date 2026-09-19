@@ -623,13 +623,36 @@ gaps is noise that hides them. On 2026-09-19 it hid them at a ratio of
 work will ever close them; they are counted below under their own
 heading and excluded from the two CPU-axis gap lists by construction.
 
-**No GPU column at all: 18**
+AND A `par-*` LANE IS NOT A VENDOR-CLASS GAP EITHER (2026-09-19). The
+rules make that count UNREACHABLE for them, in both directions at once:
 
-> bpe-trainer, bpe-vocabulary, cross-val-folds, grad-accumulation, hf-causal-lm, hf-checkpoint, hf-tokenizer, language-model-config, linalg-eigh, linalg-qr, linalg-svdvals, lowbit-conversions, metrics-fowlkes-mallows, metrics-homogeneity-completeness, par-ivf, saved-model-host-infer, select-d, tokenized-corpus
+  * `_verify_reference.py:314` REFUSES any column recording
+    `par_devices != "0"`, and `gpu_coverage` above counts ADMITTED
+    columns only -- so a two-device column is invisible to this number
+    BY CONSTRUCTION;
+  * and on ONE device every one of them is DEGENERATE, measured:
+    `lane_applicability.degenerate('apple-metal')` holds all 13 of them,
+    because with one shard the equality they assert is not false, it is
+    not expressible.
 
-**GPU column on fewer than three classes: 18**
+So the claim is only STATEABLE on two devices and only ADMISSIBLE on
+one. No run, on any hardware, ever, can take a `par-*` lane to three
+vendor classes under these rules, and listing them as short of it has
+been advertising 13 gaps that cannot be closed. A $3.34 two-device
+MI300X leg was bought on 2026-09-19 before this was noticed; what it
+proved is real and is reported under the driver heading below, not here.
 
-> arima-exog, arima-exog-seasonal, gbdt-adapter-score-weighted, ordered-gradient-sum, par-boosting-clf, par-boosting-reg, par-cd-elasticnet, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gram-ols, par-gram-pca, par-gram-tsvd, par-queries-nn, par-rbf-sampler, par-scaler-minmax, par-svm-svr, rf-score-weighted
+**No GPU column at all: 17**
+
+> bpe-trainer, bpe-vocabulary, cross-val-folds, grad-accumulation, hf-causal-lm, hf-checkpoint, hf-tokenizer, language-model-config, linalg-eigh, linalg-qr, linalg-svdvals, lowbit-conversions, metrics-fowlkes-mallows, metrics-homogeneity-completeness, saved-model-host-infer, select-d, tokenized-corpus
+
+> (plus 1 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+
+**GPU column on fewer than three classes: 5**
+
+> arima-exog, arima-exog-seasonal, gbdt-adapter-score-weighted, ordered-gradient-sum, rf-score-weighted
+
+> (plus 13 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
 **No CPU verifier declared: 1**
 

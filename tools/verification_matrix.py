@@ -951,22 +951,43 @@ def render(data):
     w("work will ever close them; they are counted below under their own")
     w("heading and excluded from the two CPU-axis gap lists by construction.")
     w("")
-    for label, pred, cpu_axis in (
-            ("No GPU column at all", lambda r: not r["gpu"], False),
-            ("GPU column on fewer than three classes", lambda r: 0 < len(r["gpu"]) < 3, False),
-            ("No CPU verifier declared", lambda r: not r["cpu"], True),
-            ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)", True),
-            ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED", False)):
-        hit = [r for r in lanes if pred(r) and not (cpu_axis and r["two_device"])]
+    w("AND A `par-*` LANE IS NOT A VENDOR-CLASS GAP EITHER (2026-09-19). The")
+    w("rules make that count UNREACHABLE for them, in both directions at once:")
+    w("")
+    w("  * `_verify_reference.py:314` REFUSES any column recording")
+    w("    `par_devices != \"0\"`, and `gpu_coverage` above counts ADMITTED")
+    w("    columns only -- so a two-device column is invisible to this number")
+    w("    BY CONSTRUCTION;")
+    w("  * and on ONE device every one of them is DEGENERATE, measured:")
+    w("    `lane_applicability.degenerate('apple-metal')` holds all 13 of them,")
+    w("    because with one shard the equality they assert is not false, it is")
+    w("    not expressible.")
+    w("")
+    w("So the claim is only STATEABLE on two devices and only ADMISSIBLE on")
+    w("one. No run, on any hardware, ever, can take a `par-*` lane to three")
+    w("vendor classes under these rules, and listing them as short of it has")
+    w("been advertising 13 gaps that cannot be closed. A $3.34 two-device")
+    w("MI300X leg was bought on 2026-09-19 before this was noticed; what it")
+    w("proved is real and is reported under the driver heading below, not here.")
+    w("")
+    for label, pred, cpu_axis, gpu_axis in (
+            ("No GPU column at all", lambda r: not r["gpu"], False, True),
+            ("GPU column on fewer than three classes", lambda r: 0 < len(r["gpu"]) < 3, False, True),
+            ("No CPU verifier declared", lambda r: not r["cpu"], True, False),
+            ("Sabotage not seen to move a build", lambda r: r["sabotage"] != "seen(build)", True, False),
+            ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED", False, False)):
+        hit = [r for r in lanes if pred(r)
+               and not ((cpu_axis or gpu_axis) and r["two_device"])]
         w(f"**{label}: {len(hit)}**")
         w("")
         w("> " + (", ".join(r["lane"] for r in hit) if hit else "none"))
         w("")
-        if cpu_axis:
+        if cpu_axis or gpu_axis:
             held = [r for r in lanes if pred(r) and r["two_device"]]
+            why = ("a CPU column cannot state their claim" if cpu_axis else
+                   "this count is unreachable for them in both directions")
             w(f"> (plus {len(held)} `par-*` multi-GPU driver lanes, held out of "
-              "this count: a CPU column cannot state their claim. They are "
-              "listed once below.)")
+              f"this count: {why}. They are listed once below.)")
             w("")
 
     drivers = [r for r in lanes if r["two_device"]]
