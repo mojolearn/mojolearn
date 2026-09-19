@@ -1,0 +1,6657 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "0845c6de7e7610cf485a8f3ae2cb63576dbc389f",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "lowbit-conversions/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0ff2da2cf430c48a",
+    "0ff2da2cf430c48a"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "2e29d4f0c734b939",
+     "int8": "0ecd1f748e070c59",
+     "materialized": "885228df051d4250",
+     "widened": "5072627d3a85c628",
+     "f32_copy": "00cc6643490a5e95",
+     "linalg": "cdf5200d6cdac1b1",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "2e29d4f0c734b939",
+     "int8": "0ecd1f748e070c59",
+     "materialized": "885228df051d4250",
+     "widened": "5072627d3a85c628",
+     "f32_copy": "00cc6643490a5e95",
+     "linalg": "cdf5200d6cdac1b1",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "94a3218664eb8e6d",
+    "94a3218664eb8e6d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.38018718699458987,
+    "stages": {
+     "repeat=1/train": 0.2955819400958717,
+     "repeat=1/infer-save-reload": 9.840005077421665e-06,
+     "repeat=1/batch": 0.03920265892520547,
+     "repeat=2/train": 0.006634454941377044,
+     "repeat=2/infer-save-reload": 9.310082532465458e-06,
+     "repeat=2/batch": 0.03849315398838371
+    }
+   }
+  },
+  "lowbit-conversions/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "04ed2c63f7eb57fe",
+    "04ed2c63f7eb57fe"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "9ff4573f1df5e527",
+     "int8": "d6b2455c430e7f74",
+     "materialized": "edd8f5773bc4fd7e",
+     "widened": "7b23924e0bfbd3cb",
+     "f32_copy": "52274d3504f80e97",
+     "linalg": "52274d3504f80e97",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "9ff4573f1df5e527",
+     "int8": "d6b2455c430e7f74",
+     "materialized": "edd8f5773bc4fd7e",
+     "widened": "7b23924e0bfbd3cb",
+     "f32_copy": "52274d3504f80e97",
+     "linalg": "52274d3504f80e97",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "f06dac188ac1d23d",
+    "f06dac188ac1d23d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08324148098472506,
+    "stages": {
+     "repeat=1/train": 0.006125028012320399,
+     "repeat=1/infer-save-reload": 7.870025001466274e-06,
+     "repeat=1/batch": 0.03568606893531978,
+     "repeat=2/train": 0.005559199023991823,
+     "repeat=2/infer-save-reload": 7.319962605834007e-06,
+     "repeat=2/batch": 0.03567762009333819
+    }
+   }
+  },
+  "lowbit-conversions/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d0a146f4a3fff094",
+    "d0a146f4a3fff094"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "edd2213a9dc8906c",
+     "int8": "b0eea30ec2b3a8a6",
+     "materialized": "4849c03d0b25f1c2",
+     "widened": "a897e354b4c90ab7",
+     "f32_copy": "85c916ab8f310787",
+     "linalg": "27e0ce46edb3de4d",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "edd2213a9dc8906c",
+     "int8": "b0eea30ec2b3a8a6",
+     "materialized": "4849c03d0b25f1c2",
+     "widened": "a897e354b4c90ab7",
+     "f32_copy": "85c916ab8f310787",
+     "linalg": "27e0ce46edb3de4d",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "558bfa8f747db16d",
+    "558bfa8f747db16d"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08413152198772877,
+    "stages": {
+     "repeat=1/train": 0.0061441289726644754,
+     "repeat=1/infer-save-reload": 8.050003089010715e-06,
+     "repeat=1/batch": 0.0366629819618538,
+     "repeat=2/train": 0.005621560965664685,
+     "repeat=2/infer-save-reload": 7.3410337790846825e-06,
+     "repeat=2/batch": 0.035505944048054516
+    }
+   }
+  },
+  "lowbit-conversions/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "759ba3f731dfbf79",
+    "759ba3f731dfbf79"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "579097fc00538a7a",
+     "int8": "60982ff76466e3b6",
+     "materialized": "78c8af7cea73020c",
+     "widened": "2f22cbf899430626",
+     "f32_copy": "cdfcbf8c5f4b65f2",
+     "linalg": "f99b88684743a4b1",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "579097fc00538a7a",
+     "int8": "60982ff76466e3b6",
+     "materialized": "78c8af7cea73020c",
+     "widened": "2f22cbf899430626",
+     "f32_copy": "cdfcbf8c5f4b65f2",
+     "linalg": "f99b88684743a4b1",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "331160d8d7d81486",
+    "331160d8d7d81486"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08322143100667745,
+    "stages": {
+     "repeat=1/train": 0.006210069986991584,
+     "repeat=1/infer-save-reload": 7.88993202149868e-06,
+     "repeat=1/batch": 0.035870784893631935,
+     "repeat=2/train": 0.0055369079345837235,
+     "repeat=2/infer-save-reload": 7.010996341705322e-06,
+     "repeat=2/batch": 0.035397139959968626
+    }
+   }
+  },
+  "lowbit-conversions/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "379a3382a8f0f131",
+    "379a3382a8f0f131"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "33d25c0f39295e54",
+     "int8": "e14a07d454a1dc57",
+     "materialized": "5f079e3289b197cd",
+     "widened": "7d31cb1f65093dc3",
+     "f32_copy": "d2d349e62fd75e25",
+     "linalg": "aaf83efba7bae24d",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "33d25c0f39295e54",
+     "int8": "e14a07d454a1dc57",
+     "materialized": "5f079e3289b197cd",
+     "widened": "7d31cb1f65093dc3",
+     "f32_copy": "d2d349e62fd75e25",
+     "linalg": "aaf83efba7bae24d",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a5b3657a726e9021",
+    "a5b3657a726e9021"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08255446900147945,
+    "stages": {
+     "repeat=1/train": 0.005807006033137441,
+     "repeat=1/infer-save-reload": 7.039983756840229e-06,
+     "repeat=1/batch": 0.03549651394132525,
+     "repeat=2/train": 0.005590309971012175,
+     "repeat=2/infer-save-reload": 1.6520963981747627e-05,
+     "repeat=2/batch": 0.03547787305433303
+    }
+   }
+  },
+  "lowbit-conversions/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "19bca517cacf9575",
+    "19bca517cacf9575"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "33d25c0f39295e54",
+     "int8": "e14a07d454a1dc57",
+     "materialized": "5f079e3289b197cd",
+     "widened": "7d31cb1f65093dc3",
+     "f32_copy": "d0024eba66d92a59",
+     "linalg": "aaf83efba7bae24d",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "33d25c0f39295e54",
+     "int8": "e14a07d454a1dc57",
+     "materialized": "5f079e3289b197cd",
+     "widened": "7d31cb1f65093dc3",
+     "f32_copy": "d0024eba66d92a59",
+     "linalg": "aaf83efba7bae24d",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a5b3657a726e9021",
+    "a5b3657a726e9021"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08260299998801202,
+    "stages": {
+     "repeat=1/train": 0.005770054995082319,
+     "repeat=1/infer-save-reload": 7.1499962359666824e-06,
+     "repeat=1/batch": 0.035583705990575254,
+     "repeat=2/train": 0.005551737966015935,
+     "repeat=2/infer-save-reload": 7.170019671320915e-06,
+     "repeat=2/batch": 0.035524464095942676
+    }
+   }
+  },
+  "lowbit-conversions/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "680bf2aa4cabc4fc",
+    "680bf2aa4cabc4fc"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "c22aeb625ef72b19",
+     "int8": "4aa90bd6199b1e4b",
+     "materialized": "7dfbeca8a5e808f1",
+     "widened": "347dd4918d1ce677",
+     "f32_copy": "08221bc136341643",
+     "linalg": "3517da01f8d61917",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "c22aeb625ef72b19",
+     "int8": "4aa90bd6199b1e4b",
+     "materialized": "7dfbeca8a5e808f1",
+     "widened": "347dd4918d1ce677",
+     "f32_copy": "08221bc136341643",
+     "linalg": "3517da01f8d61917",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "493ce7b75e53a701",
+    "493ce7b75e53a701"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08903377805836499,
+    "stages": {
+     "repeat=1/train": 0.00574863504152745,
+     "repeat=1/infer-save-reload": 7.340102456510067e-06,
+     "repeat=1/batch": 0.035590236890129745,
+     "repeat=2/train": 0.005508836940862238,
+     "repeat=2/infer-save-reload": 6.951042450964451e-06,
+     "repeat=2/batch": 0.04201421409379691
+    }
+   }
+  },
+  "lowbit-conversions/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cb1c86ffa9db8ea6",
+    "cb1c86ffa9db8ea6"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "e68c0ab3c6bdcac8",
+     "int8": "603c705947af28e9",
+     "materialized": "73208b676dc0abea",
+     "widened": "00ec3b2335480a27",
+     "f32_copy": "3f429535495d4c8d",
+     "linalg": "20e47f8f944e503a",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "e68c0ab3c6bdcac8",
+     "int8": "603c705947af28e9",
+     "materialized": "73208b676dc0abea",
+     "widened": "00ec3b2335480a27",
+     "f32_copy": "3f429535495d4c8d",
+     "linalg": "20e47f8f944e503a",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "7dbfa2fdc9c505ef",
+    "7dbfa2fdc9c505ef"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08446815295610577,
+    "stages": {
+     "repeat=1/train": 0.005767085938714445,
+     "repeat=1/infer-save-reload": 7.170019671320915e-06,
+     "repeat=1/batch": 0.03647219599224627,
+     "repeat=2/train": 0.0055513279512524605,
+     "repeat=2/infer-save-reload": 6.970018148422241e-06,
+     "repeat=2/batch": 0.03650595690123737
+    }
+   }
+  },
+  "lowbit-conversions/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e02b763b50328135",
+    "e02b763b50328135"
+   ],
+   "parts": [
+    {
+     "bf16_bits": "bd6df3c4c62b8d0e",
+     "int8": "fb6c4ccf5c1cc652",
+     "materialized": "e5bd433aeea0ff98",
+     "widened": "03f8b190f2d9f9f3",
+     "f32_copy": "4bb5cf64e02af946",
+     "linalg": "d5eaae7845e1d920",
+     "flags": "7aa10a8b02456089"
+    },
+    {
+     "bf16_bits": "bd6df3c4c62b8d0e",
+     "int8": "fb6c4ccf5c1cc652",
+     "materialized": "e5bd433aeea0ff98",
+     "widened": "03f8b190f2d9f9f3",
+     "f32_copy": "4bb5cf64e02af946",
+     "linalg": "d5eaae7845e1d920",
+     "flags": "7aa10a8b02456089"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "606464d3bc53016c",
+    "606464d3bc53016c"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08276398503221571,
+    "stages": {
+     "repeat=1/train": 0.005940211936831474,
+     "repeat=1/infer-save-reload": 7.2499969974160194e-06,
+     "repeat=1/batch": 0.035586857004091144,
+     "repeat=2/train": 0.005593909998424351,
+     "repeat=2/infer-save-reload": 6.851041689515114e-06,
+     "repeat=2/batch": 0.03547026205342263
+    }
+   }
+  },
+  "select-d/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b03785e1fe9435fe",
+    "b03785e1fe9435fe"
+   ],
+   "parts": [
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6fc89ade43696902",
+    "6fc89ade43696902"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.245645234012045,
+    "stages": {
+     "repeat=1/train": 1.215439931023866,
+     "repeat=1/infer-save-reload": 8.239992894232273e-06,
+     "repeat=1/batch": 0.01433179504238069,
+     "repeat=2/train": 0.0015909239882603288,
+     "repeat=2/infer-save-reload": 7.239985279738903e-06,
+     "repeat=2/batch": 0.01408022700343281
+    }
+   }
+  },
+  "select-d/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a3891647e7362d03",
+    "a3891647e7362d03"
+   ],
+   "parts": [
+    {
+     "D0": "cdbd5025906a6e9f",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "cdbd5025906a6e9f",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "05b7813bec5858fc",
+    "05b7813bec5858fc"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.03508215898182243,
+    "stages": {
+     "repeat=1/train": 0.0019384149927645922,
+     "repeat=1/infer-save-reload": 8.050003089010715e-06,
+     "repeat=1/batch": 0.01683572109322995,
+     "repeat=2/train": 0.0016150550218299031,
+     "repeat=2/infer-save-reload": 7.569906301796436e-06,
+     "repeat=2/batch": 0.014500791090540588
+    }
+   }
+  },
+  "select-d/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e4dfff7c400f2b0",
+    "9e4dfff7c400f2b0"
+   ],
+   "parts": [
+    {
+     "D0": "750a0fcf56b8524f",
+     "D1": "63dee1cd5eb04de0"
+    },
+    {
+     "D0": "750a0fcf56b8524f",
+     "D1": "63dee1cd5eb04de0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bee51996194a20eb",
+    "bee51996194a20eb"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.03391211002599448,
+    "stages": {
+     "repeat=1/train": 0.0023181189317256212,
+     "repeat=1/infer-save-reload": 1.03700440376997e-05,
+     "repeat=1/batch": 0.014548183069564402,
+     "repeat=2/train": 0.0016029039397835732,
+     "repeat=2/infer-save-reload": 7.180962711572647e-06,
+     "repeat=2/batch": 0.0152203559409827
+    }
+   }
+  },
+  "select-d/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b03785e1fe9435fe",
+    "b03785e1fe9435fe"
+   ],
+   "parts": [
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6fc89ade43696902",
+    "6fc89ade43696902"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.0320711568929255,
+    "stages": {
+     "repeat=1/train": 0.0020650899969041348,
+     "repeat=1/infer-save-reload": 7.960014045238495e-06,
+     "repeat=1/batch": 0.014276384026743472,
+     "repeat=2/train": 0.0015930639347061515,
+     "repeat=2/infer-save-reload": 7.2999391704797745e-06,
+     "repeat=2/batch": 0.013951722998172045
+    }
+   }
+  },
+  "select-d/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f5e546e03969d4c",
+    "2f5e546e03969d4c"
+   ],
+   "parts": [
+    {
+     "D0": "63dee1cd5eb04de0",
+     "D1": "63dee1cd5eb04de0"
+    },
+    {
+     "D0": "63dee1cd5eb04de0",
+     "D1": "63dee1cd5eb04de0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5882f010512bfae3",
+    "5882f010512bfae3"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.030109209939837456,
+    "stages": {
+     "repeat=1/train": 0.0015400920528918505,
+     "repeat=1/infer-save-reload": 7.21996184438467e-06,
+     "repeat=1/batch": 0.013605540967546403,
+     "repeat=2/train": 0.0013792570680379868,
+     "repeat=2/infer-save-reload": 7.080030627548695e-06,
+     "repeat=2/batch": 0.013409644016064703
+    }
+   }
+  },
+  "select-d/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f5e546e03969d4c",
+    "2f5e546e03969d4c"
+   ],
+   "parts": [
+    {
+     "D0": "63dee1cd5eb04de0",
+     "D1": "63dee1cd5eb04de0"
+    },
+    {
+     "D0": "63dee1cd5eb04de0",
+     "D1": "63dee1cd5eb04de0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5882f010512bfae3",
+    "5882f010512bfae3"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.030062448931857944,
+    "stages": {
+     "repeat=1/train": 0.0015465329634025693,
+     "repeat=1/infer-save-reload": 1.0280986316502094e-05,
+     "repeat=1/batch": 0.013573320000432432,
+     "repeat=2/train": 0.0013669159961864352,
+     "repeat=2/infer-save-reload": 7.090042345225811e-06,
+     "repeat=2/batch": 0.013385173981077969
+    }
+   }
+  },
+  "select-d/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b03785e1fe9435fe",
+    "b03785e1fe9435fe"
+   ],
+   "parts": [
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "6fc89ade43696902",
+    "6fc89ade43696902"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.03161626192741096,
+    "stages": {
+     "repeat=1/train": 0.0017201779410243034,
+     "repeat=1/infer-save-reload": 7.210066542029381e-06,
+     "repeat=1/batch": 0.014028645004145801,
+     "repeat=2/train": 0.0016335059190168977,
+     "repeat=2/infer-save-reload": 7.46001023799181e-06,
+     "repeat=2/batch": 0.014045066083781421
+    }
+   }
+  },
+  "select-d/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b03785e1fe9435fe",
+    "b03785e1fe9435fe"
+   ],
+   "parts": [
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "77f7469b73c40b32",
+    "77f7469b73c40b32"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.03224658302497119,
+    "stages": {
+     "repeat=1/train": 0.0017130279447883368,
+     "repeat=1/infer-save-reload": 7.480964995920658e-06,
+     "repeat=1/batch": 0.01456238399259746,
+     "repeat=2/train": 0.0015605828957632184,
+     "repeat=2/infer-save-reload": 7.029972039163113e-06,
+     "repeat=2/batch": 0.01422892208211124
+    }
+   }
+  },
+  "select-d/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b03785e1fe9435fe",
+    "b03785e1fe9435fe"
+   ],
+   "parts": [
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    },
+    {
+     "D0": "4191d33019e92de0",
+     "D1": "b832d4117b087ec6"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "bee51996194a20eb",
+    "bee51996194a20eb"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.03393352997954935,
+    "stages": {
+     "repeat=1/train": 0.002341928891837597,
+     "repeat=1/infer-save-reload": 1.0730000212788582e-05,
+     "repeat=1/batch": 0.015562166925519705,
+     "repeat=2/train": 0.0016041750786826015,
+     "repeat=2/infer-save-reload": 7.729977369308472e-06,
+     "repeat=2/batch": 0.014185120933689177
+    }
+   }
+  },
+  "linalg-qr/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "20fbc6bbd010c041",
+    "20fbc6bbd010c041"
+   ],
+   "parts": [
+    {
+     "two_slice": "9e9ee68474c96502",
+     "one_slice": "f2d9440fa37424b3",
+     "rank_deficient": "15f0bba29b6e91a7"
+    },
+    {
+     "two_slice": "9e9ee68474c96502",
+     "one_slice": "f2d9440fa37424b3",
+     "rank_deficient": "15f0bba29b6e91a7"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.07710465404670686,
+    "stages": {
+     "repeat=1/train": 0.07515224709641188,
+     "repeat=1/infer-save-reload": 8.300994522869587e-06,
+     "repeat=1/batch": 0.0001677459804341197,
+     "repeat=2/train": 0.0015455919783562422,
+     "repeat=2/infer-save-reload": 6.949994713068008e-06,
+     "repeat=2/batch": 5.324208177626133e-05
+    }
+   }
+  },
+  "linalg-qr/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a107431bd5c0ad46",
+    "a107431bd5c0ad46"
+   ],
+   "parts": [
+    {
+     "two_slice": "fe01447306cecf88",
+     "one_slice": "1d1343718673e4d4",
+     "rank_deficient": "649cc1a4f1688616"
+    },
+    {
+     "two_slice": "fe01447306cecf88",
+     "one_slice": "1d1343718673e4d4",
+     "rank_deficient": "649cc1a4f1688616"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0038563210982829332,
+    "stages": {
+     "repeat=1/train": 0.002003978006541729,
+     "repeat=1/infer-save-reload": 7.67991878092289e-06,
+     "repeat=1/batch": 6.0001970268785954e-05,
+     "repeat=2/train": 0.0015825839946046472,
+     "repeat=2/infer-save-reload": 6.919959560036659e-06,
+     "repeat=2/batch": 5.124206654727459e-05
+    }
+   }
+  },
+  "linalg-qr/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c6e40f173f971713",
+    "c6e40f173f971713"
+   ],
+   "parts": [
+    {
+     "two_slice": "d4f9851d49fdb5de",
+     "one_slice": "7a000415cc2dfe5d",
+     "rank_deficient": "699d8a6f74d98880"
+    },
+    {
+     "two_slice": "d4f9851d49fdb5de",
+     "one_slice": "7a000415cc2dfe5d",
+     "rank_deficient": "699d8a6f74d98880"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.003382093971595168,
+    "stages": {
+     "repeat=1/train": 0.0016314650420099497,
+     "repeat=1/infer-save-reload": 7.070018909871578e-06,
+     "repeat=1/batch": 6.27320259809494e-05,
+     "repeat=2/train": 0.0014909899327903986,
+     "repeat=2/infer-save-reload": 6.880960427224636e-06,
+     "repeat=2/batch": 5.233206320554018e-05
+    }
+   }
+  },
+  "linalg-qr/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9cc6ed4b839c971b",
+    "9cc6ed4b839c971b"
+   ],
+   "parts": [
+    {
+     "two_slice": "9abd2ab11da4ea27",
+     "one_slice": "50c0be6c01d52fb9",
+     "rank_deficient": "cff0933a52fd7ce9"
+    },
+    {
+     "two_slice": "9abd2ab11da4ea27",
+     "one_slice": "50c0be6c01d52fb9",
+     "rank_deficient": "cff0933a52fd7ce9"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.003632692969404161,
+    "stages": {
+     "repeat=1/train": 0.001781530911102891,
+     "repeat=1/infer-save-reload": 7.090042345225811e-06,
+     "repeat=1/batch": 6.505195051431656e-05,
+     "repeat=2/train": 0.0015863040462136269,
+     "repeat=2/infer-save-reload": 6.880029104650021e-06,
+     "repeat=2/batch": 5.284091457724571e-05
+    }
+   }
+  },
+  "linalg-qr/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9f60e45f5f493013",
+    "9f60e45f5f493013"
+   ],
+   "parts": [
+    {
+     "two_slice": "c88358445deeeedf",
+     "one_slice": "b26e4b5f9a666737",
+     "rank_deficient": "6dcb3e7efb355df0"
+    },
+    {
+     "two_slice": "c88358445deeeedf",
+     "one_slice": "b26e4b5f9a666737",
+     "rank_deficient": "6dcb3e7efb355df0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0034095849841833115,
+    "stages": {
+     "repeat=1/train": 0.0016022740164771676,
+     "repeat=1/infer-save-reload": 6.860005669295788e-06,
+     "repeat=1/batch": 5.775189492851496e-05,
+     "repeat=2/train": 0.0015574119752272964,
+     "repeat=2/infer-save-reload": 6.739981472492218e-06,
+     "repeat=2/batch": 5.06020151078701e-05
+    }
+   }
+  },
+  "linalg-qr/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9f60e45f5f493013",
+    "9f60e45f5f493013"
+   ],
+   "parts": [
+    {
+     "two_slice": "c88358445deeeedf",
+     "one_slice": "b26e4b5f9a666737",
+     "rank_deficient": "6dcb3e7efb355df0"
+    },
+    {
+     "two_slice": "c88358445deeeedf",
+     "one_slice": "b26e4b5f9a666737",
+     "rank_deficient": "6dcb3e7efb355df0"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0034585670800879598,
+    "stages": {
+     "repeat=1/train": 0.0016941979993134737,
+     "repeat=1/infer-save-reload": 7.2410330176353455e-06,
+     "repeat=1/batch": 7.599196396768093e-05,
+     "repeat=2/train": 0.0014757399912923574,
+     "repeat=2/infer-save-reload": 6.880029104650021e-06,
+     "repeat=2/batch": 5.555094685405493e-05
+    }
+   }
+  },
+  "linalg-qr/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "20fbc6bbd010c041",
+    "20fbc6bbd010c041"
+   ],
+   "parts": [
+    {
+     "two_slice": "9e9ee68474c96502",
+     "one_slice": "f2d9440fa37424b3",
+     "rank_deficient": "15f0bba29b6e91a7"
+    },
+    {
+     "two_slice": "9e9ee68474c96502",
+     "one_slice": "f2d9440fa37424b3",
+     "rank_deficient": "15f0bba29b6e91a7"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0036665049847215414,
+    "stages": {
+     "repeat=1/train": 0.0017835800535976887,
+     "repeat=1/infer-save-reload": 7.269904017448425e-06,
+     "repeat=1/batch": 6.313202902674675e-05,
+     "repeat=2/train": 0.001617613947018981,
+     "repeat=2/infer-save-reload": 6.950111128389835e-06,
+     "repeat=2/batch": 5.2682007662951946e-05
+    }
+   }
+  },
+  "linalg-qr/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0188020b9209af94",
+    "0188020b9209af94"
+   ],
+   "parts": [
+    {
+     "two_slice": "c528a96730414e8f",
+     "one_slice": "c37ece144be3b065",
+     "rank_deficient": "36ef3a335a1b10f2"
+    },
+    {
+     "two_slice": "c528a96730414e8f",
+     "one_slice": "c37ece144be3b065",
+     "rank_deficient": "36ef3a335a1b10f2"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0034041949547827244,
+    "stages": {
+     "repeat=1/train": 0.0016184949781745672,
+     "repeat=1/infer-save-reload": 6.950926035642624e-06,
+     "repeat=1/batch": 4.2211031541228294e-05,
+     "repeat=2/train": 0.0015549518866464496,
+     "repeat=2/infer-save-reload": 6.839982233941555e-06,
+     "repeat=2/batch": 3.899098373949528e-05
+    }
+   }
+  },
+  "linalg-qr/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6de042abe7b39fe",
+    "e6de042abe7b39fe"
+   ],
+   "parts": [
+    {
+     "two_slice": "8492e8209f1ab670",
+     "one_slice": "3296ed8b61bdc8f0",
+     "rank_deficient": "1c6eb18015410b69"
+    },
+    {
+     "two_slice": "8492e8209f1ab670",
+     "one_slice": "3296ed8b61bdc8f0",
+     "rank_deficient": "1c6eb18015410b69"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0035799419274553657,
+    "stages": {
+     "repeat=1/train": 0.0017327689565718174,
+     "repeat=1/infer-save-reload": 6.929971277713776e-06,
+     "repeat=1/batch": 6.463297177106142e-05,
+     "repeat=2/train": 0.0015846340684220195,
+     "repeat=2/infer-save-reload": 6.660004146397114e-06,
+     "repeat=2/batch": 5.247211083769798e-05
+    }
+   }
+  },
+  "linalg-eigh/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4cabf49d9b95828f",
+    "4cabf49d9b95828f"
+   ],
+   "parts": [
+    {
+     "gram_w": "de48ec5bc0ea8ad7",
+     "gram_v": "809f4874b37a86b4",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "de48ec5bc0ea8ad7",
+     "gram_v": "809f4874b37a86b4",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.12068341998383403,
+    "stages": {
+     "repeat=1/train": 0.11856201896443963,
+     "repeat=1/infer-save-reload": 8.319970220327377e-06,
+     "repeat=1/batch": 0.00015961600001901388,
+     "repeat=2/train": 0.001731388969346881,
+     "repeat=2/infer-save-reload": 7.180031388998032e-06,
+     "repeat=2/batch": 5.3051975555717945e-05
+    }
+   }
+  },
+  "linalg-eigh/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f611f73e689e417f",
+    "f611f73e689e417f"
+   ],
+   "parts": [
+    {
+     "gram_w": "174d62b839c6206e",
+     "gram_v": "a69432238a4c9693",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "174d62b839c6206e",
+     "gram_v": "a69432238a4c9693",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.003969745012000203,
+    "stages": {
+     "repeat=1/train": 0.001948466058820486,
+     "repeat=1/infer-save-reload": 7.3999399319291115e-06,
+     "repeat=1/batch": 6.540201138705015e-05,
+     "repeat=2/train": 0.0017510289326310158,
+     "repeat=2/infer-save-reload": 7.33998604118824e-06,
+     "repeat=2/batch": 5.0992006435990334e-05
+    }
+   }
+  },
+  "linalg-eigh/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fa8fc8aa574a91fa",
+    "fa8fc8aa574a91fa"
+   ],
+   "parts": [
+    {
+     "gram_w": "fce4df754322549f",
+     "gram_v": "280ad62f9511e553",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "fce4df754322549f",
+     "gram_v": "280ad62f9511e553",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004027307033538818,
+    "stages": {
+     "repeat=1/train": 0.0019807369681075215,
+     "repeat=1/infer-save-reload": 7.209950126707554e-06,
+     "repeat=1/batch": 6.718200165778399e-05,
+     "repeat=2/train": 0.001770899980328977,
+     "repeat=2/infer-save-reload": 6.909947842359543e-06,
+     "repeat=2/batch": 5.656201392412186e-05
+    }
+   }
+  },
+  "linalg-eigh/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "674807b952333549",
+    "674807b952333549"
+   ],
+   "parts": [
+    {
+     "gram_w": "dd266188f563b5c5",
+     "gram_v": "5d191516f3d17540",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "dd266188f563b5c5",
+     "gram_v": "5d191516f3d17540",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.003945613978430629,
+    "stages": {
+     "repeat=1/train": 0.0019154449691995978,
+     "repeat=1/infer-save-reload": 7.270020432770252e-06,
+     "repeat=1/batch": 7.535307668149471e-05,
+     "repeat=2/train": 0.0017438490176573396,
+     "repeat=2/infer-save-reload": 6.900052540004253e-06,
+     "repeat=2/batch": 5.6872027926146984e-05
+    }
+   }
+  },
+  "linalg-eigh/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2298065b7be50575",
+    "2298065b7be50575"
+   ],
+   "parts": [
+    {
+     "gram_w": "920e7f530e7723e8",
+     "gram_v": "e3624a101ef76258",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "920e7f530e7723e8",
+     "gram_v": "e3624a101ef76258",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.003744106972590089,
+    "stages": {
+     "repeat=1/train": 0.0017772699939087033,
+     "repeat=1/infer-save-reload": 6.949994713068008e-06,
+     "repeat=1/batch": 5.9481943026185036e-05,
+     "repeat=2/train": 0.0017100679688155651,
+     "repeat=2/infer-save-reload": 7.029972039163113e-06,
+     "repeat=2/batch": 5.249201785773039e-05
+    }
+   }
+  },
+  "linalg-eigh/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2298065b7be50575",
+    "2298065b7be50575"
+   ],
+   "parts": [
+    {
+     "gram_w": "920e7f530e7723e8",
+     "gram_v": "e3624a101ef76258",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "920e7f530e7723e8",
+     "gram_v": "e3624a101ef76258",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004891796037554741,
+    "stages": {
+     "repeat=1/train": 0.002803384908474982,
+     "repeat=1/infer-save-reload": 7.811002433300018e-06,
+     "repeat=1/batch": 7.511302828788757e-05,
+     "repeat=2/train": 0.0017783900257200003,
+     "repeat=2/infer-save-reload": 7.110065780580044e-06,
+     "repeat=2/batch": 6.19320198893547e-05
+    }
+   }
+  },
+  "linalg-eigh/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4cabf49d9b95828f",
+    "4cabf49d9b95828f"
+   ],
+   "parts": [
+    {
+     "gram_w": "de48ec5bc0ea8ad7",
+     "gram_v": "809f4874b37a86b4",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "de48ec5bc0ea8ad7",
+     "gram_v": "809f4874b37a86b4",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004709678934887052,
+    "stages": {
+     "repeat=1/train": 0.002626689034514129,
+     "repeat=1/infer-save-reload": 7.490045391023159e-06,
+     "repeat=1/batch": 7.11031025275588e-05,
+     "repeat=2/train": 0.0017721899785101414,
+     "repeat=2/infer-save-reload": 8.419970981776714e-06,
+     "repeat=2/batch": 5.832198075950146e-05
+    }
+   }
+  },
+  "linalg-eigh/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2269938538d1fbb5",
+    "2269938538d1fbb5"
+   ],
+   "parts": [
+    {
+     "gram_w": "150b075bd9538054",
+     "gram_v": "17876c981054c06a",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "150b075bd9538054",
+     "gram_v": "17876c981054c06a",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004293594975024462,
+    "stages": {
+     "repeat=1/train": 0.002338030026294291,
+     "repeat=1/infer-save-reload": 7.711001671850681e-06,
+     "repeat=1/batch": 4.6511064283549786e-05,
+     "repeat=2/train": 0.001691636978648603,
+     "repeat=2/infer-save-reload": 7.421011105179787e-06,
+     "repeat=2/batch": 4.150101449340582e-05
+    }
+   }
+  },
+  "linalg-eigh/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "22f2092d4b95ed45",
+    "22f2092d4b95ed45"
+   ],
+   "parts": [
+    {
+     "gram_w": "64896a1705c16d12",
+     "gram_v": "ae127d752438c391",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    },
+    {
+     "gram_w": "64896a1705c16d12",
+     "gram_v": "ae127d752438c391",
+     "repeated_w": "b1d6dbf8c13d72c6",
+     "repeated_v": "6eb39dd967bed15e",
+     "diagonal_w": "35820ac9f186a429",
+     "diagonal_v": "1451a5fb0ae89dd3"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004248004988767207,
+    "stages": {
+     "repeat=1/train": 0.002150022890418768,
+     "repeat=1/infer-save-reload": 8.100992999970913e-06,
+     "repeat=1/batch": 6.935198325663805e-05,
+     "repeat=2/train": 0.0017962709534913301,
+     "repeat=2/infer-save-reload": 7.400056347250938e-06,
+     "repeat=2/batch": 5.299097392708063e-05
+    }
+   }
+  },
+  "linalg-svdvals/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86c29380bde22098",
+    "86c29380bde22098"
+   ],
+   "parts": [
+    {
+     "generic": "cb3013002e5ca386",
+     "rank_deficient": "f281bc5ede683329",
+     "scaled": "26a47d68cf85bab4"
+    },
+    {
+     "generic": "cb3013002e5ca386",
+     "rank_deficient": "f281bc5ede683329",
+     "scaled": "26a47d68cf85bab4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.10533738101366907,
+    "stages": {
+     "repeat=1/train": 0.10286735696718097,
+     "repeat=1/infer-save-reload": 8.290051482617855e-06,
+     "repeat=1/batch": 0.0001705860486254096,
+     "repeat=2/train": 0.0020351989660412073,
+     "repeat=2/infer-save-reload": 7.709953933954239e-06,
+     "repeat=2/batch": 5.862198304384947e-05
+    }
+   }
+  },
+  "linalg-svdvals/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0b33eccfff0aa35e",
+    "0b33eccfff0aa35e"
+   ],
+   "parts": [
+    {
+     "generic": "43498f60b46fa3ef",
+     "rank_deficient": "eafc14a5ffcef656",
+     "scaled": "b2550c0bc9c9001f"
+    },
+    {
+     "generic": "43498f60b46fa3ef",
+     "rank_deficient": "eafc14a5ffcef656",
+     "scaled": "b2550c0bc9c9001f"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0046427970519289374,
+    "stages": {
+     "repeat=1/train": 0.0023581000277772546,
+     "repeat=1/infer-save-reload": 7.420079782605171e-06,
+     "repeat=1/batch": 7.44030112400651e-05,
+     "repeat=2/train": 0.00198047689627856,
+     "repeat=2/infer-save-reload": 7.079914212226868e-06,
+     "repeat=2/batch": 6.483204197138548e-05
+    }
+   }
+  },
+  "linalg-svdvals/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ca7f505e44d6dc6d",
+    "ca7f505e44d6dc6d"
+   ],
+   "parts": [
+    {
+     "generic": "bb1e331a0b98d221",
+     "rank_deficient": "960e502891cf8211",
+     "scaled": "fba8e0251d46aafc"
+    },
+    {
+     "generic": "bb1e331a0b98d221",
+     "rank_deficient": "960e502891cf8211",
+     "scaled": "fba8e0251d46aafc"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005056411027908325,
+    "stages": {
+     "repeat=1/train": 0.002818745910190046,
+     "repeat=1/infer-save-reload": 7.530092261731625e-06,
+     "repeat=1/batch": 7.604295387864113e-05,
+     "repeat=2/train": 0.0019302350701764226,
+     "repeat=2/infer-save-reload": 7.00005330145359e-06,
+     "repeat=2/batch": 5.745200905948877e-05
+    }
+   }
+  },
+  "linalg-svdvals/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0316b073e8322a1d",
+    "0316b073e8322a1d"
+   ],
+   "parts": [
+    {
+     "generic": "f93cc4252794ea96",
+     "rank_deficient": "8106d8282b0f83d0",
+     "scaled": "a20e219ecded59e7"
+    },
+    {
+     "generic": "f93cc4252794ea96",
+     "rank_deficient": "8106d8282b0f83d0",
+     "scaled": "a20e219ecded59e7"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004935247008688748,
+    "stages": {
+     "repeat=1/train": 0.002733731991611421,
+     "repeat=1/infer-save-reload": 8.21996945887804e-06,
+     "repeat=1/batch": 7.936195470392704e-05,
+     "repeat=2/train": 0.0018875539535656571,
+     "repeat=2/infer-save-reload": 7.55989458411932e-06,
+     "repeat=2/batch": 5.859194789081812e-05
+    }
+   }
+  },
+  "linalg-svdvals/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5369719b3494a8ed",
+    "5369719b3494a8ed"
+   ],
+   "parts": [
+    {
+     "generic": "377eadcb377f1c0a",
+     "rank_deficient": "1f55df5d761d2e64",
+     "scaled": "d5a3708802067302"
+    },
+    {
+     "generic": "377eadcb377f1c0a",
+     "rank_deficient": "1f55df5d761d2e64",
+     "scaled": "d5a3708802067302"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004897025995887816,
+    "stages": {
+     "repeat=1/train": 0.0029365000082179904,
+     "repeat=1/infer-save-reload": 7.729977369308472e-06,
+     "repeat=1/batch": 7.0402049459517e-05,
+     "repeat=2/train": 0.0016810169909149408,
+     "repeat=2/infer-save-reload": 6.970018148422241e-06,
+     "repeat=2/batch": 5.194207187741995e-05
+    }
+   }
+  },
+  "linalg-svdvals/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5369719b3494a8ed",
+    "5369719b3494a8ed"
+   ],
+   "parts": [
+    {
+     "generic": "377eadcb377f1c0a",
+     "rank_deficient": "1f55df5d761d2e64",
+     "scaled": "d5a3708802067302"
+    },
+    {
+     "generic": "377eadcb377f1c0a",
+     "rank_deficient": "1f55df5d761d2e64",
+     "scaled": "d5a3708802067302"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004853404010646045,
+    "stages": {
+     "repeat=1/train": 0.0028757279505953193,
+     "repeat=1/infer-save-reload": 7.4999406933784485e-06,
+     "repeat=1/batch": 6.956199649721384e-05,
+     "repeat=2/train": 0.0016881569754332304,
+     "repeat=2/infer-save-reload": 6.960006430745125e-06,
+     "repeat=2/batch": 5.444197449833155e-05
+    }
+   }
+  },
+  "linalg-svdvals/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86c29380bde22098",
+    "86c29380bde22098"
+   ],
+   "parts": [
+    {
+     "generic": "cb3013002e5ca386",
+     "rank_deficient": "f281bc5ede683329",
+     "scaled": "26a47d68cf85bab4"
+    },
+    {
+     "generic": "cb3013002e5ca386",
+     "rank_deficient": "f281bc5ede683329",
+     "scaled": "26a47d68cf85bab4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004818652989342809,
+    "stages": {
+     "repeat=1/train": 0.002733592060394585,
+     "repeat=1/infer-save-reload": 7.4999406933784485e-06,
+     "repeat=1/batch": 6.620294880121946e-05,
+     "repeat=2/train": 0.0018034609965980053,
+     "repeat=2/infer-save-reload": 7.110997103154659e-06,
+     "repeat=2/batch": 5.167198833078146e-05
+    }
+   }
+  },
+  "linalg-svdvals/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5125ab2c480773e6",
+    "5125ab2c480773e6"
+   ],
+   "parts": [
+    {
+     "generic": "f59df06b84c945ad",
+     "rank_deficient": "efcb03c4057c5b13",
+     "scaled": "78f77e6cef0386dd"
+    },
+    {
+     "generic": "f59df06b84c945ad",
+     "rank_deficient": "efcb03c4057c5b13",
+     "scaled": "78f77e6cef0386dd"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00515495496802032,
+    "stages": {
+     "repeat=1/train": 0.0031101960921660066,
+     "repeat=1/infer-save-reload": 7.500988431274891e-06,
+     "repeat=1/batch": 4.7770910896360874e-05,
+     "repeat=2/train": 0.001794100971892476,
+     "repeat=2/infer-save-reload": 7.119961082935333e-06,
+     "repeat=2/batch": 3.8192025385797024e-05
+    }
+   }
+  },
+  "linalg-svdvals/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fa0730e97b38a99b",
+    "fa0730e97b38a99b"
+   ],
+   "parts": [
+    {
+     "generic": "2f3c4e1ef4ca7ba8",
+     "rank_deficient": "ac78cf9c73d161ce",
+     "scaled": "49814dc0913437bb"
+    },
+    {
+     "generic": "2f3c4e1ef4ca7ba8",
+     "rank_deficient": "ac78cf9c73d161ce",
+     "scaled": "49814dc0913437bb"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)",
+    "n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0052068959921598434,
+    "stages": {
+     "repeat=1/train": 0.0027241719653829932,
+     "repeat=1/infer-save-reload": 9.20100137591362e-06,
+     "repeat=1/batch": 7.715297397226095e-05,
+     "repeat=2/train": 0.002139662974514067,
+     "repeat=2/infer-save-reload": 1.0941061191260815e-05,
+     "repeat=2/batch": 6.126193329691887e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "672e75f003fce299",
+    "672e75f003fce299"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    },
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0805532009107992,
+    "stages": {
+     "repeat=1/train": 0.04943394602742046,
+     "repeat=1/infer-save-reload": 8.080038242042065e-06,
+     "repeat=1/batch": 0.00015733495820313692,
+     "repeat=2/train": 0.03067887993529439,
+     "repeat=2/infer-save-reload": 9.050942026078701e-06,
+     "repeat=2/batch": 8.749309927225113e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "30626b69cca77fb9",
+    "30626b69cca77fb9"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "ab28909572e77360",
+     "hcv:beta1.0": "b553b34af446fe56",
+     "hcv:beta2.0": "8093e81ff9ff02d9"
+    },
+    {
+     "hcv:beta0.5": "ab28909572e77360",
+     "hcv:beta1.0": "b553b34af446fe56",
+     "hcv:beta2.0": "8093e81ff9ff02d9"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.05694760102778673,
+    "stages": {
+     "repeat=1/train": 0.028955760993994772,
+     "repeat=1/infer-save-reload": 7.480033673346043e-06,
+     "repeat=1/batch": 8.654303383082151e-05,
+     "repeat=2/train": 0.027667817077599466,
+     "repeat=2/infer-save-reload": 7.1499962359666824e-06,
+     "repeat=2/batch": 7.063301745802164e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c14fc128a020b39",
+    "6c14fc128a020b39"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "8b699aef8096b365",
+     "hcv:beta1.0": "1c9b8f4a056f2717",
+     "hcv:beta2.0": "812726404cd842be"
+    },
+    {
+     "hcv:beta0.5": "8b699aef8096b365",
+     "hcv:beta1.0": "1c9b8f4a056f2717",
+     "hcv:beta2.0": "812726404cd842be"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06248291791416705,
+    "stages": {
+     "repeat=1/train": 0.031253738910891116,
+     "repeat=1/infer-save-reload": 7.689930498600006e-06,
+     "repeat=1/batch": 9.012303780764341e-05,
+     "repeat=2/train": 0.030899837031029165,
+     "repeat=2/infer-save-reload": 7.209950126707554e-06,
+     "repeat=2/batch": 7.260299753397703e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "948e1079fb2960cc",
+    "948e1079fb2960cc"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "52663dacd6acd9f6",
+     "hcv:beta1.0": "9d8bdd747c4d5a3b",
+     "hcv:beta2.0": "b6e30d02627328db"
+    },
+    {
+     "hcv:beta0.5": "52663dacd6acd9f6",
+     "hcv:beta1.0": "9d8bdd747c4d5a3b",
+     "hcv:beta2.0": "b6e30d02627328db"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0619994510198012,
+    "stages": {
+     "repeat=1/train": 0.03145124588627368,
+     "repeat=1/infer-save-reload": 7.870025001466274e-06,
+     "repeat=1/batch": 9.550305549055338e-05,
+     "repeat=2/train": 0.03021196404006332,
+     "repeat=2/infer-save-reload": 7.281079888343811e-06,
+     "repeat=2/batch": 7.299205753952265e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "672e75f003fce299",
+    "672e75f003fce299"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    },
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.08471857197582722,
+    "stages": {
+     "repeat=1/train": 0.0482825170038268,
+     "repeat=1/infer-save-reload": 1.3810931704938412e-05,
+     "repeat=1/batch": 0.00010674400255084038,
+     "repeat=2/train": 0.036022690939716995,
+     "repeat=2/infer-save-reload": 6.789923645555973e-06,
+     "repeat=2/batch": 7.563305553048849e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "672e75f003fce299",
+    "672e75f003fce299"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    },
+    {
+     "hcv:beta0.5": "e29a9555414cc1dd",
+     "hcv:beta1.0": "1b5aabb57a74af04",
+     "hcv:beta2.0": "d45d9e86e564df82"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06246973795350641,
+    "stages": {
+     "repeat=1/train": 0.03186937002465129,
+     "repeat=1/infer-save-reload": 7.300986908376217e-06,
+     "repeat=1/batch": 8.785305544734001e-05,
+     "repeat=2/train": 0.03027212608139962,
+     "repeat=2/infer-save-reload": 7.300055585801601e-06,
+     "repeat=2/batch": 7.25229037925601e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dff6a5fc7bc49aae",
+    "dff6a5fc7bc49aae"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "1b369be2459b14e0",
+     "hcv:beta1.0": "f1dca6094b82e71a",
+     "hcv:beta2.0": "055435481c453711"
+    },
+    {
+     "hcv:beta0.5": "1b369be2459b14e0",
+     "hcv:beta1.0": "f1dca6094b82e71a",
+     "hcv:beta2.0": "055435481c453711"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.06477486598305404,
+    "stages": {
+     "repeat=1/train": 0.03210411895997822,
+     "repeat=1/infer-save-reload": 7.960014045238495e-06,
+     "repeat=1/batch": 9.941402822732925e-05,
+     "repeat=2/train": 0.03227482398506254,
+     "repeat=2/infer-save-reload": 8.309958502650261e-06,
+     "repeat=2/batch": 8.871301542967558e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5676cca48115b406",
+    "5676cca48115b406"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "de2e73ad2b15f1db",
+     "hcv:beta1.0": "6f21d7f97fbac717",
+     "hcv:beta2.0": "2b2e5e5b619938a9"
+    },
+    {
+     "hcv:beta0.5": "de2e73ad2b15f1db",
+     "hcv:beta1.0": "6f21d7f97fbac717",
+     "hcv:beta2.0": "2b2e5e5b619938a9"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04877947398927063,
+    "stages": {
+     "repeat=1/train": 0.024860671954229474,
+     "repeat=1/infer-save-reload": 9.090988896787167e-06,
+     "repeat=1/batch": 7.134291809052229e-05,
+     "repeat=2/train": 0.023601809982210398,
+     "repeat=2/infer-save-reload": 6.980961188673973e-06,
+     "repeat=2/batch": 5.2042072638869286e-05
+    }
+   }
+  },
+  "metrics-homogeneity-completeness/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a871a9f3383b8c48",
+    "a871a9f3383b8c48"
+   ],
+   "parts": [
+    {
+     "hcv:beta0.5": "36973e2653062d7b",
+     "hcv:beta1.0": "36973e2653062d7b",
+     "hcv:beta2.0": "36973e2653062d7b"
+    },
+    {
+     "hcv:beta0.5": "36973e2653062d7b",
+     "hcv:beta1.0": "36973e2653062d7b",
+     "hcv:beta2.0": "36973e2653062d7b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)",
+    "n/a:global-contingency-reduction (three scalar scores over all labels; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04721129999961704,
+    "stages": {
+     "repeat=1/train": 0.023895899998024106,
+     "repeat=1/infer-save-reload": 7.429975084960461e-06,
+     "repeat=1/batch": 0.00012357404921203852,
+     "repeat=2/train": 0.022921307012438774,
+     "repeat=2/infer-save-reload": 7.029972039163113e-06,
+     "repeat=2/batch": 8.378305938094854e-05
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2cc16b7a5cb0caa4",
+    "2cc16b7a5cb0caa4"
+   ],
+   "parts": [
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.32084984600078315,
+    "stages": {
+     "repeat=1/train": 0.16544048802461475,
+     "repeat=1/infer-save-reload": 8.010072633624077e-06,
+     "repeat=1/batch": 0.00016567495185881853,
+     "repeat=2/train": 0.15481131803244352,
+     "repeat=2/infer-save-reload": 7.940921932458878e-06,
+     "repeat=2/batch": 0.00016923598013818264
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7a26ee9f258fb0a8",
+    "7a26ee9f258fb0a8"
+   ],
+   "parts": [
+    {
+     "split": "9f453d44fa797ccc",
+     "reversed": "9f453d44fa797ccc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "9f453d44fa797ccc",
+     "reversed": "9f453d44fa797ccc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2622195880394429,
+    "stages": {
+     "repeat=1/train": 0.129184999037534,
+     "repeat=1/infer-save-reload": 8.090049959719181e-06,
+     "repeat=1/batch": 0.0001441650092601776,
+     "repeat=2/train": 0.1324910509865731,
+     "repeat=2/infer-save-reload": 8.09994526207447e-06,
+     "repeat=2/batch": 0.00014400493819266558
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "39299bfd4fafd06f",
+    "39299bfd4fafd06f"
+   ],
+   "parts": [
+    {
+     "split": "233f98ee5f5434d0",
+     "reversed": "233f98ee5f5434d0",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "233f98ee5f5434d0",
+     "reversed": "233f98ee5f5434d0",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.24556585389655083,
+    "stages": {
+     "repeat=1/train": 0.12787694507278502,
+     "repeat=1/infer-save-reload": 9.389943443238735e-06,
+     "repeat=1/batch": 0.00016429496463388205,
+     "repeat=2/train": 0.11709090892691165,
+     "repeat=2/infer-save-reload": 8.721021004021168e-06,
+     "repeat=2/batch": 0.00015799491666257381
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f3260f403bc50af5",
+    "f3260f403bc50af5"
+   ],
+   "parts": [
+    {
+     "split": "338dbf3474857f18",
+     "reversed": "338dbf3474857f18",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "338dbf3474857f18",
+     "reversed": "338dbf3474857f18",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.28772442298941314,
+    "stages": {
+     "repeat=1/train": 0.14164425199851394,
+     "repeat=1/infer-save-reload": 8.82009044289589e-06,
+     "repeat=1/batch": 0.00021475704852491617,
+     "repeat=2/train": 0.14535457699093968,
+     "repeat=2/infer-save-reload": 1.0379939340054989e-05,
+     "repeat=2/batch": 0.00021913798991590738
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2cc16b7a5cb0caa4",
+    "2cc16b7a5cb0caa4"
+   ],
+   "parts": [
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.299938766984269,
+    "stages": {
+     "repeat=1/train": 0.14701280393637717,
+     "repeat=1/infer-save-reload": 1.2739910744130611e-05,
+     "repeat=1/batch": 0.00022249692119657993,
+     "repeat=2/train": 0.15215429803356528,
+     "repeat=2/infer-save-reload": 1.1619995348155499e-05,
+     "repeat=2/batch": 0.00017352600116282701
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2cc16b7a5cb0caa4",
+    "2cc16b7a5cb0caa4"
+   ],
+   "parts": [
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2948587950086221,
+    "stages": {
+     "repeat=1/train": 0.13646310498006642,
+     "repeat=1/infer-save-reload": 1.1579948477447033e-05,
+     "repeat=1/batch": 0.00017473602201789618,
+     "repeat=2/train": 0.15773498604539782,
+     "repeat=2/infer-save-reload": 1.0380987077951431e-05,
+     "repeat=2/batch": 0.0001548950094729662
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2cc16b7a5cb0caa4",
+    "2cc16b7a5cb0caa4"
+   ],
+   "parts": [
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "3033e4fe627954fc",
+     "reversed": "3033e4fe627954fc",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.28503952198661864,
+    "stages": {
+     "repeat=1/train": 0.13707080704625696,
+     "repeat=1/infer-save-reload": 8.261064067482948e-06,
+     "repeat=1/batch": 0.00015793496277183294,
+     "repeat=2/train": 0.1473993359832093,
+     "repeat=2/infer-save-reload": 7.809954695403576e-06,
+     "repeat=2/batch": 0.00014150491915643215
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ea7091579a40238",
+    "6ea7091579a40238"
+   ],
+   "parts": [
+    {
+     "split": "40ea659a17a3298b",
+     "reversed": "40ea659a17a3298b",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "40ea659a17a3298b",
+     "reversed": "40ea659a17a3298b",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.3165404100436717,
+    "stages": {
+     "repeat=1/train": 0.1681393689941615,
+     "repeat=1/infer-save-reload": 8.629984222352505e-06,
+     "repeat=1/batch": 0.00015768501907587051,
+     "repeat=2/train": 0.14780055999290198,
+     "repeat=2/infer-save-reload": 1.1419993825256824e-05,
+     "repeat=2/batch": 0.00011753407306969166
+    }
+   }
+  },
+  "metrics-fowlkes-mallows/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bf17710ae346249e",
+    "bf17710ae346249e"
+   ],
+   "parts": [
+    {
+     "split": "f91131bbee4e4499",
+     "reversed": "f91131bbee4e4499",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    },
+    {
+     "split": "f91131bbee4e4499",
+     "reversed": "f91131bbee4e4499",
+     "relabeled": "fc6986bca557ac3b",
+     "singletons": "746e75607f7ce347",
+     "two_rows": "746e75607f7ce347"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.26966148102656007,
+    "stages": {
+     "repeat=1/train": 0.1281049019889906,
+     "repeat=1/infer-save-reload": 1.8951017409563065e-05,
+     "repeat=1/batch": 0.00014697492588311434,
+     "repeat=2/train": 0.14098207897040993,
+     "repeat=2/infer-save-reload": 8.171075023710728e-06,
+     "repeat=2/batch": 0.00014843500684946775
+    }
+   }
+  },
+  "bpe-trainer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ed8b49585df3d85",
+    "6ed8b49585df3d85"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008152206079103053,
+    "stages": {
+     "repeat=1/train": 0.004572755075059831,
+     "repeat=1/infer-save-reload": 8.920091204345226e-06,
+     "repeat=1/batch": 8.149305358529091e-05,
+     "repeat=2/train": 0.0031657880172133446,
+     "repeat=2/infer-save-reload": 9.350012987852097e-06,
+     "repeat=2/batch": 8.628296200186014e-05
+    }
+   }
+  },
+  "bpe-trainer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6e31039662bb21c0",
+    "6e31039662bb21c0"
+   ],
+   "parts": [
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "n_tokens": "d97a3e841ef6bd72",
+     "n_merges": "87b0e2146ab311bd",
+     "n_ties_broken": "3c80798a857ce605"
+    },
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "n_tokens": "d97a3e841ef6bd72",
+     "n_merges": "87b0e2146ab311bd",
+     "n_ties_broken": "3c80798a857ce605"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006171668996103108,
+    "stages": {
+     "repeat=1/train": 0.0035547210136428475,
+     "repeat=1/infer-save-reload": 1.0390067473053932e-05,
+     "repeat=1/batch": 8.69029900059104e-05,
+     "repeat=2/train": 0.002259387052617967,
+     "repeat=2/infer-save-reload": 6.949994713068008e-06,
+     "repeat=2/batch": 5.655200220644474e-05
+    }
+   }
+  },
+  "bpe-trainer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "228eeeab1e7e2a50",
+    "228eeeab1e7e2a50"
+   ],
+   "parts": [
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "n_tokens": "177c88281b081a6f",
+     "n_merges": "957a46faf78b9dbc",
+     "n_ties_broken": "d13880042d3c804e"
+    },
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "n_tokens": "177c88281b081a6f",
+     "n_merges": "957a46faf78b9dbc",
+     "n_ties_broken": "d13880042d3c804e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007968140067532659,
+    "stages": {
+     "repeat=1/train": 0.0042108220513910055,
+     "repeat=1/infer-save-reload": 7.760012522339821e-06,
+     "repeat=1/batch": 9.003398008644581e-05,
+     "repeat=2/train": 0.0034012349788099527,
+     "repeat=2/infer-save-reload": 7.329974323511124e-06,
+     "repeat=2/batch": 7.451302371919155e-05
+    }
+   }
+  },
+  "bpe-trainer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "08115320ec780dad",
+    "08115320ec780dad"
+   ],
+   "parts": [
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "n_tokens": "e531040db3dbc4e9",
+     "n_merges": "f25375b2e8683d0a",
+     "n_ties_broken": "a280e90014323e20"
+    },
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "n_tokens": "e531040db3dbc4e9",
+     "n_merges": "f25375b2e8683d0a",
+     "n_ties_broken": "a280e90014323e20"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0076246780809015036,
+    "stages": {
+     "repeat=1/train": 0.0035083990078419447,
+     "repeat=1/infer-save-reload": 1.234002411365509e-05,
+     "repeat=1/batch": 9.162293281406164e-05,
+     "repeat=2/train": 0.003634192980825901,
+     "repeat=2/infer-save-reload": 1.3621058315038681e-05,
+     "repeat=2/batch": 0.0001388349337503314
+    }
+   }
+  },
+  "bpe-trainer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "10fc06a0110e6188",
+    "10fc06a0110e6188"
+   ],
+   "parts": [
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "n_tokens": "17e8082df8df7c0e",
+     "n_merges": "ae1160511a9de01d",
+     "n_ties_broken": "51ba3d7d0f06b584"
+    },
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "n_tokens": "17e8082df8df7c0e",
+     "n_merges": "ae1160511a9de01d",
+     "n_ties_broken": "51ba3d7d0f06b584"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007113271974958479,
+    "stages": {
+     "repeat=1/train": 0.004073868039995432,
+     "repeat=1/infer-save-reload": 1.8079997971653938e-05,
+     "repeat=1/batch": 7.440207991749048e-05,
+     "repeat=2/train": 0.002730002044700086,
+     "repeat=2/infer-save-reload": 6.481073796749115e-06,
+     "repeat=2/batch": 5.4051983170211315e-05
+    }
+   }
+  },
+  "bpe-trainer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f02e7de54464b781",
+    "f02e7de54464b781"
+   ],
+   "parts": [
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "7e9b25c6ab9fd0f4"
+    },
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "7e9b25c6ab9fd0f4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.009250733070075512,
+    "stages": {
+     "repeat=1/train": 0.004542284063063562,
+     "repeat=1/infer-save-reload": 1.1250958777964115e-05,
+     "repeat=1/batch": 9.45129431784153e-05,
+     "repeat=2/train": 0.00430059595964849,
+     "repeat=2/infer-save-reload": 1.0640011169016361e-05,
+     "repeat=2/batch": 8.574302773922682e-05
+    }
+   }
+  },
+  "bpe-trainer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f1dc3bb473bd2a1",
+    "2f1dc3bb473bd2a1"
+   ],
+   "parts": [
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "n_tokens": "381a673f586a94a8",
+     "n_merges": "016f9b389c74a3af",
+     "n_ties_broken": "8fbcb01bac48432e"
+    },
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "n_tokens": "381a673f586a94a8",
+     "n_merges": "016f9b389c74a3af",
+     "n_ties_broken": "8fbcb01bac48432e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006407257984392345,
+    "stages": {
+     "repeat=1/train": 0.0035693710669875145,
+     "repeat=1/infer-save-reload": 7.680966518819332e-06,
+     "repeat=1/batch": 7.765297777950764e-05,
+     "repeat=2/train": 0.002540325978770852,
+     "repeat=2/infer-save-reload": 6.7900400608778e-06,
+     "repeat=2/batch": 6.043200846761465e-05
+    }
+   }
+  },
+  "bpe-trainer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6ed8b49585df3d85",
+    "6ed8b49585df3d85"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "n_tokens": "2a2343b8e032ceeb",
+     "n_merges": "9b595b938074b87a",
+     "n_ties_broken": "91031c1d5e6eedf2"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007032629102468491,
+    "stages": {
+     "repeat=1/train": 0.004070298047736287,
+     "repeat=1/infer-save-reload": 7.451046258211136e-06,
+     "repeat=1/batch": 4.797196015715599e-05,
+     "repeat=2/train": 0.0027087919879704714,
+     "repeat=2/infer-save-reload": 7.250113412737846e-06,
+     "repeat=2/batch": 3.7510995753109455e-05
+    }
+   }
+  },
+  "bpe-trainer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ce5f06bff1bca0ac",
+    "ce5f06bff1bca0ac"
+   ],
+   "parts": [
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "n_tokens": "841c67b5a6b86e8e",
+     "n_merges": "a2f2801070a3b256",
+     "n_ties_broken": "2125639377726aa4"
+    },
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "n_tokens": "841c67b5a6b86e8e",
+     "n_merges": "a2f2801070a3b256",
+     "n_ties_broken": "2125639377726aa4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004031107062473893,
+    "stages": {
+     "repeat=1/train": 0.0020178380655124784,
+     "repeat=1/infer-save-reload": 7.280963473021984e-06,
+     "repeat=1/batch": 6.99819065630436e-05,
+     "repeat=2/train": 0.001730537973344326,
+     "repeat=2/infer-save-reload": 6.739981472492218e-06,
+     "repeat=2/batch": 5.4811942391097546e-05
+    }
+   }
+  },
+  "bpe-vocabulary/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302",
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.018773405929096043,
+    "stages": {
+     "repeat=1/train": 0.009752229903824627,
+     "repeat=1/infer-save-reload": 7.470021955668926e-06,
+     "repeat=1/batch": 8.649297524243593e-05,
+     "repeat=2/train": 0.00861371192149818,
+     "repeat=2/infer-save-reload": 8.199946023523808e-06,
+     "repeat=2/batch": 0.00011366407852619886
+    }
+   }
+  },
+  "bpe-vocabulary/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "377756b17a7d25ef",
+    "377756b17a7d25ef"
+   ],
+   "parts": [
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "identity": "0dcd935583ee5fe3",
+     "ids": "5524efea7dec2bde",
+     "decoded": "1801b04fd35666a1",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "f594e9b343b2f1af",
+     "tokenizer_json": "ec9d5a7b9125f15b",
+     "identity": "0dcd935583ee5fe3",
+     "ids": "5524efea7dec2bde",
+     "decoded": "1801b04fd35666a1",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.016883763018995523,
+    "stages": {
+     "repeat=1/train": 0.00858303194399923,
+     "repeat=1/infer-save-reload": 7.510068826377392e-06,
+     "repeat=1/batch": 8.68429196998477e-05,
+     "repeat=2/train": 0.007999320980161428,
+     "repeat=2/infer-save-reload": 6.971065886318684e-06,
+     "repeat=2/batch": 5.491205956786871e-05
+    }
+   }
+  },
+  "bpe-vocabulary/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ceba105a1d56a94b",
+    "ceba105a1d56a94b"
+   ],
+   "parts": [
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "identity": "63c408dab81d7396",
+     "ids": "f674f19737c5c97a",
+     "decoded": "6efad01f0e84ff17",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "1bb72f972348219a",
+     "tokenizer_json": "9bb67805ae88c100",
+     "identity": "63c408dab81d7396",
+     "ids": "f674f19737c5c97a",
+     "decoded": "6efad01f0e84ff17",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.017298646038398147,
+    "stages": {
+     "repeat=1/train": 0.00871615600772202,
+     "repeat=1/infer-save-reload": 7.4499985203146935e-06,
+     "repeat=1/batch": 8.17030668258667e-05,
+     "repeat=2/train": 0.008278569905087352,
+     "repeat=2/infer-save-reload": 6.710994057357311e-06,
+     "repeat=2/batch": 6.814207881689072e-05
+    }
+   }
+  },
+  "bpe-vocabulary/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e5784e8510c4fc65",
+    "e5784e8510c4fc65"
+   ],
+   "parts": [
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "identity": "d0c2adf17fe29c8a",
+     "ids": "1adcdd4e92998d09",
+     "decoded": "6e70c922a53f3a6d",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "32dc6ca1e3809765",
+     "tokenizer_json": "639b757215b09b15",
+     "identity": "d0c2adf17fe29c8a",
+     "ids": "1adcdd4e92998d09",
+     "decoded": "6e70c922a53f3a6d",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.015257527003996074,
+    "stages": {
+     "repeat=1/train": 0.0077178910141810775,
+     "repeat=1/infer-save-reload": 7.689930498600006e-06,
+     "repeat=1/batch": 7.075199391692877e-05,
+     "repeat=2/train": 0.007246525026857853,
+     "repeat=2/infer-save-reload": 7.029972039163113e-06,
+     "repeat=2/batch": 6.899295840412378e-05
+    }
+   }
+  },
+  "bpe-vocabulary/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "29ca89044830a85f",
+    "29ca89044830a85f"
+   ],
+   "parts": [
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "identity": "52c762ba21d072b5",
+     "ids": "2642b8d543acd7b5",
+     "decoded": "ab30200095e80263",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "875364d055213548",
+     "tokenizer_json": "91547fe1be757c10",
+     "identity": "52c762ba21d072b5",
+     "ids": "2642b8d543acd7b5",
+     "decoded": "ab30200095e80263",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01668892498128116,
+    "stages": {
+     "repeat=1/train": 0.008449706016108394,
+     "repeat=1/infer-save-reload": 7.429975084960461e-06,
+     "repeat=1/batch": 6.953300908207893e-05,
+     "repeat=2/train": 0.007956370012834668,
+     "repeat=2/infer-save-reload": 7.089925929903984e-06,
+     "repeat=2/batch": 6.384297739714384e-05
+    }
+   }
+  },
+  "bpe-vocabulary/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a785f5969fb257f2",
+    "a785f5969fb257f2"
+   ],
+   "parts": [
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "identity": "8ae287188e26bca4",
+     "ids": "9ca1ca858615a0b0",
+     "decoded": "d79dd0f9e3dcad7a",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "5226d2051f2c27be",
+     "tokenizer_json": "9e28fb21d912c3fe",
+     "identity": "8ae287188e26bca4",
+     "ids": "9ca1ca858615a0b0",
+     "decoded": "d79dd0f9e3dcad7a",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.016567221959121525,
+    "stages": {
+     "repeat=1/train": 0.008327772957272828,
+     "repeat=1/infer-save-reload": 7.400056347250938e-06,
+     "repeat=1/batch": 7.50919571146369e-05,
+     "repeat=2/train": 0.007913258974440396,
+     "repeat=2/infer-save-reload": 7.260008715093136e-06,
+     "repeat=2/batch": 9.482295718044043e-05
+    }
+   }
+  },
+  "bpe-vocabulary/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "173e1bde0f84a4ec",
+    "173e1bde0f84a4ec"
+   ],
+   "parts": [
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "identity": "fda24323326979da",
+     "ids": "a978a736ec2d641d",
+     "decoded": "9b40a069bcb9d6a7",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "3f01bd1c5d33fb9e",
+     "tokenizer_json": "5bc8953f1a511ba3",
+     "identity": "fda24323326979da",
+     "ids": "a978a736ec2d641d",
+     "decoded": "9b40a069bcb9d6a7",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.016139687038958073,
+    "stages": {
+     "repeat=1/train": 0.008165405946783721,
+     "repeat=1/infer-save-reload": 9.34000127017498e-06,
+     "repeat=1/batch": 7.507205009460449e-05,
+     "repeat=2/train": 0.007680670008994639,
+     "repeat=2/infer-save-reload": 6.949994713068008e-06,
+     "repeat=2/batch": 5.744199734181166e-05
+    }
+   }
+  },
+  "bpe-vocabulary/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "875b2b4bc2a4c302",
+    "875b2b4bc2a4c302"
+   ],
+   "parts": [
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "9a4f12c251bb167b",
+     "tokenizer_json": "3469eecd3a2219a8",
+     "identity": "8377db2e595e3e8d",
+     "ids": "048aeec5de1631ba",
+     "decoded": "219165a8c26234d8",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.016396326012909412,
+    "stages": {
+     "repeat=1/train": 0.008157926960848272,
+     "repeat=1/infer-save-reload": 7.740920409560204e-06,
+     "repeat=1/batch": 0.0001426349626854062,
+     "repeat=2/train": 0.007889418047852814,
+     "repeat=2/infer-save-reload": 7.3499977588653564e-06,
+     "repeat=2/batch": 4.551198799163103e-05
+    }
+   }
+  },
+  "bpe-vocabulary/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cc0f30dc6d3e929b",
+    "cc0f30dc6d3e929b"
+   ],
+   "parts": [
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "identity": "581c697b6fd58ce8",
+     "ids": "96ff8817ef1b4463",
+     "decoded": "64d2d241bfb1b540",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "ranks": "f7ecce1ad0dec97c",
+     "tokenizer_json": "e8efeef129c33334",
+     "identity": "581c697b6fd58ce8",
+     "ids": "96ff8817ef1b4463",
+     "decoded": "64d2d241bfb1b540",
+     "roundtrip": "96d4915936ea48ba",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.01358260097913444,
+    "stages": {
+     "repeat=1/train": 0.006870632991194725,
+     "repeat=1/infer-save-reload": 7.370021194219589e-06,
+     "repeat=1/batch": 0.0001505149994045496,
+     "repeat=2/train": 0.006358285085298121,
+     "repeat=2/infer-save-reload": 6.991089321672916e-06,
+     "repeat=2/batch": 5.3751980885863304e-05
+    }
+   }
+  },
+  "tokenized-corpus/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01",
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1751569570042193,
+    "stages": {
+     "repeat=1/train": 0.15185498702339828,
+     "repeat=1/infer-save-reload": 8.010072633624077e-06,
+     "repeat=1/batch": 0.00016117491759359837,
+     "repeat=2/train": 0.022895885980688035,
+     "repeat=2/infer-save-reload": 7.33998604118824e-06,
+     "repeat=2/batch": 7.711304351687431e-05
+    }
+   }
+  },
+  "tokenized-corpus/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ae1f351ccc072ed4",
+    "ae1f351ccc072ed4"
+   ],
+   "parts": [
+    {
+     "tokens": "904190b383b57a1f",
+     "identity": "809d9887392d488e",
+     "batches": "388571ba350e36bf",
+     "schedule": "857a72df02ea9ae8",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "904190b383b57a1f",
+     "identity": "809d9887392d488e",
+     "batches": "388571ba350e36bf",
+     "schedule": "857a72df02ea9ae8",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04024746408686042,
+    "stages": {
+     "repeat=1/train": 0.02021531609352678,
+     "repeat=1/infer-save-reload": 7.660011760890484e-06,
+     "repeat=1/batch": 0.00013573397882282734,
+     "repeat=2/train": 0.01967001601587981,
+     "repeat=2/infer-save-reload": 7.690046913921833e-06,
+     "repeat=2/batch": 6.423203740268946e-05
+    }
+   }
+  },
+  "tokenized-corpus/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "775ab845193498f0",
+    "775ab845193498f0"
+   ],
+   "parts": [
+    {
+     "tokens": "bdf2f9ecc4cc17d3",
+     "identity": "854bb3952a12b619",
+     "batches": "aec7bcef1f01aa9e",
+     "schedule": "983ddea91a391024",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "bdf2f9ecc4cc17d3",
+     "identity": "854bb3952a12b619",
+     "batches": "aec7bcef1f01aa9e",
+     "schedule": "983ddea91a391024",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04477659810800105,
+    "stages": {
+     "repeat=1/train": 0.022433610982261598,
+     "repeat=1/infer-save-reload": 7.3999399319291115e-06,
+     "repeat=1/batch": 8.867308497428894e-05,
+     "repeat=2/train": 0.021969055058434606,
+     "repeat=2/infer-save-reload": 7.639988325536251e-06,
+     "repeat=2/batch": 0.00012118392623960972
+    }
+   }
+  },
+  "tokenized-corpus/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "959cb78ae887b9c0",
+    "959cb78ae887b9c0"
+   ],
+   "parts": [
+    {
+     "tokens": "35662d24c6737efd",
+     "identity": "d770edf4debe2aa0",
+     "batches": "b03b4fe8e778fc64",
+     "schedule": "9c9bb827fbb9f834",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "35662d24c6737efd",
+     "identity": "d770edf4debe2aa0",
+     "batches": "b03b4fe8e778fc64",
+     "schedule": "9c9bb827fbb9f834",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04590614605695009,
+    "stages": {
+     "repeat=1/train": 0.022956397966481745,
+     "repeat=1/infer-save-reload": 7.289927452802658e-06,
+     "repeat=1/batch": 8.4263039752841e-05,
+     "repeat=2/train": 0.022634538006968796,
+     "repeat=2/infer-save-reload": 7.270020432770252e-06,
+     "repeat=2/batch": 8.037197403609753e-05
+    }
+   }
+  },
+  "tokenized-corpus/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "79821375c8f5a221",
+    "79821375c8f5a221"
+   ],
+   "parts": [
+    {
+     "tokens": "47e79b47c91a1d14",
+     "identity": "f61937f940ec392f",
+     "batches": "de55e70bccc8ccc5",
+     "schedule": "92ba895b37e160be",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "47e79b47c91a1d14",
+     "identity": "f61937f940ec392f",
+     "batches": "de55e70bccc8ccc5",
+     "schedule": "92ba895b37e160be",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04597157798707485,
+    "stages": {
+     "repeat=1/train": 0.022717540035955608,
+     "repeat=1/infer-save-reload": 7.839989848434925e-06,
+     "repeat=1/batch": 7.749302312731743e-05,
+     "repeat=2/train": 0.022947898018173873,
+     "repeat=2/infer-save-reload": 7.131020538508892e-06,
+     "repeat=2/batch": 7.33518972992897e-05
+    }
+   }
+  },
+  "tokenized-corpus/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cb4a54b07b2acfcb",
+    "cb4a54b07b2acfcb"
+   ],
+   "parts": [
+    {
+     "tokens": "86555be593f61f74",
+     "identity": "f584ae38e5e8ed55",
+     "batches": "ce94986e9f620677",
+     "schedule": "419569c4af55eb72",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "86555be593f61f74",
+     "identity": "f584ae38e5e8ed55",
+     "batches": "ce94986e9f620677",
+     "schedule": "419569c4af55eb72",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.044386554043740034,
+    "stages": {
+     "repeat=1/train": 0.02210146898869425,
+     "repeat=1/infer-save-reload": 7.670954801142216e-06,
+     "repeat=1/batch": 9.149301331490278e-05,
+     "repeat=2/train": 0.021929334034211934,
+     "repeat=2/infer-save-reload": 1.0110903531312943e-05,
+     "repeat=2/batch": 7.34919449314475e-05
+    }
+   }
+  },
+  "tokenized-corpus/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "41542aee2d840085",
+    "41542aee2d840085"
+   ],
+   "parts": [
+    {
+     "tokens": "c132dfe8206a69b2",
+     "identity": "de7d8bf820adeb85",
+     "batches": "60ef5ae3b02ca571",
+     "schedule": "a89e3d7e0d7569cf",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "c132dfe8206a69b2",
+     "identity": "de7d8bf820adeb85",
+     "batches": "60ef5ae3b02ca571",
+     "schedule": "a89e3d7e0d7569cf",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.047448399011045694,
+    "stages": {
+     "repeat=1/train": 0.024733569007366896,
+     "repeat=1/infer-save-reload": 7.721013389527798e-06,
+     "repeat=1/batch": 0.00013133406173437834,
+     "repeat=2/train": 0.022353387903422117,
+     "repeat=2/infer-save-reload": 7.270020432770252e-06,
+     "repeat=2/batch": 6.763299461454153e-05
+    }
+   }
+  },
+  "tokenized-corpus/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2580bb7a34e5ae01",
+    "2580bb7a34e5ae01"
+   ],
+   "parts": [
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "5b098a015f3cdcf2",
+     "identity": "b2886a2ec9db18bb",
+     "batches": "a79790e138591fe1",
+     "schedule": "514e084123be103b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.045470990939065814,
+    "stages": {
+     "repeat=1/train": 0.02279051300138235,
+     "repeat=1/infer-save-reload": 7.280032150447369e-06,
+     "repeat=1/batch": 6.410200148820877e-05,
+     "repeat=2/train": 0.022418370004743338,
+     "repeat=2/infer-save-reload": 7.260008715093136e-06,
+     "repeat=2/batch": 4.573201294988394e-05
+    }
+   }
+  },
+  "tokenized-corpus/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9d903acaa22028ed",
+    "9d903acaa22028ed"
+   ],
+   "parts": [
+    {
+     "tokens": "794f53d794a1bc17",
+     "identity": "4d06d459289a0f8d",
+     "batches": "d7b56471fe1bd1a4",
+     "schedule": "c5c6af0d1e9f48db",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "tokens": "794f53d794a1bc17",
+     "identity": "4d06d459289a0f8d",
+     "batches": "d7b56471fe1bd1a4",
+     "schedule": "c5c6af0d1e9f48db",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)",
+    "n/a:corpus-global-vocabulary-training (pair counts depend on the complete corpus; no per-row output)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.04152338800486177,
+    "stages": {
+     "repeat=1/train": 0.020705071976408362,
+     "repeat=1/infer-save-reload": 7.419963367283344e-06,
+     "repeat=1/batch": 8.768297266215086e-05,
+     "repeat=2/train": 0.020511885988526046,
+     "repeat=2/infer-save-reload": 7.21996184438467e-06,
+     "repeat=2/batch": 6.897200364619493e-05
+    }
+   }
+  },
+  "hf-checkpoint/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e4e083eaea46d80",
+    "2e4e083eaea46d80"
+   ],
+   "parts": [
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16124956600833684,
+    "stages": {
+     "repeat=1/train": 0.08139149891212583,
+     "repeat=1/infer-save-reload": 7.46001023799181e-06,
+     "repeat=1/batch": 0.00010367308277636766,
+     "repeat=2/train": 0.07950637501198798,
+     "repeat=2/infer-save-reload": 7.500057108700275e-06,
+     "repeat=2/batch": 7.817300502210855e-05
+    }
+   }
+  },
+  "hf-checkpoint/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2dc4beff33b6c751",
+    "2dc4beff33b6c751"
+   ],
+   "parts": [
+    {
+     "dtypes": "ebfa325797547fe3",
+     "bits": "db2cd78588bdf1ce",
+     "sharded": "ebfa325797547fe3",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "ebfa325797547fe3",
+     "bits": "db2cd78588bdf1ce",
+     "sharded": "ebfa325797547fe3",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15971706400159746,
+    "stages": {
+     "repeat=1/train": 0.07998030097223818,
+     "repeat=1/infer-save-reload": 7.250928319990635e-06,
+     "repeat=1/batch": 9.298301301896572e-05,
+     "repeat=2/train": 0.07941891299560666,
+     "repeat=2/infer-save-reload": 7.429975084960461e-06,
+     "repeat=2/batch": 7.316295523196459e-05
+    }
+   }
+  },
+  "hf-checkpoint/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fcff2266488b5033",
+    "fcff2266488b5033"
+   ],
+   "parts": [
+    {
+     "dtypes": "a540b4407a7e31d1",
+     "bits": "0d9947644aac090a",
+     "sharded": "a540b4407a7e31d1",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "a540b4407a7e31d1",
+     "bits": "0d9947644aac090a",
+     "sharded": "a540b4407a7e31d1",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16004971507936716,
+    "stages": {
+     "repeat=1/train": 0.0803294531069696,
+     "repeat=1/infer-save-reload": 7.32101034373045e-06,
+     "repeat=1/batch": 8.548295591026545e-05,
+     "repeat=2/train": 0.07940944202709943,
+     "repeat=2/infer-save-reload": 7.370021194219589e-06,
+     "repeat=2/batch": 7.362198084592819e-05
+    }
+   }
+  },
+  "hf-checkpoint/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d42e88f5de98f974",
+    "d42e88f5de98f974"
+   ],
+   "parts": [
+    {
+     "dtypes": "9d8930104518d88e",
+     "bits": "985ccfb0506e60cb",
+     "sharded": "9d8930104518d88e",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "9d8930104518d88e",
+     "bits": "985ccfb0506e60cb",
+     "sharded": "9d8930104518d88e",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16272246500011533,
+    "stages": {
+     "repeat=1/train": 0.08036015403922647,
+     "repeat=1/infer-save-reload": 7.779919542372227e-06,
+     "repeat=1/batch": 0.0001360640162602067,
+     "repeat=2/train": 0.08179479197133332,
+     "repeat=2/infer-save-reload": 8.660019375383854e-06,
+     "repeat=2/batch": 0.0002092879731208086
+    }
+   }
+  },
+  "hf-checkpoint/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "75ca3521c86f414a",
+    "75ca3521c86f414a"
+   ],
+   "parts": [
+    {
+     "dtypes": "3e6ed351e5b04ecc",
+     "bits": "f14b3e05698f89fb",
+     "sharded": "3e6ed351e5b04ecc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "3e6ed351e5b04ecc",
+     "bits": "f14b3e05698f89fb",
+     "sharded": "3e6ed351e5b04ecc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16040881804656237,
+    "stages": {
+     "repeat=1/train": 0.07985184609424323,
+     "repeat=1/infer-save-reload": 7.909955456852913e-06,
+     "repeat=1/batch": 0.00012462399899959564,
+     "repeat=2/train": 0.08014201698824763,
+     "repeat=2/infer-save-reload": 7.830909453332424e-06,
+     "repeat=2/batch": 0.00011584395542740822
+    }
+   }
+  },
+  "hf-checkpoint/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d7ebde1298189dfa",
+    "d7ebde1298189dfa"
+   ],
+   "parts": [
+    {
+     "dtypes": "41720b4d4119cb3d",
+     "bits": "8a092b14d5075145",
+     "sharded": "41720b4d4119cb3d",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "41720b4d4119cb3d",
+     "bits": "8a092b14d5075145",
+     "sharded": "41720b4d4119cb3d",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16085336299147457,
+    "stages": {
+     "repeat=1/train": 0.08054046996403486,
+     "repeat=1/infer-save-reload": 7.79004767537117e-06,
+     "repeat=1/batch": 0.00014508503954857588,
+     "repeat=2/train": 0.07989409903530031,
+     "repeat=2/infer-save-reload": 7.699942216277122e-06,
+     "repeat=2/batch": 0.00010305305477231741
+    }
+   }
+  },
+  "hf-checkpoint/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "92b2188eec7b6344",
+    "92b2188eec7b6344"
+   ],
+   "parts": [
+    {
+     "dtypes": "5d73af15d8e349cc",
+     "bits": "b9a340c9077dd20d",
+     "sharded": "5d73af15d8e349cc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "5d73af15d8e349cc",
+     "bits": "b9a340c9077dd20d",
+     "sharded": "5d73af15d8e349cc",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.15969132399186492,
+    "stages": {
+     "repeat=1/train": 0.07961030793376267,
+     "repeat=1/infer-save-reload": 7.750000804662704e-06,
+     "repeat=1/batch": 0.0001403839560225606,
+     "repeat=2/train": 0.07969077106099576,
+     "repeat=2/infer-save-reload": 7.0409150794148445e-06,
+     "repeat=2/batch": 8.353299926966429e-05
+    }
+   }
+  },
+  "hf-checkpoint/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e4e083eaea46d80",
+    "2e4e083eaea46d80"
+   ],
+   "parts": [
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "34fd62b658dd1584",
+     "bits": "908f930834fbeb02",
+     "sharded": "34fd62b658dd1584",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1597298450069502,
+    "stages": {
+     "repeat=1/train": 0.07983218599110842,
+     "repeat=1/infer-save-reload": 7.511000148952007e-06,
+     "repeat=1/batch": 8.466304279863834e-05,
+     "repeat=2/train": 0.0795990580227226,
+     "repeat=2/infer-save-reload": 7.409951649606228e-06,
+     "repeat=2/batch": 5.31019177287817e-05
+    }
+   }
+  },
+  "hf-checkpoint/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f4d46c34f3f86203",
+    "f4d46c34f3f86203"
+   ],
+   "parts": [
+    {
+     "dtypes": "1db75f4655c44168",
+     "bits": "79f68084a4850d25",
+     "sharded": "1db75f4655c44168",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    },
+    {
+     "dtypes": "1db75f4655c44168",
+     "bits": "79f68084a4850d25",
+     "sharded": "1db75f4655c44168",
+     "infos": "118d422a3698a4b9",
+     "plan": "d5df1aa24f031858",
+     "refusals": "be0be71e13c1f100",
+     "caught": "21ba7c1dec19ea34",
+     "flags": "21ba7c1dec19ea34"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)",
+    "n/a:function (a header parse, a memoryview cast and the option matrix; the lane fits nothing and asks nothing for a row's answer)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.16375899105332792,
+    "stages": {
+     "repeat=1/train": 0.07988221803680062,
+     "repeat=1/infer-save-reload": 7.33998604118824e-06,
+     "repeat=1/batch": 0.000146804959513247,
+     "repeat=2/train": 0.08338113699574023,
+     "repeat=2/infer-save-reload": 8.360017091035843e-06,
+     "repeat=2/batch": 0.0001443049404770136
+    }
+   }
+  },
+  "hf-tokenizer/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a66a961b530381ae",
+    "a66a961b530381ae"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bd52da98a5aa9de7",
+    "bd52da98a5aa9de7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1002133369911462,
+    "stages": {
+     "repeat=1/train": 0.04809023009147495,
+     "repeat=1/infer-save-reload": 0.0009608028922230005,
+     "repeat=1/batch": 0.0003083599731326103,
+     "repeat=2/train": 0.049545909045264125,
+     "repeat=2/infer-save-reload": 0.0009562320774421096,
+     "repeat=2/batch": 0.00015776499640196562
+    }
+   }
+  },
+  "hf-tokenizer/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "51972798872aec9c",
+    "51972798872aec9c"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "13766777471b8df0",
+     "llama3_ids": "13766777471b8df0",
+     "qwen2_ids": "13766777471b8df0",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "13766777471b8df0",
+     "specials": "8c4c3d03d7d6dd9a",
+     "decoded": "2434a655a2b9395d",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "13766777471b8df0",
+     "llama3_ids": "13766777471b8df0",
+     "qwen2_ids": "13766777471b8df0",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "13766777471b8df0",
+     "specials": "8c4c3d03d7d6dd9a",
+     "decoded": "2434a655a2b9395d",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "edd443e990005131",
+    "edd443e990005131"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09530509007163346,
+    "stages": {
+     "repeat=1/train": 0.04601595993153751,
+     "repeat=1/infer-save-reload": 0.0013891078997403383,
+     "repeat=1/batch": 0.00031338108237832785,
+     "repeat=2/train": 0.04569450893905014,
+     "repeat=2/infer-save-reload": 0.0015746530843898654,
+     "repeat=2/batch": 0.0001316840061917901
+    }
+   }
+  },
+  "hf-tokenizer/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "98097fb17bd433f1",
+    "98097fb17bd433f1"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "33c064b896480ec1",
+     "llama3_ids": "33c064b896480ec1",
+     "qwen2_ids": "33c064b896480ec1",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "33c064b896480ec1",
+     "specials": "7c33ce931c3692f3",
+     "decoded": "88e6f419f5c5e001",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "33c064b896480ec1",
+     "llama3_ids": "33c064b896480ec1",
+     "qwen2_ids": "33c064b896480ec1",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "33c064b896480ec1",
+     "specials": "7c33ce931c3692f3",
+     "decoded": "88e6f419f5c5e001",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "f382f25be8d68a80",
+    "f382f25be8d68a80"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09407174796797335,
+    "stages": {
+     "repeat=1/train": 0.045987269026227295,
+     "repeat=1/infer-save-reload": 0.0009334620554000139,
+     "repeat=1/batch": 8.61829612404108e-05,
+     "repeat=2/train": 0.04590152599848807,
+     "repeat=2/infer-save-reload": 0.0008726599626243114,
+     "repeat=2/batch": 0.00011716398876160383
+    }
+   }
+  },
+  "hf-tokenizer/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "87eeb61a3e92ff6e",
+    "87eeb61a3e92ff6e"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "6132bdc878267ba3",
+     "llama3_ids": "6132bdc878267ba3",
+     "qwen2_ids": "6132bdc878267ba3",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "6132bdc878267ba3",
+     "specials": "47c6b51cae8dce9b",
+     "decoded": "4ef02cedee2d7e75",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "6132bdc878267ba3",
+     "llama3_ids": "6132bdc878267ba3",
+     "qwen2_ids": "6132bdc878267ba3",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "6132bdc878267ba3",
+     "specials": "47c6b51cae8dce9b",
+     "decoded": "4ef02cedee2d7e75",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "f046458747ed168a",
+    "f046458747ed168a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09398246603086591,
+    "stages": {
+     "repeat=1/train": 0.04573517094831914,
+     "repeat=1/infer-save-reload": 0.000925692031159997,
+     "repeat=1/batch": 8.527305908501148e-05,
+     "repeat=2/train": 0.04608099197503179,
+     "repeat=2/infer-save-reload": 0.0008773900335654616,
+     "repeat=2/batch": 0.00010079401545226574
+    }
+   }
+  },
+  "hf-tokenizer/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5ece48a8ed9d767b",
+    "5ece48a8ed9d767b"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "7dd08e33ed5cc18e",
+     "llama3_ids": "7dd08e33ed5cc18e",
+     "qwen2_ids": "7dd08e33ed5cc18e",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "7dd08e33ed5cc18e",
+     "specials": "a286800023849bcf",
+     "decoded": "3e6693ced86d1a36",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "7dd08e33ed5cc18e",
+     "llama3_ids": "7dd08e33ed5cc18e",
+     "qwen2_ids": "7dd08e33ed5cc18e",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "7dd08e33ed5cc18e",
+     "specials": "a286800023849bcf",
+     "decoded": "3e6693ced86d1a36",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "59b5ad5dfbff7c9f",
+    "59b5ad5dfbff7c9f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09781330602709204,
+    "stages": {
+     "repeat=1/train": 0.04809159098658711,
+     "repeat=1/infer-save-reload": 0.0009482520399615169,
+     "repeat=1/batch": 7.901294156908989e-05,
+     "repeat=2/train": 0.047555901925079525,
+     "repeat=2/infer-save-reload": 0.000885179964825511,
+     "repeat=2/batch": 8.362298831343651e-05
+    }
+   }
+  },
+  "hf-tokenizer/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e44a34c85554b75d",
+    "e44a34c85554b75d"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "cf626f0df8ed4b34",
+     "llama3_ids": "cf626f0df8ed4b34",
+     "qwen2_ids": "cf626f0df8ed4b34",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "cf626f0df8ed4b34",
+     "specials": "fbccfd06e002895d",
+     "decoded": "d69f14f8374599ba",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "cf626f0df8ed4b34",
+     "llama3_ids": "cf626f0df8ed4b34",
+     "qwen2_ids": "cf626f0df8ed4b34",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "cf626f0df8ed4b34",
+     "specials": "fbccfd06e002895d",
+     "decoded": "d69f14f8374599ba",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "50ac7ce6d419bb19",
+    "50ac7ce6d419bb19"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09476604196242988,
+    "stages": {
+     "repeat=1/train": 0.04639284301083535,
+     "repeat=1/infer-save-reload": 0.000940931960940361,
+     "repeat=1/batch": 7.639196701347828e-05,
+     "repeat=2/train": 0.04619697597809136,
+     "repeat=2/infer-save-reload": 0.0009068809449672699,
+     "repeat=2/batch": 9.079300798475742e-05
+    }
+   }
+  },
+  "hf-tokenizer/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9dde8189ff29a5a9",
+    "9dde8189ff29a5a9"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "e8502ceef04e551f",
+     "llama3_ids": "e8502ceef04e551f",
+     "qwen2_ids": "e8502ceef04e551f",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "e8502ceef04e551f",
+     "specials": "795173f1e8316e26",
+     "decoded": "b09de69b8e254549",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "e8502ceef04e551f",
+     "llama3_ids": "e8502ceef04e551f",
+     "qwen2_ids": "e8502ceef04e551f",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "e8502ceef04e551f",
+     "specials": "795173f1e8316e26",
+     "decoded": "b09de69b8e254549",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "df35f527935672e5",
+    "df35f527935672e5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0947225809795782,
+    "stages": {
+     "repeat=1/train": 0.04643366392701864,
+     "repeat=1/infer-save-reload": 0.0009233009768649936,
+     "repeat=1/batch": 7.623201236128807e-05,
+     "repeat=2/train": 0.04616826504934579,
+     "repeat=2/infer-save-reload": 0.0008817900670692325,
+     "repeat=2/batch": 8.20419518277049e-05
+    }
+   }
+  },
+  "hf-tokenizer/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a66a961b530381ae",
+    "a66a961b530381ae"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "98ff23b0fecb6513",
+     "llama3_ids": "98ff23b0fecb6513",
+     "qwen2_ids": "98ff23b0fecb6513",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "98ff23b0fecb6513",
+     "specials": "5a77802a85d2dc72",
+     "decoded": "0960ee7396510405",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bd52da98a5aa9de7",
+    "bd52da98a5aa9de7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.09519418596755713,
+    "stages": {
+     "repeat=1/train": 0.046647810959257185,
+     "repeat=1/infer-save-reload": 0.0008581889560446143,
+     "repeat=1/batch": 4.9961963668465614e-05,
+     "repeat=2/train": 0.046576278982684016,
+     "repeat=2/infer-save-reload": 0.0008616900304332376,
+     "repeat=2/batch": 4.533189348876476e-05
+    }
+   }
+  },
+  "hf-tokenizer/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "66223380ebeea5bb",
+    "66223380ebeea5bb"
+   ],
+   "parts": [
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "f7c0618396e2b2a2",
+     "llama3_ids": "f7c0618396e2b2a2",
+     "qwen2_ids": "f7c0618396e2b2a2",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "f7c0618396e2b2a2",
+     "specials": "5d0ca683c43f6569",
+     "decoded": "1beaafcce11fe487",
+     "flags": "ed9091945b692ac7"
+    },
+    {
+     "bounds": "f0699740af1d640b",
+     "names": "612355c32d38184b",
+     "gpt2_ids": "f7c0618396e2b2a2",
+     "llama3_ids": "f7c0618396e2b2a2",
+     "qwen2_ids": "f7c0618396e2b2a2",
+     "text_ids": "f49fa063521cdda4",
+     "json_ids": "f7c0618396e2b2a2",
+     "specials": "5d0ca683c43f6569",
+     "decoded": "1beaafcce11fe487",
+     "flags": "ed9091945b692ac7"
+    }
+   ],
+   "infer": [
+    "bb8c8efd6d04f6cf",
+    "bb8c8efd6d04f6cf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)",
+    "n/a:no-batch-axis (mojolearn.models.Tokenizer encodes and decodes one document per call; it has no encode_batch, and a loop written here would test the harness, not the class)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.08819462894462049,
+    "stages": {
+     "repeat=1/train": 0.043190003954805434,
+     "repeat=1/infer-save-reload": 0.0008254380663856864,
+     "repeat=1/batch": 7.379206363111734e-05,
+     "repeat=2/train": 0.043053898960351944,
+     "repeat=2/infer-save-reload": 0.0008119069971144199,
+     "repeat=2/batch": 8.167198393493891e-05
+    }
+   }
+  },
+  "hf-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "13d9b4ba89461093",
+    "13d9b4ba89461093"
+   ],
+   "parts": [
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a",
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.4436225759563968,
+    "stages": {
+     "repeat=1/train": 1.2323931748978794,
+     "repeat=1/infer-save-reload": 0.003452977049164474,
+     "repeat=1/batch": 0.02990679396316409,
+     "repeat=2/train": 0.14493817300535738,
+     "repeat=2/infer-save-reload": 0.0029349689139053226,
+     "repeat=2/batch": 0.029775699018500745
+    }
+   }
+  },
+  "hf-causal-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b22564bebf129bc8",
+    "b22564bebf129bc8"
+   ],
+   "parts": [
+    {
+     "every": "b6d7936433b01269",
+     "logits": "31c30f8c0ea0ad9c",
+     "generate": "f4d5dd53c326b79f",
+     "step": "c4e5aa26c69859fd",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "b6d7936433b01269",
+     "logits": "31c30f8c0ea0ad9c",
+     "generate": "f4d5dd53c326b79f",
+     "step": "c4e5aa26c69859fd",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "efb513a514c39d67",
+    "efb513a514c39d67"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "73aef1570825d468",
+    "73aef1570825d468"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3550582049647346,
+    "stages": {
+     "repeat=1/train": 0.14513624995015562,
+     "repeat=1/infer-save-reload": 0.0029635399114340544,
+     "repeat=1/batch": 0.029798800009302795,
+     "repeat=2/train": 0.14395705005154014,
+     "repeat=2/infer-save-reload": 0.002983291051350534,
+     "repeat=2/batch": 0.029969385941512883
+    }
+   }
+  },
+  "hf-causal-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "70ed1432e08a6930",
+    "70ed1432e08a6930"
+   ],
+   "parts": [
+    {
+     "every": "a46861c1331ac41c",
+     "logits": "a0641131ca09b686",
+     "generate": "4afb828154b71339",
+     "step": "fc54fbc702d33d1b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "a46861c1331ac41c",
+     "logits": "a0641131ca09b686",
+     "generate": "4afb828154b71339",
+     "step": "fc54fbc702d33d1b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "9c6318b3ff266f0f",
+    "9c6318b3ff266f0f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b2dfd7cd9cf444df",
+    "b2dfd7cd9cf444df"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3550472150091082,
+    "stages": {
+     "repeat=1/train": 0.1452715650666505,
+     "repeat=1/infer-save-reload": 0.002962270053103566,
+     "repeat=1/batch": 0.029938795021735132,
+     "repeat=2/train": 0.1436882499838248,
+     "repeat=2/infer-save-reload": 0.0029156289529055357,
+     "repeat=2/batch": 0.030029817949980497
+    }
+   }
+  },
+  "hf-causal-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b7bd4dfcde072d5",
+    "5b7bd4dfcde072d5"
+   ],
+   "parts": [
+    {
+     "every": "01a9048117948e3d",
+     "logits": "5deeb2b77b89c972",
+     "generate": "6bb81335da9f8bac",
+     "step": "ad5c54965484fd0d",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "01a9048117948e3d",
+     "logits": "5deeb2b77b89c972",
+     "generate": "6bb81335da9f8bac",
+     "step": "ad5c54965484fd0d",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "7da1277e513d4391",
+    "7da1277e513d4391"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "97051f4a7819532e",
+    "97051f4a7819532e"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3540650620125234,
+    "stages": {
+     "repeat=1/train": 0.14417869702447206,
+     "repeat=1/infer-save-reload": 0.0029177289688959718,
+     "repeat=1/batch": 0.029765038983896375,
+     "repeat=2/train": 0.14418695797212422,
+     "repeat=2/infer-save-reload": 0.002921618986874819,
+     "repeat=2/batch": 0.029857221990823746
+    }
+   }
+  },
+  "hf-causal-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "341a152351edf9d1",
+    "341a152351edf9d1"
+   ],
+   "parts": [
+    {
+     "every": "4631da3ff65fd61d",
+     "logits": "3333a75866b17725",
+     "generate": "e62ad5b7bf17f82d",
+     "step": "1a1089653d39d322",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "4631da3ff65fd61d",
+     "logits": "3333a75866b17725",
+     "generate": "e62ad5b7bf17f82d",
+     "step": "1a1089653d39d322",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "0da206610b865ba6",
+    "0da206610b865ba6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0c52595dfa1179f9",
+    "0c52595dfa1179f9"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.35836822795681655,
+    "stages": {
+     "repeat=1/train": 0.14866664994042367,
+     "repeat=1/infer-save-reload": 0.0028598170028999448,
+     "repeat=1/batch": 0.03020557400304824,
+     "repeat=2/train": 0.14360963902436197,
+     "repeat=2/infer-save-reload": 0.00290472898632288,
+     "repeat=2/batch": 0.029870611964724958
+    }
+   }
+  },
+  "hf-causal-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "764e30eb3aae5cb1",
+    "764e30eb3aae5cb1"
+   ],
+   "parts": [
+    {
+     "every": "e239bd528ce08fb9",
+     "logits": "8a41f078bdfa8cd9",
+     "generate": "240ca654c853a30f",
+     "step": "feec0c6daa5e24cc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "e239bd528ce08fb9",
+     "logits": "8a41f078bdfa8cd9",
+     "generate": "240ca654c853a30f",
+     "step": "feec0c6daa5e24cc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "b6ddbb4c407db282",
+    "b6ddbb4c407db282"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ecda286f05a73eaa",
+    "ecda286f05a73eaa"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3548005670309067,
+    "stages": {
+     "repeat=1/train": 0.14473891607485712,
+     "repeat=1/infer-save-reload": 0.0029418200720101595,
+     "repeat=1/batch": 0.030090479995124042,
+     "repeat=2/train": 0.14378316409420222,
+     "repeat=2/infer-save-reload": 0.0029350389959290624,
+     "repeat=2/batch": 0.030075449030846357
+    }
+   }
+  },
+  "hf-causal-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "13d9b4ba89461093",
+    "13d9b4ba89461093"
+   ],
+   "parts": [
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a",
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.35700506099965423,
+    "stages": {
+     "repeat=1/train": 0.14509884908329695,
+     "repeat=1/infer-save-reload": 0.0029406390385702252,
+     "repeat=1/batch": 0.030117360991425812,
+     "repeat=2/train": 0.14531871594954282,
+     "repeat=2/infer-save-reload": 0.002896638005040586,
+     "repeat=2/batch": 0.030381730059161782
+    }
+   }
+  },
+  "hf-causal-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "13d9b4ba89461093",
+    "13d9b4ba89461093"
+   ],
+   "parts": [
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "f3479e72405ebce4",
+     "logits": "71b13186e4fa95f3",
+     "generate": "528ca553f7d7563f",
+     "step": "07fa5569dee4cafc",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "5b1fc87f81865a2a",
+    "5b1fc87f81865a2a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.3578899420099333,
+    "stages": {
+     "repeat=1/train": 0.1478751819813624,
+     "repeat=1/infer-save-reload": 0.0029389800038188696,
+     "repeat=1/batch": 0.029858762049116194,
+     "repeat=2/train": 0.14423784893006086,
+     "repeat=2/infer-save-reload": 0.002920808969065547,
+     "repeat=2/batch": 0.029822670971043408
+    }
+   }
+  },
+  "hf-causal-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5a43cae76f8cb134",
+    "5a43cae76f8cb134"
+   ],
+   "parts": [
+    {
+     "every": "aa94190b6e7b9918",
+     "logits": "3a2a57ac304f0b7b",
+     "generate": "b9394c70797b4910",
+     "step": "e16068bef2cff08b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    },
+    {
+     "every": "aa94190b6e7b9918",
+     "logits": "3a2a57ac304f0b7b",
+     "generate": "b9394c70797b4910",
+     "step": "e16068bef2cff08b",
+     "params": "bb88c3e24c41da72",
+     "flags": "3ff21f9c6bf31055"
+    }
+   ],
+   "infer": [
+    "bfaf8d3dadcbab54",
+    "bfaf8d3dadcbab54"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "921a3eb50c0e6439",
+    "921a3eb50c0e6439"
+   ],
+   "batch_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.35468276299070567,
+    "stages": {
+     "repeat=1/train": 0.14448596793226898,
+     "repeat=1/infer-save-reload": 0.0033940350404009223,
+     "repeat=1/batch": 0.029971656040288508,
+     "repeat=2/train": 0.14348861400503665,
+     "repeat=2/infer-save-reload": 0.0029125489527359605,
+     "repeat=2/batch": 0.030195402912795544
+    }
+   }
+  },
+  "grad-accumulation/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7914bf0b244d9142",
+    "7914bf0b244d9142"
+   ],
+   "parts": [
+    {
+     "combined": "607e8b32cf90460a",
+     "single": "7dfca309a6790d26",
+     "unaligned": "607e8b32cf90460a",
+     "pairs": "feb5826d038dd80a",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "607e8b32cf90460a",
+     "single": "7dfca309a6790d26",
+     "unaligned": "607e8b32cf90460a",
+     "pairs": "feb5826d038dd80a",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.022853233967907727,
+    "stages": {
+     "repeat=1/train": 0.018505127052776515,
+     "repeat=1/infer-save-reload": 8.33999365568161e-06,
+     "repeat=1/batch": 0.00013958499766886234,
+     "repeat=2/train": 0.003972714999690652,
+     "repeat=2/infer-save-reload": 7.021008059382439e-06,
+     "repeat=2/batch": 5.3322059102356434e-05
+    }
+   }
+  },
+  "grad-accumulation/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "48f09bea6be3c1a3",
+    "48f09bea6be3c1a3"
+   ],
+   "parts": [
+    {
+     "combined": "f3c933aac51843df",
+     "single": "cea1f710a7e2f49a",
+     "unaligned": "f3c933aac51843df",
+     "pairs": "0afd7e990fc6d6ad",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "f3c933aac51843df",
+     "single": "cea1f710a7e2f49a",
+     "unaligned": "f3c933aac51843df",
+     "pairs": "0afd7e990fc6d6ad",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008187668048776686,
+    "stages": {
+     "repeat=1/train": 0.00407305802218616,
+     "repeat=1/infer-save-reload": 6.870017386972904e-06,
+     "repeat=1/batch": 6.38419296592474e-05,
+     "repeat=2/train": 0.0038481709780171514,
+     "repeat=2/infer-save-reload": 7.100054062902927e-06,
+     "repeat=2/batch": 5.6851888075470924e-05
+    }
+   }
+  },
+  "grad-accumulation/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5a35b27519cdbd02",
+    "5a35b27519cdbd02"
+   ],
+   "parts": [
+    {
+     "combined": "18a6f5b475ff982a",
+     "single": "cd6c48c5e211e3f7",
+     "unaligned": "18a6f5b475ff982a",
+     "pairs": "67f9f78ad79dd8ce",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "18a6f5b475ff982a",
+     "single": "cd6c48c5e211e3f7",
+     "unaligned": "18a6f5b475ff982a",
+     "pairs": "67f9f78ad79dd8ce",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008243179065175354,
+    "stages": {
+     "repeat=1/train": 0.004030046984553337,
+     "repeat=1/infer-save-reload": 7.169903255999088e-06,
+     "repeat=1/batch": 6.119208410382271e-05,
+     "repeat=2/train": 0.0039521639700978994,
+     "repeat=2/infer-save-reload": 7.12997280061245e-06,
+     "repeat=2/batch": 5.3421943448483944e-05
+    }
+   }
+  },
+  "grad-accumulation/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "38bd346a51272f38",
+    "38bd346a51272f38"
+   ],
+   "parts": [
+    {
+     "combined": "e056ddb4d4006f0d",
+     "single": "53377b795987662d",
+     "unaligned": "e056ddb4d4006f0d",
+     "pairs": "e3ec78e9e86b4a5c",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "e056ddb4d4006f0d",
+     "single": "53377b795987662d",
+     "unaligned": "e056ddb4d4006f0d",
+     "pairs": "e3ec78e9e86b4a5c",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00815359700936824,
+    "stages": {
+     "repeat=1/train": 0.004041166976094246,
+     "repeat=1/infer-save-reload": 7.159891538321972e-06,
+     "repeat=1/batch": 7.363199256360531e-05,
+     "repeat=2/train": 0.0038279490545392036,
+     "repeat=2/infer-save-reload": 6.810063496232033e-06,
+     "repeat=2/batch": 5.98919577896595e-05
+    }
+   }
+  },
+  "grad-accumulation/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db5e6dc536a29696",
+    "db5e6dc536a29696"
+   ],
+   "parts": [
+    {
+     "combined": "7d505e189b0b7086",
+     "single": "4bb3f7edc29b9040",
+     "unaligned": "7d505e189b0b7086",
+     "pairs": "fa62c3c0630aeb0f",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "7d505e189b0b7086",
+     "single": "4bb3f7edc29b9040",
+     "unaligned": "7d505e189b0b7086",
+     "pairs": "fa62c3c0630aeb0f",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008147476939484477,
+    "stages": {
+     "repeat=1/train": 0.004095957963727415,
+     "repeat=1/infer-save-reload": 7.3999399319291115e-06,
+     "repeat=1/batch": 6.490200757980347e-05,
+     "repeat=2/train": 0.0037877579452469945,
+     "repeat=2/infer-save-reload": 6.810994818806648e-06,
+     "repeat=2/batch": 5.541194695979357e-05
+    }
+   }
+  },
+  "grad-accumulation/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "db5e6dc536a29696",
+    "db5e6dc536a29696"
+   ],
+   "parts": [
+    {
+     "combined": "7d505e189b0b7086",
+     "single": "4bb3f7edc29b9040",
+     "unaligned": "7d505e189b0b7086",
+     "pairs": "fa62c3c0630aeb0f",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "7d505e189b0b7086",
+     "single": "4bb3f7edc29b9040",
+     "unaligned": "7d505e189b0b7086",
+     "pairs": "fa62c3c0630aeb0f",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008222579024732113,
+    "stages": {
+     "repeat=1/train": 0.004032377037219703,
+     "repeat=1/infer-save-reload": 7.200054824352264e-06,
+     "repeat=1/batch": 6.297195795923471e-05,
+     "repeat=2/train": 0.003931003040634096,
+     "repeat=2/infer-save-reload": 6.709946319460869e-06,
+     "repeat=2/batch": 5.357200279831886e-05
+    }
+   }
+  },
+  "grad-accumulation/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7914bf0b244d9142",
+    "7914bf0b244d9142"
+   ],
+   "parts": [
+    {
+     "combined": "607e8b32cf90460a",
+     "single": "7dfca309a6790d26",
+     "unaligned": "607e8b32cf90460a",
+     "pairs": "feb5826d038dd80a",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "607e8b32cf90460a",
+     "single": "7dfca309a6790d26",
+     "unaligned": "607e8b32cf90460a",
+     "pairs": "feb5826d038dd80a",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008472517016343772,
+    "stages": {
+     "repeat=1/train": 0.004189181956462562,
+     "repeat=1/infer-save-reload": 7.0300884544849396e-06,
+     "repeat=1/batch": 6.729201413691044e-05,
+     "repeat=2/train": 0.00400765601079911,
+     "repeat=2/infer-save-reload": 7.150927558541298e-06,
+     "repeat=2/batch": 5.903199780732393e-05
+    }
+   }
+  },
+  "grad-accumulation/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fcb769d452396579",
+    "fcb769d452396579"
+   ],
+   "parts": [
+    {
+     "combined": "a01ba0d8ac6a9326",
+     "single": "ae49e32cd0a25220",
+     "unaligned": "a01ba0d8ac6a9326",
+     "pairs": "c14b5c5ca6793405",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "a01ba0d8ac6a9326",
+     "single": "ae49e32cd0a25220",
+     "unaligned": "a01ba0d8ac6a9326",
+     "pairs": "c14b5c5ca6793405",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008185556973330677,
+    "stages": {
+     "repeat=1/train": 0.004066647961735725,
+     "repeat=1/infer-save-reload": 7.029972039163113e-06,
+     "repeat=1/batch": 4.402105696499348e-05,
+     "repeat=2/train": 0.003892491920851171,
+     "repeat=2/infer-save-reload": 6.939982995390892e-06,
+     "repeat=2/batch": 3.990205004811287e-05
+    }
+   }
+  },
+  "grad-accumulation/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c7e813ded531ae9a",
+    "c7e813ded531ae9a"
+   ],
+   "parts": [
+    {
+     "combined": "c77a0b4efd5873a9",
+     "single": "19bdd66e8e553ec4",
+     "unaligned": "c77a0b4efd5873a9",
+     "pairs": "addab121b4cc9b68",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    },
+    {
+     "combined": "c77a0b4efd5873a9",
+     "single": "19bdd66e8e553ec4",
+     "unaligned": "c77a0b4efd5873a9",
+     "pairs": "addab121b4cc9b68",
+     "aligned": "90823e0cae5ca108",
+     "flags": "dc18219f740c41b4"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)",
+    "n/a:accumulation-step (the A microbatches are the arithmetic the lane hashes; a call with fewer of them is a different accumulation, not a smaller batch of the same one)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.008483418030664325,
+    "stages": {
+     "repeat=1/train": 0.004225042997859418,
+     "repeat=1/infer-save-reload": 7.530907168984413e-06,
+     "repeat=1/batch": 7.02819088473916e-05,
+     "repeat=2/train": 0.003977893968112767,
+     "repeat=2/infer-save-reload": 7.470021955668926e-06,
+     "repeat=2/batch": 5.9511978179216385e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "469edfb5427db98ff70bab6caa5063f049366ce8083363c1f4696e44b7755f36",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "7b72156f58e2cd082deb4383d735b4ce875ee61cbee609d60643c5a738f56aa3",
+    "size": 842344
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "8114137c252a582e3f66b3141b3c353a878dbf2db4c136d5337d6f93a5bb62e6",
+    "size": 9038336
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "e79fd53a669fc2c5265d7a00dd58bcfe4475119773e28bb4e0543c263395b8a1",
+    "size": 300640
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "114ace013e9e189f83b3f6527b7c0859bc27ffe537d7b8ea2ef7ad8cb8348f20",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "4b1b5a8d9c8de14aa60d9664e09fcc98b8fd450d742888876f6ce798d4ac624a",
+    "size": 8479704
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "a318d13cd35fe4175e27bcd711cb25120fcf56c9d976ed04fb55da6ceb298a55",
+    "size": 3371640
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "64dda16e7e032d6c9db7ba28b3853c9b882362d0539114613df9b7623057c1bd",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "202eecba0900100ae697da4c58d6caa7334285bb4e5495ac6bf6d45cf4af7748",
+    "size": 2070264
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "f3fab83fd21b25b28ca992ecd66fae7fc53a3941fd9119024fb4627a9f370f78",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "33b827a29b0c98a8903887f339449f5e2c6cdb339180bf896100156e2be455b3",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "552a806d6c748241d8a967bd8a26efc5b4b4ee4cfdd33cb46652ad32e8468de1",
+    "size": 4952824
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "a661f46ba2a113d146982febb661eb2d45fc0539436816d16c9eeb1796706d30",
+    "size": 10394056
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "01e16183defc54d6d0d13adb83977e4f57d1f6dc70508837de94f81f13c2676d",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "3ae36ba879ddabbd67e0c1634ec326a6079134ce0927156e23b6b497eab7be52",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "d8a854828e11ae8d0cdeedcee9cec814341541bfe2d99d23503895f5798043ca",
+    "size": 2186776
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "3525efdb75c0baa0ccbd83348807e44116221b468a173151d3e3263d26b13eca",
+    "size": 3036448
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "4ec748415811b9d61a4f5fc4fd05b14c93146c527c60816f4efcb5074ddb79ae",
+    "size": 3495072
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "f6194554b6592d24285e5fb2e410bdb49d876bdf8ff42ccc516daf5fbf0dd6c9",
+    "size": 3165480
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "cd961fe04df697923c090fa289f1ab934d603816677a8653fcd6913aed1bfb39",
+    "size": 8066120
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "dc1cf94791edfc57fb774c69535735de3387a6acb6f19b8bd29caabec0af0a0f",
+    "size": 1869808
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "66d7868e2a1429a5bccd545e97b42e9ec93d27cc762673a0cece22e334363995",
+    "size": 738112
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "ace3075e334efbc772b67179b76341a32eaa48c726f098a40fbe4e125e0b64a8",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "lanes": "bpe-trainer,bpe-vocabulary,grad-accumulation,hf-causal-lm,hf-checkpoint,hf-tokenizer,linalg-eigh,linalg-qr,linalg-svdvals,lowbit-conversions,metrics-fowlkes-mallows,metrics-homogeneity-completeness,select-d,tokenized-corpus",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "dc8772b3d882670a31b57853a352ab8fda89da6b065b046ad5b79fc0d2b785e6",
+  "provenance": {
+   "commit": "0845c6de7e7610cf485a8f3ae2cb63576dbc389f",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

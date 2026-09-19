@@ -186,9 +186,71 @@ _prod=$(printf '%s' "$_prod" | tr 'A-Z ' 'a-z-' | tr -cd 'a-z0-9-' | cut -c1-24)
 LABEL="amd-$_prod-${MOJOLEARN_GPU_ARCHS:-gfx}"
 say "vendor_label=$LABEL"
 
+# ------------------------------------------------ THE R2 BINDING CACHE
+# WHY THIS AND NOT `sh bindings/X.sh`. This shape of leg spends TEN TO TWENTY
+# MINUTES COMPILING and then a few minutes doing identity work on fixtures
+# that are 20000 x 16 float32 -- 1.28 MB. Measured: 1010 s of builds against
+# 1006 s of identity run on 2026-09-14 (166 lanes, two GPUs), and 1204 s of
+# builds for 23 binding families on 2026-09-19. Three legs on 2026-09-19
+# rebuilt the SAME families at the SAME commit within hours of each other. On
+# a $4.78/h two-GPU box the compile is most of the bill.
+#
+# tools/bincache.py makes each build a content-addressed lookup in the R2
+# bucket that already holds the datasets: bincache/v1/<device arch>/<image
+# slug>/<key>.tar.gz. The key is the import closure of the entry .mojo, every
+# shell script the build execs, pixi.toml and pixi.lock, the pinned toolchain,
+# every MOJOLEARN_/MOJO_/MODULAR_ variable that can reach the compiler, the
+# numeric mode, the arch the box reports, the container image, the OS
+# (os-release, glibc, ld, cc), the host CPU on the machines where
+# bindings/build_*.sh does not pin --target-cpu, and the absolute repo path
+# (the rpath into .pixi is baked in). A hit is therefore
+# the binary THIS box would have produced, and the archive's manifest is
+# re-verified here against the key and the fields this box computed before a
+# single byte is placed.
+#
+# IT IS A PASS-THROUGH, NOT A DEPENDENCY. `bincache.py build X` runs `sh X`
+# unchanged when /root/.mojolearn_bincache/urls.tsv is absent (the Mac did not
+# stage, because MOJOLEARN_BINCACHE was not 1), when MOJOLEARN_BINCACHE=0,
+# when the key cannot be computed, and on every miss or rejection. A cold
+# cache costs the key computation, seconds over the whole leg, and the leg
+# still builds everything from source. `command -v python3` is checked because
+# a box without one must build, not die.
+#
+# A SABOTAGE BUILD IS NEVER SERVED AS A PRODUCTION BINDING. bincache.py
+# refuses to look up or upload any build whose arguments or MOJOLEARN_*
+# environment mention SABOTAGE or FAULT_INJECT, unless the caller opts in with
+# MOJOLEARN_BINCACHE_NEGATIVE=1 -- and then the fields carry variant=sabotage,
+# so the key cannot equal a production key, and both the lookup and the upload
+# use the separate bincache/sabotage-v1/ prefix that a production build never
+# reads. THIS BODY SETS NO SABOTAGE DEFINE AND NEVER SETS THAT VARIABLE.
+BINCACHE="sh"
+if command -v python3 > /dev/null 2>&1 && [ -f tools/bincache.py ]; then
+    BINCACHE="python3 tools/bincache.py build"
+fi
+if [ -f /root/.mojolearn_bincache/urls.tsv ]; then
+    _bcmap="staged entries=$(grep -c '^get' /root/.mojolearn_bincache/urls.tsv)"
+else
+    _bcmap="absent (every build compiles from source)"
+fi
+say "bincache=$BINCACHE map=$_bcmap"
+
+# WHAT THE CACHE ACTUALLY DID, in the gate file, because a wiring change that
+# cannot be read back is not a fix. `hit` means no compiler ran for that
+# family; `refused:` and `miss` both compiled from source.
+bincache_report() {
+    _bcp="${MOJOLEARN_BINCACHE_OUT:-/root/gemm_leg_out/bincache}/provenance.tsv"
+    if [ -f "$_bcp" ]; then
+        say "bincache_outcomes=$(cut -f3 "$_bcp" | sort | uniq -c | tr '\n' ' ')"
+        say "bincache_build_seconds=$(awk -F'\t' '{s+=$5} END {printf "%.0f", s}' "$_bcp")"
+    else
+        say "bincache_outcomes=none (pass-through: no map, no python3, or MOJOLEARN_BINCACHE=0)"
+    fi
+}
+
 build() {
+    # shellcheck disable=SC2086  # $BINCACHE is one word or three, split on purpose
     run "$1" timeout "$(cap 420)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1 \
-        MOJOLEARN_COMPILE_JOBS="$JOBS" sh "bindings/$1.sh"
+        MOJOLEARN_COMPILE_JOBS="$JOBS" $BINCACHE "bindings/$1.sh"
 }
 
 # ------------------------------------ THE HOST MATH LIBRARY, OR NOTHING IMPORTS
@@ -322,4 +384,5 @@ cp "$OUT/logs/column-two.log" "$OUT/column-two.log" 2>/dev/null
 cp "$OUT/logs/par_diff.log" "$OUT/par_diff.log" 2>/dev/null
 cat "$OUT/status.tsv" >> "$G" 2>/dev/null
 ls -l "$OUT" >> "$G" 2>/dev/null
+bincache_report
 say "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"

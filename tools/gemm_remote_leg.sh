@@ -312,6 +312,23 @@
 #                                  SUBSTRING match; keep it narrow.
 #   MOJOLEARN_GEMM_LEG_PAYLOAD     gemm, phase8, speed, or mamba;
 #                                  --payload wins.
+#   MOJOLEARN_BINCACHE             the R2 binding cache (tools/bincache.py,
+#                                  tools/bincache_leg.sh). DEFAULT 1: before
+#                                  the payload this leg presigns the cache
+#                                  entries for THIS box's arch and image and
+#                                  pipes them into /root/.mojolearn_bincache/
+#                                  urls.tsv (0600, credentials never leave
+#                                  the Mac), and after the fetch it promotes
+#                                  whatever the box built to its content
+#                                  address. A body opts in per binding with
+#                                  `python3 tools/bincache.py build
+#                                  bindings/build_X.sh`; the bodies that do
+#                                  are tools/gpu_class_gaps_{nvidia,amd}_leg.sh,
+#                                  tools/two_device_par_class_amd_leg.sh and
+#                                  tools/gap_column_leg.sh. Set it to 0 to
+#                                  compile everything from source -- and note
+#                                  that a qualification leg (--qualify) never
+#                                  uses the cache whatever this says.
 #   MOJOLEARN_GEMM_LEG_EXTRA       gemm payload only: a local POSIX sh file
 #                                  shipped to /root/gemm_leg_extra.sh and run
 #                                  on the box AFTER the device check and the
@@ -4668,12 +4685,26 @@ RELEASE_SOURCE
             [ "${MOJOLEARN_STAGE_STRICT:-0}" != 1 ] || leg_die "Strict R2 staging failed; payload not started"
         }
     leg_say "$(tail -1 "$OUT/stage.log")"
-    # lane/r2-binding-cache (2026-09-15), DEFAULT OFF. MOJOLEARN_BINCACHE=1
-    # hands the box presigned URLs for tools/bincache.py; a body opts in per
-    # binding with `python3 tools/bincache.py build bindings/build_X.sh`.
+    # lane/r2-binding-cache (2026-09-15). DEFAULT ON since 2026-09-19:
+    # staging hands the box presigned URLs for tools/bincache.py, and the leg
+    # bodies that opt in (`$BINCACHE bindings/build_X.sh`, which is
+    # `python3 tools/bincache.py build ...`) then resolve a family they have
+    # already built at this commit, on this arch, on this image, from R2
+    # instead of compiling it. It was DEFAULT OFF for four days and in that
+    # time the stage and promote steps below ran for no one: no body ever
+    # opted in, so the cache was staged, unused and promoted empty, while
+    # three legs on 2026-09-19 each spent 10 to 20 minutes rebuilding the
+    # SAME families at the SAME commit.
+    #
+    # ON IS SAFE TO DEFAULT because every half of it fails soft: staging
+    # failing leaves no URL map, and no URL map makes tools/bincache.py a
+    # pass-through to `sh bindings/build_X.sh`. MOJOLEARN_BINCACHE=0 turns
+    # the whole thing off, on the Mac and on the box (bincache.py reads the
+    # same variable).
+    #
     # Never on a qualification leg: a release keeps "verify on a box that did
     # not build it" literal, and its wheels never pass through the cache.
-    if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ "$LEG_QUALIFY" != 1 ]; then
+    if [ "${MOJOLEARN_BINCACHE:-1}" = 1 ] && [ "$LEG_QUALIFY" != 1 ]; then
         sh tools/bincache_leg.sh stage "$SSH_TARGET" "runpod:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
         leg_say "$(tail -1 "$OUT/bincache_stage.log")"
     fi
@@ -4949,7 +4980,7 @@ leg_fetch() {
         || echo "  FETCH FAILED -- the remote log is /root/gemm_leg_out"
     # lane/r2-binding-cache: the Mac copies what the box uploaded to its
     # content address; the box never holds a credential that could.
-    if [ "${MOJOLEARN_BINCACHE:-0}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
+    if [ "${MOJOLEARN_BINCACHE:-1}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
         sh tools/bincache_leg.sh promote "$OUT/remote/bincache" > "$OUT/bincache_promote.log" 2>&1 || true
         echo "  $(tail -1 "$OUT/bincache_promote.log")"
     fi

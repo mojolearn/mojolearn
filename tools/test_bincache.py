@@ -102,11 +102,31 @@ class KeyTests(unittest.TestCase):
             "device arch": fields(self.repo, arch="gfx942"),
             "os release": fields(self.repo, os_info=dict(OS, version_id="24.04")),
             "glibc": fields(self.repo, os_info=dict(OS, glibc="glibc 2.39")),
+            # aarch64 only: bindings/build_*.sh leaves --target-cpu unset
+            # there, so two cores that share machine=aarch64 build different
+            # instructions. See bc.host_cpu.
+            "host cpu": fields(self.repo, os_info=dict(OS, machine="aarch64",
+                                                       cpu="CPU part=0xd4f")),
+            "host cpu, other core": fields(self.repo, os_info=dict(OS, machine="aarch64",
+                                                                   cpu="CPU part=0xd0c")),
         }
         keys = {n: bc.key_of(f) for n, f in moved.items()}
         for name, k in keys.items():
             self.assertNotEqual(k, self.base, name)
         self.assertEqual(len(set(keys.values())), len(keys))
+
+    def test_the_host_cpu_is_keyed_exactly_where_the_build_does_not_pin_it(self):
+        # Every bindings/build_*.sh pins `--target-cpu x86-64-v3` on Linux
+        # x86-64 and pins NOTHING on any other Linux machine. So the host CPU
+        # must be absent from the key on x86 (where keying a pod's EPYC model
+        # would cost every hit and buy nothing) and present everywhere else
+        # (where it is the instruction set).
+        for m in ("x86_64", "amd64"):
+            self.assertEqual(bc.host_cpu(m), "", m)
+        # Never silently empty on an unpinned machine: with no /proc/cpuinfo
+        # to read it says so, and "unknown" is still a value that partitions
+        # the cache rather than a field that quietly vanishes.
+        self.assertTrue(bc.host_cpu("aarch64"))
 
     def test_identical_is_the_unset_mode(self):
         self.assertEqual(bc.key_of(fields(self.repo, {"MOJOLEARN_NUMERIC_MODE": "identical"}))

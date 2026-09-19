@@ -24,7 +24,12 @@ bytes (`key_fields`):
   * the container image the runner declared, and the OS the build actually
     ran in: os-release ID and VERSION_ID, glibc, machine, the first line of
     `ld --version` and `cc --version` (the Sep 13 incident: DO 24.04 linked
-    a different CPU binding than RunPod 22.04 from one source);
+    a different CPU binding than RunPod 22.04 from one source), and -- on the
+    machines where bindings/build_*.sh does NOT pin `--target-cpu`, which is
+    every Linux that is not x86-64 -- the host CPU itself (`host_cpu`, added
+    2026-09-19: on aarch64 the compiler targets whatever core ran it, so
+    `machine=aarch64` alone would let a Neoverse-V2 binary be served to a
+    Neoverse-N1 box);
   * the absolute repository path (the rpath into .pixi is baked in).
 A build whose environment or arguments mention SABOTAGE or FAULT_INJECT is
 NEVER looked up and NEVER uploaded, unless the runner opts in with
@@ -371,6 +376,48 @@ def first_line(cmd):
         return ""
 
 
+def host_cpu(machine):
+    """The host CPU, keyed ONLY where `mojo build` is left to target it.
+
+    EVERY bindings/build_*.sh runs the same `case "$(uname -m)"`: on Linux
+    x86-64 it pins `--target-cpu ${MOJOLEARN_LINUX_CPU:-x86-64-v3}`, and on
+    ANYTHING ELSE it sets TARGET_FLAGS to the empty string -- the comment
+    beside it reads "linux arm: host cpu + its GPU". So on aarch64 the
+    compiler targets WHATEVER CORE RAN IT, and two boxes that this key
+    otherwise cannot tell apart (same image, same glibc, same
+    machine=aarch64, same GPU) compile different instruction sets: a
+    Neoverse-V2 GH200 emits things a Neoverse-N1 Altra traps on. Serving one
+    box's archive to the other is the 2026-08-30 incident again -- a wheel
+    built at the host default shipped AVX-512 and died with SIGILL on a Zen 3
+    EPYC inside kmeans_fit -- on the architecture where the fix for it does
+    not apply. So the host CPU is an input there and it is keyed there.
+
+    It is NOT keyed on x86-64, where the pin makes it irrelevant and where
+    keying it would cost every hit for nothing: a rented pod's exact EPYC or
+    Xeon model changes from rental to rental, which is precisely the drift
+    the pin was added to stop mattering. (os_fields() drops it on macOS for
+    the same reason: `--target-cpu apple-m1` is pinned there too.)
+
+    A machine with no /proc/cpuinfo to read returns "unknown" rather than "",
+    so an unreadable host partitions the cache instead of silently joining
+    every other unreadable host.
+    """
+    if machine in ("x86_64", "amd64"):
+        return ""
+    try:
+        lines = Path("/proc/cpuinfo").read_text(errors="replace").splitlines()
+    except OSError:
+        return "unknown"
+    want = ("CPU implementer", "CPU architecture", "CPU variant", "CPU part",
+            "model name", "cpu model", "Features")
+    seen = []
+    for line in lines:
+        k, sep, v = line.partition(":")
+        if sep and k.strip() in want and (k.strip(), v.strip()) not in seen:
+            seen.append((k.strip(), v.strip()))
+    return "; ".join("%s=%s" % kv for kv in seen) or "unknown"
+
+
 def os_fields():
     osr = {}
     try:
@@ -384,9 +431,24 @@ def os_fields():
         glibc = os.confstr("CS_GNU_LIBC_VERSION") or ""
     except (ValueError, OSError, AttributeError):
         glibc = ""
-    return dict(id=osr.get("ID", sys.platform), version_id=osr.get("VERSION_ID", platform.release()),
-                glibc=glibc, machine=platform.machine(),
-                ld=first_line(["ld", "--version"]), cc=first_line(["cc", "--version"]))
+    machine = platform.machine()
+    # macOS pins `--target-cpu apple-m1` in every bindings/build_*.sh, for the
+    # same reason Linux x86 pins x86-64-v3, so its host CPU is not an input
+    # either -- and nothing on a Mac stages a URL map, so bincache.py is a
+    # pass-through there in any case.
+    cpu = "" if sys.platform == "darwin" else host_cpu(machine)
+    out = dict(id=osr.get("ID", sys.platform), version_id=osr.get("VERSION_ID", platform.release()),
+               glibc=glibc, machine=machine,
+               ld=first_line(["ld", "--version"]), cc=first_line(["cc", "--version"]))
+    # ABSENT, not empty, where the build pins --target-cpu -- the same shape as
+    # `variant` below, and for the same reason: a key that was correct before
+    # this field existed stays correct, so the x86-64 entries already in
+    # bincache/v1 (tools/runpod_cpu_leg.sh has been filling them since
+    # 2026-09-15) are not all invalidated by adding a field that says nothing
+    # about them.
+    if cpu:
+        out["cpu"] = cpu
+    return out
 
 
 def device_arch():
