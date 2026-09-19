@@ -389,17 +389,48 @@ def ssd_core_oracle(
                 # seg[i][j] = ftz(seg[i-1][j] + dA[i]), seg[j][j] = +0.0;
                 # a padded row's dA never exists, so its entry is a copy.
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
+                # THE DIAGONAL is exp(+0.0) at every j -- one call, not q.
+                var exp_seed = ftz(identical_exp(Float32(0.0)))
                 for j in range(q):
                     var acc = Float32(0.0)
-                    st.seg_l[lbase + j * q + j] = ftz(identical_exp(acc))
+                    st.seg_l[lbase + j * q + j] = exp_seed
+                    var held = Float32(0.0)
+                    var holding = False
                     for i in range(j + 1, q):
                         if i < real:
                             acc = ftz(acc + da[hh * q + i])
-                        st.seg_l[lbase + i * q + j] = ftz(identical_exp(acc))
+                            st.seg_l[lbase + i * q + j] = ftz(
+                                identical_exp(acc)
+                            )
+                        else:
+                            # PADDED ROW: `acc` can no longer change, so
+                            # every remaining entry of this column is the
+                            # SAME exp of the SAME argument. Called once
+                            # and copied -- the value is a pure function
+                            # of `acc`, so this is the identical bit
+                            # pattern, not an approximation of it.
+                            if not holding:
+                                held = ftz(identical_exp(acc))
+                                holding = True
+                            st.seg_l[lbase + i * q + j] = held
                     # above the diagonal: +0.0, already the zero fill --
                     # STRUCTURAL, never a computed exp(-inf).
             # G, per group (G = 1): [Q, Q] = C[Q, N] . B[Q, N]^T.
-            var g_mat = gemm_oracle(cmat, bmat, OP_NT, q, q, n_state)
+            # ONLY THE REAL BLOCK IS COMPUTED. A cell with i >= real or
+            # j >= real contracts a row of exact +0.0, so its leaf is a
+            # fold of exact zeros from the +0.0 seed and its value is
+            # +0.0 -- `ssd_minimal.mojo::m2_cb_g_kernel` writes that
+            # +0.0 directly for the same reason (gemm section 9), and
+            # this is the same band, the same argument and the same
+            # bits. A gemm v1 cell reads neither `m` nor `n` under
+            # OP_NT (`_a_at`/`_b_at`) and the leaf size is a function of
+            # `k` alone, so the real block's cells are character for
+            # character the cells of the Q x Q call.
+            var g_small = gemm_oracle(cmat, bmat, OP_NT, real, real, n_state)
+            var g_mat = _zeros(q * q)
+            for i in range(real):
+                for j in range(real):
+                    g_mat[i * q + j] = g_small[i * real + j]
             var gbase = ((bb * nc + c) * 1) * q * q
             for i in range(q * q):
                 st.cb_g[gbase + i] = g_mat[i]
@@ -408,8 +439,12 @@ def ssd_core_oracle(
             #      cell at k = Q = 256: two leaves, one fold level).
             for hh in range(nh):
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
-                var m_mat = _zeros(q * q)
-                for i in range(q):
+                # M's rows at i >= real reach NOTHING: they produce only
+                # Y_diag rows at i >= real, and the loop below copies out
+                # i < real. The row stride stays k = Q, which is what the
+                # S14 cell reads.
+                var m_mat = _zeros(real * q)
+                for i in range(real):
                     for j in range(i + 1):
                         m_mat[i * q + j] = ftz(
                             pinned_mul(
@@ -423,7 +458,10 @@ def ssd_core_oracle(
                 for i in range(q):
                     for p in range(p_dim):
                         xd_chunk[i * p_dim + p] = xd[(hh * q + i) * p_dim + p]
-                var ydiag = gemm_oracle(m_mat, xd_chunk, OP_NN, q, p_dim, q)
+                # `m` is not read by an OP_NN cell and the k = Q fold is
+                # untouched, so these are the first `real` rows of the
+                # Q-row product, bit for bit.
+                var ydiag = gemm_oracle(m_mat, xd_chunk, OP_NN, real, p_dim, q)
                 for i in range(real):
                     var t = c0 + i
                     for p in range(p_dim):
@@ -437,10 +475,28 @@ def ssd_core_oracle(
                     ((bb * nh + hh) * nc + c) * q + (q - 1)
                 ]
                 var bd = _zeros(q * n_state)
+                var dec_pad = Float32(0.0)
+                var have_pad = False
                 for i in range(q):
-                    var dacs_i = st.dacs_out[((bb * nh + hh) * nc + c) * q + i]
-                    var d = ftz(dacs_last - dacs_i)
-                    var dec = ftz(identical_exp(d))
+                    var dec: Float32
+                    if i < real:
+                        var dacs_i = st.dacs_out[
+                            ((bb * nh + hh) * nc + c) * q + i
+                        ]
+                        dec = ftz(identical_exp(ftz(dacs_last - dacs_i)))
+                    else:
+                        # PADDED POSITION: dacs COPIES the last real value
+                        # (S11), so `dacs_last - dacs_i` is the same
+                        # argument at every padded i. One call, copied.
+                        if not have_pad:
+                            var dacs_i = st.dacs_out[
+                                ((bb * nh + hh) * nc + c) * q + i
+                            ]
+                            dec_pad = ftz(
+                                identical_exp(ftz(dacs_last - dacs_i))
+                            )
+                            have_pad = True
+                        dec = dec_pad
                     st.decay_states[((bb * nh + hh) * nc + c) * q + i] = dec
                     if i < real:
                         for n in range(n_state):
@@ -475,7 +531,11 @@ def ssd_core_oracle(
 
                 # ---- S18: Y_off = (C . h_prev) ⊙ exp(dA_cs) -- contract
                 #      over n FIRST (gemm cell, k = 128), scale AFTER.
-                var ch = gemm_oracle(cmat, h_prev, OP_NT, q, p_dim, n_state)
+                # Rows at i >= real are read by nothing (the loop below
+                # runs to `real`). OP_NT reads no `m`, so the first
+                # `real` rows are the first `real` rows of the Q-row
+                # product, bit for bit.
+                var ch = gemm_oracle(cmat, h_prev, OP_NT, real, p_dim, n_state)
                 for i in range(real):
                     var t = c0 + i
                     var dacs_i = st.dacs_out[((bb * nh + hh) * nc + c) * q + i]
