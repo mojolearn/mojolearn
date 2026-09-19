@@ -371,6 +371,10 @@ sampler, a solver, a metric, a reduction).
     2026-09-15 (lane/cpu-training-small-gaps)
       metrics-fowlkes-mallows gbdt-adapter-score-weighted rf-score-weighted svc-poly
       gp-normalize-y
+    2026-09-19 (lane/catboost-parity: CatBoost's GPU defaults, Ordered
+               boosting, the seven border types, the quantile constant)
+      gbdt-catboost-defaults gbdt-ordered gbdt-ordered-bayesian-noise
+               gbdt-border-types gbdt-bfa-quantile par-ordered par-border-types
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1247,6 +1251,47 @@ class NumericalMismatch(AssertionError):
         self.parts = dict(parts)
 
 
+#: lane/catboost-parity (2026-09-19): GradientBoosting's SymmetricTree
+#: defaults became CatBoost's GPU learner's (1000 iterations, the auto
+#: learning rate, random_strength 1.0, the Bayesian bootstrap and the
+#: small-iteration leaf count), and the adapters inherit them. Every GBDT lane
+#: below was recorded under the EARLIER defaults, so each one now passes that
+#: configuration explicitly through `_gbdt`: a default flip must never move a
+#: recorded cell. What a lane already passes is kept. The leaf count is
+#: pinned only for the losses whose own default is not 1 (the only ones the
+#: small-iteration rule changes, catboost_options.cpp:120-240).
+_GBDT_LEGACY_LEAF_ITERATIONS = {"Logloss": 10, "CrossEntropy": 10, "Poisson": 10,
+                                "Tweedie": 20, "Expectile": 5, "PairLogit": 10}
+
+
+def _gbdt_legacy_kw(cls, kw):
+    """`kw` with the pre-2026-09-19 GBDT defaults filled in where absent."""
+    out = dict(kw)
+    name = getattr(cls, "__name__", "")
+    loss = out.get("loss", {"GradientBoostingClassifier": "Logloss",
+                            "GradientBoostingRegressor": "RMSE"}.get(name, "RMSE"))
+    out.setdefault("learning_rate", 0.03)
+    out.setdefault("random_strength", 0.0)
+    out.setdefault("bootstrap_type", "No")
+    if name in ("GradientBoostingClassifier", "GradientBoostingRegressor"):
+        out.setdefault("l2_leaf_reg", 3.0)
+    if (out.get("grow_policy", "SymmetricTree") == "SymmetricTree"
+            and "leaf_estimation_iterations" not in out
+            and "leaf_estimation_method" not in out
+            and loss in _GBDT_LEGACY_LEAF_ITERATIONS):
+        out["leaf_estimation_iterations"] = _GBDT_LEGACY_LEAF_ITERATIONS[loss]
+    if loss in ("MAE", "Quantile", "MAPE"):
+        # unset resolved False for these three until 2026-09-19, when their
+        # CalcSampleQuantile constant landed and unset became their True
+        out.setdefault("boost_from_average", False)
+    return out
+
+
+def _gbdt(cls, **kw):
+    """`cls(**kw)` under the configuration the GBDT lanes were recorded at."""
+    return cls(**_gbdt_legacy_kw(cls, kw))
+
+
 def _fit(parts, est=None, probe="n/a:function", model_na=None):
     f = Fit(parts)
     f.est = est
@@ -1290,29 +1335,137 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-symmetric")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 @lane("gbdt-depthwise")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, grow_policy="Depthwise",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, grow_policy="Depthwise",
                             loss="Logloss").fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
 @lane("gbdt-lossguide")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_leaves=32, grow_policy="Lossguide",
                             loss="Logloss").fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
 @lane("gbdt-rmse")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE").fit(X, yr)
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE").fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+#: The six non-default `feature_border_type`s (lane/catboost-parity); the
+#: default, GreedyLogSum, is every other GBDT lane's border search.
+_GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
+                      "MinEntropy", "GreedyMinEntropy")
+
+
+@lane("gbdt-ordered")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
+    configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
+    (their four permutations, ten Newton steps per leaf) with an eval set,
+    the Iter detector at wait 5 and use_best_model (their test cursor), and
+    an RMSE fit (boost_from_average on, as their unset default), 20 trees of
+    depth 6 each. The fold structure search, every (permutation, fold)
+    cursor and the estimation permutation reach the train column through both
+    fits' predictions and learn curves and the Logloss fit's held-out curve."""
+    ych = labels_for(Xh, HELDOUT_SEED)[0]
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+              boosting_type="Ordered", od_type="Iter", od_wait=5
+              ).fit(X, yc, eval_set=(Xh, ych))
+    r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+              boosting_type="Ordered").fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
+                     best_iteration=_h(np.asarray([m.best_iteration_], dtype=np.int64)),
+                     rmse=_h(r.predict(X)),
+                     rmse_loss_curve=_h(np.asarray(r.loss_curve_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("gbdt-ordered-bayesian-noise")
+def _(ml, X, yc, yr, Xh=None):
+    """Ordered boosting at CatBoost's GPU defaults for the parts `_gbdt`
+    pins elsewhere: the Bayesian bootstrap at temperature 1 on the quality
+    slices and random_strength 1.0 with its model-length decay, one Logloss
+    fit of 20 depth-6 trees with a NewtonCosine twin (Newton weights in the
+    search planes). The learning rate is pinned to 0.03 and the leaf count to
+    Logloss's ten, so the lane moves only with the bootstrap and the noise."""
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered",
+              learning_rate=0.03, leaf_estimation_iterations=10)
+    m = ml.GradientBoosting(**kw).fit(X, yc)
+    nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), newton_cosine=_h(nc.predict(X))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-catboost-defaults")
+def _(ml, X, yc, yr, Xh=None):
+    """The SymmetricTree defaults this implementation takes from CatBoost's
+    GPU learner (catboost 1.2.10), everything unset but the tree count and
+    the loss: the auto learning rate off the GPU coefficient rows (read back
+    as `learning_rate_`), the Bayesian bootstrap at temperature 1,
+    random_strength 1 with its model-length decay, and the small-iteration
+    leaf rule (one Newton step below 200 trees and 20 features). 20 trees,
+    Plain (below 500 trees), Logloss, and the same fit through
+    GradientBoostingClassifier, which defers every default. At 20 trees the
+    auto rate is capped at 0.5 on every fixture, so a third fit, 50 depth-2
+    trees on the first 2000 rows, reads the formula below its cap (0.475 on
+    the GPU rows; 0.216 on the CPU rows the sabotage arm swaps in)."""
+    m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
+    c = ml.GradientBoostingClassifier(n_estimators=20).fit(X, yc)
+    a = ml.GradientBoosting(n_estimators=50, max_depth=2, loss="Logloss").fit(X[:2000], yc[:2000])
+    lr = np.asarray([m.learning_rate_, a.learning_rate_], dtype=np.float64)
+    return _fit(dict(predict=_h(m.predict(X)), learning_rate=_h(lr),
+                     classifier_proba=_h(c.predict_proba(X)),
+                     auto_rate_fit=_h(a.predict(X[:2000]))),
+                m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-bfa-quantile")
+def _(ml, X, yc, yr, Xh=None):
+    """boost_from_average at CatBoost's default for MAE, Quantile and MAPE
+    (unset is True for them since 2026-09-19): the starting point is their
+    CalcSampleQuantile constant with the delta adjust
+    (`gbdt/metrics/sample_quantile.mojo`, host code the device fit and the
+    CPU host path share). Plain MAE, Quantile at alpha 0.25, MAPE, and one
+    Ordered MAE fit, 8 trees of depth 4 each."""
+    y = _pos(yr)
+    parts, first = {}, None
+    for name, kw in (("MAE", dict(loss="MAE")),
+                     ("Quantile", dict(loss="Quantile", loss_alpha=0.25)),
+                     ("MAPE", dict(loss="MAPE")),
+                     ("Ordered-MAE", dict(loss="MAE", boosting_type="Ordered"))):
+        m = ml.GradientBoosting(n_estimators=8, max_depth=4, learning_rate=0.03,
+                                random_strength=0.0, bootstrap_type="No", **kw).fit(X, y)
+        parts[name] = _h(m.predict(X))
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-border-types")
+def _(ml, X, yc, yr, Xh=None):
+    """One symmetric Logloss fit per non-default feature_border_type (8
+    trees of depth 4 at 32 borders, the recorded GBDT configuration of
+    `_gbdt`), each hashed on the training AND held-out rows, so every
+    type's borders reach the train column; the infer, model and batch
+    columns probe the Median fit. Border selection is host code shared by
+    the device fit and the CPU host path (`select_borders`)."""
+    parts, first = {}, None
+    for bt in _GBDT_BORDER_TYPES:
+        m = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, border_count=32,
+                  loss="Logloss", feature_border_type=bt).fit(X, yc)
+        parts[bt] = _h(m.predict(X))
+        parts[bt + "-heldout"] = _h(m.predict(Xh))
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
 def _km_probe(X, Xh):
@@ -2825,7 +2978,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """MultiClass with class weights on the three-class target."""
     t = _three_class_centered(X)
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClass",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClass",
                             class_weights=[1.0, 2.0, 0.5]).fit(X, t)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -2833,7 +2986,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-onevsall")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MultiClassOneVsAll").fit(X, _three_class_centered(X))
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
@@ -2857,10 +3010,10 @@ def _(ml, X, yc, yr, Xh=None):
     }
     parts, first = {}, None
     for loss, kw in fits.items():
-        m = ml.GradientBoosting(n_estimators=8, max_depth=4, loss=loss, **kw).fit(X, y)
+        m = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss=loss, **kw).fit(X, y)
         parts[loss] = _h(m.predict(X))
         first = first or m
-    ce = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    ce = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="CrossEntropy").fit(X, yc.astype(np.float32))
     parts["CrossEntropy"] = _h(ce.predict(X))
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
@@ -2876,7 +3029,7 @@ def _(ml, X, yc, yr, Xh=None):
     gradient leaves with three iterations: one Lossguide fit."""
     rows = 1500                                  # FLOORED, see @floor above
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
-    m = ml.GradientBoosting(n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_leaves=32, grow_policy="Lossguide", loss="Logloss",
                             score_function="NewtonCosine", min_child_hessian=1.0, min_split_gain=0.01,
                             min_data_in_leaf=8, feature_fraction=0.5, random_strength=1.0,
                             bootstrap_type="Bernoulli", subsample=0.7,
@@ -2892,7 +3045,7 @@ def _(ml, X, yc, yr, Xh=None):
     weights: one symmetric fit."""
     w = _hw((X.shape[0],), "gbdt-eval:sample_weight", 0.5, 1.5)
     ych = labels_for(Xh, HELDOUT_SEED)[0]
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", score_function="L2",
                             use_pointwise_searcher=True, bootstrap_type="Bayesian", bagging_temperature=0.5,
                             boost_from_average=True, od_type="Iter", od_wait=5, use_best_model=True
                             ).fit(X, yc, sample_weight=w, eval_set=(Xh, ych))
@@ -2903,7 +3056,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-exact-mae")
 def _(ml, X, yc, yr, Xh=None):
     """The Exact (weighted quantile) leaf estimator and the Poisson bootstrap."""
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="MAE", leaf_estimation_method="Exact",
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="MAE", leaf_estimation_method="Exact",
                             bootstrap_type="Poisson", subsample=0.6).fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
@@ -2919,7 +3072,7 @@ def _(ml, X, yc, yr, Xh=None):
     fixtures carry no ctr record, dumped on the M4 2026-09-15). This lane
     measures the one-hot categorical arm; a CTR column needs a source with
     more than two categories."""
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0],
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0],
                             one_hot_features=[1], permutation_count=2,
                             ctr_estimation_permutation_id=0).fit(_coded(X), yc)
     return _fit(dict(predict=_h(m.predict(_coded(X)))), m, lambda e: (e.predict(_coded(Xh)),))
@@ -3049,7 +3202,7 @@ def _(ml, X, yc, yr, Xh=None):
     beside a one-hot column: 20 depth-6 Logloss trees. The held-out rows
     carry unseen and seen-once categories."""
     Xc = _ctr_tables_x(X)
-    m = _ctr_saved_or_fit(ml, lambda: ml.GradientBoosting(
+    m = _ctr_saved_or_fit(ml, lambda: _gbdt(ml.GradientBoosting, 
         n_estimators=20, max_depth=6, loss="Logloss", cat_features=[0, 1, 2]).fit(Xc, yc))
     return _fit(dict(predict=_h(m.predict(Xc)), proba=_h(m.predict_proba(Xc))),
                 m, lambda e: (e.predict(_ctr_tables_xh(Xh)), e.predict_proba(_ctr_tables_xh(Xh))))
@@ -3084,8 +3237,8 @@ def _(ml, X, yc, yr, Xh=None):
     rows = 1500                                  # FLOORED, see @floor above
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # rows are a fixture size, not a claim (2026-09-16)
     Xn = _with_nan(X)
-    lo = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
-    hi = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
+    lo = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Min").fit(Xn, yc)
+    hi = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss", nan_mode="Max").fit(Xn, yc)
     return _fit(dict(min=_h(lo.predict(Xn)), max=_h(hi.predict(Xn))),
                 lo, lambda e: (e.predict(_with_nan(Xh)),))
 
@@ -3094,7 +3247,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """The sklearn-style classifier adapter, the only caller of the binary
     probability and class entries. It refuses save, so no model column."""
-    m = ml.GradientBoostingClassifier(n_estimators=20, max_depth=6).fit(X, yc)
+    m = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X, yc)
     return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
                      decision=_h(m.decision_function(X[:512]))),
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
@@ -3102,7 +3255,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-adapter-reg")
 def _(ml, X, yc, yr, Xh=None):
-    m = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X, yr)
+    m = _gbdt(ml.GradientBoostingRegressor, n_estimators=20, max_depth=6).fit(X, yr)
     return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
 
 
@@ -3144,7 +3297,7 @@ def _(ml, X, yc, yr, Xh=None):
     and the batch part apply."""
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="QueryRMSE").fit(X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64))),
                 m, lambda e: (e.predict(Xh),))
 
@@ -3164,7 +3317,7 @@ def _(ml, X, yc, yr, Xh=None):
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]   # a fixture size, not a claim; 178 query groups remain (2026-09-16)
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="PairLogit").fit(X, rel, group_id=g)
     pairs = []
     begin = 0
     for q in range(40):
@@ -3175,7 +3328,7 @@ def _(ml, X, yc, yr, Xh=None):
                     pairs.append((a, b) if rel[a] > rel[b] else (b, a))
         begin += size
     pw = _hw((len(pairs),), "gbdt-pair-logit:pairs_weight", 0.5, 2.0)
-    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="PairLogit").fit(
+    e = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="PairLogit").fit(
         X, rel, group_id=g, pairs=pairs, pairs_weight=pw)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
                      explicit_predict=_h(e.predict(X)),
@@ -3194,8 +3347,8 @@ def _(ml, X, yc, yr, Xh=None):
     Predict is row-wise, so the held-out probe and the batch part apply."""
     g = _rank_groups(X.shape[0])
     rel = _relevance(yr)
-    m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
-    e = ml.GradientBoosting(n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="YetiRank").fit(X, rel, group_id=g)
+    e = _gbdt(ml.GradientBoosting, n_estimators=8, max_depth=4, loss="YetiRank", random_state=7).fit(
         X, rel, group_id=g)
     return _fit(dict(predict=_h(m.predict(X)), loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
                      seeded_predict=_h(e.predict(X))),
@@ -3231,8 +3384,8 @@ def _(ml, X, yc, yr, Xh=None):
     learn's weighted accuracy and R2 on the pinned-sum path. A lane of its
     own so the adapter lanes' committed hashes do not move; 2000 training
     rows."""
-    clf = ml.GradientBoostingClassifier(n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
-    reg = ml.GradientBoostingRegressor(n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
+    clf = _gbdt(ml.GradientBoostingClassifier, n_estimators=20, max_depth=6).fit(X[:2000], yc[:2000])
+    reg = _gbdt(ml.GradientBoostingRegressor, n_estimators=20, max_depth=6).fit(X[:2000], yr[:2000])
     return _fit(_weighted_score_parts(clf, reg, X, yc, yr, "gbdt-adapter-score-weighted"))
 
 
@@ -4982,7 +5135,7 @@ def _(ml, X, yc, yr, Xh=None):
     sklearn-style boosting regressor (cross-validation clones through
     get_params, which the classical estimators do not implement), scored
     by the adapter's own score."""
-    scores = ml.model_selection.cross_val_score(ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), X, yr, cv=3)
+    scores = ml.model_selection.cross_val_score(_gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
     return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64))))
 
 
@@ -5768,8 +5921,8 @@ def _(ml, X, yc, yr, Xh=None):
     partitioned, held to the plain fit."""
     from mojolearn.parallel_ensemble import fit_boosting
     kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
-    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=_par_devices())
-    plain = ml.GradientBoosting(**kw).fit(X, yc)
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
     _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
                 par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
@@ -6138,6 +6291,39 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
 
 
+@lane("par-ordered")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-ordered lane's Logloss fit (feature groups of
+    the fold histograms partitioned; permutations, folds, cursors and leaves
+    on the root), held to the plain one-device fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered")
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
+    p = par.predict(X)
+    _same_bytes("fit_boosting ordered predict", p, "plain predict", plain.predict(X))
+    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
+
+
+@lane("par-border-types")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-border-types lane's six fits (feature
+    histograms partitioned by whole packed groups; border selection is host
+    code on the root), each held to the plain one-device fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    parts, first = {}, None
+    for bt in _GBDT_BORDER_TYPES:
+        kw = dict(n_estimators=8, max_depth=4, border_count=32, loss="Logloss",
+                  feature_border_type=bt)
+        par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+        plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
+        p = par.predict(X)
+        _same_bytes(f"fit_boosting {bt} predict", p, "plain predict", plain.predict(X))
+        parts[bt] = _h(p)
+        first = first or par
+    return _fit(parts, first, lambda e: (e.predict(Xh),))
+
+
 @lane("par-feature-freq")
 def _(ml, X, yc, yr, Xh=None):
     """fit_feature_freq on the gbdt-feature-freq lane's fit, held to the plain fit."""
@@ -6158,8 +6344,8 @@ def _(ml, X, yc, yr, Xh=None):
     pairs), held to the plain pointwise fit."""
     from mojolearn.parallel_ensemble import fit_boosting
     kw = dict(n_estimators=20, max_depth=6, loss="Logloss", use_pointwise_searcher=True)
-    par = fit_boosting(ml.GradientBoosting(**kw), X, yc, devices=_par_devices())
-    plain = ml.GradientBoosting(**kw).fit(X, yc)
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
     _same_bytes("fit_boosting pointwise predict_proba", par.predict_proba(X[:2048]),
                 "plain predict_proba", plain.predict_proba(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
@@ -6576,8 +6762,8 @@ def _(ml, X, yc, yr, Xh=None):
     the same packed feature groups par-boosting distributes."""
     from mojolearn.parallel_ensemble import fit_boosting
     kw = dict(n_estimators=20, max_depth=6)
-    par = fit_boosting(ml.GradientBoostingClassifier(**kw), X, yc, devices=_par_devices())
-    plain = ml.GradientBoostingClassifier(**kw).fit(X, yc)
+    par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoostingClassifier, **kw).fit(X, yc)
     _same_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
                 "plain predict_proba", plain.predict_proba(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
@@ -6590,8 +6776,8 @@ def _(ml, X, yc, yr, Xh=None):
     """fit_boosting on the gbdt-adapter-reg lane's GradientBoostingRegressor."""
     from mojolearn.parallel_ensemble import fit_boosting
     kw = dict(n_estimators=20, max_depth=6)
-    par = fit_boosting(ml.GradientBoostingRegressor(**kw), X, yr, devices=_par_devices())
-    plain = ml.GradientBoostingRegressor(**kw).fit(X, yr)
+    par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoostingRegressor, **kw).fit(X, yr)
     _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
     return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
 
@@ -7201,6 +7387,7 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"),
+            "gbdt-ordered",
             "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
             "par-forest", "par-boosting", "par-forest-et-clf")
@@ -7209,7 +7396,9 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
-            "par-forest-reg", "par-boosting-reg")
+            "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
+            "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
+            "gbdt-catboost-defaults", "par-border-types")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
@@ -7615,7 +7804,7 @@ def _batch_cross_val(ml, e, Xh):
               np.ascontiguousarray(rows[256 * k:256 * (k + 1)])) for k in range(3)]
     idx = np.arange(3, dtype=np.int64).reshape(3, 1)
     return [_BatchRows("cross_val_score (folds)", idx, lambda r: (np.asarray(ml.model_selection.cross_val_score(
-        ml.GradientBoostingRegressor(n_estimators=8, max_depth=4), Xf, y,
+        _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), Xf, y,
         cv=[folds[int(k)] for k in r[:, 0]]), dtype=np.float64),))]
 
 

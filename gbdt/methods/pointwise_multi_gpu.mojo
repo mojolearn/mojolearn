@@ -3,7 +3,7 @@
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from std.os import getenv
-from core.multi_gpu import peer_clone
+from core.multi_gpu import peer_clone, gbdt_shard_device_id
 from checks.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.pointwise_kernels import compute_hist2, FoldsHistogram, HIST_BUILD_MODE, PW_PRIVATE_DOC_SLOTS
 
@@ -87,7 +87,7 @@ def pointwise_feature_shards(ctx: DeviceContext, policy: Int,
         var width = end-begin
         var bin_first = Int(hf.unsafe_ptr()[begin])
         var bin_end = Int(hf.unsafe_ptr()[end-1])+Int(hn.unsafe_ptr()[end-1])
-        var device = DeviceContext(device_id=rank)
+        var device = DeviceContext(device_id=gbdt_shard_device_id(rank))
         var v_offset = offset.create_sub_buffer[DType.uint32](begin,width)
         var d_offset = peer_clone(ctx,device,v_offset)
         var v_first = first.create_sub_buffer[DType.uint32](begin,width)

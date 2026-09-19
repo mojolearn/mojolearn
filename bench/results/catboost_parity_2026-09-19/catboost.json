@@ -1,0 +1,95 @@
+{
+ "meta": {
+  "settings": {
+   "iterations": 300,
+   "depth": 6,
+   "learning_rate": 0.1,
+   "l2_leaf_reg": 3.0,
+   "border_count": 128,
+   "random_strength": 0.0,
+   "bootstrap_type": "No",
+   "leaf_estimation_method": "Newton",
+   "leaf_estimation_iterations": 10,
+   "boost_from_average": false,
+   "score_function": "Cosine",
+   "nan_mode": "Min",
+   "random_seed": 0
+  },
+  "n_train": 200000,
+  "n_test": 500000,
+  "data": "/Users/andrewhendel/datasets/gbm-bench/higgs/higgs_speed.npz",
+  "arm": "catboost"
+ },
+ "Plain/GreedyLogSum": {
+  "auc": 0.8142608346774264,
+  "logloss": 0.5240348345335915,
+  "trees": 300,
+  "seconds": 7.2,
+  "boosting_type_": "Plain",
+  "border_type_": "GreedyLogSum",
+  "catboost": "1.2.10"
+ },
+ "Ordered/GreedyLogSum": {
+  "auc": 0.8139488052286444,
+  "logloss": 0.524046184393858,
+  "trees": 300,
+  "seconds": 25.8,
+  "boosting_type_": "Ordered",
+  "border_type_": "GreedyLogSum",
+  "catboost": "1.2.10"
+ },
+ "Plain/Median": {
+  "auc": 0.8143388006161387,
+  "logloss": 0.5238556341710394,
+  "trees": 300,
+  "seconds": 7.7,
+  "boosting_type_": "Plain",
+  "border_type_": "Median",
+  "catboost": "1.2.10"
+ },
+ "Plain/Uniform": {
+  "auc": 0.8102739854682749,
+  "logloss": 0.528797382782375,
+  "trees": 300,
+  "seconds": 7.3,
+  "boosting_type_": "Plain",
+  "border_type_": "Uniform",
+  "catboost": "1.2.10"
+ },
+ "Plain/UniformAndQuantiles": {
+  "auc": 0.8144412490093662,
+  "logloss": 0.5238117590820581,
+  "trees": 300,
+  "seconds": 7.6,
+  "boosting_type_": "Plain",
+  "border_type_": "UniformAndQuantiles",
+  "catboost": "1.2.10"
+ },
+ "Plain/MaxLogSum": {
+  "auc": 0.8141770509567949,
+  "logloss": 0.5240894638826556,
+  "trees": 300,
+  "seconds": 10.0,
+  "boosting_type_": "Plain",
+  "border_type_": "MaxLogSum",
+  "catboost": "1.2.10"
+ },
+ "Plain/MinEntropy": {
+  "auc": 0.8141890633093746,
+  "logloss": 0.5240482575924899,
+  "trees": 300,
+  "seconds": 9.3,
+  "boosting_type_": "Plain",
+  "border_type_": "MinEntropy",
+  "catboost": "1.2.10"
+ },
+ "Plain/GreedyMinEntropy": {
+  "auc": 0.8142608346774264,
+  "logloss": 0.5240348345335915,
+  "trees": 300,
+  "seconds": 7.1,
+  "boosting_type_": "Plain",
+  "border_type_": "GreedyMinEntropy",
+  "catboost": "1.2.10"
+ }
+}

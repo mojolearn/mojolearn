@@ -592,6 +592,11 @@ TRAINING_LANE_NAMES = {
     # and 18 batch cells IDENTICAL x4 against the 166-lane columns before
     # the gate ran, and the sabotage build DIVERGENT on every cell.
     "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
+    "gbdt-border-types": "gradient boosting with the six non-default feature border types",
+    "gbdt-ordered": "ordered boosting (boosting_type='Ordered') with the Logloss and RMSE losses",
+    "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
+    "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
+    "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -1023,6 +1028,20 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: MOJOLEARN_LOWBIT_CONVERT_SABOTAGE is those four seams' own arm and the
 #: gate's set now carries it too.
 GATE_SABOTAGE_OWN_DEFINES = {
+    # lane/catboost-parity (2026-09-19): the non-default border types' own
+    # arm (drops `select_borders`' middle border). MOJOLEARN_HOST_SABOTAGE
+    # already moves gbdt-border-types through the Newton walker; this one
+    # reaches the border branch itself, and moves no GreedyLogSum lane
+    # (gbdt-symmetric reads its clean hash under it, measured on the M4).
+    # And Ordered boosting's own arm (every fold estimated on its whole fold,
+    # the look-ahead Ordered prevents): it moves every column of gbdt-ordered
+    # and gbdt-ordered-bayesian-noise on the CPU column AND on Metal, to the
+    # same hashes (1053bc113326b3cb and ae3714a675da4713 on base), and leaves
+    # gbdt-symmetric and gbdt-ordered-rmse at their clean hashes.
+    # And the quantile constant's arm (their delta adjust skipped): it moves
+    # gbdt-bfa-quantile only.
+    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE", "MOJOLEARN_ORDERED_SABOTAGE",
+             "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE"),
     "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
     "linalg": ("MOJOLEARN_LOWBIT_CONVERT_SABOTAGE",),
     "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE", "MOJOLEARN_BPE_TRAINER_SABOTAGE"),
@@ -2131,6 +2150,19 @@ FAMILIES = (
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            # lane/catboost-parity (2026-09-19): the non-default border
+            # types run the device fit's own host function
+            # (`select_borders`) on the CPU column
+            "gbdt-border-types",
+            # lane/catboost-parity: Ordered boosting through
+            # gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit
+            "gbdt-ordered", "gbdt-ordered-bayesian-noise",
+            # lane/catboost-parity: the MAE / Quantile / MAPE starting point
+            # (`gbdt/metrics/sample_quantile.mojo`, shared host code)
+            "gbdt-bfa-quantile",
+            # lane/catboost-parity: the SymmetricTree defaults, the Bayesian
+            # bootstrap and score noise through gbdt_oracle.mojo::gbdt_host_fit
+            "gbdt-catboost-defaults",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2148,6 +2180,9 @@ FAMILIES = (
             "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
             "gbdt/data/pairs.mojo",
             "gbdt/host/gbdt_oracle_yeti.mojo", "gbdt/data/yeti_rank_tasks.mojo",
+            # lane/catboost-parity: the Ordered plan and the quantile
+            # constant, host code the device fit calls too
+            "gbdt/data/ordered_plan.mojo", "gbdt/metrics/sample_quantile.mojo",
             "core/gbdt_host_predict.mojo",
         ),
         exports=(

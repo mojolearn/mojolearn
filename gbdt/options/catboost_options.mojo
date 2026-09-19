@@ -1403,6 +1403,11 @@ def set_leaves_estimation_default(
     method_override: Int = -1,
     iterations_override: Int = -1,
     l2_override: Float32 = Float32(-1.0),
+    # `BoostingType == Ordered` (lane/catboost-parity): their GPU `useExact`
+    # needs Plain (`:290-293`), so an Ordered fit keeps the loss's own
+    # default, and an EXPLICIT Exact is refused with their message
+    # (`:346-350`)
+    ordered: Bool = False,
 ) raises -> TResolvedLeavesEstimation:
     """`TCatBoostOptions::SetLeavesEstimationDefault` (`:273-360`).
 
@@ -1420,7 +1425,7 @@ def set_leaves_estimation_default(
     var newton = d.newton_iterations
     var gradient = d.gradient_iterations
 
-    if use_exact_leaves(loss):
+    if use_exact_leaves(loss) and not ordered:
         # `:296-300`
         method = LEAF_ESTIMATION_EXACT
         newton = 1
@@ -1465,6 +1470,13 @@ def set_leaves_estimation_default(
     # `ensure_newton_is_available`).
     if method == LEAF_ESTIMATION_NEWTON:
         ensure_newton_is_available(loss)
+    if ordered and method == LEAF_ESTIMATION_EXACT:
+        # `CB_ENSURE(BoostingType == Plain || TaskType == CPU, ...)`
+        # (`:346-350`), their words
+        raise Error(
+            "Exact leaf estimation method don't work with ordered boosting"
+            " on GPU (catboost_options.cpp:346-350)"
+        )
 
     return TResolvedLeavesEstimation(method, iterations, l2)
 

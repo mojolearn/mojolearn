@@ -20,17 +20,26 @@ from .ensemble import GradientBoosting
 class _GBDTAdapter:
     _loss = None
 
-    def __init__(self, *, n_estimators=100, max_depth=6, learning_rate=0.03,
-                 l2_leaf_reg=3.0, border_count=128, random_state=0,
+    # Every default is GradientBoosting's own, so a default adapter is the
+    # default learner: None defers to CatBoost's GPU defaults under
+    # SymmetricTree (n_estimators 1000, the auto learning rate, l2 3.0,
+    # random_strength 1.0, the Bayesian bootstrap) and to the earlier ones
+    # under Depthwise and Lossguide (lane/catboost-parity, 2026-09-19; see
+    # GradientBoosting). l2_leaf_reg is None rather than 3.0 because an
+    # explicit l2 turns CatBoost's learning-rate auto-selection off.
+    def __init__(self, *, n_estimators=None, max_depth=6, learning_rate=None,
+                 l2_leaf_reg=None, border_count=128, random_state=0,
                  leaf_estimation_method=None, leaf_estimation_iterations=None,
                  bootstrap_type=None, bagging_temperature=1.0, subsample=None,
                  od_type=None, od_pvalue=None, od_wait=None, use_best_model=None,
                  best_model_min_trees=1, score_function=None, nan_mode='Min',
-                 random_strength=0.0, use_pointwise_searcher=False,
+                 random_strength=None, use_pointwise_searcher=False,
                  boost_from_average=None, border_build_max_samples=200000,
                  class_weights=None, grow_policy='SymmetricTree', max_leaves=None,
                  min_data_in_leaf=1, min_split_gain=None, min_child_hessian=None,
-                 feature_fraction=1.0, numeric_mode=None):
+                 feature_fraction=1.0, feature_border_type='GreedyLogSum',
+                 boosting_type=None, fold_len_multiplier=2.0,
+                 fold_permutation_block=None, numeric_mode=None):
         values = locals().copy()
         values.pop('self')
         for name, value in values.items():
@@ -103,7 +112,8 @@ class _GBDTAdapter:
         self.numeric_mode_ = mode
         self.n_features_in_ = learner.n_features_in_
         self.model_ = learner.model_
-        for name in ('loss_curve_', 'test_loss_curve_', 'best_iteration_', 'stopped_early_'):
+        for name in ('loss_curve_', 'test_loss_curve_', 'best_iteration_', 'stopped_early_',
+                     'learning_rate_'):
             setattr(self, name, getattr(learner, name))
         return self
 

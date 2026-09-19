@@ -66,7 +66,7 @@ from gbdt.methods.greedy_subsets_searcher.kernel.histogram_utils import (
 )
 from checks.numerics import numeric_mode_name
 from std.os import getenv
-from core.multi_gpu import peer_clone, copy_columns_kernel, copy_scalar_kernel
+from core.multi_gpu import peer_clone, copy_columns_kernel, copy_scalar_kernel, gbdt_shard_device_id
 
 from gbdt.gpu_data.kernel.binarize import (
     WRITE_BLOCK_SIZE,
@@ -5998,7 +5998,7 @@ def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
             var folds = prefix[end_feature] - prefix[first_feature]
             var first = first_bin + prefix[first_feature]
             var cells = max_leaves * stat_count * folds
-            var device = DeviceContext(device_id=rank)
+            var device = DeviceContext(device_id=gbdt_shard_device_id(rank))
             var desc_folds = List[UInt32]()
             var desc_offsets = List[UInt32]()
             var desc_groups = List[UInt32](length=nf, fill=0)

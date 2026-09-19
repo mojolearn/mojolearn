@@ -1,0 +1,4 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+use  bench/results/identity_break/2026-09-19_catboost-parity/apple-m4.json: class apple, commit b8e015346, 252 cell parts
+use  bench/results/identity_break/2026-09-19_catboost-parity/cpu-apple-m4.json: class cpu, commit b8e015346, 180 cell parts
+{"bytes": 1308685, "cells": 2187, "classes_agreeing": {"1": 7899, "2": 1638, "3": 1900, "4": 4673}, "conflicts": 0, "parts": 16110, "records": 262}

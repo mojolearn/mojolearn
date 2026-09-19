@@ -63,7 +63,9 @@ def test_binding_dispatches_rmse_and_lifts_only_its_refusals():
     assert "from gbdt.host.gbdt_oracle_rmse import" in src
     assert 'var is_rmse = loss == String("RMSE")' in src
     assert 'if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:' in src
-    assert "if boost_from_average == 1 and not is_rmse:" in src
+    # lane/catboost-parity: MAE, Quantile and MAPE joined RMSE's seeded
+    # cursor (their CalcSampleQuantile constant)
+    assert "if boost_from_average == 1 and not is_rmse and not quantile_family:" in src
     assert "if is_rmse and leaf_iterations >= 0 and leaf_iterations != 1:" in src
     assert "gbdt_rmse_host_fit(" in src and "gbdt_rmse_host_model_text(fit)" in src
     assert "boost_from_average != 0" in src, "unset and True must resolve the seeded cursor"
@@ -77,7 +79,7 @@ def test_oracle_imports_no_gpu_module():
     assert imports == [
         "checks.numerics", "gbdt.gpu_data.compressed_index_builder",
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
-        "gbdt.host.gbdt_oracle",
+        "gbdt.host.gbdt_oracle", "std.memory",
     ], imports
     assert "optimal_const_for_loss" not in "".join(re.findall(r"^from .*$", text, re.M)), (
         "the optimum constant module imports a kernel module; restate it"
@@ -99,7 +101,9 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "identical_mul_add(leaf_values[leaf], lr, cursor[row])" in text
     assert "model_leaves.append(leaf_values[i] * lr)" in text, "the host rescale"
     assert 'String("bias ") + gbdt_f64_token(fit.bias)' in text
-    assert "if fit.bias == 0.0:" in text, "a zero bias writes no record"
+    # a zero bias writes no record; zero BY BITS since lane/catboost-parity
+    # (a -0.0 bias is theirs to report and is written)
+    assert "if bitcast[DType.uint64](fit.bias) == UInt64(0):" in text, "a zero bias writes no record"
     assert "var cursor = List[Float32](length=n_rows, fill=start_value)" in text
 
 

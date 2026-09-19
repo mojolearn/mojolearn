@@ -77,6 +77,10 @@ from std.math import isfinite
 from std.memory import bitcast
 from std.os import abort
 from std.python import Python, PythonObject
+
+#: their Quantile / MAE `delta` default (`optimal_const_for_loss.h:198`),
+#: the value `gbdt/metrics/optimal_const_for_loss.mojo` passes
+comptime QUANTILE_CONST_DELTA = 1e-6
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
@@ -94,6 +98,9 @@ from gbdt.data.quantization import (
     NAN_TREATMENT_AS_TRUE,
 )
 from gbdt.host.gbdt_oracle import (
+    GBDT_BOOT_BAYESIAN,
+    GBDT_BOOT_BERNOULLI,
+    GBDT_BOOT_POISSON,
     GBDT_LOGLOSS_NEWTON_ITERATIONS,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostParams,
@@ -101,8 +108,6 @@ from gbdt.host.gbdt_oracle import (
     gbdt_host_model_text,
 )
 from gbdt.host.gbdt_oracle_losses import (
-    GBDT_BOOT_BERNOULLI,
-    GBDT_BOOT_POISSON,
     GBDT_LEAF_EXACT,
     GBDT_LEAF_GRADIENT,
     GBDT_LEAF_NEWTON,
@@ -118,6 +123,7 @@ from gbdt.host.gbdt_oracle_losses import (
     GBDT_OBJ_PAIR_LOGIT,
     GBDT_OBJ_QUANTILE,
     GBDT_OBJ_QUERY_RMSE,
+    GBDT_OBJ_RMSE,
     GBDT_OBJ_TWEEDIE,
     GBDT_OBJ_YETI_RANK,
     GbdtHostLoss,
@@ -130,6 +136,7 @@ from gbdt.host.gbdt_oracle_multiclass import (
     gbdt_multi_host_model_text,
 )
 from gbdt.host.gbdt_oracle_rmse import (
+    GbdtRmseHostFit,
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
 )
@@ -142,8 +149,29 @@ from gbdt.host.gbdt_oracle_depthwise import (
     gbdt_host_ns_model_text,
 )
 from gbdt.options.data_processing_options import nan_mode_from_name
+from gbdt.options.overfitting_detector_options import (
+    load_overfitting_detector_options,
+)
+from gbdt.overfitting_detector.overfitting_detector import OD_NONE
+from gbdt.grid_creator.binarization import (
+    BORDER_TYPE_GREEDY_LOG_SUM,
+    border_type_from_name,
+)
+from gbdt.metrics.sample_quantile import (
+    calculate_optimal_const_approx_for_mape,
+    calculate_weighted_target_quantile,
+)
 from gbdt.host.gbdt_oracle_feature_freq import gbdt_feature_freq_host_fit
-from gbdt.host.gbdt_oracle_ordered import gbdt_ordered_rmse_host_fit
+from gbdt.host.gbdt_oracle_ordered import (
+    GbdtOrderedHostEval,
+    GbdtOrderedHostOptions,
+    gbdt_ordered_host_fit,
+    gbdt_ordered_rmse_host_fit,
+)
+from gbdt.data.ordered_plan import (
+    ORDERED_MIN_FOLD_SIZE,
+    ordered_permutation_block_size,
+)
 from gbdt.host.gbdt_oracle_pointwise import gbdt_pointwise_host_fit
 from gbdt.host.gbdt_oracle_onehot import (
     gbdt_host_model_text_one_hot,
@@ -544,6 +572,281 @@ def _gbdt_fit_pointwise_arm(
     return out
 
 
+def _refuse_ordered_host(what: String) raises:
+    raise Error(
+        "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
+        + " with boosting_type='Ordered'; the gbdt host binding trains Ordered"
+        " boosting at unit weights on numeric columns with RMSE, Logloss,"
+        " CrossEntropy and the pointwise losses (see"
+        " gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit)"
+    )
+
+
+def _gbdt_fit_ordered_arm(
+    x_address: Int,
+    y_address: Int,
+    flags_address: Int,
+    eval_x_address: Int,
+    eval_y_address: Int,
+    params: PythonObject,
+    strs: PythonObject,
+    border_type: Int,
+) raises -> PythonObject:
+    """`gbdt_fit` with `boosting_type='Ordered'`: `train`'s Ordered refusals
+    in its words, the host binding's own (what the oracle does not restate),
+    the loss resolved as `train` resolves it under Ordered (their GPU
+    `useExact` needs Plain, `catboost_options.cpp:290-293`, so MAE, MAPE and
+    Quantile keep Gradient), then `gbdt_ordered_host_fit`."""
+    var n_class_weights = Int(py=params[34])
+    var fixed_and_weights = 35 + n_class_weights
+    var n_rows = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_weights = Int(py=params[2])
+    var n_flags = Int(py=params[3])
+    var border_count = Int(py=params[4])
+    var n_estimators = Int(py=params[5])
+    var max_depth = Int(py=params[6])
+    var learning_rate = Float32(Float64(py=params[7]))
+    var l2_leaf_reg = Float32(Float64(py=params[8]))
+    var random_seed = UInt64(Int(py=params[9]))
+    var score_function = Int(py=params[10])
+    var loss_border = Float32(Float64(py=params[15]))
+    var leaf_iterations = Int(py=params[16])
+    var leaf_method = Int(py=params[17])
+    var bagging_temperature = Float32(Float64(py=params[18]))
+    var subsample = Float32(Float64(py=params[19]))
+    var n_eval_rows = Int(py=params[20])
+    var od_pvalue = Float64(py=params[21])
+    var od_wait = Int(py=params[22])
+    var random_strength = Float32(Float64(py=params[25]))
+    var use_pointwise = Int(py=params[26]) != 0
+    var border_build_max_samples = Int(py=params[27])
+    var permutation_count = Int(py=params[28])
+    var boost_from_average = Int(py=params[30])
+    var grow_code = Int(py=params[31])
+    var feature_fraction = Float64(1)
+    if len(params) >= fixed_and_weights + 3:
+        feature_fraction = Float64(py=params[fixed_and_weights + 2])
+    var loss = String(py=strs[0])
+    var bootstrap_type = String(py=strs[1])
+    var od_type = String(py=strs[2])
+    var nan_mode = nan_mode_from_name(String(py=strs[3]))
+    var fold_len_multiplier = bitcast[DType.float64](UInt64(Int(String(py=strs[6]))))
+    var fold_permutation_block = Int(String(py=strs[7]))
+
+    # ---- `train`'s Ordered refusals (`gbdt/train.mojo`), their words ----
+    if grow_code != 0:
+        raise Error(
+            "Ordered boosting is not supported for nonsymmetric trees."
+            " (catboost_options.cpp:757-759)"
+        )
+    if loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
+        raise Error(
+            "On GPU loss " + loss + " can't be used with ordered boosting"
+            " (catboost_options.cpp:949-967: their GPU trains this loss"
+            " doc-parallel and Plain only)"
+        )
+    if score_function != GBDT_HOST_SCORE_COSINE and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
+        raise Error(
+            "Score function can't be used with ordered boosting"
+            " (catboost_options.cpp:972-978); Cosine and NewtonCosine are"
+            " the two with an ordered kernel"
+        )
+    if loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank"):
+        raise Error(
+            "boosting_type='Ordered' with loss='" + loss + "' is not"
+            " implemented here: the reference's folds follow the query"
+            " grouping (dynamic_boosting.h:189-223), which this Ordered arm"
+            " does not restate"
+        )
+    if use_pointwise:
+        raise Error(
+            "use_pointwise_searcher selects the doc-parallel Plain searcher;"
+            " an Ordered fit always runs the feature-parallel fold searcher"
+        )
+    if feature_fraction != 1.0:
+        raise Error(
+            "boosting_type='Ordered' with feature_fraction < 1 is not"
+            " implemented here"
+        )
+    if leaf_method == GBDT_LEAF_EXACT:
+        raise Error(
+            "Exact leaf estimation method don't work with ordered boosting"
+            " on GPU (catboost_options.cpp:346-350)"
+        )
+    # ---- what this oracle does not restate, by name ----
+    if n_weights != 0:
+        _refuse_ordered_host("sample_weight")
+    if n_class_weights != 0:
+        _refuse_ordered_host("class_weights")
+    if n_flags != 0:
+        _refuse_ordered_host("cat_features or one_hot_features")
+    # the detector as `gbdt_fit` resolves it, through the same host function
+    # (`load_overfitting_detector_options`, their `Load`)
+    var use_best_model = Int(py=params[23])
+    var best_model_min_trees = Int(py=params[24])
+    var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
+    var od_kind = od.od_type
+    if use_best_model == 1 and n_eval_rows == 0:
+        raise Error(
+            "use_best_model=1 needs an eval set: pass eval_x_colmajor and"
+            " eval_y, or leave it unset."
+        )
+    if best_model_min_trees < 1:
+        raise Error(
+            "best_model_min_trees must be at least 1, got "
+            + String(best_model_min_trees)
+        )
+    if od_kind != OD_NONE and n_eval_rows == 0:
+        raise Error(
+            "od_type is set but there is no held-out set. Stopping on the"
+            " LEARN loss would stop on a curve that falls almost by"
+            " construction; their own detector is inert without a test set"
+            " (overfitting_detector.cpp:122-124) and this refuses rather"
+            " than silently never firing."
+        )
+    var ordered_bfa_losses = (
+        loss == String("RMSE") or loss == String("MAE")
+        or loss == String("Quantile") or loss == String("MAPE")
+    )
+    if boost_from_average == 1 and not ordered_bfa_losses:
+        _refuse_ordered_host(
+            "boost_from_average=True outside RMSE, MAE, Quantile and MAPE"
+        )
+    if border_count < 1 or border_count > 255:
+        _refuse_ordered_host("border_count=" + String(border_count) + " (1 to 255)")
+
+    # ---- the loss, as `train` resolves it under Ordered ----
+    var hloss: GbdtHostLoss
+    var border = GBDT_HOST_DEFAULT_BORDER
+    if loss_border >= Float32(0.0):
+        border = loss_border
+    if loss == String("RMSE") or loss == String("Logloss"):
+        var objective = GBDT_OBJ_RMSE if loss == String("RMSE") else GBDT_OBJ_LOGLOSS
+        var method = GBDT_LEAF_NEWTON if leaf_method == -1 else leaf_method
+        var iterations: Int
+        if method == GBDT_LEAF_NEWTON:
+            iterations = 1 if objective == GBDT_OBJ_RMSE else GBDT_LOGLOSS_NEWTON_ITERATIONS
+        elif method == GBDT_LEAF_GRADIENT:
+            iterations = 1 if objective == GBDT_OBJ_RMSE else 40
+        else:
+            _refuse_ordered_host("leaf_estimation_method code " + String(method))
+            iterations = 1
+        if leaf_iterations >= 0:
+            iterations = leaf_iterations
+        # `kernel_alpha` carries Logloss's border, as `_loss_row` reads it
+        hloss = GbdtHostLoss(
+            objective, border if objective == GBDT_OBJ_LOGLOSS else Float32(0.0),
+            Float32(0.5), method, iterations, -1, Float32(0.0), border,
+        )
+    else:
+        var pw_objective = _pointwise_objective(loss)
+        if pw_objective < 0:
+            _refuse_ordered_host("loss='" + loss + "'")
+        hloss = _resolve_pointwise_loss(
+            pw_objective, loss,
+            Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
+            Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
+            leaf_method, leaf_iterations, String(""), Float32(-1.0),
+        )
+        if hloss.method == GBDT_LEAF_EXACT:
+            # the loss's own default under Ordered: Gradient, one iteration
+            # (`GetEstimationMethodDefaults`, `catboost_options.cpp:113-124`)
+            hloss.method = GBDT_LEAF_GRADIENT
+            hloss.iterations = leaf_iterations if leaf_iterations >= 0 else 1
+        if pw_objective == GBDT_OBJ_CROSSENTROPY:
+            hloss.kernel_alpha = border
+
+    # ---- the bootstrap (`train`'s resolution, `gbdt/train.mojo`) ----
+    var boot_kind = -1
+    var boot_param = Float32(0.0)
+    if bootstrap_type == String("Bayesian"):
+        if subsample >= Float32(0.0):
+            raise Error(
+                "Error: default bootstrap type (bayesian) doesn't support"
+                " 'subsample' option"
+            )
+        boot_kind = 0
+        boot_param = bagging_temperature
+    elif bootstrap_type == String("Bernoulli"):
+        boot_kind = 1
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Poisson"):
+        boot_kind = 2
+        boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type != String("") and bootstrap_type != String("No"):
+        raise Error(
+            "unknown bootstrap_type '" + bootstrap_type
+            + "': Bayesian, Bernoulli, Poisson, No"
+        )
+
+    var perm_count = permutation_count if permutation_count != -1 else 4
+    if perm_count < 1:
+        raise Error("Permutation count should be positive (boosting_options.cpp:67)")
+    # `AdjustBoostFromAverageDefaultValue`: unset is True for RMSE, MAE,
+    # Quantile and MAPE (`gbdt/train.mojo`)
+    var bfa = boost_from_average == 1 or (
+        boost_from_average == -1 and ordered_bfa_losses
+    )
+    var p = GbdtHostParams(
+        border_count, border_build_max_samples, n_estimators, max_depth,
+        learning_rate, l2_leaf_reg, random_seed, nan_mode, border,
+        hloss.iterations, border_type,
+    )
+    var opts = GbdtOrderedHostOptions(
+        score_function == GBDT_HOST_SCORE_NEWTON_COSINE, random_strength,
+        boot_kind, boot_param, perm_count, fold_len_multiplier,
+        ordered_permutation_block_size(n_rows, fold_permutation_block),
+        ORDERED_MIN_FOLD_SIZE, bfa,
+    )
+    var text = String("")
+    var losses = List[Float64]()
+    var test_losses = List[Float64]()
+    var best = 0
+    var stopped = False
+    with GILReleased(Python()):
+        var x = read_f32(x_address, n_rows * n_features)
+        var y = read_f32(y_address, n_rows)
+        var ex = List[Float32]()
+        var ey = List[Float32]()
+        if n_eval_rows > 0:
+            ex = read_f32(eval_x_address, n_eval_rows * n_features)
+            ey = read_f32(eval_y_address, n_eval_rows)
+        # `UpdateUseBestModel` (`options_helper.cpp:100-113`), as `train`
+        var eval_const = True
+        for r in range(1, n_eval_rows):
+            if ey[r] != ey[0]:
+                eval_const = False
+                break
+        var want_best = use_best_model
+        if want_best == -1:
+            want_best = 1 if (n_eval_rows > 0 and not eval_const) else 0
+        var ev = GbdtOrderedHostEval(
+            ex^, ey^, n_eval_rows, od_kind, od.auto_stop_p_value,
+            od.iterations_wait, want_best, best_model_min_trees,
+        )
+        var fit = gbdt_ordered_host_fit(x, y, n_rows, n_features, p, hloss, opts, ev)
+        text = fit.text
+        losses = fit.losses.copy()
+        test_losses = fit.test_losses.copy()
+        best = fit.best_iteration
+        stopped = fit.stopped_early
+    _ = flags_address
+    var learn = Python.list()
+    for i in range(len(losses)):
+        learn.append(PythonObject(losses[i]))
+    var test = Python.list()
+    for i in range(len(test_losses)):
+        test.append(PythonObject(test_losses[i]))
+    var out = Python.list()
+    out.append(PythonObject(text))
+    out.append(PythonObject(best))
+    out.append(PythonObject(stopped))
+    out.append(learn)
+    out.append(test)
+    return out
+
+
 def gbdt_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -578,10 +881,31 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4:
+    if len(strs) != 4 and len(strs) != 5 and len(strs) != 8:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode], got " + String(len(strs))
+            " nan_mode], optionally feature_border_type, optionally then"
+            " boosting_type, the fold_len_multiplier's float64 bits and"
+            " fold_permutation_block, got " + String(len(strs))
+        )
+    # `feature_border_type`, the optional fifth string (lane/catboost-parity);
+    # the seven types are the device fit's own host functions
+    # (`calc_quantization` / `select_borders`), restated nowhere
+    var border_type = BORDER_TYPE_GREEDY_LOG_SUM
+    if len(strs) >= 5:
+        border_type = border_type_from_name(String(py=strs[4]))
+    # the Ordered tail (lane/catboost-parity): its own arm, before any of
+    # the Plain arms' refusals
+    if len(strs) == 8 and String(py=strs[5]) == String("Ordered"):
+        return _gbdt_fit_ordered_arm(
+            Int(py=x_addr), Int(py=y_addr), Int(py=cat_flags_addr),
+            Int(py=eval_x_addr), Int(py=eval_y_addr), params, strs,
+            border_type,
+        )
+    if len(strs) == 8 and String(py=strs[5]) != String("Plain"):
+        raise Error(
+            "gbdt_fit: boosting_type must be 'Plain' or 'Ordered', got '"
+            + String(py=strs[5]) + "'"
         )
     var xp = f32_ptr(Int(py=x_addr))
     var yp = f32_ptr(Int(py=y_addr))
@@ -768,6 +1092,8 @@ def gbdt_fit_binding(
         )
     if is_rmse and grow_code != 0:
         _refuse("loss='RMSE' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
+    if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
+        _refuse("feature_border_type under use_pointwise_searcher")
     if use_pointwise:
         # the gbdt-pointwise-l2-bayesian-eval lane, its own arm and refusals
         # (`_gbdt_fit_pointwise_arm`, gbdt/host/gbdt_oracle_pointwise.mojo)
@@ -780,6 +1106,14 @@ def gbdt_fit_binding(
     # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
     # the searcher knobs of that lane are restated as well
     var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
+    # the symmetric Logloss fit's stochastic arm, CatBoost's GPU defaults
+    # (Bayesian bootstrap, random_strength 1): gbdt_oracle.mojo::gbdt_host_fit,
+    # lane/catboost-parity (the gbdt-catboost-defaults lane); numeric
+    # columns only, as the one-hot arm is measured without it
+    var symmetric_stochastic = (
+        grow_code == 0 and loss == String("Logloss") and not is_pointwise
+        and not is_multi and not is_rmse and n_flags == 0
+    )
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
             _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
@@ -809,7 +1143,12 @@ def gbdt_fit_binding(
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
         )
         var lg_boot = lossguide_knobs and bootstrap_type == String("Bernoulli")
-        if not pw_boot and not lg_boot:
+        var sym_boot = symmetric_stochastic and (
+            bootstrap_type == String("Bayesian")
+            or bootstrap_type == String("Bernoulli")
+            or bootstrap_type == String("Poisson")
+        )
+        if not pw_boot and not lg_boot and not sym_boot:
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
@@ -821,9 +1160,19 @@ def gbdt_fit_binding(
         _refuse("eval_set")
     if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
         _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
-    if random_strength != Float32(0.0) and not lossguide_knobs:
-        _refuse("random_strength=" + String(random_strength) + " outside Lossguide with Logloss")
-    if boost_from_average == 1 and not is_rmse:
+    if random_strength != Float32(0.0) and not lossguide_knobs and not symmetric_stochastic:
+        _refuse(
+            "random_strength=" + String(random_strength)
+            + " outside Lossguide with Logloss and SymmetricTree with Logloss"
+        )
+    # the quantile family's constant (`sample_quantile.mojo`), shared with
+    # the device fit, lane/catboost-parity
+    var quantile_family = (
+        pw_objective == GBDT_OBJ_MAE
+        or pw_objective == GBDT_OBJ_QUANTILE
+        or pw_objective == GBDT_OBJ_MAPE
+    )
+    if boost_from_average == 1 and not is_rmse and not quantile_family:
         _refuse("boost_from_average=True")
     if feature_fraction != 1.0 and not lossguide_knobs:
         _refuse("feature_fraction=" + String(feature_fraction) + " outside Lossguide with Logloss")
@@ -944,6 +1293,7 @@ def gbdt_fit_binding(
     var p = GbdtHostParams(
         border_count, border_build_max_samples, n_estimators, max_depth,
         learning_rate, l2_leaf_reg, random_seed, nan_mode, border, iterations,
+        border_type,
     )
     var pw_loss = GbdtHostLoss(-1, Float32(0), Float32(0), -1, -1, -1, Float32(0), border)
     # the non-symmetric fit's estimator and bootstrap: Logloss, Newton at the
@@ -972,6 +1322,26 @@ def gbdt_fit_binding(
             leaf_method, leaf_iterations, bootstrap_type,
             Float32(Float64(py=params[19])),
         )
+    # the symmetric stochastic arm's bootstrap, `train`'s resolution
+    # (`gbdt/train.mojo`), the Ordered arm's words above
+    var sym_boot_kind = -1
+    var sym_boot_param = Float32(1.0)
+    if symmetric_stochastic:
+        var sym_subsample = Float32(Float64(py=params[19]))
+        if bootstrap_type == String("Bayesian"):
+            if sym_subsample >= Float32(0.0):
+                raise Error(
+                    "Error: default bootstrap type (bayesian) doesn't support"
+                    " 'subsample' option"
+                )
+            sym_boot_kind = GBDT_BOOT_BAYESIAN
+            sym_boot_param = Float32(Float64(py=params[18]))
+        elif bootstrap_type == String("Bernoulli"):
+            sym_boot_kind = GBDT_BOOT_BERNOULLI
+            sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
+        elif bootstrap_type == String("Poisson"):
+            sym_boot_kind = GBDT_BOOT_POISSON
+            sym_boot_param = sym_subsample if sym_subsample >= Float32(0.0) else Float32(0.66)
     var flags = List[UInt32]()
     for f in range(n_flags):
         flags.append(cp.unsafe_load(f))
@@ -1013,14 +1383,37 @@ def gbdt_fit_binding(
             losses = multi_model.losses.copy()
         elif is_pointwise:
             # gbdt/host/gbdt_oracle_losses.mojo
+            # `AdjustBoostFromAverageDefaultValue`: unset is True for MAE,
+            # Quantile and MAPE (`gbdt/train.mojo`); the constant is
+            # `calc_one_dimensional_optimum_const_approx`'s, the same host
+            # code the device fit calls
+            var pw_start = Float64(0.0)
+            if quantile_family and boost_from_average != 0:
+                if pw_objective == GBDT_OBJ_MAPE:
+                    pw_start = Float64(
+                        calculate_optimal_const_approx_for_mape(
+                            y, List[Float32](), False
+                        )
+                    )
+                else:
+                    pw_start = Float64(
+                        calculate_weighted_target_quantile(
+                            y, List[Float32](), False,
+                            0.5 if pw_objective == GBDT_OBJ_MAE else Float64(
+                                pw_loss.estimator_alpha
+                            ),
+                            QUANTILE_CONST_DELTA,
+                        )
+                    )
             var pw_model = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
+                pw_start,
             )
-            text = gbdt_host_model_text(pw_model)
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration
             stopped_early = pw_model.stopped_early
+            text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
         elif is_rmse:
             # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
             # 1597-1600`): unset is True for RMSE
@@ -1041,7 +1434,10 @@ def gbdt_fit_binding(
             best_iteration = model.best_iteration
             stopped_early = model.stopped_early
         elif grow_code == 0:
-            var model = gbdt_host_fit(x, y, n_rows, n_features, p)
+            var model = gbdt_host_fit(
+                x, y, n_rows, n_features, p, List[Bool](),
+                sym_boot_kind, sym_boot_param, random_strength,
+            )
             text = gbdt_host_model_text(model)
             losses = model.losses.copy()
             best_iteration = model.best_iteration

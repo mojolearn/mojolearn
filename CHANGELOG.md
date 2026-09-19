@@ -3,6 +3,73 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (lane/catboost-parity)
+
+**BEHAVIOR CHANGE: `GradientBoosting`'s SymmetricTree defaults are now CatBoost's
+GPU learner's** (catboost 1.2.10, pinned source 54a8143a). A default-constructed
+model fits a different, larger model than before; pass the old values
+explicitly to keep an old result. Old -> new, SymmetricTree only:
+
+- `n_estimators` 100 -> 1000 (`boosting_options.cpp:13`).
+- `learning_rate` 0.03 -> CatBoost's auto-selection from the pool when
+  `learning_rate`, `l2_leaf_reg`, `leaf_estimation_method` and
+  `leaf_estimation_iterations` are unset and the loss is RMSE, Logloss or
+  MultiClass (GPU coefficient rows, `options_helper.cpp:221-288`); 0.03
+  otherwise. The value used is `learning_rate_`.
+- `random_strength` 0.0 -> 1.0 (`oblivious_tree_options.cpp:17`); unset under
+  the L2/NewtonL2 scores, which carry no noise term, it resolves to 0.0.
+- `bootstrap_type` no sampling -> Bayesian with `bagging_temperature` 1.0
+  (`bootstrap_options.h:16-18`). For QueryRMSE, PairLogit and YetiRank that
+  default samples whole queries, which is not implemented, so an unset
+  bootstrap is refused by name for those losses (pass `bootstrap_type='No'`).
+- `leaf_estimation_iterations` unset -> 1 when there are fewer than 200
+  iterations and fewer than 20 features (`options_helper.cpp:290-307`).
+- `boost_from_average` unset on MAE, Quantile and MAPE: False -> True
+  (`options_helper.cpp:353-374`; all policies, as theirs). Their starting
+  constant (`CalcSampleQuantile` with the 1e-6 delta adjust, and the MAPE
+  weighted median) is now implemented and reproduces CatBoost 1.2.10 CPU's
+  bias bit for bit on 40 cases. A model whose bias is -0.0 now writes it.
+
+Depthwise and Lossguide keep 100 iterations, 0.03, no noise and no
+bootstrap. `GradientBoostingClassifier` and `GradientBoostingRegressor` now
+defer every default to `GradientBoosting` (their `l2_leaf_reg` default is
+None rather than 3.0, because an explicit l2 turns the learning-rate
+auto-selection off). Every GBDT lane of `tools/identity_break.py` and
+`tools/repeat_run_stability.py` passes its earlier configuration explicitly,
+and the covered lanes reproduce their shipped reference hashes on the CPU
+route under those pins. A CPU-only install still refuses the new defaults'
+Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
+
+- `boosting_type` ('Plain' or 'Ordered'): CatBoost's GPU Ordered boosting
+  (`TDynamicBoosting`), with `fold_len_multiplier`, `fold_permutation_block`
+  and `permutation_count` as its knobs. **Unset, it is CatBoost's GPU default:
+  Ordered under SymmetricTree below 50,000 rows at 500 iterations or more**
+  (`catboost_options.cpp:802-807`, `defaults_helper.h:33-42`), Plain otherwise,
+  for the multiclass losses and for the L2 scores. Refused by name where
+  CatBoost refuses (non-symmetric trees, multiclass, L2 scores, Exact leaves)
+  and where it is not implemented (CTR categoricals, the ranking losses). An
+  eval set, the overfitting detector and use_best_model work as on a Plain fit.
+- `feature_border_type`: all seven of CatBoost's border selections
+  (GreedyLogSum stays the default), matching CatBoost 1.2.10's own borders bit
+  for bit on 294 oracle cases.
+- The score-noise add in both pointwise scorers is now a pinned fma under
+  IDENTICAL (IDENTITY_PATHS row 96); no recorded lane reached it.
+- CPU host path: the symmetric Logloss fit now restates the Bayesian,
+  Bernoulli and Poisson bootstraps and the score noise, so a CPU-only
+  verifier can check a default-constructed Logloss fit (the
+  gbdt-catboost-defaults lane). Ordered boosting and every border type have
+  CPU host paths too; weighted and one-hot Ordered fits
+  are GPU only and refused by name on the CPU.
+- Multi-GPU: `fit_boosting` accepts Ordered fits and every border type
+  (feature histograms partitioned by whole packed groups; the permutations,
+  folds, cursors, leaves and border selection stay on the root device). New
+  identity lanes par-ordered and par-border-types. The two-GPU columns are
+  owed; see docs/lanes/LANE_STATUS_catboost-parity.md for a logical-shard
+  finding on the Plain partition.
+- New identity lanes: gbdt-catboost-defaults, gbdt-ordered,
+  gbdt-ordered-bayesian-noise, gbdt-border-types, gbdt-bfa-quantile,
+  par-ordered, par-border-types.
+
 ## 0.8.8 (published 2026-09-19)
 
 A verifier/reference patch using the unchanged 0.8.7 native binaries. CPU replay
