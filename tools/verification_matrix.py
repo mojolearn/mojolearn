@@ -255,8 +255,38 @@ def read_columns(verify_reference):
             cls=verify_reference.device_class(j.get("vendor"), path),
             sabotage=sab, sab_kind=kind,
             admit=verify_reference.admit(j, path),
+            # A `par-*` driver's claim is only STATEABLE on two devices, and
+            # the default rule refuses a two-device column. `par_axis` admits
+            # it, and ONLY `par-*` cells may be credited from such a column.
+            admit_par=verify_reference.admit(j, path, par_axis=True),
+            par_devices=str((j.get("package") or {}).get("par_devices") or "0"),
             cells=j["cells"]))
     return cols
+
+
+def par_two_device(cols):
+    """`par-*` lane -> {device class: record path} from TWO-DEVICE columns.
+
+    The drivers' own axis (2026-09-19). `gpu_coverage` below counts columns
+    the DEFAULT rule admits, which refuses `par_devices != "0"` -- correct for
+    every ordinary lane and impossible for these, whose claim only exists on
+    two devices. Read here through `admit(..., par_axis=True)` instead, and
+    only ever for a lane whose name starts `par-`.
+    """
+    out = collections.defaultdict(dict)
+    for c in cols:
+        if c["admit_par"] is not None or c["cls"] not in GPU_CLASSES:
+            continue
+        if c["par_devices"] == "0":
+            continue
+        for key, cell in c["cells"].items():
+            lane = key.split("/", 1)[0]
+            if not lane.startswith("par-"):
+                continue
+            if cell.get("verdict") != "STABLE" or not cell.get("hashes"):
+                continue
+            out[lane].setdefault(c["cls"], c["rel"])
+    return out
 
 
 def gpu_coverage(cols):
@@ -622,6 +652,7 @@ def lane_references(src):
 
 def lane_rows(harness, surface_mod, cols):
     gpu = gpu_coverage(cols)
+    two_dev = par_two_device(cols)
     cpu_seen = cpu_recorded(cols)
     moves, unpaired = sabotage_moves(cols)
     covered = set(surface_mod.covered_lanes())
@@ -662,6 +693,10 @@ def lane_rows(harness, surface_mod, cols):
         rows[lane] = dict(
             lane=lane,
             two_device=lane.startswith("par-"),
+            # The drivers' OWN axis: vendor classes carrying a TWO-DEVICE
+            # column for this lane. Empty for every non-`par-*` lane.
+            par_two=sorted(two_dev.get(lane, {})),
+            par_two_where=two_dev.get(lane, {}),
             gpu=sorted(gpu.get(lane, {})),
             gpu_where=gpu.get(lane, {}),
             cpu=cpu_kind,
@@ -994,11 +1029,22 @@ def render(data):
     waiting = [r for r in drivers if r["sabotage"] != "seen(build)" or not r["cpu"]]
     w("## The multi-GPU driver lanes, which a CPU column cannot judge")
     w("")
-    w(f"{len(drivers)} `par-*` lanes exist and {len(waiting)} of them are waiting "
-      "on a two-device column. THE WORK THEY NEED IS A SECOND GPU (RunPod "
-      "`GPU_COUNT=2`, one `nvidia-2gpu` or `amd-2gpu` column), not a CPU "
-      "verifier and not another CPU sabotage build. Nothing about them is "
-      "owed by the CPU column and nothing on a CPU box can discharge it.")
+    have_two = [r for r in drivers if r.get("par_two")]
+    w(f"{len(drivers)} `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON "
+      "TWO DEVICES -- that a two-device column hashes equal to the one-device "
+      "column cell for cell -- so a one-device run of one is DEGENERATE: it "
+      "compares a run against itself and passes whatever the code does. They "
+      "are held out of the vendor-class counts above for that reason.")
+    w("")
+    w(f"**{len(have_two)} of {len(drivers)} now carry a TWO-DEVICE column**, read "
+      "through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule "
+      "refused `par_devices != \"0\"`, so the only run that can state their "
+      "claim was inadmissible and this evidence counted for nothing.")
+    w("")
+    for r in sorted(drivers, key=lambda x: x["lane"]):
+        got = ",".join(r.get("par_two") or []) or "-"
+        w(f"| {r['lane']} | {got} | {next(iter((r.get('par_two_where') or {}).values()), '-')} |"
+          if r.get("par_two") else f"| {r['lane']} | - | no two-device column |")
     w("")
     w("> " + (", ".join(r["lane"] for r in waiting) if waiting else "none"))
     w("")

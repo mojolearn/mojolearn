@@ -672,7 +672,61 @@ proved is real and is reported under the driver heading below, not here.
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 
-51 `par-*` lanes exist and 37 of them are waiting on a two-device column. THE WORK THEY NEED IS A SECOND GPU (RunPod `GPU_COUNT=2`, one `nvidia-2gpu` or `amd-2gpu` column), not a CPU verifier and not another CPU sabotage build. Nothing about them is owed by the CPU column and nothing on a CPU box can discharge it.
+51 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
+
+**50 of 51 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
+
+| par-arima | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-boosting | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-boosting-clf | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-boosting-clf-two.json |
+| par-boosting-pointwise | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-boosting-reg | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-boosting-reg-two.json |
+| par-byte-lm | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-byte-lm-model-pool | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-byte-lm-offload | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-cd | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-cd-elasticnet | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-cd-elasticnet-two.json |
+| par-cholesky | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
+| par-dbscan | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-feature-freq | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-forest | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-forest-et | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-forest-et-clf | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-forest-et-clf-two.json |
+| par-forest-pool | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
+| par-forest-reg | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-forest-reg-two.json |
+| par-gmm | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
+| par-gp | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-gram | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-gram-ols | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-gram-ols-two.json |
+| par-gram-pca | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-gram-pca-two.json |
+| par-gram-tsvd | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-gram-tsvd-two.json |
+| par-graph-agglomerative | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-graph-spectral | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-graph-umap | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-hdbscan | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
+| par-holtwinters | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-iforest | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-ivf | - | no two-device column |
+| par-kernel-ridge | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
+| par-kmeans | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-logistic | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-mlp | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-nystroem | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
+| par-ordered-rmse | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-queries-kde | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-queries-knn | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-queries-nn | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-queries-nn-two.json |
+| par-queries-radius | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-rbf-sampler | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
+| par-reference-knn | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-reference-knn-reg | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-resample | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
+| par-samba | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-samba-clip | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-scaler | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-scaler-minmax | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-scaler-minmax-two.json |
+| par-svm | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
+| par-svm-svr | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-svm-svr-two.json |
 
 > par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload, par-cd, par-cd-elasticnet, par-cholesky, par-dbscan, par-feature-freq, par-forest-et-clf, par-forest-pool, par-forest-reg, par-gmm, par-gp, par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd, par-graph-agglomerative, par-graph-spectral, par-graph-umap, par-hdbscan, par-iforest, par-ivf, par-kernel-ridge, par-kmeans, par-logistic, par-nystroem, par-ordered-rmse, par-queries-nn, par-rbf-sampler, par-resample, par-svm, par-svm-svr
 

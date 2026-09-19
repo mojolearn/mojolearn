@@ -281,8 +281,36 @@ def _commit_time(root, commit, cache):
     return t
 
 
-def admit(j, path):
-    """None when the column is admissible, else the reason it is not."""
+def admit(j, path, par_axis=False):
+    """None when the column is admissible, else the reason it is not.
+
+    `par_axis=True` admits a column recorded on MORE THAN ONE DEVICE, and is
+    only ever correct for a `par-*` multi-device driver lane.
+
+    WHY THIS MODE HAD TO EXIST (2026-09-19). A `par-*` lane's whole claim is
+    that a TWO-DEVICE column hashes equal to the one-device column cell for
+    cell. The default rule below refuses `par_devices != "0"`, which is right
+    for every ORDINARY lane -- a two-device answer must never be read as the
+    one-device reference. But applied to the drivers it produced a rule that
+    could not be satisfied from either side:
+
+      * a two-device column, the only run that can STATE their claim, was
+        refused here and so was invisible to `gpu_coverage`;
+      * and on ONE device every one of them is DEGENERATE -- measured,
+        `lane_applicability.degenerate('apple-metal')` holds all 13 -- because
+        comparing a one-device run against a one-device run is comparing a run
+        to itself, and it passes whatever the code does.
+
+    Stateable only on two devices, admissible only on one. No run on any
+    hardware could ever discharge them, while `docs/VERIFICATION_MATRIX.md`
+    listed them as thirteen gaps to go close. The evidence existed the whole
+    time: bench/results/identity_break/2026-09-19_par-lane-amd-class/ carries
+    117 cells at par_devices='0' and 117 at par_devices='0,1', off one build
+    on one box at one commit, with IDENTICAL hashes on all 117.
+
+    THE DEFAULT IS UNCHANGED AND STAYS STRICT. A caller must ask for this
+    mode, and must only credit `par-*` lanes from the column it admits.
+    """
     low = path.lower()
     # This particular incident directory was explicitly quarantined by its
     # contemporaneous README. Stable repetitions inside a faulty-device run
@@ -311,13 +339,13 @@ def admit(j, path):
     pkg = j.get("package") or {}
     if pkg.get("fixture_n") or pkg.get("wide"):
         return "non-default fixture size or wide mode"
-    if str(pkg.get("par_devices") or "0") != "0":
+    if not par_axis and str(pkg.get("par_devices") or "0") != "0":
         return f"par_devices {pkg.get('par_devices')}"
     host = j.get("host") or {}
     for fam in (host.get("families") or {}).values():
         if isinstance(fam, dict) and fam.get("sabotage"):
             return "a host binding reads back sabotage"
-    if str(j.get("vendor", "")).endswith("-two"):
+    if not par_axis and str(j.get("vendor", "")).endswith("-two"):
         return "two-device part"
     if j.get("heldout_seed") not in (None, 1):
         return f"heldout_seed {j.get('heldout_seed')}"
