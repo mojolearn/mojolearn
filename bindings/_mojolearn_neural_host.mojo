@@ -340,7 +340,7 @@ def transformer_forward_fresh_binding(
         var w = _transformer_weights_from(a, dm, nh, nkv, hd, it, l, opts, what)
         var x = read_f32(a[0], b * l * dm)
         var out = transformer_host_forward(
-            w, x, b, l, l, 0, window, List[Float32](), List[Float32]()
+            w, x, b, l, l, 0, window, List[Float32](), List[Float32](), False
         )
         copy_f32(out.y.unsafe_ptr(), f32_ptr(a[12]), len(out.y))
         out_len = out.cached_tokens

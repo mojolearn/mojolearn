@@ -255,7 +255,9 @@ def _run_forward(
         k_in = read_f32(a[10], cache_n)
         v_in = read_f32(a[11], cache_n)
     var x = read_f32(a[0], b * l * dm)
-    var out = transformer_host_forward(w, x, b, l, smax, s0, window, k_in, v_in)
+    var out = transformer_host_forward(
+        w, x, b, l, smax, s0, window, k_in, v_in, carried
+    )
     _write(a[12], out.y)
     if carried:
         _write(a[10], out.k_cache)
