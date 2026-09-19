@@ -250,7 +250,18 @@ def device_class(vendor, filename):
     if v.startswith("cpu") or base.startswith("cpu"):
         return "cpu"
     for cls in ("apple", "nvidia", "amd"):
-        if cls in v or cls in base or (cls == "apple" and v == "arm64" and "apple" in base):
+        # METAL IS APPLE'S GPU API AND NOTHING ELSE'S (2026-09-19). The
+        # `arm64` escape below required "apple" in the FILE NAME, so a column
+        # named `metal.new-base.json` recording `vendor: "arm64"` -- which is
+        # what a Metal round writes when the GPU label does not reach the
+        # recorder -- classified as None and counted for NOTHING. Two admitted
+        # arima-exog cells sat unread in
+        # bench/results/identity_break/2026-09-15_arima-exog/metal/ for four
+        # days because of it. A file cannot be named `metal` and be any other
+        # vendor.
+        if (cls in v or cls in base
+                or (cls == "apple" and v == "arm64"
+                    and ("apple" in base or "metal" in base))):
             return cls
     return None
 
