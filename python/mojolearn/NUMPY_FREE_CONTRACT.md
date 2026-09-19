@@ -3,6 +3,13 @@
 The 0.8.0 source uses the shared Array/buffer layer across estimators,
 metrics, preprocessing, model selection and neural training. NumPy is absent
 from runtime dependencies; it remains an optional test/diagnostic oracle.
+Wheels neither bundle NumPy nor declare it in dependency metadata. Corpus
+preparation/batching and parallel RBFSampler use the same owned buffers as the
+rest of the product. The optional identity, full-verification and distributed
+verification commands retain NumPy as an independently installed testing oracle
+(`python -m pip install numpy`); running those checks is separate from using
+estimators. Their fixture generation and recorded reference hashes are unchanged.
+
 Existing NumPy inputs still work through the buffer protocol. Outputs are
 `mojolearn.Array`; use `numpy.asarray(result)` for a zero-copy NumPy view.
 This is an API change from published 0.7.0 and requires new native builds.
@@ -72,7 +79,7 @@ Same public functions and the SAME BYTES ON DISK: a hand-written NPY v1.0 codec
 the existing deterministic zip (pinned 1980-01-01 timestamps, sorted members,
 ZIP_STORED). `read_npz` returns a dict of `Array`; `exact()` keeps refusing dtype
 mismatches with the same messages. A model saved by 0.6.x loads with 0.7 and vice
-versa; a test proves both directions using NumPy from the `test` extra.
+versa; a test proves both directions using NumPy installed in the test environment.
 
 ## New native helpers (DEVIATION 2303; bindings/_mojolearn.mojo, the base extension)
 
@@ -100,10 +107,10 @@ count, else keeps the fraction and records DEVIATION 2304 with the boundary case
 
 ## Rules
 - Nothing imports numpy at module import time. `_verify.py` may import it lazily under a
-  clear "diagnostics need numpy from the test extra" error.
+  clear "diagnostics need numpy" error.
 - Python loops over big data are forbidden in fit/predict paths: any per-element scan
   goes to a native helper or is a memoryview.cast slice operation; label encoding and
   argmax over class counts are the only permitted Python loops (O(classes) or O(rows)
   for labels).
-- Tests keep NumPy (optional `test` extra); `np.asarray(result)` must be zero-copy.
+- Tests keep NumPy in their separate environment; `np.asarray(result)` must be zero-copy.
 - Every changed function gets a DEVIATION number from its agent's range in a comment.

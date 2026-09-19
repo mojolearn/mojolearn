@@ -42,3 +42,25 @@ def test_rejects_native_math_import(payload):
     subprocess.run(flags + [str(source), '-o', str(payload / 'foreign.so')], check=True)
     with pytest.raises(ValueError, match="math imports=\\['sin'\\]"):
         audit.audit_tree(payload)
+
+
+@pytest.mark.parametrize('name,content', [
+    ('mojolearn/feature.py', b'import numpy as np\n'),
+    ('mojolearn/feature.py', b'from numpy import asarray\n'),
+    ('mojolearn/feature.py', b'__import__("numpy")\n'),
+    ('mojolearn/feature.py', b'importlib.import_module("numpy.linalg")\n'),
+    ('numpy/__init__.py', b''),
+    ('numpy.libs/libopenblas.so', b''),
+    ('mojolearn.dist-info/METADATA', b'Requires-Dist: numpy>=1.24; extra == "test"\n'),
+])
+def test_numpy_policy_rejects_runtime_and_payload_dependencies(tmp_path, name, content):
+    path = tmp_path / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_bytes(content)
+    assert audit.numpy_errors(path, name)
+
+
+def test_numpy_remains_available_to_independent_verification(tmp_path):
+    path = tmp_path / '_identity_break.py'
+    path.write_text('import numpy as np\n')
+    assert not audit.numpy_errors(path, 'mojolearn/_identity_break.py')

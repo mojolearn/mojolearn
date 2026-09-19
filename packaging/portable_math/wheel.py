@@ -19,6 +19,38 @@ from stage import stage
 # dependency must fail closed instead of being silently removed by the patcher.
 ROOTS = "acos acosh asin asinh atan atan2 atanh cbrt ceil copysign cos cosh erf erfc exp exp2 expm1 fabs fdim floor fma fmax fmin fmod frexp hypot ilogb ldexp lgamma llrint llround log log10 log1p log2 logb lrint lround modf nearbyint nextafter nexttoward pow remainder remquo rint round scalbln scalbn sin sincos sinh sqrt tan tanh tgamma trunc".split()
 MATH_SYMBOLS = {root + suffix for root in ROOTS for suffix in ("", "f", "l")}
+# These entry points run independent tests; none is imported by estimators.
+NUMPY_ORACLES = {
+    "mojolearn/_identity_break.py", "mojolearn/_identity.py",
+    "mojolearn/_verify_all.py", "mojolearn/_verify_distributed.py",
+    "mojolearn/_verify_parallel_cv.py", "mojolearn/_parallel_cv_witness.py",
+}
+
+
+def numpy_errors(path, relative):
+    errors = []
+    if any(re.match(r"numpy(?:$|\.py$|\.libs$|-[^/]+\.dist-info$)", part, re.I) for part in Path(relative).parts):
+        errors.append(relative + ": bundled NumPy payload")
+    if path.name == "METADATA":
+        from email.parser import Parser
+        metadata = Parser().parsestr(path.read_text())
+        if any(re.match(r"numpy(?:$|[\s<>=!~;\[])", dep, re.I)
+               for dep in metadata.get_all("Requires-Dist", [])):
+            errors.append(relative + ": NumPy dependency metadata")
+    if path.suffix == ".py" and relative not in NUMPY_ORACLES:
+        for node in ast.walk(ast.parse(path.read_bytes(), filename=relative)):
+            names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                     else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
+            if isinstance(node, ast.Call) and node.args and isinstance(node.args[0], ast.Constant):
+                func = node.func
+                if (isinstance(func, ast.Name) and func.id == "__import__"
+                        or isinstance(func, ast.Attribute) and func.attr == "import_module"):
+                    names.append(str(node.args[0].value))
+            if any(name.split(".")[0] == "numpy" for name in names):
+                errors.append(relative + ": NumPy import outside independent verification")
+    return errors
+
+
 LIBM = re.compile(r"^lib(?:m|mvec)(?:[.-]|$)", re.I)
 
 
@@ -29,6 +61,7 @@ def audit_tree(root):
         if not path.is_file():
             continue
         relative = path.relative_to(root).as_posix()
+        errors.extend(numpy_errors(path, relative))
         if LIBM.match(path.name):
             errors.append(relative + ": bundled platform math library")
         if path.suffix == ".py":
@@ -75,7 +108,7 @@ def audit_tree(root):
         errors.append("wheel contains no native binaries")
     if errors:
         raise ValueError("platform math audit failed:\n" + "\n".join(errors))
-    return {"platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries}
+    return {"numpy_runtime_free": True, "numpy_oracles": sorted(NUMPY_ORACLES), "platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries}
 
 
 def finalize(wheel, helper=None, audit_only=False):
@@ -149,7 +182,7 @@ def main():
     args = parser.parse_args()
     for wheel in args.wheels:
         report = finalize(wheel, args.helper, args.audit_only)
-        print(json.dumps({"wheel": str(wheel), "platform_math_free": True,
+        print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_runtime_free": report["numpy_runtime_free"],
                           "native_files_checked": len(report["binaries"])}))
 
 

@@ -129,9 +129,6 @@ classifiers = [
 # NumPy is an optional test/diagnostic oracle, not a runtime requirement.
 dependencies = []
 
-[project.optional-dependencies]
-test = ["numpy>=1.24"]
-
 [project.urls]
 Homepage = "https://github.com/mojolearn/mojolearn"
 Repository = "https://github.com/mojolearn/mojolearn"
