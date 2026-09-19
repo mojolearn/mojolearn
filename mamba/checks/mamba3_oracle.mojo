@@ -118,7 +118,13 @@ from checks.numerics import (
     portable_cosf,
     portable_sinf,
 )
-from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, gemm_oracle
+from gemm.checks.gemm_oracle import (
+    OP_NN,
+    OP_NT,
+    OP_TN,
+    gemm_oracle,
+    gemm_oracle_right_zero_padded,
+)
 from mamba.checks.mamba_oracle import refuse_nonfinite
 from mamba.checks.mamba3_fixture import (
     BITS_POS_INF,
@@ -923,7 +929,9 @@ def mamba3_block_oracle(
                         ]
                     # padded rows: v is exact +0.0, so the fold sees
                     # exact zeros (contract section 3).
-                var inc = gemm_oracle(vs, ks, OP_TN, p_dim, n_state, q)
+                var inc = gemm_oracle_right_zero_padded(
+                    vs, ks, OP_TN, p_dim, n_state, q, real
+                )
                 var scale_c = ftz(identical_exp(dl))
                 for i in range(p_dim * n_state):
                     h_run[i] = ftz(
@@ -977,10 +985,15 @@ def mamba3_block_oracle(
                 # entries are STRUCTURAL +0.0 (the -inf mask never
                 # exists; the diagonal is DEVIATION 830's, moved to
                 # S14/S18).
-                var smat = gemm_oracle(qmat, kmat, OP_NT, q, q, n_state)
+                # Padded output rows are never consumed. Keep the logical
+                # columns and contraction unchanged, but produce only the
+                # real row prefix.
+                var smat = gemm_oracle(
+                    qmat, kmat, OP_NT, real, q, n_state
+                )
                 var lbase = (((bb * nc + c) * nh + hh) * q) * q
                 var m_mat = _zeros(q * q)
-                for i in range(q):
+                for i in range(real):
                     for j in range(i):
                         m_mat[i * q + j] = ftz(
                             pinned_mul(
@@ -988,13 +1001,17 @@ def mamba3_block_oracle(
                                 ftz(st.seg_l[lbase + i * q + j]),
                             )
                         )
-                var yint = gemm_oracle(m_mat, vmat, OP_NN, q, p_dim, q)
+                var yint = gemm_oracle(
+                    m_mat, vmat, OP_NN, real, p_dim, q
+                )
                 # state read-out: (q_rot . h_entering^T) then * exp(da_cs)
                 var h_in = _zeros(p_dim * n_state)
                 var pbase = (((bb * nc + c) * nh + hh) * p_dim) * n_state
                 for i in range(p_dim * n_state):
                     h_in[i] = st.pass_states[pbase + i]
-                var ch = gemm_oracle(qmat, h_in, OP_NT, q, p_dim, n_state)
+                var ch = gemm_oracle(
+                    qmat, h_in, OP_NT, real, p_dim, n_state
+                )
                 for i in range(real):
                     var t = c0 + i
                     if t < q0:
