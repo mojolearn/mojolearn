@@ -438,6 +438,13 @@ drops is the harness calling in and what it keeps is the frame that raised
 which travels at the very end). `<json>.errors.txt` beside the record holds
 every refusal untruncated; with no `--json` the full text is printed after
 the summary.
+
+CPU WALL CLOCK (2026-09-19). `--jobs N` is an opt-in process supervisor for
+independent lane shards. It requires `--json`, caps N to min(8, CPU count),
+forces every child through `--require-cpu`, preserves each shard JSON as a
+resume checkpoint, and merges in deterministic lane order. It never shares a
+fitted estimator or native runtime between workers and never runs concurrent
+jobs on a GPU.
 """
 import argparse
 import hashlib
@@ -10833,6 +10840,118 @@ def merge(paths, out, allow_separate_builds=False):
     return 0
 
 
+def _strip_driver_args(argv):
+    """Remove arguments owned by the process supervisor from a child argv."""
+    out, i = [], 0
+    valued = {"--jobs", "--json", "--lanes"}
+    while i < len(argv):
+        arg = argv[i]
+        if arg in valued:
+            i += 2
+            continue
+        if any(arg.startswith(name + "=") for name in valued):
+            i += 1
+            continue
+        out.append(arg)
+        i += 1
+    return out
+
+
+def _job_shards(lanes, count):
+    """Contiguous, ordered lane shards; no estimator can cross a process."""
+    count = min(count, len(lanes))
+    return [lanes[len(lanes) * i // count:len(lanes) * (i + 1) // count]
+            for i in range(count)]
+
+
+def run_jobs(args, argv=None):
+    """Run CPU lane shards in isolated processes and merge their records.
+
+    This deliberately does not share fitted estimators, fixtures, Python
+    modules, or native runtimes between workers. GPU backends are refused in
+    every child: concurrent jobs on one accelerator invalidate the evidence.
+    Part JSONs are durable checkpoints and are merged only after every child
+    exits, in deterministic shard order.
+    """
+    if not args.json:
+        raise SystemExit("REFUSING: --jobs > 1 requires --json for durable shard checkpoints")
+    cap = min(8, os.cpu_count() or 1)
+    if args.jobs > cap:
+        raise SystemExit(f"REFUSING: --jobs {args.jobs} exceeds this host's conservative cap {cap}")
+    requested = [n for n in args.lanes.split(",") if n]
+    unknown = [n for n in requested if n not in LANES]
+    if unknown:
+        raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
+    lanes = requested or [n for n in LANES if not n.startswith(RECORD_EXCLUDED_PREFIXES)]
+    skip = set(filter(None, args.skip.split(",")))
+    lanes = [n for n in lanes if n not in skip]
+    if not lanes:
+        raise SystemExit("REFUSING: --jobs has no lanes to run after --skip")
+    shards = _job_shards(lanes, args.jobs)
+    final = Path(args.json)
+    part_dir = final.with_name(final.name + ".jobs")
+    part_dir.mkdir(parents=True, exist_ok=True)
+    parts = [part_dir / f"part-{i:02d}.json" for i in range(len(shards))]
+    logs = [part_dir / f"part-{i:02d}.log" for i in range(len(shards))]
+    if not args.resume:
+        for path in parts + logs:
+            try:
+                path.unlink()
+            except FileNotFoundError:
+                pass
+    base = _strip_driver_args(list(sys.argv[1:] if argv is None else argv))
+    base = [arg for arg in base if arg != "--resume"]
+    # A child verifies the actual loaded backend before its first fit. Adding
+    # this even when the caller omitted it makes --jobs intrinsically CPU-only.
+    if "--require-cpu" not in base:
+        base.append("--require-cpu")
+    running = []
+    print(f"# JOBS {len(shards)} isolated CPU shards (cap={cap}); checkpoints={part_dir}", flush=True)
+    try:
+        for i, (shard, part, log) in enumerate(zip(shards, parts, logs)):
+            cmd = [sys.executable, os.path.abspath(__file__)] + base + [
+                "--jobs", "1", "--lanes", ",".join(shard), "--json", str(part)]
+            if args.resume and part.is_file():
+                cmd.append("--resume")
+            stream = open(log, "a" if args.resume else "w")
+            proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT)
+            running.append((i, proc, stream))
+            print(f"# JOB {i} pid={proc.pid} lanes={','.join(shard)}", flush=True)
+        codes = {}
+        for i, proc, stream in running:
+            codes[i] = proc.wait()
+            stream.close()
+    except BaseException:
+        for _, proc, stream in running:
+            if proc.poll() is None:
+                proc.terminate()
+        for _, proc, stream in running:
+            try:
+                proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                proc.wait()
+            stream.close()
+        raise
+    for i, log in enumerate(logs):
+        print(f"\n=== identity shard {i} exit={codes[i]} ===", flush=True)
+        try:
+            sys.stdout.write(log.read_text())
+        except OSError as exc:
+            print(f"REFUSED to read shard log: {exc}")
+    missing = [str(p) for p in parts if not p.is_file()]
+    if missing:
+        print(f"REFUSING: shard records missing: {missing}", file=sys.stderr)
+        return 1
+    merge(parts, str(final))
+    bad = [i for i, code in codes.items() if code]
+    if bad:
+        print(f"# JOBS FAILED shards={bad}; merged evidence retained at {final}", file=sys.stderr)
+        return 1
+    print(f"# JOBS COMPLETE merged={final}", flush=True)
+    return 0
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--json", default="")
@@ -10844,6 +10963,9 @@ def main():
                     help="exit nonzero if any requested stage refuses (used by iteration runner)")
     ap.add_argument("--resume", action="store_true",
                     help="reuse completed cells from --json only when sources, binaries and protocol match")
+    ap.add_argument("--jobs", type=int, default=1, metavar="N",
+                    help="CPU only: run independent lane shards in N isolated processes (requires --json; "
+                         "each shard is resumable and the final record is merged in lane order)")
     ap.add_argument("--lanes", default="")
     ap.add_argument("--skip", default="", help="lanes to leave out, comma separated; each is reported as SKIPPED")
     ap.add_argument("--fixtures", default="")
@@ -10888,6 +11010,12 @@ def main():
                     help="with --merge: admit parts whose binding digests differ (two legs, two builds of the "
                          "same commit on the same box type); every part's digests are kept under merged_from")
     args = ap.parse_args()
+    if args.jobs < 1:
+        raise SystemExit("REFUSING: --jobs must be positive")
+    if args.jobs > 1:
+        if args.merge or args.diff:
+            raise SystemExit("REFUSING: --jobs cannot be combined with --merge or --diff")
+        return run_jobs(args)
     if args.merge:
         if not args.json:
             raise SystemExit("REFUSING: --merge needs --json <out>")

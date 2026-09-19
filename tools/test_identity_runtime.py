@@ -204,6 +204,23 @@ def test_cpu_requirement_refuses_gpu_before_any_fit(run_fixture):
     assert state["calls"] == 0
 
 
+def test_parallel_driver_keeps_lane_order_and_never_splits_an_estimator():
+    lanes = [f"lane-{i}" for i in range(7)]
+    shards = ib._job_shards(lanes, 3)
+    assert shards == [["lane-0", "lane-1"],
+                      ["lane-2", "lane-3"],
+                      ["lane-4", "lane-5", "lane-6"]]
+    assert sum(shards, []) == lanes
+    assert len({lane for shard in shards for lane in shard}) == len(lanes)
+
+
+def test_parallel_driver_strips_only_supervisor_arguments():
+    argv = ["--jobs=4", "--lanes", "ridge,kmeans", "--json=out.json",
+            "--resume", "--fixtures", "base,ties", "--repeats", "2"]
+    assert ib._strip_driver_args(argv) == [
+        "--resume", "--fixtures", "base,ties", "--repeats", "2"]
+
+
 def test_release_marker_does_not_enable_full_apple_matrix(monkeypatch):
     monkeypatch.setattr(ib, "_is_apple_gpu", lambda host: not host)
     lanes = ["ridge", "kmeans"]
