@@ -242,6 +242,13 @@ class SambaStack(object):
                                  lr_schedule=lr_schedule,
                                  accumulation_steps=accumulation_steps,
                                  numeric_mode=numeric_mode)
+        # The block wrappers retain views of ``self.flat``; optimizer steps
+        # and checkpoint restores update that storage in place.  Constructing
+        # them again for every forward/backward only repeats Python shape and
+        # option validation, and also prevents TransformerBlock from reusing
+        # its per-instance runtime resources.  Keep one wrapper per registry
+        # block, just as SambaInference does.  No tensor is copied or cached.
+        self._blocks = [self._make_block(i) for i in range(len(config.layers))]
         self.last_ = None
 
     # -- weights ----------------------------------------------------------
@@ -271,7 +278,7 @@ class SambaStack(object):
         """The registry as `{name: array}` (views of the flat buffer)."""
         return {n: self.arrays[n] for n in self.names}
 
-    def _block(self, i):
+    def _make_block(self, i):
         kind = self.config.layers[i]
         w = {n: self.arrays["layers.%d.%s" % (i, n)]
              for n, _ in self.config.block_shapes(kind)}
@@ -280,6 +287,14 @@ class SambaStack(object):
         c = self.config
         return TransformerBlock(w, n_heads=c.n_heads, n_kv_heads=c.n_kv_heads,
                                 head_dim=c.head_dim, numeric_mode=self.numeric_mode)
+
+    def _block(self, i):
+        # A small number of wiring tests deliberately construct a partial
+        # stack with ``__new__`` so they can substitute the arithmetic.  Keep
+        # that diagnostic path able to materialize a wrapper on demand; all
+        # ordinarily constructed stacks use the cache above.
+        blocks = getattr(self, "_blocks", None)
+        return self._make_block(i) if blocks is None else blocks[i]
 
     def _head_weight(self):
         return self.arrays["embed.weight" if self.config.tie_embeddings
