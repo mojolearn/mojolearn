@@ -136,6 +136,26 @@ def test_pack_unpack_are_exact_and_the_three_spellings_agree(fmt):
     assert _same(out, f32["a"])
 
 
+@pytest.mark.parametrize("fmt", ["bfloat16", "int8"])
+def test_repack_same_format_copies_packed_bytes_without_materializing(monkeypatch, fmt):
+    if fmt == "bfloat16":
+        original = lowbit.BF16Weight(np.arange(24, dtype=np.uint16).reshape(6, 4))
+    else:
+        original = lowbit.Int8Weight(
+            np.arange(24, dtype=np.int8).reshape(6, 4),
+            np.arange(6, dtype=np.int32) - 3,
+        )
+    monkeypatch.setattr(lowbit, "materialize_one", lambda *a, **k: pytest.fail("materialized"))
+    copied = lowbit.pack({"w": original}, fmt)["w"]
+    assert copied is not original
+    if fmt == "bfloat16":
+        assert np.array_equal(copied.bits, original.bits)
+        assert copied.bits._addr != original.bits._addr
+    else:
+        assert np.array_equal(copied.codes, original.codes)
+        assert np.array_equal(copied.exponents, original.exponents)
+        assert copied.codes._addr != original.codes._addr
+        assert copied.exponents._addr != original.exponents._addr
 def _special_rows():
     """Finite float32 rows that reach every branch of the seams: zeros, a
     subnormal (flushed), negatives, exact halves (ties to even), a tiny row,
