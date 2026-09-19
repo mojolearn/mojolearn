@@ -2687,6 +2687,42 @@ def wheel_bindings():
 #: there is no LANE_REVISIONS entry to catch it going stale. A user's `verify`
 #: must not rest on that. They stay covered lanes, and the CPU identity gate
 #: still runs all thirteen.
+#:
+#: ASKED AGAIN 2026-09-19 (lane/lm-attention-fallback), because the columns
+#: LOOK finished now: thirteen of the twenty-one covered par-* lanes --
+#: `par-arima`, `par-forest`, `par-forest-et`, `par-holtwinters`, `par-mlp`,
+#: `par-queries-kde`, `par-queries-knn`, `par-queries-radius`,
+#: `par-reference-knn`, `par-reference-knn-reg`, `par-samba`,
+#: `par-samba-clip` and `par-scaler` -- each carry amd + apple + cpu +
+#: nvidia on every real part of all nine fixtures, which is a stronger table
+#: position than any of the eighteen PUBLIC_REFERENCE_CANDIDATES holds.
+#: They are still not
+#: promoted, and the reason above is not a formality -- it is visible in the
+#: provenance of the very cells that look complete. Reading each part's
+#: `cols` back through the table's `records` list:
+#:
+#:   par-forest        apple + nvidia <- 2026-09-14_166-lanes
+#:   par-arima         apple + nvidia + amd <- 2026-09-14_166-lanes
+#:   par-mlp           apple + nvidia + amd <- 2026-09-14_166-lanes
+#:   par-samba         apple + nvidia + amd <- 2026-09-14_166-lanes
+#:   par-queries-knn   apple + nvidia + amd <- 2026-09-14_166-lanes
+#:   par-holtwinters   apple <- 2026-09-14_166-lanes
+#:
+#: 2026-09-14_166-lanes is the record RECORD_EXCLUDED_PREFIXES was added to
+#: EXCLUDE par-* from two days later. So these witnesses come from a scope
+#: that no longer runs them, exactly as this note says, and no release record
+#: will ever refresh them: the number looks complete because it was frozen,
+#: not because it is current. The remainder (par-holtwinters' nvidia and amd,
+#: from 2026-09-15_holtwinters-linesearch-fix) are one-off fix records, which
+#: is the same problem in a smaller package.
+#:
+#: And the deeper one, which no column can fix: on ONE device a par-* driver
+#: is DEGENERATE -- `_verify_reference.admit` now says so in its own
+#: docstring, and `lane_applicability.degenerate('apple-metal')` holds all
+#: thirteen -- so a one-device column passes whatever the code does, while a
+#: CPU-only install has exactly one device. Promoting them would put a cell
+#: in a user's `verify --all` that cannot fail on their machine. Two devices
+#: is what states their claim, and that is what the dedicated legs do.
 PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 
 #: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
@@ -2828,6 +2864,27 @@ PUBLIC_PENDING_LANES = {
     # LANE_STATUS_verifier-installed-continuation.md. Extended installed
     # properties and NVIDIA/current Apple completion remain owed, as does
     # the exact expanded 0.8.7 release certificate. Keep the holds explicit.
+    #
+    # THE APPLE HALF OF THAT DEBT IS ALREADY PAID AND JUST UNADMITTED
+    # (measured 2026-09-19, lane/lm-attention-fallback). These five read
+    # amd + cpu in the shipped table and nothing else, and the obvious
+    # reading -- that a Mac owes them all nine fixtures -- is wrong.
+    # bench/results/identity_break/2026-09-18_installed-apple-properties/
+    # carries one Apple M4 column per lane at commit aff968968, two repeats,
+    # identical mode, `admit()` clean, and every one of them agrees with the
+    # SHIPPED refs on every comparable part with ZERO disagreements:
+    # mamba3 72, transformer 72, transformer-window 72, samba 81,
+    # samba-untied-dropout-accum 81. That is all nine fixtures each.
+    #
+    # NVIDIA IS THE REAL DEBT, and it is a rental. Every NVIDIA column in
+    # the tree that names these lanes predates the fixture change that made
+    # them `stale reference` on 2026-09-17 (their two same-shape norm
+    # weights stopped being one tensor), and it shows: the best of them,
+    # 2026-09-14_166-lanes, agrees on 36 parts and DISAGREES on 117. An old
+    # column of the old bytes proves nothing here, so this one cannot be
+    # closed by an admission -- it needs a current NVIDIA box running the
+    # five lanes over all nine fixtures. That is the ONE piece of GPU time
+    # these five still owe.
     "mamba3": "qualification pending",
     "transformer": "qualification pending",
     "transformer-window": "qualification pending",
@@ -2940,9 +2997,53 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: carries it. A lane moves from here into `public_reference_lanes()` on the
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
+#:
+#: WHAT ALL EIGHTEEN ARE WAITING ON, RE-MEASURED 2026-09-19
+#: (lane/lm-attention-fallback). One thing, and it is the same thing for
+#: every entry: the shipped table carries NO `nvidia` column for any of them,
+#: on any part of any fixture. Fifteen of the eighteen are otherwise
+#: complete -- `amd` + `apple` + `cpu` on every real part of all nine
+#: fixtures, at the current revision, unconflicted. The other three
+#: (gbdt-query-rmse, gmm-sample, gmm-random-init-sample) hold amd + cpu
+#: everywhere and apple on some fixtures only; see their entry below, where
+#: that gap turns out to be unadmitted rather than unrecorded too.
+#:
+#: THE PER-ENTRY COMMENTS BELOW HAD ALL GONE STALE, and that is the reason
+#: the condition is now ASSERTED in test_host_surface rather than described
+#: here. `gp-optimize` said "only Apple GPU witnesses"; the nine from
+#: lane/ship-cpu-host-families said "rests on the APPLE column alone, with no
+#: NVIDIA and no AMD"; `svc-poly` said "apple and cpu". The 2026-09-18 AMD
+#: columns landed and made all three sentences false, and nothing failed,
+#: because a condition kept in prose is a condition nothing checks. Each has
+#: been rewritten to the measured state below.
+#:
+#: AND THE NVIDIA COLUMN THEY NEED IS ALREADY IN THE TREE, COMMITTED AND
+#: ADMISSIBLE. It is not a rental:
+#:
+#:   bench/results/identity_break/2026-09-19_gpu-class-gaps/
+#:     nvidia-nvidia-geforce-rtx-4090-sm_89.classical.json   (commit 14e0c6bbe)
+#:       -- 16 of the 18, all nine fixtures, identical mode, repeats 2
+#:   bench/results/identity_break/2026-09-19_single-device-gaps/
+#:     nvidia-nvidia-geforce-rtx-4090-sm_89.single-device-gaps.json
+#:       -- gp-normalize-y and gp-sample-y-normalize, same terms
+#:
+#: `_verify_reference.admit()` returns None (admissible) for both: mode
+#: identical, par_devices 0, heldout_seed 1, no sabotage flag, no `gpu_slot`
+#: held by another run. AND THEY AGREE WITH WHAT IS ALREADY SHIPPED: held
+#: against the table's own refs through `_part_value` at two repeats, the two
+#: columns match on 612 of 612 comparable parts across the eighteen lanes,
+#: with ZERO disagreements, so the admission adds columns and changes no
+#: cell. What stands between them and the table is one scoped
+#: `verify --all --emit-reference --reference-table` -- the same operation
+#: 91a2a68d5 used to add 63 GBDT cells without touching an existing one --
+#: and that writes the file every installed verifier checks against, so it is
+#: a release-time decision and deliberately NOT taken by this lane. Nobody
+#: needs to rent anything for these eighteen. When that admission lands, the
+#: assertion in test_host_surface fails and names them.
 PUBLIC_REFERENCE_CANDIDATES = (
-    # Strict all-nine CPU/Apple/AMD references admitted 2026-09-18.
-    # NVIDIA evidence and installed verifier replay are still owed.
+    # Strict all-nine CPU/Apple/AMD references admitted 2026-09-18; the
+    # NVIDIA column exists (2026-09-19_gpu-class-gaps) and is not yet
+    # admitted to the table. Installed verifier replay is also owed.
     "kernel-ridge-poly",
     "kernel-ridge-sigmoid",
     "kernel-ridge-laplacian",
@@ -2950,26 +3051,37 @@ PUBLIC_REFERENCE_CANDIDATES = (
     "nystroem-sigmoid",
     "nystroem-laplacian",
 
-    # CPU diagnostics now match all nine fixtures, but the bundled table
-    # has only Apple GPU witnesses for these optimizers. CUDA/HIP release
-    # records and installed-wheel verification are still owed.
+    # CPU diagnostics match all nine fixtures. "The bundled table has only
+    # Apple GPU witnesses for these optimizers" was true when it was written
+    # and is NOT true now (re-measured 2026-09-19): both carry amd + apple +
+    # cpu on every part of all nine. HIP is no longer owed; CUDA is, and the
+    # column for it is the one named above.
     "gp-optimize",
     "gp-optimize-restarts",
     # `svc-poly` is here rather than promoted for a reason that is not about
-    # its arithmetic: its cells rest on TWO columns (apple and cpu, from
-    # 2026-09-15_inference-svm), so it cannot meet `--require-columns 4`.
-    # CLASSICAL_RECORDED already notes that its NVIDIA and AMD recordings are
-    # owed to the next release record; it joins `public_reference_lanes()` the
-    # day a record carries them.
+    # its arithmetic. It was held on TWO columns (apple and cpu, from
+    # 2026-09-15_inference-svm); the 2026-09-18 AMD column made that three,
+    # so the sentence CLASSICAL_RECORDED and this comment both carried --
+    # "its NVIDIA and AMD recordings are owed" -- is now half wrong. Only
+    # NVIDIA is owed, and only into the table.
     "svc-poly",
     # The same condition, and the same remedy, for nine more
     # (lane/ship-cpu-host-families, 2026-09-16). Each read IDENTICAL in the
-    # measured CPU-only run, so it is NOT their arithmetic that holds them:
-    # every IDENTICAL cell they have rests on the APPLE column alone, with no
-    # NVIDIA and no AMD recording behind it. A lane whose only GPU witness is
-    # one vendor is a two-column agreement, and promoting it on this lane's
-    # own evidence would apply a weaker rule than the one svc-poly was held
-    # to. They join the day a release record carries the other two columns.
+    # measured CPU-only run, so it is NOT their arithmetic that holds them.
+    # "Every IDENTICAL cell they have rests on the APPLE column alone" was
+    # the 2026-09-16 state; re-measured 2026-09-19 all nine carry amd on
+    # every part and six of them carry apple on every part too. The three
+    # that do not are gbdt-query-rmse (apple absent on 24 of 36 parts),
+    # gmm-sample and gmm-random-init-sample (15 of 27 each) -- a lane whose
+    # UNION reads three classes while single fixtures rest on one, which is
+    # why the promotion check intersects over parts instead of unioning.
+    # Those three owe an Apple column as well as the NVIDIA one -- and that
+    # column is in the tree too, not owed to a Mac: 2026-09-15_gmm-sample,
+    # 2026-09-18_installed-apple-properties and the gbdt-pair-logit records
+    # together cover all nine fixtures for all three, every one admissible
+    # at two repeats, and their part values AGREE with the shipped refs on
+    # 142 of 150 parts with the other 8 being `n/a:no-save` from a column
+    # recorded before those lanes emitted a model part. Nothing disagrees.
     "gbdt-query-rmse",
     "gmm-random-init-sample",
     "gmm-sample",

@@ -24,6 +24,7 @@ reads SOURCE, never a built binary, so it runs on a box with nothing built:
     identity gate workflow reads its lists from the manifest rather than
     carrying literals.
 """
+import json
 import re
 from pathlib import Path
 
@@ -33,6 +34,12 @@ from mojolearn import host_surface
 
 ROOT = Path(__file__).resolve().parents[3]
 BINDINGS = ROOT / "bindings"
+
+#: The three vendor classes a cross-vendor claim needs, as the shipped
+#: table's `cols` spells them. `cpu` is deliberately not one of them: it is
+#: the column the user's own machine reproduces, so it cannot also be one of
+#: the independent witnesses that make the reference worth reproducing.
+TRAINING_GPU_CLASSES = ("amd", "apple", "nvidia")
 
 DEF_FUNCTION = re.compile(r'(?:module|m)\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)')
 
@@ -601,6 +608,40 @@ def test_public_reference_candidates_meet_every_condition_to_be_promoted():
                 f"{lane}: declared by {f['family']}, which does not ship, and no shipped binding "
                 f"serves its route {f['routes']}; promoting it would grow the wheel")
 
+    # THE CONDITION THAT ACTUALLY HOLDS THIS LIST, ASKED OF THE SHIPPED TABLE
+    # (lane/lm-attention-fallback, 2026-09-19). Every other condition above is
+    # checked; the three-vendor-class one -- the ONE every entry is in fact
+    # waiting on -- was prose in the docstring, and prose went stale without
+    # anything noticing. Measured this morning against the shipped table: the
+    # `gp-optimize` comment said "only Apple GPU witnesses", the nine from
+    # lane/ship-cpu-host-families said "rests on the APPLE column alone, with
+    # no NVIDIA and no AMD", and `svc-poly` said "apple and cpu" -- and all
+    # eighteen carry amd + apple + cpu today, because the 2026-09-18 AMD
+    # columns landed and no one re-read the comments. A FLOOR IN PROSE IS NOT
+    # A FLOOR: the reason has to travel with the number, in code a change
+    # walks past.
+    #
+    # It is the promoting direction that is load-bearing. A candidate that
+    # REACHES all three classes has nothing left holding it here, and leaving
+    # it would understate the public surface by exactly the lanes a rented
+    # column just paid for; this fails on that day and names them. The
+    # converse is already covered: `already` above fails if one is promoted
+    # early. Note what the assertion reads -- the SHIPPED TABLE, not the
+    # record files in the tree. A column can be committed, admissible and
+    # still absent from every installed verifier's copy until a scoped
+    # `verify --emit-reference --reference-table` admits it, and it is the
+    # installed copy a promotion promises against.
+    table = json.loads(_read("python/mojolearn/verify_reference/table.json"))
+    reached = {lane: sorted(_classes_on_every_part(table, lane))
+               for lane in candidates
+               if set(TRAINING_GPU_CLASSES) <= _classes_on_every_part(table, lane)}
+    assert reached == {}, (
+        "these candidates now carry all three vendor classes on every part of every fixture in the "
+        "shipped table, so the condition that held them here is met: promote them into "
+        "public_reference_lanes() (and drop any matching SAVED_MODEL_INFERENCE_OWED debt that the "
+        "same column discharged):\n  "
+        + "\n  ".join(f"{lane}: {', '.join(classes)}" for lane, classes in sorted(reached.items())))
+
 
 def test_saved_model_inference_owed_names_real_lanes_and_remaining_debt():
     """Recording support and remaining vendor qualification are distinct.
@@ -674,6 +715,36 @@ def _reference_classes(table, lane):
                 continue
             classes.update(entry.get("cols", {}))
     return classes
+
+
+def _classes_on_every_part(table, lane):
+    """The device classes that carry EVERY real part of EVERY fixture the
+    shipped table has for `lane`, which is the strong form of the same
+    question `_reference_classes` asks loosely.
+
+    The union is the right reading for "has anything ever reproduced this
+    lane at all", which is what the `one column` hold means. It is the WRONG
+    reading for promotion: a lane can read three classes in the union while a
+    single vendor carries `base` alone and the other eight fixtures rest on
+    one column each, and promoting on that would claim a cross-vendor
+    agreement over cells that never had one. Measured 2026-09-19, the
+    difference is real and not hypothetical -- `gbdt-query-rmse`,
+    `gmm-sample` and `gmm-random-init-sample` each carry apple in the union
+    and lack it on 24, 15 and 15 of their parts respectively.
+
+    Returns the empty set for a lane the table has no real part for, so a
+    lane with no cells can never satisfy a caller asking for three classes.
+    """
+    per_part = []
+    for key, cell in table["cells"].items():
+        if key.partition("/")[0] != lane:
+            continue
+        for entry in cell.values():
+            ref = entry.get("ref")
+            if ref is None or str(ref).startswith("n/a") or entry.get("conflict"):
+                continue
+            per_part.append(set(entry.get("cols", {})))
+    return set.intersection(*per_part) if per_part else set()
 
 
 def _lane_revisions():
