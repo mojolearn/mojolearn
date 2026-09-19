@@ -411,8 +411,12 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     only the CTR arm moves a CTR table lane without touching every other
     forest prediction, so the gate's sabotage set builds both with their own
     define, and the define must exist in the binding source."""
+    # Two own defines for the tokenizer since lane/laneless-public-classes
+    # (2026-09-19): the encoder arm leaves bpe-trainer where it found it, so
+    # the trainer's own arm is in the set too (GATE_SABOTAGE_OWN_DEFINES).
     assert host_surface.sabotage_build_defines("tokenizer").split() == [
-        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1"]
+        "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1",
+        "-D", "MOJOLEARN_BPE_TRAINER_SABOTAGE=1"]
     assert host_surface.sabotage_build_defines("forest").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1"]
     for name in host_surface.families():
@@ -420,9 +424,11 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
             assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
     sources = {"tokenizer": ["bindings/_mojolearn_tokenizer_host.mojo"],
                "forest": ["core/gbdt_host_ctr.mojo", "bindings/_mojolearn_forest_host.mojo"]}
-    for name, define in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
+    sources["tokenizer"].append("tokenizer/train/bpe_train.mojo")
+    for name, defines in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
         text = "".join(_read(rel) for rel in sources[name])
-        assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
+        for define in defines:
+            assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
     with pytest.raises(KeyError):
         host_surface.sabotage_build_defines("nonesuch")
 

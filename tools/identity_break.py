@@ -1875,6 +1875,146 @@ def _(ml, X, yc, yr, Xh=None):
 # docstrings say the IDENTICAL card is one vendor (transformer) or that
 # broader backward qualification is open (Mamba); measured here on all.
 
+#: THE SHAPES THE `language-model-config` LANE ASKS FOR, none of them the
+#: shipped profile: an ODD length with one block and a small vocabulary, and
+#: a three-block model with n_heads == n_kv (no grouped-query sharing) over a
+#: vocabulary that is not a power of two. Chosen against what the other byte
+#: LM lanes already run -- `byte-lm`, `byte-lm-host-infer` and
+#: `byte-lm-host-train` all run the DEFAULT b2-l32-d32-h4-kv2-ff64-v256 and
+#: `byte-lm-resident` one block at d_model 16 -- so every number the config
+#: derives (the offsets, n_total, n_tensors and the profile's `.v3` suffix)
+#: takes a value no other cell in any record has taken.
+LM_CONFIG_SHAPES = (
+    dict(batch=1, length=5, d_model=16, n_heads=2, n_kv=1, head_dim=8,
+         intermediate=24, n_layers=1, vocab_size=61),
+    dict(batch=3, length=7, d_model=24, n_heads=3, n_kv=3, head_dim=8,
+         intermediate=40, n_layers=3, vocab_size=37),
+)
+
+#: Shapes the config must REFUSE and the words it must refuse them with, one
+#: per clause of `ByteLanguageModelConfig.__post_init__`. Each is the DEFAULT
+#: shape with the named fields replaced, so the only reason any of them is
+#: refused is the clause it names.
+LM_CONFIG_REFUSALS = (
+    (dict(batch=0), "Byte-LM dimensions must be in [1, 2**20]"),
+    (dict(batch=True), "requires integer dimensions"),
+    (dict(length=1.5), "requires integer dimensions"),
+    (dict(length=8193), "L <= 8192"),
+    (dict(d_model=33), "DM = H*HD"),
+    (dict(n_kv=3), "divisible by KV"),
+    (dict(head_dim=9, d_model=36), "even HD"),
+    (dict(length=8192, d_model=64, n_heads=32, n_kv=1, head_dim=2, intermediate=2),
+     "signed 32-bit indexing"),
+)
+
+
+@lane("language-model-config")
+def _(ml, X, yc, yr, Xh=None):
+    """LanguageModelConfig (`python/mojolearn/language_model.py`, the public
+    name of `ByteLanguageModelConfig`), the object that SELECTS a byte LM
+    shape, at two shapes no other lane runs (LM_CONFIG_SHAPES).
+
+    WHY THIS IS A LANE AND NOT ONLY A TEST. The class is a frozen dataclass
+    and its own work is integer bookkeeping, so on its own it would belong in
+    python/mojolearn/tests/. What makes it a cell is that its numbers are the
+    only thing between a caller and the native code: `parameter_shapes` and
+    `offsets` cut one flat float32 vector into the tensors a forward pass
+    reads, `n_total` is the length that vector must have, and `profile` is
+    the string `LanguageModelInference.__init__` holds the compiled binding's
+    own answer to before it will run at all. An off-by-one in any of them is
+    not a Python bug, it is a different model, and on a shape no lane asks
+    for nothing would catch it. Until 2026-09-19 every byte LM cell in every
+    record ran the shipped profile or `byte-lm-resident`'s one block.
+
+    THE PARTS. `profiles` is what the COMPILED side calls each shape, read
+    back through the binding's `byte_lm_config_profile` (the GPU binding
+    computes it natively; on a CPU column `_byte_lm_trainer_host.py` routes
+    it to the host binding's `byte_lm_host_profile`), so the cell records the
+    native name and not Python's. `derived` is the config's own integer
+    table -- the native shape, every offset, n_total, n_tensors and every
+    parameter shape -- which is what a checkpoint reader and a weight packer
+    both index with. `logits`, `loss` and `next` are a real forward at each
+    shape through `LanguageModelInference` on the reference (unthreaded) arm,
+    from `_byte_lm_params` weights at that shape and ids cut from the fixture
+    bytes; they are what moves under a sabotage build. `flags` carries the
+    LM_CONFIG_REFUSALS, the `to_dict` round trip,
+    the shape refusals of `LanguageModelInference`, and the ALIAS itself:
+    `LanguageModelConfig` must BE `ByteLanguageModelConfig` or the public
+    name documents a class that is not the one that runs.
+
+    SABOTAGE, AND WHAT IT CANNOT REACH. -D MOJOLEARN_HOST_SABOTAGE=1 on the
+    byte LM host family (gemm_oracle's descending leaf, the arm the other
+    byte LM host lanes read DIVERGENT under) moves the cell on both
+    fixtures: MEASURED on the M4, one core, --repeats 2, 2026-09-19,
+    `base` edb3d7f33a909fb1 -> 2b0060261bcb25ff and `ties`
+    48d4577b6abf0a41 -> 6dadf23bf0853110, through `logits`
+    (089290b669328bf1 -> 11fedffc40c2d6eb) and `loss` (342dcda55c6727c4 ->
+    0b83c7ae1ebdf243).
+
+    THREE PARTS DO NOT MOVE UNDER IT AND ONE MORE DID NOT. `profiles`,
+    `derived` and `flags` are integers and a string with no float fold
+    anywhere near them, so no build define can reach them; what guards those
+    is the recorded hash itself, which reads DIVERGENT on every column at
+    once if an offset or the profile's spelling changes. `next` did not move
+    either, and that is a measurement and not a design: the arm perturbs the
+    fold ORDER, the resulting logit changes are far below the gap between
+    the top two candidates on these fixtures, and an argmax survives it. It
+    is kept because it is the part a user reads, and because a real defect in
+    the shape arithmetic would move it; it is not evidence of anything on its
+    own."""
+    B = ml._backend.binding("_mojolearn_byte_lm", "identical")
+    profiles, derived, logits, losses, nexts, flags = [], [], [], [], [], []
+    for kw in LM_CONFIG_SHAPES:
+        cfg = ml.LanguageModelConfig(**kw)
+        profiles.append(str(B.byte_lm_config_profile(list(cfg.native_shape))))
+        derived.extend(cfg.native_shape)
+        derived.extend(cfg.offsets)
+        derived.extend((cfg.n_total, cfg.n_tensors, len(cfg.parameter_names)))
+        for shp in cfg.parameter_shapes:
+            derived.extend((len(shp),) + tuple(shp))
+        _, flat = _byte_lm_params(cfg)
+        m = ml.LanguageModelInference(flat, shape=cfg, threaded=False)
+        ids = _ids(X, cfg.batch, cfg.length + 1, vocab=cfg.vocab_size)
+        logits.append(np.asarray(m.logits(ids[:, :-1])).reshape(-1))
+        losses.append(np.uint32(m.loss_bits(ids)))
+        nexts.append(np.asarray(m.next_bytes(ids[:, :-1])).reshape(-1))
+        # The constructor refuses unless the compiled profile IS the config's,
+        # so reaching here is itself the agreement; the flags record it as a
+        # number because a raise would read REFUSED and not DIVERGENT.
+        flags.extend((m.profile == cfg.profile, str(m.shape.profile) == profiles[-1],
+                      ml.LanguageModelConfig(**cfg.to_dict()) == cfg,
+                      len(flat) == cfg.n_total, cfg.offsets[-1] == cfg.n_total,
+                      len(cfg.parameter_shapes) == cfg.n_tensors))
+    for kw, needle in LM_CONFIG_REFUSALS:
+        flags.append(_refused(lambda kw=kw: ml.LanguageModelConfig(**kw), needle))
+    default = ml.LanguageModelConfig()
+    flags.extend((
+        # THE ALIAS. `language_model.py` spells it
+        # `LanguageModelConfig = ByteLanguageModelConfig`; if that ever
+        # became a subclass or a wrapper, every checkpoint written under the
+        # public name would carry a different class and nothing else here
+        # would notice. python/mojolearn/tests/test_public_aliases.py holds
+        # the same identity at import time, and the private helpers
+        # `require_shape` and `state_shape` are held there too: they are not
+        # on the public surface, so they are a test and not a cell.
+        ml.LanguageModelConfig is ml.ByteLanguageModelConfig,
+        default.profile == str(B.byte_lm_config_profile(list(default.native_shape))),
+        _refused(lambda: ml.LanguageModelInference(np.zeros(3, dtype=np.float32),
+                                                   shape=ml.LanguageModelConfig(**LM_CONFIG_SHAPES[0])),
+                 "parameters must be float32"),
+        _refused(lambda: ml.LanguageModelInference(np.zeros(8, dtype=np.float32),
+                                                   shape=default.native_shape),
+                 "shape must be a ByteLanguageModelConfig"),
+    ))
+    cfg0 = ml.LanguageModelConfig(**LM_CONFIG_SHAPES[0])
+    return _fit(dict(profiles=_h(np.frombuffer("|".join(profiles).encode("ascii"), dtype=np.uint8)),
+                     derived=_h(np.asarray(derived, dtype=np.int64)),
+                     logits=_h(*logits), loss=_h(np.asarray(losses, dtype=np.uint32)),
+                     next=_h(*nexts), flags=_h(np.asarray(flags, dtype=np.int64))),
+                ml.LanguageModelInference(_byte_lm_params(cfg0)[1], shape=cfg0, threaded=False),
+                lambda e: (np.asarray(e.logits(_ids(Xh, cfg0.batch, cfg0.length, vocab=cfg0.vocab_size))),))
+
+
 @lane("mamba1")
 def _(ml, X, yc, yr, Xh=None):
     dm, di, r = 32, 64, 2
@@ -5405,6 +5545,157 @@ def _(ml, X, yc, yr, Xh=None):
     _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
     _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
     return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: _pq(e, Xh[:64], "kneighbors"))
+
+
+# ---------------------------------------------------------------- lanes (2026-09-19, lane/laneless-public-classes)
+# THE LAST PUBLIC CLASS WITH NO LANE. A census of `mojolearn.__all__` against
+# this file on 2026-09-19 returned three names it never mentions:
+# `DistributedIVFIndex`, `LanguageModelConfig` and `GPT2Tokenizer`. Two of
+# the three are ALIASES that `tools/verification_matrix.py::package_index`
+# already resolves -- `LanguageModelConfig = ByteLanguageModelConfig` in
+# language_model.py and `GPT2Tokenizer -> BpeTokenizer` in
+# tokenizer.py::_DEPRECATED_ALIASES -- so the lanes of the classes they name
+# are their lanes, and what was missing for them was a check that the ALIAS
+# still resolves and still warns, which is a test and not arithmetic
+# (python/mojolearn/tests/test_public_aliases.py). `DistributedIVFIndex` was
+# the real gap: a class of its own, in `__all__`, with no cell anywhere.
+#
+# ITS CPU ROUTE HAD TO BE BUILT FIRST, and that is the load-bearing part of
+# this lane. The driver's workers call `ivf_flat_partial_search` and
+# `ivf_finalize_distances`, two names the ivf HOST bindings did not register
+# and `_parallel_pool.CPU_OPERATIONS` did not admit, so before this lane the
+# class could not run on a CPU at all and a lane for it would have read
+# REFUSED on every CPU column. `ivf/host/ivf_host.mojo::host_ivf_search`
+# now carries the device search's `partial_storage` arms and both host
+# bindings register both names; see those files for what each arm is.
+
+def _refused(call, needle):
+    """1 when `call()` raises with `needle` in the message, 0 when it raises
+    something else, 0 when it does not raise. A REFUSAL HASHED AS A NUMBER,
+    never asserted: a lane that raises reads REFUSED, and a REFUSED cell and a
+    passing cell are the same thing in a column total (the `tokenizer` lane's
+    `roundtrip` part, 2026-09-15). Recorded this way a lifted refusal reads
+    DIVERGENT against the reference, which is a catch."""
+    try:
+        call()
+    except Exception as exc:
+        return 1 if needle in str(exc) else 0
+    return 0
+
+
+def _dist_search(cls, index, queries, devices):
+    """One `DistributedIVFIndex` search over `index`, the pool opened and
+    closed around it (the `_pq` helper's shape). Returns the distances, the
+    global ids and the merged per-query candidate counts."""
+    with cls.from_index(index, devices=devices) as shards:
+        d, i = shards.search(queries)
+        return d, i, np.asarray(shards.n_candidates_).copy()
+
+
+@lane("par-ivf")
+def _(ml, X, yc, yr, Xh=None):
+    """DistributedIVFIndex (python/mojolearn/parallel_ivf.py): a BUILT
+    IVF-Flat index partitioned into disjoint stored shards with the coarse
+    quantizer REPLICATED, searched shard by shard and merged back to global
+    row ids. The `ivf` lane's index exactly (16 lists, 4 probes, k=8, 4096
+    rows, random_state 3) and its 64 queries, so a reader can hold this
+    lane's cells against that one.
+
+    WHAT THE CELL SAYS. The driver's whole contract is equality to the plain
+    search, so the squared-metric arm is held to `IVFIndex.search` BYTE FOR
+    BYTE and the train cell reads REFUSED naming the pair if it is not: the
+    local-id maps, the per-shard candidate counts and the global merge by
+    `(distance, original id)` either reproduce the one-index answer or they
+    do not. `cand` is the merged candidate total per query, which is what
+    says the shards were probed at all rather than a k-sized answer arriving
+    from one of them.
+
+    THE EUCLIDEAN ARM IS A FLAG, NOT A RAISE, and the reason is measured.
+    Under `metric='euclidean'` the shards return SQUARED distances and the
+    root is taken once, afterwards, by `ivf_finalize_distances` on the
+    merged row -- that seam is the one thing the squared arm cannot reach.
+    Its agreement with the plain search is hashed as a flag rather than
+    asserted because the sabotage build's value flip is applied BEFORE that
+    root on this route and AFTER it on the plain one, so a raise would make
+    the sabotaged cell read REFUSED, which the owed check
+    (tools/cpu_identity_gate_check.py owed) does not count as a catch -- the
+    `tokenizer` lane's `roundtrip` part carries the same reasoning. MEASURED
+    on the M4, one core, --repeats 2, base fixture, 2026-09-19: clean
+    `root_dist` cdbf46f042cf7c81 and `flags` b1e0e3b7b8fee07b against
+    6381524ce593f295 and 9ce81bd2eece53a4 under the
+    -D MOJOLEARN_HOST_SABOTAGE=1 ivf binding, so the arm moves TWICE over --
+    the distances and the flag that says they still agree.
+
+    WHAT THE SABOTAGE DOES NOT MOVE, said rather than left to be assumed.
+    The same pair leaves `idx`, `cand`, `root_idx` (on `base`) and
+    `thin_idx` where it found them, because that build's value arm steps a
+    float32 mantissa by ONE UNIT and is therefore monotone on the positive
+    distances, so nothing is reordered; on the `ties` fixture, where
+    distances collide, `root_idx` does move (433afb8e970006c6 ->
+    d85c1e527d64badd). Every distance part moves on both fixtures, and so
+    does the cell (base 82ac27da71d34ea9 -> 1a0e8a596286d0c3, infer
+    fd6eed35b1338d17 -> c70054c87bc14b51).
+
+    THE DEVICE AXIS IS `_par_devices()`, as every par-* lane's is, and at one
+    device the partition is ONE shard: the merge still runs, the id map is
+    still applied and the equality above still fires, but no shard can be
+    short of candidates. The arms that only a multi-shard column reaches --
+    `min(k, n_cand)` selection and the all-zero padding of a shard that owns
+    NO candidate for a query -- are what the `thin_*` parts are for: 128
+    rows over 16 lists probed twice, k=6, so a shard holds few candidates or
+    none. At MOJOLEARN_PAR_DEVICES=0,1,2,3,4,5,6,7 on the M4, 54 of 64 shard
+    answers were short and 42 were EMPTY, and the merged answer was still
+    byte-equal to the plain search (2026-09-19,
+    lane/laneless-public-classes). Those three parts read the same at one
+    shard and at eight, as every part here does; that equality, cell for
+    cell across shard counts, is the driver's claim and the reason this lane
+    is worth running on a column with no device at all.
+
+    THE REFUSALS ARE PART OF THE CLASS. `from_index` is the only door (the
+    constructor refuses by name), it refuses an index that is not ours and
+    one that was never fitted, a closed index refuses to search, and a query
+    of the wrong width refuses. None of them is arithmetic and none moves
+    under a sabotage build; they are in `flags` because a driver that stops
+    refusing has changed its contract and nothing else here would see it."""
+    from mojolearn.parallel_ivf import DistributedIVFIndex
+    dev = _par_devices()
+    kw = dict(n_lists=16, n_probes=4, n_neighbors=8, random_state=3)
+    q = np.ascontiguousarray(X[4096:4160])
+    m = ml.IVFIndex(**kw).fit(X[:4096])
+    d0, i0 = m.search(q)
+    with DistributedIVFIndex.from_index(m, devices=dev) as shards:
+        d, i = shards.search(q)
+        cand = np.asarray(shards.n_candidates_).copy()
+        closed = shards
+    _same_bytes("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0)
+    _same_bytes("DistributedIVFIndex ids", i, "plain IVFIndex ids", i0)
+    e = ml.IVFIndex(metric="euclidean", **kw).fit(X[:4096])
+    ed0, ei0 = e.search(q)
+    with DistributedIVFIndex.from_index(e, devices=dev) as rooted:
+        ed, ei = rooted.search(q)
+    # THE SHORT-FILL ARM (see the docstring): 128 rows over 16 lists probed
+    # twice, so a shard of this index owns few candidates or none for a
+    # query. Its answer does not depend on the shard count, so the cell is
+    # the same at one device and at eight; what changes is which arms of
+    # `host_ivf_search` the column walks through to produce it.
+    thin = ml.IVFIndex(n_lists=16, n_probes=2, n_neighbors=6, random_state=5).fit(X[:128])
+    tq = np.ascontiguousarray(X[4096:4104])
+    td0, ti0 = thin.search(tq)
+    td, ti, tcand = _dist_search(DistributedIVFIndex, thin, tq, dev)
+    _same_bytes("DistributedIVFIndex short-fill distances", td, "plain IVFIndex distances", td0)
+    _same_bytes("DistributedIVFIndex short-fill ids", ti, "plain IVFIndex ids", ti0)
+    flags = np.asarray([
+        np.asarray(ed).tobytes() == np.asarray(ed0).tobytes(),
+        np.asarray(ei).tobytes() == np.asarray(ei0).tobytes(),
+        _refused(lambda: DistributedIVFIndex(), "from_index"),
+        _refused(lambda: DistributedIVFIndex.from_index(ml.IVFIndex(**kw), devices=dev), "fit or load"),
+        _refused(lambda: DistributedIVFIndex.from_index(m.list_data_, devices=dev), "mojolearn.IVFIndex"),
+        _refused(lambda: closed.search(q), "is closed"),
+        _refused(lambda: _dist_search(DistributedIVFIndex, m, np.ascontiguousarray(q[:, :2]), dev), "query features"),
+    ], dtype=np.int64)
+    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(cand), root_dist=_h(ed), root_idx=_h(ei),
+                     thin_dist=_h(td), thin_idx=_h(ti), thin_cand=_h(tcand), flags=_h(flags)),
+                m, lambda est: _dist_search(DistributedIVFIndex, est, np.ascontiguousarray(Xh[:64]), _par_devices()))
 
 
 def _neural_inference(ml, lane_name, est):

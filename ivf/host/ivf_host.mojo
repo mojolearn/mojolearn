@@ -305,10 +305,24 @@ def host_ivf_search(
     n_queries: Int,
     k: Int,
     n_probes: Int,
+    partial_storage: Bool = False,
 ) raises -> IvfHostResult:
     """`ivf_flat_search_host` on the host (module docstring), over a built
     index: from the build, or from arrays `ivf_validate_index_arrays` has
-    admitted."""
+    admitted.
+
+    `partial_storage` restates the device search's three partial-storage
+    arms (`ivf_flat_search.mojo:577,600,640`) for one SHARD of a disjoint
+    index whose coarse centres are replicated (`DistributedIVFIndex`,
+    python/mojolearn/parallel_ivf.py): a shard may own FEWER than `k`
+    candidates for a query, so the short-fill refusal is lifted, only
+    `min(k, n_cand)` slots are selected and the remaining slots are padded
+    with zeros the driver must ignore (`n_candidates` is what says how many
+    are real), and the Euclidean root is NOT taken, because the global order
+    is fixed on the squared keys across shards and the root is applied once,
+    afterwards, by `ivf_finalize_distances`. Every other statement, in
+    particular the coarse probe selection over the REPLICATED centres, is
+    the plain search's."""
     var n_lists = index.n_lists
     var dim = index.dim
     var n_rows = index.n_rows
@@ -362,7 +376,7 @@ def host_ivf_search(
         var chunks = calc_chunk_indices(list_sizes, this_probe, n_probes)
         var n_cand = n_samples_from_chunks(chunks, n_probes)
         cand_counts.append(Int32(n_cand))
-        if n_cand < k:
+        if n_cand < k and not partial_storage:
             raise Error(
                 "ivf_flat search: query "
                 + String(q)
@@ -376,6 +390,16 @@ def host_ivf_search(
                 " (ivf_common.cuh:106-108) is not implemented. Raise n_probes,"
                 " or lower k, or rebuild with fewer lists."
             )
+        # Partial storage keeps the global coarse probes but may own no
+        # candidates at all. Padding has no numerical meaning; `n_candidates`
+        # gives min(k, count) valid slots and the driver ignores the rest
+        # (`ivf_flat_search.mojo:598-606`).
+        var selected = min(k, n_cand)
+        if selected == 0:
+            for _pad in range(k):
+                out_dist.append(Float32(0))
+                out_idx.append(UInt32(0))
+            continue
         var slots = merge_probed_lists(probe_layout, this_probe, n_probes)
         var cand_vec = gather_candidate_vectors(probe_layout, slots)
         var cand_orig = gather_candidate_indices(probe_layout, slots)
@@ -383,21 +407,24 @@ def host_ivf_search(
         var row = List[Float32](capacity=n_cand)
         for c in range(n_cand):
             row.append(host_pinned_distance(queries, q, cand_vec, c, dim, q_norm[q], cand_norm[c], IVF_HOST_SABOTAGE))
-        var sel_pos = host_select_top_k(row, n_cand, k)
-        var sel_dist = List[Float32](capacity=k)
-        for i in range(k):
+        var sel_pos = host_select_top_k(row, n_cand, selected)
+        var sel_dist = List[Float32](capacity=selected)
+        for i in range(selected):
             sel_dist.append(row[Int(sel_pos[i])])
-        var sel_orig = postprocess_neighbors(sel_pos, cand_orig, k)
-        host_sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, k)
-        if not dist_is_identity:
+        var sel_orig = postprocess_neighbors(sel_pos, cand_orig, selected)
+        host_sort_slots_by_distance_then_index(sel_dist, sel_orig, 0, selected)
+        if not dist_is_identity and not partial_storage:
             postprocess_distances(sel_dist, metric)
-        for i in range(k):
+        for i in range(selected):
             comptime if IVF_HOST_SABOTAGE:
                 # THE VALUE ARM (THE NEGATIVE CONTROL above), after the root.
                 out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
             else:
                 out_dist.append(sel_dist[i])
             out_idx.append(sel_orig[i])
+        for _pad in range(selected, k):
+            out_dist.append(Float32(0))
+            out_idx.append(UInt32(0))
     return IvfHostResult(out_dist^, out_idx^, cand_counts^)
 
 

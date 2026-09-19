@@ -24,7 +24,12 @@ from std.python.bindings import PythonModuleBuilder
 from bindings.hostptr import copy_f32, f32_ptr, i32_ptr, read_f32
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from bindings.ivf_host_search import ivf_flat_extend_binding, ivf_flat_search_binding
+from bindings.ivf_host_search import (
+    ivf_finalize_distances_binding,
+    ivf_flat_extend_binding,
+    ivf_flat_partial_search_binding,
+    ivf_flat_search_binding,
+)
 from bindings.ivf_index_arrays import ivf_build_extents, ivf_write_index_arrays
 from ivf.host.ivf_host import IVF_HOST_SABOTAGE, host_ivf_build, host_ivf_build_and_search
 
@@ -154,6 +159,8 @@ def PyInit__mojolearn_ivf_host() abi("C") -> PythonObject:
         m.def_function[ivf_flat_build_binding]("ivf_flat_build")
         m.def_function[ivf_flat_search_binding]("ivf_flat_search")
         m.def_function[ivf_flat_extend_binding]("ivf_flat_extend")
+        m.def_function[ivf_flat_partial_search_binding]("ivf_flat_partial_search")
+        m.def_function[ivf_finalize_distances_binding]("ivf_finalize_distances")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_ivf_host: ", e))

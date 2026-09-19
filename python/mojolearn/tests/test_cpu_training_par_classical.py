@@ -95,6 +95,20 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "if operation in ('samba_gradient', 'samba_update'):" in worker
     assert "gradients = ordered_sum_gradients(args)" in worker
     wanted.update(("mlp_gradient", "samba_gradient"))
+    # DistributedIVFIndex's disjoint shards (lane/laneless-public-classes,
+    # 2026-09-19). `from_index` builds ONE non-cooperative pool and sends an
+    # `ivf_store` per shard; `search` and the Euclidean root then go through
+    # that SAME pool, so their sends sit in a different function from the
+    # construction and are checked by name here, as par-mlp's are above. The
+    # merge itself is the driver's own Python, in shard order, like the
+    # gradient fold.
+    ivf = _read("python/mojolearn/parallel_ivf.py")
+    assert "pool = DevicePool(devices)" in ivf and "cooperative=True" not in ivf
+    assert "requests.append(('ivf_store', shard, ()))" in ivf
+    assert "self._pool.map([('ivf_search_stored', None, (q,)) for _ in self.devices])" in ivf
+    assert "self._pool.map([('ivf_finalize', result, (self.metric_code_,))])" in ivf
+    assert "candidates.sort()" in ivf and "mapping[local]" in ivf
+    wanted.update(("ivf_store", "ivf_search_stored", "ivf_finalize"))
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
     assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
     cooperative = set()

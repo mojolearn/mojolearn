@@ -47,10 +47,24 @@ from concurrent.futures import ThreadPoolExecutor
 #: worker receives identical fitted weights/offsets and uses the kernel_methods
 #: host transform; ordered assembly in transform_rbf_sampler is unchanged.
 #: This is a logical-shard CPU route, not physical multi-GPU qualification.
+#:
+#: lane/laneless-public-classes (2026-09-19) adds the disjoint IVF shards.
+#: `parallel_ivf.DistributedIVFIndex` cuts a BUILT index's stored rows into
+#: contiguous row ranges in Python, maps each range's original ids to local
+#: ids, sends one `ivf_store` per shard and one `ivf_search_stored` per
+#: query batch, and merges the shard candidates back to global ids in
+#: Python by `(distance, original id)`. `ivf_finalize` is the Euclidean root
+#: the shards withheld, taken once on the merged row. Every one of those
+#: four steps is the driver's own Python, and the shard's search is the ivf
+#: family's host binding under its `ivf_flat_partial_search` name, so the
+#: CPU column runs the partition and the merge the GPU column runs. It is
+#: NOT a device claim: at one device the partition is one shard, which is
+#: what `_par_devices`'s docstring says of every `par-*` lane.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
     'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
+    'ivf_store', 'ivf_search_stored', 'ivf_finalize',
 ))
 
 #: The cooperative operations the CPU route admits, and only from a

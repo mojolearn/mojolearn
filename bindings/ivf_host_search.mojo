@@ -12,11 +12,19 @@ only `_mojolearn_*_host.mojo`. The contract is
 `bindings/ivf_index_arrays.mojo`'s; the arithmetic is
 `ivf/host/ivf_host.mojo::host_ivf_search`. Since stage 2 of the same lane
 both also register `ivf_flat_extend` from here (`host_ivf_extend`).
+
+Since lane/laneless-public-classes (2026-09-19) both also register
+`ivf_flat_partial_search` and `ivf_finalize_distances`, the GPU binding's
+two remaining search names (`bindings/_mojolearn_ivf.mojo:275,280`). They
+are what `python/mojolearn/parallel_ivf.py::DistributedIVFIndex` calls in
+its workers, so with them the driver's Python partition, its local-id maps
+and its global merge run on a CPU-only install exactly as they run on a
+GPU, and the `par-ivf` lane of tools/identity_break.py has a CPU route.
 """
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
-from bindings.hostptr import read_f32
+from bindings.hostptr import f32_ptr, read_f32
 from bindings.ivf_index_arrays import (
     ivf_extend_count,
     ivf_read_index_arrays,
@@ -25,14 +33,20 @@ from bindings.ivf_index_arrays import (
     ivf_write_search_result,
 )
 from ivf.host.ivf_host import IvfHostIndex, host_ivf_extend, host_ivf_search
+from ivf.impl.neighbors.ivf_common import postprocess_distances
 
 
-def ivf_flat_search_binding(
-    addrs: PythonObject, params: PythonObject
+def _ivf_host_search_arrays(
+    addrs: PythonObject, params: PythonObject, partial_storage: Bool
 ) raises -> PythonObject:
     """`ivf_flat::search` over a built index, restated on the host. Returns
-    0. See `bindings/ivf_index_arrays.mojo` for the lists."""
-    var arrays = ivf_read_index_arrays(addrs, params, String("ivf_flat_search"))
+    0. See `bindings/ivf_index_arrays.mojo` for the lists. `partial_storage`
+    is the disjoint-shard arm `host_ivf_search`'s docstring describes; the
+    GPU binding routes its two names through the same one statement
+    (`bindings/_mojolearn_ivf.mojo::_ivf_search_arrays`)."""
+    var arrays = ivf_read_index_arrays(
+        addrs, params, String("ivf_flat_search"), partial_storage=partial_storage
+    )
     var ext = ivf_search_extents(params)
     var m = ext[0]
     var k = ext[1]
@@ -47,11 +61,45 @@ def ivf_flat_search_binding(
     var idx = List[UInt32]()
     var cand = List[Int32]()
     with GILReleased(Python()):
-        var r = host_ivf_search(index, queries, m, k, n_probes)
+        var r = host_ivf_search(index, queries, m, k, n_probes, partial_storage)
         dist = r.distances.copy()
         idx = r.indices.copy()
         cand = r.n_candidates.copy()
     ivf_write_search_result(addrs, dist, idx, cand, m, k)
+    return PythonObject(0)
+
+
+def ivf_flat_search_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """`ivf_flat::search` over a whole built index."""
+    return _ivf_host_search_arrays(addrs, params, False)
+
+
+def ivf_flat_partial_search_binding(
+    addrs: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Disjoint storage with global centers/probes; squared output, valid
+    count=min(k,candidates). The GPU binding's docstring, same contract."""
+    return _ivf_host_search_arrays(addrs, params, True)
+
+
+def ivf_finalize_distances_binding(
+    address: PythonObject, count: PythonObject, metric: PythonObject
+) raises -> PythonObject:
+    """`postprocess_distances` applied in place to `count` float32 at
+    `address`: the Euclidean root the partial search withheld, taken ONCE
+    by the driver after the global order is fixed on the squared keys.
+    `bindings/_mojolearn_ivf.mojo:280` is the original, statement for
+    statement."""
+    var n = Int(py=count)
+    if n < 0:
+        raise Error("distance count must be nonnegative")
+    var distances = read_f32(Int(py=address), n)
+    postprocess_distances(distances, Int(py=metric))
+    var dst = f32_ptr(Int(py=address))
+    for i in range(n):
+        dst.unsafe_store(i, distances[i])
     return PythonObject(0)
 
 

@@ -470,8 +470,16 @@ class SabotageDefinesTests(unittest.TestCase):
             self.assertEqual(defines[:2], ['-D', 'MOJOLEARN_HOST_SABOTAGE=1'], family)
             if len(defines) > 2:
                 own[family] = defines[2:]
+        # The tokenizer carries TWO since lane/laneless-public-classes
+        # (2026-09-19): `bpe-trainer` became a covered lane and it never
+        # encodes, so the encoder arm left its cell byte-identical
+        # (6ed8b49585df3d85 clean and sabotaged, M4, base, --repeats 2). The
+        # trainer's own arm moves it (-> f5172d25e6499662), so the gate's set
+        # builds with both. A negative control that leaves a covered lane
+        # where it found it is not a negative control for that lane.
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
-                               'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1']})
+                               'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
+                                             '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})
 
     def test_lanes_resting_on_their_own_define_are_covered(self):
         covered = self.manifest['covered_lanes']()

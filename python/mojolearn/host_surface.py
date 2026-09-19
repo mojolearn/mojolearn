@@ -777,6 +777,17 @@ TRAINING_LANE_NAMES = {
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
+    # lane/laneless-public-classes (2026-09-19): LanguageModelConfig, the
+    # public name of ByteLanguageModelConfig, at two shapes no other lane
+    # runs. The forward is LanguageModelInference's, this family's host
+    # binding, so the family's route is the lane's route; the profile string
+    # it hashes comes back from the same binding through
+    # _byte_lm_trainer_host.py's byte_lm_config_profile. Host-only, exactly
+    # as byte-lm-host-infer is: tools/lane_applicability.py calls it
+    # `cpu-host-route-only`, so a GPU column measures that box's CPU and the
+    # DEVICE axis is degenerate there. No record carries it yet, and it is
+    # held out of public_reference_lanes() until one does.
+    "language-model-config": "the byte LM shape object at two non-default shapes",
     # CPU training for the par-* lanes whose driver shards in Python
     # (lane/cpu-training-par-classical, 2026-09-15). fit_scaler and
     # transform_scaler (four column shards), fit_arima and
@@ -843,6 +854,20 @@ TRAINING_LANE_NAMES = {
     # own host binding, under both L2 metrics.
     "ivf": "the IVF-Flat index",
     "ivf-euclidean": "the IVF-Flat index under euclidean distance",
+    # lane/laneless-public-classes (2026-09-19): DistributedIVFIndex, the
+    # disjoint-shard driver over a built index. Its workers call the ivf
+    # binding's `ivf_flat_partial_search` and `ivf_finalize_distances`,
+    # which the host bindings now register from bindings/ivf_host_search.mojo
+    # over `host_ivf_search`'s partial_storage arms, and which
+    # `_parallel_pool.CPU_OPERATIONS` admits, so the driver's Python
+    # partition, its local-id maps and its global merge run unchanged on a
+    # CPU. Being covered means it HAS a CPU route, not that a CPU column
+    # runs it: it is a multi-device driver, so tools/lane_applicability.py
+    # refuses it on a zero-device column and identity_break's
+    # RECORD_EXCLUDED_PREFIXES keeps every par-* lane out of a release
+    # record. Its cells come from the CPU identity gate and from the
+    # two-device par legs, as the other par-* lanes' do.
+    "par-ivf": "the shard-distributed IVF-Flat index",
     # lane/inference-embedding-ivf-cholesky stage 2 (2026-09-15): the rows
     # added to a built index by IVFIndex.extend. No GPU record carries the
     # lane yet, so every cell is OWED against the record.
@@ -871,6 +896,25 @@ TRAINING_LANE_NAMES = {
     # absent and every part is OWED. The gate's sabotage set builds this
     # binding with its own define (GATE_SABOTAGE_OWN_DEFINES).
     "tokenizer": "the byte-level BPE tokenizer (inference, host integers)",
+    # THE THREE THE TOKENIZER FAMILY ALREADY SERVED AND NEVER DECLARED
+    # (2026-09-19, lane/laneless-public-classes). lane/bpe-builder-native
+    # (2026-09-18) put `bpe_train`, `bpe_trained_sizes` and
+    # `bpe_trained_copy` in the tokenizer binding and named them in this
+    # family's `exports` and `host_modules`, and lane/tokenized-corpus added
+    # the three lanes that reach them, but the hand-written `training_lanes`
+    # tuple stayed at `("tokenizer",)`. Because tools/lane_applicability.py
+    # derives `has_cpu_route` from `covered_lanes()`, all three read
+    # DEGENERATE and tools/verify_lanes.py REFUSED them on the CPU column
+    # while the binding was built, loaded and producing hashes: a lane that
+    # cannot be run is indistinguishable in a total from one that passes.
+    # Measured on the M4 against the prebuilt host set at the fix:
+    # bpe-trainer, bpe-vocabulary and tokenized-corpus each STABLE.
+    # No GPU column can carry them -- vocabulary training has no GPU path in
+    # any library -- which is why they are also PUBLIC_HOST_ONLY_LANES; being
+    # covered is about having a CPU route, not about owing a GPU one.
+    "bpe-trainer": "byte-level BPE vocabulary training",
+    "bpe-vocabulary": "a trained BPE vocabulary written, loaded back and used",
+    "tokenized-corpus": "a corpus tokenized once, cached and read back as batches",
     # The CTR table lanes: CPU TRAINING of CTR tables refuses by name
     # (NO_CPU_PATH), so the CPU column LOADS the Metal-saved model of each
     # fixture from GBDT_CTR_MODELS_DIR and predicts through the forest host
@@ -906,7 +950,7 @@ TRAINING_LANE_NAMES = {
 GBDT_CTR_MODELS_DIR = "bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models"
 GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 
-#: Families the CPU identity gate's sabotage host set builds with a define of
+#: Families the CPU identity gate's sabotage host set builds with defines of
 #: their own BESIDE -D MOJOLEARN_HOST_SABOTAGE=1 (lane/cpu-verifier-gaps-7,
 #: 2026-09-15), because MOJOLEARN_HOST_SABOTAGE reaches nothing in them and a
 #: covered lane rests on them. The tokenizer's reverses every encoded
@@ -914,9 +958,21 @@ GBDT_CTR_MODEL_LANES = ("gbdt-categorical-ctr-tables", "gbdt-tensor-ctr-tables")
 #: forest's CTR arm rotates every CTR table's counts by one category (the CTR
 #: table lanes' train, infer and batch parts), which leaves every other
 #: forest and GBDT prediction alone. byte_lm keeps building clean here.
+#:
+#: A FAMILY MAY NEED MORE THAN ONE, and the tokenizer does since
+#: lane/laneless-public-classes (2026-09-19) made `bpe-trainer` a covered
+#: lane. That lane trains a vocabulary and hashes the two files it renders;
+#: it never encodes, so the ENCODER arm above cannot reach it and under
+#: -D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1 alone its cell read
+#: 6ed8b49585df3d85 -- the clean value, every part unmoved (measured on the
+#: M4, base fixture, --repeats 2). The trainer's own arm,
+#: MOJOLEARN_BPE_TRAINER_SABOTAGE, reverses the merge tie-break and is what
+#: moves it, so it is listed here too and the gate's set now carries both.
+#: A negative control that leaves a covered lane where it found it is not a
+#: negative control for that lane.
 GATE_SABOTAGE_OWN_DEFINES = {
-    "forest": "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",
-    "tokenizer": "MOJOLEARN_TOKENIZER_HOST_SABOTAGE",
+    "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
+    "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE", "MOJOLEARN_BPE_TRAINER_SABOTAGE"),
 }
 
 
@@ -925,8 +981,7 @@ def sabotage_build_defines(name):
     gate's sabotage host set."""
     family(name)
     defines = ["-D MOJOLEARN_HOST_SABOTAGE=1"]
-    own = GATE_SABOTAGE_OWN_DEFINES.get(name)
-    if own:
+    for own in GATE_SABOTAGE_OWN_DEFINES.get(name, ()):
         defines.append(f"-D {own}=1")
     return " ".join(defines)
 
@@ -981,7 +1036,7 @@ FAMILIES = (
         # MOJOLEARN_HOST_SABOTAGE, gemm_oracle's descending leaf) reaches
         # them, and byte_lm_host_sabotage reports that arm too.
         training_lanes=("byte-lm-host-infer", "byte-lm-host-infer-threaded", "byte-lm-host-train",
-                        "byte-lm", "byte-lm-resident"),
+                        "byte-lm", "byte-lm-resident", "language-model-config"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LanguageModelInference", "LanguageModelHostTrainer", "SmallByteLanguageModelTrainer"),
@@ -1095,7 +1150,15 @@ FAMILIES = (
         # bpe_encode_batch (lane/inference-tokenizer-neural, 2026-09-15)
         # has its own negative control, -D MOJOLEARN_TOKENIZER_BATCH_SABOTAGE=1,
         # which the lane's batch part reads BATCH_MOVED.
-        training_lanes=("tokenizer",),
+        # bpe-trainer, bpe-vocabulary and tokenized-corpus joined on
+        # 2026-09-19 (lane/laneless-public-classes); TRAINING_LANE_NAMES
+        # carries why they were missing. It takes BOTH of this family's own
+        # defines to move all four: MOJOLEARN_TOKENIZER_HOST_SABOTAGE is the
+        # ENCODER's arm and bpe-trainer never encodes, so under it alone that
+        # lane read 6ed8b49585df3d85, every part unmoved, on the M4 at the
+        # fix. MOJOLEARN_BPE_TRAINER_SABOTAGE is the trainer's, which is why
+        # GATE_SABOTAGE_OWN_DEFINES now names both for this family.
+        training_lanes=("tokenizer", "bpe-trainer", "bpe-vocabulary", "tokenized-corpus"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("BpeTokenizer",),
@@ -2283,7 +2346,7 @@ FAMILIES = (
         routes="_mojolearn_ivf",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("ivf", "ivf-euclidean", "ivf-extend"),
+        training_lanes=("ivf", "ivf-euclidean", "ivf-extend", "par-ivf"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("IVFIndex",),
@@ -2299,7 +2362,7 @@ FAMILIES = (
             "ivf_host_numeric_mode", "ivf_host_vendor", "ivf_host_column",
             "ivf_host_sabotage", "ivf_vendor", "ivf_numeric_mode",
             "ivf_flat_build_and_search", "ivf_flat_build", "ivf_flat_search",
-            "ivf_flat_extend",
+            "ivf_flat_extend", "ivf_flat_partial_search", "ivf_finalize_distances",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
@@ -2337,6 +2400,7 @@ FAMILIES = (
             "ivf_search_host_numeric_mode", "ivf_search_host_vendor",
             "ivf_search_host_column", "ivf_search_host_sabotage",
             "ivf_vendor", "ivf_numeric_mode", "ivf_flat_search", "ivf_flat_extend",
+            "ivf_flat_partial_search", "ivf_finalize_distances",
         ),
         gate="tools/classical_host_gate.py and tools/identity_break.py",
         wheel_note=(
@@ -2544,6 +2608,15 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    # lane/laneless-public-classes (2026-09-19). The lane is new, so no
+    # committed record and no shipped table cell describes it yet, and a
+    # public lane with no reference makes an installed `verify --all` read
+    # OWED for something it could have been told not to ask. It joins
+    # `public_reference_lanes()` the day a record carries it. The three
+    # `linalg-*` lanes admitted on 2026-09-18 are in the SAME position and
+    # are NOT listed here -- see the report of this lane; leaving them is a
+    # deliberate refusal to paper over another lane's debt, not an oversight.
+    "language-model-config": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

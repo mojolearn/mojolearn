@@ -39,7 +39,24 @@ def test_manifest_declares_the_family():
     # parts all move. It was () when this test was written (2026-09-14), before
     # that gate existed. No INFERENCE lane, because the family has no saved
     # model to predict from.
-    assert f["training_lanes"] == ("tokenizer",) and f["inference_lanes"] == ()
+    #
+    # THREE MORE SINCE lane/laneless-public-classes (2026-09-19), and the
+    # drift they close is worth stating: lane/bpe-builder-native (2026-09-18)
+    # put the vocabulary TRAINER in this binding and in `exports` and
+    # `host_modules`, and lane/tokenized-corpus added the lanes that reach it,
+    # but this hand-written tuple stayed at one name. Because
+    # tools/lane_applicability.py derives `has_cpu_route` from
+    # `covered_lanes()`, all three read DEGENERATE and verify_lanes.py REFUSED
+    # them on the CPU column while the binding was built, loaded and producing
+    # hashes. A lane that cannot be RUN and a lane that PASSES read the same
+    # in a total, which is the defect this tuple now has to keep out.
+    assert f["training_lanes"] == ("tokenizer", "bpe-trainer", "bpe-vocabulary",
+                                   "tokenized-corpus") and f["inference_lanes"] == ()
+    # The trainer's own arm is in the gate's set too: the encoder arm above
+    # cannot reach `bpe-trainer`, which never encodes (measured: that lane's
+    # cell was byte-identical under MOJOLEARN_TOKENIZER_HOST_SABOTAGE alone).
+    assert host_surface.GATE_SABOTAGE_OWN_DEFINES["tokenizer"] == (
+        "MOJOLEARN_TOKENIZER_HOST_SABOTAGE", "MOJOLEARN_BPE_TRAINER_SABOTAGE")
     assert "tokenizer" in host_surface.covered_lanes()
     assert "tokenizer/encoding.mojo" in f["host_modules"]
     assert "_mojolearn_tokenizer_host" not in host_surface.routed_modules().values()
