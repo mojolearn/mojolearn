@@ -1,0 +1,870 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4",
+ "commit": "ef8c2b3117a712ae2d9df2579f77f0c32b3fb14e",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "rf-score-weighted/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d744878e7c0e31ee",
+    "d744878e7c0e31ee"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "344c62eb4cd64fb3",
+     "clf_zeroed": "ec813dada65f3025",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "47f8b7489bc932ae",
+     "reg_zeroed": "fb08a5de7864ad65",
+     "reg_unit": "a0adfc1ac03e495d",
+     "reg_unweighted": "a0adfc1ac03e495d"
+    },
+    {
+     "clf_weighted": "344c62eb4cd64fb3",
+     "clf_zeroed": "ec813dada65f3025",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "47f8b7489bc932ae",
+     "reg_zeroed": "fb08a5de7864ad65",
+     "reg_unit": "a0adfc1ac03e495d",
+     "reg_unweighted": "a0adfc1ac03e495d"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.9083246670052176,
+    "stages": {
+     "repeat=1/train": 0.5866318749904167,
+     "repeat=1/infer-save-reload": 1.8292004824616015e-05,
+     "repeat=1/batch": 9.537501318845898e-05,
+     "repeat=2/train": 0.32118820800678805,
+     "repeat=2/infer-save-reload": 1.5375000657513738e-05,
+     "repeat=2/batch": 5.1915994845330715e-05
+    }
+   }
+  },
+  "rf-score-weighted/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2a6b131a1f7b1ab0",
+    "2a6b131a1f7b1ab0"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "cbc76b59a573869e",
+     "clf_zeroed": "7f518a670ae08aae",
+     "clf_unit": "2775727c8552ae43",
+     "clf_unweighted": "2775727c8552ae43",
+     "reg_weighted": "c34bd00b1d6f90db",
+     "reg_zeroed": "868d29547102c3f7",
+     "reg_unit": "08fc66a8cb94ce2b",
+     "reg_unweighted": "08fc66a8cb94ce2b"
+    },
+    {
+     "clf_weighted": "cbc76b59a573869e",
+     "clf_zeroed": "7f518a670ae08aae",
+     "clf_unit": "2775727c8552ae43",
+     "clf_unweighted": "2775727c8552ae43",
+     "reg_weighted": "c34bd00b1d6f90db",
+     "reg_zeroed": "868d29547102c3f7",
+     "reg_unit": "08fc66a8cb94ce2b",
+     "reg_unweighted": "08fc66a8cb94ce2b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5713985829934245,
+    "stages": {
+     "repeat=1/train": 0.30797624999831896,
+     "repeat=1/infer-save-reload": 1.2707998394034803e-05,
+     "repeat=1/batch": 9.404199954587966e-05,
+     "repeat=2/train": 0.2630409999983385,
+     "repeat=2/infer-save-reload": 1.087499549612403e-05,
+     "repeat=2/batch": 4.225000157020986e-05
+    }
+   }
+  },
+  "rf-score-weighted/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a9b926cc7e2e9c7c",
+    "a9b926cc7e2e9c7c"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "ecc46e242c8dd47d",
+     "clf_zeroed": "af1c01e3a6e5107b",
+     "clf_unit": "40df6fec722707c2",
+     "clf_unweighted": "40df6fec722707c2",
+     "reg_weighted": "71439a66a6402bf5",
+     "reg_zeroed": "b262c444908328ad",
+     "reg_unit": "6aba8f05e35d6c32",
+     "reg_unweighted": "6aba8f05e35d6c32"
+    },
+    {
+     "clf_weighted": "ecc46e242c8dd47d",
+     "clf_zeroed": "af1c01e3a6e5107b",
+     "clf_unit": "40df6fec722707c2",
+     "clf_unweighted": "40df6fec722707c2",
+     "reg_weighted": "71439a66a6402bf5",
+     "reg_zeroed": "b262c444908328ad",
+     "reg_unit": "6aba8f05e35d6c32",
+     "reg_unweighted": "6aba8f05e35d6c32"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5474687079986325,
+    "stages": {
+     "repeat=1/train": 0.24881958299374674,
+     "repeat=1/infer-save-reload": 1.562500256113708e-05,
+     "repeat=1/batch": 0.00010204099817201495,
+     "repeat=2/train": 0.29807916600839235,
+     "repeat=2/infer-save-reload": 1.645900192670524e-05,
+     "repeat=2/batch": 0.00018454100063536316
+    }
+   }
+  },
+  "rf-score-weighted/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "49be8ea935a47640",
+    "49be8ea935a47640"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "2c1b57ec6e068dde",
+     "clf_zeroed": "2c0e863332bdaeb2",
+     "clf_unit": "a00ed31f08d08874",
+     "clf_unweighted": "a00ed31f08d08874",
+     "reg_weighted": "42f06f60804054f9",
+     "reg_zeroed": "0e6a6b8110b78758",
+     "reg_unit": "5950fe9897edc56c",
+     "reg_unweighted": "5950fe9897edc56c"
+    },
+    {
+     "clf_weighted": "2c1b57ec6e068dde",
+     "clf_zeroed": "2c0e863332bdaeb2",
+     "clf_unit": "a00ed31f08d08874",
+     "clf_unweighted": "a00ed31f08d08874",
+     "reg_weighted": "42f06f60804054f9",
+     "reg_zeroed": "0e6a6b8110b78758",
+     "reg_unit": "5950fe9897edc56c",
+     "reg_unweighted": "5950fe9897edc56c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.614915917001781,
+    "stages": {
+     "repeat=1/train": 0.36127712499001063,
+     "repeat=1/infer-save-reload": 1.679199340287596e-05,
+     "repeat=1/batch": 8.354199235327542e-05,
+     "repeat=2/train": 0.25318287500704173,
+     "repeat=2/infer-save-reload": 1.2375006917864084e-05,
+     "repeat=2/batch": 8.945800072979182e-05
+    }
+   }
+  },
+  "rf-score-weighted/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e604694e3d59965",
+    "9e604694e3d59965"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    },
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5891538750001928,
+    "stages": {
+     "repeat=1/train": 0.3029612090031151,
+     "repeat=1/infer-save-reload": 1.491699367761612e-05,
+     "repeat=1/batch": 9.866700565908104e-05,
+     "repeat=2/train": 0.2857348749967059,
+     "repeat=2/infer-save-reload": 1.2625008821487427e-05,
+     "repeat=2/batch": 9.92499990388751e-05
+    }
+   }
+  },
+  "rf-score-weighted/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9e604694e3d59965",
+    "9e604694e3d59965"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    },
+    {
+     "clf_weighted": "c79ce1fbb0838873",
+     "clf_zeroed": "adf62943484e3db6",
+     "clf_unit": "e9d5512bf1f70a1a",
+     "clf_unweighted": "e9d5512bf1f70a1a",
+     "reg_weighted": "444f24a839db8b7b",
+     "reg_zeroed": "906a0a041b9a8477",
+     "reg_unit": "61e68a5cabae4f2e",
+     "reg_unweighted": "61e68a5cabae4f2e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5819883329968434,
+    "stages": {
+     "repeat=1/train": 0.2611386660137214,
+     "repeat=1/infer-save-reload": 9.499999578110874e-06,
+     "repeat=1/batch": 4.120900121051818e-05,
+     "repeat=2/train": 0.32053337500838097,
+     "repeat=2/infer-save-reload": 1.1208991054445505e-05,
+     "repeat=2/batch": 4.395800351630896e-05
+    }
+   }
+  },
+  "rf-score-weighted/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3bfaf189588ac303",
+    "3bfaf189588ac303"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "6c39a52bcfbd6dda",
+     "clf_zeroed": "8e7174300dccd83c",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "01b3db535b6e4ac2",
+     "reg_zeroed": "e23af95953588a38",
+     "reg_unit": "c087808c8beb7b7b",
+     "reg_unweighted": "c087808c8beb7b7b"
+    },
+    {
+     "clf_weighted": "6c39a52bcfbd6dda",
+     "clf_zeroed": "8e7174300dccd83c",
+     "clf_unit": "a465e536edbf5707",
+     "clf_unweighted": "a465e536edbf5707",
+     "reg_weighted": "01b3db535b6e4ac2",
+     "reg_zeroed": "e23af95953588a38",
+     "reg_unit": "c087808c8beb7b7b",
+     "reg_unweighted": "c087808c8beb7b7b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.8453862919996027,
+    "stages": {
+     "repeat=1/train": 0.43461733299773186,
+     "repeat=1/infer-save-reload": 1.637499372009188e-05,
+     "repeat=1/batch": 0.00021495801047421992,
+     "repeat=2/train": 0.41023095800483134,
+     "repeat=2/infer-save-reload": 1.1124997399747372e-05,
+     "repeat=2/batch": 4.33750101365149e-05
+    }
+   }
+  },
+  "rf-score-weighted/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9330f1998e6d104a",
+    "9330f1998e6d104a"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "65473869e8bb01b4",
+     "clf_zeroed": "c74cc8611942e728",
+     "clf_unit": "eaa9275e21353a5c",
+     "clf_unweighted": "eaa9275e21353a5c",
+     "reg_weighted": "241e7de48e689c9e",
+     "reg_zeroed": "9ed6446b711a8c7c",
+     "reg_unit": "b86633a73a482e8c",
+     "reg_unweighted": "b86633a73a482e8c"
+    },
+    {
+     "clf_weighted": "65473869e8bb01b4",
+     "clf_zeroed": "c74cc8611942e728",
+     "clf_unit": "eaa9275e21353a5c",
+     "clf_unweighted": "eaa9275e21353a5c",
+     "reg_weighted": "241e7de48e689c9e",
+     "reg_zeroed": "9ed6446b711a8c7c",
+     "reg_unit": "b86633a73a482e8c",
+     "reg_unweighted": "b86633a73a482e8c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.606316292003612,
+    "stages": {
+     "repeat=1/train": 0.33874262499739416,
+     "repeat=1/infer-save-reload": 1.2541000614874065e-05,
+     "repeat=1/batch": 6.0250007663853467e-05,
+     "repeat=2/train": 0.2672325409948826,
+     "repeat=2/infer-save-reload": 1.0207993909716606e-05,
+     "repeat=2/batch": 7.045800157357007e-05
+    }
+   }
+  },
+  "rf-score-weighted/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb7a95587869a8ea",
+    "fb7a95587869a8ea"
+   ],
+   "parts": [
+    {
+     "clf_weighted": "cdf5603019b89128",
+     "clf_zeroed": "b3bb5e2aff5f8227",
+     "clf_unit": "e16ceb52f2e22f1c",
+     "clf_unweighted": "e16ceb52f2e22f1c",
+     "reg_weighted": "5916b2094e5c6a1d",
+     "reg_zeroed": "ebf656f4dcb752e1",
+     "reg_unit": "c6c39438a746e2c5",
+     "reg_unweighted": "c6c39438a746e2c5"
+    },
+    {
+     "clf_weighted": "cdf5603019b89128",
+     "clf_zeroed": "b3bb5e2aff5f8227",
+     "clf_unit": "e16ceb52f2e22f1c",
+     "clf_unweighted": "e16ceb52f2e22f1c",
+     "reg_weighted": "5916b2094e5c6a1d",
+     "reg_zeroed": "ebf656f4dcb752e1",
+     "reg_unit": "c6c39438a746e2c5",
+     "reg_unweighted": "c6c39438a746e2c5"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)",
+    "n/a:scalar-reduction (score(X, y, sample_weight) returns one float over every row it is handed, python/mojolearn/_gbdt_adapters.py and _forest_protocol.py; the predict and predict_proba it wraps keep their batch parts on gbdt-adapter-clf, gbdt-adapter-reg, rf-clf and rf-reg)"
+   ],
+   "batch_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6964400830038358,
+    "stages": {
+     "repeat=1/train": 0.3430216249980731,
+     "repeat=1/infer-save-reload": 1.4082994312047958e-05,
+     "repeat=1/batch": 0.00011566698958631605,
+     "repeat=2/train": 0.3528626670013182,
+     "repeat=2/infer-save-reload": 1.708399213384837e-05,
+     "repeat=2/batch": 5.1750001148320735e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/Users/andrewhendel/CascadeProjects/mojolearn/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "bfbe0ba1b8322e60ff1864514e2f58863b079d752154ed6536117256c96b1b98",
+    "size": 2597104
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "2658b667c66d33e650b70d7b56e36b4903fcfa453c95771cff740cab1c883dd7",
+    "size": 711008
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "8f43c454ee89ac6c27294bf6e853c2e1e408520770cb8c62196812f9276bddec",
+    "size": 4869688
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "a386ffdcb365a39c7db5c0392798786b8cffea089fa9cd43880912582559b4f8",
+    "size": 356376
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "c304ab542d2e369f5bbbdd040787e85cfd63669e27b891d1888b2a270fb831d2",
+    "size": 4201160
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "49b3ab5cfb92cd65d460a34628c88efd15951876b1447c4d4e6a89a5f0ac3b6c",
+    "size": 7202304
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "193d448581ccae309fd3d27826675835bab9afa4f459cff3cf19827690bebf9d",
+    "size": 2462768
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "63762597b19035b44caf866811ed5754f6af7d3f6d715f58afc694ae42cbba49",
+    "size": 2053672
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "2d14a10374899f2c0a49e5785c1fb7111228042419dd857226495d040fd2d330",
+    "size": 1245712
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "27a18687e5b0c2b0f42d717a873737e9807bdac67c89936864a3e3a4363b94a6",
+    "size": 2395696
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "af2688ba955d06780ecb55ebc9655057101745dfb8386a4081cf443d436e4ba9",
+    "size": 2058456
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "c8f82de93cc7a52d2d6bf096937eebf90b8310a3e4e3d601da9425db543156b7",
+    "size": 3630688
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "c045b45801354888aba7a47f7327d4e35a4204c8c72e15e2b5efd5f06d0ea27a",
+    "size": 4782520
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "fde01d3622d44a7dd1a6b579b72599fedd219626e27a76ce4de3c65d8b3bfc35",
+    "size": 3145752
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "b72256ea66443a3975b389808e55b3d9ef995e8495eab78fba13b53b7da48121",
+    "size": 345976
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "6a4d50943f6cb4bca65198a05abb4d17f120127f247c3269d0950800539e03fd",
+    "size": 1209592
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "5a1f9a00029d43341b710b2efc196efb835627f46415ac8485748bb70cfe9230",
+    "size": 1761536
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "2fde363ccb09078981d6f8cad5776137bedcea2d65c7ef35c2aef7072564c14e",
+    "size": 2284728
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "3b421107b2ef5f440c72e5c0eee3a987089f9ee6995113a19cd29c29a1b31449",
+    "size": 2642192
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "c5c15514607c4008c0b309e9f25f4745d4ebc662124d71bfc1b01bd02d2ab384",
+    "size": 2384248
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "efce31f83731d3cdc7b0468a43454cf0fc6085e0465189de261ec3f466a1c158",
+    "size": 3891032
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "2b268b22ec89cb5e95cca3b9eedb18e0e031e32d8823a31eb13ed9de17c384f3",
+    "size": 1432720
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "340957278791c3a8178b903b60ba922813cc7da89395a5aa5ecf4f5faffd250a",
+    "size": 597792
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "541babaa016d0afea107910ed1f645f8b50ba17a15bb1e52930e3e83bfc89535",
+  "options": {
+   "require_backend": "metal",
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "lanes": "rf-score-weighted",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "apple-m4",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "bc4f877b7a8c67615bb95b3230750295758e2a7b973bf6b33d48485b52d9d21e",
+  "provenance": {
+   "commit": "ef8c2b3117a712ae2d9df2579f77f0c32b3fb14e",
+   "mode": "identical",
+   "vendor": "apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
