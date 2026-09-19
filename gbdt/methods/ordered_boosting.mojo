@@ -69,6 +69,9 @@ every Ordered fit: `DataPartitionType` is FeatureParallel by default
      (`:448`).
   7. the learn loss at the estimation cursor (`metricCalcer.SetPoint(cursor.
      Estimation)`, `:452-455`).
+  8. with an eval set, the exported model onto the test cursor (`:423-430`),
+     the held-out loss and the overfitting detector, through the Plain fit's
+     own `_apply_last_tree_to_test`, `_test_loss` and detector.
 
 ## What is refused, by name, and why (the caller, `gbdt/train.mojo`)
 
@@ -84,8 +87,10 @@ every Ordered fit: `DataPartitionType` is FeatureParallel by default
     (`useExact` needs Plain on GPU, `:290-293`).
   * NOT IMPLEMENTED here (CatBoost has them): categorical CTR features (their
     permutation-dependent CTR datasets), the ranking losses (query-aware folds),
-    an eval set and the overfitting detector (the test cursor), the pointwise
-    doc-parallel searcher flag, feature_fraction below 1.
+    the pointwise doc-parallel searcher flag, feature_fraction below 1.
+
+An eval set, the overfitting detector and use_best_model are theirs: step 8
+below, their test cursor.
 
 ## The identity contract
 
@@ -136,7 +141,13 @@ from gbdt.gpu_util.kernel.bootstrap import (
 )
 from gbdt.methods.doc_parallel_boosting import (
     TEstimationWorkspace,
+    TestArm,
+    _apply_last_tree_to_test,
     _estimate_and_apply,
+    _test_loss,
+)
+from gbdt.overfitting_detector.overfitting_detector import (
+    make_overfitting_detector,
 )
 from gbdt.methods.dynamic_boosting import (
     _ordered_apply_kernel,
@@ -183,6 +194,18 @@ comptime ORDERED_BLOCK = 256
 #: of gbdt-ordered: 20 trees chose the same splits.) The host oracle carries
 #: the same arm (`GBDT_ORDERED_SABOTAGE`).
 comptime ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
+
+
+@fieldwise_init
+struct OrderedFitOutput(Movable):
+    """The learn curve, the held-out curve (empty without an eval set), the
+    error tracker's best iteration and whether the detector stopped the
+    fit -- what `fit_with_test`'s `FitResult` reports for a Plain fit."""
+
+    var learn_losses: List[Float64]
+    var test_losses: List[Float64]
+    var best_iteration: Int
+    var stopped_early: Bool
 
 
 @fieldwise_init
@@ -406,12 +429,22 @@ def fit_ordered(
     opts: OrderedBoostingOptions,
     mut model: TAdditiveModel,
     mut trace: IdentityTrace,
-) raises -> List[Float64]:
+    mut test: TestArm,
+    od_type: Int,
+    od_pvalue: Float64,
+    od_wait: Int,
+) raises -> OrderedFitOutput:
     """Train `n_estimators` oblivious trees by their GPU Ordered boosting
-    (see the module docstring) into `model`; returns the learn loss after
-    each tree, `-functionValue / rows` at the estimation cursor, the plain
-    fit's convention. `targets` and `weights` are per ORIGINAL row (weights
-    all ones without sample or class weights)."""
+    (see the module docstring) into `model`. The learn loss after each tree
+    is `-functionValue / rows` at the estimation cursor, the plain fit's
+    convention. `targets` and `weights` are per ORIGINAL row (weights all
+    ones without sample or class weights).
+
+    THE HELD-OUT SET (`test.n_rows > 0`): their test cursor, started at the
+    starting point (`dynamic_boosting.h:627-635`) and moved by the exported
+    estimation model every iteration (`:423-430`), through the Plain fit's
+    own `_apply_last_tree_to_test` and `_test_loss`, and the overfitting
+    detector over the held-out curve, as the Plain loop feeds it."""
     if n_rows < 4:
         # `CB_ENSURE(queryCount >= 4 * devCount)` (`dynamic_boosting.h:200`)
         raise Error(
@@ -526,6 +559,14 @@ def fit_ordered(
     var h_fv = ctx.enqueue_create_host_buffer[DType.float32](1)
     var dummy_mag = ctx.enqueue_create_buffer[DType.float32](2)
     var loss_stats = ctx.enqueue_create_buffer[DType.float32](2 * n_rows)
+    var has_test = test.n_rows > 0
+    if has_test:
+        enqueue_fill(ctx, test.cursor, opts.start_value)
+    var detector = make_overfitting_detector(
+        od_type, False, od_pvalue, od_wait, has_test
+    )
+    var test_losses = List[Float64]()
+    var stopped_early = False
     ctx.synchronize()
     _ = hq^
 
@@ -711,6 +752,20 @@ def fit_ordered(
         ctx.synchronize()
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
         _ = bins^
+        # 8. the held-out cursor, its loss, the detector
+        if has_test:
+            _apply_last_tree_to_test(
+                ctx, model, layout, test, 1, opts.learning_rate
+            )
+            var t_loss = _test_loss(
+                ctx, test, opts.objective, 0, opts.kernel_alpha,
+                opts.logloss_border, 1,
+            )
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
     ctx.synchronize()
     _ = quality^
     _ = boot_seeds^
@@ -722,4 +777,13 @@ def fit_ordered(
     _ = h_fv^
     _ = dummy_mag^
     _ = loss_stats^
-    return losses^
+    # the ERROR tracker's best: the held-out curve's with a test set, else
+    # the first strict minimum of the learn curve (`error_tracker.h:58-64`)
+    var best = 0
+    if has_test:
+        best = detector.best_iteration
+    else:
+        for i in range(1, len(losses)):
+            if losses[i] < losses[best]:
+                best = i
+    return OrderedFitOutput(losses^, test_losses^, best, stopped_early)

@@ -42,9 +42,8 @@ Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
   (`catboost_options.cpp:802-807`, `defaults_helper.h:33-42`), Plain otherwise,
   for the multiclass losses and for the L2 scores. Refused by name where
   CatBoost refuses (non-symmetric trees, multiclass, L2 scores, Exact leaves)
-  and where it is not implemented (CTR categoricals, the ranking losses, an
-  eval set). A default fit with an eval set on a small pool therefore raises
-  by name; pass `boosting_type='Plain'`.
+  and where it is not implemented (CTR categoricals, the ranking losses). An
+  eval set, the overfitting detector and use_best_model work as on a Plain fit.
 - `feature_border_type`: all seven of CatBoost's border selections
   (GreedyLogSum stays the default), matching CatBoost 1.2.10's own borders bit
   for bit on 294 oracle cases.

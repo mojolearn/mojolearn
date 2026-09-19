@@ -1055,7 +1055,8 @@ class GradientBoosting(NumericModeMixin):
         and NewtonL2 scores, the Exact leaf estimator (unset, MAE, MAPE and
         Quantile take Gradient under Ordered, as theirs). NOT IMPLEMENTED,
         refused by name: categorical columns that build CTRs, the ranking
-        losses, an eval set / the overfitting detector. Their random streams
+        losses. An eval set, its overfitting detector and use_best_model
+        work as on a Plain fit (their test cursor). Their random streams
         (the load shuffle, the permutation draw, the score noise) are this
         library's, so an Ordered model matches CatBoost in behavior, not in
         bits.
@@ -2057,17 +2058,6 @@ class GradientBoosting(NumericModeMixin):
                     "resolved to Plain with no cat_features; it would be "
                     "accepted and ignored"
                 )
-        if n_eval_rows and boosting == "Ordered":
-            raise NotImplementedError(
-                "mojolearn: an eval_set with Ordered boosting is not "
-                "implemented (their test cursor, dynamic_boosting.h:423-430, "
-                "is not restated); pass boosting_type='Plain' to use one"
-                + ("" if self.boosting_type == "Ordered" else
-                   " -- this fit resolved to Ordered because CatBoost's GPU "
-                   "default is Ordered below 50,000 rows at 500 iterations "
-                   "or more (catboost_options.cpp:802-807, "
-                   "defaults_helper.h:33-42)")
-            )
         if border_type != "GreedyLogSum" or boosting == "Ordered":
             strs.append(border_type)
         if boosting == "Ordered":

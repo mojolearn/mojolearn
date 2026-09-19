@@ -1084,7 +1084,8 @@ def gbdt_ordered_rmse_host_fit(
 # COVERED: RMSE, Logloss, CrossEntropy and the pointwise losses at UNIT
 # weights, SymmetricTree, Cosine or NewtonCosine, any bootstrap, any
 # random_strength, any permutation count, border type and NaN mode, with
-# boost_from_average only on RMSE. Everything else is refused by name in the
+# boost_from_average only on RMSE; an eval set with the detector and
+# use_best_model (step 8 of `fit_ordered`). Everything else is refused by name in the
 # binding (`_mojolearn_gbdt_host.mojo`).
 #
 # THE NEGATIVE CONTROL: `-D MOJOLEARN_ORDERED_SABOTAGE=1` (the device arm's
@@ -1094,6 +1095,7 @@ def gbdt_ordered_rmse_host_fit(
 # ===========================================================================
 
 from std.sys.compile import is_defined
+from std.memory import bitcast
 from gbdt.data.ordered_plan import (
     ORDERED_BOOTSTRAP_SALT,
     ORDERED_STREAM_SALT,
@@ -1119,6 +1121,9 @@ from gbdt.host.gbdt_oracle_rmse import (
 )
 from checks.numerics import identical_log, identical_pow
 from std.math import sqrt
+from gbdt.overfitting_detector.overfitting_detector import (
+    make_overfitting_detector,
+)
 
 comptime GBDT_ORDERED_SABOTAGE = is_defined["MOJOLEARN_ORDERED_SABOTAGE"]()
 comptime GBDT_ORD_BOOT_BLOCK = 256
@@ -1149,7 +1154,25 @@ struct GbdtOrderedHostOptions(ImplicitlyCopyable, Movable):
 struct GbdtOrderedHostFit(Movable):
     var text: String
     var losses: List[Float64]
+    var test_losses: List[Float64]
     var best_iteration: Int
+    var stopped_early: Bool
+
+
+@fieldwise_init
+struct GbdtOrderedHostEval(Movable):
+    """The held-out set and what reads it, as `train` resolves them: the
+    rows (column-major), the detector (`od_type_from_name` codes), and the
+    RESOLVED `use_best_model` (1 on, 0 off) with `best_model_min_trees`."""
+
+    var x_colmajor: List[Float32]
+    var y: List[Float32]
+    var n_rows: Int
+    var od_type: Int
+    var od_pvalue: Float64
+    var od_wait: Int
+    var want_best_model: Int
+    var best_model_min_trees: Int
 
 
 def _ordered_bootstrap_draws(
@@ -1244,6 +1267,20 @@ def _ordered_task_host(
     return leaves^
 
 
+@no_inline
+def _add_tree_values(
+    mut cursor: List[Float32], bins: List[Int], values: List[Float32]
+):
+    """`compute_bins_and_add_kernel`'s add (`add_bin_values.mojo`):
+    `cursor += values[bin]`, the STORED model values. `@no_inline` IS LOAD
+    BEARING: inlined, the host compiler contracted `cursor + leaf * rate`
+    into one fma, one rounding where the device kernel rounds the stored
+    product first -- measured on the M4, 258 of 800 held-out rows one ulp
+    apart after the first tree (lane/catboost-parity)."""
+    for r in range(len(bins)):
+        cursor[r] = cursor[r] + values[bins[r]]
+
+
 def gbdt_ordered_host_fit(
     x_colmajor: List[Float32],
     y: List[Float32],
@@ -1252,10 +1289,12 @@ def gbdt_ordered_host_fit(
     params: GbdtHostParams,
     loss: GbdtHostLoss,
     opts: GbdtOrderedHostOptions,
+    eval: GbdtOrderedHostEval,
 ) raises -> GbdtOrderedHostFit:
     """Train `params.n_estimators` trees by Ordered boosting on the host and
-    return the model text (bias included), the learn losses and the best
-    iteration, as `gbdt_fit` returns them."""
+    return the model text (bias included), the learn and held-out losses,
+    the best iteration and the detector's verdict, as `gbdt_fit` returns
+    them. `eval.n_rows == 0` is no held-out set."""
     if n_rows < 4:
         raise Error(
             "Error: pool has just " + String(n_rows) + " groups or docs,"
@@ -1363,6 +1402,19 @@ def gbdt_ordered_host_fit(
     var seeds = List[UInt64]()
     if bootstrap_on:
         seeds = gbdt_bootstrap_seeds(params.random_seed ^ ORDERED_BOOTSTRAP_SALT)
+    # the held-out rows against the model's own borders, the test cursor at
+    # the starting point, the detector (`fit_ordered`'s step 8)
+    var has_test = eval.n_rows > 0
+    var n_eval = eval.n_rows if has_test else 1
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(eval.x_colmajor, n_eval, n_features, grid, layout)
+    var test_cursor = List[Float32](length=n_eval, fill=start_value)
+    var detector = make_overfitting_detector(
+        eval.od_type, False, eval.od_pvalue, eval.od_wait, has_test
+    )
+    var test_losses = List[Float64]()
+    var stopped_early = False
     var rng = TRandom(params.random_seed ^ ORDERED_STREAM_SALT)
     var lr = params.learning_rate
     var l2 = params.l2_leaf_reg
@@ -1473,15 +1525,61 @@ def gbdt_ordered_host_fit(
         # ---- the learn loss at the estimation cursor ----
         var fv = _loss_value(loss, est_y, est_cursor, n)
         losses.append(-Float64(fv) / Float64(n))
+        # ---- the held-out cursor (`_apply_last_tree_to_test`: a depth-0
+        # tree adds nothing), its loss, the detector ----
+        if has_test:
+            if len(splits) > 0:
+                var test_bins = List[Int](length=n_eval, fill=0)
+                for r in range(n_eval):
+                    var leaf = 0
+                    for level in range(len(splits)):
+                        var fid = splits[level].feature
+                        var mask = feat_mask[fid] << feat_shift[fid]
+                        var value = UInt32(splits[level].bin) << feat_shift[fid]
+                        if (test_cindex[Int(layout.features[fid].offset) * n_eval + r] & mask) > value:
+                            leaf += 1 << level
+                    test_bins[r] = leaf
+                var tree_values = List[Float32](capacity=n_leaves)
+                for leaf in range(n_leaves):
+                    tree_values.append(identical_mul(leaves[leaf], lr))
+                _add_tree_values(test_cursor, test_bins, tree_values)
+            var t_loss = -Float64(_loss_value(loss, eval.y, test_cursor, n_eval)) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                stopped_early = True
+                break
 
     var best = 0
-    for i in range(1, len(losses)):
-        if losses[i] < losses[best]:
-            best = i
+    if has_test:
+        best = detector.best_iteration
+    else:
+        for i in range(1, len(losses)):
+            if losses[i] < losses[best]:
+                best = i
+    # ---- `use_best_model`: `ShrinkToBestIteration` ----
+    if eval.want_best_model == 1 and len(test_losses) > 0:
+        var min_trees_best = -1
+        var min_trees_err = Float64(0.0)
+        for i in range(len(test_losses)):
+            if i + 1 < eval.best_model_min_trees:
+                continue
+            if min_trees_best < 0 or test_losses[i] < min_trees_err:
+                min_trees_err = test_losses[i]
+                min_trees_best = i
+        var best_iter = min_trees_best + 1
+        var n_trees = len(tree_split_offsets) - 1
+        if 0 < best_iter and best_iter < n_trees:
+            while len(tree_split_offsets) - 1 > best_iter:
+                _ = tree_split_offsets.pop()
+                _ = tree_leaf_offsets.pop()
+            split_features.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+            split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+            model_leaves.resize(tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0))
     var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses.copy(), best, False,
+        model_leaves^, losses.copy(), best, stopped_early,
     )
     var text = gbdt_rmse_host_model_text(GbdtRmseHostFit(model^, start))
-    return GbdtOrderedHostFit(text^, losses^, best)
+    return GbdtOrderedHostFit(text^, losses^, test_losses^, best, stopped_early)
