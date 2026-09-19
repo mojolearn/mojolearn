@@ -1,4 +1,4 @@
-# upstream	status	why / where it would go
+# their_thing	status	why / where it would go
 cuml cpp/src/metrics/pairwise_distance.cu (and pairwise_distance_*.cu)	NOT IMPLEMENTED	a distance front-end over cuVS pairwise_distance; neighbors/ owns distances (core/expand_distances.mojo, neighbors/checks/pinned_distance_tile.mojo). Not a metric of a model.
 raft stats/detail/contingencyMatrix.cuh SORT_AND_GATOMICS arm (contingencyMatrixWSort, cub::DeviceRadixSort)	NOT IMPLEMENTED	a locality arm for matrices larger than L2; writes the same integers as GLOBAL_ATOMICS, which stands in. getImplVersion's device queries (smem budget, L2 size) are replaced by the comptime CMAT_SMEM_MAX_DIM cap; scheduling only.
 raft stats/detail/histogram.cuh: smemHistKernel, smemBitsHistKernel, smemHashHistKernel, __match_any_sync lane aggregation, VecLen > 1	NOT IMPLEMENTED	throughput arms of the histogram; all land the same integers as gmemHistKernel, which is implemented.

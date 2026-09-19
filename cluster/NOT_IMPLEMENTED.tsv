@@ -1,5 +1,6 @@
 # cuVS files this section deliberately does NOT implementation, and why.
-# A file absent from both this list. Keep both complete.
+# A file absent from this list has simply not been looked at. Keep it complete.
+# their_thing	status	why / where it would go
 cpp/src/distance/detail/fused_distance_nn/cutlass_base.cuh	unportable	CUTLASS persistent GEMM on NVIDIA tensor cores. Only the CUTLASS specialization is unportable; their SIMT kernel in the same directory IS implemented. There is no compute-capability selector in cuVS's k-means dispatch -- is_fused (kmeans_common.cuh:378-379) is a metric test and nothing else
 cpp/src/cluster/detail/kmeans_balanced.cuh	out of scope	balanced k-means is an ANN index-building primitive, not the clustering algorithm being compared
 cpp/src/cluster/detail/kmeans_mg.cuh	out of scope	multi-GPU. One device here

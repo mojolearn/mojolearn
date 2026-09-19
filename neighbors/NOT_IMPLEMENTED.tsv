@@ -1,4 +1,5 @@
 # Deliberately not implemented, and why.
+# their_thing	status	why / where it would go
 raft matrix/detail/select_warpsort.cuh::warp_sort_filtered	not implemented	needs set_k_th_ (:327), which is __shfl_sync with an explicit width and a DELIBERATELY out-of-range source lane k-1 (their comment, :329). Mojo shuffle_idx takes no width and reconstructing the modulo would be a guess at CUDA, not a statement-for-statement match. shuffle_xor is unaffected: bitonic only ever shuffles within an aligned subwarp
 raft matrix/detail/select_warpsort.cuh::warp_sort_distributed	not implemented	same set_k_th_ blocker (:452), plus ballot/__ffs/__popc which nothing here has probed
 raft matrix/detail/select_warpsort.cuh::warp_sort_distributed_ext	not implemented	same set_k_th_ blocker (:560), plus ballot/__popc and a shared-memory warp buffer

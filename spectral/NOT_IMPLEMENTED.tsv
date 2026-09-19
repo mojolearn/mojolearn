@@ -1,10 +1,11 @@
 # Upstream files and functions this section deliberately does NOT implementation, and why.
-# A file absent from both this list. Keep both complete.
+# A file absent from this list has simply not been looked at. Keep it complete.
 #
 # Pins: RAFT v26.08.00, cuML v26.08.00, cuVS v26.08.00 (6ba2ce2). Paths
 # are relative to the repository named in the first path component.
 #
 # ==================== RESOLVED 2026-08-23, KEPT AS A RECORD ====================
+# their_thing	status	why / where it would go
 cuvs: the two files this lane cites	RESOLVED, both exist and 18 of 20 citations were exact	For one round these rows said the 26.08 cuVS was on no checkout here and that every cuVS citation in this lane was unverified. The clone landed (v26.08.00, 6ba2ce2) and both files are exactly where the headers said. It settled five questions at once: the files exist; the Laplacian overload is COO and this lane implemented the right one; ncv, max_iterations and a plumbed tolerance are VERBATIM THEIRS and DEVIATION 780's C1/C2/C3 are struck; the params struct has a real tolerance field; and the transform COO overload exists. Kept rather than deleted because the lesson is the row: reading the wrong tree invents ORIGINALITY we do not have, not only defects
 # ==================== RAFT: out of scope or not the path ====================
 raft: cpp/include/raft/sparse/linalg/detail/laplacian.cuh::compute_graph_laplacian (CSR, :40-117)	not the path, SETTLED	The two overloads agree on every VALUE and not on every ROUNDING: the CSR kernel excludes a self-loop from the degree (`input_value = col_index == row ? 0 : adj_values[...]`, :69) while the COO overload SUMS it in and SUBTRACTS it back on the diagonal (:224-226), two roundings where the CSR arm has none, and the kNN graph always carries a self-loop. This lane implemented the COO arm. SETTLED 2026-08-23 IN THIS LANE'S FAVOR: cuvs 26.08 instantiates create_laplacian<..., raft::device_coo_matrix<...>> explicitly at detail/spectral_embedding.cuh:127 and :219 and has NO coo_to_csr_matrix at all, so the COO arm IS the path and the rounding hazard does not arise. (cuVS 25.08 did convert to CSR first, which is why this row once read as a live risk.) The mechanism is kept because it is the reason the two overloads may never be treated as interchangeable

@@ -1,4 +1,4 @@
-# upstream_file_or_symbol	status	upstream	notes
+# their_thing	status	reference_library	why / where it would go
 # Files and symbols this section deliberately does NOT implement, and why.
 # A file absent from this list has simply not been looked at. Keep it complete.
 #
