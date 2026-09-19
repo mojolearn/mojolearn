@@ -522,7 +522,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-boosting-clf | amd,nvidia | - | none | - | part | NO |
 | par-boosting-pointwise | amd,apple,nvidia | - | none | - | part | NO |
 | par-boosting-reg | amd,nvidia | - | none | - | part | NO |
-| par-border-types | apple | - | none | - | part | NO |
+| par-border-types | apple,nvidia | - | none | - | part | NO |
 | par-byte-lm | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-model-pool | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-offload | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
@@ -556,7 +556,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-logistic | amd,apple,nvidia | - | none | - | part | NO |
 | par-mlp | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/d-neural/cpu-x86.sabotage.json` | part | yes |
 | par-nystroem | amd,apple,nvidia | - | none | - | part | NO |
-| par-ordered | apple | - | none | - | part | NO |
+| par-ordered | apple,nvidia | - | none | - | part | NO |
 | par-ordered-rmse | amd,apple,nvidia | - | none | - | part | NO |
 | par-queries-kde | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
 | par-queries-knn | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/a-linear-neighbors/cpu-x86.sabotage.json` | part | yes |
@@ -739,14 +739,14 @@ coverage, and they are not evidence for any vendor claim.
 
 55 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
 
-**50 of 55 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
+**52 of 55 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
 
 | par-arima | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting-clf | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-boosting-clf-two.json |
 | par-boosting-pointwise | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting-reg | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-boosting-reg-two.json |
-| par-border-types | - | no two-device column |
+| par-border-types | nvidia | bench/results/identity_break/2026-09-19_par-two-device-gaps/ordered-and-border-types/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-gaps.two-device.json |
 | par-byte-lm | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-byte-lm-model-pool | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-byte-lm-offload | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
@@ -780,7 +780,7 @@ coverage, and they are not evidence for any vendor claim.
 | par-logistic | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-mlp | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-nystroem | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
-| par-ordered | - | no two-device column |
+| par-ordered | nvidia | bench/results/identity_break/2026-09-19_par-two-device-gaps/ordered-and-border-types/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-gaps.two-device.json |
 | par-ordered-rmse | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-queries-kde | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-queries-knn | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
