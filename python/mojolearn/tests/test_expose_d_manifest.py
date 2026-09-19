@@ -42,7 +42,6 @@ PARALLEL_FLAGS = {
     "embedding": None,
 }
 CLASSES = ("Cholesky", "KernelRidge", "Nystroem", "RBFSampler", "GaussianMixture", "HDBSCAN", "IVFIndex", "Embedding")
-LANE_BODIES = ("cholesky", "kernel_methods", "mixture", "hdbscan", "resample", "ivf", "training_primitives", "kmeans")
 
 
 def _read(rel):
@@ -140,16 +139,22 @@ def test_docs_name_the_surfaces():
     assert "faster" not in matrix.split("Workstream D")[1][:6000].lower(), "no speed word in the workstream D rows"
 
 
-def test_lane_bodies_parse_and_name_lanes():
-    for stem in LANE_BODIES:
-        p = ROOT / "docs/lanes" / f"LANE_BODY_{stem}.py"
-        assert p.exists(), p
-        tree = ast.parse(p.read_text(), filename=str(p))
-        lanes = [d.args[0].value for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)
-                 for d in node.decorator_list if isinstance(d, ast.Call) and getattr(d.func, "id", "") == "lane"]
-        assert lanes, (p, "no @lane")
-        assert all("Xh=None" in ast.get_source_segment(p.read_text(), node) for node in ast.walk(tree)
-                   if isinstance(node, ast.FunctionDef) and node.decorator_list), (p, "the harness signature is (ml, X, yc, yr, Xh=None)")
+def test_every_staged_lane_body_reached_the_harness():
+    """The eight `docs/lanes/LANE_BODY_*.py` staging files are gone (2026-09-19),
+    and this is what replaced the test that parsed them.
+
+    They were lane definitions held outside `tools/identity_break.py` while
+    they were written. Every one had already been merged -- checked lane by
+    lane before the delete -- so the files were duplicates of harness code,
+    and a test asserting a duplicate still parses was checking the copy, not
+    the thing that runs. What is worth holding is the property that made
+    deleting them safe: each staged lane is IN the harness.
+    """
+    src = _read("tools/identity_break.py")
+    for lane in ("par-cholesky", "par-kernel-ridge", "par-gmm", "par-hdbscan",
+                 "par-resample", "par-ivf", "par-scaler", "par-kmeans"):
+        assert f'@lane("{lane}")' in src, (
+            f"{lane} was staged in a LANE_BODY_ file that has been deleted and is not in the harness")
 
 
 def test_embedding_sabotage_script_names_every_arm():
