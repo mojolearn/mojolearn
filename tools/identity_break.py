@@ -443,6 +443,7 @@ import argparse
 import hashlib
 import json
 import os
+import pathlib
 import platform
 import re
 import subprocess
@@ -9968,6 +9969,26 @@ def _run_reference(args):
                     record["degenerate_column"] = _col
         except Exception as exc:        # never lose a column over this check
             record["degenerate_check_error"] = f"{type(exc).__name__}: {exc}"[:200]
+        # WAS THIS GPU RUN SERIALISED? (2026-09-19) Concurrent Metal jobs on one
+        # M4 return NaN, constant and zero output -- a sabotage-free way to get
+        # a wrong answer that still hashes stably. `verify_lanes.py` routes
+        # every backend through `tools/mac_slot.py`, which takes
+        # /tmp/mojolearn-metal-slot. RUNNING THIS FILE DIRECTLY TAKES NO LOCK,
+        # and on 2026-09-19 a job doing exactly that held the GPU for 18
+        # minutes while the slot read `free` -- so a second agent could not
+        # tell it was there. The column now records what the lock said, so a
+        # reader can see whether the run was serialised instead of assuming
+        # it. Recorded, never refused: a legitimate diagnostic run is allowed
+        # to be unlocked, it just should not be mistaken for a clean column.
+        try:
+            if str(ml.vendor()) != "cpu":
+                _lk = pathlib.Path(os.environ.get("MOJOLEARN_METAL_LOCK",
+                                                 "/tmp/mojolearn-metal-slot"))
+                _pid = (_lk / "pid").read_text().strip() if (_lk / "pid").exists() else ""
+                record["gpu_slot"] = (f"held pid={_pid}" if _pid
+                                      else "held" if _lk.exists() else "FREE (run not serialised)")
+        except Exception as exc:
+            record["gpu_slot_error"] = f"{type(exc).__name__}: {exc}"[:200]
         host_infer = _host_infer_lanes()
         if host_infer is not None:
             record["host_infer"] = "all" if host_infer is True else sorted(host_infer)
