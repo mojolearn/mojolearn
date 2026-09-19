@@ -32,3 +32,17 @@ No AMD droplet was created.
 
 Full capture snapshots, saved CV models, initial failures and lifecycle receipts:
 `/Users/andrewhendel/mojolearn-evidence/hardware-gaps-088/`.
+
+## Additional model-file evidence
+
+`model-gaps-summary.json` and the `nvidia-model-*` captures close ten older
+model-file gaps, with nine fixtures and two repeats each. All270 captured
+train/infer/model parts match the current references, including90 newly recorded
+two-device model witnesses. Existing batch checks were omitted from these jobs.
+Four scaler fixtures also completed before the bounded job expired; they remain
+in the external partial capture and are excluded from the next run's requests.
+
+The first test pod was deleted and verified absent via HTTP404. A second bounded
+NVIDIA leg is targeting only the remaining168 reference-parts plus loaded-model
+layer distribution against the retained24-case single-device baseline. AMD
+capacity/quota remains unresolved. No release tag or PyPI artifact was changed.
