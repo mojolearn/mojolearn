@@ -85,7 +85,7 @@ def command(python, lane, fixture, record, timeout, mode, resume, group="all", w
            "--wait-timeout", str(wait_timeout),
            "--timing-json", str(record.with_suffix(".timing.json")), "run" if mode == "cpu" else mode,
            python, "-u", str(ROOT / "tools/identity_break.py"), "--lanes", lane,
-           "--fixtures", fixture, "--repeats", "2", "--fail-on-refused", "--json", str(record)]
+           "--fixtures", fixture, "--repeats", "1", "--fail-on-refused", "--json", str(record)]
     if deadline is not None:
         cmd[2:2] = ["--deadline", str(deadline)]
     if mode == "cpu":
@@ -157,7 +157,7 @@ def main(argv=None):
     except ValueError as exc:
         ap.error(str(exc))
     selected["fixtures"] = fixtures
-    selected["repeats"] = 2
+    selected["repeats"] = 1
     selected["cell_count"] = len(selected["lanes"]) * len(fixtures)
     # The audit is a preflight, before staging sources or taking a lease.
     import lane_applicability

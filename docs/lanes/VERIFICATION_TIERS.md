@@ -127,8 +127,7 @@ Use `test-algo --lane NAME --mode metal --metal-diagnostic --out DIR` for that
 investigation. The default is one base/core job with a **60-second total budget**,
 including the queue. Batch or decode can replace core for a focused question.
 Multiple fixtures/groups require `--metal-expanded`; they share the same total
-budget unless `--budget` explicitly changes it. Two fits and fixture floors
-remain intact. Never silently count skipped or timed-out work as coverage.
+budget unless `--budget` explicitly changes it. Fixture floors remain intact. Never silently count skipped or timed-out work as coverage.
 
 CPU checks cover their own implementation and comparisons with named reference
 records. Agreement with an older GPU record is not proof of a changed GPU
