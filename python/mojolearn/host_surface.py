@@ -586,6 +586,8 @@ TRAINING_LANE_NAMES = {
     # the gate ran, and the sabotage build DIVERGENT on every cell.
     "gbdt-ordered-rmse": "ordered boosting with the RMSE loss (OrderedRMSE)",
     "gbdt-border-types": "gradient boosting with the six non-default feature border types",
+    "gbdt-ordered": "ordered boosting (boosting_type='Ordered') with the Logloss and RMSE losses",
+    "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -914,8 +916,13 @@ GATE_SABOTAGE_OWN_DEFINES = {
     # already moves gbdt-border-types through the Newton walker; this one
     # reaches the border branch itself, and moves no GreedyLogSum lane
     # (gbdt-symmetric reads its clean hash under it, measured on the M4).
+    # And Ordered boosting's own arm (every fold estimated on its whole fold,
+    # the look-ahead Ordered prevents): it moves every column of gbdt-ordered
+    # and gbdt-ordered-bayesian-noise on the CPU column AND on Metal, to the
+    # same hashes (1053bc113326b3cb and ae3714a675da4713 on base), and leaves
+    # gbdt-symmetric and gbdt-ordered-rmse at their clean hashes.
     # A family may carry more than one own define, so every value is a tuple.
-    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE",),
+    "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE", "MOJOLEARN_ORDERED_SABOTAGE"),
     "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
     "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE",),
 }
@@ -1975,6 +1982,9 @@ FAMILIES = (
             # types run the device fit's own host function
             # (`select_borders`) on the CPU column
             "gbdt-border-types",
+            # lane/catboost-parity: Ordered boosting through
+            # gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit
+            "gbdt-ordered", "gbdt-ordered-bayesian-noise",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2544,6 +2554,8 @@ PUBLIC_PENDING_LANES = {
     # and the NVIDIA and AMD columns are owed. They join
     # `public_reference_lanes()` the day a record carries them.
     "gbdt-border-types": "no reference",
+    "gbdt-ordered": "no reference",
+    "gbdt-ordered-bayesian-noise": "no reference",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

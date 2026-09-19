@@ -252,7 +252,12 @@ from std.math import copysign
 
 # DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
 # the stdlib under FAST and the portable pair under IDENTICAL
-from checks.numerics import identical_log, identical_pow, identical_sqrt
+from checks.numerics import (
+    identical_log,
+    identical_mul_add,
+    identical_pow,
+    identical_sqrt,
+)
 from std.memory import stack_allocation
 
 from gbdt.gpu_util.kernel.random_gen import (
@@ -513,7 +518,10 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
                     self.global_seed + UInt64(self.feature_id), 4
                 )
                 var draw = next_normal_f(seed)
-                out += draw[0] * self.score_std_dev
+                # IDENTITY_PATHS row 9: the contraction PINNED (an explicit
+                # fma under IDENTICAL), lane/catboost-parity -- `+=` of a
+                # product is contracted on some backends and not on others
+                out = identical_mul_add(draw[0], self.score_std_dev, out)
 
         return out
 
@@ -1099,7 +1107,10 @@ def find_optimal_split_cosine_kernel[
                 global_seed + UInt64(UInt32(feature_id)), 4
             )
             var draw = next_normal_f(seed)
-            noisy_score += draw[0] * score_std_dev
+            # IDENTITY_PATHS row 9: the contraction PINNED (lane/catboost-
+            # parity); Ordered boosting's default random_strength of 1.0 is
+            # the first default configuration to reach this line
+            noisy_score = identical_mul_add(draw[0], score_std_dev, noisy_score)
 
         var gain = (noisy_score - score_before_split) * ldg(
             bin_features_weights.unsafe_offset(feature_id)

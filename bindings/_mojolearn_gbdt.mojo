@@ -47,6 +47,7 @@ the wrapper holds the caller's arrays for the length of the call.
 """
 
 from std.os import abort
+from std.memory import bitcast
 from std.python import Python, PythonObject
 from std.sys.compile import is_defined
 from std.python._cpython import GILReleased
@@ -336,19 +337,33 @@ def gbdt_fit_binding(
             + ") values, got "
             + String(len(params))
         )
-    if len(strs) != 4 and len(strs) != 5:
+    if len(strs) != 4 and len(strs) != 5 and len(strs) != 8:
         raise Error(
             "gbdt_fit: strs must hold [loss, bootstrap_type, od_type,"
-            " nan_mode] and optionally feature_border_type, got "
-            + String(len(strs))
+            " nan_mode], optionally feature_border_type, optionally then"
+            " boosting_type, the fold_len_multiplier's float64 bits and"
+            " fold_permutation_block, got " + String(len(strs))
         )
     # the optional fifth string, their `feature_border_type` (empty or
     # absent is GreedyLogSum); an older wrapper sends four
     var border_type_name = String("GreedyLogSum")
-    if len(strs) == 5:
+    if len(strs) >= 5:
         border_type_name = String(py=strs[4])
         if border_type_name == "":
             border_type_name = String("GreedyLogSum")
+    # the Ordered tail (lane/catboost-parity): `boosting_type`, then
+    # `fold_len_multiplier` as the DECIMAL OF ITS FLOAT64 BITS (a parsed
+    # decimal float is not exact, the class-weight note above), then
+    # `fold_permutation_block`
+    var boosting_type_name = String("Plain")
+    var fold_len_multiplier = Float64(2.0)
+    var fold_permutation_block = 0
+    if len(strs) == 8:
+        boosting_type_name = String(py=strs[5])
+        fold_len_multiplier = bitcast[DType.float64](
+            UInt64(Int(String(py=strs[6])))
+        )
+        fold_permutation_block = Int(String(py=strs[7]))
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     # unread when n_weights / n_flags is 0; the wrapper passes the X
@@ -473,6 +488,9 @@ def gbdt_fit_binding(
         min_child_hessian,
         feature_fraction,
         border_type_name,
+        boosting_type_name,
+        fold_len_multiplier,
+        fold_permutation_block,
     )
     var n_eval_rows = Int(py=params[20])
 

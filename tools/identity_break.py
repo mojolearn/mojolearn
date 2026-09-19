@@ -1256,6 +1256,41 @@ _GBDT_BORDER_TYPES = ("Median", "Uniform", "UniformAndQuantiles", "MaxLogSum",
                       "MinEntropy", "GreedyMinEntropy")
 
 
+@lane("gbdt-ordered")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoosting(boosting_type='Ordered') at the recorded GBDT
+    configuration of `_gbdt` (no bootstrap, no score noise): a Logloss fit
+    (their four permutations, ten Newton steps per leaf) and an RMSE fit
+    (boost_from_average on, as their unset default), 20 trees of depth 6
+    each. The fold structure search, every (permutation, fold) cursor and the
+    estimation permutation reach the train column through the RMSE fit's
+    loss curve as well as both fits' predictions."""
+    m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+              boosting_type="Ordered").fit(X, yc)
+    r = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+              boosting_type="Ordered").fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     rmse=_h(r.predict(X)),
+                     rmse_loss_curve=_h(np.asarray(r.loss_curve_, dtype=np.float64))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("gbdt-ordered-bayesian-noise")
+def _(ml, X, yc, yr, Xh=None):
+    """Ordered boosting at CatBoost's GPU defaults for the parts `_gbdt`
+    pins elsewhere: the Bayesian bootstrap at temperature 1 on the quality
+    slices and random_strength 1.0 with its model-length decay, one Logloss
+    fit of 20 depth-6 trees with a NewtonCosine twin (Newton weights in the
+    search planes). The learning rate is pinned to 0.03 and the leaf count to
+    Logloss's ten, so the lane moves only with the bootstrap and the noise."""
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered",
+              learning_rate=0.03, leaf_estimation_iterations=10)
+    m = ml.GradientBoosting(**kw).fit(X, yc)
+    nc = ml.GradientBoosting(score_function="NewtonCosine", **kw).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), newton_cosine=_h(nc.predict(X))),
+                m, lambda e: (e.predict(Xh),))
+
+
 @lane("gbdt-border-types")
 def _(ml, X, yc, yr, Xh=None):
     """One symmetric Logloss fit per non-default feature_border_type (8
@@ -4848,6 +4883,20 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
 
 
+@lane("par-ordered")
+def _(ml, X, yc, yr, Xh=None):
+    """fit_boosting on the gbdt-ordered lane's Logloss fit (feature groups of
+    the fold histograms partitioned; permutations, folds, cursors and leaves
+    on the root), held to the plain one-device fit."""
+    from mojolearn.parallel_ensemble import fit_boosting
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss", boosting_type="Ordered")
+    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
+    plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
+    p = par.predict(X)
+    _same_bytes("fit_boosting ordered predict", p, "plain predict", plain.predict(X))
+    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
+
+
 @lane("par-feature-freq")
 def _(ml, X, yc, yr, Xh=None):
     """fit_feature_freq on the gbdt-feature-freq lane's fit, held to the plain fit."""
@@ -5760,6 +5809,7 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"),
+            "gbdt-ordered",
             "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
             "par-forest", "par-boosting", "par-forest-et-clf")
@@ -5768,7 +5818,8 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
-            "par-forest-reg", "par-boosting-reg", "gbdt-border-types")
+            "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
+            "gbdt-ordered-bayesian-noise", "par-ordered")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

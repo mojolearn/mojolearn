@@ -38,7 +38,8 @@ class _GBDTAdapter:
                  class_weights=None, grow_policy='SymmetricTree', max_leaves=None,
                  min_data_in_leaf=1, min_split_gain=None, min_child_hessian=None,
                  feature_fraction=1.0, feature_border_type='GreedyLogSum',
-                 numeric_mode=None):
+                 boosting_type=None, fold_len_multiplier=2.0,
+                 fold_permutation_block=None, numeric_mode=None):
         values = locals().copy()
         values.pop('self')
         for name, value in values.items():
