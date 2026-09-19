@@ -359,6 +359,79 @@ def byte_host_logits_threaded(params: List[Float32], inputs: List[Int32], batch:
     return _threaded_rows(params, inputs, batch, length, config, byte_host_worker_count(threads))
 
 
+def byte_host_next_threaded(params: List[Float32], inputs: List[Int32], batch: Int,
+                            length: Int, config: ByteConfig,
+                            threads: Int = 0) raises -> List[Int32]:
+    """Greedy token after each row, through the threaded logits arithmetic.
+
+    Only the last hidden row enters the LM head.  Earlier hidden rows still run
+    unchanged because causal attention needs them, but their ``vocab`` logits
+    were immediately discarded by ``LanguageModelInference.next_bytes``.
+    Skipping those independent output cells changes no fold and no bit in the
+    surviving row.
+    """
+    _validate_logits_inputs(params, inputs, batch, length, config)
+    var vocab = config.vocab_size
+    var layers = config.n_layers
+    var head_index = 1 + 9 * layers
+    var reverse = byte_host_sabotage_compiled() or GEMM_ORACLE_HOST_SABOTAGE
+    var held = List[List[List[Float32]]]()
+    held.append(byte_host_fast_tensors(params, config))
+    var ropes = List[RopeTable]()
+    ropes.append(build_rope_table(byte_host_dims(config)))
+    var out = List[Int32](length=batch, fill=Int32(0))
+    var tasks = byte_host_worker_count(threads)
+    if tasks > batch:
+        tasks = batch
+    var chunk = (batch + tasks - 1) // tasks
+    var failed = List[Int](length=tasks, fill=0)
+    var op = out.unsafe_ptr()
+    var fp = failed.unsafe_ptr()
+    var ip = inputs.unsafe_ptr()
+    var tp = held.unsafe_ptr()
+    var rp = ropes.unsafe_ptr()
+    var c_dm = config.d_model
+    var c_heads = config.n_heads
+    var c_kv = config.n_kv
+    var c_hd = config.head_dim
+    var c_ff = config.intermediate
+    var c_len = config.length
+
+    def _row_task(c: Int) {imm op, imm fp, imm ip, imm tp, imm rp, imm chunk, imm batch, imm length,
+                           imm vocab, imm layers, imm head_index, imm reverse, imm c_dm, imm c_heads,
+                           imm c_kv, imm c_hd, imm c_ff, imm c_len}:
+        try:
+            var lo = c * chunk
+            var hi = min(lo + chunk, batch)
+            var dims = TransformerDims(c_dm, c_heads, c_kv, c_hd, c_ff, c_len)
+            var row_ids = List[Int32](length=length, fill=Int32(0))
+            var last = List[Float32](length=vocab, fill=Float32(0.0))
+            for r in range(lo, hi):
+                for t in range(length):
+                    row_ids[t] = ip.unsafe_load(r * length + t)
+                var hidden = hidden_fast(tp[], rp[], row_ids, length, dims, layers)
+                gemm_nt_rows(hidden, tp[][head_index], vocab, c_dm,
+                             length - 1, length, last, reverse)
+                var best = 0
+                for j in range(1, vocab):
+                    if last[j] > last[best]:
+                        best = j
+                op.unsafe_store(r, Int32(best))
+        except:
+            fp.unsafe_store(c, 1)
+
+    if tasks == 1:
+        _row_task(0)
+    else:
+        sync_parallelize(_row_task, tasks)
+    _ = held^
+    _ = ropes^
+    for c in range(tasks):
+        if failed[c] != 0:
+            raise Error("byte LM host: threaded next-byte chunk " + String(c) + " raised")
+    return out^
+
+
 def byte_host_loss(params: List[Float32], ids: List[Int32], config: ByteConfig,
                    threaded: Bool = False, threads: Int = 0) raises -> Float32:
     """Mean next-byte cross-entropy of ids `[batch, length + 1]` at the

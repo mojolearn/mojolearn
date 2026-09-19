@@ -16,7 +16,7 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
-from bindings.hostptr import f32_ptr, f64_ptr, read_f32, read_i32
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr, read_f32, read_i32
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -39,6 +39,7 @@ from training.byte_lm_config import ByteConfig
 from training.byte_lm_host import (
     byte_host_logits,
     byte_host_logits_threaded,
+    byte_host_next_threaded,
     byte_host_loss,
     byte_host_sabotage_compiled,
 )
@@ -175,6 +176,26 @@ def byte_lm_host_logits_binding(addresses: PythonObject, dims: PythonObject,
     for i in range(len(logits)):
         out.unsafe_store(i, logits[i])
     return PythonObject(len(logits))
+
+
+def byte_lm_host_next_binding(addresses: PythonObject, dims: PythonObject,
+                              shape: PythonObject, threads: PythonObject) raises -> PythonObject:
+    """Greedy next bytes for [params f32, ids i32, output i32]."""
+    var cfg = _host_config(shape)
+    var thread_count = _thread_count(threads)
+    if len(addresses) != 3 or len(dims) != 2:
+        raise Error("byte LM host next: expected 3 addresses and 2 dims")
+    var batch = _index(dims[0])
+    var length = _index(dims[1])
+    if batch <= 0 or batch > 1048576 or length <= 0 or length > cfg.length:
+        raise Error("byte LM host next: batch in [1, 2^20] and length in [1, configured length]")
+    var params = read_f32(_index(addresses[0]), cfg.n_total())
+    var ids = read_i32(_index(addresses[1]), batch * length)
+    var next = byte_host_next_threaded(params, ids, batch, length, cfg, thread_count)
+    var out = i32_ptr(_index(addresses[2]))
+    for i in range(batch):
+        out.unsafe_store(i, next[i])
+    return PythonObject(batch)
 
 
 def _write_span(address: Int, values: List[Float32]) raises:
@@ -331,6 +352,7 @@ def PyInit__mojolearn_byte_lm_host() abi("C") -> PythonObject:
         module.def_function[byte_lm_host_sabotage_binding]("byte_lm_host_sabotage")
         module.def_function[byte_lm_host_profile_binding]("byte_lm_host_profile")
         module.def_function[byte_lm_host_logits_binding]("byte_lm_host_logits")
+        module.def_function[byte_lm_host_next_binding]("byte_lm_host_next")
         module.def_function[byte_lm_host_loss_binding]("byte_lm_host_loss")
         module.def_function[byte_lm_host_train_step_binding]("byte_lm_host_train_step")
         module.def_function[all_finite_f32_binding]("all_finite_f32")

@@ -46,6 +46,15 @@ def fake_host(monkeypatch, tmp_path):
         return batch * length * shape.vocab_size
 
     m.byte_lm_host_logits = logits
+
+    def next_bytes(addresses, dims, native, threads):
+        m.calls.append(('next', list(dims), threads))
+        batch, _ = dims
+        out = buffer(addresses[2], batch, integer=True)
+        out[:] = 3
+        return batch
+
+    m.byte_lm_host_next = next_bytes
     m.byte_lm_host_loss = (
         lambda addresses, native, threaded, threads: m.calls.append(('loss', threaded, threads)) or 0x3F800000)
     m.all_finite_f32 = lambda addr, n: int(np.isfinite(buffer(addr, n)).all())
@@ -131,6 +140,13 @@ def test_logits_shape_and_greedy_ties_go_low(fake_host):
     out = model.logits(np.zeros((2, 5), np.int32))
     assert tuple(out.shape) == (2, 5, 256)
     assert model.next_bytes(np.zeros((2, 5), np.int32)) == [3, 3]
+    assert fake_host.calls[-1] == ('next', [2, 5], 0)
+
+
+def test_unthreaded_next_bytes_uses_full_logits_fallback(fake_host):
+    model = host_mod.LanguageModelInference(np.zeros(34944, np.float32))
+    assert model.next_bytes(np.zeros((2, 5), np.int32), threaded=False) == [3, 3]
+    assert fake_host.calls == [('logits', [2, 5], 0, 0)]
 
 
 def test_refusals(fake_host):

@@ -304,6 +304,20 @@ class LanguageModelInference:
                 lambda padded: self.logits(padded, threaded=threaded, threads=threads),
                 raw, None, lengths, '<i4', 'LanguageModelInference.next_bytes')
             return _greedy_next_bytes(_ragged.last_real_rows(logits, lens, 'LanguageModelInference.next_bytes'))
+        flag = self._threads_flag(threaded)
+        entry = getattr(self._binding, 'byte_lm_host_next', None)
+        if flag and callable(entry):
+            count = self._threads_arg(threads)
+            tokens, _ = _logits_ids(ids, self._shape)
+            batch, length = tokens.shape
+            out = zeros((batch,), '<i4')
+            written = entry(
+                [addr_ro(self._parameters, name='parameters'), addr_ro(tokens, name='ids'),
+                 addr(out, name='next_bytes')],
+                [batch, length], self._native, count)
+            if int(written) != batch:
+                raise RuntimeError('byte LM host wrote an unexpected number of next bytes')
+            return list(flat_view(out, 'i'))
         return _greedy_next_bytes(self.logits(ids, threaded=threaded, threads=threads))
 
 
