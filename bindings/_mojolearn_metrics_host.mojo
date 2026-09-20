@@ -94,6 +94,7 @@ from metrics.host.metrics_oracle import (
     host_accuracy_score_ptr,
     host_adjusted_rand_score,
     host_entropy,
+    host_entropy_ptr,
     host_fowlkes_mallows,
     host_weighted_accuracy,
     host_weighted_r2,
@@ -276,18 +277,13 @@ def entropy_binding(
     var n = _index(params[0])
     var lower = Int32(_index(params[1]))
     var upper = Int32(_index(params[2]))
-    var lab = read_i32(_index(labels_addr), n)
+    var lab = i32_ptr(_index(labels_addr))
     var out = Float64(0.0)
     with GILReleased(Python()):
         if n <= 0:
             raise Error("entropy: n must be positive, got " + String(n))
-        if len(lab) < n:
-            raise Error(
-                "entropy: labels holds " + String(len(lab))
-                + " entries, needs at least n = " + String(n)
-            )
         _check_range(lower, upper)
-        out = host_entropy(lab, n, lower, upper)
+        out = host_entropy_ptr(lab, n, lower, upper)
     return PythonObject(out)
 
 
