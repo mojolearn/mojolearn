@@ -63,6 +63,7 @@ from embedding.checks.embedding_identical import (
     identical_embedding_backward_into,
 )
 from embedding.checks.embedding_oracle import EmbConfig
+from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT
 from training.checks.loss import (
     ANY_LOSS_SABOTAGE, identical_ce_forward_into, identical_ce_backward_into,
     identical_ce_ones_floats, identical_ce_workspace_max_floats,
@@ -1365,9 +1366,14 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
         tr.forward.insert(layer, stages^)
     # Envelope of the whole backward loop (the blocks print `bwd.*`).
     timing_tick(ctx, ton, tk, "envelope.blocks_backward")
+    # PLAN_SCAN performs vocab*positions integer probes before the identical
+    # row fold.  At large token batches the stable total-key sort builds the
+    # same ascending-position runs much more cheaply; keep small calls on the
+    # zero-allocation scan path.
+    var emb_plan = PLAN_SORT if M >= 16384 else PLAN_SCAN
     identical_embedding_backward_into(ctx, tr.buffers.dw_emb, tr.backward[0].d_x,
         tr.buffers.ids, tr.buffers.emb_counts, tr.buffers.emb_run_begin,
-        tr.buffers.emb_perm, M, emb)
+        tr.buffers.emb_perm, M, emb, emb_plan)
     # No wait: the pack loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")

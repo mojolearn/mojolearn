@@ -48,7 +48,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
@@ -392,6 +392,9 @@ comptime BWD_ANY_SABOTAGE = (
 #: spelling so each altered seam remains independently localized.
 comptime BWD_NORM_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM_SPLIT_TRIAL"
+]()
+comptime BWD_NORM_FUSED_TRIAL = is_defined[
+    "MOJOLEARN_BWD_NORM_FUSED_TRIAL"
 ]()
 
 
@@ -2723,6 +2726,9 @@ def bwd_rms_norm[which: Int = 0](
     (DEVIATION 851 becoming DEVIATION 1410). Its `k'` is `M`, THE TOKEN
     COUNT, so this output is not batch-composition invariant and the gate
     asserts that it MOVES."""
+    comptime assert not (BWD_NORM_SPLIT_TRIAL and BWD_NORM_FUSED_TRIAL), (
+        "RMSNorm backward trial cannot force both split and fused paths"
+    )
     # DEVIATION 2630: `which` picks this call site's timer names at
     # compile time (1 the input norm, 2 the post-attention norm, 0 any
     # other caller) and nothing else; the ticks exist only under
@@ -2774,8 +2780,12 @@ def bwd_rms_norm[which: Int = 0](
         # below that measured boundary; this is scheduling only and both
         # paths produce the same complete-stage hash.
         var use_fused = False
-        comptime if TARGET_COLUMN == COLUMN_APPLE:
+        comptime if BWD_NORM_FUSED_TRIAL:
             use_fused = m >= 8192 and dm >= 768
+        elif TARGET_COLUMN == COLUMN_APPLE:
+            use_fused = m >= 8192 and dm >= 768
+        elif TARGET_COLUMN == COLUMN_NVIDIA:
+            use_fused = m >= 32768 and dm >= 768
         if use_fused:
             ctx.enqueue_function[bwd_norm_dh_dot_kernel](
                 dh.unsafe_ptr(), dot_out.unsafe_ptr(), rstd.unsafe_ptr(),

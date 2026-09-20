@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod g603hr0e7cd9vm ...
+ARMED. Pod g603hr0e7cd9vm is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-gpt3-rmsnorm-cv/tools/../bench/results/runpod_leases/g603hr0e7cd9vm.lease
+  extend with: tools/runpod_guard.sh extend g603hr0e7cd9vm '-p 19825 root@47.47.180.50' <minutes>
