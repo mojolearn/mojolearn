@@ -1076,7 +1076,8 @@ LANE_REVISIONS = {
 # serializer must fail their model proof, not become an admitted no-save N/A.
 REQUIRED_NUMERIC_PARTS = {
     name: ("model",)
-    for name in ("par-arima", "par-holtwinters", "par-scaler", "par-queries-radius")
+    for name in ("par-arima", "par-holtwinters", "par-scaler", "par-queries-radius",
+                 "par-rbf-sampler")
 }
 
 
