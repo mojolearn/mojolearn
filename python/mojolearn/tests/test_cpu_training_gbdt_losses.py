@@ -15,7 +15,7 @@ need-weights block, the sixteen-step search, splitmix64 and the stride walk
 of the bootstrap, the one-per-launch level seed, the child-Hessian bit test,
 the 1e-7 probability clip, the pinned MultiClass class, the Cholesky solve);
 the binding dispatches the new losses, exports the multi-dimensional predict
-and refuses the Bayesian bootstrap by name; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
+and routes the multiclass bootstrap and score noise; the CPU identity gate runs by hand since 2026-09-15 (no push trigger).
 
 The runtime check (skipped, and SAID to be skipped, when the binding is
 absent or a GPU set loaded): small fits of each configuration run twice
@@ -85,9 +85,9 @@ def test_oracles_import_no_gpu_module():
         "gbdt.host.gbdt_oracle_yeti", "std.math", "std.memory",
     ], _imports(LOSSES)
     assert _imports(MULTI) == [
-        "checks.numerics", "gbdt.gpu_data.compressed_index_builder",
+        "checks.numerics", "gbdt.data.permutation", "gbdt.gpu_data.compressed_index_builder",
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
-        "gbdt.host.gbdt_oracle", "gbdt.lapack.linear_system", "std.math",
+        "gbdt.gpu_util.kernel.random_gen", "gbdt.host.gbdt_oracle", "gbdt.lapack.linear_system", "std.math",
     ], _imports(MULTI)
     assert _imports("gbdt/lapack/linear_system.mojo") == ["std.math"]
     assert _imports("gbdt/gpu_util/kernel/random_gen.mojo") == ["checks.numerics"]

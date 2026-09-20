@@ -615,6 +615,7 @@ TRAINING_LANE_NAMES = {
     "gbdt-exact-mae": "gradient boosting with Exact leaves and the Poisson bootstrap",
     "gbdt-lossguide-newtoncosine": "gradient boosting on lossguide trees with the NewtonCosine score and the searcher options",
     "gbdt-multiclass": "multiclass gradient boosting",
+    "gbdt-multiclass-defaults": "multiclass gradient boosting with public stochastic defaults",
     "gbdt-onevsall": "one-vs-all gradient boosting",
     # lane/cpu-training-gbdt-ordered (2026-09-15): OrderedRMSE trains
     # through gbdt/host/gbdt_oracle_ordered.mojo (the pointwise searcher's
@@ -2309,7 +2310,7 @@ FAMILIES = (
             "par-cross-val",
             "gbdt-nan-modes", "gbdt-adapter-clf", "gbdt-adapter-reg",
             "gbdt-parametric-losses", "gbdt-exact-mae",
-            "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall",
+            "gbdt-lossguide-newtoncosine", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults",
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
