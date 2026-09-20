@@ -1204,11 +1204,11 @@ NO_CPU_PATH = (
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: RMSE and the "
-    "pointwise losses under Depthwise and Lossguide, score functions and "
-    "leaf estimators outside each policy's covered pair, most (bootstrap, "
-    "loss) pairs, Depthwise's min_split_gain, min_child_hessian and "
-    "min_data_in_leaf, random_strength and feature_fraction outside Logloss, "
+    "the gbdt/host oracles restate, each refused by name: pointwise "
+    "losses under Depthwise and Lossguide, score functions and leaf "
+    "estimators outside each policy's covered pair, Depthwise's "
+    "min_split_gain, min_child_hessian and min_data_in_leaf, feature_fraction "
+    "outside Logloss, "
     "boost_from_average outside RMSE and the quantile family, and a NaN in X "
     "outside SymmetricTree with Logloss -- each one its own device kernel or "
     "its own searcher gate order",
