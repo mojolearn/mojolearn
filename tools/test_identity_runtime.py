@@ -299,3 +299,83 @@ def test_reference_neighbors_keep_wrong_bytes_and_do_not_waive_refusals(monkeypa
         assert exc.value.parts != {name: ib._h(outputs[field]) for name, field in names.items()}
     else:
         assert dict(ib.LANES[route](ml, X, y, y, X[:64])) == expected_parts
+
+
+# ---------------------------------------------------------------- batchscale
+# A CHECK THAT CANNOT FAIL, closed 2026-09-20: `_eval_scale_rows` skipped a
+# sub-batch wider than the whole call (`if b > n: continue`) but seeded the
+# digest with the whole SCALE_BATCHES tuple, so the cell asserted a size the
+# run never took. `_eval_grad_accum` is the model: the digest carries what was
+# asked and an `n/a:` note says what was not.
+
+def _scale_digest(n, sabotage=""):
+    import hashlib
+    rng = np.random.default_rng(0)
+    R = rng.standard_normal((n, 8)).astype(np.float32)
+    call = ib._ScaleRows("probe", R, lambda r: (np.asarray(r) * np.float32(2.0),))
+    d, notes = hashlib.blake2b(digest_size=16), []
+    moved = ib._eval_scale_rows(call, sabotage, d, notes)
+    return moved, d.hexdigest(), notes
+
+
+def test_scale_rows_records_only_the_batches_it_asked():
+    """A call narrower than a sub-batch must not hash that sub-batch's number,
+    and must say so. The old code returned a clean verdict with no note."""
+    moved, _, notes = _scale_digest(20)
+    assert moved is None
+    assert [nt for nt in notes if "B=64 n/a:" in nt]
+    assert [nt for nt in notes if "B=256 n/a:" in nt]
+    wide_notes = _scale_digest(ib.SCALE_WHOLE)[2]
+    assert wide_notes == [], "a 1024-row call asks every batch and owes no n/a"
+
+
+def test_scale_rows_digest_distinguishes_a_skipped_batch():
+    """Two runs that asked DIFFERENT batch sets must not share a digest. Under
+    the old seeding both hashed `1,17,64,256` and were told apart only by the
+    row bytes, so a shrunk call read as a full one."""
+    import hashlib
+
+    def seeded(n, asked):
+        d = hashlib.blake2b(digest_size=16)
+        d.update(f"scale:probe:{n}:{','.join(map(str, asked))}".encode())
+        return d.hexdigest()
+
+    assert seeded(20, [1, 17]) != seeded(20, ib.SCALE_BATCHES)
+    # and the live path picks the first of those, not the second
+    rng = np.random.default_rng(0)
+    call = ib._ScaleRows("probe", rng.standard_normal((20, 8)).astype(np.float32),
+                         lambda r: (np.asarray(r) * np.float32(2.0),))
+    d, notes = hashlib.blake2b(digest_size=16), []
+    ib._eval_scale_rows(call, "", d, notes)
+    asked = hashlib.blake2b(digest_size=16)
+    asked.update(b"scale:probe:20:1,17")
+    wrong = hashlib.blake2b(digest_size=16)
+    wrong.update(b"scale:probe:20:1,17,64,256")
+    for r in ib._as_rows(call.fn(call.R), 20, "probe"):
+        for dt, shape, raw in r:
+            asked.update(f"{dt}{shape}".encode())
+            asked.update(raw)
+            wrong.update(f"{dt}{shape}".encode())
+            wrong.update(raw)
+    assert d.hexdigest() == asked.hexdigest()
+    assert d.hexdigest() != wrong.hexdigest(), "the digest still claims B=64 and B=256"
+    assert len(notes) == 2
+
+
+def test_scale_rows_sabotage_still_moves_the_cell():
+    """The n/a note must not have disarmed the part."""
+    moved, _, _ = _scale_digest(64, sabotage="1")
+    assert moved and moved.startswith("BATCH_MOVED:")
+
+
+def test_every_scale_rows_in_the_tree_asks_the_whole_batch_set():
+    """No committed cell moves, because no _ScaleRows is narrower than 256.
+    `_scale_calls` and `_batchscale_kneighbors` slice `Xh[:SCALE_WHOLE]` and
+    the fixture guard refuses MOJOLEARN_IDENTITY_N below 8192; the sequence
+    specs tile to exactly SCALE_WHOLE rows."""
+    assert ib.SCALE_WHOLE >= max(ib.SCALE_BATCHES)
+    assert ib._tiled(np.zeros((8192, 4), dtype=np.float32),
+                     (ib.SCALE_WHOLE, 3, 4)).shape[0] == ib.SCALE_WHOLE
+    assert ib._tiled_ids(np.zeros((8192, 4), dtype=np.float32),
+                         ib.SCALE_WHOLE, 8).shape[0] == ib.SCALE_WHOLE
+    assert np.zeros((8192, 4))[:ib.SCALE_WHOLE].shape[0] == ib.SCALE_WHOLE
