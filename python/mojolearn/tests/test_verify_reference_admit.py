@@ -225,3 +225,48 @@ def test_incomplete_checkpoint_is_refused_even_with_a_clean_filename():
     assert vref.admit(column, RECORDS + '/new/cpu-clean.json') == 'incomplete identity_break checkpoint'
     column['complete'] = True
     assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None
+
+
+# ------------------------------------------ the partial column (2026-09-20)
+# `complete` is a RUN-LEVEL flag and never inspected which parts a column
+# carries, so a four-part column and a nine-part column were admitted here
+# identically. The harness now stamps a narrowed run, and these watch the
+# refusal FIRE, watch a whole column still pass, and watch the historical
+# corpus stay admissible (the key is absent there, which must read as "not
+# narrowed", not as "unknown").
+
+def test_a_partial_column_is_refused_and_names_the_parts_it_left_out():
+    column = clean_column()
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None
+    column['partial_column'] = True
+    column['parts_omitted'] = ['batchscale', 'stepfull']
+    why = vref.admit(column, RECORDS + '/new/cpu-clean.json')
+    assert why == 'partial column: the run left out batchscale, stepfull'
+    # and it is a DIFFERENT refusal from the incomplete one, because they are
+    # different faults: one run stopped early, the other never asked
+    column['complete'] = False
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') == 'incomplete identity_break checkpoint'
+
+
+def test_a_partial_column_that_did_not_name_its_parts_is_still_refused():
+    column = clean_column()
+    column['partial_column'] = True
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') == (
+        'partial column: the run left out parts it did not name')
+
+
+@pytest.mark.parametrize('value', [False, None])
+def test_a_column_that_left_nothing_out_is_admitted(value):
+    column = clean_column()
+    column['partial_column'] = value
+    column['parts_omitted'] = []
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None
+
+
+def test_the_key_being_absent_reads_as_not_narrowed():
+    """Every column committed before 2026-09-20 lacks `partial_column`.
+    Refusing those would discard the corpus over a question they were never
+    asked, so absence must read falsey and admit exactly as before."""
+    column = clean_column()
+    assert 'partial_column' not in column
+    assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None

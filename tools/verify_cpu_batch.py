@@ -101,8 +101,15 @@ def main():
     parser.add_argument('--lanes', required=True)
     parser.add_argument('--out', required=True, type=Path)
     parser.add_argument('--timeout', type=int, default=300)
+    # ACCEPTED AND INERT SINCE 2026-09-20. It used to add --batch-grad,
+    # --batch-scale and --ragged, so a tool named verify_cpu_BATCH recorded
+    # no batch-size property unless the caller remembered a flag -- and its
+    # help text claimed it added step/full, which line 139 already passed
+    # unconditionally, so a reader who saw --step-full in the log assumed the
+    # other three had come with it. All four parts are now the harness
+    # default and this asks for nothing.
     parser.add_argument('--properties', action='store_true',
-                        help='also record step/full, gradients, batch-size and ragged properties')
+                        help='accepted and inert: every property part is recorded by default')
     args = parser.parse_args()
     if args.timeout <= 0:
         parser.error('--timeout must be positive')
@@ -136,9 +143,7 @@ def main():
             if path.exists():
                 raise SystemExit(f'record already exists: {path}')
             command = [sys.executable, str(root / 'tools/identity_break.py'), '--lanes', lane,
-                       '--repeats', '2', '--require-cpu', '--step-full', '--json', str(path)]
-            if args.properties:
-                command.extend(['--batch-grad', '--batch-scale', '--ragged'])
+                       '--repeats', '2', '--require-cpu', '--json', str(path)]
             print(f'{lane}: {arm}', flush=True)
             with (directory / f'{arm}.log').open('w') as log:
                 try:
