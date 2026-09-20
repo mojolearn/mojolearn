@@ -111,6 +111,44 @@ from concurrent.futures import ThreadPoolExecutor
 #: covered `gpc` and `gpc-multiclass` lanes already hash. It is NOT a device
 #: claim: at one device the partition is one process per class, which is what
 #: `identity_break._par_devices`'s docstring says of every `par-*` lane.
+#: lane/cpu-routes-gpu-only-four (2026-09-20) adds the last two operations of
+#: the four lanes that had NO CPU route at all, and the two were checked
+#: against this docstring's bar separately because they are not alike.
+#:
+#: `causal_lm_layer` is `models.ParallelCausalLM`'s one operation. THE
+#: PARTITION IS LAYERS, cut in the driver's own Python: `layer_devices` is one
+#: index per checkpoint layer, `_make_blocks` builds one `_RemoteBlock` per
+#: layer and sends it to its owner, and THE MERGE IS `CausalLM._run`'s own
+#: sequential chain -- embedding on the first owner, each layer's output
+#: handed to the next owner through host memory, the final norm and head on
+#: the last owner. Nothing is split inside a binding: the worker builds
+#: `_block_classes(route)[kind]`, which on the CPU route is the
+#: `neural_inference` block class the covered `hf-causal-lm` lane already
+#: hashes, and `_CpuPrimitives`, which is `_mojolearn_neural_host`'s
+#: `embedding_forward`/`rms_norm_forward`/`linear_forward` at the same
+#: addresses in the same order. The pool is NOT cooperative, so each worker is
+#: handed one device index and could not split across devices even if a kernel
+#: wanted to, and no `MOJOLEARN_*_DEVICE_COUNT` is set for it. It is INFERENCE
+#: only -- `CausalLM.load` plus `forward`; no operation here fits anything --
+#: which is why it needs no `require_training` the way `gpc_class_fit` did.
+#: `_rpc` addresses a single worker and so never reaches `map()`; it calls
+#: `_cpu_refusal` itself so this set still gates it.
+#:
+#: `cross_val_fold` is `parallel_model_selection.cross_val_score`'s. THE
+#: PARTITION IS FOLDS, cut in the driver's own Python by `_prepare_folds` and
+#: `_take_rows` (the serial API's own fold code, unchanged), one request per
+#: fold with its own cloned estimator, dispatched in waves of
+#: `len(pool.devices)`; THE MERGE IS `scores.extend(results)` in fold order.
+#: Nothing is split inside a binding: the worker runs
+#: `model_selection._fit_score_fold`, the estimator's PUBLIC `fit` and
+#: `score`, which on the CPU route is the same host arithmetic the serial
+#: `cross-val` lane hashes. IT IS A FIT, so it carries the same hole
+#: `gpc_class_fit` opened and the same guard: `_parallel_worker` calls
+#: `require_training` before the fold runs, and a CPU-only install outside
+#: `reference_training()` refuses in the worker exactly as the plain fit
+#: refuses in the parent. The device inventory that admits the WORKERS is not
+#: a device claim on this route and does not pretend to be one; see
+#: `_gpu_witness.require_distinct_processes`.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'forecast_predict',
@@ -118,6 +156,7 @@ CPU_OPERATIONS = frozenset((
     'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
     'ivf_store', 'ivf_search_stored', 'ivf_finalize',
     'gpc_class_fit', 'gpc_class_predict',
+    'causal_lm_layer', 'cross_val_fold', 'worker_identity',
 ))
 
 #: The cooperative operations the CPU route admits, and only from a

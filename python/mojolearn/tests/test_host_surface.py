@@ -215,7 +215,14 @@ def _gpu_only_lanes():
     2026-09-20). It is the set the harness itself uses to drop a lane from a
     full-column run on a CPU-only install, so a `no cpu route` reason is
     checked against the mechanism that acts on it and not against prose.
-    Refuses an empty read rather than passing vacuously."""
+    AN EMPTY DICT IS A LEGITIMATE READ SINCE 2026-09-20
+    (lane/cpu-routes-gpu-only-four): all four entries gained CPU routes and
+    `GPU_ONLY_LANES` is now `{}`. This used to refuse an empty read outright,
+    on the ground that a reader that silently returned nothing would let a
+    `no cpu route` reason through unchecked. That ground is still right and
+    the check is kept -- it is just spelled against the SOURCE's own key
+    count instead of against "non-empty", so it catches the broken reader
+    without calling a true emptiness a bug."""
     import ast
 
     for node in ast.parse(_read("tools/identity_break.py")).body:
@@ -225,7 +232,8 @@ def _gpu_only_lanes():
         if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
             out = {k.value for k in node.value.keys
                    if isinstance(k, ast.Constant) and isinstance(k.value, str)}
-            assert out, "GPU_ONLY_LANES parsed as empty; the reader is wrong"
+            assert len(out) == len(node.value.keys), \
+                "GPU_ONLY_LANES has keys this reader did not parse"
             return out
     raise AssertionError("tools/identity_break.py defines no GPU_ONLY_LANES dict")
 

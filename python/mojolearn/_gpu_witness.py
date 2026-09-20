@@ -68,6 +68,52 @@ def visible_gpu_inventory(vendor):
                             if key in os.environ})
 
 
+def worker_process_inventory():
+    """This worker's PROCESS identity, and nothing else.
+
+    THE CPU ROUTE'S PLACEMENT RECORD (lane/cpu-routes-gpu-only-four,
+    2026-09-20), and it is NOT a device inventory and must never be read as
+    one. `visible_gpu_inventory` above asks a vendor driver which physical
+    GPUs this process can see; there is no such question on a CPU-only
+    install, where `DevicePool` gives a worker no visibility mask at all and
+    a "device index" means one worker process. So this records the one fact
+    that IS true there -- which OS process answered -- under its own `kind`,
+    so a reader who mistakes the two has to ignore the word `process` in
+    every field. It admits that the driver's folds were dispatched to
+    separate processes. It admits NOTHING about hardware, isolation,
+    residency or throughput, and a column carrying it owes the two-device
+    GPU column exactly as before."""
+    return dict(kind='worker-process-identity', vendor='cpu', pid=os.getpid(),
+                ppid=os.getppid())
+
+
+def require_distinct_processes(records, count):
+    """Require one distinct worker PROCESS per requested index.
+
+    The CPU counterpart of `require_distinct_workers`, deliberately a
+    SEPARATE function rather than a vendor branch inside it: the GPU check
+    demands a UUID, a PCI bus id and a local ordinal zero, and softening any
+    of those to let a CPU record through would have weakened the only place
+    that refuses two MIG instances on one card. Nothing here is a device
+    claim; see `worker_process_inventory`."""
+    if type(count) is not int or count < 1:
+        raise RuntimeError('worker placement requires a positive worker count')
+    if len(records) != count:
+        raise RuntimeError('worker inventory count differs from requested indices')
+    pids = set()
+    for record in records:
+        if record.get('kind') != 'worker-process-identity' or record.get('vendor') != 'cpu':
+            raise RuntimeError('worker inventory has the wrong kind or vendor')
+        pid, ppid = record.get('pid'), record.get('ppid')
+        if type(pid) is not int or pid < 1 or type(ppid) is not int or ppid < 1:
+            raise RuntimeError('worker inventory lacks process identity')
+        if ppid != os.getpid():
+            raise RuntimeError('worker inventory came from a process this driver did not start')
+        if pid in pids:
+            raise RuntimeError('workers resolve to a repeated process')
+        pids.add(pid)
+
+
 def require_distinct_workers(records, vendor, count):
     """Require one visible physical device per worker, with no repeated GPU.
 

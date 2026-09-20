@@ -16,11 +16,25 @@ def execute(request):
         from . import _backend
         from ._gpu_witness import visible_gpu_inventory
         return visible_gpu_inventory(_backend.vendor())
+    if operation == 'worker_identity':
+        from ._gpu_witness import worker_process_inventory
+        return worker_process_inventory()
     if operation == 'cross_val_fold':
         from . import _backend
         from .model_selection import _fit_score_fold
-        if _backend.vendor() not in ('cuda', 'hip'):
+        if _backend.vendor() not in ('cuda', 'hip') and _backend._CPU_ONLY is None:
             raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
+        # THE SAME HOLE `gpc_class_fit` OPENED, CLOSED THE SAME WAY
+        # (lane/cpu-routes-gpu-only-four, 2026-09-20). A fold IS a fit, and
+        # admitting `cross_val_fold` to `_parallel_pool.CPU_OPERATIONS` put a
+        # fit behind the driver on an install where the plain fit refuses.
+        # `_fit_score_fold` does call the estimator's PUBLIC `fit`, so
+        # `_mode._guard_cpu_training` stands behind this for every estimator
+        # that carries it -- but that is one decorator on a surface the caller
+        # chooses, and `cross_val_score` takes ANY pickleable estimator. The
+        # guard is stated here, once, on the operation itself.
+        from ._cpu_reference import require_training
+        require_training(state)
         return _fit_score_fold(state, *args)
     if operation == 'causal_lm_layer':
         from ._causal_lm_worker import execute as run_layer

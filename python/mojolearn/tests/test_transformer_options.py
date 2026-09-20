@@ -466,9 +466,18 @@ def test_backward_refuses_a_non_default_record_by_name():
 def test_decode_session_carries_the_record():
     wflags, kwargs = _CASES["everything"]
     blk = TransformerBlock(_weights(**wflags), n_heads=NH, n_kv_heads=NKV, **kwargs)
-    ext = _binding_or_skip(blk)
-    if not hasattr(ext, "transformer_decode_session_create"):
-        pytest.skip("no resident decode session in this binding")
+    _binding_or_skip(blk)
+    # A BARE `hasattr` PROBE TOOK THIS TEST DOWN ON THE CPU COLUMN. The
+    # CPU-only stand-in raises ImportError by name from `__getattr__`
+    # (`_backend.py::_HostBinding`) and `hasattr` swallows only
+    # AttributeError, so the probe for the GPU session entry raised instead of
+    # returning False -- the same trap `_transformer_impl._exports` was
+    # written for. It no longer matters WHICH arm answers: since
+    # lane/cpu-routes-gpu-only-four (2026-09-20) the host route carries the
+    # session too, over `transformer_decode_step`/`transformer_forward`, and
+    # the record this test checks (`_CASES["everything"]`, the full options
+    # tail) has to survive both arms. So the probe is gone and the session is
+    # asked for directly.
     x = _x()
     st = blk.allocate_state(B, L)
     with blk.decode_session(st) as sess:
