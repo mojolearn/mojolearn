@@ -165,9 +165,9 @@ def hsqrt[dt: DType](x: Scalar[dt]) -> Scalar[dt]:
 
 
 def _rotate[
-    dt: DType
+    dt: DType, origin: MutOrigin, //
 ](
-    mut a: List[Scalar[dt]],
+    a: MutPointer[Scalar[dt], origin],
     n: Int,
     i: Int,
     j: Int,
@@ -179,19 +179,21 @@ def _rotate[
     """NR's `ROTATE`: `g = a[i][j]; h = a[k][l]; a[i][j] = g - s*(h + g*tau);
     a[k][l] = h + s*(g - h*tau)`. Spelled as two fmas per entry, seams
     flushed."""
-    var g = a[i * n + j]
-    var h = a[k * n + l]
+    var ij = i * n + j
+    var kl = k * n + l
+    var g = a.unsafe_load(ij)
+    var h = a.unsafe_load(kl)
     comptime if SAB_ROTATE_UNFUSED:
         # NR's C, four roundings: g - s*(h + g*tau), h + s*(g - h*tau)
         var u1 = hflush[dt](h + hflush[dt](g * tau))
-        a[i * n + j] = hflush[dt](g - hflush[dt](s * u1))
+        a.unsafe_store(ij, hflush[dt](g - hflush[dt](s * u1)))
         var u2 = hflush[dt](g - hflush[dt](h * tau))
-        a[k * n + l] = hflush[dt](h + hflush[dt](s * u2))
+        a.unsafe_store(kl, hflush[dt](h + hflush[dt](s * u2)))
     else:
         var t1 = hflush[dt](hfma[dt](g, tau, h))  # h + g*tau
-        a[i * n + j] = hflush[dt](hfma[dt](-s, t1, g))  # g - s*t1
+        a.unsafe_store(ij, hflush[dt](hfma[dt](-s, t1, g)))  # g - s*t1
         var t2 = hflush[dt](hfma[dt](-h, tau, g))  # g - h*tau
-        a[k * n + l] = hflush[dt](hfma[dt](s, t2, h))  # h + s*t2
+        a.unsafe_store(kl, hflush[dt](hfma[dt](s, t2, h)))  # h + s*t2
 
 
 def symmetric_eig_host[
@@ -263,7 +265,9 @@ def symmetric_eig_host[
                     if hflush[dt](h_abs + g) == h_abs:
                         t = hflush[dt](apq / h)
                     else:
-                        var theta = hflush[dt](hflush[dt](Scalar[dt](0.5) * h) / apq)
+                        var theta = hflush[dt](
+                            hflush[dt](Scalar[dt](0.5) * h) / apq
+                        )
                         var th2 = hflush[dt](hfma[dt](theta, theta, one))
                         var den = hflush[dt](abs(theta) + hsqrt[dt](th2))
                         t = hflush[dt](one / den)
@@ -280,13 +284,13 @@ def symmetric_eig_host[
                     d[q] = hflush[dt](d[q] + hh)
                     a[p * n + q] = zero
                     for j in range(0, p):
-                        _rotate[dt](a, n, j, p, j, q, s, tau)
+                        _rotate(a.unsafe_ptr(), n, j, p, j, q, s, tau)
                     for j in range(p + 1, q):
-                        _rotate[dt](a, n, p, j, j, q, s, tau)
+                        _rotate(a.unsafe_ptr(), n, p, j, j, q, s, tau)
                     for j in range(q + 1, n):
-                        _rotate[dt](a, n, p, j, q, j, s, tau)
+                        _rotate(a.unsafe_ptr(), n, p, j, q, j, s, tau)
                     for j in range(0, n):
-                        _rotate[dt](v, n, j, p, j, q, s, tau)
+                        _rotate(v.unsafe_ptr(), n, j, p, j, q, s, tau)
         for p in range(n):
             b[p] = hflush[dt](b[p] + z[p])
             d[p] = b[p]
