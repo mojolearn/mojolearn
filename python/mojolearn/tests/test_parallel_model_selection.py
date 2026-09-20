@@ -153,8 +153,58 @@ def test_no_implicit_cpu_or_metal_pool(setup, monkeypatch, vendor):
     with pytest.raises(NotImplementedError, match='CUDA or HIP'):
         parallel.cross_val_score(Estimator(), X, y, devices=(0, 1))
     assert not pools[-1].widths
-    with pytest.raises(NotImplementedError, match='CUDA or HIP'):
-        execute(('cross_val_fold', Estimator(), (X, y, X, y, None)))
+    if vendor == 'cpu':
+        with pytest.raises(NotImplementedError, match='CUDA, HIP or Metal'):
+            execute(('cross_val_fold', Estimator(), (X, y, X, y, None)))
+
+
+def test_single_metal_worker_matches_serial_without_device_isolation_claim(setup, monkeypatch):
+    X, y, pools = setup
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
+    original = parallel.DevicePool
+    asked = []
+
+    class MetalPool(original):
+        def map(self, requests):
+            asked.append(requests[0][0])
+            if requests[0][0] == 'metal_worker_identity':
+                return [dict(kind='single-metal-worker', vendor='metal',
+                             pid=1000, ppid=os.getpid())]
+            return super().map(requests)
+
+    monkeypatch.setattr(parallel, 'DevicePool', MetalPool)
+    expected = serial.cross_val_score(Estimator({'values': [7]}), X, y, cv=5)
+    actual = parallel.cross_val_score(Estimator({'values': [7]}), X, y, devices=(0,), cv=5)
+    assert actual.tobytes() == expected.tobytes()
+    assert asked[0] == 'metal_worker_identity'
+    assert 'device_inventory' not in asked and 'worker_identity' not in asked
+    assert pools[-1].widths == [1] * 5
+    assert pools[-1].closed
+
+
+@pytest.mark.parametrize('devices', [(1,), (0, 1), (1, 0)])
+def test_metal_requires_exactly_device_zero_before_launch(setup, monkeypatch, devices):
+    X, y, pools = setup
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'metal')
+    with pytest.raises(NotImplementedError, match=r'Metal devices=\(0,\)'):
+        parallel.cross_val_score(Estimator(), X, y, devices=devices)
+    assert not pools[-1].widths
+
+
+@pytest.mark.parametrize('record', [
+    dict(kind='worker-process-identity', vendor='cpu', pid=1000),
+    dict(kind='single-metal-worker', vendor='cuda', pid=1000),
+    dict(kind='single-metal-worker', vendor='metal', pid=True),
+])
+def test_metal_worker_identity_rejects_wrong_route(record):
+    with pytest.raises(RuntimeError, match='identity is invalid'):
+        parallel._require_single_metal_worker([dict(record, ppid=os.getpid())])
+
+
+def test_metal_worker_identity_checks_parent_process():
+    with pytest.raises(RuntimeError, match='identity is invalid'):
+        parallel._require_single_metal_worker([
+            dict(kind='single-metal-worker', vendor='metal', pid=1000, ppid=-1)])
 
 
 def test_cpu_only_install_takes_the_host_route_with_a_process_witness(setup, monkeypatch):
