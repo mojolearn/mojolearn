@@ -394,6 +394,11 @@ TRAINING_LANE_NAMES = {
     # dense affinity's COO scan (nonzero_f64_count, nonzero_f64_fill) in the
     # core host binding.
     "spectral-precomputed": "spectral clustering on a precomputed affinity",
+    # lane/expose-spectral-embedding (2026-09-20): SpectralEmbedding and
+    # manifold.spectral_embedding, through spectral_embedding_dataset and
+    # spectral_embedding_graph in the metrics host binding over
+    # host_spectral_embedding_dataset and host_spectral_embedding_coo.
+    "spectral-embedding": "spectral embedding (Laplacian eigenmaps)",
     # Workstream E, the gp host lane (2026-09-14): the Gaussian process fit
     # and predict through gaussian_process/host/gpr_oracle.mojo over
     # cholesky/host/chol_oracle.mojo and gemm_oracle, exported under the GPU
@@ -1695,7 +1700,8 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness"),
+                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness",
+                        "spectral-embedding"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -1710,7 +1716,7 @@ FAMILIES = (
         inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
-            "SpectralClustering", "UMAP",
+            "SpectralClustering", "SpectralEmbedding", "manifold.spectral_embedding", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
@@ -1749,6 +1755,7 @@ FAMILIES = (
             # 2860), so a saved model predicts from the inference wheel.
             "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
             "spectral_predict",
+            "spectral_embedding_dataset", "spectral_embedding_graph",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
@@ -3314,8 +3321,8 @@ PUBLIC_PENDING_LANES = {
     # `verify --all` would read OWED for every part. `PUBLIC_INAPPLICABLE_PREFIXES`
     # already keeps every `par-` lane out of the public set; this says why the
     # table is empty as well.
-    "par-gpc-fit": "no reference",
-    "par-gpc-predict": "no reference",
+    # ADMITTED 2026-09-20: par-gpc-fit, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-gpc-predict, CPU and a two-device RTX 4090 column agree on all nine fixtures.
     # THE OTHER FOUR, AND THE REASON THAT WAS WRONG
     # (lane/cpu-routes-gpu-only-four, 2026-09-20). The four lines above used
     # to read `no cpu route`, the reason that says "this box is the wrong box,
@@ -3351,8 +3358,8 @@ PUBLIC_PENDING_LANES = {
     # and nothing here claims otherwise.
     # ADMITTED 2026-09-20: mamba1-decode-session carries cells in the shipped table now.
     # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
-    "par-causal-lm": "no reference",
-    "par-cross-val": "no reference",
+    # ADMITTED 2026-09-20: par-causal-lm, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-cross-val, CPU and a two-device RTX 4090 column agree on all nine fixtures.
 }
 
 

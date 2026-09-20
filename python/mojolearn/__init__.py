@@ -146,7 +146,8 @@ from . import _metrics_impl as metrics
 from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
-from ._spectral_impl import SpectralClustering
+from ._spectral_impl import SpectralClustering, SpectralEmbedding
+from . import manifold
 from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
@@ -385,6 +386,7 @@ __all__ = [
     "SVC",
     "SVR",
     "SpectralClustering",
+    "SpectralEmbedding",
     "TransformerBlock",
     "TransformerState",
     "NearestNeighbors",
@@ -413,6 +415,7 @@ __all__ = [
     "models",
     "matmul",
     "mamba",
+    "manifold",
     "metrics",
     "neural_network",
     "language_model",

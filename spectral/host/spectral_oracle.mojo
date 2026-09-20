@@ -67,6 +67,7 @@ from spectral.host.spectral_predict_host import (
 )
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.sparse.op.coo_ops import (
+    coo_remove_diagonal,
     coo_remove_scalar,
     coo_sort,
     refuse_repeated_keys,
@@ -902,6 +903,59 @@ def host_spectral_fit_predict_dataset_keep(
     )
 
 
+def host_validate_connectivity_coo(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_components: Int,
+) raises:
+    """The device path's refusals on a given COO, in its words:
+    `transform_graph`'s non-finite and negative values,
+    `compute_graph_laplacian`'s index range and the Lanczos entry's shape
+    (`host_spectral_fit_predict_coo_keep` names the files)."""
+    var nnz = len(vals)
+    for i in range(nnz):
+        var v = vals[i]
+        if not isfinite(v):
+            raise Error(
+                "spectral: connectivity_graph has a non-finite value at entry "
+                + String(i) + " -- refused by name"
+            )
+        if v < Float32(0.0):
+            raise Error(
+                "spectral: connectivity_graph has a negative value at entry "
+                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
+            )
+    for i in range(nnz):
+        var r = Int(rows[i])
+        var c = Int(cols[i])
+        if r < 0 or r >= n_samples or c < 0 or c >= n_samples:
+            raise Error(
+                "connectivity_graph: entry " + String(i) + " has (row, col) = ("
+                + String(r) + ", " + String(c) + ") outside [0, "
+                + String(n_samples) + ")"
+            )
+    var k = n_components
+    if n_samples - k > 0:
+        var ncv_hi = 2 * k + 1
+        if ncv_hi < 20:
+            ncv_hi = 20
+        var ncv = n_samples - k
+        if ncv_hi < ncv:
+            ncv = ncv_hi
+        if k < 1:
+            raise Error(
+                "lanczos: need 1 <= n_components < n, got " + String(k)
+                + " for n=" + String(n_samples)
+            )
+        if ncv <= k + 1 or ncv > n_samples:
+            raise Error(
+                "lanczos: need n_components + 1 < ncv <= n, got ncv=" + String(ncv)
+                + " n_components=" + String(k) + " n=" + String(n_samples)
+            )
+
+
 def host_spectral_fit_predict_coo(
     rows: List[Int32],
     cols: List[Int32],
@@ -985,45 +1039,7 @@ def host_spectral_fit_predict_coo_keep(
             "spectral clustering: n_clusters=" + String(n_clusters)
             + " must satisfy 1 <= n_clusters <= n_samples"
         )
-    for i in range(nnz):
-        var v = vals[i]
-        if not isfinite(v):
-            raise Error(
-                "spectral: connectivity_graph has a non-finite value at entry "
-                + String(i) + " -- refused by name"
-            )
-        if v < Float32(0.0):
-            raise Error(
-                "spectral: connectivity_graph has a negative value at entry "
-                + String(i) + " -- refused by name (sqrt of a negative degree is NaN in theirs)"
-            )
-    for i in range(nnz):
-        var r = Int(rows[i])
-        var c = Int(cols[i])
-        if r < 0 or r >= n_samples or c < 0 or c >= n_samples:
-            raise Error(
-                "connectivity_graph: entry " + String(i) + " has (row, col) = ("
-                + String(r) + ", " + String(c) + ") outside [0, "
-                + String(n_samples) + ")"
-            )
-    var k = n_components
-    if n_samples - k > 0:
-        var ncv_hi = 2 * k + 1
-        if ncv_hi < 20:
-            ncv_hi = 20
-        var ncv = n_samples - k
-        if ncv_hi < ncv:
-            ncv = ncv_hi
-        if k < 1:
-            raise Error(
-                "lanczos: need 1 <= n_components < n, got " + String(k)
-                + " for n=" + String(n_samples)
-            )
-        if ncv <= k + 1 or ncv > n_samples:
-            raise Error(
-                "lanczos: need n_components + 1 < ncv <= n, got ncv=" + String(ncv)
-                + " n_components=" + String(k) + " n=" + String(n_samples)
-            )
+    host_validate_connectivity_coo(rows, cols, vals, n_samples, n_components)
     var r_copy = rows.copy()
     var c_copy = cols.copy()
     var v_copy = vals.copy()
@@ -1031,4 +1047,104 @@ def host_spectral_fit_predict_coo_keep(
     return host_spectral_fit_predict_graph_keep(
         graph, n_clusters, n_components, n_init, eigen_tol, seed, labels,
         embedding_out, state, keep,
+    )
+
+
+# ---------------------------------------------------------------------------
+# SpectralEmbedding on the host (lane/expose-spectral-embedding, 2026-09-20)
+# ---------------------------------------------------------------------------
+#
+# `spectral/impl/spectral_embedding.mojo::transform` and
+# `transform_connectivity` restated: the connectivity graph above (dataset
+# arm only), then `oracle_embedding` at cuVS's default tolerance `1e-5`,
+# with `norm_laplacian` and `drop_first` the caller's. No k-means runs, so
+# the negative control is its own: `-D MOJOLEARN_HOST_SABOTAGE=1` negates
+# embedding column 0.
+
+comptime SPECTRAL_EMBEDDING_TOLERANCE = Float32(1e-5)
+
+
+def _host_embedding_from_graph(
+    graph: CooGraph,
+    n_components: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding_out: List[Float32],
+) raises -> Int:
+    var res = oracle_embedding[DType.float32](
+        graph, n_components, norm_laplacian, drop_first,
+        SPECTRAL_EMBEDDING_TOLERANCE, seed,
+    )
+    var n_out = res.n_out
+    embedding_out.clear()
+    for i in range(len(res.embedding)):
+        embedding_out.append(res.embedding[i])
+    comptime if SPECTRAL_ORACLE_HOST_SABOTAGE:
+        # THE SABOTAGE ARM: column 0 negated. Wrong on purpose.
+        for p in range(graph.n):
+            embedding_out[p * n_out] = -embedding_out[p * n_out]
+    return n_out
+
+
+def host_spectral_embedding_dataset(
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    n_components: Int,
+    n_neighbors: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding_out: List[Float32],
+) raises -> Int:
+    """`spectral_embedding_dataset_host`, `spectral/estimator.mojo`, on the
+    host. `n_components` is the Lanczos count (the caller's plus one when
+    `drop_first`). Returns `n_out`."""
+    var graph = host_create_connectivity_graph(
+        dataset, n_samples, n_features, n_neighbors
+    )
+    host_validate_connectivity_coo(
+        graph.rows, graph.cols, graph.vals, n_samples, n_components
+    )
+    return _host_embedding_from_graph(
+        graph, n_components, norm_laplacian, drop_first, seed, embedding_out
+    )
+
+
+def host_spectral_embedding_coo(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_components: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding_out: List[Float32],
+) raises -> Int:
+    """`spectral_embedding_graph_host`, `spectral/estimator.mojo`, on the
+    host: the affinity graph is GIVEN as COO triples, its diagonal entries
+    dropped first. Returns `n_out`."""
+    if n_samples <= 0:
+        raise Error(
+            "spectral embedding: n_samples must be positive, got "
+            + String(n_samples)
+        )
+    var nnz = len(vals)
+    if nnz <= 0:
+        raise Error("spectral embedding: the connectivity graph has no entries")
+    if len(rows) != nnz or len(cols) != nnz:
+        raise Error(
+            "spectral embedding: rows, cols and vals must be the same"
+            " length, got " + String(len(rows)) + ", " + String(len(cols))
+            + ", " + String(nnz)
+        )
+    host_validate_connectivity_coo(rows, cols, vals, n_samples, n_components)
+    var r_copy = rows.copy()
+    var c_copy = cols.copy()
+    var v_copy = vals.copy()
+    var graph = coo_remove_diagonal(CooGraph(n_samples, r_copy^, c_copy^, v_copy^))
+    return _host_embedding_from_graph(
+        graph, n_components, norm_laplacian, drop_first, seed, embedding_out
     )

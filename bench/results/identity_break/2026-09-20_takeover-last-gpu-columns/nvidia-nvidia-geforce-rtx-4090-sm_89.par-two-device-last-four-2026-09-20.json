@@ -1,0 +1,2480 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "1bea5b4988d950c4788659b3753084377add71eb",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "par-gpc-fit/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "53f3a09fc600d61d"
+   ],
+   "parts": [
+    {
+     "L": "cf8752e79a59c592",
+     "pi": "3e4e62ab648dd40a",
+     "lml": "98bb97bbe4c450b5",
+     "three_L": "7d9c2e518ae98c75",
+     "three_lml": "f79f5b3ad939076f",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "fc0b4c2f28c2e079"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fc0b4c2f28c2e079"
+   ],
+   "batch": [
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.951870919205248,
+    "stages": {
+     "repeat=1/train": 9.807840399444103,
+     "repeat=1/infer-save-reload": 0.022366379387676716,
+     "repeat=1/batch": 0.12064935639500618,
+     "repeat=1/batchgrad": 0.000473986379802227,
+     "repeat=1/batchscale": 5.83697110414505e-05,
+     "repeat=1/ragged": 7.011089473962784e-05,
+     "repeat=1/stepfull": 7.418077439069748e-05
+    }
+   }
+  },
+  "par-gpc-fit/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f7640639a72e6940"
+   ],
+   "parts": [
+    {
+     "L": "1c56b1a457a1c00d",
+     "pi": "54da9e409ea88a26",
+     "lml": "47e164f88e53c133",
+     "three_L": "a653ed86fc27f64c",
+     "three_lml": "00725e740fb42dbb",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "ede5baa0c8969b06"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7b9bf869ad365c26"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ede5baa0c8969b06"
+   ],
+   "batch": [
+    "c5069c7b59de4ee1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 6.014462715014815,
+    "stages": {
+     "repeat=1/train": 5.949893120676279,
+     "repeat=1/infer-save-reload": 0.016311081126332283,
+     "repeat=1/batch": 0.04777905624359846,
+     "repeat=1/batchgrad": 7.580127567052841e-05,
+     "repeat=1/batchscale": 5.2449293434619904e-05,
+     "repeat=1/ragged": 5.967915058135986e-05,
+     "repeat=1/stepfull": 4.940107464790344e-05
+    }
+   }
+  },
+  "par-gpc-fit/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "04ea8fda33a7b3dc"
+   ],
+   "parts": [
+    {
+     "L": "2b98ddf8b06f7b63",
+     "pi": "6e1f93a4c06326fb",
+     "lml": "c77e25faf5353555",
+     "three_L": "28517f6a95238a55",
+     "three_lml": "db5cbb707be4d3bf",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "9da411da0b1e3037"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f4c2aca55d9362f2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9da411da0b1e3037"
+   ],
+   "batch": [
+    "0419fbbe5d340ea4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 7.533297820016742,
+    "stages": {
+     "repeat=1/train": 7.46187209803611,
+     "repeat=1/infer-save-reload": 0.018761522136628628,
+     "repeat=1/batch": 0.052005170844495296,
+     "repeat=1/batchgrad": 0.0001774923875927925,
+     "repeat=1/batchscale": 5.789007991552353e-05,
+     "repeat=1/ragged": 5.58905303478241e-05,
+     "repeat=1/stepfull": 5.6770630180835724e-05
+    }
+   }
+  },
+  "par-gpc-fit/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "38186a8759df8c24"
+   ],
+   "parts": [
+    {
+     "L": "14b4891c671baae8",
+     "pi": "ae6674e4e07db13d",
+     "lml": "1b639a89049571a9",
+     "three_L": "129c4f787ed8740b",
+     "three_lml": "bb32aa0beef23ebd",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "209675fda33ccf51"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a3ba1f8be78a6a1e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "209675fda33ccf51"
+   ],
+   "batch": [
+    "e8e16299ce5b249c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 7.077878013253212,
+    "stages": {
+     "repeat=1/train": 7.004054986871779,
+     "repeat=1/infer-save-reload": 0.01925466675311327,
+     "repeat=1/batch": 0.054012542590498924,
+     "repeat=1/batchgrad": 9.517185389995575e-05,
+     "repeat=1/batchscale": 7.259100675582886e-05,
+     "repeat=1/ragged": 5.5001117289066315e-05,
+     "repeat=1/stepfull": 6.51506707072258e-05
+    }
+   }
+  },
+  "par-gpc-fit/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "98250ecb42f48515"
+   ],
+   "parts": [
+    {
+     "L": "643ba281d928134a",
+     "pi": "ccadf25b8563fa16",
+     "lml": "3988f47606438479",
+     "three_L": "80eb6c6a433d3f5d",
+     "three_lml": "7a2cb27ff278fc78",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "cd21375d6187b126"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1ed2aed7cb4ce5f2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cd21375d6187b126"
+   ],
+   "batch": [
+    "ba78f499f85cae98"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 6.635042090900242,
+    "stages": {
+     "repeat=1/train": 6.5683081252500415,
+     "repeat=1/infer-save-reload": 0.01630821917206049,
+     "repeat=1/batch": 0.049930340610444546,
+     "repeat=1/batchgrad": 9.017065167427063e-05,
+     "repeat=1/batchscale": 5.385000258684158e-05,
+     "repeat=1/ragged": 6.210152059793472e-05,
+     "repeat=1/stepfull": 5.041062831878662e-05
+    }
+   }
+  },
+  "par-gpc-fit/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "98250ecb42f48515"
+   ],
+   "parts": [
+    {
+     "L": "643ba281d928134a",
+     "pi": "ccadf25b8563fa16",
+     "lml": "3988f47606438479",
+     "three_L": "80eb6c6a433d3f5d",
+     "three_lml": "7a2cb27ff278fc78",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "cd21375d6187b126"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b91daefb85705ccd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cd21375d6187b126"
+   ],
+   "batch": [
+    "ba78f499f85cae98"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 7.606161753647029,
+    "stages": {
+     "repeat=1/train": 7.5404845820739865,
+     "repeat=1/infer-save-reload": 0.017300531268119812,
+     "repeat=1/batch": 0.04792021308094263,
+     "repeat=1/batchgrad": 6.0410238802433014e-05,
+     "repeat=1/batchscale": 5.276128649711609e-05,
+     "repeat=1/ragged": 5.041062831878662e-05,
+     "repeat=1/stepfull": 5.046091973781586e-05
+    }
+   }
+  },
+  "par-gpc-fit/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "53f3a09fc600d61d"
+   ],
+   "parts": [
+    {
+     "L": "cf8752e79a59c592",
+     "pi": "3e4e62ab648dd40a",
+     "lml": "98bb97bbe4c450b5",
+     "three_L": "7d9c2e518ae98c75",
+     "three_lml": "f79f5b3ad939076f",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "fc0b4c2f28c2e079"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fc0b4c2f28c2e079"
+   ],
+   "batch": [
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.47075276169926,
+    "stages": {
+     "repeat=1/train": 8.395875501446426,
+     "repeat=1/infer-save-reload": 0.019078055396676064,
+     "repeat=1/batch": 0.05509628728032112,
+     "repeat=1/batchgrad": 0.00022645294666290283,
+     "repeat=1/batchscale": 7.473025470972061e-05,
+     "repeat=1/ragged": 5.5691227316856384e-05,
+     "repeat=1/stepfull": 5.8720819652080536e-05
+    }
+   }
+  },
+  "par-gpc-fit/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "adff85182ac93351"
+   ],
+   "parts": [
+    {
+     "L": "0a974df3dec4fae2",
+     "pi": "9eed79f1f69b6abc",
+     "lml": "ea045e1fd40d7435",
+     "three_L": "f65bda3e77bcc77e",
+     "three_lml": "02e4c72f4f1db5c0",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "1af8d13ad9045833"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d5a786c8bdd995bf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1af8d13ad9045833"
+   ],
+   "batch": [
+    "1d0177239abe0a3c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.8325978349894285,
+    "stages": {
+     "repeat=1/train": 4.768347380682826,
+     "repeat=1/infer-save-reload": 0.016256059519946575,
+     "repeat=1/batch": 0.047621251083910465,
+     "repeat=1/batchgrad": 5.571078509092331e-05,
+     "repeat=1/batchscale": 3.382004797458649e-05,
+     "repeat=1/ragged": 3.214925527572632e-05,
+     "repeat=1/stepfull": 3.180094063282013e-05
+    }
+   }
+  },
+  "par-gpc-fit/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c906f7311c4464c"
+   ],
+   "parts": [
+    {
+     "L": "c9b21771ceb29600",
+     "pi": "5be3b095257cb9b1",
+     "lml": "50f4986c4e5c515f",
+     "three_L": "5f9653de4d242dfb",
+     "three_lml": "e81d5e9da598720e",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "b7e320a5c79c2f12"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "42456472e82844f7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b7e320a5c79c2f12"
+   ],
+   "batch": [
+    "c2f1bdf1ba2a74f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 6.768657663837075,
+    "stages": {
+     "repeat=1/train": 6.704318239353597,
+     "repeat=1/infer-save-reload": 0.0161476768553257,
+     "repeat=1/batch": 0.04773600213229656,
+     "repeat=1/batchgrad": 8.742045611143112e-05,
+     "repeat=1/batchscale": 4.794076085090637e-05,
+     "repeat=1/ragged": 4.6570785343647e-05,
+     "repeat=1/stepfull": 4.624016582965851e-05
+    }
+   }
+  },
+  "par-gpc-predict/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f1217bcae26e6a9"
+   ],
+   "parts": [
+    {
+     "proba": "7fe0c77419444f56",
+     "labels": "f9e4bc6d4cc2b195",
+     "three_proba": "7e0d3baa2c0e0f2a",
+     "three_labels": "c587c32a823e3991",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "fb0a0cfb1fee8dab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fb0a0cfb1fee8dab"
+   ],
+   "batch": [
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.049811767414212,
+    "stages": {
+     "repeat=1/train": 8.959508029744029,
+     "repeat=1/infer-save-reload": 0.029411466792225838,
+     "repeat=1/batch": 0.06036295369267464,
+     "repeat=1/batchgrad": 7.9411081969738e-05,
+     "repeat=1/batchscale": 4.9631111323833466e-05,
+     "repeat=1/ragged": 4.675053060054779e-05,
+     "repeat=1/stepfull": 4.9841590225696564e-05
+    }
+   }
+  },
+  "par-gpc-predict/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b7725384674bcb9b"
+   ],
+   "parts": [
+    {
+     "proba": "df42fda062224629",
+     "labels": "7ad6955755ba0203",
+     "three_proba": "56a3218ebcb584df",
+     "three_labels": "713d25520c294a27",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "36faf8506fbac21b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7b9bf869ad365c26"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36faf8506fbac21b"
+   ],
+   "batch": [
+    "c5069c7b59de4ee1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 11.190609513781965,
+    "stages": {
+     "repeat=1/train": 11.09900843910873,
+     "repeat=1/infer-save-reload": 0.029377387836575508,
+     "repeat=1/batch": 0.06170416157692671,
+     "repeat=1/batchgrad": 7.831119000911713e-05,
+     "repeat=1/batchscale": 4.7361478209495544e-05,
+     "repeat=1/ragged": 4.6601518988609314e-05,
+     "repeat=1/stepfull": 4.636961966753006e-05
+    }
+   }
+  },
+  "par-gpc-predict/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a84c7a9a2f90ff21"
+   ],
+   "parts": [
+    {
+     "proba": "58f64782990e93d5",
+     "labels": "6dbed96b13c48e0b",
+     "three_proba": "e73a82901bb53a49",
+     "three_labels": "80fa618d045b3a60",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "4b0cface672a3d34"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f4c2aca55d9362f2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "4b0cface672a3d34"
+   ],
+   "batch": [
+    "0419fbbe5d340ea4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.61957994569093,
+    "stages": {
+     "repeat=1/train": 9.52929274737835,
+     "repeat=1/infer-save-reload": 0.029347586445510387,
+     "repeat=1/batch": 0.060419014655053616,
+     "repeat=1/batchgrad": 8.743070065975189e-05,
+     "repeat=1/batchscale": 4.576053470373154e-05,
+     "repeat=1/ragged": 4.255026578903198e-05,
+     "repeat=1/stepfull": 4.279986023902893e-05
+    }
+   }
+  },
+  "par-gpc-predict/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c0ef697f0ddafb7"
+   ],
+   "parts": [
+    {
+     "proba": "9c6e238d0dcccbd3",
+     "labels": "5f482c686ea3a30e",
+     "three_proba": "28580dfcc85c4ebe",
+     "three_labels": "5f482c686ea3a30e",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "a94e0eb4bddf6c35"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a3ba1f8be78a6a1e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a94e0eb4bddf6c35"
+   ],
+   "batch": [
+    "e8e16299ce5b249c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.537410167045891,
+    "stages": {
+     "repeat=1/train": 8.446206888183951,
+     "repeat=1/infer-save-reload": 0.02934485673904419,
+     "repeat=1/batch": 0.06136679649353027,
+     "repeat=1/batchgrad": 7.896125316619873e-05,
+     "repeat=1/batchscale": 4.465971142053604e-05,
+     "repeat=1/ragged": 4.285108298063278e-05,
+     "repeat=1/stepfull": 4.30205836892128e-05
+    }
+   }
+  },
+  "par-gpc-predict/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a12033812c60523b"
+   ],
+   "parts": [
+    {
+     "proba": "ac91e82738cfcfca",
+     "labels": "d2c9d182c72db270",
+     "three_proba": "242ade648586c25f",
+     "three_labels": "43da7219435c8aaf",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "552aa9dfdcaccfb7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1ed2aed7cb4ce5f2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "552aa9dfdcaccfb7"
+   ],
+   "batch": [
+    "ba78f499f85cae98"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 11.993142714723945,
+    "stages": {
+     "repeat=1/train": 11.893191643059254,
+     "repeat=1/infer-save-reload": 0.0330080334097147,
+     "repeat=1/batch": 0.06610110774636269,
+     "repeat=1/batchgrad": 0.00018361210823059082,
+     "repeat=1/batchscale": 4.646088927984238e-05,
+     "repeat=1/ragged": 4.255026578903198e-05,
+     "repeat=1/stepfull": 4.239007830619812e-05
+    }
+   }
+  },
+  "par-gpc-predict/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a12033812c60523b"
+   ],
+   "parts": [
+    {
+     "proba": "ac91e82738cfcfca",
+     "labels": "d2c9d182c72db270",
+     "three_proba": "242ade648586c25f",
+     "three_labels": "43da7219435c8aaf",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "552aa9dfdcaccfb7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b91daefb85705ccd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "552aa9dfdcaccfb7"
+   ],
+   "batch": [
+    "ba78f499f85cae98"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.960881098173559,
+    "stages": {
+     "repeat=1/train": 8.871360040269792,
+     "repeat=1/infer-save-reload": 0.029585210606455803,
+     "repeat=1/batch": 0.059401221573352814,
+     "repeat=1/batchgrad": 9.384192526340485e-05,
+     "repeat=1/batchscale": 5.3309835493564606e-05,
+     "repeat=1/ragged": 5.0479546189308167e-05,
+     "repeat=1/stepfull": 5.130097270011902e-05
+    }
+   }
+  },
+  "par-gpc-predict/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f1217bcae26e6a9"
+   ],
+   "parts": [
+    {
+     "proba": "7fe0c77419444f56",
+     "labels": "f9e4bc6d4cc2b195",
+     "three_proba": "7e0d3baa2c0e0f2a",
+     "three_labels": "c587c32a823e3991",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "fb0a0cfb1fee8dab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fb0a0cfb1fee8dab"
+   ],
+   "batch": [
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.707846503704786,
+    "stages": {
+     "repeat=1/train": 8.643944913521409,
+     "repeat=1/infer-save-reload": 0.014790469780564308,
+     "repeat=1/batch": 0.04867741372436285,
+     "repeat=1/batchgrad": 7.922016084194183e-05,
+     "repeat=1/batchscale": 5.337130278348923e-05,
+     "repeat=1/ragged": 5.121994763612747e-05,
+     "repeat=1/stepfull": 5.0290487706661224e-05
+    }
+   }
+  },
+  "par-gpc-predict/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9f285470331c3d0a"
+   ],
+   "parts": [
+    {
+     "proba": "09d523024296b005",
+     "labels": "27e0f118daff4b69",
+     "three_proba": "42e9fc2cf76dd46e",
+     "three_labels": "81c446b08a9971ad",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "1ef823d8e4a69428"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d5a786c8bdd995bf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1ef823d8e4a69428"
+   ],
+   "batch": [
+    "1d0177239abe0a3c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.725953875109553,
+    "stages": {
+     "repeat=1/train": 8.635149611160159,
+     "repeat=1/infer-save-reload": 0.02981560304760933,
+     "repeat=1/batch": 0.06054250709712505,
+     "repeat=1/batchgrad": 5.664117634296417e-05,
+     "repeat=1/batchscale": 3.24910506606102e-05,
+     "repeat=1/ragged": 3.2150186598300934e-05,
+     "repeat=1/stepfull": 3.2631680369377136e-05
+    }
+   }
+  },
+  "par-gpc-predict/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fb79c0d34c7353ab"
+   ],
+   "parts": [
+    {
+     "proba": "9660a5852fb8d6f8",
+     "labels": "f6095d2acde78070",
+     "three_proba": "ec7f0125bdff3b5b",
+     "three_labels": "dae6b4ac4d264c47",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "29771f8e07c66d7e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "42456472e82844f7"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "29771f8e07c66d7e"
+   ],
+   "batch": [
+    "c2f1bdf1ba2a74f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 8.706672417931259,
+    "stages": {
+     "repeat=1/train": 8.601788223721087,
+     "repeat=1/infer-save-reload": 0.037926685996353626,
+     "repeat=1/batch": 0.06620946899056435,
+     "repeat=1/batchgrad": 0.00011728145182132721,
+     "repeat=1/batchscale": 5.071982741355896e-05,
+     "repeat=1/ragged": 5.543045699596405e-05,
+     "repeat=1/stepfull": 6.472133100032806e-05
+    }
+   }
+  },
+  "par-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.101296986453235,
+    "stages": {
+     "repeat=1/train": 2.509128198027611,
+     "repeat=1/infer-save-reload": 1.8839724361896515e-05,
+     "repeat=1/batch": 1.5914177587255836,
+     "repeat=1/batchgrad": 0.00031878426671028137,
+     "repeat=1/batchscale": 4.717055708169937e-05,
+     "repeat=1/ragged": 5.122087895870209e-05,
+     "repeat=1/stepfull": 3.9740465581417084e-05
+    }
+   }
+  },
+  "par-causal-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6caf9f0f7ae562d"
+   ],
+   "parts": [
+    {
+     "logits": "31c30f8c0ea0ad9c",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "73aef1570825d468"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.754060184583068,
+    "stages": {
+     "repeat=1/train": 2.1530406419187784,
+     "repeat=1/infer-save-reload": 3.258977085351944e-05,
+     "repeat=1/batch": 1.6000830000266433,
+     "repeat=1/batchgrad": 0.0002367030829191208,
+     "repeat=1/batchscale": 8.049048483371735e-05,
+     "repeat=1/ragged": 7.37309455871582e-05,
+     "repeat=1/stepfull": 7.349997758865356e-05
+    }
+   }
+  },
+  "par-causal-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37c495fc132ea9db"
+   ],
+   "parts": [
+    {
+     "logits": "a0641131ca09b686",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b2dfd7cd9cf444df"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.732713549397886,
+    "stages": {
+     "repeat=1/train": 2.1615817304700613,
+     "repeat=1/infer-save-reload": 2.363976091146469e-05,
+     "repeat=1/batch": 1.5701152347028255,
+     "repeat=1/batchgrad": 0.00032970402389764786,
+     "repeat=1/batchscale": 0.00010039098560810089,
+     "repeat=1/ragged": 9.068101644515991e-05,
+     "repeat=1/stepfull": 9.096134454011917e-05
+    }
+   }
+  },
+  "par-causal-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f711a5aa202b3e41"
+   ],
+   "parts": [
+    {
+     "logits": "5deeb2b77b89c972",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "97051f4a7819532e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 5.6240402944386005,
+    "stages": {
+     "repeat=1/train": 4.096084418706596,
+     "repeat=1/infer-save-reload": 1.6899779438972473e-05,
+     "repeat=1/batch": 1.5271611642092466,
+     "repeat=1/batchgrad": 0.00018807221204042435,
+     "repeat=1/batchscale": 8.791033178567886e-05,
+     "repeat=1/ragged": 8.558109402656555e-05,
+     "repeat=1/stepfull": 8.598156273365021e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f1c5288260c678cd"
+   ],
+   "parts": [
+    {
+     "logits": "3333a75866b17725",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0c52595dfa1179f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.563367578200996,
+    "stages": {
+     "repeat=1/train": 2.0838600946590304,
+     "repeat=1/infer-save-reload": 1.8050894141197205e-05,
+     "repeat=1/batch": 1.4787620846182108,
+     "repeat=1/batchgrad": 0.00014663208276033401,
+     "repeat=1/batchscale": 9.063165634870529e-05,
+     "repeat=1/ragged": 8.649099618196487e-05,
+     "repeat=1/stepfull": 8.602160960435867e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dba9613ece4fdadb"
+   ],
+   "parts": [
+    {
+     "logits": "8a41f078bdfa8cd9",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ecda286f05a73eaa"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.007138908840716,
+    "stages": {
+     "repeat=1/train": 2.1626843344420195,
+     "repeat=1/infer-save-reload": 1.7739832401275635e-05,
+     "repeat=1/batch": 1.8436162928119302,
+     "repeat=1/batchgrad": 0.00019467156380414963,
+     "repeat=1/batchscale": 8.436013013124466e-05,
+     "repeat=1/ragged": 8.125137537717819e-05,
+     "repeat=1/stepfull": 8.028186857700348e-05
+    }
+   }
+  },
+  "par-causal-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 5.6469554686918855,
+    "stages": {
+     "repeat=1/train": 2.752117353491485,
+     "repeat=1/infer-save-reload": 1.767929643392563e-05,
+     "repeat=1/batch": 2.8939619436860085,
+     "repeat=1/batchgrad": 0.00018437206745147705,
+     "repeat=1/batchscale": 9.224191308021545e-05,
+     "repeat=1/ragged": 8.973106741905212e-05,
+     "repeat=1/stepfull": 8.831080049276352e-05
+    }
+   }
+  },
+  "par-causal-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.014693706296384,
+    "stages": {
+     "repeat=1/train": 2.2450073305517435,
+     "repeat=1/infer-save-reload": 1.689046621322632e-05,
+     "repeat=1/batch": 1.7690024860203266,
+     "repeat=1/batchgrad": 0.00012473203241825104,
+     "repeat=1/batchscale": 6.270036101341248e-05,
+     "repeat=1/ragged": 6.129126995801926e-05,
+     "repeat=1/stepfull": 6.066076457500458e-05
+    }
+   }
+  },
+  "par-causal-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86e92270cebe985b"
+   ],
+   "parts": [
+    {
+     "logits": "3a2a57ac304f0b7b",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "921a3eb50c0e6439"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 6.798496966250241,
+    "stages": {
+     "repeat=1/train": 3.621987990103662,
+     "repeat=1/infer-save-reload": 1.783110201358795e-05,
+     "repeat=1/batch": 3.1755741350352764,
+     "repeat=1/batchgrad": 0.00021464284509420395,
+     "repeat=1/batchscale": 0.0001364322379231453,
+     "repeat=1/ragged": 8.585117757320404e-05,
+     "repeat=1/stepfull": 8.463114500045776e-05
+    }
+   }
+  },
+  "par-cross-val/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b42f6f50bae5b03c"
+   ],
+   "parts": [
+    {
+     "scores": "9336dc0965e2ba0f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 6.2325024185702205,
+    "stages": {
+     "repeat=1/train": 6.231797539629042,
+     "repeat=1/infer-save-reload": 1.3349577784538269e-05,
+     "repeat=1/batch": 0.00017131119966506958,
+     "repeat=1/batchgrad": 7.517077028751373e-05,
+     "repeat=1/batchscale": 6.774067878723145e-05,
+     "repeat=1/ragged": 6.727036088705063e-05,
+     "repeat=1/stepfull": 6.780959665775299e-05
+    }
+   }
+  },
+  "par-cross-val/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7ebc6632cd2f78db"
+   ],
+   "parts": [
+    {
+     "scores": "99255240bc21a1d8",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.5333801293745637,
+    "stages": {
+     "repeat=1/train": 2.5325627690181136,
+     "repeat=1/infer-save-reload": 1.341942697763443e-05,
+     "repeat=1/batch": 0.00020019244402647018,
+     "repeat=1/batchgrad": 0.00010381080210208893,
+     "repeat=1/batchscale": 8.473172783851624e-05,
+     "repeat=1/ragged": 7.606111466884613e-05,
+     "repeat=1/stepfull": 8.603092283010483e-05
+    }
+   }
+  },
+  "par-cross-val/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a2287c443cf24aa0"
+   ],
+   "parts": [
+    {
+     "scores": "9b24e65a694d9b86",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.5016211019828916,
+    "stages": {
+     "repeat=1/train": 2.5008427118882537,
+     "repeat=1/infer-save-reload": 4.3410807847976685e-05,
+     "repeat=1/batch": 0.00021020323038101196,
+     "repeat=1/batchgrad": 6.820075213909149e-05,
+     "repeat=1/batchscale": 7.793121039867401e-05,
+     "repeat=1/ragged": 4.781968891620636e-05,
+     "repeat=1/stepfull": 4.753191024065018e-05
+    }
+   }
+  },
+  "par-cross-val/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "40c2b054e9a24cdc"
+   ],
+   "parts": [
+    {
+     "scores": "8641f26de10ebdb7",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.3947755116969347,
+    "stages": {
+     "repeat=1/train": 2.394003120251,
+     "repeat=1/infer-save-reload": 1.3249926269054413e-05,
+     "repeat=1/batch": 0.0001770518720149994,
+     "repeat=1/batchgrad": 8.338131010532379e-05,
+     "repeat=1/batchscale": 7.650069892406464e-05,
+     "repeat=1/ragged": 7.604062557220459e-05,
+     "repeat=1/stepfull": 7.578078657388687e-05
+    }
+   }
+  },
+  "par-cross-val/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a3d0c41cf6d6da5"
+   ],
+   "parts": [
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.371459122747183,
+    "stages": {
+     "repeat=1/train": 2.370891984552145,
+     "repeat=1/infer-save-reload": 8.500181138515472e-06,
+     "repeat=1/batch": 0.0001411624252796173,
+     "repeat=1/batchgrad": 5.187094211578369e-05,
+     "repeat=1/batchscale": 4.900060594081879e-05,
+     "repeat=1/ragged": 7.016025483608246e-05,
+     "repeat=1/stepfull": 5.6850723922252655e-05
+    }
+   }
+  },
+  "par-cross-val/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a3d0c41cf6d6da5"
+   ],
+   "parts": [
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.3403498642146587,
+    "stages": {
+     "repeat=1/train": 2.339704066514969,
+     "repeat=1/infer-save-reload": 8.819624781608582e-06,
+     "repeat=1/batch": 0.00015642214566469193,
+     "repeat=1/batchgrad": 6.292108446359634e-05,
+     "repeat=1/batchscale": 6.0371123254299164e-05,
+     "repeat=1/ragged": 7.65705481171608e-05,
+     "repeat=1/stepfull": 7.562059909105301e-05
+    }
+   }
+  },
+  "par-cross-val/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0965a2f7dd472e8d"
+   ],
+   "parts": [
+    {
+     "scores": "fbd8c68dc08f37be",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.345579999499023,
+    "stages": {
+     "repeat=1/train": 2.3449186412617564,
+     "repeat=1/infer-save-reload": 1.267995685338974e-05,
+     "repeat=1/batch": 0.00018608197569847107,
+     "repeat=1/batchgrad": 7.596146315336227e-05,
+     "repeat=1/batchscale": 5.4581090807914734e-05,
+     "repeat=1/ragged": 5.487073212862015e-05,
+     "repeat=1/stepfull": 5.241110920906067e-05
+    }
+   }
+  },
+  "par-cross-val/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d2f37d8250f8b3ef"
+   ],
+   "parts": [
+    {
+     "scores": "ff12ee6c504afb26",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.33390081115067,
+    "stages": {
+     "repeat=1/train": 2.3334594760090113,
+     "repeat=1/infer-save-reload": 8.63056629896164e-06,
+     "repeat=1/batch": 9.973160922527313e-05,
+     "repeat=1/batchgrad": 3.7700869143009186e-05,
+     "repeat=1/batchscale": 4.686973989009857e-05,
+     "repeat=1/ragged": 3.4320168197155e-05,
+     "repeat=1/stepfull": 3.37306410074234e-05
+    }
+   }
+  },
+  "par-cross-val/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2df39c65766aac8e"
+   ],
+   "parts": [
+    {
+     "scores": "0d02fcad7b9ed850",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.827203271910548,
+    "stages": {
+     "repeat=1/train": 3.8266658149659634,
+     "repeat=1/infer-save-reload": 8.249655365943909e-06,
+     "repeat=1/batch": 0.0001416914165019989,
+     "repeat=1/batchgrad": 5.463138222694397e-05,
+     "repeat=1/batchscale": 4.6061351895332336e-05,
+     "repeat=1/ragged": 4.590023308992386e-05,
+     "repeat=1/stepfull": 4.588998854160309e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-causal-lm",
+  "par-cross-val",
+  "par-gpc-fit",
+  "par-gpc-predict"
+ ],
+ "degenerate_column": "nvidia-1gpu",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "dba80e4e834a89848045e1c45488747cc0f2839f4fea59a931bdf6fb71a2bdf7",
+    "size": 846440
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "e85a28fec69bd0128b0b01ee7608e79b78190d22bca1a0c748cab52c3f5bfc98",
+    "size": 9133480
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "e79fd53a669fc2c5265d7a00dd58bcfe4475119773e28bb4e0543c263395b8a1",
+    "size": 300640
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "51445fd5bea090998a118aff42c553797be538b44921fa12c370a663d2f1d6a9",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "c35c4a76a23459da4f0d4932c63e9e57795c8b7aff3f4f22af186a31ec001b3c",
+    "size": 8692016
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "5d13342a7cbbf89794c067eabe89bdf024612027d4fed484b355e91c4e3d0a8b",
+    "size": 3384392
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "ee9739f65724544188e72922229f9f73232cf0f0d513bbcec3e2dd4bef729a48",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "7f00e6e018660a770e2969803581b046f6a7c2d34080124a16c2734412910b7b",
+    "size": 2066168
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "03610544804f2c49663f743054f4661c8712b30f3b77da20fdf67216d659e5f1",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "00ad35350d7760f0a9dee0adae780281fa9699c6034991e6669303a585c72ef3",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "0a325b20143d5f883c14e453769ba63365c84752676c96c5088ecbeb6fe0b481",
+    "size": 4952824
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "47918b9ce252e4423807625bca422c3e5cc802ffe74bb6ff3ece5c132edd64f3",
+    "size": 10423528
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "aa83a09370ae22e410ac9c72ada23fb12ee522effcd29e4729929c153361437b",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "a8b2f42779a679bd878264f494bd24959cf850be52b2e11c971d1fbeff6bcaee",
+    "size": 332216
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "ad1cb8a6f6945bd9cbc8679abe4fc4433a272f53bb2ef70112fa1b4c764b8bee",
+    "size": 2211720
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "b62fb6cff7836f26d90bd9cd542c4468afca75a2ae6dd03d545b0b6b709396a9",
+    "size": 3036448
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "364a95aee31105fbc1a8626d5117f8510a2e0220c34e71109f076c15e899714d",
+    "size": 3495072
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "f7e78e5b1327aacd1a5d31bf98e47853e2ad6ae54e1bce96869368e9757f33fc",
+    "size": 3242608
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "f019fd60e20e77c23bb54c360966c7b7b770616152e84d3beab17b28de939044",
+    "size": 8095232
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "f4b98adc8ded79e0cf78a831872d7099603f2290ac865bfd7a0d5bf68aa09998",
+    "size": 1894368
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "2b37dfda0e3ff5b8a4c8ffb0f37986e595bf67c2d6d83b593c99587274b6a99e",
+    "size": 751376
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "f1be125578428f0482c2903492ca816dbe296c3cfd431364da6ac587c4382425",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-gpc-fit,par-gpc-predict,par-causal-lm,par-cross-val",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "3f340642a116f99972465c0ce7e593ea3d321a8d477f6c9d18a94dfbc52cf209",
+  "provenance": {
+   "commit": "1bea5b4988d950c4788659b3753084377add71eb",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

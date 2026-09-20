@@ -26,9 +26,9 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **263** (204 single-device, 59 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **244**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **202** of 244.
+- Lanes: **264** (205 single-device, 59 `par-*` multi-GPU drivers).
+- Source public API entries enumerated from the public API: **248**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **210** of 248.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
@@ -37,27 +37,27 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 235 | 9 |
-| cpu verifier | 211 | 33 |
-| sabotage seen to move a build | 211 | 33 |
-| batch part or named n/a | 244 | 0 |
+| gpu column | 243 | 5 |
+| cpu verifier | 215 | 33 |
+| sabotage seen to move a build | 215 | 33 |
+| batch part or named n/a | 248 | 0 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 256 | 7 |
-| gpu column on all three classes | 235 | 28 |
-| cpu verifier declared | 229 | 34 |
-| sabotage seen to move a build | 229 | 34 |
-| batch part or named n/a | 263 | 0 |
-| ALL FOUR | 222 | 41 |
+| gpu column (any class) | 261 | 3 |
+| gpu column on all three classes | 235 | 29 |
+| cpu verifier declared | 230 | 34 |
+| sabotage seen to move a build | 230 | 34 |
+| batch part or named n/a | 264 | 0 |
+| ALL FOUR | 227 | 37 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 229 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 230 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 3 | only the harness batch switch moved; the probe can fail, the build is unproven |
 | declared | 0 | the family declares a define; no committed pair moves this lane |
 | none | 31 | no define reaches the lane and nothing has moved it |
@@ -156,6 +156,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `SmallByteLanguageModelTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SmallMLPTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SpectralClustering` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `SpectralEmbedding` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `StandardScaler` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlock` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -210,6 +211,9 @@ A blank cell means no lane of this algorithm has that kind.
 | `mamba.Mamba1DecodeSession` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `mamba.Mamba2Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `mamba.Mamba3Block` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `manifold.SpectralEmbedding` | 1 | nvidia | training | seen(build) | n/a | yes |
+| `manifold.UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `manifold.spectral_embedding` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `matmul` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.accuracy_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.adjusted_rand_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
@@ -242,7 +246,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `model_selection.split_descriptor` | 1 |  | host-only | seen(build) | n/a | NO |
 | `models.CausalLM` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `models.Checkpoint` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
-| `models.ParallelCausalLM` | 1 |  | training | seen(build) | part | NO |
+| `models.ParallelCausalLM` | 1 | nvidia | training | seen(build) | part | yes |
 | `models.SafetensorsFile` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `models.Tokenizer` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `models.plan_for` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
@@ -283,12 +287,12 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_forecasting.forecast_exponential_smoothing` | 1 | nvidia | training | seen(build) | part | yes |
 | `parallel_forecasting.predict_arima` | 1 | nvidia | training | seen(build) | part | yes |
 | `parallel_forecasting.predict_exponential_smoothing` | 1 | nvidia | training | seen(build) | part | yes |
-| `parallel_gaussian_process.fit_gaussian_process_classifier` | 1 |  | training | seen(build) | part | NO |
-| `parallel_gaussian_process.predict_gaussian_process_classifier` | 1 |  | training | seen(build) | part | NO |
+| `parallel_gaussian_process.fit_gaussian_process_classifier` | 1 | nvidia | training | seen(build) | part | yes |
+| `parallel_gaussian_process.predict_gaussian_process_classifier` | 1 | nvidia | training | seen(build) | part | yes |
 | `parallel_graph.fit_graph` | 3 | amd,apple,nvidia |  | seen(harness) | part | NO |
 | `parallel_graph.transform_umap` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ivf.DistributedIVFIndex` | 1 | nvidia | training | seen(build) | part | yes |
-| `parallel_model_selection.cross_val_score` | 1 |  | training | seen(build) | n/a | NO |
+| `parallel_model_selection.cross_val_score` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `parallel_neighbors.ParallelQueries` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_neighbors_reference.ReferenceShardedNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_preprocessing.fit_scaler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -502,11 +506,11 @@ A blank cell means no lane of this algorithm has that kind.
 | par-byte-lm | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-model-pool | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
 | par-byte-lm-offload | amd,apple,nvidia | - | none | - | n/a n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column) | NO |
-| par-causal-lm | - | training | seen(build) | `bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/sabotage-neural.json` | part | NO |
+| par-causal-lm | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/sabotage-neural.json` | part | yes |
 | par-cd | amd,apple,nvidia | - | none | - | part | NO |
 | par-cd-elasticnet | amd,nvidia | - | none | - | part | NO |
 | par-cholesky | amd,apple,nvidia | - | none | - | part | NO |
-| par-cross-val | - | training | seen(build) | `bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/sabotage-gbdt.json` | n/a n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch) | NO |
+| par-cross-val | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/sabotage-gbdt.json` | n/a n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch) | yes |
 | par-dbscan | amd,apple,nvidia | - | seen(harness) | `bench/results/identity_break/2026-09-15_transductive-predict/apple-m4.batch-sabotage.json` | part | NO |
 | par-feature-freq | amd,apple,nvidia | - | none | - | part | NO |
 | par-forecast-arima | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.sabotage-core-only.before-fix.json` | part | yes |
@@ -518,8 +522,8 @@ A blank cell means no lane of this algorithm has that kind.
 | par-forest-reg | amd,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_par-sabotage-arms/a-trees-gbdt/remote/leg_out/cpu-x86.sabotage.json` | part | yes |
 | par-gmm | amd,apple,nvidia | - | none | - | part | NO |
 | par-gp | amd,apple,nvidia | - | none | - | part | NO |
-| par-gpc-fit | - | training | seen(build) | `bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.sabotage-core-only.before-fix.json` | part | NO |
-| par-gpc-predict | - | training | seen(build) | `bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.sabotage-core-only.before-fix.json` | part | NO |
+| par-gpc-fit | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.sabotage-core-only.before-fix.json` | part | yes |
+| par-gpc-predict | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.sabotage-core-only.before-fix.json` | part | yes |
 | par-gram | amd,apple,nvidia | - | none | - | part | NO |
 | par-gram-ols | amd,nvidia | - | none | - | part | NO |
 | par-gram-pca | amd,nvidia | - | none | - | part | NO |
@@ -577,6 +581,7 @@ A blank cell means no lane of this algorithm has that kind.
 | saved-model-host-infer | - | training | seen(build) | `bench/results/identity_break/2026-09-19_laneless-public-classes/sabotage-forest-own-define.json` | part | NO |
 | select-d | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
 | spectral | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
+| spectral-embedding | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_spectral-embedding/cpu-x86-sabotage.json` | n/a n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike) | yes |
 | spectral-precomputed | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | standard-scaler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | standard-scaler-no-mean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
@@ -632,13 +637,13 @@ proved is real and is reported under the driver heading below, not here.
 
 > none
 
-> (plus 4 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+> (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 3**
+**GPU column on fewer than three classes: 4**
 
-> gbdt-symmetric-eval, mamba1-decode-session, transformer-decode-session
+> gbdt-symmetric-eval, mamba1-decode-session, spectral-embedding, transformer-decode-session
 
-> (plus 18 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+> (plus 22 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
 **No CPU verifier declared: 0**
 
@@ -720,7 +725,7 @@ coverage, and they are not evidence for any vendor claim.
 
 59 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
 
-**55 of 59 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
+**59 of 59 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
 
 | par-arima | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
@@ -731,11 +736,11 @@ coverage, and they are not evidence for any vendor claim.
 | par-byte-lm | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-byte-lm-model-pool | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-byte-lm-offload | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
-| par-causal-lm | - | no two-device column |
+| par-causal-lm | nvidia | bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.two-device.json |
 | par-cd | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-cd-elasticnet | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-cd-elasticnet-two.json |
 | par-cholesky | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
-| par-cross-val | - | no two-device column |
+| par-cross-val | nvidia | bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.two-device.json |
 | par-dbscan | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-feature-freq | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-forecast-arima | nvidia | bench/results/identity_break/2026-09-19_par-two-device-final3b/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-final3b.two-device.json |
@@ -747,8 +752,8 @@ coverage, and they are not evidence for any vendor claim.
 | par-forest-reg | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-forest-reg-two.json |
 | par-gmm | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
 | par-gp | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
-| par-gpc-fit | - | no two-device column |
-| par-gpc-predict | - | no two-device column |
+| par-gpc-fit | nvidia | bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.two-device.json |
+| par-gpc-predict | nvidia | bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.two-device.json |
 | par-gram | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-gram-ols | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-gram-ols-two.json |
 | par-gram-pca | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-gram-pca-two.json |
