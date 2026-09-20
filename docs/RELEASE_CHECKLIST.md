@@ -179,6 +179,24 @@ itself already loads every host binding and runs `identity --check`.
 bash tools/release_linux_publish.sh <dist>/final/<wheel> alpha-api-<version>-<yyyymmdd> pypi <workdir>
 ```
 
+For bounded alpha publication, first run the existing expanded smoke on the
+**exact final wheel**, on a CUDA host for Linux or on this Mac for macOS:
+
+```sh
+python3 tools/qualify_verifier_wheel.py <final-wheel> --scope expanded \
+  --expected-source-commit <40-hex commit> --output <fresh-smoke-dir>
+bash tools/release_linux_publish.sh <final-wheel> \
+  alpha-api-<version>-<linux-or-macos>-<yyyymmdd> pypi <workdir> \
+  --light-smoke <fresh-smoke-dir>/results.json
+```
+
+Run the publisher from the frozen source checkout. Despite its historical name,
+the helper accepts either platform with `--light-smoke`; it hashes and stages the
+receipt, checks the existing light admission rules, and dispatches the matching
+platform batch. Publish the two wheels independently with separate tags and work
+directories. Without the option, it explicitly selects the full native Linux
+certification route. No smoke receipt from an older wheel can be reused.
+
 Manifest, GitHub release, Trusted Publisher dispatch, watch. If step 4 ran,
 pass its three output directories and the proofs directory through the
 `MOJOLEARN_QUAL_*` variables named in the script header and the archive is

@@ -2,7 +2,12 @@
 # Publish a packed, audited Linux wheel through the Trusted Publisher route:
 # manifest, GitHub release, workflow dispatch, watch. One command.
 #
-#   bash tools/release_linux_publish.sh <final manylinux .whl> <tag> <none|testpypi|pypi> <workdir>
+#   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> [--light-smoke <results.json>]
+#
+# --light-smoke accepts the existing qualify_verifier_wheel.py expanded receipt
+# for the exact Linux or macOS wheel. It stages and checks that receipt before
+# publication and selects the bounded light workflow for that one platform.
+# Without it, retain the full native Linux release/certification route.
 #
 # Optional installed qualification (run it when numerics changed or the
 # release is paper evidence; docs/RELEASE_CHECKLIST.md step 4):
@@ -32,13 +37,34 @@ PUBLISH="${3:?none|testpypi|pypi}"
 WORK="${4:?workdir}"
 case "$PUBLISH" in none|testpypi|pypi) ;; *) echo "publish must be none, testpypi or pypi" >&2; exit 2 ;; esac
 case "$TAG" in alpha-api-*) ;; *) echo "the workflow's alpha route requires an alpha-api-* tag" >&2; exit 2 ;; esac
-case "$WHL" in *manylinux*) ;; *) echo "REFUSING: $WHL is not the auditwheel-repaired wheel" >&2; exit 2 ;; esac
+LIGHT_SMOKE=""; VALIDATION_PROFILE=full; LIGHT_PLATFORM=linux
+if [ "$#" -gt 4 ]; then
+  [ "$#" -eq 6 ] && [ "$5" = --light-smoke ] || { echo "expected --light-smoke <results.json>" >&2; exit 2; }
+  LIGHT_SMOKE=$(cd "$(dirname "$6")" && pwd)/$(basename "$6")
+  [ -f "$LIGHT_SMOKE" ] || { echo "missing smoke receipt: $LIGHT_SMOKE" >&2; exit 2; }
+  VALIDATION_PROFILE=light
+fi
+case "$WHL" in
+  *manylinux*) ;;
+  *macosx*)
+    [ -n "$LIGHT_SMOKE" ] || { echo "macOS publication requires --light-smoke" >&2; exit 2; }
+    LIGHT_PLATFORM=macos ;;
+  *) echo "REFUSING: $WHL is neither a repaired manylinux wheel nor a macOS wheel" >&2; exit 2 ;;
+esac
 REPO="${MOJOLEARN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO"
+HEAD_SHA=$(git rev-parse HEAD)
 VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
 mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
 ART="$WORK/artifact"; rm -rf "$ART"; mkdir -p "$ART"; cp "$WHL" "$ART/"
 WSHA=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
+
+LIGHT_ASSET=""; LSHA=""
+if [ -n "$LIGHT_SMOKE" ]; then
+  LIGHT_ASSET="$ART/light-smoke-$LIGHT_PLATFORM.json"
+  cp "$LIGHT_SMOKE" "$LIGHT_ASSET"
+  LSHA=$(shasum -a 256 "$LIGHT_ASSET" | cut -d' ' -f1)
+fi
 
 TAR=""; TSHA=""
 if [ -n "${MOJOLEARN_QUAL_SM89:-}" ]; then
@@ -59,11 +85,13 @@ if [ -n "${MOJOLEARN_QUAL_SM89:-}" ]; then
 fi
 
 echo "== manifest =="
-python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" <<'EOF'
+python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$HEAD_SHA" "$LSHA" "$(basename "$LIGHT_ASSET")" <<'EOF'
 import json, sys
-out, version, wheel, wsha, tsha = sys.argv[1:]
+out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name = sys.argv[1:]
 doc = {"schema": "mojolearn.alpha-release.v1", "version": version, "release_profile": "alpha-api",
        "files": {wheel: wsha}}
+if smoke_sha:
+    doc["light_smoke"] = {"source_commit": source, "receipts": {smoke_name: smoke_sha}}
 if tsha:
     doc["linux_qualification"] = {"file": "linux-qualification.tar.gz", "sha256": tsha, "wheel": wheel}
 open(out, "w").write(json.dumps(doc, indent=2, sort_keys=True) + "\n")
@@ -75,22 +103,26 @@ else
   python3 packaging/verify_alpha_artifacts.py "$ART" --manifest-sha256 "$MSHA" | tee "$WORK/file-admission.json"
 fi
 
+if [ -n "$LIGHT_ASSET" ]; then
+  python3 tools/check_light_release.py "$ART" --source-commit "$HEAD_SHA" --platform "$LIGHT_PLATFORM"
+fi
+
 echo "== GitHub release $TAG =="
-HEAD_SHA=$(git rev-parse HEAD)
-git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION Linux wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
+git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION $LIGHT_PLATFORM wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
 if ! gh release view "$TAG" >/dev/null 2>&1; then
   NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast, deterministic and identical modes, built from $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
+  [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $HEAD_SHA. See CHANGELOG.md."
+  [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
   # shellcheck disable=SC2086
-  gh release create "$TAG" --latest --target "$HEAD_SHA" --title "mojolearn $VERSION Linux" --notes "$NOTES" \
-    "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"}
+  gh release create "$TAG" --latest --target "$HEAD_SHA" --title "mojolearn $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
+    "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"} ${LIGHT_ASSET:+"$LIGHT_ASSET"}
 fi
 
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
-# This command stages fresh native artifacts, without light-smoke receipts.
-# Select the full path explicitly; the workflow defaults to the light patch path.
-gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile=full -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
+# Choose explicitly: old calls keep full certification, receipts use bounded admission.
+gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
 sleep 20
 RUN=$(gh run list --workflow release-provenance.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 echo "run $RUN"
