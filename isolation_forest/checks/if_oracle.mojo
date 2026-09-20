@@ -31,6 +31,7 @@ drifts from its own double is caught before a device is asked anything.
 
 from std.math import log, exp2
 from std.memory import bitcast
+from max.algorithm import sync_parallelize
 
 from isolation_forest.impl.rng.xorwow import (
     XorwowTables,
@@ -49,6 +50,7 @@ from isolation_forest.impl.isolation_tree_builder import (
     EULER_MASCHERONI_F32,
 )
 from checks.numerics import ftz, identical_log, identical_mul_add, identical_pow
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
 struct OracleTree(Movable):
@@ -339,17 +341,43 @@ def oracle_path_lengths(
 ) -> List[Float32]:
     """`compute_path_lengths_global_kernel`: ascending tree order, `ftz`
     at the stored seams, `/ n_trees`."""
-    var out = List[Float32]()
+    var out = List[Float32](length=n_rows, fill=Float32(0.0))
     var n_trees = len(f.trees)
-    for i in range(n_rows):
-        var total = Float32(0.0)
-        for t in range(n_trees):
-            var leaf = _traverse(f.trees[t], x_rowmajor, i, n_cols)
-            total = ftz(total + f.trees[t].thr[leaf])
-        var pl = Float32(0.0)
-        if n_trees > 0:
-            pl = ftz(total / Float32(n_trees))
-        out.append(pl)
+    var tasks = host_predict_task_count(n_rows)
+    var chunk = host_predict_chunk(n_rows, tasks)
+    var tp = rebind[MutPointer[OracleTree, MutUntrackedOrigin]](
+        f.trees.unsafe_ptr()
+    )
+    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](
+        x_rowmajor.unsafe_ptr()
+    )
+    var op = rebind[MutPointer[Float32, MutUntrackedOrigin]](out.unsafe_ptr())
+    def task(c: Int) {imm tp, imm xp, imm op, imm chunk, imm n_rows,
+                      imm n_cols, imm n_trees}:
+        var begin = c * chunk
+        var end = min(begin + chunk, n_rows)
+        for i in range(begin, end):
+            var total = Float32(0.0)
+            for t in range(n_trees):
+                var node = 0
+                while True:
+                    var fe = Int(tp[t].feat[node])
+                    if fe < 0:
+                        break
+                    var v = xp[i * n_cols + fe]
+                    if v < tp[t].thr[node]:
+                        node = Int(tp[t].left[node])
+                    else:
+                        node = Int(tp[t].right[node])
+                total = ftz(total + tp[t].thr[node])
+            var pl = Float32(0.0)
+            if n_trees > 0:
+                pl = ftz(total / Float32(n_trees))
+            op[i] = pl
+    if tasks == 1:
+        task(0)
+    else:
+        sync_parallelize(task, tasks)
     return out^
 
 
