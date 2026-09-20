@@ -1,0 +1,17 @@
+===== par-causal-lm/base train =====
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation, or a CPU-only install where one owner is one worker process
+Traceback (most recent call last):
+  File "/Users/andrewhendel/mojolearn-wt/apple-parallel-trial/tools/identity_break.py", line 11477, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/Users/andrewhendel/mojolearn-wt/apple-parallel-trial/tools/identity_break.py", line 8254, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/andrewhendel/mojolearn-wt/apple-parallel-trial/python/mojolearn/models/parallel_causal_lm.py", line 152, in load
+    _admit_route()
+    ~~~~~~~~~~~~^^
+  File "/Users/andrewhendel/mojolearn-wt/apple-parallel-trial/python/mojolearn/models/parallel_causal_lm.py", line 49, in _admit_route
+    raise NotImplementedError(
+        'ParallelCausalLM requires CUDA or HIP device isolation, or a CPU-only '
+        'install where one owner is one worker process')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation, or a CPU-only install where one owner is one worker process
+
