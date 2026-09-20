@@ -152,6 +152,11 @@ comptime BLOCK2_ANY_SABOTAGE = (
     or SSD_ANY_SABOTAGE
 )
 
+def _m2_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """Keep traced stage boundaries; production uses ordered queue edges."""
+    if trace.enabled:
+        ctx.synchronize()
+
 
 def mamba2_sabotage_name() -> String:
     comptime if SAB_S6_BIAS_LAST:
@@ -906,7 +911,7 @@ def mamba2_block_forward(
     mamba_rms_norm(
         ctx, stages.norm_sumsq, stages.norm_out, x, w.norm_w, m, dm
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".norm.sumsq", stages.norm_sumsq, m
     )
@@ -925,7 +930,7 @@ def mamba2_block_forward(
     # ---- S5: A = -exp(A_log) (mamba2.py:182), the REUSED Mamba-1 kernel.
     for gid_ in range(launch_count((_grid(nh), 1, 1), (MAMBA2_TPB, 1, 1))):
         mamba_a_from_a_log_kernel(gid_, stages.a_out.unsafe_ptr(), w.a_log.unsafe_ptr(), Int32(nh))
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".A.out", stages.a_out, nh
     )
@@ -935,7 +940,7 @@ def mamba2_block_forward(
         m2_conv_kernel(gid_, stages.conv_out.unsafe_ptr(), stages.silu_out.unsafe_ptr(), stages.in_proj.unsafe_ptr(), w.conv_w.unsafe_ptr(), w.conv_b.unsafe_ptr(), state.conv_win.unsafe_ptr(), Int32(b), Int32(l), Int32(di), Int32(cd), Int32(dip))
     for gid_ in range(launch_count((_grid(b * cd * M2_D_CONV), 1, 1), (MAMBA2_TPB, 1, 1))):
         m2_conv_window_kernel(gid_, stages.conv_win.unsafe_ptr(), stages.in_proj.unsafe_ptr(), state.conv_win.unsafe_ptr(), Int32(b), Int32(l), Int32(di), Int32(cd), Int32(dip))
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".conv.out", stages.conv_out, m * cd
     )
@@ -946,7 +951,7 @@ def mamba2_block_forward(
         ctx, prefix + ".conv.window", stages.conv_win, b * cd * M2_D_CONV
     )
     ctx.enqueue_copy(dst_buf=state.conv_win, src_buf=stages.conv_win)
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
 
     # ---- working-sequence assembly (copies) + S9 over working rows.
     for gid_ in range(launch_count((_grid(b * t_work * cd), 1, 1), (MAMBA2_TPB, 1, 1))):
@@ -955,7 +960,7 @@ def mamba2_block_forward(
         m2_assemble_dtraw_kernel(gid_, stages.dtraw_work.unsafe_ptr(), state.buf_dtraw.unsafe_ptr(), stages.in_proj.unsafe_ptr(), Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(di), Int32(cd), Int32(dip), Int32(M2_CHUNK_SIZE))
     for gid_ in range(launch_count((_grid(b * t_work * nh), 1, 1), (MAMBA2_TPB, 1, 1))):
         m2_dt_kernel(gid_, stages.dt_work.unsafe_ptr(), stages.dtraw_work.unsafe_ptr(), w.dt_bias.unsafe_ptr(), Int32(b * t_work * nh), Int32(nh), dt_lo, dt_hi)
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     _record_work_slice(
         ctx, trace, prefix + ".dt.out", stages.dt_work, b, l, q0, nh
     )
@@ -977,7 +982,7 @@ def mamba2_block_forward(
             step_arm_engaged = True
             for gid_ in range(launch_count((_grid(b * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1))):
                 m2_step_upstream_kernel(gid_, stages.skip_out.unsafe_ptr(), state.h.unsafe_ptr(), stages.silu_out.unsafe_ptr(), stages.in_proj.unsafe_ptr(), w.dt_bias.unsafe_ptr(), stages.a_out.unsafe_ptr(), w.d_skip.unsafe_ptr(), Int32(b), Int32(nh), Int32(di), Int32(cd), Int32(dip))
-            ctx.synchronize()
+            _m2_stage_sync(ctx, trace)
             # The card's SSD stages are not produced by this spelling;
             # record the working buffers as they stand (zeros) so the tag
             # list stays section 7's -- the gate reads skip.out onward,
@@ -1007,6 +1012,7 @@ def mamba2_block_forward(
             di,
             cd,
             nh,
+            trace.enabled,
         )
 
     _record_work_slice(
@@ -1069,7 +1075,7 @@ def mamba2_block_forward(
         if r > 0:
             for gid_ in range(launch_count((_grid(b * r * (cd + nh)), 1, 1), (MAMBA2_TPB, 1, 1))):
                 m2_buffer_update_kernel(gid_, state.buf_xbc.unsafe_ptr(), state.buf_dtraw.unsafe_ptr(), stages.xbc_work.unsafe_ptr(), stages.dtraw_work.unsafe_ptr(), Int32(b), Int32(t_work), Int32(r), Int32(cd), Int32(nh), Int32(M2_CHUNK_SIZE))
-            ctx.synchronize()
+            _m2_stage_sync(ctx, trace)
         state.buf_len = r
 
     # ---- S20: the D residual (skipped by an ENGAGED step arm, which
@@ -1077,7 +1083,7 @@ def mamba2_block_forward(
     if not step_arm_engaged:
         for gid_ in range(launch_count((_grid(m * nh * p_dim), 1, 1), (MAMBA2_TPB, 1, 1))):
             m2_skip_kernel(gid_, stages.skip_out.unsafe_ptr(), stages.y_work.unsafe_ptr(), stages.silu_out.unsafe_ptr(), w.d_skip.unsafe_ptr(), Int32(b), Int32(l), Int32(q0), Int32(nh), Int32(cd))
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".skip.out", stages.skip_out, m * nh * p_dim
     )
@@ -1097,14 +1103,14 @@ def mamba2_block_forward(
             m,
             di,
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
         for gid_ in range(launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1))):
             m2_gate_kernel(gid_, stages.gnorm_out.unsafe_ptr(), stages.gnorm_gate.unsafe_ptr(), stages.in_proj.unsafe_ptr(), Int32(m * di), Int32(di), Int32(dip))
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     else:
         for gid_ in range(launch_count((_grid(m * di), 1, 1), (MAMBA2_TPB, 1, 1))):
             m2_gate_kernel(gid_, stages.gnorm_gate.unsafe_ptr(), stages.skip_out.unsafe_ptr(), stages.in_proj.unsafe_ptr(), Int32(m * di), Int32(di), Int32(dip))
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
         mamba_rms_norm(
             ctx,
             stages.gnorm_sumsq,
@@ -1114,7 +1120,7 @@ def mamba2_block_forward(
             m,
             di,
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".gnorm.gate", stages.gnorm_gate, m * di
     )
@@ -1136,7 +1142,7 @@ def mamba2_block_forward(
     # ---- S22: residual (HF :630), the REUSED Mamba-1 kernel.
     for gid_ in range(launch_count((_grid(m * dm), 1, 1), (MAMBA2_TPB, 1, 1))):
         residual_add_kernel(gid_, stages.residual_out.unsafe_ptr(), x.unsafe_ptr(), stages.out_proj.unsafe_ptr(), Int32(m * dm))
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )
