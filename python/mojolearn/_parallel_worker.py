@@ -19,11 +19,18 @@ def execute(request):
     if operation == 'worker_identity':
         from ._gpu_witness import worker_process_inventory
         return worker_process_inventory()
+    if operation == 'metal_worker_identity':
+        import os
+        from . import _backend
+        if _backend.vendor() != 'metal':
+            raise ValueError('single-device Metal worker requires the Metal backend')
+        return dict(kind='single-metal-worker', vendor='metal',
+                    pid=os.getpid(), ppid=os.getppid())
     if operation == 'cross_val_fold':
         from . import _backend
         from .model_selection import _fit_score_fold
-        if _backend.vendor() not in ('cuda', 'hip') and _backend._CPU_ONLY is None:
-            raise NotImplementedError('cross_val_fold requires a CUDA or HIP GPU worker')
+        if _backend.vendor() not in ('cuda', 'hip', 'metal') and _backend._CPU_ONLY is None:
+            raise NotImplementedError('cross_val_fold requires a CUDA, HIP or Metal GPU worker')
         # THE SAME HOLE `gpc_class_fit` OPENED, CLOSED THE SAME WAY
         # (lane/cpu-routes-gpu-only-four, 2026-09-20). A fold IS a fit, and
         # admitting `cross_val_fold` to `_parallel_pool.CPU_OPERATIONS` put a
