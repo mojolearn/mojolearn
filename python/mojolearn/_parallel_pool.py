@@ -214,17 +214,32 @@ def par_driver_sabotage():
             and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
 
 
-def driver_read_shift(index, first=1):
+def driver_read_shift(index, first, devices):
     """How far back shard `index` should READ, in the driver's own units.
 
-    0 always, except under the switch above for a shard past the first, where
-    it is 1 and the caller must still MERGE at the unshifted offset. `first`
-    is the shard's true start: a shard starting at 0 is never shifted, so the
-    shift can never make an index negative.
+    0 always, except under the switch above for a shard that runs on an owner
+    ABOVE RANK 0, where it is 1 and the caller must still MERGE at the
+    unshifted offset.
+
+    THE RANK, NOT THE SHARD INDEX, AND THAT DISTINCTION IS THE WHOLE CONTROL.
+    A Python-sharded driver cuts as many logical shards as its
+    `*_per_shard` argument asks for, whatever the device count: `fit_forest`
+    with `trees_per_shard=4` makes four shards on ONE device. An arm gated on
+    `index > 0` therefore fires at one device, and a cell that moves under it
+    is not attributable to the second device. MEASURED, 2026-09-20: the first
+    version of this function was gated on `index` and moved the SAME 15 cells
+    at one device as at two, which is exactly the control failing.
+    `DevicePool.map` dispatches in waves of `len(devices)` and hands wave
+    position `j` to worker `j`, so shard `index` runs on rank
+    `index % len(devices)`; that is what is tested here, and it is 0 for every
+    shard when there is one device.
+
+    `first` is the shard's true start: a shard starting at 0 is never shifted,
+    so the shift can never make an index negative.
     """
-    if index > 0 and first >= 1 and par_driver_sabotage():
-        return 1
-    return 0
+    if first < 1 or len(devices) < 2 or index % len(devices) == 0:
+        return 0
+    return 1 if par_driver_sabotage() else 0
 
 
 def _cpu_refusal(requests, cooperative, n_devices=1):

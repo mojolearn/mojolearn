@@ -46,8 +46,8 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
     try:
         parts = pool.map([
             ('holtwinters_fit', params,
-             (data[start - driver_read_shift(index, start):
-                   min(start + series_per_shard, batch) - driver_read_shift(index, start)],))
+             (data[start - driver_read_shift(index, start, devices):
+                   min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
             for index, start in enumerate(range(0, batch, series_per_shard))])
     finally:
         pool.close()
@@ -137,8 +137,8 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
                   trend='c' if estimator.k_ else 'n', method=estimator.method,
                   maxiter=estimator.maxiter, numeric_mode='identical')
     requests = [('arima_fit', params,
-                 (data[start - driver_read_shift(index, start):
-                       min(start + series_per_shard, batch) - driver_read_shift(index, start)],))
+                 (data[start - driver_read_shift(index, start, devices):
+                       min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
                 for index, start in enumerate(range(0, batch, series_per_shard))]
     pool = DevicePool(devices)
     try:
@@ -530,8 +530,8 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     rows = X.shape[0]
     if rows == 0:
         return estimator.transform(X)
-    shards = [X[start - driver_read_shift(index, start):
-                min(start + rows_per_shard, rows) - driver_read_shift(index, start)]
+    shards = [X[start - driver_read_shift(index, start, devices):
+                min(start + rows_per_shard, rows) - driver_read_shift(index, start, devices)]
               for index, start in enumerate(range(0, rows, rows_per_shard))]
     pool = DevicePool(devices)
     try:

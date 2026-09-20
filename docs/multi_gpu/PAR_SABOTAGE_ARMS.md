@@ -199,12 +199,33 @@ nothing about the partition.
 
 `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` with `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`
 (`python/mojolearn/_parallel_pool.py::driver_read_shift`) makes every shard
-after the first read one position early while the merge still writes at the
-true offset. Two variables, for `MOJOLEARN_FOLD_ORDER_SABOTAGE`'s reason: a
-switch that quietly returns wrong answers on one env var is a footgun, and no
-build script, workflow or gate sets either one. It is inert at one shard, so
-it is the same `rank > 0` control as the build arms, and it needs no rebuild,
-so it runs on a CPU-only install.
+whose WORKER RANK is above 0 read one position early while the merge still
+writes at the true offset. Two variables, for
+`MOJOLEARN_FOLD_ORDER_SABOTAGE`'s reason: a switch that quietly returns wrong
+answers on one env var is a footgun, and no build script, workflow or gate
+sets either one. It needs no rebuild, so a CPU-only install can watch it.
+
+THE RANK, NOT THE SHARD INDEX, and that distinction was measured rather than
+reasoned. A Python-sharded driver cuts as many logical shards as its
+`*_per_shard` argument asks for, whatever the device count: `fit_forest` with
+`trees_per_shard=4` makes four shards on ONE device. The first version of this
+switch was gated on `index > 0` and moved the SAME 15 cells at one device as
+at two -- the control failing, in exactly the way requirement 4 of the build
+arms exists to prevent. `DevicePool.map` dispatches in waves of `len(devices)`
+and hands wave position `j` to worker `j`, so shard `index` runs on rank
+`index % len(devices)`, and that is what the switch tests. At one device every
+shard is rank 0 and the arm is inert.
+
+WHICH DRIVERS CARRY IT. `parallel_ensemble.fit_forest` (global tree-ID
+ranges), `parallel_preprocessing.fit_scaler` and `transform_scaler` (column
+ranges), `parallel_classical.fit_arima`, `fit_exponential_smoothing` and
+`transform_rbf_sampler` (series and row ranges), `parallel_neighbors.ParallelQueries`
+(query rows) and `parallel_neighbors_reference` (reference rows). NOT YET:
+`parallel_forecasting`'s four prediction drivers, `parallel_ivf`,
+`parallel_gaussian_process`, `parallel_model_selection` and
+`models.ParallelCausalLM`. Those five are named here rather than left to be
+rediscovered; each cuts its shards in Python the same way and is one
+`driver_read_shift` call from being covered.
 
 A column produced under it stamps `par_driver_sabotage: true`, read back from
 the shipped module rather than from the environment.

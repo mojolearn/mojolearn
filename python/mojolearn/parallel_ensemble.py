@@ -64,7 +64,7 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
         # 0 for the first shard whatever the switch says; the shard COUNT is
         # untouched, so only the global tree IDs each shard seeds from move.
         requests.append(('forest_fit', (type(estimator).__name__, shard_params),
-                         (X, y, start - driver_read_shift(index, start))))
+                         (X, y, start - driver_read_shift(index, start, devices))))
     pool = DevicePool(devices)
     try:
         parts = pool.map(requests)

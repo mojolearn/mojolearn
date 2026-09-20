@@ -44,8 +44,8 @@ def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weigh
         # every width and every statistic keeps its position.
         parts = pool.map([
             ('scaler_fit', (type(estimator).__name__, params),
-             (data[:, start - driver_read_shift(index, start):
-                     end - driver_read_shift(index, start)],))
+             (data[:, start - driver_read_shift(index, start, devices):
+                     end - driver_read_shift(index, start, devices)],))
             for index, (start, end) in enumerate(ranges)])
     finally:
         pool.close()
@@ -91,7 +91,7 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
         # Only the DATA columns are shifted; the fitted statistics stay on the
         # true columns, so the shard transforms the wrong rows of the right
         # column block rather than changing any shape.
-        shift = driver_read_shift(index, start)
+        shift = driver_read_shift(index, start, devices)
         requests.append(('scaler_transform', part,
                          (data[:, start - shift:end - shift], inverse)))
     pool = DevicePool(devices)

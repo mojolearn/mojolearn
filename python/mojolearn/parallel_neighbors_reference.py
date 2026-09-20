@@ -190,8 +190,8 @@ class ReferenceShardedNeighbors:
                 # `ranges`, and `stop-start` keeps every shard's width.
                 parts.extend(self._pool.map([
                     ('neighbor_reference', params,
-                     (model._index[start - driver_read_shift(index, start):
-                                   stop - driver_read_shift(index, start)],
+                     (model._index[start - driver_read_shift(index, start, self._pool.devices):
+                                   stop - driver_read_shift(index, start, self._pool.devices)],
                       query, min(k, stop-start)))
                     for index, (start, stop) in enumerate(ranges[wave:wave+len(self._pool.devices)],
                                                           start=wave)]))

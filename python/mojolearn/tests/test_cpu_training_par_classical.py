@@ -417,6 +417,48 @@ def test_sharded_samba_sends_two_gradients_and_one_ordered_update_when_built():
     assert contributed, "the published gradient is shard 0 alone; the second shard never reached the fold"
 
 
+def test_par_driver_sabotage_switch_is_off_by_default_and_inert_at_one_device():
+    """`_parallel_pool.driver_read_shift`, the non-cooperative drivers' arm.
+
+    Three properties, and the third is the one that was measured WRONG first.
+    A switch that quietly returns wrong answers on ONE env var is a footgun
+    (`model_selection._sabotage_fold_order`, 2026-09-17). A switch never seen
+    to fire is not a switch, so the ON case is here too. And an arm that is not
+    INERT AT ONE DEVICE cannot attribute a moved cell to itself rather than to
+    the second device: gated on the shard INDEX, this function moved the same
+    15 `par-*` cells at one device as at two (measured 2026-09-20), because a
+    Python-sharded driver cuts as many shards as its `*_per_shard` argument
+    asks for whatever the device count. It is gated on the shard's WORKER RANK
+    (`index % len(devices)`) instead, and this is where that is enforced.
+    """
+    import os
+    from mojolearn._parallel_pool import driver_read_shift, par_driver_sabotage
+    saved = {k: os.environ.get(k) for k in
+             ("MOJOLEARN_PAR_DRIVER_SABOTAGE", "MOJOLEARN_HOST_ALLOW_SABOTAGE")}
+    try:
+        for k in saved:
+            os.environ.pop(k, None)
+        assert not par_driver_sabotage()
+        assert [driver_read_shift(i, 4 * i, (0, 1)) for i in range(4)] == [0, 0, 0, 0], \
+            "off by default"
+        os.environ["MOJOLEARN_PAR_DRIVER_SABOTAGE"] = "1"
+        assert not par_driver_sabotage(), "one variable is not enough"
+        assert driver_read_shift(1, 4, (0, 1)) == 0
+        os.environ["MOJOLEARN_HOST_ALLOW_SABOTAGE"] = "1"
+        assert par_driver_sabotage()
+        assert [driver_read_shift(i, 4 * i, (0, 1)) for i in range(4)] == [0, 1, 0, 1], \
+            "the arm must fire on every shard whose worker rank is above 0"
+        assert [driver_read_shift(i, 4 * i, (0,)) for i in range(4)] == [0, 0, 0, 0], \
+            "THE CONTROL: the arm must be inert at one device, at every shard count"
+        assert driver_read_shift(1, 0, (0, 1)) == 0, "a shard starting at 0 cannot shift"
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
 if __name__ == "__main__":
     names = [n for n in sorted(globals()) if n.startswith("test_")]
     for name in names:

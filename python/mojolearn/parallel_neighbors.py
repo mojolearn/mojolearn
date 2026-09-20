@@ -88,8 +88,8 @@ class ParallelQueries:
         # join below is still in shard order over unchanged widths.
         results = self._pool.map([
             ('neighbor_query', state,
-             (data[start - driver_read_shift(index, start):
-                   end - driver_read_shift(index, start)], method, kwargs))
+             (data[start - driver_read_shift(index, start, self._pool.devices):
+                   end - driver_read_shift(index, start, self._pool.devices)], method, kwargs))
             for index, (start, end) in enumerate(ranges)])
         output = _join([r[0] for r in results], ragged=method == 'radius_neighbors')
         # Diagnostics describe actual shard calls, not a fictitious global tile.
