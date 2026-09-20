@@ -511,6 +511,14 @@ TRAINING_LANE_NAMES = {
     "logistic-l1": "l1-penalized logistic regression",
     "logistic-elasticnet": "elasticnet-penalized logistic regression",
     "logistic-multiclass": "multiclass logistic regression",
+    # lane/expose-qn-objectives (2026-09-20): the six one-target
+    # quasi-Newton objectives (glm/host/qn_oracle.mojo::host_one_target_lz).
+    "linear-svc": "linear SVC on the hinge loss",
+    "linear-svc-squared-hinge": "linear SVC on the squared hinge loss",
+    "linear-svr": "linear SVR on the epsilon-insensitive loss",
+    "linear-svr-squared": "linear SVR on the squared epsilon-insensitive loss",
+    "qn-squared": "quasi-Newton regression on the squared loss",
+    "qn-absolute": "quasi-Newton regression on the absolute loss",
     "kpss": "the KPSS stationarity test",
     "svr": "SVR",
     "svr-linear": "the linear SVR",
@@ -1619,6 +1627,9 @@ FAMILIES = (
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
+            # lane/expose-qn-objectives (2026-09-20)
+            "linear-svc", "linear-svc-squared-hinge", "linear-svr",
+            "linear-svr-squared", "qn-squared", "qn-absolute",
         ),
         # lane/inference-linear-svm (2026-09-15): the option variants of
         # ols, ridge and logistic load through the same formats; the
@@ -1647,9 +1658,9 @@ FAMILIES = (
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
             "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
-            "AgglomerativeClustering",
+            "AgglomerativeClustering", "LinearSVC", "LinearSVR", "QNRegressor",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features, linear SVC and SVR and quasi-Newton regression on the squared and absolute losses",
         # lane/inference-transductive-predict (2026-09-15): `dbscan_fit_core`
         # (the fit's core mask for DBSCAN(prediction_data=True)) and
         # `labeled_reference_predict`, the out-of-sample labels of DBSCAN
