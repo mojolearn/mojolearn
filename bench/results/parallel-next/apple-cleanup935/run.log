@@ -1,0 +1,154 @@
+# vendor=apple-m4-cleanup935 commit=935b6f9046ac59b12d467a13c2ef4700e635bd5c (MOJOLEARN_COMMIT)
+# identity_break  mode=identical  2026-09-20 17:46:46  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START par-causal-lm/base repeat=1/train
+# DONE par-causal-lm/base repeat=1/train 0.270s
+# START par-causal-lm/base repeat=1/infer-save-reload
+# DONE par-causal-lm/base repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/base repeat=1/batch
+# DONE par-causal-lm/base repeat=1/batch 0.302s
+# START par-causal-lm/base repeat=1/batchgrad
+# DONE par-causal-lm/base repeat=1/batchgrad 0.000s
+# START par-causal-lm/base repeat=1/batchscale
+# DONE par-causal-lm/base repeat=1/batchscale 0.000s
+# START par-causal-lm/base repeat=1/ragged
+# DONE par-causal-lm/base repeat=1/ragged 0.000s
+# START par-causal-lm/base repeat=1/stepfull
+# DONE par-causal-lm/base repeat=1/stepfull 0.000s
+# CELL par-causal-lm/base STABLE 0.573s
+# START par-causal-lm/ties repeat=1/train
+# DONE par-causal-lm/ties repeat=1/train 0.261s
+# START par-causal-lm/ties repeat=1/infer-save-reload
+# DONE par-causal-lm/ties repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/ties repeat=1/batch
+# DONE par-causal-lm/ties repeat=1/batch 0.313s
+# START par-causal-lm/ties repeat=1/batchgrad
+# DONE par-causal-lm/ties repeat=1/batchgrad 0.000s
+# START par-causal-lm/ties repeat=1/batchscale
+# DONE par-causal-lm/ties repeat=1/batchscale 0.000s
+# START par-causal-lm/ties repeat=1/ragged
+# DONE par-causal-lm/ties repeat=1/ragged 0.000s
+# START par-causal-lm/ties repeat=1/stepfull
+# DONE par-causal-lm/ties repeat=1/stepfull 0.000s
+# CELL par-causal-lm/ties STABLE 0.574s
+# START par-causal-lm/hashed repeat=1/train
+# DONE par-causal-lm/hashed repeat=1/train 0.180s
+# START par-causal-lm/hashed repeat=1/infer-save-reload
+# DONE par-causal-lm/hashed repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/hashed repeat=1/batch
+# DONE par-causal-lm/hashed repeat=1/batch 0.280s
+# START par-causal-lm/hashed repeat=1/batchgrad
+# DONE par-causal-lm/hashed repeat=1/batchgrad 0.000s
+# START par-causal-lm/hashed repeat=1/batchscale
+# DONE par-causal-lm/hashed repeat=1/batchscale 0.000s
+# START par-causal-lm/hashed repeat=1/ragged
+# DONE par-causal-lm/hashed repeat=1/ragged 0.000s
+# START par-causal-lm/hashed repeat=1/stepfull
+# DONE par-causal-lm/hashed repeat=1/stepfull 0.000s
+# CELL par-causal-lm/hashed STABLE 0.460s
+# START par-causal-lm/wide repeat=1/train
+# DONE par-causal-lm/wide repeat=1/train 0.183s
+# START par-causal-lm/wide repeat=1/infer-save-reload
+# DONE par-causal-lm/wide repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/wide repeat=1/batch
+# DONE par-causal-lm/wide repeat=1/batch 0.275s
+# START par-causal-lm/wide repeat=1/batchgrad
+# DONE par-causal-lm/wide repeat=1/batchgrad 0.000s
+# START par-causal-lm/wide repeat=1/batchscale
+# DONE par-causal-lm/wide repeat=1/batchscale 0.000s
+# START par-causal-lm/wide repeat=1/ragged
+# DONE par-causal-lm/wide repeat=1/ragged 0.000s
+# START par-causal-lm/wide repeat=1/stepfull
+# DONE par-causal-lm/wide repeat=1/stepfull 0.000s
+# CELL par-causal-lm/wide STABLE 0.459s
+# START par-causal-lm/denormal repeat=1/train
+# DONE par-causal-lm/denormal repeat=1/train 0.187s
+# START par-causal-lm/denormal repeat=1/infer-save-reload
+# DONE par-causal-lm/denormal repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/denormal repeat=1/batch
+# DONE par-causal-lm/denormal repeat=1/batch 0.294s
+# START par-causal-lm/denormal repeat=1/batchgrad
+# DONE par-causal-lm/denormal repeat=1/batchgrad 0.000s
+# START par-causal-lm/denormal repeat=1/batchscale
+# DONE par-causal-lm/denormal repeat=1/batchscale 0.000s
+# START par-causal-lm/denormal repeat=1/ragged
+# DONE par-causal-lm/denormal repeat=1/ragged 0.000s
+# START par-causal-lm/denormal repeat=1/stepfull
+# DONE par-causal-lm/denormal repeat=1/stepfull 0.000s
+# CELL par-causal-lm/denormal STABLE 0.482s
+# START par-causal-lm/denormal_ftz repeat=1/train
+# DONE par-causal-lm/denormal_ftz repeat=1/train 0.190s
+# START par-causal-lm/denormal_ftz repeat=1/infer-save-reload
+# DONE par-causal-lm/denormal_ftz repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/denormal_ftz repeat=1/batch
+# DONE par-causal-lm/denormal_ftz repeat=1/batch 0.283s
+# START par-causal-lm/denormal_ftz repeat=1/batchgrad
+# DONE par-causal-lm/denormal_ftz repeat=1/batchgrad 0.000s
+# START par-causal-lm/denormal_ftz repeat=1/batchscale
+# DONE par-causal-lm/denormal_ftz repeat=1/batchscale 0.000s
+# START par-causal-lm/denormal_ftz repeat=1/ragged
+# DONE par-causal-lm/denormal_ftz repeat=1/ragged 0.000s
+# START par-causal-lm/denormal_ftz repeat=1/stepfull
+# DONE par-causal-lm/denormal_ftz repeat=1/stepfull 0.000s
+# CELL par-causal-lm/denormal_ftz STABLE 0.473s
+# START par-causal-lm/dupes repeat=1/train
+# DONE par-causal-lm/dupes repeat=1/train 0.184s
+# START par-causal-lm/dupes repeat=1/infer-save-reload
+# DONE par-causal-lm/dupes repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/dupes repeat=1/batch
+# DONE par-causal-lm/dupes repeat=1/batch 0.273s
+# START par-causal-lm/dupes repeat=1/batchgrad
+# DONE par-causal-lm/dupes repeat=1/batchgrad 0.000s
+# START par-causal-lm/dupes repeat=1/batchscale
+# DONE par-causal-lm/dupes repeat=1/batchscale 0.000s
+# START par-causal-lm/dupes repeat=1/ragged
+# DONE par-causal-lm/dupes repeat=1/ragged 0.000s
+# START par-causal-lm/dupes repeat=1/stepfull
+# DONE par-causal-lm/dupes repeat=1/stepfull 0.000s
+# CELL par-causal-lm/dupes STABLE 0.457s
+# START par-causal-lm/odd repeat=1/train
+# DONE par-causal-lm/odd repeat=1/train 0.209s
+# START par-causal-lm/odd repeat=1/infer-save-reload
+# DONE par-causal-lm/odd repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/odd repeat=1/batch
+# DONE par-causal-lm/odd repeat=1/batch 0.272s
+# START par-causal-lm/odd repeat=1/batchgrad
+# DONE par-causal-lm/odd repeat=1/batchgrad 0.000s
+# START par-causal-lm/odd repeat=1/batchscale
+# DONE par-causal-lm/odd repeat=1/batchscale 0.000s
+# START par-causal-lm/odd repeat=1/ragged
+# DONE par-causal-lm/odd repeat=1/ragged 0.000s
+# START par-causal-lm/odd repeat=1/stepfull
+# DONE par-causal-lm/odd repeat=1/stepfull 0.000s
+# CELL par-causal-lm/odd STABLE 0.482s
+# START par-causal-lm/negative repeat=1/train
+# DONE par-causal-lm/negative repeat=1/train 0.180s
+# START par-causal-lm/negative repeat=1/infer-save-reload
+# DONE par-causal-lm/negative repeat=1/infer-save-reload 0.000s
+# START par-causal-lm/negative repeat=1/batch
+# DONE par-causal-lm/negative repeat=1/batch 0.278s
+# START par-causal-lm/negative repeat=1/batchgrad
+# DONE par-causal-lm/negative repeat=1/batchgrad 0.000s
+# START par-causal-lm/negative repeat=1/batchscale
+# DONE par-causal-lm/negative repeat=1/batchscale 0.000s
+# START par-causal-lm/negative repeat=1/ragged
+# DONE par-causal-lm/negative repeat=1/ragged 0.000s
+# START par-causal-lm/negative repeat=1/stepfull
+# DONE par-causal-lm/negative repeat=1/stepfull 0.000s
+# CELL par-causal-lm/negative STABLE 0.459s
+| par-causal-lm          | 5171c3ffeb9dd8f8 | e6caf9f0f7ae562d | 37c495fc132ea9db | f711a5aa202b3e41 | f1c5288260c678cd | dba9613ece4fdadb | 5171c3ffeb9dd8f8 | 5171c3ffeb9dd8f8 | 86e92270cebe985b |
+| par-causal-lm batch    | 2d58207bcc498e7c | 73aef1570825d468 | b2dfd7cd9cf444df | 97051f4a7819532e | 0c52595dfa1179f9 | ecda286f05a73eaa | 2d58207bcc498e7c | 2d58207bcc498e7c | 921a3eb50c0e6439 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: n/a=9
+model: n/a=9
+batch: stable=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: par-causal-lm batchgrad n/a:no-backward, par-causal-lm batchscale n/a:not-in-the-serving-set, par-causal-lm infer n/a:function, par-causal-lm model n/a:no-save, par-causal-lm ragged n/a:no-sequence-axis, par-causal-lm stepfull n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)
+wrote /Users/andrewhendel/mojolearn-evidence/parallel-next/apple-cleanup935/apple.json
+{"guard": "macos-root-user-tiny-v1", "reason": null, "error": null, "returncode": 0, "thread_limit": 2, "cpu_affinity": null, "cpu_enforcement": "sampled, not hard affinity", "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter", "initial_memory": {"total_bytes": 17179869184, "conservative_reserve_bytes": 1583071232, "pressure_level": 1, "swap_used_bytes": 4828755394, "compressed_bytes": 4379721728}, "samples": [{"elapsed_seconds": 0.02492520899977535, "rss_bytes": 9207808, "sampled_cpu_cores": 0.4012002467096717, "total_bytes": 17179869184, "conservative_reserve_bytes": 1572814848, "pressure_level": 1, "swap_used_bytes": 4828755394, "compressed_bytes": 4379721728}, {"elapsed_seconds": 2.0560272090078797, "rss_bytes": 278970368, "sampled_cpu_cores": 0.526807614780415, "total_bytes": 17179869184, "conservative_reserve_bytes": 1246953472, "pressure_level": 1, "swap_used_bytes": 4828755394, "compressed_bytes": 4379541504}, {"elapsed_seconds": 4.082868500001496, "rss_bytes": 327745536, "sampled_cpu_cores": 0.3996366186140379, "total_bytes": 17179869184, "conservative_reserve_bytes": 1032617984, "pressure_level": 1, "swap_used_bytes": 4828755394, "compressed_bytes": 4378640384}, {"elapsed_seconds": 6.113669084006688, "rss_bytes": 343506944, "sampled_cpu_cores": 0.1428008255877371, "total_bytes": 17179869184, "conservative_reserve_bytes": 1070972928, "pressure_level": 1, "swap_used_bytes": 4828755394, "compressed_bytes": 4371431424}], "cleanup": {"verified": true, "quarantined": false, "errors": []}, "policy_limits": {"deadline_seconds": 60, "rss_bytes": 1073741824, "entry_reserve_bytes": 0, "runtime_reserve_bytes": 0, "normal_pressure_level": 1, "swap_growth_bytes": 134217728, "compressed_growth_bytes": 268435456, "sampled_cpu_limit": 3, "cpu_grace_seconds": 4, "sample_interval_seconds": 2.0}, "watchdog_expired": false, "watchdog_errors": [], "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain"}

@@ -1,0 +1,79 @@
+{
+  "cleanup": {
+    "errors": [],
+    "quarantined": false,
+    "verified": true
+  },
+  "cpu_affinity": null,
+  "cpu_enforcement": "sampled, not hard affinity",
+  "descendant_accounting": "observed ancestry and PGID, ps start-time identities; sampling gaps remain",
+  "error": null,
+  "gpu_memory_accounting": "system unified-memory reserve/pressure; no per-process Metal VRAM counter",
+  "guard": "macos-root-user-tiny-v1",
+  "initial_memory": {
+    "compressed_bytes": 4379721728,
+    "conservative_reserve_bytes": 1583071232,
+    "pressure_level": 1,
+    "swap_used_bytes": 4828755394,
+    "total_bytes": 17179869184
+  },
+  "policy_limits": {
+    "compressed_growth_bytes": 268435456,
+    "cpu_grace_seconds": 4,
+    "deadline_seconds": 60,
+    "entry_reserve_bytes": 0,
+    "normal_pressure_level": 1,
+    "rss_bytes": 1073741824,
+    "runtime_reserve_bytes": 0,
+    "sample_interval_seconds": 2.0,
+    "sampled_cpu_limit": 3,
+    "swap_growth_bytes": 134217728
+  },
+  "reason": null,
+  "returncode": 0,
+  "samples": [
+    {
+      "compressed_bytes": 4379721728,
+      "conservative_reserve_bytes": 1572814848,
+      "elapsed_seconds": 0.02492520899977535,
+      "pressure_level": 1,
+      "rss_bytes": 9207808,
+      "sampled_cpu_cores": 0.4012002467096717,
+      "swap_used_bytes": 4828755394,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4379541504,
+      "conservative_reserve_bytes": 1246953472,
+      "elapsed_seconds": 2.0560272090078797,
+      "pressure_level": 1,
+      "rss_bytes": 278970368,
+      "sampled_cpu_cores": 0.526807614780415,
+      "swap_used_bytes": 4828755394,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4378640384,
+      "conservative_reserve_bytes": 1032617984,
+      "elapsed_seconds": 4.082868500001496,
+      "pressure_level": 1,
+      "rss_bytes": 327745536,
+      "sampled_cpu_cores": 0.3996366186140379,
+      "swap_used_bytes": 4828755394,
+      "total_bytes": 17179869184
+    },
+    {
+      "compressed_bytes": 4371431424,
+      "conservative_reserve_bytes": 1070972928,
+      "elapsed_seconds": 6.113669084006688,
+      "pressure_level": 1,
+      "rss_bytes": 343506944,
+      "sampled_cpu_cores": 0.1428008255877371,
+      "swap_used_bytes": 4828755394,
+      "total_bytes": 17179869184
+    }
+  ],
+  "thread_limit": 2,
+  "watchdog_errors": [],
+  "watchdog_expired": false
+}
