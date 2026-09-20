@@ -8,7 +8,7 @@ state fold have a single, vendor-independent logical order.
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
-from checks.numerics import identical_fmax, identical_mul, identical_mul_add, portable_expf
+from checks.numerics import identical_div, identical_fmax, identical_mul, identical_mul_add, portable_expf
 
 comptime ATTENTION_V2_TILE = 32
 
@@ -83,7 +83,7 @@ def attention_v2_forward_kernel(
         tile_lo += ATTENTION_V2_TILE
     for d in range(width):
         var oi = row * width + d
-        output.unsafe_store(oi, output.unsafe_load(oi) / z)
+        output.unsafe_store(oi, identical_div(output.unsafe_load(oi), z))
     row_max.unsafe_store(row, m)
     denominator.unsafe_store(row, z)
 
@@ -176,7 +176,7 @@ def _v2_zdot(
 ) -> Float32:
     var acc = Float32(0.0)
     for j in range(lo, hi):
-        var p = portable_expf(_v2_score(queries, key_vectors, row, group, j, keys, head_dim, scale) - m) / z
+        var p = identical_div(portable_expf(_v2_score(queries, key_vectors, row, group, j, keys, head_dim, scale) - m), z)
         acc = identical_mul_add(p, _v2_dyv(values, dy, row, group, j, keys, width), acc)
     return acc
 
@@ -199,7 +199,7 @@ def attention_v2_dq_kernel(
     var m=row_max.unsafe_load(row); var z=denominator.unsafe_load(row); var zdot=row_zdot.unsafe_load(row)
     for d in range(hd): dq.unsafe_store(row * hd + d, Float32(0.0))
     for j in range(lo, hi):
-        var p = portable_expf(_v2_score(queries, key_vectors, row, group, j, keys, hd, scale) - m) / z
+        var p = identical_div(portable_expf(_v2_score(queries, key_vectors, row, group, j, keys, hd, scale) - m), z)
         var ds = _v2_mul(_v2_mul(p, _v2_dyv(values, dy, row, group, j, keys, width) - zdot), scale)
         for d in range(hd):
             var oi = row * hd + d
@@ -225,7 +225,7 @@ def attention_v2_dk_kernel(
         if key >= lo and key < hi:
             var norm = _v2_normalizer(queries, key_vectors, row, group, lo, hi, keys, hd, scale)
             var zdot = _v2_zdot(queries, key_vectors, values, dy, row, group, lo, hi, keys, Int(width_in), hd, scale, norm[0], norm[1])
-            var p = portable_expf(_v2_score(queries, key_vectors, row, group, key, keys, hd, scale) - norm[0]) / norm[1]
+            var p = identical_div(portable_expf(_v2_score(queries, key_vectors, row, group, key, keys, hd, scale) - norm[0]), norm[1])
             var ds = _v2_mul(_v2_mul(p, _v2_dyv(values, dy, row, group, key, keys, Int(width_in)) - zdot), scale)
             acc = identical_mul_add(ds, queries.unsafe_load(row * hd + d), acc)
     dk.unsafe_store(idx, acc)
@@ -249,7 +249,7 @@ def attention_v2_dv_kernel(
         var lo = Int(visible_lo.unsafe_load(row)); var hi = Int(visible_hi.unsafe_load(row))
         if key >= lo and key < hi:
             var norm = _v2_normalizer(queries, key_vectors, row, group, lo, hi, keys, hd, scale)
-            var p = portable_expf(_v2_score(queries, key_vectors, row, group, key, keys, hd, scale) - norm[0]) / norm[1]
+            var p = identical_div(portable_expf(_v2_score(queries, key_vectors, row, group, key, keys, hd, scale) - norm[0]), norm[1])
             acc = identical_mul_add(p, dy.unsafe_load(row * width + d), acc)
     dv.unsafe_store(idx, acc)
 
@@ -276,7 +276,7 @@ def attention_v2_dkdv_kernel(
         var lo=Int(visible_lo.unsafe_load(row)); var hi=Int(visible_hi.unsafe_load(row))
         if key>=lo and key<hi:
             var m=row_max.unsafe_load(row);var z=denominator.unsafe_load(row);var zdot=row_zdot.unsafe_load(row)
-            var p=portable_expf(_v2_score(queries,key_vectors,row,group,key,keys,hd,scale)-m)/z
+            var p=identical_div(portable_expf(_v2_score(queries,key_vectors,row,group,key,keys,hd,scale)-m),z)
             var ds=_v2_mul(_v2_mul(p,_v2_dyv(values,dy,row,group,key,keys,width)-zdot),scale)
             for d in range(hd):
                 var oi=(group*keys+key)*hd+d

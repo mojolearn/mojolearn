@@ -7,7 +7,7 @@ in ascending query order.  Device scheduling may not change those logical
 folds.  TILE is part of the arithmetic contract.
 """
 import numpy as np
-from tools.attention_v2_oracle import exp32, _fma32
+from tools.attention_v2_oracle import exp32, div32, _fma32
 
 TILE = 32
 
@@ -62,7 +62,7 @@ def _row_backward(qrow, keys, values, dyrow, scale, visible):
     zdot = f32(0.0)
     for j in range(keys.shape[0]):
         if visible[j]:
-            probs[j] = f32(exp32(f32(scores[j] - m)) / z)
+            probs[j] = div32(exp32(f32(scores[j] - m)),z)
             dyv[j] = _dot(dyrow, values[j])
             zdot = _fma32(probs[j], dyv[j], zdot)
     ds = np.zeros(keys.shape[0], np.float32)
