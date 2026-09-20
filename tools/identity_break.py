@@ -8665,9 +8665,25 @@ def _batchgrad_block(kind):
         dm = blk.d_model
         x = _seq(Xh, GRAD_SEQ_BATCH, GRAD_SEQ_LEN, dm)
         g = _seq(Xh, GRAD_SEQ_BATCH, GRAD_SEQ_LEN, dm, skip=GRAD_SEQ_BATCH * GRAD_SEQ_LEN * dm)
-        piece = lambda a, b: {k: v for k, v in blk.backward(np.ascontiguousarray(x[a:b]),
-                                                              np.ascontiguousarray(g[a:b])).items() if k != "x"}
-        return [_grad_rows("backward x (per row)", x, g, lambda xr, gr: blk.backward(xr, gr)["x"]),
+        # The row-invariance proof and the accumulation proof deliberately
+        # ask several of the same exact slices (the whole batch and every
+        # one-row piece).  A backward call returns both x and weight
+        # gradients, so running it again merely to select the other half is
+        # duplicate production work, not independent evidence.  Key by the
+        # complete input bytes: distinct slices still execute independently,
+        # while an exactly repeated claim reuses the one native result it is
+        # supposed to compare.
+        cache = {}
+
+        def backward_cached(xr, gr):
+            xr, gr = np.ascontiguousarray(xr), np.ascontiguousarray(gr)
+            key = (xr.dtype.str, xr.shape, xr.tobytes(), gr.dtype.str, gr.shape, gr.tobytes())
+            if key not in cache:
+                cache[key] = blk.backward(xr, gr)
+            return cache[key]
+
+        piece = lambda a, b: {k: v for k, v in backward_cached(x[a:b], g[a:b]).items() if k != "x"}
+        return [_grad_rows("backward x (per row)", x, g, lambda xr, gr: backward_cached(xr, gr)["x"]),
                 _GradAccum("backward weights", GRAD_SEQ_BATCH, GRAD_SEQ_LEN, piece, GRAD_CLAIMED[kind],
                            "a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED")]
     return spec
