@@ -1927,9 +1927,6 @@ struct LlamaBackwardStages(Movable):
         var it = dims.intermediate
         var nh = dims.n_heads
         var nkv = dims.n_kv
-        var wide = dm
-        if it > wide:
-            wide = it
 
         self.in_d_residual2 = _zeros[False](ctx, m * dm)
         # Both residual-add branches receive the incoming cotangent
@@ -1985,9 +1982,12 @@ struct LlamaBackwardStages(Movable):
         self.rstd = _zeros[False](ctx, m)
         self.dvcoef = _zeros[False](ctx, m)
         self.ones = _fill_ones[False](ctx, m)
-        self.tmp0 = _zeros[False](ctx, m * wide)
-        self.tmp1 = _zeros[False](ctx, m * wide)
-        self.tmp2 = _zeros[False](ctx, m * wide)
+        # The gate/up and q/k/v dA routes all produce [M, d_model].  These
+        # unrecorded fan-in temporaries never hold an intermediate-width
+        # tensor, even when intermediate > d_model.
+        self.tmp0 = _zeros[False](ctx, m * dm)
+        self.tmp1 = _zeros[False](ctx, m * dm)
+        self.tmp2 = _zeros[False](ctx, m * dm)
         self.head_a = _zeros[False](ctx, l * hd)
         self.head_b = _zeros[False](ctx, s_max * hd)
         self.attn_repaired = 0
