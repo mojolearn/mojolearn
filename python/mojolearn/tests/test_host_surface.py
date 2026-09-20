@@ -982,9 +982,42 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
                     f"({', '.join(classes) or 'none'}), so its reference has one witness and "
                     "nothing has ever reproduced it. Its reason is 'one column', and what it owes "
                     "is a second column, not a watched run")
-        elif why == "qualification pending":
-            assert lane in with_cells and lane not in stale, lane
-            assert len(_reference_classes(table, lane)) >= 2, lane
+        elif why.startswith("owed artifact "):
+            # ONE MISSING DEVICE CLASS, NAMED, WITH THE FILE OR COMMAND THAT
+            # WOULD SUPPLY IT (lane/verifier-full-exposure, 2026-09-20). This
+            # reason replaced `qualification pending`, which five lanes carried
+            # and which said "the expanded property/hardware completion plan is
+            # not met" -- a sentence that named no artifact, so a reader could
+            # not tell a rental from a merge from a re-run, and nothing could
+            # ever observe it being paid. The old string's only check was that
+            # the lane had two device classes in the UNION of its cells, which
+            # is the loose reading `_classes_on_every_part` exists to replace.
+            #
+            # The shape is `owed artifact <class> ...`, and it is checked BOTH
+            # ways, like `one column`: the class must be one the table's `cols`
+            # can carry, the reason must name a path or a command, and -- the
+            # load-bearing half -- the hold FAILS the day the shipped table's
+            # cells carry that class on every part of every fixture. An excuse
+            # cannot outlive the column that pays it.
+            words = why.split()
+            klass = words[2] if len(words) > 2 else ""
+            assert klass in TRAINING_GPU_CLASSES + ("cpu",), (
+                f"{lane}: {why!r} does not name a device class as its third word; "
+                f"`owed artifact <class> ...` is the shape this test can check")
+            assert lane in with_cells and lane not in stale, (
+                f"{lane}: held back for a missing {klass} column, but the shipped table "
+                f"has no current cell for it at all; its reason is 'no reference' or "
+                f"'stale reference' and what is owed is a whole record")
+            assert "bench/results/" in why or "identity_break.py" in why, (
+                f"{lane}: `owed artifact` has to name the file or the command that would "
+                f"supply the column. {why!r} names neither, which makes it the vague "
+                f"phrase it replaced")
+            if klass in _classes_on_every_part(table, lane):
+                wrong_reason.append(
+                    f"{lane}: held back for a missing {klass} column, but the shipped "
+                    f"table's cells for it carry {klass} on EVERY part of every fixture, "
+                    f"so the hold no longer applies: promote it once a CPU-only "
+                    f"`verify --all` has been watched to read IDENTICAL for it")
         elif why == "one column":
             # THE REFERENCE HAS ONE WITNESS (lane/reference-regen, 2026-09-17).
             # The lanes whose fixture or arithmetic moved lost every cell they
@@ -1074,6 +1107,49 @@ def test_no_fixture_is_shrunk_below_its_declared_floor():
     mod = _fixture_floors()
     bad = mod.check(path=str(ROOT / "tools" / "identity_break.py"))
     assert bad == [], "fixture floor violations:\n  " + "\n  ".join(bad)
+
+
+def _lane_exposure():
+    """`tools/check_lane_exposure.py` loaded by path, like `_fixture_floors`
+    above, so it runs on a box with nothing built."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "check_lane_exposure", ROOT / "tools" / "check_lane_exposure.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_every_harness_lane_is_exposed_or_declared_and_no_public_algorithm_is_laneless():
+    """AN ABSENCE HAS NO FAILURE MODE OF ITS OWN (lane/verifier-full-exposure,
+    2026-09-20).
+
+    The harness defines 256 lanes and the shipped verifier exposed 186. The
+    other 70 were not reported as anything: 55 left by prefix and 15 sat in
+    `PUBLIC_PENDING_LANES`, and neither route printed a word, so `186 lanes`
+    read exactly like all of them. Nothing could catch that by looking at the
+    lanes, because the defect was that they were not there. It is caught by
+    COUNTING, in both directions: every harness lane must come back from
+    `host_surface.lane_exposure()` as EXPOSED or as a hold with a written
+    reason, and every public algorithm must have a lane or a declaration of
+    what is owed. `tools/check_lane_exposure.py` is that count; this is the
+    gate half of it, run beside the CPU surface tests it belongs with."""
+    bad = _lane_exposure().check()
+    assert bad == [], "lane exposure problems:\n  " + "\n  ".join(bad)
+
+
+def test_the_lane_exposure_check_refuses_every_way_a_lane_can_vanish(capsys):
+    """A CHECK THAT HAS NEVER BEEN WATCHED TO FAIL IS NOT A CHECK, and this
+    one is a count, which is the kind that most easily passes for the wrong
+    reason: a reader who deleted every lane from the harness would see it
+    print OK. `--self-test` perturbs the real manifest seven ways -- a prefix
+    excluding 55 lanes with no sentence anywhere, a lane nothing declares, a
+    hold with a blank reason, a declaration for a lane that does not exist, a
+    public lane the harness does not define, an eighth laneless public
+    algorithm, and an excuse for one that has since gained a lane -- and
+    requires each to be REFUSED by the message that names it."""
+    assert _lane_exposure().self_test() is True, capsys.readouterr().out
 
 
 def test_the_fixture_floor_check_refuses_a_violating_shrink(capsys):

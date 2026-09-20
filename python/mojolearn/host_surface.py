@@ -2745,6 +2745,52 @@ def wheel_bindings():
 #: is what states their claim, and that is what the dedicated legs do.
 PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 
+#: WHY EACH EXCLUDED PREFIX IS EXCLUDED, in the words a user reads
+#: (lane/verifier-full-exposure, 2026-09-20). Until this existed the prefix
+#: removed 55 of the harness's 256 lanes from `verify --all` and said nothing:
+#: the command printed `186 lanes` and a user had no way to learn that 70
+#: lanes were not in that number, let alone why. AN ABSENCE IS NOT A REPORT.
+#: A prefix in `PUBLIC_EXCLUDED_PREFIXES` with no sentence here is refused by
+#: `lane_exposure()` rather than silently dropping its lanes again.
+#:
+#: The sentence has to carry three things, because the reader is a user on one
+#: box who wants to know whether they were shortchanged: what the lane claims,
+#: why this machine cannot state it, and the command that can. The answer is
+#: never "you are missing a feature"; it is "this claim is about two devices
+#: and you have one", which is a fact about the claim, not about the install.
+PUBLIC_EXCLUDED_PREFIX_REASONS = {
+    "par-": ("claim requires two devices: a par-* driver claims that a "
+             "TWO-DEVICE column hashes equal to the one-device column cell "
+             "for cell. `verify` is always a one-device run (it refuses "
+             "MOJOLEARN_PAR_DEVICES), and on one device the comparison is a "
+             "run against itself, which passes whatever the code does. Owed: "
+             "a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 "
+             "tools/identity_break.py --repeats 2 --lanes <lane> --json "
+             "par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, "
+             "admitted with _verify_reference.admit(par_axis=True)"),
+}
+
+#: THE STATUS EVERY HARNESS LANE GETS IN `lane_exposure()`, and the whole
+#: vocabulary of it. Only `EXPOSED` may ever contribute to a pass; the other
+#: four are the shapes an absence takes, spelled out so a reader cannot mistake
+#: one for coverage. `UNDECLARED` exists so that the default for a lane nobody
+#: has thought about is a REFUSAL, not a silent omission: it is what the gate
+#: `tools/check_lane_exposure.py` fails on.
+LANE_EXPOSED = "EXPOSED"
+LANE_NOT_APPLICABLE = "NOT APPLICABLE"
+LANE_OWED = "OWED"
+LANE_HELD = "HELD"
+LANE_UNDECLARED = "UNDECLARED"
+LANE_STATUSES = (LANE_EXPOSED, LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD,
+                 LANE_UNDECLARED)
+
+#: The `PUBLIC_PENDING_LANES` reasons that mean NO COMMITTED RECORD CARRIES A
+#: HASH, which is the one hold whose honest run-time status is OWED rather
+#: than HELD: the lane could be run, and every part of it would read OWED,
+#: which is not a pass. Every other reason is a hold on the COMPARISON, so
+#: running the lane would not settle it and the status stays HELD.
+PUBLIC_PENDING_OWED_REASONS = ("no reference",)
+
 #: COVERED LANES HELD BACK FROM THE PUBLIC SET, each with the reason, checked
 #: by python/mojolearn/tests/test_host_surface.py against the harness, the
 #: shipped table and the measured run rather than trusted as prose
@@ -2795,10 +2841,23 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     one that comes from a run rather than from a static
 #:                     condition, and it carries what the run said.
 #:   qualification pending
-#:                     watched installed CPU core replay passed, but the
-#:                     expanded property/hardware completion plan is not met.
-#:                     Current repeated references remain required; this is
-#:                     neither missing CPU execution nor release admission.
+#:                     RETIRED 2026-09-20 (lane/verifier-full-exposure). It
+#:                     said "the expanded property/hardware completion plan is
+#:                     not met", which named no artifact, so nobody reading it
+#:                     could tell whether the debt was a run, a rental, a file
+#:                     or a merge, nor when it was paid. Five lanes carried it.
+#:                     They now carry `owed artifact`, which names the thing.
+#:   owed artifact <class> ...
+#:                     the lane's cells are current and admissible, but one
+#:                     DEVICE CLASS is missing from them and the reason names
+#:                     which, what file or command would supply it, and what is
+#:                     wrong with the nearest thing the tree already has. The
+#:                     third word is the device class, and
+#:                     `test_public_reference_lanes_are_derived_and_every_pending_reason_is_true`
+#:                     fails BOTH when that class is absent from the reason's
+#:                     vocabulary and when the shipped table's cells have
+#:                     GAINED it on every part, so the hold cannot outlive the
+#:                     column that pays it.
 #:   no cpu route      THE ONE REASON A COVERED LANE CANNOT HAVE, and the
 #:                     only entry here that is not a covered lane
 #:                     (lane/unlaned-public-algorithms, 2026-09-20). The
@@ -2963,11 +3022,83 @@ PUBLIC_PENDING_LANES = {
     # closed by an admission -- it needs a current NVIDIA box running the
     # five lanes over all nine fixtures. That is the ONE piece of GPU time
     # these five still owe.
-    "mamba3": "qualification pending",
-    "transformer": "qualification pending",
-    "transformer-window": "qualification pending",
-    "samba": "qualification pending",
-    "samba-untied-dropout-accum": "qualification pending",
+    #
+    # MEASURED 2026-09-20 (lane/verifier-full-exposure), by calling
+    # `_verify_reference.admit()` on all 302 committed columns under
+    # bench/results/ that name any of these five and keeping the ones that
+    # are admissible AND at the harness's current LANE_REVISIONS entry:
+    #
+    #   mamba3               7 columns, classes {amd, apple, cpu}. TWENTY
+    #                        NVIDIA columns name it and NONE is at the current
+    #                        revision.
+    #   transformer          13 columns, classes {amd, apple, cpu, nvidia}
+    #   transformer-window   13 columns, classes {amd, apple, cpu, nvidia}
+    #   samba                14 columns, classes {amd, apple, cpu, nvidia}
+    #   samba-untied-...     13 columns, classes {amd, apple, cpu, nvidia}
+    #
+    # So the phrase `qualification pending` was hiding TWO DIFFERENT DEBTS of
+    # different size, and the four that read `nvidia` above are much closer
+    # than the one that does not. The nvidia column the four share is
+    # bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/
+    # attn-replay-extra/identity_break.{before,after}.nvidia-sm_90a.json: nine
+    # fixtures, two repeats, mode identical, `admit()` returns None. What it
+    # lacks is parts. Five of the nine carry a usable value at every fixture
+    # (train, infer, model, batch, rlpair) and four do not: `stepfull`, which
+    # is a DEFAULT compared part, and batchgrad, batchscale and ragged. It is
+    # also outside bench/results/identity_break/, the only tree
+    # `_verify_reference.build_table` walks, so nothing would find it.
+    #
+    # THE APPLE COLUMN IS A THIRD, SMALLER DEBT AND IT IS NOT GPU TIME. All
+    # five read `apple` above, from
+    # bench/results/identity_break/2026-09-18_installed-apple-properties/,
+    # which is committed, `admit()` clean, nine fixtures, two repeats and
+    # complete on all nine parts -- and is in NO cell of the shipped table for
+    # these lanes, which still read amd + cpu. Admitting it is a scoped
+    # `verify --all --batch-checks --emit-reference --reference-table`, a pure
+    # function over JSON that needs no GPU and no binding. It is not done here
+    # because lane/new-lane-reference-promotion owns the shipped table.
+    "mamba3": (
+        "owed artifact nvidia column. No committed column anywhere under "
+        "bench/results/ carries mamba3 on an NVIDIA device at fixture revision "
+        "'norms-near-one-1'; the twenty that name it all predate the 2026-09-16 "
+        "norm change (lane/dead-arms) and describe bytes this harness no longer "
+        "produces. Unlike the other four neural holds there is no near miss to "
+        "repair. Owed, on a current NVIDIA box: `MOJOLEARN_COMMIT=$(git rev-parse HEAD) "
+        "python3 tools/identity_break.py --repeats 2 --lanes mamba3 --step-full "
+        "--batch-grad --batch-scale --ragged --json identity_break.nvidia.json`, "
+        "landed under bench/results/identity_break/"),
+    "transformer": (
+        "owed artifact nvidia stepfull. An admissible NVIDIA column at the current "
+        "fixture revision exists (bench/results/attention_replay_vendors_2026-09-18/"
+        "nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json, "
+        "admit() None, nine fixtures, two repeats) but carries only train, infer, model, "
+        "batch and rlpair. The DEFAULT part `stepfull` is absent, as are batchgrad, "
+        "batchscale and ragged, and the file sits outside bench/results/identity_break/ "
+        "so build_table never sees it. Owed: re-run those lanes on a current NVIDIA box "
+        "with `--step-full --batch-grad --batch-scale --ragged` and land the column under "
+        "bench/results/identity_break/"),
+    "transformer-window": (
+        "owed artifact nvidia stepfull. Same column and same gap as `transformer`: "
+        "bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/"
+        "attn-replay-extra/identity_break.after.nvidia-sm_90a.json is admissible at the "
+        "current revision on nine fixtures but has no `stepfull`, batchgrad, batchscale or "
+        "ragged value, and is outside the tree build_table walks. Owed: the same NVIDIA "
+        "re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under "
+        "bench/results/identity_break/"),
+    "samba": (
+        "owed artifact nvidia stepfull. Same column and same gap as `transformer`: the "
+        "attention-replay NVIDIA column is admissible at revision 'steps-1-1' on nine "
+        "fixtures but carries no `stepfull`, batchgrad, batchscale or ragged value, and "
+        "is outside bench/results/identity_break/. Owed: the same NVIDIA re-run with "
+        "`--step-full --batch-grad --batch-scale --ragged`, landed under "
+        "bench/results/identity_break/"),
+    "samba-untied-dropout-accum": (
+        "owed artifact nvidia stepfull. Same column and same gap as `transformer`, at "
+        "revision 'steps-3-1'. This is the one lane whose PRE-revision NVIDIA records "
+        "also agree, because lane/shrink-floors reversed its step cut, but an old column "
+        "of coincidentally equal bytes is not a current witness. Owed: the same NVIDIA "
+        "re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under "
+        "bench/results/identity_break/"),
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
     # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
@@ -3042,6 +3173,96 @@ def public_reference_lanes():
              and lane not in PUBLIC_REFERENCE_CANDIDATES
              and lane not in PUBLIC_HOST_ONLY_LANES]
     return lanes + list(PUBLIC_HOST_ONLY_LANES)
+
+
+def excluded_prefix_reason(lane):
+    """The sentence for the `PUBLIC_EXCLUDED_PREFIXES` prefix `lane` starts
+    with, or None. Raises when a prefix carries no sentence, which is the
+    whole point: adding a prefix without saying why would put its lanes back
+    into silent absence."""
+    for prefix in PUBLIC_EXCLUDED_PREFIXES:
+        if lane.startswith(prefix):
+            try:
+                return PUBLIC_EXCLUDED_PREFIX_REASONS[prefix]
+            except KeyError:
+                raise RuntimeError(
+                    f"host_surface: PUBLIC_EXCLUDED_PREFIXES carries {prefix!r} but "
+                    f"PUBLIC_EXCLUDED_PREFIX_REASONS does not say why. Every lane under "
+                    f"that prefix would vanish from `verify --all` with no reason given, "
+                    f"which is the defect lane/verifier-full-exposure exists to remove."
+                ) from None
+    return None
+
+
+def lane_exposure(lanes):
+    """EVERY LANE ACCOUNTED FOR: `{lane: {"status", "reason", "exposed"}}`
+    over `lanes`, which is meant to be the whole harness lane list.
+
+    THE DEFECT THIS REPLACES (lane/verifier-full-exposure, 2026-09-20). The
+    identity harness defines 256 lanes; `public_reference_lanes()` returns
+    186. The other 70 -- 55 removed by `PUBLIC_EXCLUDED_PREFIXES` and 15 held
+    in `PUBLIC_PENDING_LANES` -- were not reported as anything. They were
+    simply not in the set, so `verify --all` printed a lane count that was the
+    number it ran and said nothing about the number it did not, and a user
+    reading `186 lanes` had no way to find out that a fifth of the harness was
+    missing or why. A silently absent lane is indistinguishable from a lane
+    that does not exist, and both are indistinguishable from one that passed.
+
+    Every status but `LANE_EXPOSED` is a gap, and the caller must treat it as
+    one: `_verify_all.verdict()` refuses to print VERIFIED when any lane in
+    the run's own scope is not `LANE_EXPOSED` and clean. Statuses:
+
+      EXPOSED         the installed verifier runs it and compares it
+      NOT APPLICABLE  the claim cannot be STATED on this kind of run at all,
+                      whatever the code does (the `par-*` drivers, whose
+                      claim is about two devices)
+      OWED            it could be run and every part would read OWED, because
+                      no committed record carries a hash for it
+      HELD            it is held out of the public set on a named condition
+                      that running it would not settle
+      UNDECLARED      nothing in this manifest says anything about it. This is
+                      the failure state, not a category: `tools/
+                      check_lane_exposure.py` refuses it.
+
+    It is DERIVED from the same three tables `public_reference_lanes()` is
+    derived from, so a lane cannot be exposed here and pending there.
+    """
+    public = set(public_reference_lanes())
+    candidates = set(PUBLIC_REFERENCE_CANDIDATES)
+    out = {}
+    for lane in lanes:
+        if lane in public:
+            out[lane] = dict(status=LANE_EXPOSED, reason=None, exposed=True)
+            continue
+        prefix_reason = excluded_prefix_reason(lane)
+        if prefix_reason is not None:
+            out[lane] = dict(status=LANE_NOT_APPLICABLE, reason=prefix_reason, exposed=False)
+        elif lane in PUBLIC_PENDING_LANES:
+            why = PUBLIC_PENDING_LANES[lane]
+            owed = any(why.startswith(r) for r in PUBLIC_PENDING_OWED_REASONS)
+            out[lane] = dict(
+                status=LANE_OWED if owed else LANE_HELD,
+                reason=("no committed record carries a hash for this lane, so every part of it "
+                        "would read OWED; owed: a release record that runs it" if owed else why),
+                exposed=False)
+        elif lane in candidates:
+            out[lane] = dict(status=LANE_HELD,
+                             reason="reference qualification pending (PUBLIC_REFERENCE_CANDIDATES)",
+                             exposed=False)
+        else:
+            out[lane] = dict(status=LANE_UNDECLARED, reason=None, exposed=False)
+    return out
+
+
+def lane_exposure_counts(lanes):
+    """`{status: n}` over `lane_exposure(lanes)`, every status present even at
+    zero, so a reader sees the category that is empty rather than inferring
+    it from an absent key."""
+    exposure = lane_exposure(lanes)
+    counts = {s: 0 for s in LANE_STATUSES}
+    for row in exposure.values():
+        counts[row["status"]] += 1
+    return counts
 
 
 #: Public reference lanes of a shipped host family with no GPU path to cover,

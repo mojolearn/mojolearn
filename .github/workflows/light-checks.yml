@@ -69,3 +69,12 @@ jobs:
         run: |
           /tmp/yaml-venv/bin/pip install --quiet pytest==8.3.5 numpy==2.2.6
           /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects
+      - name: No lane is silently absent and no public algorithm is silently laneless
+        # An absence has no failure mode of its own. The shipped verifier ran
+        # 186 of the harness's 256 lanes and reported the other 70 as nothing
+        # at all, so `186 lanes` read like all of them. This is the count that
+        # catches it, in both directions. --self-test runs first, because a
+        # count that cannot refuse anything would print OK on an empty tree.
+        run: |
+          /tmp/yaml-venv/bin/python tools/check_lane_exposure.py --self-test
+          /tmp/yaml-venv/bin/python tools/check_lane_exposure.py

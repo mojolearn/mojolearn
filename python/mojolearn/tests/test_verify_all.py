@@ -637,6 +637,93 @@ def test_cross_check_scope_tiers_respect_the_apple_lane_cap():
     assert set(default) <= set(every), "the default must stay inside the intersection"
 
 
+# --------------------------------------------- every lane accounted for
+
+def _exposure(lanes, status="NOT APPLICABLE", reason="claim requires two devices"):
+    return {l: dict(status=status, reason=reason, exposed=status == "EXPOSED") for l in lanes}
+
+
+def test_the_accounting_denominator_is_the_whole_harness():
+    """THE NUMBER A USER READS IS 256, NOT 186 (lane/verifier-full-exposure,
+    2026-09-20). Every lane the harness defines gets exactly one state, and
+    the states sum to the lane list. A lane that fell out of the accounting
+    would be exactly the silent absence this block exists to remove, so the
+    sum is asserted rather than assumed."""
+    harness = va.load_harness()
+    lanes = list(harness.LANES)
+    exposure = va.host_surface().lane_exposure(lanes)
+    acc = va.lane_accounting(lanes, exposure, [], [])
+    assert acc["total"] == len(lanes) == 256
+    assert sum(acc["counts"].values()) == len(lanes)
+    assert set(acc["lanes"]) == set(lanes)
+    # and the 70 that a CPU-only install does not run are each a named state
+    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 55, "the par-* drivers"
+    assert acc["counts"][va.LANE_UNDECLARED] == 0
+    assert all(e["reason"] for e in acc["lanes"].values() if e["state"] != va.LANE_VERIFIED)
+
+
+@pytest.mark.parametrize("state", [s for s in va.LANE_STATES if s != va.LANE_VERIFIED])
+def test_no_lane_state_but_verified_can_contribute_to_a_pass(state):
+    """Every state this lane added, held to the one rule that matters."""
+    acc = dict(total=1, counts={state: 1},
+               lanes={"x": dict(state=state, reason="because", exposed=False, ran=False, ran_state=None)})
+    assert va.lane_verdict_gaps(acc, ["x"]) != {}, f"{state} was read as coverage"
+    assert va.verdict(_counts(IDENTICAL=99), va.lane_verdict_gaps(acc, ["x"]))[0] != va.EXIT_VERIFIED
+
+
+def test_an_all_inapplicable_run_cannot_read_as_success():
+    """THE 0.8.6 DEFECT, ONE LEVEL UP (lane/verifier-full-exposure,
+    2026-09-20). `verify --all` once printed VERIFIED, exit 0, on 44
+    IDENTICAL and 288 REFUSED parts, and that froze a release that had
+    already been built on three GPU boxes. The states this lane adds could
+    reintroduce it in a subtler form, because a NOT APPLICABLE lane produces
+    parts that all read IDENTICAL: a `par-*` driver on one device compares a
+    run against itself and passes whatever the code does.
+
+    So the case is built exactly that way. Every part IDENTICAL, nothing
+    refused, nothing owed, nothing divergent -- the cell-part counts alone say
+    VERIFIED, and the assertion below shows them saying it -- and the run
+    still must not.
+
+    MEASURED, not only constructed (2026-09-20, Apple M4, this commit):
+
+        python -m mojolearn verify --all --lanes par-forest,par-mlp \\
+            --fixtures base --no-models
+        ... verified 8 of 10 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+        RESULT: INCOMPLETE ... exit 5
+    """
+    lanes = ["par-forest", "par-mlp"]
+    rows = [dict(lane=l, fixture="base", part=p, state=vref.IDENTICAL)
+            for l in lanes for p in ("train", "infer", "batch", "stepfull")]
+    counts = _counts(IDENTICAL=len(rows), NA=2)
+    # the cell-part counts ALONE are a pass; this is the reading that must not
+    # survive, and it is asserted so the test fails if it stops being true
+    assert va.verdict(counts) == (va.EXIT_VERIFIED, "VERIFIED")
+
+    acc = va.lane_accounting(lanes, _exposure(lanes), lanes, rows)
+    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 2
+    assert acc["counts"][va.LANE_VERIFIED] == 0, "a degenerate cell is not a verified lane"
+    assert all(e["ran_state"] == va.LANE_VERIFIED for e in acc["lanes"].values()), (
+        "the run's own reading is kept as evidence, it is just not the verdict")
+    gaps = va.lane_verdict_gaps(acc, lanes)
+    assert set(gaps) == set(lanes)
+    assert all("two devices" in why for why in gaps.values()), gaps
+    code, headline = va.verdict(counts, gaps)
+    assert (code, headline) == (va.EXIT_NO_REFERENCE, "INCOMPLETE")
+    assert code != va.EXIT_VERIFIED and headline != "VERIFIED"
+
+
+def test_the_accounting_is_printed_even_when_nothing_is_wrong():
+    """`186 lanes` used to be printed by a passing run and said nothing about
+    the 70. The block is unconditional, so the passing run carries the
+    denominator too."""
+    acc = va.lane_accounting(["a", "b"], _exposure(["a", "b"], "EXPOSED", None), ["a", "b"],
+                             [dict(lane=l, fixture="base", part="train", state=vref.IDENTICAL)
+                              for l in ("a", "b")])
+    text = "\n".join(va.format_lane_accounting(acc))
+    assert "2 of 2 harness lanes accounted for" in text and "2 VERIFIED" in text
+
+
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     """The table's own references, judged as if this box produced them,
     verify; flip one character of one shipped hash and the same rows read

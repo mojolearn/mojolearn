@@ -118,6 +118,30 @@ requires equal values.
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
 
+### Every lane is accounted for, including the ones that do not run
+
+The harness defines 256 lanes and a CPU-only install runs 186 of them. Until
+2026-09-20 the other 70 were not reported as anything at all, so `186 lanes`
+was indistinguishable from all of them. Every run now prints a LANE
+ACCOUNTING block whose denominator is the whole harness, and gives each lane
+it does not verify a state and a sentence:
+
+| state | what it means |
+|---|---|
+| VERIFIED | it ran and every part read IDENTICAL or N/A. This is the only state that contributes to a pass |
+| DIVERGENT / REFUSED / OWED | it ran and a part disagreed, raised, or has no reference |
+| NOT APPLICABLE | the claim cannot be stated by this kind of run at all. The 55 `par-*` drivers are the case: their claim is that a two-device column hashes equal to the one-device column cell for cell, and `verify` is always a one-device run, so the comparison would be a run against itself |
+| OWED (not run) | no committed record carries a hash for it, so every part would read OWED |
+| HELD | it is held out of the public set on a condition running it would not settle, named in `host_surface.PUBLIC_PENDING_LANES` |
+| NOT RUN | exposed, but this run did not select it, or its fixture moved past the shipped reference |
+| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/check_lane_exposure.py` fails on it |
+
+**None of these but VERIFIED can be read as success.** A run passes only when
+every lane in its own scope read VERIFIED, so a run made entirely of NOT
+APPLICABLE lanes exits 5 with INCOMPLETE even though every cell part it
+produced read IDENTICAL. That is deliberate: a cell that cannot fail is not a
+check.
+
 Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:
 
 | part | question |
