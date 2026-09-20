@@ -7451,8 +7451,11 @@ def _(ml, X, yc, yr, Xh=None):
     (`gemm_oracle`'s descending leaf, which every projection reaches),
     against a CLEAN build of the SAME source. MEASURED on the M4, one core,
     `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/).
-    `flags` does NOT move and cannot: a refusal is not arithmetic.
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    train, infer and stepfull DIVERGENT on 9 of 9. What does NOT move is
+    written down too -- `flags` never, because a refusal is not arithmetic,
+    and `step` on the `negative` fixture alone, where only `state` moves,
+    which is why the state part is hashed beside it.
 
     OWED, to be taken in the coordinated three-column record:
       MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
@@ -7524,13 +7527,22 @@ def _(ml, X, yc, yr, Xh=None):
     The oracle is still the per-call `block.step`/`block.forward` beside it
     in the cell, and the arm makes NO speed claim.
 
-    SABOTAGE, SEEN TO MOVE. The transformer family's own define,
-    `-D MOJOLEARN_HOST_SABOTAGE=1` on
+    SABOTAGE, SEEN TO MOVE, AND IT TAKES TWO ARMS. The transformer family's
+    own define, `-D MOJOLEARN_HOST_SABOTAGE=1` on
     `bindings/_mojolearn_transformer_host.mojo`, against a CLEAN build of the
-    SAME source. MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
-    all nine fixtures, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/).
-    `flags` does NOT move and cannot.
+    SAME source, moves `step`, `prefill`, `state` and `stepfull` on all nine
+    fixtures -- and moves the HELD-OUT `infer` cell on NONE of them. That is
+    not a miss: the held-out cell is `_neural_inference(ml, "transformer", e)`,
+    which on a CPU column builds `TransformerBlockInference`, the NEURAL
+    family's binding and not this one's, so the transformer define cannot
+    reach it and never could. The neural family's define is the second arm and
+    is the mirror image: `infer` moves 9 of 9 and the train cell and
+    `stepfull` do not move at all. Neither arm is redundant; each watches what
+    the other cannot. MEASURED on the M4, one core, `nice -n 19`,
+    `--repeats 2`, all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/,
+    `sabotage-transformer.json` and `sabotage-neural-transformer-session.json`).
+    `flags` does NOT move under either and cannot.
 
     OWED:
       MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
@@ -7798,11 +7810,16 @@ def _(ml, X, yc, yr, Xh=None):
     what `_par_devices`'s docstring says of every `par-*` lane; no hidden
     activation crosses a device boundary here, only a pipe.
 
-    SABOTAGE, SEEN TO MOVE. The generic host define,
+    SABOTAGE, SEEN TO MOVE. The neural family's define,
     `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_neural_host.mojo`,
     the same arm the covered `hf-causal-lm` lane uses and for the same
-    reason. MEASURED on the M4, 2026-09-20
-    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/).
+    reason, against a CLEAN build of the SAME source. MEASURED on the M4, one
+    core, `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    `logits` and `batch` DIVERGENT on 9 of 9. `params` does not move and is
+    not expected to -- it is the weights the owners were SENT, read back, and
+    a wrong GEMM does not change those bytes; it is hashed because a broken
+    RPC round-trip would. `flags` never moves either.
 
     OWED, on a two-device CUDA or HIP box and nowhere else:
       MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
@@ -7900,6 +7917,15 @@ def _(ml, X, yc, yr, Xh=None):
     driver's whole claim. What remains owed is the DEVICE axis: two real
     GPUs, where the folds are isolated by a visibility mask rather than by a
     process boundary.
+
+    SABOTAGE, SEEN TO MOVE. The gbdt family's define,
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_gbdt_host.mojo`,
+    the family that serves every fold's fit, against a CLEAN build of the
+    SAME source. MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
+    all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    `scores` DIVERGENT on 9 of 9. `flags` never moves, because a refusal is
+    not arithmetic.
 
     OWED, on a two-device CUDA or HIP box and nowhere else:
       MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
