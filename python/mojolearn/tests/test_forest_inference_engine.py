@@ -275,8 +275,15 @@ def test_fast_classifier_predict_uses_resident_device_argmax(cls, monkeypatch):
 def test_classifier_device_argmax_is_fast_only_and_optional(cls, monkeypatch):
     model = fitted(cls, 'parallel_groves')
     X = np.ones((2, 1), dtype=np.float32)
-    native = SimpleNamespace()
+    def forbidden(*args):
+        pytest.fail('non-FAST or sequential dispatch reached device argmax')
+    native = SimpleNamespace(forest_predict_resident_labels_gpu=forbidden)
     monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    # Explicit parallel_groves does not weaken the reproducibility tier.
     assert model._predict_forest_labels(X) is None
     model.numeric_mode = model._fit_numeric_mode = 'fast'
+    model.inference_engine = 'sequential'
+    assert model._predict_forest_labels(X) is None
+    model.inference_engine = 'parallel_groves'
+    del native.forest_predict_resident_labels_gpu
     assert model._predict_forest_labels(X) is None

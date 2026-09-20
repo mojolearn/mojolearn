@@ -45,3 +45,44 @@ Focused routing/protocol gate:
 
 Both modified FAST bindings compiled and loaded on Metal. No cloud resource
 was provisioned.
+
+## Generalization matrix
+
+Before promotion, a second qualification crossed both estimators with three
+seeds, 2/3/8 classes, 8/16/64 features, depth 4/8/12, balanced and 90%-majority
+labels, and deliberately tied leaf votes. Cases used 500,000 or 1,000,000
+rows. `old` is the prior parallel-groves public composition and `new` is the
+device-argmax path. Times are alternating-order three-run medians in seconds.
+Accuracy is identical between arms because every label array matches; the
+listed value is the common value. Tie cases intentionally force class 0/1 to
+equal votes to exercise strict-`>` first-max, so their accuracy is not a
+model-quality claim.
+
+| estimator | case (seed) | C/F/D | rows | exact | accuracy | old | new | speedup |
+|---|---|---:|---:|---|---:|---:|---:|---:|
+| RF | balanced (11) | 2/8/4 | 500k | yes | .940640 | .009188 | .007768 | 1.183x |
+| RF | imbalanced (29) | 2/16/8 | 1m | yes | .952125 | .033935 | .031355 | 1.082x |
+| RF | tie (47) | 2/64/12 | 500k | yes | .500920 | .026477 | .023932 | 1.106x |
+| RF | balanced (11) | 3/16/12 | 1m | yes | .999375 | .041459 | .038767 | 1.069x |
+| RF | imbalanced (29) | 3/64/4 | 500k | yes | .932416 | .022644 | .020160 | 1.123x |
+| RF | tie (47) | 3/8/8 | 1m | yes | .331500 | .031141 | .025568 | 1.218x |
+| RF | balanced (11) | 8/64/8 | 500k | yes | .882494 | .044240 | .035897 | 1.232x |
+| RF | imbalanced (29) | 8/8/12 | 1m | yes | .923375 | .094215 | .061173 | 1.540x |
+| RF | tie (47) | 8/16/4 | 500k | yes | .118616 | .044730 | .034371 | 1.301x |
+| ET | balanced (11) | 2/8/4 | 500k | yes | .928872 | .014575 | .013764 | 1.059x |
+| ET | imbalanced (29) | 2/16/8 | 1m | yes | .951500 | .042213 | .036720 | 1.150x |
+| ET | tie (47) | 2/64/12 | 500k | yes | .500920 | .034533 | .032192 | 1.073x |
+| ET | balanced (11) | 3/16/12 | 1m | yes | .982125 | .039000 | .035010 | 1.114x |
+| ET | imbalanced (29) | 3/64/4 | 500k | yes | .932416 | .022177 | .019919 | 1.113x |
+| ET | tie (47) | 3/8/8 | 1m | yes | .331500 | .040091 | .034227 | 1.171x |
+| ET | balanced (11) | 8/64/8 | 500k | yes | .865604 | .042724 | .031375 | 1.362x |
+| ET | imbalanced (29) | 8/8/12 | 1m | yes | .913750 | .109062 | .055706 | 1.958x |
+| ET | tie (47) | 8/16/4 | 500k | yes | .118616 | .039126 | .028201 | 1.387x |
+
+All 18 repeated `predict_proba` byte hashes were stable. There were no timing
+regressions; four binary/small-class cases fall below 10%, but the operation
+still removes the materialized host vote matrix and remains faster. Dispatch
+uses only the compiled numeric mode, configured inference engine, binding
+availability, and shape metadata; it never inspects feature or label values.
+Focused sabotage tests prove explicit `sequential` and both reproducibility
+tiers cannot enter this entry point, even if the native symbol is present.
