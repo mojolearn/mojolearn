@@ -159,6 +159,19 @@ def test_oracles_spell_the_device_statements():
             assert _squash(restated) in oracle, f"{ORACLES[fam]} does not spell {restated!r}"
 
 
+def test_gmm_scoring_parallelizes_components_not_numeric_folds():
+    """The host speed path may schedule components, never split a cell fold."""
+    text = _read(ORACLES["mixture"])
+    estep = text[text.index("def gmmh_e_step("):text.index("def _collapse_message(")]
+    assert "host_predict_task_count(ncomp)" in estep
+    assert "parallel_components and n * d >= 1024" in estep
+    assert "sync_parallelize(_components, component_tasks)" in estep
+    assert "mahalp.unsafe_store(i * ncomp + kc, acc)" in estep
+    # The complete feature fold stays inside one component worker, ascending.
+    assert "for j in range(d):" in estep
+    assert "acc = ftz(identical_mul_add(t, t, acc))" in estep
+
+
 def test_unvalidated_factorization_where_the_device_skips_validation():
     chol = _read("cholesky/host/chol_oracle.mojo")
     assert "def chol_host_factor_lower(" in chol
