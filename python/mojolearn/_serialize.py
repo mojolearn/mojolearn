@@ -226,7 +226,12 @@ def decode_npy(data):
     descr, fortran, shape, offset = _parse_header(data)
     itemsize = _itemsize_of(descr)
     n = _prod(shape)
-    raw = data[offset:offset + n * itemsize]
+    # Keep the ZIP member's payload borrowed until `frombytes` makes the one
+    # owned Array copy.  Slicing `bytes` here used to allocate and copy the
+    # complete tensor once, only for `array.array.frombytes` to copy it again.
+    # A memoryview slice carries the same exact byte range without that
+    # transient model-sized allocation.
+    raw = memoryview(data)[offset:offset + n * itemsize]
     if len(raw) != n * itemsize:
         raise ValueError(
             f"mojolearn: npy member holds {len(raw)} data bytes, shape "
@@ -237,6 +242,10 @@ def decode_npy(data):
         if fortran and a.ndim > 1:
             a._set_meta(shape, a.dtype, "F")
         return a
+    # Text decoding below needs byte slices (`memoryview` has no `decode` or
+    # `rstrip`). String metadata is tiny; numeric model tensors took the
+    # borrowed, single-copy return above.
+    raw = raw.tobytes()
     if descr[1] == "U":
         width = itemsize
         items = [raw[i * width:(i + 1) * width].decode("utf-32-le").rstrip("\x00")
