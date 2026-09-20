@@ -1,0 +1,57 @@
+1281 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7a4b40000000, nodemask=2)
+{
+  "status": "PASS",
+  "checks": [
+    {
+      "layers": 1,
+      "logical_shards": 3,
+      "parameters": 10144,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        },
+        {
+          "device": 1,
+          "first": 5072,
+          "count": 5072,
+          "moment_bytes": 40576,
+          "rollback_bytes": 60864,
+          "reduction_bytes": 40576
+        }
+      ],
+      "state_sha256": "b004a481ad069f93b150534ca10d1b863a79277160a199b18ba6a1f259cac938",
+      "native_faults": true
+    },
+    {
+      "layers": 3,
+      "logical_shards": 3,
+      "parameters": 25680,
+      "ownership": [
+        {
+          "device": 0,
+          "first": 0,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        },
+        {
+          "device": 1,
+          "first": 12840,
+          "count": 12840,
+          "moment_bytes": 102720,
+          "rollback_bytes": 154080,
+          "reduction_bytes": 102720
+        }
+      ],
+      "state_sha256": "219684e3ecd4de815ee6236d0fdea731a45abe0049b51c37ccde2dbe214c21f0",
+      "native_faults": true
+    }
+  ],
+  "scope": "Two GPUs: optimizer moment/rollback and gradient-reduction pooling, replay, exports and recovery. Model weights and activations remain replicated."
+}

@@ -1,0 +1,31 @@
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x53ffc0000000, nodemask=1)
+{"shards": 1, "refused": "ValueError: require 1 <= device count <= logical_shards <= 1024"}
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b4c0000000, nodemask=1)
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b500000000, nodemask=1)
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b540000000, nodemask=1)
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b580000000, nodemask=1)
+{"shards": 2, "step": 1, "seconds": 9.154222574084997, "tokens_per_second": 447.44378529701766}
+{"shards": 2, "step": 2, "seconds": 0.29756859689950943, "tokens_per_second": 13764.893347879857}
+{"shards": 2, "step": 3, "seconds": 0.2979100476950407, "tokens_per_second": 13749.116660183683}
+{"shards": 2, "step": 4, "seconds": 0.2980664912611246, "tokens_per_second": 13741.900280939837}
+{"shards": 2, "step": 5, "seconds": 0.29804876260459423, "tokens_per_second": 13742.717682186621}
+{"shards": 2, "step": 6, "seconds": 0.29832893423736095, "tokens_per_second": 13729.81139248491}
+{"shards": 2, "step": 7, "seconds": 0.29807220213115215, "tokens_per_second": 13741.636995045095}
+{"shards": 2, "step": 8, "seconds": 0.29810371436178684, "tokens_per_second": 13740.184381027142}
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b5c0000000, nodemask=1)
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b600000000, nodemask=1)
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b640000000, nodemask=1)
+{"shards": 4, "step": 1, "seconds": 6.671625308692455, "tokens_per_second": 1227.886702409179}
+{"shards": 4, "step": 2, "seconds": 0.5100538115948439, "tokens_per_second": 16061.050449530281}
+{"shards": 4, "step": 3, "seconds": 0.5104895252734423, "tokens_per_second": 16047.34200101751}
+{"shards": 4, "step": 4, "seconds": 0.5098378900438547, "tokens_per_second": 16067.852468350968}
+{"shards": 4, "step": 5, "seconds": 0.5110196080058813, "tokens_per_second": 16030.69602743251}
+{"shards": 4, "step": 6, "seconds": 0.5097143761813641, "tokens_per_second": 16071.746026416102}
+{"shards": 4, "step": 7, "seconds": 0.5104383882135153, "tokens_per_second": 16048.949665935595}
+{"shards": 4, "step": 8, "seconds": 0.5110310856252909, "tokens_per_second": 16030.335982352966}
+3733 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11b680000000, nodemask=1)
+{
+ "1": "ValueError: require 1 <= device count <= logical_shards <= 1024",
+ "2": 13741.900280939837,
+ "4": 16048.949665935595
+}

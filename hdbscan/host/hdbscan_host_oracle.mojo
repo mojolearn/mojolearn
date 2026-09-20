@@ -608,6 +608,8 @@ def hdbh_mutual_reachability(
         _rows(0)
     else:
         sync_parallelize(_rows, tasks)
+    # Keep the owner alive while untracked pointers are consumed by row tasks.
+    _ = norms^
     var n_nan = 0
     for cell in range(m * m):
         if mr[cell] != mr[cell]:
