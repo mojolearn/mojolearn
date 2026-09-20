@@ -173,6 +173,14 @@ from gbdt.gpu_data.compressed_index_builder import (
     build_layout,
 )
 from gbdt.gpu_data.feature_blocks import PolicyBlock, blocks_for
+from gbdt.host.gbdt_oracle_eval import (
+    GbdtHostEval,
+    GbdtHostEvalFit,
+    gbdt_eval_add_tree,
+    gbdt_eval_detector,
+    gbdt_eval_shrink_point,
+    gbdt_eval_test_bins,
+)
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
     POLICY_HALF_BYTE,
@@ -246,6 +254,16 @@ struct GbdtHostParams(ImplicitlyCopyable, Movable):
     #: `feature_border_type` (`binarization.mojo` BORDER_TYPE_*),
     #: GreedyLogSum (0) unless the fit named another
     var border_type: Int
+
+
+@fieldwise_init
+struct GbdtHostFitWithEval(Movable):
+    """`gbdt_host_fit_eval`'s pair: the ensemble, and what the HELD-OUT arm
+    reports beside it (`FitResult`, `doc_parallel_boosting.mojo:415-432`).
+    `gbdt_host_fit` returns the model alone, as it always did."""
+
+    var model: GbdtHostModel
+    var eval: GbdtHostEvalFit
 
 
 @fieldwise_init
@@ -1564,8 +1582,40 @@ def gbdt_host_fit(
     bootstrap_param: Float32 = Float32(1.0),
     random_strength: Float32 = Float32(0.0),
 ) raises -> GbdtHostModel:
+    """`gbdt_host_fit_eval` with NO held-out set, the entry every caller
+    that does not pass an eval set uses. Its bytes are unchanged by the
+    held-out arm: with `eval.n_rows == 0` nothing below reads the test
+    cursor, the detector is inert by construction and `best_iteration` stays
+    0, which is what this returned before the arm existed."""
+    var r = gbdt_host_fit_eval(
+        x_colmajor, y, n_rows, n_features, params, one_hot_in,
+        bootstrap_kind, bootstrap_param, random_strength,
+        GbdtHostEval.none(),
+    )
+    return r.model^
+
+
+def gbdt_host_fit_eval(
+    x_colmajor: List[Float32],
+    y: List[Float32],
+    n_rows: Int,
+    n_features: Int,
+    params: GbdtHostParams,
+    one_hot_in: List[Bool],
+    bootstrap_kind: Int,
+    bootstrap_param: Float32,
+    random_strength: Float32,
+    eval: GbdtHostEval,
+) raises -> GbdtHostFitWithEval:
     """`train` then `fit_with_test` on the covered configuration (see the
     module docstring for what that is and what mirrors what).
+
+    `eval` is the HELD-OUT arm (`gbdt/host/gbdt_oracle_eval.mojo`): their
+    `testCursor`, the held-out curve, the overfitting detector and
+    `ShrinkToBestIteration`. `eval.n_rows == 0` is no eval set, and the fit
+    is then byte for byte the one this function ran before the arm existed
+    -- an eval set does not reach the learn cursor, the borders, the splits
+    or the leaves on the Plain doc-parallel path.
 
     `bootstrap_kind` (`GBDT_BOOT_*`, -1 none) and `random_strength` are the
     stochastic arm CatBoost's GPU defaults select (Bayesian at temperature
@@ -1633,6 +1683,40 @@ def gbdt_host_fit(
             )
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
+
+    # ---- the HELD-OUT arm (gbdt/host/gbdt_oracle_eval.mojo) ----
+    # THE TEST ROWS ARE QUANTIZED AGAINST THE MODEL'S OWN BORDERS, the
+    # contract `TestArm` states in as many words: the same `grid` and the
+    # same `layout`, so the same feature offsets apply and every split
+    # scores against the bins it was grown on.
+    var has_test = eval.n_rows > 0
+    var n_eval = eval.n_rows if has_test else 1
+    if has_test:
+        if len(eval.x_colmajor) != eval.n_rows * n_features:
+            raise Error("eval_set x_colmajor size mismatch")
+        if len(eval.y) != eval.n_rows:
+            raise Error("eval_set y size mismatch")
+    var test_cindex = List[UInt32]()
+    if has_test:
+        test_cindex = _binarize_columns(
+            eval.x_colmajor, n_eval, n_features, grid, layout
+        )
+    # `CreateCursors`' test seed: zero here, because this arm refuses
+    # `boost_from_average` by name and its model carries no bias
+    var test_cursor = List[Float32](length=n_eval, fill=Float32(0.0))
+    var detector = gbdt_eval_detector(eval)
+    var test_losses = List[Float64]()
+    var stopped_early = False
+    # the packed per-feature records `_apply_last_tree_to_test` writes
+    var feat_offset = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
+    var feat_one_hot = List[Bool](length=n_features, fill=False)
+    for f in range(n_features):
+        feat_offset[f] = layout.features[f].offset
+        feat_mask[f] = layout.features[f].mask
+        feat_shift[f] = layout.features[f].shift
+        feat_one_hot[f] = layout.features[f].one_hot_feature
 
     # the flat bin-feature tables (`TTreeWorkspace.refresh_layout_metadata`,
     # `greedy_search_helper.mojo:3742-3798`)
@@ -1943,17 +2027,72 @@ def gbdt_host_fit(
             model_leaves.append(estimated[i] * lr)
         tree_leaf_offsets.append(len(model_leaves))
 
+        # ---- `AppendModels(..., learnCursors, testCursor)`
+        # (`doc_parallel_boosting.h:391-396`): the SAME weak model onto the
+        # held-out cursor, its loss through the SAME target kernel, and the
+        # detector. A depth-0 tree adds nothing, as their apply returns
+        # early. The stored values ALREADY carry the learning rate.
+        if has_test:
+            if grown > 0:
+                var tree_values = List[Float32](capacity=len(estimated))
+                for i in range(len(estimated)):
+                    tree_values.append(estimated[i] * lr)
+                var test_bins = gbdt_eval_test_bins(
+                    test_cindex, n_eval, tree_features, tree_bins,
+                    feat_offset, feat_mask, feat_shift, feat_one_hot,
+                )
+                gbdt_eval_add_tree(test_cursor, test_bins, tree_values)
+            var t_loss = -Float64(
+                _logloss_value(eval.y, test_cursor, n_eval, border)
+            ) / Float64(n_eval)
+            test_losses.append(t_loss)
+            detector.add_error(t_loss)
+            if detector.is_need_stop():
+                # THEIR BREAK IS HERE, BEFORE the learn loss append
+                # (`doc_parallel_boosting.mojo:2395-2411`): the stopping
+                # iteration contributes a held-out point and NO learn point.
+                stopped_early = True
+                break
+
         # the learn loss read alongside this iteration's gradients
         if len(losses) < params.n_estimators:
             var v = Float64(fv)
             if iteration + 1 > 1:
                 losses.append(-v / Float64(n_rows))
 
+    # the final tree's loss: one more pass over the settled cursor, through
+    # the SAME per-block partials and fold as the loop's, whether or not the
+    # detector cut the loop short (`doc_parallel_boosting.mojo:2415-2516`)
     losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
-    return GbdtHostModel(
+
+    # ---- `ShrinkToBestIteration` (`gbdt/train.mojo:2241-2254`) ----
+    # Their SECOND tracker, not the detector's: fed only the iterations at
+    # or past `best_model_min_trees`, so the cut can differ from
+    # `best_iteration`. The shrink drops whole trees off the flat model.
+    var shrink_to = gbdt_eval_shrink_point(
+        test_losses, eval.want_best_model, eval.best_model_min_trees
+    )
+    var n_trees = len(tree_split_offsets) - 1
+    if 0 < shrink_to and shrink_to < n_trees:
+        while len(tree_split_offsets) - 1 > shrink_to:
+            _ = tree_split_offsets.pop()
+            _ = tree_leaf_offsets.pop()
+        split_features.resize(
+            tree_split_offsets[len(tree_split_offsets) - 1], 0
+        )
+        split_bins.resize(tree_split_offsets[len(tree_split_offsets) - 1], 0)
+        model_leaves.resize(
+            tree_leaf_offsets[len(tree_leaf_offsets) - 1], Float32(0.0)
+        )
+
+    var model = GbdtHostModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_split_offsets^, split_features^, split_bins^, tree_leaf_offsets^,
-        model_leaves^, losses^, 0, False,
+        model_leaves^, losses^, detector.best_iteration, stopped_early,
+    )
+    return GbdtHostFitWithEval(
+        model^,
+        GbdtHostEvalFit(test_losses^, detector.best_iteration, stopped_early),
     )
 
 

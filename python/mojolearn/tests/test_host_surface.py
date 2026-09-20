@@ -447,11 +447,16 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
         "-D", "MOJOLEARN_BPE_TRAINER_SABOTAGE=1"]
     assert host_surface.sabotage_build_defines("forest").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1"]
-    # lane/catboost-parity: the non-default border types' own arm
+    # lane/catboost-parity: the non-default border types' own arm.
+    # lane/close-no-cpu-path-gbdt (2026-09-20) adds the held-out arm's:
+    # MOJOLEARN_HOST_SABOTAGE moves the LEAVES, so it reads DIVERGENT on
+    # gbdt-symmetric-eval whether or not the held-out cursor is right;
+    # MOJOLEARN_GBDT_EVAL_SABOTAGE moves the held-out cells alone.
     assert host_surface.sabotage_build_defines("gbdt").split() == [
         "-D", "MOJOLEARN_HOST_SABOTAGE=1", "-D", "MOJOLEARN_BORDER_TYPES_SABOTAGE=1",
         "-D", "MOJOLEARN_ORDERED_SABOTAGE=1",
-        "-D", "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1"]
+        "-D", "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1",
+        "-D", "MOJOLEARN_GBDT_EVAL_SABOTAGE=1"]
     for name in host_surface.families():
         if name not in host_surface.GATE_SABOTAGE_OWN_DEFINES:
             assert host_surface.sabotage_build_defines(name) == "-D MOJOLEARN_HOST_SABOTAGE=1", name
@@ -469,7 +474,9 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     sources["tokenizer"].append("tokenizer/train/bpe_train.mojo")
     sources["gbdt"] = ["gbdt/grid_creator/binarization.mojo",
                        "gbdt/host/gbdt_oracle_ordered.mojo",
-                       "gbdt/metrics/sample_quantile.mojo"]
+                       "gbdt/metrics/sample_quantile.mojo",
+                       # lane/close-no-cpu-path-gbdt (2026-09-20)
+                       "gbdt/host/gbdt_oracle_eval.mojo"]
     for name, defines in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
         text = "".join(_read(rel) for rel in sources[name])
         for define in defines:

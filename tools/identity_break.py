@@ -1350,6 +1350,44 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
+@lane("gbdt-symmetric-eval")
+def _(ml, X, yc, yr, Xh=None):
+    """The gbdt-symmetric fit WITH A HELD-OUT SET: their test cursor, the
+    held-out curve, the Iter detector at wait 5 and `use_best_model`
+    (lane/close-no-cpu-path-gbdt, 2026-09-20; the CPU route is
+    gbdt/host/gbdt_oracle_eval.mojo, which closed the last Plain arm that
+    refused an eval set by name).
+
+    Three fits, 20 depth-6 Logloss trees each on the lane's own held-out
+    slice as the eval set. The FIRST runs the detector off and
+    `use_best_model` off, so its model must be gbdt-symmetric's model and
+    only the held-out curve is new arithmetic. The SECOND turns the Iter
+    detector on at wait 5, so `stopped_early_` and the curve's length are
+    hashed. The THIRD turns `use_best_model` on at `best_model_min_trees=3`,
+    so the SHRINK -- their second best-iteration tracker, which is not the
+    detector's -- reaches the model column through the saved bytes and the
+    predictions."""
+    ych = labels_for(Xh, HELDOUT_SEED)[0]
+    kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    m = _gbdt(ml.GradientBoosting, use_best_model=False, **kw).fit(
+        X, yc, eval_set=(Xh, ych))
+    od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=5,
+               use_best_model=False, **kw).fit(X, yc, eval_set=(Xh, ych))
+    sh = _gbdt(ml.GradientBoosting, use_best_model=True,
+               best_model_min_trees=3, **kw).fit(X, yc, eval_set=(Xh, ych))
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
+                     learn_loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     best_iteration=_h(np.asarray([m.best_iteration_], dtype=np.int64)),
+                     od_predict=_h(od.predict(X)),
+                     od_test_loss_curve=_h(np.asarray(od.test_loss_curve_, dtype=np.float64)),
+                     od_stopped=_h(np.asarray([od.stopped_early_, sh.stopped_early_], dtype=np.int64)),
+                     od_best_iteration=_h(np.asarray([od.best_iteration_, sh.best_iteration_], dtype=np.int64)),
+                     shrunk_predict=_h(sh.predict(X)),
+                     shrunk_proba=_h(sh.predict_proba(X))),
+                sh, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
 @lane("gbdt-depthwise")
 def _(ml, X, yc, yr, Xh=None):
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, grow_policy="Depthwise",
@@ -8155,7 +8193,8 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"),
             "gbdt-ordered",
-            "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
+            "rf-clf", "et-clf", "gbdt-symmetric", "gbdt-symmetric-eval",
+            "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
             "par-forest", "par-boosting", "par-forest-et-clf")
 _batch_decl(_rows_calls("predict"),
