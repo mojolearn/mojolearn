@@ -270,6 +270,48 @@ def host_accuracy_score(
     return Float32(count) / Float32(n)
 
 
+def host_accuracy_score_ptr(
+    y_true: MutPointer[Int32, MutUntrackedOrigin],
+    y_pred: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int,
+) raises -> Float32:
+    """Pointer/parallel form of `host_accuracy_score`; integer counts merge exactly."""
+    if n <= 0:
+        raise Error(
+            "accuracy_score: n must be positive, got " + String(n)
+            + " (0 / 0 is refused by name)"
+        )
+    var tasks = host_predict_task_count(n)
+    if n < 32768:
+        tasks = 1
+    var chunk = host_predict_chunk(n, tasks)
+    var partials = List[Int64](length=tasks, fill=Int64(0))
+    var pp = rebind[MutPointer[Int64, MutUntrackedOrigin]](partials.unsafe_ptr())
+
+    def _rows(task: Int) {imm y_true, imm y_pred, imm n, imm chunk, imm pp}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        var count = Int64(0)
+        for i in range(lo, hi):
+            var truth = y_true.unsafe_load(i)
+            var p = y_pred.unsafe_load(i)
+            comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                if i == 0:
+                    p = truth + Int32(1) if p == truth else truth
+            if truth == p:
+                count += 1
+        pp.unsafe_store(task, count)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+    var count = Int64(0)
+    for task in range(tasks):
+        count += partials[task]
+    return Float32(count) / Float32(n)
+
+
 # ===========================================================================
 # r2_score (DEVIATIONS 653, 657)
 # ===========================================================================

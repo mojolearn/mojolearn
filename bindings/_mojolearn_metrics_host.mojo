@@ -91,6 +91,7 @@ from metrics.host.metrics_oracle import (
     DISTANCE_L2_SQRT_UNEXPANDED,
     METRICS_ORACLE_HOST_SABOTAGE,
     host_accuracy_score,
+    host_accuracy_score_ptr,
     host_adjusted_rand_score,
     host_entropy,
     host_fowlkes_mallows,
@@ -236,12 +237,11 @@ def accuracy_score_binding(
     """`ML::Metrics::accuracy_score_py` on the host. `params`: `0 n`."""
     _want(String("accuracy_score"), params, 1)
     var n = _index(params[0])
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
+    var yt = i32_ptr(_index(y_true_addr))
+    var yp = i32_ptr(_index(y_pred_addr))
     var out = Float32(0.0)
     with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        out = host_accuracy_score(yt, yp, n)
+        out = host_accuracy_score_ptr(yt, yp, n)
     return PythonObject(Float64(out))
 
 
