@@ -4,6 +4,7 @@ from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from transformer.impl.llama.attention_v2 import enqueue_attention_v2_backward
 from transformer.impl.llama.fused_attention import ATTN_ARM_DEFAULT,FUSED_RAN,fused_forward_launch_estash_ran,fused_backward_launch_estash_ran
+from transformer.impl.llama.modeling_llama import _download
 
 def main() raises:
     comptime H=12; comptime L=2048; comptime HD=64; comptime R=H*L
@@ -25,4 +26,16 @@ def main() raises:
         var t=perf_counter_ns();var sb=fused_backward_launch_estash_ran(ctx,rzd,dq,dk,dv,q,dy,k,v,rm,rz,kept,kept_cells,1,L,H,H,HD,L,0,0,0,Float32(.125),ATTN_ARM_DEFAULT,ran);ctx.synchronize()
         if sb!=FUSED_RAN:raise Error("production v1 backward refused")
         print("attention_v1_backward B1 H12 L2048 HD64 rep",rep,"ms",Float64(perf_counter_ns()-t)/1e6,"base_resident_bytes",resident+R*HD*4,"kept_cells",kept_cells,"extra_kept_bytes",kept_cells*4,"ran_arm",ran)
-    _=q^;_=k^;_=v^;_=dy^;_=dq^;_=dk^;_=dv^;_=rm^;_=rz^;_=rzd^;_=ctxv^;_=kept^;_=lo^;_=hi^;_=hlo^;_=hhi^
+    var stash_dq=_download(ctx,dq,R*HD);var stash_dk=_download(ctx,dk,H*L*HD);var stash_dv=_download(ctx,dv,H*L*HD)
+    for rep in range(3):
+        var t=perf_counter_ns();var sb=fused_backward_launch_estash_ran(ctx,rzd,dq,dk,dv,q,dy,k,v,rm,rz,kept,0,1,L,H,H,HD,L,0,0,0,Float32(.125),ATTN_ARM_DEFAULT,ran);ctx.synchronize()
+        if sb!=FUSED_RAN:raise Error("production v1 recompute backward refused")
+        print("attention_v1_recompute_backward B1 H12 L2048 HD64 rep",rep,"ms",Float64(perf_counter_ns()-t)/1e6,"resident_bytes",resident+R*HD*4,"stash_saved_bytes",kept_cells*4,"ran_arm",ran)
+    var rdq=_download(ctx,dq,R*HD);var rdk=_download(ctx,dk,H*L*HD);var rdv=_download(ctx,dv,H*L*HD);var bad=0
+    for i in range(R*HD):
+        if rdq[i]!=stash_dq[i]:bad+=1
+    for i in range(H*L*HD):
+        if rdk[i]!=stash_dk[i] or rdv[i]!=stash_dv[i]:bad+=1
+    print("attention_v1_recompute exact_bad",bad)
+    if bad!=0:raise Error("v1 recompute moved gradients")
+    _=q^;_=k^;_=v^;_=dy^;_=dq^;_=dk^;_=dv^;_=rm^;_=rz^;_=rzd^;_=ctxv^;_=kept^;_=lo^;_=hi^;_=hlo^;_=hhi^;_=stash_dq^;_=stash_dk^;_=stash_dv^;_=rdq^;_=rdk^;_=rdv^

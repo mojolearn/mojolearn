@@ -1295,6 +1295,11 @@ default resolves to: `_launch_fwd_r2_keep[64, 32, True, True, False]` and
 of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
+comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
+"""Opt-in memory arm: keep v1 arithmetic but do not retain forward exp cells.
+The backward consequently takes the existing exact recompute launcher. The
+default remains the tuned estash route on columns whose matrix selects it."""
+
 comptime ATTN_DEFAULT_ESTASH_DRES = (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_DRES) != 0
 """Whether the column default carries DEVIATION 2651's `_dres` bit, so a
 shipped build instantiates that one estash backward and not both."""
@@ -7600,6 +7605,11 @@ def fused_forward_launch_estash_ran(
     a valid kept stash from a stale or absent one. The regime scan, the
     corner flag and `ran` are the plain launcher's."""
     kept_cells = 0
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+        return fused_forward_launch_ran(
+            ctx, ctxv, amax, denom, q_rope, k_cache, v_cache, b, l, nh, nkv,
+            hd, s, pos0, key_lo, window, scale, arm, ran,
+        )
     comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
         if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD:
             ran = ATTN_ARM_BASELINE
