@@ -1,17 +1,24 @@
-"""Exact A/B price for the production bias epilogue followed by GELU."""
+"""Exact A/B price for a production bias epilogue plus GELU or SiLU.
+
+Build with ``-D MOJOLEARN_BIAS_SILU_PRICE=1`` for SiLU; GELU is the default.
+"""
 from std.memory import bitcast
+from std.sys.compile import is_defined
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from transformer.impl.llama.modeling_llama import (
     LLAMA_TPB,
     add_bias_kernel,
     bias_gelu_kernel,
+    bias_silu_kernel,
     gelu_kernel,
+    silu_kernel,
 )
 
 comptime M = 32768
 comptime WIDTH = 2304
 comptime N = M * WIDTH
+comptime PRICE_SILU = is_defined["MOJOLEARN_BIAS_SILU_PRICE"]()
 
 
 def fill(ctx: DeviceContext, mut d: DeviceBuffer[DType.float32]) raises:
@@ -38,14 +45,18 @@ def baseline(
         grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
         block_dim=(LLAMA_TPB, 1, 1),
     )
-    ctx.enqueue_function[gelu_kernel](
-        out.unsafe_ptr(),
-        src.unsafe_ptr(),
-        Int32(N),
-        Int32(0),
-        grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    comptime if PRICE_SILU:
+        ctx.enqueue_function[silu_kernel](
+            out.unsafe_ptr(), src.unsafe_ptr(), Int32(N),
+            grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[gelu_kernel](
+            out.unsafe_ptr(), src.unsafe_ptr(), Int32(N), Int32(0),
+            grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
 
 
 def fused(
@@ -54,16 +65,19 @@ def fused(
     mut src: DeviceBuffer[DType.float32],
     mut bias: DeviceBuffer[DType.float32],
 ) raises:
-    ctx.enqueue_function[bias_gelu_kernel](
-        out.unsafe_ptr(),
-        src.unsafe_ptr(),
-        bias.unsafe_ptr(),
-        Int32(N),
-        Int32(WIDTH),
-        Int32(0),
-        grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
-    )
+    comptime if PRICE_SILU:
+        ctx.enqueue_function[bias_silu_kernel](
+            out.unsafe_ptr(), src.unsafe_ptr(), bias.unsafe_ptr(), Int32(N),
+            Int32(WIDTH), grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[bias_gelu_kernel](
+            out.unsafe_ptr(), src.unsafe_ptr(), bias.unsafe_ptr(), Int32(N),
+            Int32(WIDTH), Int32(0),
+            grid_dim=((N + LLAMA_TPB - 1) // LLAMA_TPB, 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
 
 
 def digest(
