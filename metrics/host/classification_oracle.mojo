@@ -88,6 +88,8 @@ from std.memory import bitcast
 from checks.numerics import ftz, identical_div, identical_log, portable_sqrtf
 from core.knn_host_predict import host_knn_search
 from metrics.host.metrics_oracle import (
+    METRICS_ORACLE_HOST_SABOTAGE,
+    PINNED_SUM_W,
     host_canonicalize_nan,
     host_l2sqrt_unexpanded,
     host_tree_sum,
@@ -188,14 +190,31 @@ def host_regression_error(
     division and the optional root."""
     if n <= 0 or n > 2147483647 or n > len(y) or n > len(prediction):
         raise Error("regression_error: invalid input length")
-    var terms = List[Float32](length=n, fill=Float32(0.0))
-    for i in range(n):
-        var difference = ftz(ftz(y[i]) - ftz(prediction[i]))
-        if absolute:
-            terms[i] = abs(difference)
-        else:
-            terms[i] = ftz(difference * difference)
-    var total = host_tree_sum(terms, n)
+    # Form each residual directly in its pinned-tree slab.  Materializing an
+    # n-value terms list only for host_tree_sum to copy it into the same slab
+    # added two full memory passes and a large transient allocation.
+    var chunks = (n + PINNED_SUM_W - 1) // PINNED_SUM_W
+    var partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    for c in range(chunks):
+        for t in range(PINNED_SUM_W):
+            var i = c * PINNED_SUM_W + t
+            if i < n:
+                comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                    i = (i + 1) % n
+                var difference = ftz(ftz(y[i]) - ftz(prediction[i]))
+                slab[t] = abs(difference) if absolute else ftz(difference * difference)
+            else:
+                slab[t] = Float32(0.0)
+        var step = PINNED_SUM_W // 2
+        while step > 0:
+            for t in range(step):
+                slab[t] = ftz(slab[t] + slab[t + step])
+            step //= 2
+        partials[c] = slab[0]
+    var total = Float32(0.0)
+    for c in range(chunks):
+        total = ftz(total + partials[c])
     var value = ftz(identical_div(total, Float32(n)))
     if root:
         value = portable_sqrtf(value)
