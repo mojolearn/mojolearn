@@ -1,0 +1,107 @@
+PASS=base
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4191 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3166c0000000, nodemask=1)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+4191 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x184580000000, nodemask=2)
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2404.643
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1005.203 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS=tpb512
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+4621 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x723000000000, nodemask=1)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+4621 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7af5c0000000, nodemask=2)
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2528.739
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1016.942 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS=tpb512
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5051 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x510cc0000000, nodemask=1)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2596.244
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1018.954 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS=base
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5481 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x739d40000000, nodemask=1)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+5481 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x394440000000, nodemask=2)
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2577.395
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1038.086 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS=base
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+5911 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x324500000000, nodemask=1)
+5911 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x396480000000, nodemask=2)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2561.278
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1053.764 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+PASS=tpb512
+FSPEED-CTR-TRACE lane=et MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=et arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+6341 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33fc40000000, nodemask=1)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_trees.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=et arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+FSPEED-WARMUP lane=et arm=ours shape=taxi-1000000x16 ms=2591.797
+6341 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1bc380000000, nodemask=2)
+FSPEED-ORDER lane=et round=1 arms=ours
+FSPEED lane=et arm=ours shape=taxi-1000000x16 round=1 ms=1125.471 hash=9d151e0449a610ab
+FSPEED-ACC lane=et arm=ours metric=logloss value=0.527541
+FSPEED-ACC lane=et arm=ours metric=auc value=0.608084
+FSPEED-FIT lane=et arm=ours library=mojolearn trees=100 nodes=1252834 leaves=626467 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=et arms=ours leaves=ours:626467 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
