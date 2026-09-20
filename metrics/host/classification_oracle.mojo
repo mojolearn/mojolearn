@@ -84,9 +84,11 @@ tools/identity_break.py on the metrics-classification lane is the
 measurement.
 """
 from std.memory import bitcast
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, portable_sqrtf
 from core.knn_host_predict import host_knn_search
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from metrics.host.metrics_oracle import (
     METRICS_ORACLE_HOST_SABOTAGE,
     PINNED_SUM_W,
@@ -212,6 +214,54 @@ def host_regression_error(
                 slab[t] = ftz(slab[t] + slab[t + step])
             step //= 2
         partials[c] = slab[0]
+    var total = Float32(0.0)
+    for c in range(chunks):
+        total = ftz(total + partials[c])
+    var value = ftz(identical_div(total, Float32(n)))
+    if root:
+        value = portable_sqrtf(value)
+    return ftz(value)
+
+
+def host_regression_error_ptr(
+    y: MutPointer[Float32, MutUntrackedOrigin],
+    prediction: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int, absolute: Bool, root: Bool,
+) raises -> Float32:
+    """Pointer/parallel partials with the original ascending final fold."""
+    if n <= 0 or n > 2147483647:
+        raise Error("regression_error: invalid input length")
+    var chunks = (n + PINNED_SUM_W - 1) // PINNED_SUM_W
+    var partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var pp = rebind[MutPointer[Float32, MutUntrackedOrigin]](partials.unsafe_ptr())
+    var tasks = host_predict_task_count(chunks)
+    if n < 32768:
+        tasks = 1
+    var per = host_predict_chunk(chunks, tasks)
+    def _chunks(task: Int) {imm y, imm prediction, imm n, imm chunks, imm per, imm pp, imm absolute}:
+        var lo = task * per
+        var hi = min(lo + per, chunks)
+        var slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+        for c in range(lo, hi):
+            for t in range(PINNED_SUM_W):
+                var i = c * PINNED_SUM_W + t
+                if i < n:
+                    comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                        i = (i + 1) % n
+                    var difference = ftz(ftz(y.unsafe_load(i)) - ftz(prediction.unsafe_load(i)))
+                    slab[t] = abs(difference) if absolute else ftz(difference * difference)
+                else:
+                    slab[t] = Float32(0.0)
+            var step = PINNED_SUM_W // 2
+            while step > 0:
+                for t in range(step):
+                    slab[t] = ftz(slab[t] + slab[t + step])
+                step //= 2
+            pp.unsafe_store(c, slab[0])
+    if tasks == 1:
+        _chunks(0)
+    else:
+        sync_parallelize(_chunks, tasks)
     var total = Float32(0.0)
     for c in range(chunks):
         total = ftz(total + partials[c])

@@ -114,6 +114,7 @@ from metrics.host.classification_oracle import (
     host_precision_recall_fscore,
     host_rand_score,
     host_regression_error,
+    host_regression_error_ptr,
     host_trustworthiness,
 )
 
@@ -800,15 +801,16 @@ def _regression_error_entry(
 ) raises -> PythonObject:
     _want(String("regression_error"), params, 1)
     var n = _index(params[0])
-    var y = read_f32(_index(y_true_addr), max(0, n))
-    var prediction = read_f32(_index(y_pred_addr), max(0, n))
+    var y = f32_ptr(_index(y_true_addr))
+    var prediction = f32_ptr(_index(y_pred_addr))
     var result = Float32(0.0)
     with GILReleased(Python()):
-        _check_float_pair(y, prediction, n)
+        if n <= 0:
+            raise Error("metrics: n must be positive, got " + String(n))
         for i in range(n):
-            if not isfinite(y[i]) or not isfinite(prediction[i]):
+            if not isfinite(y.unsafe_load(i)) or not isfinite(prediction.unsafe_load(i)):
                 raise Error("regression_error: inputs must be finite Float32")
-        result = host_regression_error(y, prediction, n, absolute, root)
+        result = host_regression_error_ptr(y, prediction, n, absolute, root)
     return PythonObject(Float64(result))
 
 
