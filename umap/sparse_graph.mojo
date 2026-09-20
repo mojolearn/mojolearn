@@ -10,6 +10,12 @@ candidates are retained; consumers must apply their existing weight policy.
 from checks.numerics import identical_exp64, identical_log2_64
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
+from max.algorithm import sync_parallelize
 from umap.graph import _finite, _sigma_fast, _sigma_identical
 
 
@@ -79,6 +85,10 @@ def sparse_fuzzy_simplicial_graph(
     rhos.resize(n_samples, Float32(0.0))
     sigmas.resize(n_samples, Float32(0.0))
     var target = identical_log2_64(Float64(n_neighbors))
+    # Validate in caller order so malformed input keeps the same first error,
+    # and compute rho while the row is already hot.  Sigma searches are then
+    # independent by row: moving whole searches to worker threads changes no
+    # statement or reduction order within a row.
     for i in range(n_samples):
         if Int(knn_indices[i * n_neighbors]) != i:
             raise Error("UMAP expects self in k-NN slot zero")
@@ -94,12 +104,42 @@ def sparse_fuzzy_simplicial_graph(
             if rho == 0.0 and d > Float32(0.0):
                 rho = Float64(d)
         rhos[i] = Float32(rho)
-        var sigma: Float64
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-            sigma = _sigma_identical(knn_distances, i, n_neighbors, rho, target)
-        else:
-            sigma = _sigma_fast(knn_distances, i, n_neighbors, rho, target)
-        sigmas[i] = Float32(sigma)
+    var tasks = host_predict_task_count(n_samples)
+    # The thread-pool join is not worthwhile for small graph builds.
+    if n_samples < 256:
+        tasks = 1
+    var chunk = host_predict_chunk(n_samples, tasks)
+    var rp = host_list_ptr(rhos)
+    var sp = host_list_ptr(sigmas)
+    var failed = List[Int](length=tasks, fill=0)
+    var fp = failed.unsafe_ptr()
+
+    def _sigma_rows(task: Int) {imm knn_distances, imm target, imm n_neighbors, imm n_samples, imm chunk, imm rp, imm sp, imm fp}:
+        try:
+            var lo = task * chunk
+            var hi = min(lo + chunk, n_samples)
+            for i in range(lo, hi):
+                var rho = Float64(rp.unsafe_load(i))
+                var sigma: Float64
+                comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+                    sigma = _sigma_identical(
+                        knn_distances, i, n_neighbors, rho, target
+                    )
+                else:
+                    sigma = _sigma_fast(
+                        knn_distances, i, n_neighbors, rho, target
+                    )
+                sp.unsafe_store(i, Float32(sigma))
+        except:
+            fp.unsafe_store(task, 1)
+
+    if tasks == 1:
+        _sigma_rows(0)
+    else:
+        sync_parallelize(_sigma_rows, tasks)
+    for task in range(tasks):
+        if failed[task] != 0:
+            raise Error("UMAP sigma search did not bracket its target")
 
     var doff = List[Int]()
     var dcol = List[UInt32]()
