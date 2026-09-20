@@ -120,6 +120,7 @@ from checks.numerics import (
 from core.host_predict_threads import (
     HostF32Ptr,
     HostF64Ptr,
+    HostI64Ptr,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -285,6 +286,21 @@ def host_qn_decision_into(
         for i in range(n_rows):
             z.unsafe_store(i, ftz(z.unsafe_load(i) + b))
     _ = w_head^
+
+
+def host_qn_predict_binary_into(
+    x: HostF32Ptr, w: HostF32Ptr, dst: HostI64Ptr, n_rows: Int,
+    n_features: Int, fit_intercept: Bool, tasks: Int,
+):
+    """Binary `qn_predict`: the identical decision spelling followed by
+    cuML's strict `z > 0` threshold, without exporting the score vector."""
+    var z = List[Float32](length=n_rows, fill=Float32(0.0))
+    host_qn_decision_into(
+        x, w, host_list_ptr(z), n_rows, n_features, fit_intercept, tasks,
+    )
+    for i in range(n_rows):
+        dst.unsafe_store(i, Int64(1) if z[i] > Float32(0.0) else Int64(0))
+    _ = z^
 
 
 def host_qn_sigmoid(
