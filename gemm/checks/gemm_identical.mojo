@@ -150,6 +150,7 @@ from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
     COLUMN_AMD,
     COLUMN_APPLE,
+    COLUMN_NVIDIA,
     PINNED_ACC_COLS_PER_TH,
     PINNED_ACC_ROWS_PER_TH,
     PINNED_KBLK,
@@ -4453,6 +4454,14 @@ def _shipped_body_kpack_hg[
             )
             return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        # L40S, 2026-09-20: GPT-3-small Q/K/V/O dWeight has six contract
+        # leaves, so FS4 covers its unchanged fold tree while avoiding 3 KiB
+        # of unreachable per-thread local stack. Keep the measured choice
+        # NVIDIA- and shape-specific; other production shapes were neutral.
+        comptime if not SAB and TARGET_COLUMN == COLUMN_NVIDIA:
+            if op == OP_TN and m == 768 and n == 768 and k == 2048:
+                _kpack_hg_run_with_ws[4, SAB](ctx, c, a, b, ws, m, n, k, op)
+                return
         _kpack_hg_run_with_ws[GEMM_KPACK_FS, SAB](
             ctx, c, a, b, ws, m, n, k, op
         )
@@ -5425,7 +5434,11 @@ def identical_gemm_kpack_kernel[
         "identical_gemm_kpack_kernel: GATHER needs a 16-byte page and one (group, step)"
         " pair per thread: TR * KS == TC * KS == the block size"
     )
-    comptime assert FS >= GEMM_FOLD_LEVELS or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"](), (
+    comptime assert (
+        FS >= GEMM_FOLD_LEVELS
+        or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"]()
+        or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8))
+    ), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
         " profile cap CONTRACT_MAX_LEAVES (smaller stacks are trial-only and"
         " must be host-bounded by the launched group leaf count)"

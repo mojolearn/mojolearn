@@ -396,6 +396,12 @@ comptime BWD_NORM_SPLIT_TRIAL = is_defined[
 comptime BWD_NORM_FUSED_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM_FUSED_TRIAL"
 ]()
+comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
+    "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
+]()
+comptime BWD_GATED_SILU_SPLIT_TRIAL = is_defined[
+    "MOJOLEARN_BWD_GATED_SILU_SPLIT_TRIAL"
+]()
 
 
 def llama_backward_sabotage_name() -> String:
@@ -749,6 +755,40 @@ def bwd_silu_backward_kernel(
     dg.unsafe_store(i, ftz(pinned_mul(ftz(dsi.unsafe_load(i)), r4)))
 
 
+def bwd_mul2_silu_backward_kernel(
+    dsi: MutPointer[Float32, MutAnyOrigin],
+    dup: MutPointer[Float32, MutAnyOrigin],
+    dg: MutPointer[Float32, MutAnyOrigin],
+    d_gated: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Fuse S21's two products with the clean S20 SiLU backward.
+
+    Every stored value keeps the split kernels' per-cell arithmetic and
+    rounding. `dsi_v` is rounded before its store and before it feeds `dg`,
+    exactly matching the store/load seam in the split spelling.
+    """
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var av = ftz(d_gated.unsafe_load(i))
+    var dsi_v = ftz(pinned_mul(av, ftz(up.unsafe_load(i))))
+    dsi.unsafe_store(i, dsi_v)
+    dup.unsafe_store(i, ftz(pinned_mul(av, ftz(silu_out.unsafe_load(i)))))
+
+    var x = ftz(gate.unsafe_load(i))
+    var sg = ftz(identical_sigmoid(x))
+    var r1 = ftz(ftz(Float32(1.0)) - ftz(sg))
+    var r2 = ftz(pinned_mul(x, r1))
+    var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
+    var r4 = ftz(pinned_mul(sg, r3))
+    dg.unsafe_store(i, ftz(pinned_mul(dsi_v, r4)))
+
+
 # ===========================================================================
 # S1-S4's BACKWARD. DEVIATIONS 1408, 1409, 1410, 1420.
 #
@@ -940,6 +980,8 @@ def bwd_norm_dot_kernel(
 
 def bwd_norm_dx_kernel(
     dx: MutPointer[Float32, MutAnyOrigin],
+    residual_out: MutPointer[Float32, MutAnyOrigin],
+    residual_branch: MutPointer[Float32, MutAnyOrigin],
     dprod: MutPointer[Float32, MutAnyOrigin],
     dh: MutPointer[Float32, MutAnyOrigin],
     dy: MutPointer[Float32, MutAnyOrigin],
@@ -948,6 +990,7 @@ def bwd_norm_dx_kernel(
     dv_in: MutPointer[Float32, MutAnyOrigin],
     m_in: Int32,
     dm_in: Int32,
+    fuse_residual_in: Int32,
 ):
     """The two `x` branches and the weight-gradient product. One thread per
     cell.
@@ -989,7 +1032,13 @@ def bwd_norm_dx_kernel(
     var dx1 = ftz(pinned_mul(ftz(dh.unsafe_load(i)), rstd))
     var tx = ftz(pinned_mul(BWD_TWO, xj))
     var dx2 = ftz(pinned_mul(dv, tx))
-    dx.unsafe_store(i, ftz(ftz(dx1) + ftz(dx2)))
+    var dxj = ftz(ftz(dx1) + ftz(dx2))
+    dx.unsafe_store(i, dxj)
+    if fuse_residual_in != 0:
+        residual_out.unsafe_store(
+            i,
+            ftz(ftz(dxj) + ftz(residual_branch.unsafe_load(i))),
+        )
 
     var inner = ftz(pinned_mul(xj, rstd))
     dprod.unsafe_store(
@@ -2690,7 +2739,7 @@ def bwd_attention_eager_stages(
 # ===========================================================================
 
 
-def bwd_rms_norm[which: Int = 0](
+def bwd_rms_norm[which: Int](
     ctx: DeviceContext,
     mut dot_out: DeviceBuffer[DType.float32],
     mut dx_out: DeviceBuffer[DType.float32],
@@ -2704,6 +2753,9 @@ def bwd_rms_norm[which: Int = 0](
     mut x: DeviceBuffer[DType.float32],
     mut weight: DeviceBuffer[DType.float32],
     mut sumsq: DeviceBuffer[DType.float32],
+    residual_out: MutPointer[Float32, MutAnyOrigin],
+    residual_branch: MutPointer[Float32, MutAnyOrigin],
+    fuse_residual: Bool,
     m: Int,
     dm: Int,
     eps: Float32,
@@ -2812,6 +2864,8 @@ def bwd_rms_norm[which: Int = 0](
     step_count_launch()
     ctx.enqueue_function[bwd_norm_dx_kernel](
         dx_out.unsafe_ptr(),
+        residual_out,
+        residual_branch,
         dprod.unsafe_ptr(),
         dh.unsafe_ptr(),
         dy.unsafe_ptr(),
@@ -2820,6 +2874,7 @@ def bwd_rms_norm[which: Int = 0](
         dvcoef.unsafe_ptr(),
         Int32(m),
         Int32(dm),
+        Int32(1 if fuse_residual else 0),
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
@@ -3048,17 +3103,35 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     # STAGE 4-5. S21's backward, two `pinned_mul`s. ROUTING.
     # =====================================================================
+    var fuse_gated_silu = False
+    comptime if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and TARGET_COLUMN == COLUMN_APPLE
+        and not BWD_ANY_SABOTAGE
+        and not BWD_GATED_SILU_SPLIT_TRIAL
+    ):
+        fuse_gated_silu = True
     step_count_launch()
-    ctx.enqueue_function[bwd_mul2_kernel](
-        bst.d_silu_out.unsafe_ptr(),
-        bst.d_up_proj_out.unsafe_ptr(),
-        bst.d_mlp_gated.unsafe_ptr(),
-        fwd.up_proj.unsafe_ptr(),
-        fwd.silu_out.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    if fuse_gated_silu:
+        ctx.enqueue_function[bwd_mul2_silu_backward_kernel](
+            bst.d_silu_out.unsafe_ptr(), bst.d_up_proj_out.unsafe_ptr(),
+            bst.d_gate_proj_out.unsafe_ptr(), bst.d_mlp_gated.unsafe_ptr(),
+            fwd.up_proj.unsafe_ptr(), fwd.silu_out.unsafe_ptr(),
+            fwd.gate_proj.unsafe_ptr(), Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[bwd_mul2_kernel](
+            bst.d_silu_out.unsafe_ptr(),
+            bst.d_up_proj_out.unsafe_ptr(),
+            bst.d_mlp_gated.unsafe_ptr(),
+            fwd.up_proj.unsafe_ptr(),
+            fwd.silu_out.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3071,16 +3144,17 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     # STAGE 6. S20's backward. NEW ARITHMETIC. DEVIATION 1411.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_silu_backward_kernel](
-        bst.d_gate_proj_out.unsafe_ptr(),
-        bst.d_silu_out.unsafe_ptr(),
-        fwd.gate_proj.unsafe_ptr(),
-        fwd.silu_out.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    if not fuse_gated_silu:
+        step_count_launch()
+        ctx.enqueue_function[bwd_silu_backward_kernel](
+            bst.d_gate_proj_out.unsafe_ptr(),
+            bst.d_silu_out.unsafe_ptr(),
+            fwd.gate_proj.unsafe_ptr(),
+            fwd.silu_out.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3131,6 +3205,13 @@ def llama_decoder_layer_backward_device(
     # STAGE 10-12. `post_attention_layernorm` backward. Its forward INPUT is
     # `residual1.out`.
     # =====================================================================
+    var fuse_norm2_residual = False
+    comptime if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and TARGET_COLUMN == COLUMN_APPLE
+        and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL
+    ):
+        fuse_norm2_residual = True
     bwd_rms_norm[2](
         ctx,
         bst.norm2_dot,
@@ -3145,6 +3226,9 @@ def llama_decoder_layer_backward_device(
         fwd.residual1,
         w.norm2_w,
         fwd.norm2_sumsq,
+        bst.d_residual1.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        bst.in_d_residual2.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        fuse_norm2_residual,
         m,
         dm,
         w.eps,
@@ -3160,15 +3244,13 @@ def llama_decoder_layer_backward_device(
     # the norm branch first. Two terms, so no order to pin -- stated rather
     # than assumed.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_add2_kernel](
-        bst.d_residual1.unsafe_ptr(),
-        bst.norm2_dx.unsafe_ptr(),
-        bst.in_d_residual2.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    if not fuse_norm2_residual:
+        step_count_launch()
+        ctx.enqueue_function[bwd_add2_kernel](
+            bst.d_residual1.unsafe_ptr(), bst.norm2_dx.unsafe_ptr(),
+            bst.in_d_residual2.unsafe_ptr(), Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1), block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3413,6 +3495,9 @@ def llama_decoder_layer_backward_device(
         x_dev,
         w.norm1_w,
         fwd.norm1_sumsq,
+        bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        bst.norm1_dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+        False,
         m,
         dm,
         w.eps,

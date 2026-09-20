@@ -159,17 +159,17 @@ def _kernel_stage(
             Float64(perf_counter_ns() - t0) / 1.0e6,
         )
 
-    bwd_rms_norm(
+    bwd_rms_norm[0](
         ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
-        m, dm, EPS,
+        dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, EPS,
     )
     ctx.synchronize()
 
     for _r in range(KERNEL_REPEATS):
         var t1 = perf_counter_ns()
-        bwd_rms_norm(
+        bwd_rms_norm[0](
             ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w,
-            sumsq, m, dm, EPS,
+            sumsq, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, EPS,
         )
         ctx.synchronize()
         _report(
