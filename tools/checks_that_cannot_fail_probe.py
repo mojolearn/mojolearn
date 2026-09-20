@@ -114,10 +114,11 @@ def probe_moved():
 
 def probe_commitment():
     src = os.path.join(ROOT, "python", "mojolearn", "_verify_all.py")
-    ns = _lift(src, {"commitment_state", "seal_document", "_without_reveal",
-                     "commitment_preimage", "read_published_commitment",
-                     "commitment_digest"})
+    ns = _lift(src, {"commitment_state", "commitment_report", "seal_document",
+                     "_without_reveal", "commitment_preimage",
+                     "read_published_commitment", "commitment_digest"})
     commitment_state, seal_document = ns["commitment_state"], ns["seal_document"]
+    commitment_report = ns["commitment_report"]
     commitment_digest, REVEAL = ns["commitment_digest"], ns["REVEAL_KEY"]
     ok_states = ns["_COMMITMENT_OK"]
 
@@ -163,6 +164,27 @@ def probe_commitment():
     print("   So the loss is the FREE self-catch, which is the only one a")
     print("   document with no published commitment ever gets.")
     print("   `challenge_state` carries the identical guard.")
+
+    print()
+    print("   AND IT GATES. `commitment_report` turns any state problem into")
+    print("   `broken`, which `--compare` reads at _verify_all.py:2581-2588:")
+    print("     elif commitment['broken']: 'COMMITMENT BROKEN', EXIT_MISMATCH")
+    other = dict(doc)
+    seal_document(other)
+    rep_str = commitment_report(tampered, other, "A", "B", None, None)
+    t = json.loads(json.dumps(tampered))
+    t[REVEAL]["commitment"] = [t[REVEAL]["commitment"]]
+    rep_list = commitment_report(t, other, "A", "B", None, None)
+    print(f"     carried commitment a STRING -> a.state "
+          f"{rep_str['a']['state']!r}, broken={rep_str['broken']}")
+    print(f"     carried commitment a LIST   -> a.state "
+          f"{rep_list['a']['state']!r}, broken={rep_list['broken']}")
+    assert rep_str["broken"] is True, "the control arm is broken"
+    assert rep_list["broken"] is False, "it gates after all; this finding is stale"
+    print("     STRING -> COMMITMENT BROKEN, exit 1.")
+    print("     LIST   -> falls through to the cell ladder; with cells that match,")
+    print("               that is AGREE, exit 0. A document edited after sealing")
+    print("               passes because its own commitment was the wrong type.")
 
 
 # --------------------------------------------------------------------------
