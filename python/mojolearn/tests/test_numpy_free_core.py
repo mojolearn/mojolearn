@@ -296,6 +296,31 @@ def test_npy_scalars_and_strings_match_numpy():
     assert b.dtype == "<u1" and b.tolist() == [1, 0]
 
 
+def test_numeric_npy_decode_borrows_payload_until_owned_copy():
+    """A large numeric member must not be sliced into a second `bytes`.
+
+    `_buffer.frombytes` is the ownership boundary: it copies into the
+    returned Array.  The codec should hand that boundary a borrowed view of
+    the ZIP payload, while text members keep their established decoding.
+    """
+    payload = _serialize.encode_npy(np.arange(1024, dtype=np.float32))
+    original = _buffer.frombytes
+    seen = []
+
+    def counted(raw, dtype, shape):
+        seen.append(type(raw))
+        return original(raw, dtype, shape)
+
+    _buffer.frombytes = counted
+    try:
+        got = _serialize.decode_npy(payload)
+    finally:
+        _buffer.frombytes = original
+    assert seen == [memoryview]
+    assert got.tobytes() == np.arange(1024, dtype=np.float32).tobytes()
+    assert _serialize.decode_npy(_serialize.encode_npy("identity")) == "identity"
+
+
 def _old_write_npz(path, arrays):
     """The 0.6.x writer, verbatim, as the oracle for file bytes."""
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
