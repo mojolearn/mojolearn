@@ -321,9 +321,11 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
         assert report['lanes'][lane]['reference_admission']['policy'] == strict, lane
         assert report['lanes'][lane]['status'] == 'available', lane
     # and nothing anywhere claims a policy the table does not carry
+    # a lane admitted since 2026-09-20 carries the two-witness policy instead:
+    # every cell fitted once, a second device class (or a second fit) agreeing
     for name, lane in report['lanes'].items():
         policy = lane['reference_admission']['policy']
-        assert policy == strict, (name, policy)
+        assert policy in (strict, vr.ADMISSION_POLICY), (name, policy)
 
 
 def _absence_harness():

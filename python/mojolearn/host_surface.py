@@ -3120,7 +3120,7 @@ PUBLIC_PENDING_LANES = {
     # next coordinated record, which is where GPU columns are taken. Until
     # one lands there is no reference to ship, so an installed `verify --all`
     # is told not to ask rather than left reading OWED.
-    "gbdt-symmetric-eval": "no reference",
+    # ADMITTED 2026-09-20: gbdt-symmetric-eval carries cells in the shipped table now.
 
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
     # committed record and no shipped table cell describes it yet, and a
@@ -3341,8 +3341,8 @@ PUBLIC_PENDING_LANES = {
     # For the two `par-*` lanes that record is a TWO-DEVICE CUDA or HIP
     # column; one process per index is the degenerate case of the device axis
     # and nothing here claims otherwise.
-    "mamba1-decode-session": "no reference",
-    "transformer-decode-session": "no reference",
+    # ADMITTED 2026-09-20: mamba1-decode-session carries cells in the shipped table now.
+    # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
     "par-causal-lm": "no reference",
     "par-cross-val": "no reference",
 }
