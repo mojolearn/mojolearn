@@ -146,6 +146,8 @@ brief records what it has shown.
 from std.math import sqrt
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
 from checks.kernel_matrix import (
     K_LIB_COLUMN_STATS,
     K_LIB_JACOBI_EIGH,
@@ -153,6 +155,11 @@ from checks.kernel_matrix import (
     lib_block_size_for,
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
 
 
@@ -244,33 +251,53 @@ def host_gram_splitk(
     var partials = List[Float32](
         length=GRAM_SPLITK_CHUNKS * mn, fill=Float32(0.0)
     )
-    for chunk in range(GRAM_SPLITK_CHUNKS):
-        var t0 = chunk * kc
-        var t1 = t0 + kc
-        if t1 > k:
-            t1 = k
-        if t0 >= t1:
-            # An empty chunk stores ftz(0.0) = 0.0 in every cell.
-            continue
-        # The staging tile of this chunk: the centered read is the fused
-        # epilogue, `ftz(ftz(x) - ftz(mu))`, DEVIATION 522.
-        var rows = t1 - t0
-        var tile = List[Float32](length=rows * m, fill=Float32(0.0))
-        for r in range(rows):
-            for j in range(m):
-                var v = x[(t0 + r) * m + j]
-                if centered:
-                    tile[r * m + j] = ftz(ftz(v) - ftz(mu[j]))
-                else:
-                    tile[r * m + j] = v
-        for cell in range(mn):
-            var i = cell // m
-            var j = cell - i * m
-            var acc = Float32(0.0)
+    var xp = host_list_ptr(x)
+    var mup = host_list_ptr(mu)
+    var pp = host_list_ptr(partials)
+    # Thread launch dominates tiny fits.  The threshold counts the Gram's
+    # multiply-add cells, not bytes, and does not affect arithmetic order.
+    var tasks = 1
+    if k * mn >= 131072:
+        tasks = host_predict_task_count(GRAM_SPLITK_CHUNKS)
+    var chunks_per_task = host_predict_chunk(GRAM_SPLITK_CHUNKS, tasks)
+
+    def _chunks(task: Int) {imm xp, imm mup, imm pp, imm chunks_per_task,
+                            imm kc, imm k, imm m, imm mn, imm centered}:
+        var c0 = task * chunks_per_task
+        var c1 = c0 + chunks_per_task
+        if c1 > GRAM_SPLITK_CHUNKS:
+            c1 = GRAM_SPLITK_CHUNKS
+        for chunk in range(c0, c1):
+            var t0 = chunk * kc
+            var t1 = t0 + kc
+            if t1 > k:
+                t1 = k
+            if t0 >= t1:
+                # The zero-filled partial already spells ftz(0.0).
+                continue
+            # The staging tile of this chunk: the centered read is the fused
+            # epilogue, `ftz(ftz(x) - ftz(mu))`, DEVIATION 522.
+            var rows = t1 - t0
+            var tile = List[Float32](length=rows * m, fill=Float32(0.0))
             for r in range(rows):
-                var base = r * m
-                acc = identical_mul_add(tile[base + i], tile[base + j], acc)
-            partials[chunk * mn + cell] = ftz(acc)
+                for j in range(m):
+                    var v = xp.unsafe_load((t0 + r) * m + j)
+                    if centered:
+                        tile[r * m + j] = ftz(ftz(v) - ftz(mup.unsafe_load(j)))
+                    else:
+                        tile[r * m + j] = v
+            for cell in range(mn):
+                var i = cell // m
+                var j = cell - i * m
+                var acc = Float32(0.0)
+                for r in range(rows):
+                    var base = r * m
+                    acc = identical_mul_add(tile[base + i], tile[base + j], acc)
+                pp.unsafe_store(chunk * mn + cell, ftz(acc))
+    if tasks == 1:
+        _chunks(0)
+    else:
+        sync_parallelize(_chunks, tasks)
     var z = List[Float32](length=mn, fill=Float32(0.0))
     for cell in range(mn):
         var acc = Float32(0.0)
