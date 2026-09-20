@@ -120,7 +120,6 @@ comptime SSD_ANY_SABOTAGE = (
     or SAB_FOLD_SERIAL_ZERO_SEED
 )
 
-
 def ssd_sabotage_name() -> String:
     comptime if SAB_SEGSUM_DESCENDING:
         return String("SEGSUM_DESCENDING")
@@ -850,11 +849,14 @@ def ssd_forward(
     di: Int,
     cd: Int,
     nh: Int,
+    drain: Bool = True,
 ) raises:
     """One SSD pass. `h_state` enters as the boundary/initial state and
     leaves as the boundary after the last COMPLETED chunk (unchanged when
-    no chunk completed); `h_last` is the report stage. SYNCHRONIZES before
-    returning."""
+    no chunk completed); `h_last` is the report stage. `drain=True` retains
+    the standalone/traced boundary. The production block passes False: all
+    launches share its ordered context queue and the public output copy is
+    the completion boundary."""
     var qv = m2_q_eff()
     var nc = m2_n_chunks(t_work)
     var n_completed = t_work // qv
@@ -877,4 +879,5 @@ def ssd_forward(
         m2_statepass_kernel(gid_, pass_states.unsafe_ptr(), h_last.unsafe_ptr(), h_state.unsafe_ptr(), cstate.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b), Int32(nh), Int32(nc), Int32(qv), Int32(n_completed))
     for gid_ in range(launch_count((_grid(b * t_work * nh * M2_HEADDIM), 1, 1), (MAMBA2_TPB, 1, 1))):
         m2_yoff_y_kernel(gid_, yoff.unsafe_ptr(), y_out.unsafe_ptr(), ydiag.unsafe_ptr(), xbc_work.unsafe_ptr(), pass_states.unsafe_ptr(), dacs.unsafe_ptr(), Int32(b), Int32(t_work), Int32(nh), Int32(di), Int32(cd), Int32(nc), Int32(qv))
-    ctx.synchronize()
+    if drain:
+        ctx.synchronize()

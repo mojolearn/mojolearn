@@ -150,6 +150,11 @@ comptime BLOCK2_ANY_SABOTAGE = (
     or SSD_ANY_SABOTAGE
 )
 
+def _m2_stage_sync(ctx: DeviceContext, trace: IdentityTrace) raises:
+    """Keep traced stage boundaries; production uses ordered queue edges."""
+    if trace.enabled:
+        ctx.synchronize()
+
 
 def mamba2_sabotage_name() -> String:
     comptime if SAB_S6_BIAS_LAST:
@@ -904,7 +909,7 @@ def mamba2_block_forward(
     mamba_rms_norm(
         ctx, stages.norm_sumsq, stages.norm_out, x, w.norm_w, m, dm
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".norm.sumsq", stages.norm_sumsq, m
     )
@@ -928,7 +933,7 @@ def mamba2_block_forward(
         grid_dim=(_grid(nh), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".A.out", stages.a_out, nh
     )
@@ -961,7 +966,7 @@ def mamba2_block_forward(
         grid_dim=(_grid(b * cd * M2_D_CONV), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".conv.out", stages.conv_out, m * cd
     )
@@ -972,7 +977,7 @@ def mamba2_block_forward(
         ctx, prefix + ".conv.window", stages.conv_win, b * cd * M2_D_CONV
     )
     ctx.enqueue_copy(dst_buf=state.conv_win, src_buf=stages.conv_win)
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
 
     # ---- working-sequence assembly (copies) + S9 over working rows.
     ctx.enqueue_function[m2_assemble_xbc_kernel](
@@ -1013,7 +1018,7 @@ def mamba2_block_forward(
         grid_dim=(_grid(b * t_work * nh), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     _record_work_slice(
         ctx, trace, prefix + ".dt.out", stages.dt_work, b, l, q0, nh
     )
@@ -1049,7 +1054,7 @@ def mamba2_block_forward(
                 grid_dim=(_grid(b * nh * p_dim), 1, 1),
                 block_dim=(MAMBA2_TPB, 1, 1),
             )
-            ctx.synchronize()
+            _m2_stage_sync(ctx, trace)
             # The card's SSD stages are not produced by this spelling;
             # record the working buffers as they stand (zeros) so the tag
             # list stays section 7's -- the gate reads skip.out onward,
@@ -1079,6 +1084,7 @@ def mamba2_block_forward(
             di,
             cd,
             nh,
+            trace.enabled,
         )
 
     _record_work_slice(
@@ -1153,7 +1159,7 @@ def mamba2_block_forward(
                 grid_dim=(_grid(b * r * (cd + nh)), 1, 1),
                 block_dim=(MAMBA2_TPB, 1, 1),
             )
-            ctx.synchronize()
+            _m2_stage_sync(ctx, trace)
         state.buf_len = r
 
     # ---- S20: the D residual (skipped by an ENGAGED step arm, which
@@ -1172,7 +1178,7 @@ def mamba2_block_forward(
             grid_dim=(_grid(m * nh * p_dim), 1, 1),
             block_dim=(MAMBA2_TPB, 1, 1),
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".skip.out", stages.skip_out, m * nh * p_dim
     )
@@ -1192,7 +1198,7 @@ def mamba2_block_forward(
             m,
             di,
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
         ctx.enqueue_function[m2_gate_kernel](
             stages.gnorm_out.unsafe_ptr(),
             stages.gnorm_gate.unsafe_ptr(),
@@ -1203,7 +1209,7 @@ def mamba2_block_forward(
             grid_dim=(_grid(m * di), 1, 1),
             block_dim=(MAMBA2_TPB, 1, 1),
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     else:
         ctx.enqueue_function[m2_gate_kernel](
             stages.gnorm_gate.unsafe_ptr(),
@@ -1215,7 +1221,7 @@ def mamba2_block_forward(
             grid_dim=(_grid(m * di), 1, 1),
             block_dim=(MAMBA2_TPB, 1, 1),
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
         mamba_rms_norm(
             ctx,
             stages.gnorm_sumsq,
@@ -1225,7 +1231,7 @@ def mamba2_block_forward(
             m,
             di,
         )
-        ctx.synchronize()
+        _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".gnorm.gate", stages.gnorm_gate, m * di
     )
@@ -1253,7 +1259,7 @@ def mamba2_block_forward(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(MAMBA2_TPB, 1, 1),
     )
-    ctx.synchronize()
+    _m2_stage_sync(ctx, trace)
     trace.record_device[DType.float32](
         ctx, prefix + ".residual.out", stages.residual_out, m * dm
     )
