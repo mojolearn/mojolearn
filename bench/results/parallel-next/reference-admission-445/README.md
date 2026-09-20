@@ -1,6 +1,6 @@
 # Next-release parallel reference admission
 
-All 25 selected Apple lanes completed all nine fixtures with full parts and one repeat. The 24-lane source445 column contributed 819 numeric comparisons and the corrected sourcebcdf causal-model column contributed 18; all 837 matched CPU reference values. Both used the declared existing source819 native binaries. Full provenance is preserved with the raw records. Fresh CPU source445 records provide current ARIMA and RBF model bytes.
+All 25 selected Apple lanes completed all nine fixtures with full parts and one repeat. The 24-lane source445 column contributed 819 numeric comparisons and the corrected sourcebcdf causal-model column contributed 18; all 837 matched existing references: 423 numeric CPU comparisons and 414 comparisons against existing GPU references. The GPU-only comparisons do not establish CPU support for those parallel configurations. Both used the declared existing source819 native binaries. Full provenance is preserved with the raw records. Fresh CPU source445 records provide current ARIMA and RBF model bytes.
 
 The historical one-device cross-vendor baseline was **810 incomplete part-cells / 1,539 vendor values**. The current harness contract before this admission had **846 / 1,647**: nine newly required RBF model parts plus 27 previously agreeing ARIMA train/infer/batch parts invalidated by the new lane revision. The fresh ARIMA column carries `trend-metadata-1`; no old AMD or NVIDIA ARIMA record is relabeled as current.
 

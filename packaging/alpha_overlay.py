@@ -153,6 +153,15 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
                 'uncommitted reference overlay')
         replacements['mojolearn/verify_reference/table.json'] = raw
         replacements['mojolearn/identity_columns/COMMIT'] = (source_commit + '\n').encode()
+        citation = root / 'CITATION.cff'
+        if citation.exists() or citation.is_symlink():
+            require(citation.is_file() and not citation.is_symlink()
+                    and citation.stat().st_size <= 1024**2, 'invalid/oversize citation')
+            raw = citation.read_bytes()
+            require(raw == subprocess.check_output(['git', '-C', str(root), 'show',
+                    source_commit + ':CITATION.cff']), 'uncommitted citation overlay')
+            replacements['mojolearn/CITATION.cff'] = raw
+            doc_hashes['mojolearn/CITATION.cff'] = hashlib.sha256(raw).hexdigest()
     expected = None
     for node in ast.parse(replacements['mojolearn/_backend.py']).body:
         if isinstance(node, ast.Assign) and any(isinstance(t, ast.Name) and t.id == '_MODULES' for t in node.targets):
