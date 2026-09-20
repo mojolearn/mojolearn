@@ -1686,6 +1686,44 @@ def bwd_kv_slice_kernel(
     )
 
 
+def bwd_kv_slice2_kernel(
+    dst_k: MutPointer[Float32, MutAnyOrigin],
+    dst_v: MutPointer[Float32, MutAnyOrigin],
+    src_k: MutPointer[Float32, MutAnyOrigin],
+    src_v: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_in: Int32,
+    own0_in: Int32,
+):
+    """The independent K and V cache-gradient slices in one traversal.
+
+    Both outputs use `bwd_kv_slice_kernel`'s exact address and are bit copies;
+    sharing its integer index calculation changes no floating-point operation
+    or ordering.
+    """
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s = Int(s_in)
+    var pos0 = Int(own0_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * l * nkv * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var kvh = rest % nkv
+    var rest2 = rest // nkv
+    var li = rest2 % l
+    var bb = rest2 // l
+    var src_i = (bb * nkv + kvh) * s * hd + (pos0 + li) * hd + d
+    dst_k.unsafe_store(i, src_k.unsafe_load(src_i))
+    dst_v.unsafe_store(i, src_v.unsafe_load(src_i))
+
+
 # ===========================================================================
 # THE ROUTING DOOR (DEVIATION 1425). Two launchers, and they are the ONLY
 # place in this file where a backward GEMM shape is decided.
@@ -3153,21 +3191,10 @@ def llama_decoder_layer_backward_device(
     # STAGE 25-26. The KV append's backward: a SLICE, no arithmetic.
     # =====================================================================
     step_count_launch()
-    ctx.enqueue_function[bwd_kv_slice_kernel](
+    ctx.enqueue_function[bwd_kv_slice2_kernel](
         bst.d_k_rope.unsafe_ptr(),
-        bst.d_k_cache.unsafe_ptr(),
-        Int32(b),
-        Int32(l),
-        Int32(nkv),
-        Int32(hd),
-        Int32(s),
-        Int32(pos0 - key_lo),
-        grid_dim=(_grid(m * kw), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    step_count_launch()
-    ctx.enqueue_function[bwd_kv_slice_kernel](
         bst.d_v_proj_out.unsafe_ptr(),
+        bst.d_k_cache.unsafe_ptr(),
         bst.d_v_cache.unsafe_ptr(),
         Int32(b),
         Int32(l),
