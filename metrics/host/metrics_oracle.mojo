@@ -645,6 +645,34 @@ def _host_entropy(
     return Float64(acc)
 
 
+def host_entropy_ptr(
+    labels: MutPointer[Int32, MutUntrackedOrigin],
+    size: Int,
+    lower: Int32,
+    upper: Int32,
+) -> Float64:
+    """Pointer-input entropy with the original histogram and class fold."""
+    if size == 0:
+        return 1.0
+    var n_unique = Int(upper - lower + 1)
+    var counts = List[Int32](length=n_unique, fill=Int32(0))
+    for row in range(size):
+        var value = labels.unsafe_load(row)
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            if row == 0 and value == Int32(0):
+                value = Int32(1)
+        var bin = Int(value - lower)
+        counts[bin] = counts[bin] + Int32(1)
+    var acc = Float32(0.0)
+    var fsize = Float32(size)
+    for i in range(n_unique):
+        var p = ftz(Float32(counts[i]) / fsize)
+        if p != Float32(0.0):
+            var lp = ftz(identical_log(p))
+            acc = ftz(identical_mul_add(-p, lp, acc))
+    return Float64(acc)
+
+
 def host_mutual_info(
     first: List[Int32], second: List[Int32], size: Int, lower: Int32, upper: Int32
 ) raises -> Float64:
