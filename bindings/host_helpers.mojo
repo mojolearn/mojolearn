@@ -36,7 +36,14 @@ from std.memory import memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
+from max.algorithm import sync_parallelize
+
 from bindings.hostptr import f32_ptr, f64_ptr
+from core.host_predict_threads import (
+    host_list_ptr_u32,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 
 
 def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
@@ -383,27 +390,47 @@ def probability_rows_f32_binding(
     var dst = src
     if bin == 1:
         dst = f32_ptr(Int(py=dst_addr))
-    var nonfinite = False
-    var outside = False
-    var bad_sum = False
+    var combined = UInt32(0)
     with GILReleased(Python()):
-        for r in range(nr):
-            var total = Float64(0)
-            for c in range(nc):
-                var p = src.unsafe_load(r * nc + c)
-                nonfinite = nonfinite or not isfinite(p)
-                outside = outside or p < 0 or p > 1
-                total += Float64(p)
-                if bin == 1:
-                    dst.unsafe_store(2 * r, Float32(1) - p)
-                    dst.unsafe_store(2 * r + 1, p)
-            if bin == 0:
-                var error = total - Float64(1)
-                bad_sum = bad_sum or abs(error) > Float64(0.00034526697709225118)
-    if nonfinite:
+        var tasks = host_predict_task_count(nr)
+        if nr * nc < 32768:
+            tasks = 1
+        var chunk = host_predict_chunk(nr, tasks)
+        var flags = List[UInt32](length=tasks, fill=UInt32(0))
+        var fp = host_list_ptr_u32(flags)
+
+        def _rows(task: Int) {imm src, imm dst, imm nr, imm nc, imm bin, imm chunk, imm fp}:
+            var lo = task * chunk
+            var hi = min(lo + chunk, nr)
+            var bits = UInt32(0)
+            for r in range(lo, hi):
+                var total = Float64(0)
+                for c in range(nc):
+                    var p = src.unsafe_load(r * nc + c)
+                    if not isfinite(p):
+                        bits |= UInt32(1)
+                    if p < 0 or p > 1:
+                        bits |= UInt32(2)
+                    total += Float64(p)
+                    if bin == 1:
+                        dst.unsafe_store(2 * r, Float32(1) - p)
+                        dst.unsafe_store(2 * r + 1, p)
+                if bin == 0:
+                    var error = total - Float64(1)
+                    if abs(error) > Float64(0.00034526697709225118):
+                        bits |= UInt32(4)
+            fp.unsafe_store(task, bits)
+
+        if tasks == 1:
+            _rows(0)
+        else:
+            sync_parallelize(_rows, tasks)
+        for task in range(tasks):
+            combined |= flags[task]
+    if (combined & UInt32(1)) != 0:
         return PythonObject(1)
-    if outside:
+    if (combined & UInt32(2)) != 0:
         return PythonObject(2)
-    if bad_sum:
+    if (combined & UInt32(4)) != 0:
         return PythonObject(3)
     return PythonObject(0)

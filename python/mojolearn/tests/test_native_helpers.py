@@ -426,6 +426,14 @@ def test_probability_validation_and_binary_packing():
         assert _ext.probability_rows_f32(p.ctypes.data, out.ctypes.data, len(p), 1, 1) == code
     wrong = np.array([[.1, .2], [.3, .7]], dtype=np.float32)
     assert _ext.probability_rows_f32(wrong.ctypes.data, 0, 2, 2, 0) == 3
+    # Keep the documented error-category precedence when different worker
+    # shards observe different failures.
+    mixed = np.full((20000, 2), np.float32(.5), dtype=np.float32)
+    mixed[1, 0] = np.nan
+    mixed[-1] = (-.25, .25)
+    assert _ext.probability_rows_f32(mixed.ctypes.data, 0, len(mixed), 2, 0) == 1
+    mixed[1] = (.5, .5)
+    assert _ext.probability_rows_f32(mixed.ctypes.data, 0, len(mixed), 2, 0) == 2
     assert _ext.probability_rows_f32(0, 0, 0, 1, 1) == 0
 
 
