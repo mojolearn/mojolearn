@@ -275,3 +275,51 @@ def chunked_lm_head_v2_train_host(
     ctx.enqueue_copy(dst_ptr=d_weight_out, src_buf=d_weight)
     ctx.synchronize()
     return rows
+
+
+def chunked_lm_head_v2_forward_into(
+    ctx: DeviceContext, mut loss: DeviceBuffer[DType.float32],
+    mut maxima: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32],
+    mut row_loss: DeviceBuffer[DType.float32],
+    mut hidden: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut targets: DeviceBuffer[DType.int32], rows: Int, vocab: Int, width: Int,
+) raises:
+    """Device-resident V2 forward for an explicitly selected trainer."""
+    var row_grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+    ctx.enqueue_function[chunked_lm_head_v2_rows_kernel](
+        maxima.unsafe_ptr(), denom.unsafe_ptr(), row_loss.unsafe_ptr(),
+        hidden.unsafe_ptr(), weight.unsafe_ptr(), targets.unsafe_ptr(),
+        Int32(rows), Int32(vocab), Int32(width), grid_dim=row_grid,
+        block_dim=LM_HEAD_V2_TPB,
+    )
+    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](
+        loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1,
+    )
+
+
+def chunked_lm_head_v2_backward_into(
+    ctx: DeviceContext, mut d_hidden: DeviceBuffer[DType.float32],
+    mut d_weight: DeviceBuffer[DType.float32],
+    mut hidden: DeviceBuffer[DType.float32],
+    mut weight: DeviceBuffer[DType.float32],
+    mut targets: DeviceBuffer[DType.int32],
+    mut maxima: DeviceBuffer[DType.float32],
+    mut denom: DeviceBuffer[DType.float32], rows: Int, vocab: Int, width: Int,
+) raises:
+    """Device-resident V2 backward, consuming the matching forward statistics."""
+    var row_grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+    var vocab_grid = (vocab + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+    ctx.enqueue_function[chunked_lm_head_v2_dhidden_kernel](
+        d_hidden.unsafe_ptr(), hidden.unsafe_ptr(), weight.unsafe_ptr(),
+        targets.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(),
+        Int32(rows), Int32(vocab), Int32(width), grid_dim=row_grid,
+        block_dim=LM_HEAD_V2_TPB,
+    )
+    ctx.enqueue_function[chunked_lm_head_v2_dweight_kernel](
+        d_weight.unsafe_ptr(), hidden.unsafe_ptr(), weight.unsafe_ptr(),
+        targets.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(),
+        Int32(rows), Int32(vocab), Int32(width), grid_dim=vocab_grid,
+        block_dim=LM_HEAD_V2_TPB,
+    )

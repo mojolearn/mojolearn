@@ -76,3 +76,19 @@ loss, row maxima, denominators, `dHidden`, and `dWeight` bit-for-bit against
 the CPU oracle, and checks repeated device loss and gradient cells. The stage allocates only three
 `[rows]` scratch arrays and one scalar beyond its inputs: `(3*rows+1)*4`
 bytes. It never allocates full logits or dlogits.
+
+## ByteTrainer selection
+
+`ByteConfig(..., chunked_lm_head_v2=True)` selects the device-resident V2
+forward and backward inside `ByteTrainer`. The selector is included in the
+checkpoint/profile string. The default is `False`.
+
+When selected, the full logits, CE exponential/dlogit storage, CE ones and
+workspace, and LM-head forward/backward GEMM workspaces are replaced by
+one-cell placeholders. Row maximum, denominator, and row-loss arrays remain.
+The integration never invokes a V1 kernel with those placeholders.
+
+The V2 route is a memory/maximum-shape option, not a speed default. Local Metal
+evidence at B=1, L=64, DM=64, V=8192 retained 6 rather than 1,323,009
+head-path cells, but took 241.529 ms versus V1's 37.217 ms. See
+`bench/evidence/2026-09-20_byte_lm_chunked_head_v2.md`.

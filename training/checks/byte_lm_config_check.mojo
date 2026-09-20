@@ -58,6 +58,8 @@ def main() raises:
     var larger = ByteConfig(1, 65, 48, 6, 3, 8, 96)
     require(larger.n_total() == 66240, "larger GQA registry")
     var generalized = ByteConfig(2, 7, 24, 3, 1, 8, 40, 3, 513)
+    var chunked = ByteConfig(2, 7, 24, 3, 1, 8, 40, 3, 513, True)
+    require(chunked.profile() != generalized.profile(), "chunked LM-head selector missing from profile")
     require(generalized.n_tensors() == 29, "three-layer tensor count")
     require(generalized.param_count(0) == 12312 and generalized.param_count(28) == 12312,
             "configured embedding/head vocabulary")
