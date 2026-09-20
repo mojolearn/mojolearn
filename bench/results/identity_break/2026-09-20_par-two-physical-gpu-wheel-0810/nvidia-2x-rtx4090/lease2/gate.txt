@@ -1,0 +1,37 @@
+slug=nvidia-lease2
+started=2026-09-20T22:44:13Z
+budget_seconds=2500
+fixtures=base ties hashed wide denormal denormal_ftz dupes odd negative
+lanes=<all par-* lanes>
+vendor=nvidia
+visible_gpus=2
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-d961b89f-8493-74b7-3d60-89baa7c94717)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-be0ed8d9-6131-996f-04ef-131b0e69c47e)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA GeForce RTX 4090, GPU-d961b89f-8493-74b7-3d60-89baa7c94717, 00000000:81:00.0, 580.159.04, 8.9, 24564 MiB
+1, NVIDIA GeForce RTX 4090, GPU-be0ed8d9-6131-996f-04ef-131b0e69c47e, 00000000:C3:00.0, 580.159.04, 8.9, 24564 MiB
+system_python=/usr/bin/python3.11 (Python 3.11.10)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 20 22:45 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+activated: VIRTUAL_ENV=/root/parwheel-venv python=/root/parwheel-venv/bin/python
+import_where_activated=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+install_mode=venv-activated
+par_self_test_exit=0  (MUST BE 0)
+par_self_test_json_exit=0  (MUST BE 0)
+par_quick_exit=0 seconds=225
+par_all_base_exit=4 seconds=1210
+NOT STARTED: fixture ties (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture hashed (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture wide (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture denormal (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture denormal_ftz (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture dupes (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture odd (budget left 965s, longest fixture so far 1210s)
+NOT STARTED: fixture negative (budget left 965s, longest fixture so far 1210s)
+elapsed_total=1535
+finished=2026-09-20T23:09:48Z
+pull_hold_seconds=420 pull_ok=no

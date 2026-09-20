@@ -1,0 +1,61 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 59 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.39s
+  par-boosting               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.27s
+  par-boosting-clf           base     train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              7.30s
+  par-boosting-pointwise     base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.61s
+  par-boosting-reg           base     train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              6.97s
+  par-border-types           base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  40.43s
+  par-byte-lm                base     train=IDENTICAL                                              2.10s
+  par-byte-lm-model-pool     base     train=IDENTICAL                                              0.15s
+  par-byte-lm-offload        base     train=IDENTICAL                                              0.22s
+  par-causal-lm              base     train=IDENTICAL batch=IDENTICAL                             12.18s
+  par-cd                     base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.85s
+  par-cd-elasticnet          base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.64s
+  par-cholesky               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.05s
+  par-cross-val              base     train=IDENTICAL                                              5.28s
+  par-dbscan                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.71s
+  par-feature-freq           base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.72s
+  par-forecast-arima         base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  40.30s
+  par-forecast-holtwinters   base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  45.16s
+  par-forest                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.01s
+  par-forest-et              base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.53s
+  par-forest-et-clf          base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.10s
+  par-forest-pool            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.57s
+  par-forest-reg             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.98s
+  par-gmm                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  27.32s
+  par-gp                     base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.45s
+  par-gpc-fit                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.04s
+  par-gpc-predict            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  18.78s
+  par-gram                   base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.93s
+  par-gram-ols               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.63s
+  par-gram-pca               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.78s
+  par-gram-tsvd              base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.67s
+  par-graph-agglomerative    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.75s
+  par-graph-spectral         base     train=IDENTICAL                                              5.06s
+  par-graph-umap             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL 104.92s
+  par-hdbscan                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.06s
+  par-holtwinters            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.38s
+  par-iforest                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.83s
+  par-ivf                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  25.58s
+  par-kernel-ridge           base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  19.96s
+  par-kmeans                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.26s
+  par-logistic               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.83s
+  par-mlp                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.40s
+  par-nystroem               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.95s
+  par-ordered                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.43s
+  par-ordered-rmse           base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.70s
+  par-queries-kde            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  19.93s
+  par-queries-knn            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  31.99s
+  par-queries-nn             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  19.88s
+  par-queries-radius         base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.68s
+  par-rbf-sampler            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.00s
+  par-reference-knn          base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  21.01s
+  par-reference-knn-reg      base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.64s
+  par-resample               base     train=IDENTICAL batch=IDENTICAL                            380.53s
+  par-samba                  base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  13.49s
+  par-samba-clip             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.81s
+  par-scaler                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.58s
+  par-scaler-minmax          base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.52s
+  par-svm                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.24s
+  par-svm-svr                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.62s

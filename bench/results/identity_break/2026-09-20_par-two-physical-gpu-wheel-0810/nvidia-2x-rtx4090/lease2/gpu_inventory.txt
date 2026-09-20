@@ -1,0 +1,5 @@
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-d961b89f-8493-74b7-3d60-89baa7c94717)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-be0ed8d9-6131-996f-04ef-131b0e69c47e)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA GeForce RTX 4090, GPU-d961b89f-8493-74b7-3d60-89baa7c94717, 00000000:81:00.0, 580.159.04, 8.9, 24564 MiB
+1, NVIDIA GeForce RTX 4090, GPU-be0ed8d9-6131-996f-04ef-131b0e69c47e, 00000000:C3:00.0, 580.159.04, 8.9, 24564 MiB

@@ -1,0 +1,64 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-arima                  base     train     IDENTICAL   one=377790cb117abb61  two=377790cb117abb61
+  par-arima                  base     infer     IDENTICAL   one=9f76be0396a666ca  two=9f76be0396a666ca
+  par-arima                  base     model     IDENTICAL   one=6ae822845884aedf  two=6ae822845884aedf
+  par-arima                  base     batch     IDENTICAL   one=cef3c859431cbbaf  two=cef3c859431cbbaf
+  par-boosting               base     train     IDENTICAL   one=56560dec5bdb6cb9  two=56560dec5bdb6cb9
+  par-boosting               base     infer     IDENTICAL   one=e1db044dc82354ac  two=e1db044dc82354ac
+  par-boosting               base     model     IDENTICAL   one=ee776c33f052679a  two=ee776c33f052679a
+  par-boosting               base     batch     IDENTICAL   one=9d36287df25eff95  two=9d36287df25eff95
+  par-causal-lm              base     train     IDENTICAL   one=5171c3ffeb9dd8f8  two=5171c3ffeb9dd8f8
+  par-causal-lm              base     batch     IDENTICAL   one=2d58207bcc498e7c  two=2d58207bcc498e7c
+  par-cross-val              base     train     IDENTICAL   one=b42f6f50bae5b03c  two=b42f6f50bae5b03c
+  par-forecast-holtwinters   base     train     IDENTICAL   one=5e8ffa04d8c2fb3d  two=5e8ffa04d8c2fb3d
+  par-forecast-holtwinters   base     infer     IDENTICAL   one=2ba6e3fe81256474  two=2ba6e3fe81256474
+  par-forecast-holtwinters   base     model     IDENTICAL   one=2b788f20f8d8c145  two=2b788f20f8d8c145
+  par-forecast-holtwinters   base     batch     IDENTICAL   one=77ca9a518446c250  two=77ca9a518446c250
+  par-forest                 base     train     IDENTICAL   one=21178dc5457bf5dc  two=21178dc5457bf5dc
+  par-forest                 base     infer     IDENTICAL   one=3b30324dc0a909d3  two=3b30324dc0a909d3
+  par-forest                 base     model     IDENTICAL   one=ed1592a2b0ab1658  two=ed1592a2b0ab1658
+  par-forest                 base     batch     IDENTICAL   one=cec53714495b4d9c  two=cec53714495b4d9c
+  par-forest-et              base     train     IDENTICAL   one=754d8c127ecfc04d  two=754d8c127ecfc04d
+  par-forest-et              base     infer     IDENTICAL   one=f67822ca39ef408b  two=f67822ca39ef408b
+  par-forest-et              base     model     IDENTICAL   one=1c0c6b20cc9be5bd  two=1c0c6b20cc9be5bd
+  par-forest-et              base     batch     IDENTICAL   one=42f0ba39adaa879d  two=42f0ba39adaa879d
+  par-gpc-fit                base     train     IDENTICAL   one=53f3a09fc600d61d  two=53f3a09fc600d61d
+  par-gpc-fit                base     infer     IDENTICAL   one=fc0b4c2f28c2e079  two=fc0b4c2f28c2e079
+  par-gpc-fit                base     model     IDENTICAL   one=81b8bb9e635d8e83  two=81b8bb9e635d8e83
+  par-gpc-fit                base     batch     IDENTICAL   one=b46f1f9043e091a8  two=b46f1f9043e091a8
+  par-ivf                    base     train     IDENTICAL   one=82ac27da71d34ea9  two=82ac27da71d34ea9
+  par-ivf                    base     infer     IDENTICAL   one=fd6eed35b1338d17  two=fd6eed35b1338d17
+  par-ivf                    base     model     IDENTICAL   one=dcfefe31adc21c6c  two=dcfefe31adc21c6c
+  par-ivf                    base     batch     IDENTICAL   one=6baf3cfbde509312  two=6baf3cfbde509312
+  par-mlp                    base     train     IDENTICAL   one=6e5cde4953362927  two=6e5cde4953362927
+  par-mlp                    base     infer     IDENTICAL   one=b7659ff90ae1ea39  two=b7659ff90ae1ea39
+  par-mlp                    base     model     IDENTICAL   one=fb3977c1ab222cea  two=fb3977c1ab222cea
+  par-mlp                    base     batch     IDENTICAL   one=16eaba30f0eb372d  two=16eaba30f0eb372d
+  par-queries-kde            base     train     IDENTICAL   one=e0d6e3d0623d6112  two=e0d6e3d0623d6112
+  par-queries-kde            base     infer     IDENTICAL   one=1a2c3054b661b72a  two=1a2c3054b661b72a
+  par-queries-kde            base     model     IDENTICAL   one=cd5469f3b8854867  two=cd5469f3b8854867
+  par-queries-kde            base     batch     IDENTICAL   one=c0c645e32da9e31c  two=c0c645e32da9e31c
+  par-queries-knn            base     train     IDENTICAL   one=4b0dd36744b84c37  two=4b0dd36744b84c37
+  par-queries-knn            base     infer     IDENTICAL   one=8381d6badb2ee31b  two=8381d6badb2ee31b
+  par-queries-knn            base     model     IDENTICAL   one=f0b9be0fd408466b  two=f0b9be0fd408466b
+  par-queries-knn            base     batch     IDENTICAL   one=b0ee1057fca8171a  two=b0ee1057fca8171a
+  par-rbf-sampler            base     train     IDENTICAL   one=7ddfa0d92256da95  two=7ddfa0d92256da95
+  par-rbf-sampler            base     infer     IDENTICAL   one=ded23e4c277b5697  two=ded23e4c277b5697
+  par-rbf-sampler            base     model     IDENTICAL   one=d4b54301bf9a47f0  two=d4b54301bf9a47f0
+  par-rbf-sampler            base     batch     IDENTICAL   one=309d57b4d32c040a  two=309d57b4d32c040a
+  par-scaler                 base     train     IDENTICAL   one=c4cc661617a4b9a7  two=c4cc661617a4b9a7
+  par-scaler                 base     infer     IDENTICAL   one=fa0fbdef7ccae250  two=fa0fbdef7ccae250
+  par-scaler                 base     model     IDENTICAL   one=3adc4c98c02a61b6  two=3adc4c98c02a61b6
+  par-scaler                 base     batch     IDENTICAL   one=917ae37b02618ab5  two=917ae37b02618ab5
+Device witness: 42 pool(s), 82 worker(s), placement=physical.
+
+RESULT: THE TWO COLUMNS AGREE on 51 compared cell parts across 14 lane(s)
+and 1 fixture(s), IDENTICAL=51, N/A=19.
+Sharding this work across the devices did not move a bit.

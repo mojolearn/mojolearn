@@ -1,6 +1,6 @@
 #!/bin/sh
 # MOJOLEARN_GEMM_LEG_EXTRA body: `python -m mojolearn verify --par` on TWO
-# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==@VERSION@.
+# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==0.8.10.
 #
 # The runner (tools/gemm_remote_leg.sh, gemm payload) ships a source archive
 # and runs its own gates first. NOTHING BELOW USES THAT SOURCE TREE. The
@@ -9,23 +9,23 @@
 # body refuses to measure unless `mojolearn.__file__` resolves inside the venv.
 #
 # Placeholders substituted per lease by make_body.sh (RunPod passes no env):
-#   @VERSION@   the wheel version
-#   @SLUG@      this lease's distinct output slug
-#   @FIXTURES@  space separated chunks this lease runs, in order: `fixture` or `fixture:G<n>`
-#   @LANES@     empty for every par-* lane, or a comma separated --lanes value
-#   @QUICK@     1 to run `verify --par quick` before the fixtures, else 0
-#   @BUDGET@    seconds this body may spend, from its own start
+#   0.8.10   the wheel version
+#   nvidia-lease2      this lease's distinct output slug
+#   base ties hashed wide denormal denormal_ftz dupes odd negative  space separated fixtures this lease runs, in order
+#        empty for every par-* lane, or a comma separated --lanes value
+#   1     1 to run `verify --par quick` before the fixtures, else 0
+#   2500    seconds this body may spend, from its own start
 #
 # Every cell is fitted ONCE per column: no --repeats anywhere. Every command
 # is bounded with timeout(1). set -u and NOT set -e: a red verdict is a
 # result and its log has to come home.
 set -u
-VERSION="@VERSION@"
-SLUG="@SLUG@"
-FIXTURES="@FIXTURES@"
-LANES="@LANES@"
-QUICK="@QUICK@"
-BUDGET="@BUDGET@"
+VERSION="0.8.10"
+SLUG="nvidia-lease2"
+FIXTURES="base ties hashed wide denormal denormal_ftz dupes odd negative"
+LANES=""
+QUICK="1"
+BUDGET="2500"
 
 OUT="/root/gemm_leg_out/$SLUG"
 mkdir -p "$OUT"
@@ -222,48 +222,30 @@ if [ "$QUICK" = 1 ]; then
     render par_quick
 fi
 
-# ---- (3) `--par all`, ONE (FIXTURE, LANE GROUP) PER COMMAND. Measured on
-# lease 2: one fixture over all 59 lanes takes 1210 s, so a 60 minute lease
-# holds two, and a command cut by the clock loses its JSON document. The 59
-# lanes are therefore cut into four groups balanced on lease 2's measured
-# per-lane seconds (par-resample alone is 381 s), and each command is
-# `verify --par all --fixtures F --lanes GROUP`. The union over the four
-# groups and the nine fixtures is exactly `verify --par all`: that scope
-# differs from the default only in the fixtures it runs, and --lanes only
-# narrows the lane list. A chunk is started only if the budget left exceeds
-# the longest chunk measured so far by a margin; otherwise it is recorded as
-# NOT-STARTED and a later lease runs it. FIXTURES entries are `fixture` (all
-# lanes, or @LANES@) or `fixture:G<n>`.
-G1="par-resample"
-G2="par-arima,par-boosting-clf,par-byte-lm-offload,par-cd-elasticnet,par-feature-freq,par-gram,par-gram-pca,par-graph-umap,par-holtwinters,par-kmeans,par-mlp,par-nystroem,par-ordered-rmse,par-queries-kde,par-queries-radius,par-reference-knn,par-samba-clip,par-svm"
-G3="par-boosting,par-byte-lm,par-causal-lm,par-cholesky,par-cross-val,par-dbscan,par-forecast-holtwinters,par-forest-et,par-forest-et-clf,par-forest-pool,par-gmm,par-gram-tsvd,par-graph-agglomerative,par-graph-spectral,par-kernel-ridge,par-ordered,par-queries-knn,par-queries-nn,par-scaler-minmax,par-svm-svr"
-G4="par-boosting-pointwise,par-boosting-reg,par-border-types,par-byte-lm-model-pool,par-cd,par-forecast-arima,par-forest,par-forest-reg,par-gp,par-gpc-fit,par-gpc-predict,par-gram-ols,par-hdbscan,par-iforest,par-ivf,par-logistic,par-rbf-sampler,par-reference-knn-reg,par-samba,par-scaler"
+# ---- (3) `--par all`, ONE FIXTURE PER COMMAND so a lease that ends early
+# keeps every finished fixture's JSON. The union over the nine fixtures is
+# exactly `verify --par all`: that scope differs from the default only in the
+# fixtures it runs. A fixture is started only if the budget left exceeds the
+# longest fixture measured so far by a margin; otherwise it is recorded as
+# NOT STARTED and a later lease runs it.
 LONGEST=0
-for chunk in $FIXTURES; do
-    fx=${chunk%%:*}
-    case "$chunk" in
-        *:G1) _lanes=$G1; _name="par_all_${fx}_G1" ;;
-        *:G2) _lanes=$G2; _name="par_all_${fx}_G2" ;;
-        *:G3) _lanes=$G3; _name="par_all_${fx}_G3" ;;
-        *:G4) _lanes=$G4; _name="par_all_${fx}_G4" ;;
-        *)    _lanes=$LANES; _name="par_all_${fx}" ;;
-    esac
+for fx in $FIXTURES; do
     _l=$(left)
-    _need=$(( LONGEST + LONGEST / 4 + 45 ))
+    _need=$(( LONGEST + LONGEST / 3 + 60 ))
     if [ "$_l" -lt "$_need" ]; then
-        say "NOT STARTED: chunk $chunk (budget left ${_l}s, longest chunk so far ${LONGEST}s)"
-        printf '%s\tNOT-STARTED\t0\n' "$_name" >> "$ST"
+        say "NOT STARTED: fixture $fx (budget left ${_l}s, longest fixture so far ${LONGEST}s)"
+        printf 'par_all_%s\tNOT-STARTED\t0\n' "$fx" >> "$ST"
         continue
     fi
-    if [ -n "$_lanes" ]; then
-        run "$_name" "$_l" "$P" -m mojolearn verify --par all --fixtures "$fx" --lanes "$_lanes" --json
+    if [ -n "$LANES" ]; then
+        run "par_all_$fx" "$_l" "$P" -m mojolearn verify --par all --fixtures "$fx" --lanes "$LANES" --json
     else
-        run "$_name" "$_l" "$P" -m mojolearn verify --par all --fixtures "$fx" --json
+        run "par_all_$fx" "$_l" "$P" -m mojolearn verify --par all --fixtures "$fx" --json
     fi
-    _secs=$(awk -F'\t' -v n="$_name" '$1==n{print $3}' "$ST" | tail -1)
-    say "${_name}_exit=$(awk -F'\t' -v n="$_name" '$1==n{print $2}' "$ST" | tail -1) seconds=$_secs"
+    _secs=$(awk -F'\t' -v n="par_all_$fx" '$1==n{print $3}' "$ST" | tail -1)
+    say "par_all_${fx}_exit=$(awk -F'\t' -v n="par_all_$fx" '$1==n{print $2}' "$ST" | tail -1) seconds=$_secs"
     [ "$_secs" -gt "$LONGEST" ] && LONGEST=$_secs
-    render "$_name"
+    render "par_all_$fx"
 done
 
 say "elapsed_total=$(( $(date +%s) - T0 ))"
