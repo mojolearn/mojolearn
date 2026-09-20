@@ -391,10 +391,9 @@ BOOSTING_TYPES = ("Plain", "Ordered")
 _ORDERED_MAX_ROWS = 50000
 _ORDERED_MIN_ITERATIONS = 500
 
-#: The ranking losses: their GPU bootstrap samples WHOLE QUERIES, which this
-#: implementation does not restate (the native trainer refuses any bootstrap
-#: for them), so CatBoost's default Bayesian bootstrap is refused by name
-#: for these rather than silently replaced by no bootstrap.
+#: The greedy searcher's ranking targets form grouped gradients first, then
+#: multiply both statistic planes by row bootstrap weights, as CatBoost's
+#: querywise_targets_impl.h::StochasticDer and weak_objective_impl.h do.
 _QUERYWISE_LOSSES = ("QueryRMSE", "PairLogit", "YetiRank")
 
 #: `TAutoLRParamsGuesser` (`libs/train_lib/options_helper.cpp:176-243`), the
@@ -944,10 +943,9 @@ class GradientBoosting(NumericModeMixin):
     bootstrap_type : {'Bayesian','Bernoulli','Poisson','No'}, optional
         None under SymmetricTree is 'Bayesian', CatBoost's GPU default
         (`bootstrap_options.h:18`; the MVS default of
-        `catboost_options.cpp:782-787` is CPU only). For the ranking losses
-        (QueryRMSE, PairLogit, YetiRank) that default samples whole queries,
-        which is not implemented here, so an unset value is REFUSED BY NAME
-        for them: pass 'No'. None under Depthwise and Lossguide means no row
+        `catboost_options.cpp:782-787` is CPU only). Ranking losses apply
+        row weights after computing their grouped gradients, as the reference
+        greedy searcher does. None under Depthwise and Lossguide means no row
         sampling, as before. 'Bernoulli' is the familiar `subsample` knob;
         'Bayesian' uses `bagging_temperature` instead.
     bagging_temperature : float, default 1.0
@@ -1218,14 +1216,6 @@ class GradientBoosting(NumericModeMixin):
             n_estimators = (_CATBOOST_ITERATIONS if symmetric_policy
                             else _LEGACY_ITERATIONS)
         if bootstrap_type is None and symmetric_policy:
-            if loss in _QUERYWISE_LOSSES:
-                raise NotImplementedError(
-                    f"mojolearn: CatBoost's GPU default for loss={loss!r} is a "
-                    "Bayesian bootstrap over whole queries "
-                    "(bootstrap_options.h:18), which this implementation does "
-                    "not restate; the default is refused by name rather than "
-                    "replaced by no bootstrap. Pass bootstrap_type='No'."
-                )
             bootstrap_type = _CATBOOST_BOOTSTRAP
         if bootstrap_type is not None and bootstrap_type not in BOOTSTRAP_TYPES:
             raise ValueError(
@@ -1836,7 +1826,7 @@ class GradientBoosting(NumericModeMixin):
         group must be CONSECUTIVE, their `group Ids are not consecutive`
         refusal (`libs/data/objects.cpp:60-87`). It is read by
         `loss="QueryRMSE"`, which fits on the SymmetricTree greedy searcher
-        with no bootstrap, categorical features or eval set; every other
+        with no categorical features or eval set; every other
         loss refuses a grouping BY NAME. A QueryRMSE fit given no
         `group_id`, or one with as many groups as rows, trains on queries
         of one row, as the CatBoost reference's `TWithoutQueriesGrouping`

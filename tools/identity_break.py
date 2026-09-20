@@ -3476,6 +3476,24 @@ def _relevance(yr):
     return np.digitize(yr, np.asarray(RANK_CUTS, dtype=np.float32)).astype(np.float32)
 
 
+@lane("gbdt-ranking-defaults")
+def _(ml, X, yc, yr, Xh=None):
+    """All three ranking objectives with default Bayesian bootstrap and
+    score noise on every fixture row. Grouped derivatives precede row
+    sampling. Five depth-three trees bound runtime without slicing rows."""
+    groups, relevance = _rank_groups(X.shape[0]), _relevance(yr)
+    parts = {}
+    models = []
+    for loss in ("QueryRMSE", "PairLogit", "YetiRank"):
+        model = ml.GradientBoosting(
+            n_estimators=5, max_depth=3, loss=loss, random_state=19,
+        ).fit(X, relevance, group_id=groups)
+        parts[loss + "_predict"] = _h(model.predict(X))
+        parts[loss + "_loss_curve"] = _h(np.asarray(model.loss_curve_, dtype=np.float64))
+        models.append(model)
+    return _fit(parts, models[0], lambda e: (e.predict(Xh),))
+
+
 @lane("gbdt-query-rmse")
 def _(ml, X, yc, yr, Xh=None):
     """QueryRMSE (learning to rank, the querywise target) on uneven queries
@@ -8674,7 +8692,7 @@ _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
             "rf-reg-poisson", "rf-reg-gamma-ig", "et-reg-bootstrap-parallel", "gbdt-parametric-losses",
             "gbdt-lossguide-newtoncosine", "gbdt-exact-mae", "gbdt-adapter-reg", "par-forest-et",
-            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
             "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
             "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")

@@ -49,7 +49,7 @@ def _model(**kw):
     params = dict(n_estimators=8, max_depth=4, loss="PairLogit")
     # pinned to the configuration these tests were written against: the
     # SymmetricTree defaults became CatBoost's GPU ones (lane/catboost-parity,
-    # 2026-09-19), whose query bootstrap is refused by name for this loss
+    # 2026-09-19); stochastic defaults are covered separately.
     params.update(bootstrap_type="No", random_strength=0.0, leaf_estimation_iterations=10)
     params.update(kw)
     return GradientBoosting(**params)
@@ -99,8 +99,6 @@ def test_refusals_by_name():
         _model().fit(X, np.ones_like(rel), group_id=g)
     with pytest.raises(Exception, match="must belong to the same group"):
         _model().fit(X, rel, group_id=g, pairs=[(0, X.shape[0] - 1)])
-    with pytest.raises(Exception, match="with a bootstrap is not implemented"):
-        _model(bootstrap_type="Bernoulli", subsample=0.5).fit(X, rel, group_id=g)
 
 
 def test_pairs_validation():

@@ -1171,15 +1171,10 @@ def gbdt_fit_binding(
     # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
     # bootstrap kind and the strength as options under both policies
     var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse)
-    # the pointwise losses' stochastic arm (gbdt_oracle_losses.mojo::
-    # gbdt_losses_host_fit); the querywise losses take no bootstrap and their
-    # noise is not restated
-    var pw_stochastic = (
-        is_pointwise and grow_code == 0
-        and pw_objective != GBDT_OBJ_QUERY_RMSE
-        and pw_objective != GBDT_OBJ_PAIR_LOGIT
-        and pw_objective != GBDT_OBJ_YETI_RANK
-    )
+    # The shared loss oracle applies row bootstrap AFTER full grouped
+    # gradients, matching querywise_targets_impl.h::StochasticDer (162-188).
+    # Its score-noise implementation is shared by all these objectives.
+    var pw_stochastic = is_pointwise and grow_code == 0
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
             _refuse("score_function code " + String(score_function) + " under Lossguide (only NewtonL2 and NewtonCosine)")
@@ -1197,13 +1192,6 @@ def gbdt_fit_binding(
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (only Newton, or Gradient under Lossguide)")
     if is_pointwise and leaf_method != -1 and leaf_method != GBDT_LEAF_GRADIENT and leaf_method != GBDT_LEAF_NEWTON and leaf_method != GBDT_LEAF_EXACT:
         _refuse("leaf_estimation_method code " + String(leaf_method) + " (Gradient, Newton or Exact)")
-    if (loss == String("QueryRMSE") or loss == String("PairLogit") or loss == String("YetiRank")) and bootstrap_type != String("") and bootstrap_type != String("No"):
-        raise Error(
-            "loss='" + loss + "' with a bootstrap is not implemented here:"
-            " the reference samples whole queries for querywise targets,"
-            " which this implementation does not restate; use"
-            " bootstrap_type='No'"
-        )
     if bootstrap_type != String("") and bootstrap_type != String("No"):
         var pw_boot = is_pointwise and (
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")

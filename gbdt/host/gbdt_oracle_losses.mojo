@@ -19,8 +19,10 @@ depth-4 trees each of Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq
 (q 3), Expectile (alpha 0.3), Tweedie (variance power 1.5), Huber (delta 1)
 and CrossEntropy, every other option at its default. `gbdt-exact-mae`: 20
 depth-6 trees of MAE with `leaf_estimation_method="Exact"` and the Poisson
-bootstrap at subsample 0.6. The binding refuses by name what the symmetric
-oracle refuses, and the Bayesian bootstrap.
+bootstrap at subsample 0.6. Bayesian bootstrap and score noise also reach
+this oracle. QueryRMSE, PairLogit and YetiRank form their grouped gradients
+first, then apply the same row bootstrap to both statistic planes, matching
+CatBoost's greedy searcher and querywise_targets_impl.h::StochasticDer.
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build, the
 default flags the symmetric oracle names)
