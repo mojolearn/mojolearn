@@ -22,7 +22,9 @@ def test_rbf_route_is_pending_and_only_admits_python_row_shards():
     assert va.select_lanes(harness, table, "cpu", "full", ["par-rbf-sampler"],
                            include_pending=True)[0] == ["par-rbf-sampler"]
     row = coverage.inventory(harness, table, "cpu")["lanes"]["par-rbf-sampler"]
-    assert row["status"] == "excluded"
+    assert row["status"] == "not_applicable", (
+        "the inventory stopped saying `excluded` on 2026-09-20: nothing is removed from "
+        "the public surface, and a one-device par-* claim is inapplicable, not absent")
     assert row["execution"]["cpu_logical_shards"]
     assert not row["execution"]["requires_gpu_for_execution"]
     assert not row["execution"]["physical_multi_gpu_measured_by_cpu"]

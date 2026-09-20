@@ -13,7 +13,20 @@ def test_pending_selection_runs_declared_cpu_shards_without_admitting_gpu_only_d
     normal, _ = va.select_lanes(h, table, 'cpu', 'full', [])
     broad, _ = va.select_lanes(h, table, 'cpu', 'full', [], include_pending=True)
     assert set(normal) < set(broad)
-    assert set(va.host_surface().PUBLIC_PENDING_LANES) <= set(broad)
+    # A PENDING LANE IS SELECTABLE UNLESS RUNNING IT WOULD RAISE (2026-09-20).
+    # The `no cpu route` lanes refuse BY NAME on a CPU-only install, and a
+    # raise is a REFUSED part, which still gates. Selecting them would turn a
+    # structural fact about the box into a failure of the run. They are still
+    # PUBLIC and still reported, as NOT APPLICABLE with the reason.
+    surface = va.host_surface()
+    blocked = {l for l in surface.PUBLIC_PENDING_LANES if surface.pending_blocks_comparison(l)}
+    assert set(surface.PUBLIC_PENDING_LANES) - blocked <= set(broad)
+    assert blocked, "the case this test distinguishes has to exist"
+    exposure = surface.lane_exposure(list(h.LANES))
+    for lane in blocked:
+        assert exposure[lane]["exposed"], f"{lane} was hidden rather than reported"
+        assert exposure[lane]["status"] in (surface.LANE_OWED, surface.LANE_NOT_APPLICABLE,
+                                            surface.LANE_HELD)
     assert set(va.host_surface().PUBLIC_REFERENCE_CANDIDATES) <= set(broad)
     for lane in ('par-scaler-minmax', 'par-queries-nn', 'par-forest-et-clf', 'par-forest-reg'):
         assert lane in broad and lane not in normal

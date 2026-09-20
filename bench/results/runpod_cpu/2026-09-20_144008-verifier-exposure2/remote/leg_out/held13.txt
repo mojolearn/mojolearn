@@ -1,0 +1,80 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: cpu (cpu), 13 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  mamba3                             mamba             239.8s
+  transformer                        transformer        57.3s
+  lowbit-conversions                 linalg              0.1s
+  samba                              training          315.9s
+  transformer-window                 transformer        57.7s
+  samba-untied-dropout-accum         training          348.7s
+  linalg-qr                          linalg              0.0s
+  linalg-eigh                        linalg              0.0s
+  linalg-svdvals                     linalg              0.0s
+  hf-checkpoint                      linalg              0.8s
+  hf-tokenizer                       tokenizer           0.5s
+  hf-causal-lm                       neural              2.7s
+  grad-accumulation                  training            0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.8  commit be8fdb1ae1094d09fed0a52082e18182331fd402 (MOJOLEARN_COMMIT)
+# mode identical  vendor cpu (class cpu)  device Linux x86_64 (no vendor tool answered)
+# cpu AMD EPYC 9754 128-Core Processor  Linux-5.15.0-94-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 18ae8f05155b18fd, 348 records)
+# depth full: 13 lanes x 9 fixtures, 1 repeat(s), 0 portable model(s)
+# note: this harness is not the one the table was generated with; lanes added or changed since then read OWED or DIVERGENT until the table is regenerated
+
+| family      | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-------------|-------|-----------|-----------|------|---------|-----|
+| mamba       |     1 |        72 |         0 |    0 |       0 |   9 |
+| transformer |     2 |       144 |         0 |    0 |       0 |  18 |
+| linalg      |     5 |        54 |         0 |    0 |       0 | 351 |
+| training    |     3 |       171 |         0 |    0 |       0 |  72 |
+| tokenizer   |     1 |        18 |         0 |    0 |       0 |  63 |
+| neural      |     1 |        27 |         0 |    0 |       0 |  54 |
+| all         |    13 |       486 |         0 |    0 |       0 | 567 |
+
+LANE ACCOUNTING: 256 of 256 harness lanes accounted for; 0 VERIFIED, 256 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (186)  [not checked]: agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 180 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (55): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 49 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  HELD (8)  [not checked]: grad-accumulation, hf-causal-lm, hf-checkpoint, hf-tokenizer, linalg-eigh, linalg-qr, ... 2 more
+      unwatched
+  HELD (1)  [not checked]: mamba3
+      owed artifact nvidia column. No committed column anywhere under bench/results/ carries mamba3 on an NVIDIA device at fixture revision 'norms-near-one-1'; the twenty that name it all predate the 2026-09-16 norm change (lane/dead-arms) and describe bytes this harness no longer produces. Unlike the other four neural holds there is no near miss to repair. Owed, on a current NVIDIA box: `MOJOLEARN_COMMIT=$(git rev-parse HEAD) python3 tools/identity_break.py --repeats 2 --lanes mamba3 --step-full --batch-grad --batch-scale --ragged --json identity_break.nvidia.json`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: transformer
+      owed artifact nvidia stepfull. An admissible NVIDIA column at the current fixture revision exists (bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json, admit() None, nine fixtures, two repeats) but carries only train, infer, model, batch and rlpair. The DEFAULT part `stepfull` is absent, as are batchgrad, batchscale and ragged, and the file sits outside bench/results/identity_break/ so build_table never sees it. Owed: re-run those lanes on a current NVIDIA box with `--step-full --batch-grad --batch-scale --ragged` and land the column under bench/results/identity_break/
+  HELD (1)  [not checked]: saved-model-host-infer
+      one column
+  HELD (1)  [not checked]: samba
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`: the attention-replay NVIDIA column is admissible at revision 'steps-1-1' on nine fixtures but carries no `stepfull`, batchgrad, batchscale or ragged value, and is outside bench/results/identity_break/. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: transformer-window
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`: bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json is admissible at the current revision on nine fixtures but has no `stepfull`, batchgrad, batchscale or ragged value, and is outside the tree build_table walks. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: samba-untied-dropout-accum
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`, at revision 'steps-3-1'. This is the one lane whose PRE-revision NVIDIA records also agree, because lane/shrink-floors reversed its step cut, but an old column of coincidentally equal bytes is not a current witness. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  OWED (1)  [not checked]: language-model-config
+      no committed record carries a hash for this lane, so every part of it would read OWED; owed: a release record that runs it
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 13 lanes, 0 VERIFIED, 0 not applicable, 13 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (13):
+  mamba3: owed artifact nvidia column. No committed column anywhere under bench/results/ carries mamba3 on an NVIDIA device at fixture revision 'norms-near-one-1'; the twenty that name it all predate the 2026-09-16 norm change (lane/dead-arms) and describe bytes this harness no longer produces. Unlike the other four neural holds there is no near miss to repair. Owed, on a current NVIDIA box: `MOJOLEARN_COMMIT=$(git rev-parse HEAD) python3 tools/identity_break.py --repeats 2 --lanes mamba3 --step-full --batch-grad --batch-scale --ragged --json identity_break.nvidia.json`, landed under bench/results/identity_break/
+  transformer: owed artifact nvidia stepfull. An admissible NVIDIA column at the current fixture revision exists (bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json, admit() None, nine fixtures, two repeats) but carries only train, infer, model, batch and rlpair. The DEFAULT part `stepfull` is absent, as are batchgrad, batchscale and ragged, and the file sits outside bench/results/identity_break/ so build_table never sees it. Owed: re-run those lanes on a current NVIDIA box with `--step-full --batch-grad --batch-scale --ragged` and land the column under bench/results/identity_break/
+  lowbit-conversions: unwatched
+  samba: owed artifact nvidia stepfull. Same column and same gap as `transformer`: the attention-replay NVIDIA column is admissible at revision 'steps-1-1' on nine fixtures but carries no `stepfull`, batchgrad, batchscale or ragged value, and is outside bench/results/identity_break/. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  transformer-window: owed artifact nvidia stepfull. Same column and same gap as `transformer`: bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json is admissible at the current revision on nine fixtures but has no `stepfull`, batchgrad, batchscale or ragged value, and is outside the tree build_table walks. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  samba-untied-dropout-accum: owed artifact nvidia stepfull. Same column and same gap as `transformer`, at revision 'steps-3-1'. This is the one lane whose PRE-revision NVIDIA records also agree, because lane/shrink-floors reversed its step cut, but an old column of coincidentally equal bytes is not a current witness. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  linalg-qr: unwatched
+  linalg-eigh: unwatched
+  linalg-svdvals: unwatched
+  hf-checkpoint: unwatched
+  hf-tokenizer: unwatched
+  hf-causal-lm: unwatched
+  grad-accumulation: unwatched
+Batch invariance: IDENTICAL=63, DIVERGENT=0, OWED=0, REFUSED=0, N/A=54
+batchgrad: IDENTICAL=45, DIVERGENT=0, OWED=0, REFUSED=0, N/A=72
+batchscale: IDENTICAL=45, DIVERGENT=0, OWED=0, REFUSED=0, N/A=72
+ragged: IDENTICAL=45, DIVERGENT=0, OWED=0, REFUSED=0, N/A=72
+rlpair: IDENTICAL=45, DIVERGENT=0, OWED=0, REFUSED=0, N/A=72
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: CANNOT RUN (verified 486 of 1053 cell parts (0 divergent, 0 owed, 0 refused, 567 n/a); 0 of 13 lanes verified; 13 not checked). 1024.1s. exit 4
+# evidence written to /root/leg_out/held13.json

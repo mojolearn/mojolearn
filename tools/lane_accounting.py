@@ -20,10 +20,12 @@ lane, and on 2026-09-20 three lanes were sitting between them:
 
 `par-forecast-arima`, `par-forecast-holtwinters` and `par-ivf` were in
 NEITHER. Neither list was wrong on its own terms, which is the whole point.
-`PUBLIC_PENDING_LANES` only ever admits lanes that could become PUBLIC, and
-`PUBLIC_EXCLUDED_PREFIXES` excludes every `par-` driver from the public set,
+`PUBLIC_PENDING_LANES` only ever admitted lanes that could become PUBLIC, and
+`PUBLIC_INAPPLICABLE_PREFIXES` removed every `par-` driver from the public set,
 so the pending list had no business naming them; and the table simply had no
-record admitted for them yet. Each mechanism refused the lane for a good
+record admitted for them yet. (Both of those mechanisms stopped filtering on
+2026-09-20 -- every lane is public now and they only annotate -- but the gap
+they left between them is exactly what this file was written to own.) Each mechanism refused the lane for a good
 reason and handed it to the other. Nothing owned the gap, so nothing failed,
 and the lanes were invisible to both sides for as long as nobody counted.
 
@@ -54,19 +56,23 @@ WHAT IS CHECKED
      harness no longer registers is a reason kept for something that is gone.
   4. NO DOUBLE STANDARD ON AN EMPTY REASON. A pending entry whose reason is
      empty or blank declares nothing; it is the gap with a name on it.
-  5. NOTHING LEAVES `verify --all` WITHOUT A WORD SAID ABOUT IT
-     (lane/verifier-full-exposure, 2026-09-20). The same gap, one door over.
-     The harness defines 256 lanes and the shipped verifier exposes 186; the
-     other 70 were REPORTED AS NOTHING, so `186 lanes` read like all of them.
-     Fifty-five of those leave by PREFIX -- `PUBLIC_EXCLUDED_PREFIXES` -- and
-     a prefix is not a list, so checks 2 to 4 cannot see them: a `par-` lane
-     with a table cell satisfies the invariant above while still vanishing
-     from the command with no sentence anywhere. So every lane must also come
-     back from `host_surface.lane_exposure()` as EXPOSED or as a hold with a
-     reason, every excluded prefix must carry the sentence a user reads, and
-     `UNDECLARED` -- the status a lane gets when nothing in the manifest
-     mentions it -- is refused. That status exists for this check: the
-     default for a lane nobody thought about is a red check, not silence.
+  5. EVERY LANE IS PUBLIC, AND SAYS WHAT THE VERIFIER DOES WITH IT
+     (lane/verifier-full-exposure, 2026-09-20). The same gap, one door over,
+     and the one that was biggest. The harness defines 262 lanes and the
+     shipped verifier exposed 186; the other 76 were REPORTED AS NOTHING, so
+     `186 lanes` read like all of them. Fifty-nine of those left by PREFIX,
+     and a prefix is not a list, so checks 2 to 4 could not see them: a `par-`
+     lane with a table cell satisfies the invariant above while still
+     vanishing from the command with no sentence anywhere.
+
+     Andrew settled it the same day: nothing is hidden. So this now checks
+     that `host_surface.public_lane_scope()` returns EVERY lane the harness
+     defines -- it fails when one is MISSING from the public set, which is the
+     inversion of what it used to look for -- that each one comes back with a
+     status and, when that status is not EXPOSED, a reason a reader can act
+     on, and that every inapplicable prefix carries the sentence a user reads.
+     `UNDECLARED` is refused outright: the default for a lane nobody thought
+     about is a red check, not silence.
   6. NO PUBLIC ALGORITHM IS SILENTLY LANELESS. The counting above runs from
      lanes outward. This one runs the other way, because an algorithm with no
      lane AT ALL cannot be missing a cell and so is invisible to every count
@@ -113,28 +119,16 @@ TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.jso
 #: lanes land rather than outliving them. The six below are the queue
 #: lane/unlaned-public-algorithms is working; they are declared rather than
 #: silently tolerated so a SEVENTH cannot arrive unnoticed.
-DECLARED_LANELESS = {
-    "mamba.Mamba1DecodeSession":
-        "owed: an identity_break lane that steps the Mamba-1 decode session "
-        "token by token against a fresh-state forward pass (the stepfull part "
-        "shape). lane/unlaned-public-algorithms",
-    "transformer.TransformerDecodeSession":
-        "owed: an identity_break lane that steps the transformer decode "
-        "session against a whole-sequence forward pass. "
-        "lane/unlaned-public-algorithms",
-    "models.ParallelCausalLM":
-        "owed: an identity_break lane fitting and decoding the parallel "
-        "causal LM. lane/unlaned-public-algorithms",
-    "parallel_gaussian_process.fit_gaussian_process_classifier":
-        "owed: an identity_break lane fitting the parallel GPC driver. "
-        "lane/unlaned-public-algorithms",
-    "parallel_gaussian_process.predict_gaussian_process_classifier":
-        "owed: an identity_break lane predicting through the parallel GPC "
-        "driver. lane/unlaned-public-algorithms",
-    "parallel_model_selection.cross_val_score":
-        "owed: an identity_break lane scoring through the parallel "
-        "cross-validation driver. lane/unlaned-public-algorithms",
-}
+#: EMPTY, AND THAT IS THE POINT. It held six entries for a few hours on
+#: 2026-09-20 -- Mamba1DecodeSession, TransformerDecodeSession,
+#: ParallelCausalLM, the two parallel GPC functions and
+#: parallel_model_selection.cross_val_score -- and lane/unlaned-public-algorithms
+#: landed lanes for all six the same day. The check's other direction is what
+#: emptied it: the moment those lanes existed, this gate REFUSED the six
+#: declarations by name as excuses that had outlived their debt, on the first
+#: run after the merge. An empty dict here is a claim, checked on every run:
+#: every public algorithm has a lane.
+DECLARED_LANELESS = {}
 
 #: A reason has to say something. The shortest real one in the vocabulary is
 #: `no reference` at 13 characters; below this it is a placeholder.
@@ -325,8 +319,8 @@ def check(lanes=None, referenced=None, pending=None, covered=None, authoritative
     # 5. nothing leaves `verify --all` without a word said about it
     if prefixes is None or prefix_reasons is None:
         mod = surface()
-        prefixes = tuple(mod.PUBLIC_EXCLUDED_PREFIXES) if prefixes is None else tuple(prefixes)
-        prefix_reasons = (dict(mod.PUBLIC_EXCLUDED_PREFIX_REASONS) if prefix_reasons is None
+        prefixes = tuple(mod.PUBLIC_INAPPLICABLE_PREFIXES) if prefixes is None else tuple(prefixes)
+        prefix_reasons = (dict(mod.PUBLIC_INAPPLICABLE_PREFIX_REASONS) if prefix_reasons is None
                           else dict(prefix_reasons))
     silent = []
     for prefix in prefixes:
@@ -334,15 +328,15 @@ def check(lanes=None, referenced=None, pending=None, covered=None, authoritative
             silent.append(prefix)
             hidden = sorted(l for l in lanes if l.startswith(prefix))
             bad.append(
-                f"PUBLIC_EXCLUDED_PREFIXES carries {prefix!r} and PUBLIC_EXCLUDED_PREFIX_REASONS "
+                f"PUBLIC_INAPPLICABLE_PREFIXES carries {prefix!r} and PUBLIC_INAPPLICABLE_PREFIX_REASONS "
                 f"gives no reason for it. {len(hidden)} lane(s) would leave `verify --all` with "
                 f"nothing said about them ({', '.join(hidden[:4])}"
                 f"{'...' if len(hidden) > 4 else ''}). A prefix is not a list, so checks 2 to 4 "
                 "above cannot see them.")
     for prefix in prefix_reasons:
         if prefix not in prefixes:
-            bad.append(f"PUBLIC_EXCLUDED_PREFIX_REASONS explains {prefix!r}, which "
-                       "PUBLIC_EXCLUDED_PREFIXES does not exclude: a dead reason reads like a "
+            bad.append(f"PUBLIC_INAPPLICABLE_PREFIX_REASONS explains {prefix!r}, which "
+                       "PUBLIC_INAPPLICABLE_PREFIXES does not exclude: a dead reason reads like a "
                        "live one")
     if exposure is None and not silent:
         try:
@@ -350,6 +344,21 @@ def check(lanes=None, referenced=None, pending=None, covered=None, authoritative
         except RuntimeError as exc:
             bad.append(str(exc))
             exposure = {}
+    # EVERY LANE IS PUBLIC, AND THIS IS WHERE THAT CLAIM IS CHECKED (Andrew,
+    # 2026-09-20). The check is INVERTED from what it used to be. It used to
+    # ask whether a lane outside the public set had a reason; it now asks
+    # whether a lane is outside the public set AT ALL, because after this rule
+    # there is no such thing. It is what fails the day someone reintroduces a
+    # filter -- the exact move that hid 76 lanes for weeks.
+    if exposure:
+        hidden = sorted(l for l in lanes if not exposure.get(l, {}).get("exposed"))
+        if hidden:
+            bad.append(
+                f"{len(hidden)} lane(s) are NOT in the public surface: {hidden[:6]}"
+                f"{'...' if len(hidden) > 6 else ''}. Every lane the harness defines is public "
+                "since 2026-09-20; a reason may change what a lane REPORTS and may stop the "
+                "verifier comparing it, but nothing may remove it from the set a user sees. "
+                "An absence is indistinguishable from a feature we do not have.")
     for lane in sorted(lanes) if exposure is not None else ():
         row = exposure.get(lane)
         if row is None:
@@ -506,8 +515,8 @@ def self_test(verbose=True):
     # tools/check_lane_exposure.py on 2026-09-20. Same rule: every one is a
     # way a lane or an algorithm has actually gone missing, or could.
     exposure = mod.lane_exposure(sorted(lanes))
-    prefixes = tuple(mod.PUBLIC_EXCLUDED_PREFIXES)
-    prefix_reasons = dict(mod.PUBLIC_EXCLUDED_PREFIX_REASONS)
+    prefixes = tuple(mod.PUBLIC_INAPPLICABLE_PREFIXES)
+    prefix_reasons = dict(mod.PUBLIC_INAPPLICABLE_PREFIX_REASONS)
     found, with_lanes = laneless_algorithms()
     if found is None:
         print("SKIPPED: the laneless half could not run here (it imports the harness); "
@@ -530,7 +539,7 @@ def self_test(verbose=True):
          dict(prefix_reasons={}), "gives no reason for it"),
         # (j) a reason for a prefix nothing excludes.
         ("a dead prefix reason", dict(prefix_reasons=dict(prefix_reasons, **{"zz-": "words here"})),
-         "which PUBLIC_EXCLUDED_PREFIXES does not exclude"),
+         "which PUBLIC_INAPPLICABLE_PREFIXES does not exclude"),
         # (k) a lane nothing in the manifest mentions.
         ("a lane the manifest never heard of",
          dict(exposure=dict(exposure, **{newborn: dict(status="UNDECLARED", reason=None,
@@ -545,20 +554,36 @@ def self_test(verbose=True):
         ("lane_exposure() loses a lane",
          dict(exposure={k: v for k, v in exposure.items() if k != a_lane}),
          "did not account for it at all"),
+        # (n) THE INVERTED CASE: a filter comes back and a lane stops being
+        #     public. This is the one the 2026-09-20 rule turns on, and the
+        #     only case here that would have PASSED before that day.
+        ("a lane is removed from the public surface",
+         dict(exposure=dict(exposure, **{a_lane: dict(exposure[a_lane], exposed=False)})),
+         "are NOT in the public surface"),
     ]
     if found is not None:
-        a_laneless = sorted(found)[0] if found else None
+        # THE VICTIMS ARE SYNTHETIC ON PURPOSE. DECLARED_LANELESS is empty
+        # today, and an earlier draft picked the laneless victim out of the
+        # tree's current state, so emptying the list would have silently
+        # skipped this case while still printing OK -- the self-test that
+        # quietly shrinks, which is the failure this file exists to refuse and
+        # which it would then have committed itself. Both cases are built from
+        # names that certainly do not exist, plus one that certainly does.
         a_with_lane = sorted(with_lanes)[0]
-        if a_laneless:
-            extra.append(("an undeclared laneless public algorithm",
-                          dict(laneless=(found, with_lanes),
-                               declared_laneless={k: v for k, v in DECLARED_LANELESS.items()
-                                                  if k != a_laneless}), a_laneless))
+        extra.append(("an undeclared laneless public algorithm",
+                      dict(laneless=({"zz.NoLaneAtAll": None}, with_lanes),
+                           declared_laneless={}), "zz.NoLaneAtAll"))
+        extra.append(("a laneless algorithm whose declaration says nothing",
+                      dict(laneless=({"zz.NoLaneAtAll": "   "}, with_lanes),
+                           declared_laneless={"zz.NoLaneAtAll": "   "}), "zz.NoLaneAtAll"))
         extra.append(("an excuse that outlived its debt",
-                      dict(laneless=(found, with_lanes),
-                           declared_laneless=dict(DECLARED_LANELESS,
-                                                  **{a_with_lane: "owed: nothing, it has a lane"})),
+                      dict(laneless=({}, with_lanes),
+                           declared_laneless={a_with_lane: "owed: nothing, it has a lane"}),
                       a_with_lane))
+        extra.append(("an excuse for something that is not an algorithm at all",
+                      dict(laneless=({}, with_lanes),
+                           declared_laneless={"zz.Vanished": "owed: a lane, some day"}),
+                      "zz.Vanished"))
 
     for title, kw, name in extra:
         bad = run2(**kw)

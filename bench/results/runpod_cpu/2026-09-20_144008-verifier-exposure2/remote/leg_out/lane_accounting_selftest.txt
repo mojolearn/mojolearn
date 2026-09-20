@@ -1,0 +1,17 @@
+refused: a referenced lane loses its table cells -> agglomerative: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES. An installed `verify --all` has no hash for it and nothing s
+refused: a pending declaration is deleted -> agglomerative: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES. An installed `verify --all` has no hash for it and nothing s
+refused: a new lane is registered and nothing else -> zz-new-lane: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES, and it is not a covered lane, so PUBLIC_PENDING_LANES cannot t
+refused: an uncovered lane loses its table cells -> cross-val-folds: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES, and it is not a covered lane, so PUBLIC_PENDING_LANES cann
+refused: the lane reader under-reads -> the lane reader did not see 1 lane(s) that the shipped table names, so it is under-reading tools/identity_break.py and every check
+refused: the reader disagrees with the harness's LANES -> the lane reader disagrees with the harness's own LANES; a new registration form needs a reader. missed by the reader: ['zz-new-lan
+refused: a pending reason outlives its lane -> zz-retired-lane: declared in PUBLIC_PENDING_LANES but tools/identity_break.py registers no such lane; the reason outlived the thin
+refused: a pending reason is blank -> agglomerative: declared in PUBLIC_PENDING_LANES with an empty reason, which declares nothing
+refused: a prefix excludes lanes and says why nowhere -> PUBLIC_EXCLUDED_PREFIXES carries 'par-' and PUBLIC_EXCLUDED_PREFIX_REASONS gives no reason for it. 55 lane(s) would leave `verify 
+refused: a dead prefix reason -> PUBLIC_EXCLUDED_PREFIX_REASONS explains 'zz-', which PUBLIC_EXCLUDED_PREFIXES does not exclude: a dead reason reads like a live on
+refused: a lane the manifest never heard of -> zz-new-lane: UNDECLARED. Nothing in host_surface.py exposes it, excludes it by prefix or holds it in PUBLIC_PENDING_LANES, so `ver
+refused: a hold with a blank reason -> agglomerative: held back as HELD with no reason a reader can act on (''). An absence with no sentence is what this file refuses
+refused: lane_exposure() loses a lane -> agglomerative: host_surface.lane_exposure() did not account for it at all
+refused: an undeclared laneless public algorithm -> mamba.Mamba1DecodeSession: a public algorithm with NO identity lane and no declaration. An algorithm with no lane cannot be MISSIN
+refused: an excuse that outlived its debt -> ARIMA: declared laneless, but a lane reaches it now. Delete the declaration; an excuse that outlives its debt makes the list a mem
+refused: an uncovered lane is told to get a record, not a declaration
+OK: 15 perturbations, all refused by name

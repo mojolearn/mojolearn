@@ -118,47 +118,54 @@ requires equal values.
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
 
-### Every lane is accounted for, including the ones that do not run
+### Every lane is public, and every lane says what this box did with it
 
-The harness defines 256 lanes and a CPU-only install runs 186 of them. Until
-2026-09-20 the other 70 were not reported as anything at all, so `186 lanes`
-was indistinguishable from all of them. Every run now prints a LANE
-ACCOUNTING block whose denominator is the whole harness, and gives each lane
-it does not verify a state and a sentence:
+The harness defines 262 lanes. Until 2026-09-20 the shipped verifier exposed
+186 of them and the other 76 were not reported as anything at all, so
+`186 lanes` was indistinguishable from all of them. Fifty-nine left by a
+prefix rule and the rest sat in a pending list. **Nothing is hidden now.**
+`PUBLIC_PENDING_LANES` and the inapplicable-prefix rule no longer remove a
+lane from anything; they annotate. A reason decides what a lane REPORTS, and
+whether this box can compare it, never whether you can see it.
 
-| state | what it means |
-|---|---|
-| VERIFIED | it ran and every part read IDENTICAL or N/A. This is the only state that contributes to a pass |
-| DIVERGENT / REFUSED / OWED | it ran and a part disagreed, raised, or has no reference |
-| NOT APPLICABLE | the claim cannot be stated by this kind of run at all. The 55 `par-*` drivers are the case: their claim is that a two-device column hashes equal to the one-device column cell for cell, and `verify` is always a one-device run, so the comparison would be a run against itself |
-| OWED (not run) | no committed record carries a hash for it, so every part would read OWED |
-| HELD | it is held out of the public set on a condition running it would not settle, named in `host_surface.PUBLIC_PENDING_LANES` |
-| NOT RUN | exposed, but this run did not select it, or its fixture moved past the shipped reference |
-| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it |
+The reasoning is short: an absence is indistinguishable from a feature we do
+not have, and we do have these. A lane with no reference reads OWED, which
+names what is missing. That is more than silence gives anyone.
 
-**Every state above except VERIFIED and NOT APPLICABLE costs the run its
-pass.** The line between them is whether anything is UNKNOWN. OWED, HELD, NOT
-RUN and UNDECLARED all mean something could be checked and was not, so the
-verdict cannot be VERIFIED while any of them is in the run's scope. NOT
-APPLICABLE means no run on this hardware could ever check it — `verify` is
-always a one-device run, since it refuses `MOJOLEARN_PAR_DEVICES`, so the
-`par-*` two-device claim is not stateable by this command on any machine.
-Gating on it would make VERIFIED unreachable for everyone, and a verdict that
-can never be positive says as little as one that is always positive. It is
-reported, not counted against you. This is the same rule the part level has
-always followed: a part declared `n/a:no-backward` has never made a run
-INCOMPLETE.
+Every run prints a LANE ACCOUNTING block whose denominator is the whole
+harness, and gives each lane a state and a sentence:
+
+| state | what it means | gates? |
+|---|---|---|
+| VERIFIED | it ran and every part read IDENTICAL or N/A | — |
+| DIVERGENT | its bits differ from the reference | **yes** |
+| REFUSED | a part raised, so it did not run | **yes** |
+| OWED | no committed record carries a hash for a part of it | no |
+| NOT APPLICABLE | no run on this box could ever state its claim. The 59 `par-*` drivers claim a two-device column hashes equal to the one-device column cell for cell, and `verify` is a one-device run; and a handful of lanes refuse by name on a CPU-only install | no |
+| HELD | its comparison is blocked by a named condition | no |
+| NOT RUN | this run did not select it, or its fixture moved past the shipped reference | no |
+| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it | no |
+
+**Only DIVERGENT and REFUSED cost the run its pass.** Those are the two that
+mean something went WRONG rather than something is missing. A lane whose bits
+differ from its reference is the single thing this library exists to detect,
+and a lane that raised did not run at all; passing over either would make the
+word mean nothing. Everything else is reported and counted, not held against
+you. That is the same rule the part level has always followed: a part declared
+`n/a:no-backward` has never made a run INCOMPLETE.
 
 **A run that checked nothing is still not a pass.** If a run's whole scope is
-NOT APPLICABLE, it exits 4 with CANNOT RUN even though every cell part it
+NOT APPLICABLE it exits 4 with CANNOT RUN, even though every cell part it
 produced read IDENTICAL, because a one-device `par-*` column is compared
 against itself and passes whatever the code does.
 
-**The verdict carries its own scope**, so a pass cannot overstate itself:
+**The verdict carries its own scope**, which is what keeps a looser gate
+honest. Nobody should have to open the JSON to learn that a quarter of the run
+was inapplicable:
 
 ```
-RESULT: VERIFIED (verified 12 of 15 cell parts (0 divergent, 0 owed, 0 refused,
-3 n/a); 2 of 3 lanes verified; 1 not applicable to any run of this command).
+RESULT: VERIFIED (verified 16 of 20 cell parts (0 divergent, 0 owed, 0 refused,
+4 n/a); 2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes). exit 0
 ```
 
 Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:

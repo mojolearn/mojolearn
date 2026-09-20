@@ -165,12 +165,18 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
         surface = host_surface()
-        public = surface.public_reference_lanes()
-        # A user may explicitly exercise a declared CPU route before its
-        # reference is ready. Its results read OWED, never VERIFIED.
-        eligible = (set(public) | set(surface.covered_lanes())) if asked or include_pending else set(public)
+        # EVERY LANE IS PUBLIC; WHAT VARIES IS WHETHER THIS BOX CAN COMPARE IT
+        # (Andrew, 2026-09-20). `comparable_lanes()` is the execution set, and
+        # it is NOT a visibility filter: the lanes it leaves out are reported
+        # by name, with the reason, in the run's lane accounting. It exists
+        # because running them would not help. A `par-*` driver on one device
+        # compares a run against itself; a `no cpu route` lane RAISES by name
+        # on a CPU install, and a raise is a REFUSED part, which still gates.
+        # Selecting them would turn a structural fact into a failure.
+        comparable = surface.comparable_lanes(all_lanes, "cpu")
+        eligible = (set(comparable) | set(surface.covered_lanes())) if asked or include_pending else set(comparable)
         allowed = [l for l in harness.LANES if l in eligible
-                   and (include_pending or not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES))]
+                   and (include_pending or not l.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES))]
     else:
         allowed = all_lanes
     if asked:
@@ -477,7 +483,7 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
     WHY THIS EXISTS. `verify --all` used to report only the lanes it ran. On a
     CPU-only install that was 186 of the harness's 256, and the other 70 were
     not reported as anything at all: 55 removed by
-    `host_surface.PUBLIC_EXCLUDED_PREFIXES` and 15 held in
+    `host_surface.PUBLIC_INAPPLICABLE_PREFIXES` and 15 held in
     `PUBLIC_PENDING_LANES`. A user read `186 lanes` and could not tell that
     number from `all of them`. This block makes the denominator 256 on every
     run and gives each of the 70 a state and a sentence.
@@ -585,10 +591,25 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
 #:
 #: The abuse this opens is obvious and is closed at the source: a lane could
 #: be relabelled NOT APPLICABLE to buy a pass. So NOT APPLICABLE has exactly
-#: ONE derivation -- `host_surface.PUBLIC_EXCLUDED_PREFIXES` with a written
+#: ONE derivation -- `host_surface.PUBLIC_INAPPLICABLE_PREFIXES` with a written
 #: sentence -- it cannot be reached from `PUBLIC_PENDING_LANES` at all, and
 #: `test_not_applicable_has_exactly_one_derivation` holds it there.
-LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE,)
+#: ANDREW, 2026-09-20, after the narrower rule was argued and decided against:
+#: OWED, HELD and NOT RUN stop gating too. A run reads VERIFIED when nothing
+#: DIVERGED and nothing REFUSED, whatever else is unreferenced or inapplicable.
+#:
+#: THE TWO THAT STILL GATE ARE THE TWO THAT MEAN SOMETHING WENT WRONG rather
+#: than something is missing. A DIVERGENT lane's bits differ from its
+#: reference, which is the single thing this library exists to detect. A
+#: REFUSED lane raised, so it did not run at all. Passing over either would
+#: not be a looser rule, it would make the word mean nothing, and that is the
+#: 0.8.6 defect exactly.
+#:
+#: WHAT CARRIES THE HONESTY NOW IS THE SCOPE LINE, not the gate. A pass can
+#: cover a lot of unreferenced surface, so the headline states what it
+#: covered, in lanes, on the same line as the verdict. That is the trade for
+#: the looser gate and it is why `lane_scope_clause()` is not optional.
+LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD, LANE_NOT_RUN)
 
 
 def lane_verdict_gaps(accounting, scope):
@@ -633,7 +654,8 @@ def lane_scope(accounting, scope):
     return dict(
         scope=len(scope),
         checked=sum(1 for s in states if s == LANE_VERIFIED),
-        not_applicable=sum(1 for s in states if s in LANE_STATES_THAT_DO_NOT_GATE),
+        not_applicable=sum(1 for s in states if s == LANE_NOT_APPLICABLE),
+        by_state={state: sum(1 for s in states if s == state) for state in LANE_STATES},
         gaps=lane_verdict_gaps(accounting, scope))
 
 
@@ -650,12 +672,19 @@ def lane_scope_clause(accounting, scope):
     s = lane_scope(accounting, scope)
     if not s["scope"]:
         return ""
-    parts = [f"{s['checked']} of {s['scope']} lanes verified"]
-    if s["not_applicable"]:
-        parts.append(f"{s['not_applicable']} not applicable to any run of this command")
-    if s["gaps"]:
-        parts.append(f"{len(s['gaps'])} not checked")
-    return "; ".join(parts)
+    # THE FULL SHAPE, IN ONE LINE, because the gate no longer carries it.
+    # Since 2026-09-20 a pass can cover a lot of unreferenced surface, so
+    # nobody should have to open the JSON to learn that a quarter of the run
+    # was inapplicable. Every state is named even at zero: a category a reader
+    # has to infer from an absent word is the defect this whole lane is about.
+    by = s["by_state"]
+    return (f"{by[LANE_VERIFIED]} verified, {by[LANE_NOT_APPLICABLE]} not applicable, "
+            f"{by[LANE_OWED]} owed, {by[LANE_HELD]} held"
+            + (f", {by[LANE_DIVERGENT]} DIVERGENT" if by[LANE_DIVERGENT] else "")
+            + (f", {by[LANE_REFUSED]} REFUSED" if by[LANE_REFUSED] else "")
+            + (f", {by[LANE_NOT_RUN]} not run" if by[LANE_NOT_RUN] else "")
+            + (f", {by[LANE_UNDECLARED]} UNDECLARED" if by[LANE_UNDECLARED] else "")
+            + f", of {s['scope']} lanes")
 
 
 def verdict(counts, scope_gaps=(), lanes_checked=None):
@@ -686,8 +715,8 @@ def verdict(counts, scope_gaps=(), lanes_checked=None):
     # that judge in cell parts only, and those are unchanged.
     if lanes_checked == 0:
         return EXIT_CANNOT_RUN, "CANNOT RUN"
-    if counts[vref.OWED] or scope_gaps:
-        return EXIT_NO_REFERENCE, "INCOMPLETE" if counts[vref.IDENTICAL] else "NO REFERENCE"
+    if scope_gaps:
+        return EXIT_MISMATCH, "MISMATCH"
     if counts[vref.IDENTICAL]:
         return EXIT_VERIFIED, "VERIFIED"
     return EXIT_NO_REFERENCE, "NO REFERENCE"
@@ -3373,7 +3402,14 @@ def cmd_verify_all(args):
     accounting["verdict_scope"] = sorted(verdict_scope)
     accounting["unverified_in_scope"] = lane_gaps
     accounting["scope_summary"] = {k: v for k, v in scope_summary.items() if k != "gaps"}
-    code, headline = verdict(counts, scope_gaps,
+    # THE REPORT'S `scope_gaps` AND THE VERDICT'S ARE NOW DIFFERENT THINGS
+    # (2026-09-20). `scope_gaps` above is everything a reader should know was
+    # not covered -- withheld CPU routes, stale references, inapplicable
+    # claims -- and it stays in the document in full. Only `lane_gaps` reaches
+    # the verdict, and `lane_verdict_gaps()` puts a lane there only when its
+    # state GATES. Feeding the reporting set to the verdict would make every
+    # inapplicable lane a MISMATCH, which is the opposite of the rule.
+    code, headline = verdict(counts, lane_gaps,
                              lanes_checked=scope_summary["checked"] if verdict_scope else None)
     # THE SCOPE RIDES WITH THE VERDICT, as it already does in
     # `format_cross_check`. VERIFIED over 186 of 256 lanes is a real pass and

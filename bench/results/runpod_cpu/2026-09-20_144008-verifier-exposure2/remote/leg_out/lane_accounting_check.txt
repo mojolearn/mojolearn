@@ -1,0 +1,5 @@
+256 registered lanes: 255 carry cells in the shipped table, 15 are declared in PUBLIC_PENDING_LANES (14 in both), 0 in neither
+what the shipped verifier does with them: 186 EXPOSED, 55 NOT APPLICABLE, 1 OWED, 14 HELD
+public algorithms with no lane at all: 6 declared (ran)
+harness cross-check: ran
+OK: 0 problems

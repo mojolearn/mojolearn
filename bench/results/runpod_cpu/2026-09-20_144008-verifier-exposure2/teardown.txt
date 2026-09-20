@@ -1,0 +1,5 @@
+pod=5ft4tl5cn3nc92
+name=mojolearn-cpu-verifier-exposure2-20260920-144008
+terminated_verified=1
+exit=0
+at=2026-09-20T15:04:59Z

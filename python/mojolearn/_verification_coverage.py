@@ -60,19 +60,24 @@ def inventory(harness, table, vendor_class):
     stale = set(vref.stale_reference_lanes(table, harness))
     parallel_cpu = {name for name in covered if name.startswith("par-")}
     lanes = {}
+    # NOTHING IS HIDDEN, SO NOTHING IS `excluded` (Andrew, 2026-09-20). Every
+    # lane is in the public surface; the inventory now says what the verifier
+    # DOES with each one. `not_applicable` replaced `excluded` because the
+    # older word described a decision we no longer make: these lanes were
+    # never absent for want of merit, they are claims a one-device run cannot
+    # state. `withheld` survives only for a lane whose comparison is blocked,
+    # and it carries the reason verbatim.
+    exposure = host_surface.lane_exposure(list(harness.LANES), vendor_class or "cpu")
     for name in harness.LANES:
         status, reason = "available", None
-        if vendor_class == "cpu" and name not in public:
-            if name.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES):
-                status = "excluded"
-                reason = ("CPU logical-shard replay available with --include-pending; physical multi-GPU qualification pending"
-                          if name in parallel_cpu else "no declared CPU implementation of this parallel driver; GPU execution required")
-            elif name in covered:
-                status = "withheld"
-                reason = pending.get(name, "reference qualification pending" if name in candidates
-                                     else "CPU route not admitted to the public verifier")
-            else:
-                status, reason = "unavailable", "no declared public CPU verification route"
+        row = exposure[name]
+        if row["status"] == host_surface.LANE_NOT_APPLICABLE:
+            status, reason = "not_applicable", row["reason"]
+        elif not row["comparable"]:
+            status = "withheld"
+            reason = row["reason"] or pending.get(
+                name, "reference qualification pending" if name in candidates
+                else "CPU route not admitted to the public verifier")
         if status == "available" and name in stale:
             status, reason = "withheld", "stale reference"
         elif reason == "stale reference" and name not in stale:
@@ -172,7 +177,7 @@ def inventory(harness, table, vendor_class):
                 additional_lanes=sorted(set(lanes) - mapped),
                 counts=dict(appendix_entries=len(entries), registered_lanes=len(lanes),
                             **{status: sum(r["status"] == status for r in lanes.values())
-                               for status in ("available", "withheld", "excluded", "unavailable")}),
+                               for status in ("available", "withheld", "not_applicable", "excluded", "unavailable")}),
                 cpu_execution_counts=dict(declared=len(set(lanes) & covered),
                     logical_shard_drivers=len(set(lanes) & parallel_cpu),
                     parallel_drivers_requiring_gpu=sum(name.startswith("par-") and name not in covered for name in lanes)),
@@ -187,8 +192,8 @@ def format_human(report):
     lines = ["Verification coverage inventory — no algorithms executed",
              f"{c['appendix_entries']} appendix entries; {c['registered_lanes']} registered lanes; "
              f"backend {report['vendor_class']}",
-             f"{c['available']} available, {c['withheld']} withheld, {c['excluded']} excluded, "
-             f"{c['unavailable']} unavailable", "",
+             f"{c['available']} available, {c['not_applicable']} not applicable here, "
+             f"{c['withheld']} withheld (comparison blocked); every lane is public", "",
              "Lane | status | batch check | reason", "--- | --- | --- | ---"]
     for name, lane in report["lanes"].items():
         batch = lane["properties"]["batch"]

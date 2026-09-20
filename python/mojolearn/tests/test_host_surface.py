@@ -871,8 +871,23 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     public = host_surface.public_reference_lanes()
 
     assert len(public) == len(set(public)), "a lane is listed twice"
-    assert not [lane for lane in public if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)]
-    assert not (set(public) & set(host_surface.PUBLIC_PENDING_LANES)), "a pending lane is public"
+    # NOTHING IS HIDDEN ANY MORE (Andrew, 2026-09-20). These two assertions
+    # used to demand the opposite: that no prefix-excluded lane and no pending
+    # lane was public. That was the rule that hid 76 lanes behind a list and a
+    # prefix. `public_reference_lanes()` is now the COMPARABLE set -- what the
+    # verifier runs and compares on a CPU install -- and a pending lane joins
+    # it unless its reason is one of the three that block a comparison.
+    assert not [lane for lane in public
+                if lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)], (
+        "a par-* lane is comparable on one device, where its claim cannot be stated")
+    still_blocked = {lane for lane in host_surface.PUBLIC_PENDING_LANES
+                     if host_surface.pending_blocks_comparison(lane)}
+    assert not (set(public) & still_blocked), (
+        f"a lane whose comparison is blocked is in the comparable set: {sorted(set(public) & still_blocked)}")
+    annotated = set(host_surface.PUBLIC_PENDING_LANES) - still_blocked - set(covered_par := set())
+    assert all(lane in public or lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)
+               for lane in annotated), (
+        "a pending lane with a merely annotating reason must be comparable, not hidden")
     trained = set(public) - host_only
     assert trained <= covered, f"public lanes with no CPU training path: {sorted(trained - covered)}"
     assert trained <= with_cells, f"public lanes the shipped table has no cell for: {sorted(trained - with_cells)}"
@@ -1072,7 +1087,7 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     # assertion demanded an entry that the same test's own loop would then
     # reject.
     excluded = {lane for lane in revisions
-                if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
+                if lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)}
     moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
                    - host_only - excluded)
     assert moved == [], (
@@ -1145,7 +1160,7 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
 
     Neither list was wrong on its own terms, which is exactly how this
     happens. `PUBLIC_PENDING_LANES` only ever admits lanes that could become
-    PUBLIC, and `PUBLIC_EXCLUDED_PREFIXES` excludes every `par-` driver from
+    PUBLIC, and `PUBLIC_INAPPLICABLE_PREFIXES` excludes every `par-` driver from
     the public set -- the test above even states that a prefix-excluded lane
     "must not be required in PUBLIC_PENDING_LANES", and it is right. So one
     mechanism refused the lanes for a good reason and handed them to the

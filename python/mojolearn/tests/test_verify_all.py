@@ -206,10 +206,13 @@ def _counts(**kw):
 def test_verdict_exit_codes():
     # a refused part did not run, so it costs the run its pass
     # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
+    # OWED STOPPED GATING ON 2026-09-20 (Andrew). Only DIVERGENT and REFUSED
+    # gate now: they mean something went WRONG, not that something is missing.
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_NO_REFERENCE
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1))[0] == va.EXIT_MISMATCH
     assert va.verdict(_counts(REFUSED=2, OWED=1))[0] == va.EXIT_CANNOT_RUN
+    # nothing IDENTICAL at all is still not a pass
     assert va.verdict(_counts(OWED=4, NA=1))[0] == va.EXIT_NO_REFERENCE
     from mojolearn import _verify
     assert (va.EXIT_VERIFIED, va.EXIT_MISMATCH, va.EXIT_USAGE, va.EXIT_REFUSED_FAST, va.EXIT_CANNOT_RUN,
@@ -235,8 +238,9 @@ def test_a_run_that_refused_is_not_reported_as_verified():
 
     # one refused part is enough
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1)) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+    # and a refusal outranks the looser OWED rule
     # Missing references cannot be offset by successful comparisons; N/A is different.
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_NO_REFERENCE, "INCOMPLETE")
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_VERIFIED, "VERIFIED")
     # a wrong answer still outranks an absent one
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1, REFUSED=9))[0] == va.EXIT_MISMATCH
 
@@ -653,11 +657,11 @@ def test_the_accounting_denominator_is_the_whole_harness():
     lanes = list(harness.LANES)
     exposure = va.host_surface().lane_exposure(lanes)
     acc = va.lane_accounting(lanes, exposure, [], [])
-    assert acc["total"] == len(lanes) == 256
+    assert acc["total"] == len(lanes) == 262
     assert sum(acc["counts"].values()) == len(lanes)
     assert set(acc["lanes"]) == set(lanes)
     # and the 70 that a CPU-only install does not run are each a named state
-    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 55, "the par-* drivers"
+    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 61, "59 par-* drivers plus 2 GPU-only lanes"
     assert acc["counts"][va.LANE_UNDECLARED] == 0
     assert all(e["reason"] for e in acc["lanes"].values() if e["state"] != va.LANE_VERIFIED)
 
@@ -708,28 +712,38 @@ def test_part_level_na_and_lane_level_not_applicable_agree():
         "the same run is judged differently depending on which layer says `inapplicable`")
 
 
-def test_not_applicable_has_exactly_one_derivation():
-    """THE ESCAPE HATCH, NAILED SHUT. NOT APPLICABLE is the one state that
-    does not gate, so if a lane could be moved into it by editing a reason
-    string, any hold could be converted into a pass. It cannot: the ONLY way
-    to reach it is `host_surface.PUBLIC_EXCLUDED_PREFIXES`, which is a prefix
-    rule over lane names, requires a written sentence that
-    `tools/lane_accounting.py` refuses to let be missing, and cannot be
-    reached from `PUBLIC_PENDING_LANES` for any reason string at all."""
+def test_not_applicable_has_exactly_two_derivations_and_both_are_structural():
+    """THE ESCAPE HATCH, NAILED SHUT. NOT APPLICABLE is a non-gating state, so
+    if a lane could be moved into it by editing a reason string, any hold
+    could be converted into a pass. It cannot. There are exactly two ways in,
+    and both are facts about the lane rather than opinions about it:
+
+      * an inapplicable PREFIX (`par-`), a rule over lane names that requires
+        a written sentence `tools/lane_accounting.py` will not let be missing;
+      * the `no cpu route` reason, which is checked against
+        `identity_break.GPU_ONLY_LANES` -- the list the harness itself uses to
+        drop a lane from a CPU column -- so it cannot be claimed for a lane
+        that merely lacks a CPU column so far.
+
+    Every other reason string, including ones that do not exist, leaves the
+    lane in a gating state. That is asserted below by trying them."""
     surface = va.host_surface()
-    lanes = list(va.load_harness().LANES)
+    harness = va.load_harness()
+    lanes = list(harness.LANES)
     exposure = surface.lane_exposure(lanes)
     inapplicable = [l for l, r in exposure.items() if r["status"] == surface.LANE_NOT_APPLICABLE]
     assert inapplicable, "the state exists, so something must reach it"
-    assert all(l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES) for l in inapplicable)
-    assert not (set(inapplicable) & set(surface.PUBLIC_PENDING_LANES)), (
-        "a pending lane reached the non-gating state")
-    # and no reason string can move a pending lane into it
-    for why in ("no reference", "one column", "unwatched", "owed artifact nvidia x", "anything"):
+    gpu_only = set(getattr(harness, "GPU_ONLY_LANES", ()) or ())
+    for lane in inapplicable:
+        assert lane.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES) or lane in gpu_only, (
+            f"{lane} reached the non-gating state by neither route")
+    # no reason string invents a third way in
+    for why in ("no reference", "one column", "unwatched", "owed artifact nvidia x",
+                "anything", "not applicable", "NOT APPLICABLE"):
         probe = dict(surface.PUBLIC_PENDING_LANES, ols=why)
         saved, surface.PUBLIC_PENDING_LANES = surface.PUBLIC_PENDING_LANES, probe
         try:
-            assert surface.lane_exposure(["ols"])["ols"]["status"] != surface.LANE_NOT_APPLICABLE
+            assert surface.lane_exposure(["ols"])["ols"]["status"] != surface.LANE_NOT_APPLICABLE, why
         finally:
             surface.PUBLIC_PENDING_LANES = saved
 
@@ -759,12 +773,14 @@ def test_a_clean_run_with_inapplicable_lanes_beside_it_is_still_verified():
     acc = va.lane_accounting(lanes, exposure, lanes, rows)
     assert acc["counts"][va.LANE_VERIFIED] == 2 and acc["counts"][va.LANE_NOT_APPLICABLE] == 2
     scope = va.lane_scope(acc, lanes)
-    assert scope == dict(scope=4, checked=2, not_applicable=2, gaps={})
+    assert {k: scope[k] for k in ('scope', 'checked', 'not_applicable', 'gaps')} == dict(
+        scope=4, checked=2, not_applicable=2, gaps={})
+    assert scope['by_state'][va.LANE_VERIFIED] == 2
     assert va.verdict(_counts(IDENTICAL=8), scope["gaps"], lanes_checked=scope["checked"]) == (
         va.EXIT_VERIFIED, "VERIFIED")
     # and it says so rather than implying it covered everything
     clause = va.lane_scope_clause(acc, lanes)
-    assert clause == "2 of 4 lanes verified; 2 not applicable to any run of this command"
+    assert clause == "2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes"
 
 
 def test_an_all_inapplicable_run_is_cannot_run_because_nothing_was_checked():
@@ -1044,7 +1060,7 @@ def test_full_and_cpu_lane_sets():
     # A lane a CPU-only install does not run is refused by name rather than
     # silently dropped. The example is `par-forest` rather than a lane that
     # merely happens to be off the list: `par-*` is excluded by RULE
-    # (host_surface.PUBLIC_EXCLUDED_PREFIXES), so this stays a real test of
+    # (host_surface.PUBLIC_INAPPLICABLE_PREFIXES), so this stays a real test of
     # the refusal as the public set grows. It used `rf-clf` until
     # lane/ship-cpu-host-families shipped the rf binding and made that lane
     # public, at which point the assertion had nothing left to catch.
@@ -1228,14 +1244,14 @@ def test_the_printed_verdict_carries_its_own_scope_end_to_end():
     assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
     result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert "VERIFIED" in result, result
-    assert "2 of 3 lanes verified" in result, (
+    assert "2 verified" in result and "of 3 lanes" in result, (
         "a pass that does not say its own scope overstates itself: " + result)
     assert "1 not applicable" in result, result
 
     nothing = _run_cli(["verify", "--lanes", "par-forest,par-mlp", "--fixtures", "base", "--no-models"])
     result = [l for l in nothing.stdout.splitlines() if l.startswith("RESULT:")][-1]
     assert nothing.returncode == va.EXIT_CANNOT_RUN, result
-    assert "CANNOT RUN" in result and "0 of 2 lanes verified" in result, result
+    assert "CANNOT RUN" in result and "0 verified" in result and "of 2 lanes" in result, result
 
 
 @pytest.mark.skipif(ROOT is None, reason="needs tools/identity_break.py beside the package")
