@@ -2714,8 +2714,13 @@ class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
                     "mojolearn: every experimental FeatureFreq source must "
                     f"be densely coded 0..k-1; column {f} has {ordered!r}"
                 )
-        for f in set(range(n_features)).difference(self.sources):
-            if len(set(xv[f * n_rows:(f + 1) * n_rows])) < 2:
+        source_set = set(self.sources)
+        for f in range(n_features):
+            if f in source_set:
+                continue
+            column = xv[f * n_rows:(f + 1) * n_rows]
+            first = column[0]
+            if not any(value != first for value in column[1:]):
                 raise ValueError(
                     "mojolearn: experimental FeatureFreq numeric columns "
                     f"must vary; column {f} is constant"

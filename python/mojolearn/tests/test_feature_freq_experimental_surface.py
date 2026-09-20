@@ -72,6 +72,15 @@ def test_experimental_feature_freq_weight_refusals(weights, needle):
         est.fit(X, np.zeros(4, np.float32), sample_weight=weights)
 
 
+def test_experimental_feature_freq_refuses_constant_numeric_column():
+    X = np.asarray(
+        [[0, 0, 7], [0, 1, 7], [1, 0, 7], [1, 1, 7]], dtype=np.float32
+    )
+    est = ExperimentalTwoLevelFeatureFreq(sources=[0, 1])
+    with pytest.raises(ValueError, match="numeric columns must vary; column 2"):
+        est.fit(X, np.zeros(4, np.float32))
+
+
 def test_experimental_feature_freq_forwards_weights():
     X = np.asarray(
         [[0, 0], [0, 1], [1, 0], [1, 1]], dtype=np.float32
