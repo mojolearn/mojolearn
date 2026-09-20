@@ -1203,14 +1203,21 @@ NO_CPU_PATH = (
 
     "gradient boosting training at a (loss, grow_policy, score_function, "
     "leaf_estimation_method, bootstrap_type) combination outside the ones "
-    "the gbdt/host oracles restate, each refused by name: RMSE and the "
-    "pointwise losses under Depthwise and Lossguide, score functions and "
-    "leaf estimators outside each policy's covered pair, most (bootstrap, "
-    "loss) pairs, Depthwise's min_split_gain, min_child_hessian and "
-    "min_data_in_leaf, random_strength and feature_fraction outside Logloss, "
-    "boost_from_average outside RMSE and the quantile family, and a NaN in X "
-    "outside SymmetricTree with Logloss -- each one its own device kernel or "
-    "its own searcher gate order",
+    "the gbdt/host oracles restate, each refused by name: the pointwise "
+    "losses under Depthwise and Lossguide, score functions and leaf "
+    "estimators outside each policy's covered pair, any bootstrap and "
+    "random_strength under MultiClass and MultiClassOneVsAll (so their "
+    "DEFAULT fit refuses; pass bootstrap_type='No' and random_strength=0), "
+    "the Poisson bootstrap under Depthwise and Lossguide, random_strength "
+    "under the ranking losses, Depthwise's min_split_gain, "
+    "min_child_hessian and min_data_in_leaf, feature_fraction outside "
+    "Lossguide with Logloss, boost_from_average outside RMSE and the "
+    "quantile family, and a NaN in X outside SymmetricTree with Logloss -- "
+    "each one its own device kernel or its own searcher gate order. The "
+    "bootstraps and the score noise DO train on Logloss, RMSE and the ten "
+    "pointwise losses under SymmetricTree and on Logloss and RMSE under "
+    "Depthwise and Lossguide (the gbdt-stochastic-arms lane), which is every "
+    "default fit of GradientBoostingRegressor and GradientBoostingClassifier",
 )
 
 #: The read-back trio every host binding exports under its own prefix,

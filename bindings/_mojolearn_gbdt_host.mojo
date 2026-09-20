@@ -266,8 +266,8 @@ def _refuse(what: String) raises:
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
         + "; the gbdt host binding trains the declared GBDT lanes"
         " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
-        " and multiclass losses, Depthwise with Logloss and Cosine,"
-        " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
+        " and multiclass losses, Depthwise with Logloss or RMSE and Cosine,"
+        " Lossguide with Logloss or RMSE and NewtonL2 or NewtonCosine; no sample"
         " weights and no CTR categoricals anywhere; an eval set and the"
         " overfitting detector on SymmetricTree with Logloss and on the"
         " Ordered and pointwise-searcher arms only; one-hot categorical"

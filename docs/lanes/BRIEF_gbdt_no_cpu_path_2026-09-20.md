@@ -3,6 +3,20 @@
 `python/mojolearn/host_surface.py::NO_CPU_PATH` held one entry that ended
 **"among them"**. That phrase hid an unknown count. This file is the count.
 
+**Superseded in part the same day (lane/gbdt-cpu-default-parity).** F10's RMSE
+rows, F11 and F12 below are no longer true: the bootstraps and the score noise
+train on Logloss, RMSE and the ten pointwise losses under SymmetricTree and on
+Logloss and RMSE under Depthwise and Lossguide, and RMSE trains under both
+non-symmetric policies. They were options of one restatement, not a
+restatement per arm. What is left of those three families is MultiClass and
+MultiClassOneVsAll with any bootstrap or noise, the Poisson bootstrap on the
+non-symmetric policies, and the pointwise losses under Depthwise and Lossguide.
+The measured table is bench/results/gbdt_cpu_parity/2026-09-20/, the CPU and
+NVIDIA columns bench/results/identity_break/2026-09-20_gbdt-cpu-default-parity/.
+That directory's README also records that the `gbdt-symmetric-eval`
+disagreement this file's OWED section led to is a DEVICE defect (an unfilled
+test cursor), not a defect of gbdt_oracle_eval.mojo.
+
 Everything below was **reproduced**, not read off the source: every row is a
 `GradientBoosting(...).fit(...)` run on a CPU-only install (the `identical`
 set absent, `mojolearn._backend._CPU_ONLY` set, inside
