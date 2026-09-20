@@ -34,8 +34,31 @@ are under `apple/`.  Derived backward medians were 43.629 -> 43.826 ms
 The schedule is therefore effectively neutral on Apple, not an Apple speed
 claim.
 
+## AMD MI300X
+
+Hot Aisle deployment `7597dc06-f5e6-4513-98b8-5befac22ea98`, tagged
+`mojolearn:attention-tq16:20260920T195525Z`, ran on one MI300X (`gfx942`).
+The 30-minute cap was $1.50; the measured account charge was $0.20.  Both
+watchdogs were verified before work.  Teardown returned DELETE 204 followed
+by GET 404 and `listed=no`; `teardown.txt` records `destroy_confirmed=1`.
+
+All seven hashes matched eager at every shape.  Median derived backward
+times (15 rounds, four warmups) were:
+
+| Shape | Current backward ms | 16x16 backward ms | Change |
+|---|---:|---:|---:|
+| B1 L1024 causal | 2.453379 | 2.464943 | +0.47% |
+| B1 L1536 causal | 3.673991 | 3.607469 | -1.81% |
+| B1 L2048 causal | 5.522206 | 5.398358 | -2.24% |
+| B1 L2048 window512 | 1.988148 | 1.925888 | -3.13% |
+
+Raw logs plus provider, watchdog, cost and teardown receipts are under
+`amd-hotaisle/`.
+
 ## Disposition
 
-The source remains opt-in.  NVIDIA is a repeatable win and Apple has no large
-regression, but AMD MI300X exact/timing evidence is still required before any
-production-default routing decision.
+The source remains opt-in.  NVIDIA and AMD show useful medium/large-shape
+wins, while Apple is neutral to slightly slower and the smallest AMD case is
+within noise but slightly slower.  A production-default change therefore
+needs a separately qualified shape/vendor dispatch matrix rather than turning
+the schedule on globally.

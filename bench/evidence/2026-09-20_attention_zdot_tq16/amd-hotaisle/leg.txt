@@ -1,0 +1,50 @@
+commit=751d1d8f4 parent 0a7bff3ba
+commit_sha=751d1d8f4b390fa0c1c9d84b2fdf4f4428d99601
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=attention-tq16
+minutes=30
+gates=0
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=tools/attention_tq16_amd_leg.sh
+extra_sha256=1fb1a7c45c362207af6bf64f238b32d8d2659d0d274e063218d6f0c900ce0924
+bundle_bytes=14193276
+bundle_sha256=61269ce02082e717f12180b8747383041d1add383979381159828522491fba3d
+source_sha256_local=dd963245bea427787a7fbf9035fcef487dc7bc7f412a726ea2a423cab28c324c
+mode=rent
+started=2026-09-20T19:55:21Z
+balance_before_cents=2897
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-20T19:55:24Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-20T19:55:31Z
+vm_ref=7597dc06-f5e6-4513-98b8-5befac22ea98
+vm_name=enc1-gpuvm002
+description=mojolearn:attention-tq16:20260920T195525Z
+ssh=hotaisle@23.183.40.67:22 running_after_seconds=10
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=4
+image_pull=pull_exit=0 pull_seconds=98
+work_seconds=1391
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=SKIPPED
+remote_card_exit=SKIPPED
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-20T20:02:36Z
+lease_used_seconds=431
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-20T20:02:42Z
+balance_after_cents=2877

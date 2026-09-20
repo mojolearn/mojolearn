@@ -1,0 +1,16 @@
+FILE l1024_w0_base.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.144687 | 1.4084073637597003 | 3.598066 | 2.453379 | 1.6428215942176077 | 1.0 | 1.0
+FILE l1024_w0_tq16.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.144762 | 1.4083150908223718 | 3.609705 | 2.464943 | 1.6351144833775062 | 1.0 | 1.0
+FILE l1536_w0_base.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.6412 | 2.209503992200829 | 5.315191 | 3.6739910000000005 | 2.467506011854683 | 1.0 | 1.0
+FILE l1536_w0_tq16.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.640846 | 2.2099806758221066 | 5.248315 | 3.607469 | 2.513007008514834 | 1.0 | 1.0
+FILE l2048_w0_base.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 2.24477 | 2.871384004597353 | 7.766976 | 5.522206 | 2.918035234469703 | 1.0 | 1.0
+FILE l2048_w0_tq16.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 2.242955 | 2.8737075295759387 | 7.641313 | 5.398358 | 2.9849801884202565 | 1.0 | 1.0
+FILE l2048_w512_base.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 0.890356 | 3.1665521656505935 | 2.878504 | 1.9881479999999998 | 3.545207298450619 | 1.0 | 1.0
+FILE l2048_w512_tq16.log
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 0.887356 | 3.1772577409743104 | 2.813244 | 1.925888 | 3.6598165625415393 | 1.0 | 1.0

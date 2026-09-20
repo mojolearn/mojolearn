@@ -1,0 +1,92 @@
+=== attention step price, mode IDENTICAL, column amd, generator shape B1_L1024_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+DEFAULT column=amd arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=default candidate_requested=default
+baseline=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 candidate=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 rounds=15 warmups=4
+PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=-
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=-
+--- kind hashed
+shape=B1_L1024_nh12_nkv12_hd64_win0 visible_cells=6297600 S=1024 key_lo=0 pos0=0
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx b6a62736079e5929 amax ec5ec8ebe1838abd denom 7bfb0b811d27a406 zdot 4f202bd331829247 dq 95891f719c14d659 dk 6fcc803872e3009c dv 9678b78a58f267cb
+DIGEST hashed eager ctx b6a62736079e5929 amax ec5ec8ebe1838abd denom 7bfb0b811d27a406 zdot 4f202bd331829247 dq 95891f719c14d659 dk 6fcc803872e3009c dv 9678b78a58f267cb
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager ctx MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager amax MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager denom MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager zdot MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager dq MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager dk MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_eager dv MATCH 0 of 786432
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx b6a62736079e5929 amax ec5ec8ebe1838abd denom 7bfb0b811d27a406 zdot 4f202bd331829247 dq 95891f719c14d659 dk 6fcc803872e3009c dv 9678b78a58f267cb
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 amax MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 denom MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot MATCH 0 of 12288
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dq MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dk MATCH 0 of 786432
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dv MATCH 0 of 786432
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.144687 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.585793 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.177 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.593705 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.156497 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.605377 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.151141 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.651942 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.14584 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.596156 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.145456 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.610759 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.15404 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.581025 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.144937 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.605879 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.141549 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.590182 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.143063 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.582943 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.162233 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.583256 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.142504 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.612921 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.143959 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.588861 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.139721 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.582277 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.153639 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.57047 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.142131 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.600911 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.137183 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.579117 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.141727 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.58799 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.157432 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.577927 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.145091 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.605686 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.143203 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.601071 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.140521 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.575127 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.148434 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.576691 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.145829 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.600013 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.135479 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.592489 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.142579 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.587489 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.14249 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.568624 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.144727 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.598066 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.146229 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.592871 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.147005 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 3.585296 ms
+TABLE kind=hashed shape=B1_L1024_nh12_nkv12_hd64_win0 column=amd default_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 visible_cells=6297600 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.144687 | 1.4084073637597003 | 3.598066 | 2.453379 | 1.6428215942176077 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.147005 | 1.405561091712765 | 3.582943 | 2.435938 | 1.6545839836646088 | 0.9979790846596135 | 1.0042208318692203
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 vs stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32)
