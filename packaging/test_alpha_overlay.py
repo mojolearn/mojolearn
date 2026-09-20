@@ -136,22 +136,27 @@ class AlphaOverlayTests(unittest.TestCase):
             (self.root / 'tools' / name).write_text('# packaged harness fixture\n')
         native = self.root / 'kernel.mojo'
         native.write_text('# original native input\n')
-        git('add', 'python', 'tools', 'kernel.mojo'); git('commit', '-m', 'base')
+        citation = self.root / 'CITATION.cff'
+        citation.write_text('version: "0.6.0"\n')
+        git('add', 'python', 'tools', 'kernel.mojo', 'CITATION.cff'); git('commit', '-m', 'base')
         parent = git('rev-parse', 'HEAD')
         self.files['mojolearn/identity_columns/COMMIT'] = (parent + '\n').encode()
         self.files['mojolearn/verify_reference/table.json'] = reference.read_bytes()
+        self.files['mojolearn/CITATION.cff'] = citation.read_bytes()
         payload = dict(schema='mojolearn.linux-payload.v1', source_commit=parent, version='0.6.0')
         self.files[self.dist + 'LINUX_PAYLOAD.json'] = json.dumps(payload).encode()
         self.write()
         reference.write_text('{"cells": {"new": "measured"}}\n')
         (package / '_version.py').write_text("__version__ = '0.6.1'\n")
-        git('add', 'python'); git('commit', '-m', 'reference patch')
+        citation.write_text('version: "0.6.1"\n')
+        git('add', 'python', 'CITATION.cff'); git('commit', '-m', 'reference patch')
         source = git('rev-parse', 'HEAD')
         result = overlay.assemble(self.wheel, self.python, '0.6.1', self.root / 'out', True, source)
         with zipfile.ZipFile(result) as archive:
             dist = 'mojolearn-0.6.1.dist-info/'
             self.assertEqual(archive.read('mojolearn/verify_reference/table.json'), reference.read_bytes())
             self.assertEqual(archive.read('mojolearn/identity_columns/COMMIT').decode().strip(), source)
+            self.assertEqual(archive.read('mojolearn/CITATION.cff'), citation.read_bytes())
             self.assertEqual(archive.read(dist + 'BASE_LINUX_PAYLOAD.json'), self.files[self.dist + 'LINUX_PAYLOAD.json'])
             self.assertNotIn(dist + 'LINUX_PAYLOAD.json', archive.namelist())
             self.assertEqual(archive.read('mojolearn/hip/identical/_mojolearn.so'), self.files['mojolearn/hip/identical/_mojolearn.so'])
@@ -164,6 +169,10 @@ class AlphaOverlayTests(unittest.TestCase):
             verify_wheel(result, '0.6.1', 'alpha-api', source_root=self.root)
         finally:
             sys.path.pop(0)
+        citation.write_text('version: "uncommitted"\n')
+        with self.assertRaisesRegex(ValueError, 'uncommitted citation overlay'):
+            overlay.assemble(self.wheel, self.python, '0.6.1', self.root / 'bad-citation', True, source)
+        git('restore', 'CITATION.cff')
         native.write_text('# changed arithmetic\n')
         git('add', 'kernel.mojo'); git('commit', '-m', 'native edit')
         with self.assertRaisesRegex(ValueError, 'native compile inputs changed'):
