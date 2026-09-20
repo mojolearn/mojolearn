@@ -1025,6 +1025,7 @@ LANES = {}
 #: next record instead of DIVERGENT on a user's machine. `umap` also joins
 #: host_surface.PUBLIC_PENDING_LANES as `stale reference` until that record.
 LANE_REVISIONS = {
+    "par-arima": "trend-metadata-1",
     "tokenizer": "synthetic-vocab-1",
     # rows: these lanes fitted the full 20,000 x 16 fixture
     "gbdt-parametric-losses": "rows-1500-1",
@@ -1068,6 +1069,14 @@ LANE_REVISIONS = {
     # arithmetic, not input: UMAP.transform is row separable now
     "umap": "transform-row-separable-1",
     "par-graph-umap": "transform-row-separable-1",
+}
+
+
+# These parallel estimators implement real portable save/load. A missing
+# serializer must fail their model proof, not become an admitted no-save N/A.
+REQUIRED_NUMERIC_PARTS = {
+    name: ("model",)
+    for name in ("par-arima", "par-holtwinters", "par-scaler", "par-queries-radius")
 }
 
 
@@ -1138,6 +1147,9 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "par-arima": (
+        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n; "
+        "the saved-model metadata changes while the fitted arithmetic is unchanged"),
     "tokenizer": (
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
@@ -11104,6 +11116,16 @@ def _probe_saved_host(fit, name):
 
 
 def _probe_fit(fit, name):
+    result = _probe_fit_impl(fit, name)
+    if "model" in REQUIRED_NUMERIC_PARTS.get(name, ()):
+        infer, model, reload, error = result
+        if not isinstance(model, str) or re.fullmatch(r"[0-9a-f]{16}", model) is None:
+            return infer, None, reload, (error or
+                f"model: {name} requires saved-model bytes; received {model!r}")
+    return result
+
+
+def _probe_fit_impl(fit, name):
     """The infer and model columns of ONE fit. Returns (infer, model, reload,
     error) where infer and model are a hash or an `n/a:<reason>` string,
     reload is the held-out hash of the loaded-back file or None, and error is
