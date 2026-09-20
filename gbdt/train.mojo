@@ -1194,15 +1194,6 @@ def train(
             )
         if len(class_weights) > 0:
             raise Error("class_weights do not apply to loss='" + loss + "'")
-        if bootstrap_bayesian or (
-            bootstrap_type != String("") and bootstrap_type != String("No")
-        ):
-            raise Error(
-                "loss='" + loss + "' with a bootstrap is not implemented here:"
-                " the reference samples whole queries for querywise targets,"
-                " which this implementation does not restate; use"
-                " bootstrap_type='No'"
-            )
     # ---- the PairLogit pairs (`gbdt/data/pairs.mojo`) ----
     # Generated from the groups and grades unless the caller passed them;
     # either way put in the order the reference's device grouping flattens

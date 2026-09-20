@@ -122,9 +122,8 @@ def test_small_iteration_leaf_count():
 
 
 @pytest.mark.parametrize('loss', ['QueryRMSE', 'PairLogit', 'YetiRank'])
-def test_querywise_default_bootstrap_is_refused_by_name(loss):
-    with pytest.raises(NotImplementedError, match="bootstrap_type='No'"):
-        GradientBoosting(loss=loss)
+def test_querywise_default_uses_bayesian_row_bootstrap(loss):
+    assert GradientBoosting(loss=loss).bootstrap_type == 'Bayesian'
     assert GradientBoosting(loss=loss, bootstrap_type='No').bootstrap_type == 'No'
 
 

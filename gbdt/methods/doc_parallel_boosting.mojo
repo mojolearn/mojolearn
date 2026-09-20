@@ -1460,11 +1460,9 @@ def fit_with_test(
         )
         boot_param = bagging_temperature
     var bootstrap_on = boot_kind >= 0
-    if (is_querywise or is_pair_logit or is_yeti_rank) and bootstrap_on:
-        raise Error(
-            "QueryRMSE, PairLogit and YetiRank with a bootstrap are not implemented here:"
-            " the reference samples whole queries for querywise targets"
-        )
+    # Querywise targets form full-query gradients before this row bootstrap.
+    # CatBoost's greedy searcher uses the same samples mapping and multiplies
+    # both planes in querywise_targets_impl.h::StochasticDer (162-188).
 
     var boot_seeds: DeviceBuffer[DType.uint64]
     if bootstrap_on:

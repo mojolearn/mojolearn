@@ -666,6 +666,7 @@ TRAINING_LANE_NAMES = {
     # loss on query groups trains through gbdt/host/gbdt_oracle_losses.mojo
     # with the querywise target restated in gbdt/host/gbdt_oracle_query.mojo,
     # from the same binding.
+    "gbdt-ranking-defaults": "gradient boosting ranking losses with default Bayesian bootstrap and score noise",
     "gbdt-query-rmse": "gradient boosting with the QueryRMSE ranking loss on query groups",
     # lane/gbdt-learning-to-rank stage 3 (2026-09-15): the PairLogit ranking
     # loss on generated and explicit pairs trains through
@@ -2314,7 +2315,7 @@ FAMILIES = (
             "gbdt-ordered-rmse", "gbdt-feature-freq",
             "gbdt-pointwise-l2-bayesian-eval", "gbdt-categorical-ctr",
             "gbdt-adapter-score-weighted",
-            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
+            "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank", "gbdt-ranking-defaults",
             # lane/catboost-parity (2026-09-19): the non-default border
             # types run the device fit's own host function
             # (`select_borders`) on the CPU column
@@ -3102,6 +3103,7 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
+    "gbdt-ranking-defaults": "no reference",
     # THIRTEEN LANES LEFT THIS TABLE ON 2026-09-20, on a watched run and not
     # on an argument (lane/verifier-full-exposure). The promotion rule in
     # `public_reference_lanes()` is "a covered lane, in a release record's

@@ -45,7 +45,7 @@ def _model(**kw):
     params = dict(n_estimators=10, max_depth=4, loss="YetiRank")
     # pinned to the configuration these tests were written against: the
     # SymmetricTree defaults became CatBoost's GPU ones (lane/catboost-parity,
-    # 2026-09-19), whose query bootstrap is refused by name for this loss
+    # 2026-09-19); stochastic defaults are covered separately.
     params.update(bootstrap_type="No", random_strength=0.0)
     params.update(kw)
     return GradientBoosting(**params)
@@ -89,8 +89,6 @@ def test_refusals_by_name():
     X, rel, g = _fixture()
     with pytest.raises(Exception, match="changing the leaf_estimation_method parameter is prohibited"):
         _model(leaf_estimation_method="Gradient").fit(X, rel, group_id=g)
-    with pytest.raises(Exception, match="with a bootstrap is not implemented"):
-        _model(bootstrap_type="Bernoulli", subsample=0.5).fit(X, rel, group_id=g)
     with pytest.raises(Exception, match="read by loss='PairLogit' only"):
         _model().fit(X, rel, group_id=g, pairs=[(0, 1)])
     big = np.zeros(1100, dtype=np.int64)

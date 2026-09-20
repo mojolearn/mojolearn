@@ -34,7 +34,7 @@ def _model(**kw):
     params = dict(n_estimators=10, max_depth=4, loss="QueryRMSE")
     # pinned to the configuration these tests were written against: the
     # SymmetricTree defaults became CatBoost's GPU ones (lane/catboost-parity,
-    # 2026-09-19), whose query bootstrap is refused by name for this loss
+    # 2026-09-19); stochastic defaults are covered separately.
     params.update(bootstrap_type="No", random_strength=0.0)
     params.update(kw)
     return GradientBoosting(**params)
@@ -71,8 +71,6 @@ def test_group_id_spelling_does_not_change_the_model():
 @reference_training()
 def test_refusals_by_name():
     X, rel, g = _fixture()
-    with pytest.raises(Exception, match="with a bootstrap is not implemented"):
-        _model(bootstrap_type="Bernoulli", subsample=0.5).fit(X, rel, group_id=g)
     # the device refuses in the QueryRMSE sentence; the host binding refuses
     # eval_set for every loss first, in its own by-name sentence
     with pytest.raises(Exception, match="with eval_set is not implemented|no CPU implementation of .* for eval_set"):
