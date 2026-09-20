@@ -607,7 +607,9 @@ def cmd_par_check(args, ml):
                   f"this command covers the {len(every)} of them", sys.stderr)
             return EXIT_USAGE
         chosen = [l for l in every if l in asked]
-    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x] or [QUICK_FIXTURE]
+    fixtures = [x for x in (getattr(args, "fixtures", "") or "").split(",") if x]
+    if not fixtures:
+        fixtures = list(harness.FIXTURES) if scope == "all" else [QUICK_FIXTURE]
     bad = [f for f in fixtures if f not in harness.FIXTURES]
     if bad:
         _emit(f"USAGE: --fixtures names fixtures the harness does not define: {bad}", sys.stderr)

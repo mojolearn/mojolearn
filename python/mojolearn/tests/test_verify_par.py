@@ -487,3 +487,32 @@ def test_each_parallel_cell_needs_its_own_device_witness(monkeypatch, axis, miss
     assert result['witness_refusal'].startswith(missing['lane'] + '/' + missing['fixture'])
     assert result['cell_witnesses'][1 - missing_index]['witness_refusal'] is None
     assert 'CANNOT RUN' in vpar.format_par_check(result)
+
+
+@pytest.mark.parametrize('scope', ['quick', 'default', 'all'])
+@pytest.mark.parametrize('override', [None, 'odd,wide'])
+def test_par_cli_fixture_scope_and_explicit_override(monkeypatch, scope, override):
+    """The all mode must exercise non-base fixtures without needing another flag."""
+    from mojolearn import _backend
+    _need_numpy()
+    harness = va.load_harness()
+    selected = []
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'cuda')
+    monkeypatch.setattr(vpar, 'refuse_to_run', lambda *args: None)
+    monkeypatch.setattr(vpar, 'load_harness', lambda **kwargs: harness)
+
+    def capture(harness, ml, lanes, fixtures, **kwargs):
+        selected.extend(fixtures)
+        return dict(cells=[dict(lane=lanes[0], fixture=fixtures[0])],
+                    witness_refusal=None, state='VERIFIED')
+
+    monkeypatch.setattr(vpar, 'par_check', capture)
+    monkeypatch.setattr(vpar, '_emit', lambda *args: None)
+    argv = ['verify', '--par', scope, '--json']
+    if override:
+        argv += ['--fixtures', override]
+    args = cli.build_parser().parse_args(argv)
+    assert vpar.cmd_par_check(args, None) == vpar.EXIT_VERIFIED
+    expected = override.split(',') if override else list(harness.FIXTURES) if scope == 'all' else ['base']
+    assert selected == expected
+    assert len(harness.FIXTURES) == 9

@@ -309,7 +309,8 @@ def build_parser():
                         "and a column that never sharded is refused instead of "
                         "reported as agreement. 'quick' is one lane per family, "
                         "the default is all 59 par-* lanes on the base fixture, "
-                        "'all' is the same lanes for --fixtures. Apple is "
+                        "'all' runs the same lanes over all nine fixtures. "
+                        "--fixtures overrides the fixtures in every mode. Apple is "
                         "refused structurally: DevicePool admits metal only at "
                         "one device")
     v.add_argument("--par-devices", dest="par_devices", default="",
