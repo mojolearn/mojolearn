@@ -204,7 +204,12 @@ def encode_npy(value, *, c_order=False):
 
 
 def write_npy(fp, value, *, c_order=False):
-    fp.write(encode_npy(value, c_order=c_order))
+    # Keep the header and the model-sized payload as separate writes.  Joining
+    # them would allocate and copy a second complete numeric payload merely to
+    # hand it to a file object.
+    descr, fortran, shape, raw = _describe(value, c_order=c_order)
+    fp.write(_header(descr, fortran, shape))
+    fp.write(raw)
 
 
 # ----------------------------------------------------------------- decode
@@ -278,13 +283,15 @@ def write_npz(path, arrays):
     uncompressed npz whose bytes depend only on the array contents."""
     with zipfile.ZipFile(path, "w", compression=zipfile.ZIP_STORED) as zf:
         for name in sorted(arrays):
-            payload = encode_npy(arrays[name], c_order=True)
             info = zipfile.ZipInfo(
                 name + ".npy", date_time=(1980, 1, 1, 0, 0, 0)
             )
             info.compress_type = zipfile.ZIP_STORED
             info.external_attr = 0o644 << 16
-            zf.writestr(info, payload)
+            # ZipFile.open() produces the same seekable ZIP_STORED bytes as
+            # writestr(), while letting write_npy avoid a header+payload join.
+            with zf.open(info, "w") as fp:
+                write_npy(fp, arrays[name], c_order=True)
     return path
 
 
