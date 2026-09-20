@@ -56,6 +56,12 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
 The validation is `preprocessing/estimator.mojo`'s, in its words, spelled
 in the binding.
 
+The two transform mirrors split contiguous output rows with the shared
+`MOJOLEARN_CPU_THREADS` host policy. A task reads fitted statistics and owns
+all cells of its rows; no reduction or arithmetic statement crosses a row,
+so the serial and parallel outputs are bitwise identical. Setting the policy
+to one retains the original serial walk for qualification and small boxes.
+
 THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1` shifts the slab
 tree's chunk boundaries by one value (the standard scaler's mean, variance
 and scale move where the column's sums are inexact) and turns the min-max
@@ -74,8 +80,14 @@ tools/identity_break.py on the two scaler lanes is the measurement.
 """
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_div, identical_mul, portable_sqrtf
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -168,27 +180,39 @@ def host_standard_transform(
 ) -> List[Float32]:
     """`standard_transform_kernel` (module docstring), `n * d` floats."""
     var out = List[Float32](length=n * d, fill=Float32(0.0))
-    for i in range(n * d):
-        var c = i % d
-        comptime if SCALER_ORACLE_HOST_SABOTAGE:
-            # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
-            # 2026-09-15): each element reads the NEXT column's statistics.
-            # The fit's arms above never reach this kernel, and saved-model
-            # inference runs this kernel alone. Wrong on purpose; see
-            # SCALER_ORACLE_HOST_SABOTAGE.
-            c = (c + 1) % d
-        var value = x[i]
-        if inverse != 0:
-            if with_std != 0:
-                value = ftz(identical_mul(ftz(value), ftz(scale[c])))
-            if with_mean != 0:
-                value = ftz(ftz(value) + ftz(mean[c]))
-        else:
-            if with_mean != 0:
-                value = ftz(ftz(value) - ftz(mean[c]))
-            if with_std != 0:
-                value = ftz(identical_div(ftz(value), ftz(scale[c])))
-        out[i] = value
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+    var xp = host_list_ptr(x)
+    var mp = host_list_ptr(mean)
+    var sp = host_list_ptr(scale)
+    var op = host_list_ptr(out)
+
+    def _rows(task: Int) {imm xp, imm mp, imm sp, imm op, imm chunk, imm n, imm d, imm inverse, imm with_mean, imm with_std}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo * d, hi * d):
+            var c = i % d
+            comptime if SCALER_ORACLE_HOST_SABOTAGE:
+                # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
+                # 2026-09-15): each element reads the NEXT column's statistics.
+                c = (c + 1) % d
+            var value = xp.unsafe_load(i)
+            if inverse != 0:
+                if with_std != 0:
+                    value = ftz(identical_mul(ftz(value), ftz(sp.unsafe_load(c))))
+                if with_mean != 0:
+                    value = ftz(ftz(value) + ftz(mp.unsafe_load(c)))
+            else:
+                if with_mean != 0:
+                    value = ftz(ftz(value) - ftz(mp.unsafe_load(c)))
+                if with_std != 0:
+                    value = ftz(identical_div(ftz(value), ftz(sp.unsafe_load(c))))
+            op.unsafe_store(i, value)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return out^
 
 
@@ -254,22 +278,36 @@ def host_minmax_transform(
 ) -> List[Float32]:
     """`minmax_transform_kernel` (module docstring), `n * d` floats."""
     var out = List[Float32](length=n * d, fill=Float32(0.0))
-    for i in range(n * d):
-        var c = i % d
-        comptime if SCALER_ORACLE_HOST_SABOTAGE:
-            # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
-            # 2026-09-15): each element reads the NEXT column's scale and
-            # offset. Wrong on purpose; see SCALER_ORACLE_HOST_SABOTAGE.
-            c = (c + 1) % d
-        var value = ftz(x[i])
-        if inverse != 0:
-            value = ftz(identical_div(ftz(value - ftz(offset[c])), ftz(scale[c])))
-        else:
-            value = ftz(ftz(identical_mul(value, ftz(scale[c]))) + ftz(offset[c]))
-            if clip != 0:
-                if value < lower:
-                    value = lower
-                if value > upper:
-                    value = upper
-        out[i] = value
+    var tasks = host_predict_task_count(n)
+    var chunk = host_predict_chunk(n, tasks)
+    var xp = host_list_ptr(x)
+    var sp = host_list_ptr(scale)
+    var mp = host_list_ptr(offset)
+    var op = host_list_ptr(out)
+
+    def _rows(task: Int) {imm xp, imm sp, imm mp, imm op, imm chunk, imm n, imm d, imm inverse, imm clip, imm lower, imm upper}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        for i in range(lo * d, hi * d):
+            var c = i % d
+            comptime if SCALER_ORACLE_HOST_SABOTAGE:
+                # THE TRANSFORM SABOTAGE ARM (lane/inference-linear-svm,
+                # 2026-09-15): each element reads the NEXT column's statistics.
+                c = (c + 1) % d
+            var value = ftz(xp.unsafe_load(i))
+            if inverse != 0:
+                value = ftz(identical_div(ftz(value - ftz(mp.unsafe_load(c))), ftz(sp.unsafe_load(c))))
+            else:
+                value = ftz(ftz(identical_mul(value, ftz(sp.unsafe_load(c)))) + ftz(mp.unsafe_load(c)))
+                if clip != 0:
+                    if value < lower:
+                        value = lower
+                    if value > upper:
+                        value = upper
+            op.unsafe_store(i, value)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return out^
