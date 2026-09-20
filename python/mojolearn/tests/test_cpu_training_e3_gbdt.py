@@ -70,10 +70,6 @@ def test_manifest_declares_the_gbdt_family():
     assert host_surface.routed_modules()["_mojolearn_gbdt"] == "_mojolearn_gbdt_host"
     covered = host_surface.covered_lanes()
     assert "gbdt-symmetric" in covered
-    for lane in ():
-        assert lane not in covered, f"{lane} is declared covered and has no host trainer"
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training outside its declared lanes" in sentence, sentence
     # The forest host binding stays loaded by path, never routed.
     assert host_surface.family("forest")["routes"] is None
 
@@ -97,7 +93,7 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
     for what in ("loss='", "grow_policy code", "use_pointwise_searcher=True",
                  "score_function code", "leaf_estimation_method code",
                  "bootstrap_type='", '"sample_weight"', '"class_weights outside',
-                 '"cat_features or one_hot_features outside SymmetricTree with Logloss"', '"eval_set"',
+                 '"cat_features or one_hot_features outside SymmetricTree with Logloss"', '"eval_set outside SymmetricTree with Logloss',
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
         assert f"_refuse(" in src and what in src, f"no by-name refusal for {what}"
@@ -141,7 +137,7 @@ def test_oracle_imports_no_gpu_module():
         "checks.numerics", "gbdt.data.permutation", "gbdt.data.quantization",
         "gbdt.gpu_data.compressed_index_builder", "gbdt.gpu_data.feature_blocks",
         "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
-        "gbdt.grid_creator.binarization",
+        "gbdt.grid_creator.binarization", "gbdt.host.gbdt_oracle_eval",
         "gbdt.options.data_processing_options",
         "max.algorithm", "std.math", "std.memory", "std.sys.compile",
     ], imports

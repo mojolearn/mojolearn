@@ -117,7 +117,7 @@ def test_driver_spells_the_bit_carrying_constructs():
 
 def test_binding_dispatches_and_refuses_by_name():
     src = _read(host_surface.binding_source("gbdt"))
-    assert "gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)" in src
+    assert re.search(r"gbdt_host_fit_non_symmetric\(\s*x, y, n_rows, n_features, tp, ns_start\s*\)", src)
     assert "gbdt_host_ns_model_text(ns_model)" in src
     for what in ('"min_split_gain="', '"min_child_hessian="', '"min_data_in_leaf="',
                  "under Lossguide (only NewtonL2 and NewtonCosine)", "(only Cosine)"):
