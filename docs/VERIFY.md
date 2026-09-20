@@ -138,6 +138,8 @@ harness, and gives each lane a state and a sentence:
 | state | what it means | gates? |
 |---|---|---|
 | VERIFIED | it ran and every part read IDENTICAL or N/A | — |
+| SMOKE | its full claim is not expressible on this box, but `--smoke` fitted it **twice** and it ran, kept its shape, stayed finite and gave the same bits both times. Never a verification | — |
+| SMOKE FAILED | that smoke test found a raise, a NaN or inf, a changed shape, or different bits from two fits on one box. A real defect | **yes** |
 | DIVERGENT | its bits differ from the reference | **yes** |
 | REFUSED | a part raised, so it did not run | **yes** |
 | OWED | no committed record carries a hash for a part of it | no |
@@ -146,13 +148,22 @@ harness, and gives each lane a state and a sentence:
 | NOT RUN | this run did not select it, or its fixture moved past the shipped reference | no |
 | UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it | no |
 
-**Only DIVERGENT and REFUSED cost the run its pass.** Those are the two that
+**Only DIVERGENT, REFUSED and SMOKE FAILED cost the run its pass.** Those are the two that
 mean something went WRONG rather than something is missing. A lane whose bits
 differ from its reference is the single thing this library exists to detect,
 and a lane that raised did not run at all; passing over either would make the
 word mean nothing. Everything else is reported and counted, not held against
 you. That is the same rule the part level has always followed: a part declared
 `n/a:no-backward` has never made a run INCOMPLETE.
+
+**`--smoke` is a looser tier, not a weaker one.** For a lane whose real claim
+needs hardware you do not have — the 59 `par-*` drivers claim two devices hash
+equal to one — it fits the lane **twice, in full**, and reports whether it
+ran, kept its shape, stayed finite and produced the same bits both times. Two
+full fits, never two probes of one fit: a second probe re-reads the same
+arrays and cannot fail, and a cheap check that cannot fail is worse than none.
+It is off by default because two full fits is real work, and it skips lanes
+the run already executed, so on a GPU install it costs nothing.
 
 **A run that checked nothing is still not a pass.** If a run's whole scope is
 NOT APPLICABLE it exits 4 with CANNOT RUN, even though every cell part it
