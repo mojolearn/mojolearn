@@ -1,7 +1,7 @@
 # Exact tiled attention v2 (opt-in foundation)
 
-Status: host arithmetic and executable gates only. This does not alter the v1
-default and makes no GPU-performance or cross-device claim.
+Status: host arithmetic plus an opt-in Apple-qualified forward kernel. This
+does not alter the v1 default and makes no NVIDIA/AMD or backward claim.
 
 V2 fixes the logical KV tile at 32 elements. Rows visit tiles and cells in
 ascending order. Each tile computes its maximum with `identical_fmax`; the
@@ -10,6 +10,8 @@ per logical tile using `portable_exp32(old_max - new_max)`. Every multiply,
 add, division, and rescale is rounded to float32 at the spelling represented
 by `tools/attention_v2_oracle.py`. Device block size, warp width, and vendor
 may not alter this order. Partial tiles behave as if absent cells do not exist.
+The weighted-value update is one pinned `fma(weight, value, accumulator)`;
+rescaling remains a separately rounded multiply.
 
 This is intentionally not v1 arithmetic. A separating fixture must differ in
 bits from materialized v1 while remaining numerically close. V1 remains the
