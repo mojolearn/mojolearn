@@ -1,0 +1,8250 @@
+{
+  "cells": 342,
+  "column_sha256": "af3e0662a66ffe8a5fb8fc87f0bb7a55a359e5af567c71aed222513274a1da03",
+  "comparisons": [
+    {
+      "cell": "kmeans/base",
+      "part": "batch",
+      "value": "ce34789a012168b5"
+    },
+    {
+      "cell": "kmeans/base",
+      "part": "infer",
+      "value": "3d50c4c50bf078b2"
+    },
+    {
+      "cell": "kmeans/base",
+      "part": "model",
+      "value": "355598f468300bee"
+    },
+    {
+      "cell": "kmeans/base",
+      "part": "train",
+      "value": "5aa44cc11034dec9"
+    },
+    {
+      "cell": "kmeans/ties",
+      "part": "batch",
+      "value": "ff636ffbdf6153fe"
+    },
+    {
+      "cell": "kmeans/ties",
+      "part": "infer",
+      "value": "0e9dcaedec0fcadc"
+    },
+    {
+      "cell": "kmeans/ties",
+      "part": "model",
+      "value": "74275c5f94fd56a2"
+    },
+    {
+      "cell": "kmeans/ties",
+      "part": "train",
+      "value": "3de3e103006de69c"
+    },
+    {
+      "cell": "kmeans/hashed",
+      "part": "batch",
+      "value": "2821adc81c87c1a6"
+    },
+    {
+      "cell": "kmeans/hashed",
+      "part": "infer",
+      "value": "5d6e4fa66a2f59bb"
+    },
+    {
+      "cell": "kmeans/hashed",
+      "part": "model",
+      "value": "d6356da8f36cfff4"
+    },
+    {
+      "cell": "kmeans/hashed",
+      "part": "train",
+      "value": "0a570e84b0002723"
+    },
+    {
+      "cell": "kmeans/wide",
+      "part": "batch",
+      "value": "1893d1e955539a1c"
+    },
+    {
+      "cell": "kmeans/wide",
+      "part": "infer",
+      "value": "576a17d0775573bc"
+    },
+    {
+      "cell": "kmeans/wide",
+      "part": "model",
+      "value": "1c5abd185e53aaf6"
+    },
+    {
+      "cell": "kmeans/wide",
+      "part": "train",
+      "value": "6f0529fcb3d60536"
+    },
+    {
+      "cell": "kmeans/denormal",
+      "part": "batch",
+      "value": "cd11da38d7d996eb"
+    },
+    {
+      "cell": "kmeans/denormal",
+      "part": "infer",
+      "value": "9b15ee1cac8ce636"
+    },
+    {
+      "cell": "kmeans/denormal",
+      "part": "model",
+      "value": "8646c7d4fc16c75e"
+    },
+    {
+      "cell": "kmeans/denormal",
+      "part": "train",
+      "value": "993fe5caff144b0c"
+    },
+    {
+      "cell": "kmeans/denormal_ftz",
+      "part": "batch",
+      "value": "cd11da38d7d996eb"
+    },
+    {
+      "cell": "kmeans/denormal_ftz",
+      "part": "infer",
+      "value": "9b15ee1cac8ce636"
+    },
+    {
+      "cell": "kmeans/denormal_ftz",
+      "part": "model",
+      "value": "8646c7d4fc16c75e"
+    },
+    {
+      "cell": "kmeans/denormal_ftz",
+      "part": "train",
+      "value": "993fe5caff144b0c"
+    },
+    {
+      "cell": "kmeans/dupes",
+      "part": "batch",
+      "value": "226990012f870f93"
+    },
+    {
+      "cell": "kmeans/dupes",
+      "part": "infer",
+      "value": "45007c31b3127822"
+    },
+    {
+      "cell": "kmeans/dupes",
+      "part": "model",
+      "value": "daa4518508a79e25"
+    },
+    {
+      "cell": "kmeans/dupes",
+      "part": "train",
+      "value": "2ae942d45a51757a"
+    },
+    {
+      "cell": "kmeans/odd",
+      "part": "batch",
+      "value": "06c7a23bc000d13d"
+    },
+    {
+      "cell": "kmeans/odd",
+      "part": "infer",
+      "value": "191287260610940c"
+    },
+    {
+      "cell": "kmeans/odd",
+      "part": "model",
+      "value": "5fdc9f5ac45877c9"
+    },
+    {
+      "cell": "kmeans/odd",
+      "part": "train",
+      "value": "43d8a3d3859f4143"
+    },
+    {
+      "cell": "kmeans/negative",
+      "part": "batch",
+      "value": "a1cee1687356c069"
+    },
+    {
+      "cell": "kmeans/negative",
+      "part": "infer",
+      "value": "2ceb107b327d1b74"
+    },
+    {
+      "cell": "kmeans/negative",
+      "part": "model",
+      "value": "5749d537f980d312"
+    },
+    {
+      "cell": "kmeans/negative",
+      "part": "train",
+      "value": "d4cc38e75f8e2d75"
+    },
+    {
+      "cell": "dbscan/base",
+      "part": "batch",
+      "value": "f7e7d24690d3107e"
+    },
+    {
+      "cell": "dbscan/base",
+      "part": "infer",
+      "value": "e6e720fcb54b180e"
+    },
+    {
+      "cell": "dbscan/base",
+      "part": "model",
+      "value": "c36812c6260e7ee6"
+    },
+    {
+      "cell": "dbscan/base",
+      "part": "train",
+      "value": "64df251bd00de81b"
+    },
+    {
+      "cell": "dbscan/ties",
+      "part": "batch",
+      "value": "be9e40c554329827"
+    },
+    {
+      "cell": "dbscan/ties",
+      "part": "infer",
+      "value": "63990f64c63d296b"
+    },
+    {
+      "cell": "dbscan/ties",
+      "part": "model",
+      "value": "7c766eb707695149"
+    },
+    {
+      "cell": "dbscan/ties",
+      "part": "train",
+      "value": "b7535355c1581603"
+    },
+    {
+      "cell": "dbscan/hashed",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan/hashed",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan/hashed",
+      "part": "model",
+      "value": "22074f6988a2878e"
+    },
+    {
+      "cell": "dbscan/hashed",
+      "part": "train",
+      "value": "d17808b4b9261d5d"
+    },
+    {
+      "cell": "dbscan/wide",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan/wide",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan/wide",
+      "part": "model",
+      "value": "12450128a5b4be8b"
+    },
+    {
+      "cell": "dbscan/wide",
+      "part": "train",
+      "value": "d17808b4b9261d5d"
+    },
+    {
+      "cell": "dbscan/denormal",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan/denormal",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan/denormal",
+      "part": "model",
+      "value": "af8f5b102930fc66"
+    },
+    {
+      "cell": "dbscan/denormal",
+      "part": "train",
+      "value": "9c0b3563fc16b652"
+    },
+    {
+      "cell": "dbscan/denormal_ftz",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan/denormal_ftz",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan/denormal_ftz",
+      "part": "model",
+      "value": "ea374d169392e62d"
+    },
+    {
+      "cell": "dbscan/denormal_ftz",
+      "part": "train",
+      "value": "9c0b3563fc16b652"
+    },
+    {
+      "cell": "dbscan/dupes",
+      "part": "batch",
+      "value": "f7e7d24690d3107e"
+    },
+    {
+      "cell": "dbscan/dupes",
+      "part": "infer",
+      "value": "e6e720fcb54b180e"
+    },
+    {
+      "cell": "dbscan/dupes",
+      "part": "model",
+      "value": "c36812c6260e7ee6"
+    },
+    {
+      "cell": "dbscan/dupes",
+      "part": "train",
+      "value": "64df251bd00de81b"
+    },
+    {
+      "cell": "dbscan/odd",
+      "part": "batch",
+      "value": "ca397a1032011cd9"
+    },
+    {
+      "cell": "dbscan/odd",
+      "part": "infer",
+      "value": "22e3872de99d04f6"
+    },
+    {
+      "cell": "dbscan/odd",
+      "part": "model",
+      "value": "8f762291a36100db"
+    },
+    {
+      "cell": "dbscan/odd",
+      "part": "train",
+      "value": "54d129f45630ea84"
+    },
+    {
+      "cell": "dbscan/negative",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan/negative",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan/negative",
+      "part": "model",
+      "value": "6211d942d0c33fa2"
+    },
+    {
+      "cell": "dbscan/negative",
+      "part": "train",
+      "value": "bb6bd31e075693e9"
+    },
+    {
+      "cell": "agglomerative/base",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/base",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "agglomerative/base",
+      "part": "model",
+      "value": "9bb9f86300c44f5f"
+    },
+    {
+      "cell": "agglomerative/base",
+      "part": "train",
+      "value": "ad11b976bfbfc20b"
+    },
+    {
+      "cell": "agglomerative/ties",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/ties",
+      "part": "infer",
+      "value": "d161892b4ef55128"
+    },
+    {
+      "cell": "agglomerative/ties",
+      "part": "model",
+      "value": "64a8cd1101ec17ba"
+    },
+    {
+      "cell": "agglomerative/ties",
+      "part": "train",
+      "value": "7dea8a094150b8a9"
+    },
+    {
+      "cell": "agglomerative/hashed",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/hashed",
+      "part": "infer",
+      "value": "26e420cf82c51709"
+    },
+    {
+      "cell": "agglomerative/hashed",
+      "part": "model",
+      "value": "a18b7b9941cdcfc6"
+    },
+    {
+      "cell": "agglomerative/hashed",
+      "part": "train",
+      "value": "196c79a60c16166c"
+    },
+    {
+      "cell": "agglomerative/wide",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/wide",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "agglomerative/wide",
+      "part": "model",
+      "value": "921238d7a4940b9c"
+    },
+    {
+      "cell": "agglomerative/wide",
+      "part": "train",
+      "value": "24b2baa4533fb568"
+    },
+    {
+      "cell": "agglomerative/denormal",
+      "part": "batch",
+      "value": "a2740d2ed4d74812"
+    },
+    {
+      "cell": "agglomerative/denormal",
+      "part": "infer",
+      "value": "2b2d3f329eec69f7"
+    },
+    {
+      "cell": "agglomerative/denormal",
+      "part": "model",
+      "value": "0749a7721feb2709"
+    },
+    {
+      "cell": "agglomerative/denormal",
+      "part": "train",
+      "value": "b05982504c7e8646"
+    },
+    {
+      "cell": "agglomerative/denormal_ftz",
+      "part": "batch",
+      "value": "a2740d2ed4d74812"
+    },
+    {
+      "cell": "agglomerative/denormal_ftz",
+      "part": "infer",
+      "value": "2b2d3f329eec69f7"
+    },
+    {
+      "cell": "agglomerative/denormal_ftz",
+      "part": "model",
+      "value": "60f83b3658dd10ab"
+    },
+    {
+      "cell": "agglomerative/denormal_ftz",
+      "part": "train",
+      "value": "b05982504c7e8646"
+    },
+    {
+      "cell": "agglomerative/dupes",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/dupes",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "agglomerative/dupes",
+      "part": "model",
+      "value": "9bb9f86300c44f5f"
+    },
+    {
+      "cell": "agglomerative/dupes",
+      "part": "train",
+      "value": "ad11b976bfbfc20b"
+    },
+    {
+      "cell": "agglomerative/odd",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/odd",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "agglomerative/odd",
+      "part": "model",
+      "value": "dc518a35765a3b5c"
+    },
+    {
+      "cell": "agglomerative/odd",
+      "part": "train",
+      "value": "c747a33eff11bbe1"
+    },
+    {
+      "cell": "agglomerative/negative",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "agglomerative/negative",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "agglomerative/negative",
+      "part": "model",
+      "value": "573732d2cc0397a8"
+    },
+    {
+      "cell": "agglomerative/negative",
+      "part": "train",
+      "value": "795f9975eb5ed985"
+    },
+    {
+      "cell": "spectral/base",
+      "part": "batch",
+      "value": "fedcfcc1f97d1520"
+    },
+    {
+      "cell": "spectral/base",
+      "part": "infer",
+      "value": "a7f3488317ff571e"
+    },
+    {
+      "cell": "spectral/base",
+      "part": "model",
+      "value": "3e34622ced4d3c60"
+    },
+    {
+      "cell": "spectral/base",
+      "part": "train",
+      "value": "112c7b0d7556a6ff"
+    },
+    {
+      "cell": "spectral/ties",
+      "part": "batch",
+      "value": "fa770a3b846ea54d"
+    },
+    {
+      "cell": "spectral/ties",
+      "part": "infer",
+      "value": "3a3fc8018ebcbca3"
+    },
+    {
+      "cell": "spectral/ties",
+      "part": "model",
+      "value": "ad1e356159f986fd"
+    },
+    {
+      "cell": "spectral/ties",
+      "part": "train",
+      "value": "3976be59c005d8f8"
+    },
+    {
+      "cell": "spectral/hashed",
+      "part": "batch",
+      "value": "62a05c74d9804ffb"
+    },
+    {
+      "cell": "spectral/hashed",
+      "part": "infer",
+      "value": "0227830c9fd1fe3e"
+    },
+    {
+      "cell": "spectral/hashed",
+      "part": "model",
+      "value": "dbca01a677a6db83"
+    },
+    {
+      "cell": "spectral/hashed",
+      "part": "train",
+      "value": "63111a283f247f0c"
+    },
+    {
+      "cell": "spectral/wide",
+      "part": "batch",
+      "value": "1669b42120ecc80a"
+    },
+    {
+      "cell": "spectral/wide",
+      "part": "infer",
+      "value": "586e97f6021ef95f"
+    },
+    {
+      "cell": "spectral/wide",
+      "part": "model",
+      "value": "a985160042099a54"
+    },
+    {
+      "cell": "spectral/wide",
+      "part": "train",
+      "value": "a65623b09f32292e"
+    },
+    {
+      "cell": "spectral/denormal",
+      "part": "batch",
+      "value": "a34a571fd486b72b"
+    },
+    {
+      "cell": "spectral/denormal",
+      "part": "infer",
+      "value": "2afcfda3fa76f90f"
+    },
+    {
+      "cell": "spectral/denormal",
+      "part": "model",
+      "value": "508b97806e7b4642"
+    },
+    {
+      "cell": "spectral/denormal",
+      "part": "train",
+      "value": "96081e4016bb85b3"
+    },
+    {
+      "cell": "spectral/denormal_ftz",
+      "part": "batch",
+      "value": "a34a571fd486b72b"
+    },
+    {
+      "cell": "spectral/denormal_ftz",
+      "part": "infer",
+      "value": "2afcfda3fa76f90f"
+    },
+    {
+      "cell": "spectral/denormal_ftz",
+      "part": "model",
+      "value": "dbaf9dde2a1654b4"
+    },
+    {
+      "cell": "spectral/denormal_ftz",
+      "part": "train",
+      "value": "96081e4016bb85b3"
+    },
+    {
+      "cell": "spectral/dupes",
+      "part": "batch",
+      "value": "fedcfcc1f97d1520"
+    },
+    {
+      "cell": "spectral/dupes",
+      "part": "infer",
+      "value": "a7f3488317ff571e"
+    },
+    {
+      "cell": "spectral/dupes",
+      "part": "model",
+      "value": "3e34622ced4d3c60"
+    },
+    {
+      "cell": "spectral/dupes",
+      "part": "train",
+      "value": "112c7b0d7556a6ff"
+    },
+    {
+      "cell": "spectral/odd",
+      "part": "batch",
+      "value": "3b67216c0796907b"
+    },
+    {
+      "cell": "spectral/odd",
+      "part": "infer",
+      "value": "39fdef517641e388"
+    },
+    {
+      "cell": "spectral/odd",
+      "part": "model",
+      "value": "5b584f9ad9a4334f"
+    },
+    {
+      "cell": "spectral/odd",
+      "part": "train",
+      "value": "c8c26f83355366a6"
+    },
+    {
+      "cell": "spectral/negative",
+      "part": "batch",
+      "value": "bf7af370b26728ba"
+    },
+    {
+      "cell": "spectral/negative",
+      "part": "infer",
+      "value": "9125742811a1c301"
+    },
+    {
+      "cell": "spectral/negative",
+      "part": "model",
+      "value": "f530608624dd3f0b"
+    },
+    {
+      "cell": "spectral/negative",
+      "part": "train",
+      "value": "0ae906c32d701fe3"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "batch",
+      "value": "82e157389c3e9d81"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "batchscale",
+      "value": "f593c658b4c7d586"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "infer",
+      "value": "5ad307a9540b63c0"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "model",
+      "value": "92c66e6649ba21b6"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "ragged",
+      "value": "815cd21296acc88b"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "rlpair",
+      "value": "08f09a8b13bfc90e"
+    },
+    {
+      "cell": "byte-lm/base",
+      "part": "train",
+      "value": "4e8dfbf5daf0e950"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "batch",
+      "value": "45142717240656ba"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "batchscale",
+      "value": "f95b84817e32f4e6"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "infer",
+      "value": "5456539596680f83"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "model",
+      "value": "7e7b43cb0b019c83"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "ragged",
+      "value": "9c16d3347d763329"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "rlpair",
+      "value": "02801728d29dbb60"
+    },
+    {
+      "cell": "byte-lm/ties",
+      "part": "train",
+      "value": "a4161d33310253ac"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "batch",
+      "value": "597a5e1328172682"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "batchscale",
+      "value": "e7f9d37d5bdac6af"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "infer",
+      "value": "3b84f28bdf621ab8"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "model",
+      "value": "11dbc35775b19e1c"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "ragged",
+      "value": "02a3ba225afde41a"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "rlpair",
+      "value": "94533c559182be33"
+    },
+    {
+      "cell": "byte-lm/hashed",
+      "part": "train",
+      "value": "ee8f7d095c8c494e"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "batch",
+      "value": "390e4ab33840f611"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "batchscale",
+      "value": "6e741555ab6d8746"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "infer",
+      "value": "15608fac67b31c5d"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "model",
+      "value": "a0e9623a7f0c5f10"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "ragged",
+      "value": "3de18ac811168fb4"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "rlpair",
+      "value": "05f2935b98af7797"
+    },
+    {
+      "cell": "byte-lm/wide",
+      "part": "train",
+      "value": "0de10397b7f76633"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "batch",
+      "value": "bf8fcc729daf385d"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "batchscale",
+      "value": "29a0243eb5b92808"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "infer",
+      "value": "9d5d1c6540479dc6"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "model",
+      "value": "453b7f7386b02f0b"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "ragged",
+      "value": "c1ec0d5a3afb8a66"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "rlpair",
+      "value": "c24d3cad5505d02d"
+    },
+    {
+      "cell": "byte-lm/denormal",
+      "part": "train",
+      "value": "6d08a1d402b4e2f5"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "batch",
+      "value": "ec86db04de12fe22"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "batchscale",
+      "value": "a50c1e89801c8abd"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "infer",
+      "value": "470d1c9e7e16c8d4"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "model",
+      "value": "22c7adc890ae3df4"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "ragged",
+      "value": "5d0528417bee9fed"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "rlpair",
+      "value": "80151a3048323d37"
+    },
+    {
+      "cell": "byte-lm/denormal_ftz",
+      "part": "train",
+      "value": "6c97008bbd6bd2ea"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "batch",
+      "value": "7e0618eac73c581e"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "batchscale",
+      "value": "f79b18b3c529d5b9"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "infer",
+      "value": "2db4e4b0b0837073"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "model",
+      "value": "c9eb4a1801f659ad"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "ragged",
+      "value": "788c035347aa6a99"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "rlpair",
+      "value": "ae5f3a47f13ec6d4"
+    },
+    {
+      "cell": "byte-lm/dupes",
+      "part": "train",
+      "value": "3342c6910aa4723f"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "batch",
+      "value": "82e157389c3e9d81"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "batchscale",
+      "value": "2c70b4c93028705e"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "infer",
+      "value": "5ad307a9540b63c0"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "model",
+      "value": "92c66e6649ba21b6"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "ragged",
+      "value": "815cd21296acc88b"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "rlpair",
+      "value": "08f09a8b13bfc90e"
+    },
+    {
+      "cell": "byte-lm/odd",
+      "part": "train",
+      "value": "4e8dfbf5daf0e950"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "batch",
+      "value": "37aa9f1658d8fbfd"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "batchscale",
+      "value": "93101ae0e7f298d2"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "infer",
+      "value": "41c69f3ed1b8fca9"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "model",
+      "value": "9a0236ddf7af1de0"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "ragged",
+      "value": "dcc8c6eddd65e803"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "rlpair",
+      "value": "144294badbe7e475"
+    },
+    {
+      "cell": "byte-lm/negative",
+      "part": "train",
+      "value": "6551651a3836b96b"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "batch",
+      "value": "fbb1f3233000006e"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "batchgrad",
+      "value": "6dc76b046d9dfd07"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "batchscale",
+      "value": "5481e0dff3303591"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "infer",
+      "value": "97e86b9db80719a7"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "ragged",
+      "value": "e560b542fc558190"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "rlpair",
+      "value": "3fd0b9d19f53c9c1"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "stepfull",
+      "value": "f582474b00117f8e"
+    },
+    {
+      "cell": "mamba1/base",
+      "part": "train",
+      "value": "1609902abaf80a04"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "batch",
+      "value": "23b7f12c8a228592"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "batchgrad",
+      "value": "606a5724ab5c0f41"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "batchscale",
+      "value": "dcb2a540e0d72eac"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "infer",
+      "value": "13aed38cf2e3c341"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "ragged",
+      "value": "5abcb0b09ea615e3"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "rlpair",
+      "value": "29e18589720b7474"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "stepfull",
+      "value": "783f30507f6d74b5"
+    },
+    {
+      "cell": "mamba1/ties",
+      "part": "train",
+      "value": "c821893bfb5ba46c"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "batch",
+      "value": "29fc3810bca1e78a"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "batchgrad",
+      "value": "02307cd514fceb2d"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "batchscale",
+      "value": "d44c4d814a35d216"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "infer",
+      "value": "b2e6c1006bf3a5ce"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "ragged",
+      "value": "8fbfb081c0991539"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "rlpair",
+      "value": "08398a6bfcc8570a"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "stepfull",
+      "value": "f7a84796f87ea6e0"
+    },
+    {
+      "cell": "mamba1/hashed",
+      "part": "train",
+      "value": "062931419c55ee5a"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "batch",
+      "value": "e83173af858d8291"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "batchgrad",
+      "value": "44ae6f0520c58bb3"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "batchscale",
+      "value": "54da89a0749a8c64"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "infer",
+      "value": "905c98cf2a276d1d"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "ragged",
+      "value": "93bf5f8aa3430649"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "rlpair",
+      "value": "8a4cd7a1b49c65a8"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "stepfull",
+      "value": "a663c1d24961f690"
+    },
+    {
+      "cell": "mamba1/wide",
+      "part": "train",
+      "value": "0e7b2cee60a53003"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "batch",
+      "value": "a17b09e0f608dab7"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "batchgrad",
+      "value": "6a7023d45d75092c"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "batchscale",
+      "value": "6cefa2fe4b8e937a"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "infer",
+      "value": "79e0f910c5525ef7"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "ragged",
+      "value": "820e4e6bfba11c24"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "rlpair",
+      "value": "7b0bbb310451668a"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "stepfull",
+      "value": "77aea1d61808fd10"
+    },
+    {
+      "cell": "mamba1/denormal",
+      "part": "train",
+      "value": "b7b8e653d7d0f153"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "batch",
+      "value": "a17b09e0f608dab7"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "batchgrad",
+      "value": "6a7023d45d75092c"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "batchscale",
+      "value": "6cefa2fe4b8e937a"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "infer",
+      "value": "79e0f910c5525ef7"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "ragged",
+      "value": "820e4e6bfba11c24"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "rlpair",
+      "value": "deb7fd8a06a24ed9"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "stepfull",
+      "value": "77aea1d61808fd10"
+    },
+    {
+      "cell": "mamba1/denormal_ftz",
+      "part": "train",
+      "value": "b7b8e653d7d0f153"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "batch",
+      "value": "7eb2c68796e0f91a"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "batchgrad",
+      "value": "d3d5d8870262f8b6"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "batchscale",
+      "value": "b8fa64bb560de88e"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "infer",
+      "value": "4f1ca2b3595ec583"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "ragged",
+      "value": "5a07ad1dafb81fb1"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "rlpair",
+      "value": "3fd0b9d19f53c9c1"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "stepfull",
+      "value": "df2cc85b6e3f787c"
+    },
+    {
+      "cell": "mamba1/dupes",
+      "part": "train",
+      "value": "2ac98fad7386a721"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "batch",
+      "value": "fbb1f3233000006e"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "batchgrad",
+      "value": "6dc76b046d9dfd07"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "batchscale",
+      "value": "8f97528deb8aa655"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "infer",
+      "value": "97e86b9db80719a7"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "ragged",
+      "value": "e560b542fc558190"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "rlpair",
+      "value": "3fd0b9d19f53c9c1"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "stepfull",
+      "value": "f582474b00117f8e"
+    },
+    {
+      "cell": "mamba1/odd",
+      "part": "train",
+      "value": "1609902abaf80a04"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "batch",
+      "value": "a48d8850d38c0e4c"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "batchgrad",
+      "value": "d337c6414d0c6b88"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "batchscale",
+      "value": "f1f293536dd10853"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "infer",
+      "value": "c0e8d2045bc0faf6"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "ragged",
+      "value": "71baa8846a0294d9"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "rlpair",
+      "value": "0f0f848b5a1a12e3"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "stepfull",
+      "value": "f9e149ea5f00a434"
+    },
+    {
+      "cell": "mamba1/negative",
+      "part": "train",
+      "value": "0a83c66670f92b55"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "batch",
+      "value": "d21a83ab6b3ce297"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "batchgrad",
+      "value": "99cad63be0fb7239"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "batchscale",
+      "value": "f5c6c5c02917a956"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "infer",
+      "value": "b0084ee171c0720f"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "ragged",
+      "value": "f1f44805dc9171e8"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "rlpair",
+      "value": "f4abbd5451ff5172"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "stepfull",
+      "value": "bfd516aa93fe1b12"
+    },
+    {
+      "cell": "mamba2/base",
+      "part": "train",
+      "value": "5b05a3ecbd70248e"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "batch",
+      "value": "4b2801f8f573c8c8"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "batchgrad",
+      "value": "d662c396d92de418"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "batchscale",
+      "value": "9febb4c33c9d4b48"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "infer",
+      "value": "bbd1634ec2e78ddf"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "ragged",
+      "value": "8f0119a70131adcb"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "rlpair",
+      "value": "f899efc2a35ec48a"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "stepfull",
+      "value": "e80d5052a77533a5"
+    },
+    {
+      "cell": "mamba2/ties",
+      "part": "train",
+      "value": "48a4bec7b6f6e4f6"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "batch",
+      "value": "a824974d95e976a1"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "batchgrad",
+      "value": "cc350cb47739345e"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "batchscale",
+      "value": "492b5c7545648f34"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "infer",
+      "value": "fa5cdfa7a8028ea4"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "ragged",
+      "value": "758a09358b4de751"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "rlpair",
+      "value": "ebd9a6af0f062bee"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "stepfull",
+      "value": "22964e382156e886"
+    },
+    {
+      "cell": "mamba2/hashed",
+      "part": "train",
+      "value": "2689cc3187df61fd"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "batch",
+      "value": "0a20d6f3d8237f24"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "batchgrad",
+      "value": "3151cfcc25d5c776"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "batchscale",
+      "value": "ff5f412bb3fd5328"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "infer",
+      "value": "b67647742c88aaf1"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "ragged",
+      "value": "9c1bcc53c4f2905a"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "rlpair",
+      "value": "47957b59ac09a5d8"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "stepfull",
+      "value": "e56447ee7a8fe932"
+    },
+    {
+      "cell": "mamba2/wide",
+      "part": "train",
+      "value": "0d1022f692c144dd"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "batch",
+      "value": "ce1a26dfa4587c15"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "batchgrad",
+      "value": "ce0a5a78bcd04f68"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "batchscale",
+      "value": "a8a0984b5804dde6"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "infer",
+      "value": "715e3b3d9ee219ba"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "ragged",
+      "value": "c6cfc709454fd6a4"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "rlpair",
+      "value": "c43d27b4d3607e26"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "stepfull",
+      "value": "556d823e1cd70e16"
+    },
+    {
+      "cell": "mamba2/denormal",
+      "part": "train",
+      "value": "a143926e29ac0813"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "batch",
+      "value": "ce1a26dfa4587c15"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "batchgrad",
+      "value": "ce0a5a78bcd04f68"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "batchscale",
+      "value": "a8a0984b5804dde6"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "infer",
+      "value": "715e3b3d9ee219ba"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "ragged",
+      "value": "c6cfc709454fd6a4"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "rlpair",
+      "value": "85aeeec8c5a056a1"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "stepfull",
+      "value": "556d823e1cd70e16"
+    },
+    {
+      "cell": "mamba2/denormal_ftz",
+      "part": "train",
+      "value": "a143926e29ac0813"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "batch",
+      "value": "82b6615b36847109"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "batchgrad",
+      "value": "30287f3369d63e43"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "batchscale",
+      "value": "8b9801efe8170524"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "infer",
+      "value": "bc19a007224d9860"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "ragged",
+      "value": "c6240fc848bde00d"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "rlpair",
+      "value": "f4abbd5451ff5172"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "stepfull",
+      "value": "7e667d50fcbc11f4"
+    },
+    {
+      "cell": "mamba2/dupes",
+      "part": "train",
+      "value": "c565acd587b39ab2"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "batch",
+      "value": "d21a83ab6b3ce297"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "batchgrad",
+      "value": "99cad63be0fb7239"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "batchscale",
+      "value": "71e5ec10135b32fb"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "infer",
+      "value": "b0084ee171c0720f"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "ragged",
+      "value": "f1f44805dc9171e8"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "rlpair",
+      "value": "f4abbd5451ff5172"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "stepfull",
+      "value": "bfd516aa93fe1b12"
+    },
+    {
+      "cell": "mamba2/odd",
+      "part": "train",
+      "value": "5b05a3ecbd70248e"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "batch",
+      "value": "5e4dc2619d55149f"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "batchgrad",
+      "value": "2992677ebe413db5"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "batchscale",
+      "value": "9c78b8aeea6269b2"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "infer",
+      "value": "e47047c1022164fb"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "ragged",
+      "value": "2586664048028a83"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "rlpair",
+      "value": "08cdec93b208dfcc"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "stepfull",
+      "value": "9836f8424c64896c"
+    },
+    {
+      "cell": "mamba2/negative",
+      "part": "train",
+      "value": "3506202ab66d8a1f"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "batch",
+      "value": "1811d6265f7ed086"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "batchgrad",
+      "value": "fe8573bd099ae191"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "batchscale",
+      "value": "53ec1405e9a3ec2d"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "infer",
+      "value": "1b8c18bb76edd4eb"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "ragged",
+      "value": "d717255fb60e1267"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "rlpair",
+      "value": "ccafc15f46b4efee"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "stepfull",
+      "value": "2b97311aa860ed19"
+    },
+    {
+      "cell": "transformer-bf16w/base",
+      "part": "train",
+      "value": "9b332edb3ff5db8b"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "batch",
+      "value": "30c86c7226ba2cae"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "batchgrad",
+      "value": "62bd6f6f243c8651"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "batchscale",
+      "value": "e32cdd422b9baaee"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "infer",
+      "value": "0023de6f3b74f961"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "ragged",
+      "value": "8eba6bc04427e134"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "rlpair",
+      "value": "d403199a00d918fb"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "stepfull",
+      "value": "f7aa5042be7cd2f2"
+    },
+    {
+      "cell": "transformer-bf16w/ties",
+      "part": "train",
+      "value": "4c62dc1a0020c6d6"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "batch",
+      "value": "f5f0b0fca1bfdbbb"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "batchgrad",
+      "value": "970c63d3db2d2739"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "batchscale",
+      "value": "8365f0e485fd1dcb"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "infer",
+      "value": "5a8001cd64b3b675"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "ragged",
+      "value": "5941d84f09acebce"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "rlpair",
+      "value": "00e58129865260e9"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "stepfull",
+      "value": "2b3aa7fa90e88edf"
+    },
+    {
+      "cell": "transformer-bf16w/hashed",
+      "part": "train",
+      "value": "74c73daad47e4425"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "batch",
+      "value": "e443739ada66a5f0"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "batchgrad",
+      "value": "3cfb2cc12cd0b9f5"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "batchscale",
+      "value": "ca9721aee16b8005"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "infer",
+      "value": "459d836a1de632c6"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "ragged",
+      "value": "421562269dd7e282"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "rlpair",
+      "value": "aa5f446950f3a0d9"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "stepfull",
+      "value": "1bcfb7b1f2b032e5"
+    },
+    {
+      "cell": "transformer-bf16w/wide",
+      "part": "train",
+      "value": "2fd232d53d3a0b6e"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "batch",
+      "value": "e9f88cf01a08a607"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "batchgrad",
+      "value": "43d964b2c08506a8"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "batchscale",
+      "value": "d160315215911255"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "infer",
+      "value": "9c1934af1ac99e1e"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "ragged",
+      "value": "dfd5f199eb063ade"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "rlpair",
+      "value": "98d3bf486d4faffc"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "stepfull",
+      "value": "36b06f37a8b31022"
+    },
+    {
+      "cell": "transformer-bf16w/denormal",
+      "part": "train",
+      "value": "84a4677f74abc838"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "batch",
+      "value": "e9f88cf01a08a607"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "batchgrad",
+      "value": "43d964b2c08506a8"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "batchscale",
+      "value": "d160315215911255"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "9c1934af1ac99e1e"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "ragged",
+      "value": "dfd5f199eb063ade"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "rlpair",
+      "value": "75ce5416d5f0fc25"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "stepfull",
+      "value": "36b06f37a8b31022"
+    },
+    {
+      "cell": "transformer-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "84a4677f74abc838"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "batch",
+      "value": "66e7422c1cc6d70a"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "batchgrad",
+      "value": "90a3937ba3ac80f6"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "batchscale",
+      "value": "2bca1b13611f8c8e"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "infer",
+      "value": "c46193e52a7d952a"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "ragged",
+      "value": "52dc599ef878d75f"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "rlpair",
+      "value": "ccafc15f46b4efee"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "stepfull",
+      "value": "f3f95f965900a27c"
+    },
+    {
+      "cell": "transformer-bf16w/dupes",
+      "part": "train",
+      "value": "53d9782ebf264539"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "batch",
+      "value": "1811d6265f7ed086"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "batchgrad",
+      "value": "fe8573bd099ae191"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "batchscale",
+      "value": "1f472cae25335ac3"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "infer",
+      "value": "1b8c18bb76edd4eb"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "ragged",
+      "value": "d717255fb60e1267"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "rlpair",
+      "value": "ccafc15f46b4efee"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "stepfull",
+      "value": "2b97311aa860ed19"
+    },
+    {
+      "cell": "transformer-bf16w/odd",
+      "part": "train",
+      "value": "9b332edb3ff5db8b"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "batch",
+      "value": "20656add1ebac186"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "batchgrad",
+      "value": "9840be1a320fb19a"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "batchscale",
+      "value": "3a6527d22d336e27"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "infer",
+      "value": "7d81383838820817"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "ragged",
+      "value": "40674307820aa552"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "rlpair",
+      "value": "836abe2391b1bc85"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "stepfull",
+      "value": "e5ee0d2a63189ca8"
+    },
+    {
+      "cell": "transformer-bf16w/negative",
+      "part": "train",
+      "value": "aa1dda0755d424f6"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "batch",
+      "value": "292a5694c2563481"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "batchgrad",
+      "value": "7569ebd5036c2cc8"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "batchscale",
+      "value": "71173883f68728a5"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "infer",
+      "value": "23581663b1989f16"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "ragged",
+      "value": "19f94e5947845504"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "rlpair",
+      "value": "b1492d4d8b9cf1dd"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "stepfull",
+      "value": "c0045a670bc91677"
+    },
+    {
+      "cell": "transformer-int8w/base",
+      "part": "train",
+      "value": "1a6b9ef22fb6cd2a"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "batch",
+      "value": "fdcc3b15fba3e380"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "batchgrad",
+      "value": "80039f490d7364aa"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "batchscale",
+      "value": "d91cf7094f065c4e"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "infer",
+      "value": "bf4a6fed5e580d63"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "ragged",
+      "value": "21e0de72fdcd307d"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "rlpair",
+      "value": "ad108ff4cf3d53c9"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "stepfull",
+      "value": "6d424c108df98482"
+    },
+    {
+      "cell": "transformer-int8w/ties",
+      "part": "train",
+      "value": "ad4d86a0a7613f75"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "batch",
+      "value": "304cba16b6d2d96c"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "batchgrad",
+      "value": "d2015b0ea3eeb0be"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "batchscale",
+      "value": "bb613aea3f082fb5"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "infer",
+      "value": "e50896969bb22a22"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "ragged",
+      "value": "932f825a45c40782"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "rlpair",
+      "value": "e50f4a895fdb8f6c"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "stepfull",
+      "value": "417d0079c775d43e"
+    },
+    {
+      "cell": "transformer-int8w/hashed",
+      "part": "train",
+      "value": "4c0c7073a564d2b9"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "batch",
+      "value": "bc2678198e334f1f"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "batchgrad",
+      "value": "061ca042062f2b71"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "batchscale",
+      "value": "fa3a42567fb9fbb6"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "infer",
+      "value": "d9fef12e09932b40"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "ragged",
+      "value": "428bcbee4a5a0882"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "rlpair",
+      "value": "fc1165dd3bf2d3ca"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "stepfull",
+      "value": "7172de479441004e"
+    },
+    {
+      "cell": "transformer-int8w/wide",
+      "part": "train",
+      "value": "b224ebd5191a6fa8"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "batch",
+      "value": "b576c4bf3cafd07b"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "batchgrad",
+      "value": "e6837d59d637add2"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "batchscale",
+      "value": "69fa5f5dee68c62d"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "infer",
+      "value": "9e28b86183efa887"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "ragged",
+      "value": "487ed04a4ecaa519"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "rlpair",
+      "value": "dcf61e3f22843579"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "stepfull",
+      "value": "a2890617535fb70d"
+    },
+    {
+      "cell": "transformer-int8w/denormal",
+      "part": "train",
+      "value": "4cab11f83bd16ce6"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "batch",
+      "value": "b576c4bf3cafd07b"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "batchgrad",
+      "value": "e6837d59d637add2"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "batchscale",
+      "value": "69fa5f5dee68c62d"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "9e28b86183efa887"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "ragged",
+      "value": "487ed04a4ecaa519"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "rlpair",
+      "value": "dff85ca7c260951f"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "stepfull",
+      "value": "a2890617535fb70d"
+    },
+    {
+      "cell": "transformer-int8w/denormal_ftz",
+      "part": "train",
+      "value": "4cab11f83bd16ce6"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "batch",
+      "value": "5cff94b924af9bd0"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "batchgrad",
+      "value": "e2d3c12d6d296e93"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "batchscale",
+      "value": "0e0baf6084beb3ad"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "infer",
+      "value": "4aabb45896455447"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "ragged",
+      "value": "331e7295b0238184"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "rlpair",
+      "value": "b1492d4d8b9cf1dd"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "stepfull",
+      "value": "b2c2139e0af1b722"
+    },
+    {
+      "cell": "transformer-int8w/dupes",
+      "part": "train",
+      "value": "b9aa7ce600e8ba79"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "batch",
+      "value": "292a5694c2563481"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "batchgrad",
+      "value": "7569ebd5036c2cc8"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "batchscale",
+      "value": "b17a9263719b01a1"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "infer",
+      "value": "23581663b1989f16"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "ragged",
+      "value": "19f94e5947845504"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "rlpair",
+      "value": "b1492d4d8b9cf1dd"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "stepfull",
+      "value": "c0045a670bc91677"
+    },
+    {
+      "cell": "transformer-int8w/odd",
+      "part": "train",
+      "value": "1a6b9ef22fb6cd2a"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "batch",
+      "value": "d24c9da733be5b77"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "batchgrad",
+      "value": "9eb670ec2dc21cf5"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "batchscale",
+      "value": "8a746759ce7da3c9"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "infer",
+      "value": "df73f33edf6ce17b"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "ragged",
+      "value": "5bb8b0ed4f998764"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "rlpair",
+      "value": "a6f474809fb0ad5e"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "stepfull",
+      "value": "955c3daa4787e2c8"
+    },
+    {
+      "cell": "transformer-int8w/negative",
+      "part": "train",
+      "value": "3288c3447e0a14f7"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "batch",
+      "value": "b0e3c410ad70f0d1"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "batchgrad",
+      "value": "e64669712d206a43"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "batchscale",
+      "value": "c5bd099ac636632a"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "infer",
+      "value": "8feeb9c461557f5e"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "ragged",
+      "value": "eef4ff22a4c04711"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "rlpair",
+      "value": "072fa93cce8433d3"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "stepfull",
+      "value": "24b32bef93e2f25c"
+    },
+    {
+      "cell": "mamba1-bf16w/base",
+      "part": "train",
+      "value": "3f5bc9d379c27d37"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "batch",
+      "value": "ddb6aa95d06d5741"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "batchgrad",
+      "value": "1b73dc9a679527e8"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "batchscale",
+      "value": "9c18ce43e0a81b22"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "infer",
+      "value": "bc8f877befb93f61"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "ragged",
+      "value": "10eb6530342186bd"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "rlpair",
+      "value": "b1b958ab30e6fd3e"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "stepfull",
+      "value": "b9a98714ab482b6b"
+    },
+    {
+      "cell": "mamba1-bf16w/ties",
+      "part": "train",
+      "value": "3afddceba75613c3"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "batch",
+      "value": "de43e1a04f7a619c"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "batchgrad",
+      "value": "99516f6ed2ba66f8"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "batchscale",
+      "value": "d1d7fb9f2a16af1e"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "infer",
+      "value": "7caf9c85dd9e4871"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "ragged",
+      "value": "9ca148a6e2ce9b5b"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "rlpair",
+      "value": "ded76587d3a257f9"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "stepfull",
+      "value": "14d649fdc6cdb009"
+    },
+    {
+      "cell": "mamba1-bf16w/hashed",
+      "part": "train",
+      "value": "d6c320e1b31fc8e0"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "batch",
+      "value": "846e07be1248922d"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "batchgrad",
+      "value": "373c6c992e6931d2"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "batchscale",
+      "value": "d04d34e1f1475961"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "infer",
+      "value": "c110afb4881b7b30"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "ragged",
+      "value": "ff3adbc48533a095"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "rlpair",
+      "value": "ff65bca8a737d552"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "stepfull",
+      "value": "bd3dfe7a7b67270e"
+    },
+    {
+      "cell": "mamba1-bf16w/wide",
+      "part": "train",
+      "value": "37bafece4b8cc1e4"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "batch",
+      "value": "fd7e84dbac951442"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "batchgrad",
+      "value": "9a807006331bf22b"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "batchscale",
+      "value": "a54afbdbc52e843a"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "infer",
+      "value": "920ead5b7c4ddcf3"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "ragged",
+      "value": "54b62abb5985dcc4"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "rlpair",
+      "value": "a8f265435592dcc3"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "stepfull",
+      "value": "44708fe6b3c65d0b"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal",
+      "part": "train",
+      "value": "4f99057ae7c2950b"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "batch",
+      "value": "fd7e84dbac951442"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "batchgrad",
+      "value": "9a807006331bf22b"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "batchscale",
+      "value": "a54afbdbc52e843a"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "920ead5b7c4ddcf3"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "ragged",
+      "value": "54b62abb5985dcc4"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "rlpair",
+      "value": "28f8ad6d932ee115"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "stepfull",
+      "value": "44708fe6b3c65d0b"
+    },
+    {
+      "cell": "mamba1-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "4f99057ae7c2950b"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "batch",
+      "value": "63da53f040e01efc"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "batchgrad",
+      "value": "fd6cc2a3e4d6f5c9"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "batchscale",
+      "value": "f7a1dbef8371e449"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "infer",
+      "value": "1455bca05ed2cf5b"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "ragged",
+      "value": "b50748160e63ba50"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "rlpair",
+      "value": "072fa93cce8433d3"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "stepfull",
+      "value": "f7bdfcc643b3788c"
+    },
+    {
+      "cell": "mamba1-bf16w/dupes",
+      "part": "train",
+      "value": "cc8d1c78c43104ef"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "batch",
+      "value": "b0e3c410ad70f0d1"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "batchgrad",
+      "value": "e64669712d206a43"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "batchscale",
+      "value": "e86e26bcaf957d06"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "infer",
+      "value": "8feeb9c461557f5e"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "ragged",
+      "value": "eef4ff22a4c04711"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "rlpair",
+      "value": "072fa93cce8433d3"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "stepfull",
+      "value": "24b32bef93e2f25c"
+    },
+    {
+      "cell": "mamba1-bf16w/odd",
+      "part": "train",
+      "value": "3f5bc9d379c27d37"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "batch",
+      "value": "18f82730cb1100c5"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "batchgrad",
+      "value": "75057193f3cf6510"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "batchscale",
+      "value": "ccd57aef9daeba9e"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "infer",
+      "value": "3f167c1766663cf6"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "ragged",
+      "value": "eb2db6add039369a"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "rlpair",
+      "value": "609c80e81c001455"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "stepfull",
+      "value": "2d083b9d4bc54963"
+    },
+    {
+      "cell": "mamba1-bf16w/negative",
+      "part": "train",
+      "value": "51873fa106b5ded0"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "batch",
+      "value": "09c7cc69c84a6f13"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "batchgrad",
+      "value": "f018cdf3b4c3ba11"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "batchscale",
+      "value": "6cd0ebe360c488e5"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "infer",
+      "value": "d84c782cb645f49b"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "ragged",
+      "value": "ef42207850bd8da3"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "rlpair",
+      "value": "b1881cceb4dd1ece"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "stepfull",
+      "value": "364cf7976fb371cc"
+    },
+    {
+      "cell": "mamba1-int8w/base",
+      "part": "train",
+      "value": "36971a2710a4c347"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "batch",
+      "value": "88053a4c43e5e835"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "batchgrad",
+      "value": "71ebfe1c07813ed9"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "batchscale",
+      "value": "31f2a225e9947fce"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "infer",
+      "value": "23a01a8dfa1b98be"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "ragged",
+      "value": "ccc832d703a09be8"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "rlpair",
+      "value": "e0cd3b45b1524f1e"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "stepfull",
+      "value": "dc7021c5dfc9ecfa"
+    },
+    {
+      "cell": "mamba1-int8w/ties",
+      "part": "train",
+      "value": "4988b4700fdd3d5f"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "batch",
+      "value": "31f66c46ea4eddc5"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "batchgrad",
+      "value": "dae0b4488bdf0db4"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "batchscale",
+      "value": "0dc641cb772a91fe"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "infer",
+      "value": "864e6ac8975e2476"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "ragged",
+      "value": "15c8251ddf547492"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "rlpair",
+      "value": "dd5fd5e8e2297632"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "stepfull",
+      "value": "7c029c7cc752b4a0"
+    },
+    {
+      "cell": "mamba1-int8w/hashed",
+      "part": "train",
+      "value": "303d2660231dc8d1"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "batch",
+      "value": "90bc8aceb2f795f7"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "batchgrad",
+      "value": "60a49ecc66ff45ef"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "batchscale",
+      "value": "598b09d0fdba671e"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "infer",
+      "value": "c2ff44071d3b12b4"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "ragged",
+      "value": "841a981f9db8f1c0"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "rlpair",
+      "value": "8780b1a73f6d6dfb"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "stepfull",
+      "value": "5845c6ba39da6607"
+    },
+    {
+      "cell": "mamba1-int8w/wide",
+      "part": "train",
+      "value": "6a6446f981aa4ed7"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "batch",
+      "value": "ed9cb74552438e87"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "batchgrad",
+      "value": "d164d701dde3e295"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "batchscale",
+      "value": "b6b18fb3ad6bc8c4"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "infer",
+      "value": "0636ce581f964ea8"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "ragged",
+      "value": "5f2b612521681165"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "rlpair",
+      "value": "b5c3328030b6606a"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "stepfull",
+      "value": "25f021ceb888eff1"
+    },
+    {
+      "cell": "mamba1-int8w/denormal",
+      "part": "train",
+      "value": "0ea54c309c971497"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "batch",
+      "value": "ed9cb74552438e87"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "batchgrad",
+      "value": "d164d701dde3e295"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "batchscale",
+      "value": "b6b18fb3ad6bc8c4"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "0636ce581f964ea8"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "ragged",
+      "value": "5f2b612521681165"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "rlpair",
+      "value": "f4470137e73fddd0"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "stepfull",
+      "value": "25f021ceb888eff1"
+    },
+    {
+      "cell": "mamba1-int8w/denormal_ftz",
+      "part": "train",
+      "value": "0ea54c309c971497"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "batch",
+      "value": "c87334acb9329401"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "batchgrad",
+      "value": "11500f70f78614a8"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "batchscale",
+      "value": "07f214cabe9632bf"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "infer",
+      "value": "1cbeb72bd107949b"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "ragged",
+      "value": "01bd0071edf20b2c"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "rlpair",
+      "value": "b1881cceb4dd1ece"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "stepfull",
+      "value": "a9f06c418223e6d4"
+    },
+    {
+      "cell": "mamba1-int8w/dupes",
+      "part": "train",
+      "value": "9f04994d0fa3eacf"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "batch",
+      "value": "09c7cc69c84a6f13"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "batchgrad",
+      "value": "f018cdf3b4c3ba11"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "batchscale",
+      "value": "14ac28bd96e478ed"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "infer",
+      "value": "d84c782cb645f49b"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "ragged",
+      "value": "ef42207850bd8da3"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "rlpair",
+      "value": "b1881cceb4dd1ece"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "stepfull",
+      "value": "364cf7976fb371cc"
+    },
+    {
+      "cell": "mamba1-int8w/odd",
+      "part": "train",
+      "value": "36971a2710a4c347"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "batch",
+      "value": "bed107b3d6d94f49"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "batchgrad",
+      "value": "ef0e0e9e6af93ca8"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "batchscale",
+      "value": "d66ec0458fe4061b"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "infer",
+      "value": "7c1acd66cdfbce8f"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "ragged",
+      "value": "fee094e0e4cb2fa0"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "rlpair",
+      "value": "afb75ea651859b58"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "stepfull",
+      "value": "135666a793ebf51f"
+    },
+    {
+      "cell": "mamba1-int8w/negative",
+      "part": "train",
+      "value": "4929c1a4bf5f45a7"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "batch",
+      "value": "a7e2a0b6c7ed964d"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "batchscale",
+      "value": "5363f5d061278347"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "infer",
+      "value": "5cae7295a36713bf"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "ragged",
+      "value": "e000068e82e4707e"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "rlpair",
+      "value": "bc4da5388be1c862"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "stepfull",
+      "value": "e537a0dfaadae224"
+    },
+    {
+      "cell": "mamba2-bf16w/base",
+      "part": "train",
+      "value": "73367d2def3fb75a"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "batch",
+      "value": "63f827f0a586bce3"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "batchscale",
+      "value": "3683a665d570b350"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "infer",
+      "value": "7db99b24cea235e6"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "ragged",
+      "value": "16f402806ec2f131"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "rlpair",
+      "value": "9734d6a22cb250d0"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "stepfull",
+      "value": "f58c629ef8755ce3"
+    },
+    {
+      "cell": "mamba2-bf16w/ties",
+      "part": "train",
+      "value": "c5dd74ebf5ff776c"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "batch",
+      "value": "5424b4bdeb2719b8"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "batchscale",
+      "value": "a09c1738ee73f526"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "infer",
+      "value": "b5b7b8bb1f2adcf7"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "ragged",
+      "value": "9cdac45663c830fe"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "rlpair",
+      "value": "154b05c228f43fa4"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "stepfull",
+      "value": "a079e8dcf0034536"
+    },
+    {
+      "cell": "mamba2-bf16w/hashed",
+      "part": "train",
+      "value": "4b80eccf9c7661b8"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "batch",
+      "value": "5360d9eceb2d5fd0"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "batchscale",
+      "value": "9bdf81511d732137"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "infer",
+      "value": "8eb4f4d6dd21c7a7"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "ragged",
+      "value": "68275816b07ecf4f"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "rlpair",
+      "value": "b55d6ce953744b29"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "stepfull",
+      "value": "d3343804d7e096bd"
+    },
+    {
+      "cell": "mamba2-bf16w/wide",
+      "part": "train",
+      "value": "9ed6883de06e9cfc"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "batch",
+      "value": "bd29815b3b301837"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "batchscale",
+      "value": "b434b84197f2b4b1"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "infer",
+      "value": "58a165930fe3aafe"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "ragged",
+      "value": "07f1284eace73d29"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "rlpair",
+      "value": "b5df17b53f2b75f7"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "stepfull",
+      "value": "3a71bd83b869071e"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal",
+      "part": "train",
+      "value": "cd9a7bd9fa0ba0bb"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "batch",
+      "value": "bd29815b3b301837"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "batchscale",
+      "value": "b434b84197f2b4b1"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "58a165930fe3aafe"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "ragged",
+      "value": "07f1284eace73d29"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "rlpair",
+      "value": "30908acf6201b5dc"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "stepfull",
+      "value": "3a71bd83b869071e"
+    },
+    {
+      "cell": "mamba2-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "cd9a7bd9fa0ba0bb"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "batch",
+      "value": "bd5c603ef83e6892"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "batchscale",
+      "value": "f8b9be394e200dd8"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "infer",
+      "value": "6f8d4de3b9e023f7"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "ragged",
+      "value": "f61fa44d43f3f3f8"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "rlpair",
+      "value": "bc4da5388be1c862"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "stepfull",
+      "value": "4e79f8d6250236c7"
+    },
+    {
+      "cell": "mamba2-bf16w/dupes",
+      "part": "train",
+      "value": "e61ac54ce941f57b"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "batch",
+      "value": "a7e2a0b6c7ed964d"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "batchscale",
+      "value": "74a757167b9cb6c3"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "infer",
+      "value": "5cae7295a36713bf"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "ragged",
+      "value": "e000068e82e4707e"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "rlpair",
+      "value": "bc4da5388be1c862"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "stepfull",
+      "value": "e537a0dfaadae224"
+    },
+    {
+      "cell": "mamba2-bf16w/odd",
+      "part": "train",
+      "value": "73367d2def3fb75a"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "batch",
+      "value": "c63ce86817464e6e"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "batchscale",
+      "value": "f10eec514637aeb3"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "infer",
+      "value": "ffb2aeb58199944a"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "ragged",
+      "value": "4462aa49df84a838"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "rlpair",
+      "value": "6df350036b79b9cd"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "stepfull",
+      "value": "86050127d30c5422"
+    },
+    {
+      "cell": "mamba2-bf16w/negative",
+      "part": "train",
+      "value": "544ed0fac6347d6d"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "batch",
+      "value": "d22b275b9c7eb3e5"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "batchscale",
+      "value": "ef3d920e6290ab35"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "infer",
+      "value": "403884646dc80124"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "ragged",
+      "value": "e39760071fbfb4c3"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "rlpair",
+      "value": "d05cadfab274cfac"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "stepfull",
+      "value": "e510f77cb9994553"
+    },
+    {
+      "cell": "mamba2-int8w/base",
+      "part": "train",
+      "value": "99f128062804a821"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "batch",
+      "value": "37f3de328f3979c0"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "batchscale",
+      "value": "baa7e39de31a4ef6"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "infer",
+      "value": "8d3a5dfdd518ea58"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "ragged",
+      "value": "e76afd100fff53e1"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "rlpair",
+      "value": "221f0c014b44cef7"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "stepfull",
+      "value": "091efebeb0fc7440"
+    },
+    {
+      "cell": "mamba2-int8w/ties",
+      "part": "train",
+      "value": "2a0f6760033ceac1"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "batch",
+      "value": "b94134c5bc10dcbe"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "batchscale",
+      "value": "44be781e0949ae9d"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "infer",
+      "value": "92841c5ba418a51a"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "ragged",
+      "value": "c1d1bedfe3f427c4"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "rlpair",
+      "value": "02313bf10224fbc9"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "stepfull",
+      "value": "728624c64ee4b509"
+    },
+    {
+      "cell": "mamba2-int8w/hashed",
+      "part": "train",
+      "value": "c91df970ef4da597"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "batch",
+      "value": "a027bfe0304327c0"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "batchscale",
+      "value": "16ebef8d1c29860c"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "infer",
+      "value": "bf688b3ca0734ce8"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "ragged",
+      "value": "003bed0a73133c97"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "rlpair",
+      "value": "c4a2120cea2d1d6b"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "stepfull",
+      "value": "03f4649e49a44b92"
+    },
+    {
+      "cell": "mamba2-int8w/wide",
+      "part": "train",
+      "value": "697f3275ea227da1"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "batch",
+      "value": "dad2ee1ccf5e5277"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "batchscale",
+      "value": "0bdf3207cd6cf706"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "infer",
+      "value": "300f35b542bec604"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "ragged",
+      "value": "751ccf2e00af49d6"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "rlpair",
+      "value": "238386389d57676b"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "stepfull",
+      "value": "595e3d3f7750190a"
+    },
+    {
+      "cell": "mamba2-int8w/denormal",
+      "part": "train",
+      "value": "ffb1274281ea3c9d"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "batch",
+      "value": "dad2ee1ccf5e5277"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "batchscale",
+      "value": "0bdf3207cd6cf706"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "300f35b542bec604"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "ragged",
+      "value": "751ccf2e00af49d6"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "rlpair",
+      "value": "5bdca7cc3a2808c3"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "stepfull",
+      "value": "595e3d3f7750190a"
+    },
+    {
+      "cell": "mamba2-int8w/denormal_ftz",
+      "part": "train",
+      "value": "ffb1274281ea3c9d"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "batch",
+      "value": "9752608c065d66d4"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "batchscale",
+      "value": "054b597eb0b090e2"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "infer",
+      "value": "f8b1258e806214a9"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "ragged",
+      "value": "fbbcadff5d5595d4"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "rlpair",
+      "value": "d05cadfab274cfac"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "stepfull",
+      "value": "f4d24e8fe30e5ad0"
+    },
+    {
+      "cell": "mamba2-int8w/dupes",
+      "part": "train",
+      "value": "91e321a474dd2472"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "batch",
+      "value": "d22b275b9c7eb3e5"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "batchscale",
+      "value": "2b8dda478e3e60b5"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "infer",
+      "value": "403884646dc80124"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "ragged",
+      "value": "e39760071fbfb4c3"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "rlpair",
+      "value": "d05cadfab274cfac"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "stepfull",
+      "value": "e510f77cb9994553"
+    },
+    {
+      "cell": "mamba2-int8w/odd",
+      "part": "train",
+      "value": "99f128062804a821"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "batch",
+      "value": "3f5faaeddf139198"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "batchscale",
+      "value": "21f49304d350616c"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "infer",
+      "value": "9b03109e693648e1"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "ragged",
+      "value": "e4b9d0e35ede501a"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "rlpair",
+      "value": "16b91322fad197bb"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "stepfull",
+      "value": "3ac9ee5dc5aeb029"
+    },
+    {
+      "cell": "mamba2-int8w/negative",
+      "part": "train",
+      "value": "f34c3fbdc9e8e996"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "batch",
+      "value": "08d14d79e96c938b"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "batchscale",
+      "value": "a7a250dd76381ed7"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "infer",
+      "value": "cbc6288e8b94fad2"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "ragged",
+      "value": "bbe009f30829aa49"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "rlpair",
+      "value": "59d1771ff80a816a"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "stepfull",
+      "value": "012c74eb215b11ac"
+    },
+    {
+      "cell": "mamba3-bf16w/base",
+      "part": "train",
+      "value": "420f9a4b19317b2a"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "batch",
+      "value": "6681e7dea57df968"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "batchscale",
+      "value": "bf8994e070ee8ec7"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "infer",
+      "value": "670338ffb561acef"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "ragged",
+      "value": "c930fb2af68adc25"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "rlpair",
+      "value": "dcb84817a5576408"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "stepfull",
+      "value": "9fc27cebed59487f"
+    },
+    {
+      "cell": "mamba3-bf16w/ties",
+      "part": "train",
+      "value": "82b8d76284bb2ba6"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "batch",
+      "value": "46d10e8d5affad06"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "batchscale",
+      "value": "43b90501a2a7414f"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "infer",
+      "value": "fa83cf2f6e305294"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "ragged",
+      "value": "0d2fc9e03e27c6b3"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "rlpair",
+      "value": "28413b942734e4ca"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "stepfull",
+      "value": "5f9ad430cec901d7"
+    },
+    {
+      "cell": "mamba3-bf16w/hashed",
+      "part": "train",
+      "value": "4d6ceb333b1a178d"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "batch",
+      "value": "bb2ef68e717c9256"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "batchscale",
+      "value": "78b6e531cfb4f3b5"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "infer",
+      "value": "f9c3029034311f4b"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "ragged",
+      "value": "9e1cb01497619c86"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "rlpair",
+      "value": "8c98fab1ddf1ecc5"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "stepfull",
+      "value": "2dcf5ab3777c4520"
+    },
+    {
+      "cell": "mamba3-bf16w/wide",
+      "part": "train",
+      "value": "bebe0d228e48b3ac"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "batch",
+      "value": "5242f5bb7eb74b6b"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "batchscale",
+      "value": "86f331b8ef629fce"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "infer",
+      "value": "9cdfc8307b70eaf6"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "ragged",
+      "value": "7982e2bacd35377b"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "rlpair",
+      "value": "7a9d303025f2fbf1"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "stepfull",
+      "value": "7c681fc57b80ed31"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal",
+      "part": "train",
+      "value": "fb2d8dfd53268614"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "batch",
+      "value": "5242f5bb7eb74b6b"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "batchscale",
+      "value": "86f331b8ef629fce"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "9cdfc8307b70eaf6"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "ragged",
+      "value": "7982e2bacd35377b"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "rlpair",
+      "value": "e0295d44bdd19523"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "stepfull",
+      "value": "7c681fc57b80ed31"
+    },
+    {
+      "cell": "mamba3-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "fb2d8dfd53268614"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "batch",
+      "value": "80f217ab6aa47131"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "batchscale",
+      "value": "8ba335383c73b505"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "infer",
+      "value": "e6277caf58d2af32"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "ragged",
+      "value": "43513ed733c281fc"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "rlpair",
+      "value": "59d1771ff80a816a"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "stepfull",
+      "value": "a2e561bfe04e1a71"
+    },
+    {
+      "cell": "mamba3-bf16w/dupes",
+      "part": "train",
+      "value": "95e1bf57fead28ee"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "batch",
+      "value": "08d14d79e96c938b"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "batchscale",
+      "value": "1d3aec9c695cd9c0"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "infer",
+      "value": "cbc6288e8b94fad2"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "ragged",
+      "value": "bbe009f30829aa49"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "rlpair",
+      "value": "59d1771ff80a816a"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "stepfull",
+      "value": "012c74eb215b11ac"
+    },
+    {
+      "cell": "mamba3-bf16w/odd",
+      "part": "train",
+      "value": "420f9a4b19317b2a"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "batch",
+      "value": "658ba6339c98e58c"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "batchscale",
+      "value": "6acf414a9fbcc164"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "infer",
+      "value": "d990f8ae41747c43"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "ragged",
+      "value": "23a14234a141e782"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "rlpair",
+      "value": "7a267da3f7f189ff"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "stepfull",
+      "value": "ac84b24eae60cf52"
+    },
+    {
+      "cell": "mamba3-bf16w/negative",
+      "part": "train",
+      "value": "00dc16fa15da3368"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "batch",
+      "value": "5354254438309c94"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "batchscale",
+      "value": "5dfcd29e1cbfaadb"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "infer",
+      "value": "fc039f179e70ef6e"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "ragged",
+      "value": "b9a7c28e77fefbc8"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "rlpair",
+      "value": "de9921e68783e5e9"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "stepfull",
+      "value": "ed6b6c547ec43e5a"
+    },
+    {
+      "cell": "mamba3-int8w/base",
+      "part": "train",
+      "value": "0e7bddf19fd3e010"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "batch",
+      "value": "ea7f199f372f143e"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "batchscale",
+      "value": "41d30008dbbfadb4"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "infer",
+      "value": "f033b95ade381e90"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "ragged",
+      "value": "d439c5ec00264e51"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "rlpair",
+      "value": "0be7f3f5429c9a76"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "stepfull",
+      "value": "5058c39974007223"
+    },
+    {
+      "cell": "mamba3-int8w/ties",
+      "part": "train",
+      "value": "36c6a5ac87201190"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "batch",
+      "value": "cc08228b11ca2580"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "batchscale",
+      "value": "9877547b2cc5118d"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "infer",
+      "value": "2e72b97484ba76fb"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "ragged",
+      "value": "906a88caf558232e"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "rlpair",
+      "value": "9e09d0ba3b74d53d"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "stepfull",
+      "value": "e54ddf013593b13e"
+    },
+    {
+      "cell": "mamba3-int8w/hashed",
+      "part": "train",
+      "value": "3e1a377b74a264ac"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "batch",
+      "value": "36b4d98a6ade1af8"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "batchscale",
+      "value": "3cae141152316486"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "infer",
+      "value": "9e9802ce1f13c6ee"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "ragged",
+      "value": "2388721f8dc1635f"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "rlpair",
+      "value": "a3f3df8e3d06c354"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "stepfull",
+      "value": "53e96cf18aa5c195"
+    },
+    {
+      "cell": "mamba3-int8w/wide",
+      "part": "train",
+      "value": "0036c98fbafb5fcb"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "batch",
+      "value": "8aeeca0a5eed86e8"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "batchscale",
+      "value": "0c5f3c1179dc1514"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "infer",
+      "value": "3179131a3e35e84e"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "ragged",
+      "value": "a4335e201482fa47"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "rlpair",
+      "value": "3976936746c02809"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "stepfull",
+      "value": "327cc82bd014e6d9"
+    },
+    {
+      "cell": "mamba3-int8w/denormal",
+      "part": "train",
+      "value": "d4aff7939fd7dab9"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "batch",
+      "value": "8aeeca0a5eed86e8"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "batchscale",
+      "value": "0c5f3c1179dc1514"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "3179131a3e35e84e"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "ragged",
+      "value": "a4335e201482fa47"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "rlpair",
+      "value": "d778d12b18a6fa8e"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "stepfull",
+      "value": "327cc82bd014e6d9"
+    },
+    {
+      "cell": "mamba3-int8w/denormal_ftz",
+      "part": "train",
+      "value": "d4aff7939fd7dab9"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "batch",
+      "value": "71f198a20ec0fcff"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "batchscale",
+      "value": "21e858a7348c5b61"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "infer",
+      "value": "b7a2eb0c33584564"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "ragged",
+      "value": "7a479c1fdb20fbc8"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "rlpair",
+      "value": "de9921e68783e5e9"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "stepfull",
+      "value": "a098e532a2b6c402"
+    },
+    {
+      "cell": "mamba3-int8w/dupes",
+      "part": "train",
+      "value": "67a4f955b604626e"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "batch",
+      "value": "5354254438309c94"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "batchscale",
+      "value": "e5ca192a0ce9a335"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "infer",
+      "value": "fc039f179e70ef6e"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "ragged",
+      "value": "b9a7c28e77fefbc8"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "rlpair",
+      "value": "de9921e68783e5e9"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "stepfull",
+      "value": "ed6b6c547ec43e5a"
+    },
+    {
+      "cell": "mamba3-int8w/odd",
+      "part": "train",
+      "value": "0e7bddf19fd3e010"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "batch",
+      "value": "f158515ccd23e32f"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "batchscale",
+      "value": "fdef8892b594038b"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "infer",
+      "value": "7dd6412bf658226c"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "ragged",
+      "value": "c37e18f7ea1cabcb"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "rlpair",
+      "value": "4545e5a6e2143ed7"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "stepfull",
+      "value": "ed8dae4d0f2a592f"
+    },
+    {
+      "cell": "mamba3-int8w/negative",
+      "part": "train",
+      "value": "baec4e8e45c65ea6"
+    },
+    {
+      "cell": "mlp-bf16w/base",
+      "part": "infer",
+      "value": "aba80ad4b3c4a002"
+    },
+    {
+      "cell": "mlp-bf16w/base",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/base",
+      "part": "train",
+      "value": "6168adc1058c1d59"
+    },
+    {
+      "cell": "mlp-bf16w/ties",
+      "part": "infer",
+      "value": "12bafc468c183329"
+    },
+    {
+      "cell": "mlp-bf16w/ties",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/ties",
+      "part": "train",
+      "value": "a526a2fbf8e24965"
+    },
+    {
+      "cell": "mlp-bf16w/hashed",
+      "part": "infer",
+      "value": "cdb6dde10999c281"
+    },
+    {
+      "cell": "mlp-bf16w/hashed",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/hashed",
+      "part": "train",
+      "value": "cbdcd379bd21c77f"
+    },
+    {
+      "cell": "mlp-bf16w/wide",
+      "part": "infer",
+      "value": "af6d475c3ec7f2d3"
+    },
+    {
+      "cell": "mlp-bf16w/wide",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/wide",
+      "part": "train",
+      "value": "42b44d55a8a8bb42"
+    },
+    {
+      "cell": "mlp-bf16w/denormal",
+      "part": "infer",
+      "value": "efc4ef9136e09f0a"
+    },
+    {
+      "cell": "mlp-bf16w/denormal",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/denormal",
+      "part": "train",
+      "value": "daf3efb00851fcf8"
+    },
+    {
+      "cell": "mlp-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "efc4ef9136e09f0a"
+    },
+    {
+      "cell": "mlp-bf16w/denormal_ftz",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "daf3efb00851fcf8"
+    },
+    {
+      "cell": "mlp-bf16w/dupes",
+      "part": "infer",
+      "value": "aba80ad4b3c4a002"
+    },
+    {
+      "cell": "mlp-bf16w/dupes",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/dupes",
+      "part": "train",
+      "value": "6168adc1058c1d59"
+    },
+    {
+      "cell": "mlp-bf16w/odd",
+      "part": "infer",
+      "value": "f627b0a604e01d4c"
+    },
+    {
+      "cell": "mlp-bf16w/odd",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/odd",
+      "part": "train",
+      "value": "18adffd7558f9e58"
+    },
+    {
+      "cell": "mlp-bf16w/negative",
+      "part": "infer",
+      "value": "4dd61170bc007017"
+    },
+    {
+      "cell": "mlp-bf16w/negative",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-bf16w/negative",
+      "part": "train",
+      "value": "344e2fd2a628967a"
+    },
+    {
+      "cell": "mlp-int8w/base",
+      "part": "infer",
+      "value": "aba80ad4b3c4a002"
+    },
+    {
+      "cell": "mlp-int8w/base",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/base",
+      "part": "train",
+      "value": "6168adc1058c1d59"
+    },
+    {
+      "cell": "mlp-int8w/ties",
+      "part": "infer",
+      "value": "12bafc468c183329"
+    },
+    {
+      "cell": "mlp-int8w/ties",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/ties",
+      "part": "train",
+      "value": "a526a2fbf8e24965"
+    },
+    {
+      "cell": "mlp-int8w/hashed",
+      "part": "infer",
+      "value": "cdb6dde10999c281"
+    },
+    {
+      "cell": "mlp-int8w/hashed",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/hashed",
+      "part": "train",
+      "value": "cbdcd379bd21c77f"
+    },
+    {
+      "cell": "mlp-int8w/wide",
+      "part": "infer",
+      "value": "af6d475c3ec7f2d3"
+    },
+    {
+      "cell": "mlp-int8w/wide",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/wide",
+      "part": "train",
+      "value": "42b44d55a8a8bb42"
+    },
+    {
+      "cell": "mlp-int8w/denormal",
+      "part": "infer",
+      "value": "efc4ef9136e09f0a"
+    },
+    {
+      "cell": "mlp-int8w/denormal",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/denormal",
+      "part": "train",
+      "value": "daf3efb00851fcf8"
+    },
+    {
+      "cell": "mlp-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "efc4ef9136e09f0a"
+    },
+    {
+      "cell": "mlp-int8w/denormal_ftz",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/denormal_ftz",
+      "part": "train",
+      "value": "daf3efb00851fcf8"
+    },
+    {
+      "cell": "mlp-int8w/dupes",
+      "part": "infer",
+      "value": "aba80ad4b3c4a002"
+    },
+    {
+      "cell": "mlp-int8w/dupes",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/dupes",
+      "part": "train",
+      "value": "6168adc1058c1d59"
+    },
+    {
+      "cell": "mlp-int8w/odd",
+      "part": "infer",
+      "value": "f627b0a604e01d4c"
+    },
+    {
+      "cell": "mlp-int8w/odd",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/odd",
+      "part": "train",
+      "value": "18adffd7558f9e58"
+    },
+    {
+      "cell": "mlp-int8w/negative",
+      "part": "infer",
+      "value": "4dd61170bc007017"
+    },
+    {
+      "cell": "mlp-int8w/negative",
+      "part": "model",
+      "value": "10959ca81118cc10"
+    },
+    {
+      "cell": "mlp-int8w/negative",
+      "part": "train",
+      "value": "344e2fd2a628967a"
+    },
+    {
+      "cell": "samba-bf16w/base",
+      "part": "infer",
+      "value": "e7f99e1388ad7a50"
+    },
+    {
+      "cell": "samba-bf16w/base",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/base",
+      "part": "train",
+      "value": "501528c4887bd54b"
+    },
+    {
+      "cell": "samba-bf16w/ties",
+      "part": "infer",
+      "value": "4b2990b4b8d74d01"
+    },
+    {
+      "cell": "samba-bf16w/ties",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/ties",
+      "part": "train",
+      "value": "4aac3696d9334aac"
+    },
+    {
+      "cell": "samba-bf16w/hashed",
+      "part": "infer",
+      "value": "62e5360e5dd3ecf8"
+    },
+    {
+      "cell": "samba-bf16w/hashed",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/hashed",
+      "part": "train",
+      "value": "950979811d965c3e"
+    },
+    {
+      "cell": "samba-bf16w/wide",
+      "part": "infer",
+      "value": "a6e6f1e042287cdc"
+    },
+    {
+      "cell": "samba-bf16w/wide",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/wide",
+      "part": "train",
+      "value": "4e15d620003335cd"
+    },
+    {
+      "cell": "samba-bf16w/denormal",
+      "part": "infer",
+      "value": "9cf5976b90926770"
+    },
+    {
+      "cell": "samba-bf16w/denormal",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/denormal",
+      "part": "train",
+      "value": "ea34cb72985f6924"
+    },
+    {
+      "cell": "samba-bf16w/denormal_ftz",
+      "part": "infer",
+      "value": "17ace88847aaac79"
+    },
+    {
+      "cell": "samba-bf16w/denormal_ftz",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/denormal_ftz",
+      "part": "train",
+      "value": "74b5ea29a2d304cc"
+    },
+    {
+      "cell": "samba-bf16w/dupes",
+      "part": "infer",
+      "value": "e7f99e1388ad7a50"
+    },
+    {
+      "cell": "samba-bf16w/dupes",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/dupes",
+      "part": "train",
+      "value": "501528c4887bd54b"
+    },
+    {
+      "cell": "samba-bf16w/odd",
+      "part": "infer",
+      "value": "e7f99e1388ad7a50"
+    },
+    {
+      "cell": "samba-bf16w/odd",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/odd",
+      "part": "train",
+      "value": "501528c4887bd54b"
+    },
+    {
+      "cell": "samba-bf16w/negative",
+      "part": "infer",
+      "value": "c940554aae2e2ec2"
+    },
+    {
+      "cell": "samba-bf16w/negative",
+      "part": "model",
+      "value": "4c577f4f184b9549"
+    },
+    {
+      "cell": "samba-bf16w/negative",
+      "part": "train",
+      "value": "c82167f7f39ef800"
+    },
+    {
+      "cell": "samba-int8w/base",
+      "part": "infer",
+      "value": "02bbf130a2e3fd19"
+    },
+    {
+      "cell": "samba-int8w/base",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/base",
+      "part": "train",
+      "value": "c113074d1dbd0d19"
+    },
+    {
+      "cell": "samba-int8w/ties",
+      "part": "infer",
+      "value": "42a7251ef519aa1b"
+    },
+    {
+      "cell": "samba-int8w/ties",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/ties",
+      "part": "train",
+      "value": "bbd9d7c78304ca85"
+    },
+    {
+      "cell": "samba-int8w/hashed",
+      "part": "infer",
+      "value": "b47bda94ba11e9a7"
+    },
+    {
+      "cell": "samba-int8w/hashed",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/hashed",
+      "part": "train",
+      "value": "d74a6b5a978a5d02"
+    },
+    {
+      "cell": "samba-int8w/wide",
+      "part": "infer",
+      "value": "f3f5aa5a9755d6a8"
+    },
+    {
+      "cell": "samba-int8w/wide",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/wide",
+      "part": "train",
+      "value": "735685c73abb2178"
+    },
+    {
+      "cell": "samba-int8w/denormal",
+      "part": "infer",
+      "value": "a8c8dd0f1fa1e083"
+    },
+    {
+      "cell": "samba-int8w/denormal",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/denormal",
+      "part": "train",
+      "value": "98cddd279757a94e"
+    },
+    {
+      "cell": "samba-int8w/denormal_ftz",
+      "part": "infer",
+      "value": "8917de6946a53d31"
+    },
+    {
+      "cell": "samba-int8w/denormal_ftz",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/denormal_ftz",
+      "part": "train",
+      "value": "756b21b907ffd93e"
+    },
+    {
+      "cell": "samba-int8w/dupes",
+      "part": "infer",
+      "value": "02bbf130a2e3fd19"
+    },
+    {
+      "cell": "samba-int8w/dupes",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/dupes",
+      "part": "train",
+      "value": "c113074d1dbd0d19"
+    },
+    {
+      "cell": "samba-int8w/odd",
+      "part": "infer",
+      "value": "02bbf130a2e3fd19"
+    },
+    {
+      "cell": "samba-int8w/odd",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/odd",
+      "part": "train",
+      "value": "c113074d1dbd0d19"
+    },
+    {
+      "cell": "samba-int8w/negative",
+      "part": "infer",
+      "value": "37ce22e45234d2f3"
+    },
+    {
+      "cell": "samba-int8w/negative",
+      "part": "model",
+      "value": "53ee77438e2ae664"
+    },
+    {
+      "cell": "samba-int8w/negative",
+      "part": "train",
+      "value": "dd4035e7ed284097"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "batch",
+      "value": "885d3626a23f0f5c"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "batchgrad",
+      "value": "4a2a3acc4db353fe"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "batchscale",
+      "value": "2cfca0bd9fbc6c4d"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "infer",
+      "value": "4312dd1063cb32e4"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "ragged",
+      "value": "d4f695bd212b974e"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "rlpair",
+      "value": "3625544aabcd97ba"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "stepfull",
+      "value": "6cefffbc50e10b84"
+    },
+    {
+      "cell": "mamba2-dtlimit/base",
+      "part": "train",
+      "value": "dbe3d4e560695b2e"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "batch",
+      "value": "bba795df8055db30"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "batchgrad",
+      "value": "41abdbcf7b6ac8b9"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "batchscale",
+      "value": "73885bd9ea411269"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "infer",
+      "value": "2d3dc0f595c46058"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "ragged",
+      "value": "7f31275643fd75a8"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "rlpair",
+      "value": "814e17bc41ec908a"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "stepfull",
+      "value": "b2c87f7139c8ccf0"
+    },
+    {
+      "cell": "mamba2-dtlimit/ties",
+      "part": "train",
+      "value": "2987b3e07a61458f"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "batch",
+      "value": "b2316f6d561bf13b"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "batchgrad",
+      "value": "42d5e7ac0c1f5ff6"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "batchscale",
+      "value": "1e0cfe25be3b16be"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "infer",
+      "value": "4c79332e23881661"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "ragged",
+      "value": "5928b443541cfaef"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "rlpair",
+      "value": "8777db626c1b2f9f"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "stepfull",
+      "value": "2327277e92ce697c"
+    },
+    {
+      "cell": "mamba2-dtlimit/hashed",
+      "part": "train",
+      "value": "ff9113f0d729ce92"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "batch",
+      "value": "a37be8f540b9e9bb"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "batchgrad",
+      "value": "f69e4652e1f7406e"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "batchscale",
+      "value": "2bf0af034aca0126"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "infer",
+      "value": "cb6c53183b453060"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "ragged",
+      "value": "4f6edd08ad650ca3"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "rlpair",
+      "value": "eb4474a56051bba2"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "stepfull",
+      "value": "a1c8b19bfae91dda"
+    },
+    {
+      "cell": "mamba2-dtlimit/wide",
+      "part": "train",
+      "value": "91fc741adbf429ae"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "batch",
+      "value": "45058a52744472b0"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "batchgrad",
+      "value": "e7c95e469092a361"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "batchscale",
+      "value": "b8de8949a3927dc5"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "infer",
+      "value": "d8af6ca089acfd11"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "ragged",
+      "value": "8d33bdbb5aed6b83"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "rlpair",
+      "value": "a68a01e5c05d3b6d"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "stepfull",
+      "value": "d80bdd42c59edfbb"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal",
+      "part": "train",
+      "value": "3702e2e171e31bf9"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "batch",
+      "value": "45058a52744472b0"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "batchgrad",
+      "value": "e7c95e469092a361"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "batchscale",
+      "value": "b8de8949a3927dc5"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "infer",
+      "value": "d8af6ca089acfd11"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "ragged",
+      "value": "8d33bdbb5aed6b83"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "rlpair",
+      "value": "ee566fdd1ce376dd"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "stepfull",
+      "value": "d80bdd42c59edfbb"
+    },
+    {
+      "cell": "mamba2-dtlimit/denormal_ftz",
+      "part": "train",
+      "value": "3702e2e171e31bf9"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "batch",
+      "value": "e25593f2dd1b6d6b"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "batchgrad",
+      "value": "8f6b3a08063cf882"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "batchscale",
+      "value": "bba1d1e7db3ea228"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "infer",
+      "value": "3bd37926ee98112f"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "ragged",
+      "value": "5e4bf92df2c4da7b"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "rlpair",
+      "value": "3625544aabcd97ba"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "stepfull",
+      "value": "b680f92e0d6ae149"
+    },
+    {
+      "cell": "mamba2-dtlimit/dupes",
+      "part": "train",
+      "value": "f83ae1a2c4db769d"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "batch",
+      "value": "885d3626a23f0f5c"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "batchgrad",
+      "value": "4a2a3acc4db353fe"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "batchscale",
+      "value": "acdf8be1f962fa4f"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "infer",
+      "value": "4312dd1063cb32e4"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "ragged",
+      "value": "d4f695bd212b974e"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "rlpair",
+      "value": "3625544aabcd97ba"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "stepfull",
+      "value": "6cefffbc50e10b84"
+    },
+    {
+      "cell": "mamba2-dtlimit/odd",
+      "part": "train",
+      "value": "dbe3d4e560695b2e"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "batch",
+      "value": "19df3a777f98244a"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "batchgrad",
+      "value": "a15dd787180510c8"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "batchscale",
+      "value": "30bbdb1b4fc1527b"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "infer",
+      "value": "ba3b0a0b14a880a9"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "ragged",
+      "value": "2071a60193a776fd"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "rlpair",
+      "value": "b290968542f709a4"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "stepfull",
+      "value": "c015846ddeda2c0b"
+    },
+    {
+      "cell": "mamba2-dtlimit/negative",
+      "part": "train",
+      "value": "b5f224b79224b8c5"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "batch",
+      "value": "ee2a9214267587a0"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "batchscale",
+      "value": "90afa0a086162362"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "infer",
+      "value": "ffeae35e1b813aeb"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "model",
+      "value": "c73f66c106f2d61a"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "ragged",
+      "value": "460826152a021cc9"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "rlpair",
+      "value": "665252bdfe8f1ea6"
+    },
+    {
+      "cell": "byte-lm-resident/base",
+      "part": "train",
+      "value": "927bd17804146a19"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "batch",
+      "value": "f5f52b3359601e15"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "batchscale",
+      "value": "285cb51f2c85c182"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "infer",
+      "value": "f277350668fee3ff"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "model",
+      "value": "0ed59c7e6ce30e78"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "ragged",
+      "value": "687840cc9a6cd898"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "rlpair",
+      "value": "a64f5ddbde30a180"
+    },
+    {
+      "cell": "byte-lm-resident/ties",
+      "part": "train",
+      "value": "2629f45813116b52"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "batch",
+      "value": "77536a601441c009"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "batchscale",
+      "value": "72954068bffc9e9f"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "infer",
+      "value": "ff7b20906d51dcea"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "model",
+      "value": "6cf828daaf35413f"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "ragged",
+      "value": "5c4bb66ba2f3f021"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "rlpair",
+      "value": "d08be9c4b226fb55"
+    },
+    {
+      "cell": "byte-lm-resident/hashed",
+      "part": "train",
+      "value": "d8d7a74a4561e5e1"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "batch",
+      "value": "b26e34c8fa493fc4"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "batchscale",
+      "value": "5e60cf1664fa5bd0"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "infer",
+      "value": "0f199b824dd067a2"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "model",
+      "value": "7a8858c6b2494bee"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "ragged",
+      "value": "4083a9eb69d9b5fe"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "rlpair",
+      "value": "1c42e66807ea6852"
+    },
+    {
+      "cell": "byte-lm-resident/wide",
+      "part": "train",
+      "value": "a3a875b3bb416c51"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "batch",
+      "value": "c31fd69fbc46d445"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "batchscale",
+      "value": "c9beb3603f7897ad"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "infer",
+      "value": "b4038b4b76ea0af7"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "model",
+      "value": "bc4f1d026135a2ff"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "ragged",
+      "value": "3b835d89669e7975"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "rlpair",
+      "value": "aba195f8c27de6bf"
+    },
+    {
+      "cell": "byte-lm-resident/denormal",
+      "part": "train",
+      "value": "37ba1aca6bef01e0"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "batch",
+      "value": "2c3db4c362cae5c9"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "batchscale",
+      "value": "1d5a5067ea2ff988"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "infer",
+      "value": "7a412c5bdfe1889f"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "model",
+      "value": "38595532d88109d6"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "ragged",
+      "value": "465eed37c8b124dd"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "rlpair",
+      "value": "b0ab2fb0c52a5249"
+    },
+    {
+      "cell": "byte-lm-resident/denormal_ftz",
+      "part": "train",
+      "value": "4e46b35272dc3503"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "batch",
+      "value": "a6214bcd27167a9d"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "batchscale",
+      "value": "e310f63c4002008b"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "infer",
+      "value": "3b51cc790aacad0b"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "model",
+      "value": "310a869b95d631f0"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "ragged",
+      "value": "a9f9c46b736fcf5d"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "rlpair",
+      "value": "57c276fa4068f814"
+    },
+    {
+      "cell": "byte-lm-resident/dupes",
+      "part": "train",
+      "value": "cee101dfc044a77b"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "batch",
+      "value": "ee2a9214267587a0"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "batchscale",
+      "value": "93ec00f83e1d8a5d"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "infer",
+      "value": "ffeae35e1b813aeb"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "model",
+      "value": "c73f66c106f2d61a"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "ragged",
+      "value": "460826152a021cc9"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "rlpair",
+      "value": "665252bdfe8f1ea6"
+    },
+    {
+      "cell": "byte-lm-resident/odd",
+      "part": "train",
+      "value": "927bd17804146a19"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "batch",
+      "value": "012698e8a71c8000"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "batchscale",
+      "value": "0d33baab41c046d6"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "infer",
+      "value": "f472ba82a7e4aedb"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "model",
+      "value": "68d79bfb5854996d"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "ragged",
+      "value": "4891b7c424b08cdd"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "rlpair",
+      "value": "007d95c6f3cc8fbd"
+    },
+    {
+      "cell": "byte-lm-resident/negative",
+      "part": "train",
+      "value": "78f0841203c636cc"
+    },
+    {
+      "cell": "kmeans-random/base",
+      "part": "batch",
+      "value": "41f3015cf8e0680a"
+    },
+    {
+      "cell": "kmeans-random/base",
+      "part": "infer",
+      "value": "45d941e241fdba4f"
+    },
+    {
+      "cell": "kmeans-random/base",
+      "part": "model",
+      "value": "7f934305a96d1b77"
+    },
+    {
+      "cell": "kmeans-random/base",
+      "part": "train",
+      "value": "2bab0cda9f319dbb"
+    },
+    {
+      "cell": "kmeans-random/ties",
+      "part": "batch",
+      "value": "9dba3245a60df276"
+    },
+    {
+      "cell": "kmeans-random/ties",
+      "part": "infer",
+      "value": "6698384517f202cd"
+    },
+    {
+      "cell": "kmeans-random/ties",
+      "part": "model",
+      "value": "d25373be4895312d"
+    },
+    {
+      "cell": "kmeans-random/ties",
+      "part": "train",
+      "value": "9f90e48e2d5a4ce4"
+    },
+    {
+      "cell": "kmeans-random/hashed",
+      "part": "batch",
+      "value": "bc5e45c0121fa326"
+    },
+    {
+      "cell": "kmeans-random/hashed",
+      "part": "infer",
+      "value": "e73f5b76f598daad"
+    },
+    {
+      "cell": "kmeans-random/hashed",
+      "part": "model",
+      "value": "6a568c8e9b403e58"
+    },
+    {
+      "cell": "kmeans-random/hashed",
+      "part": "train",
+      "value": "0b375d0049c4c87b"
+    },
+    {
+      "cell": "kmeans-random/wide",
+      "part": "batch",
+      "value": "fafa2ba50e2b1137"
+    },
+    {
+      "cell": "kmeans-random/wide",
+      "part": "infer",
+      "value": "1b4870bfea4141d8"
+    },
+    {
+      "cell": "kmeans-random/wide",
+      "part": "model",
+      "value": "6945513fb5ac5415"
+    },
+    {
+      "cell": "kmeans-random/wide",
+      "part": "train",
+      "value": "2b64e3f5f82a82d8"
+    },
+    {
+      "cell": "kmeans-random/denormal",
+      "part": "batch",
+      "value": "88799e781dfe5a5b"
+    },
+    {
+      "cell": "kmeans-random/denormal",
+      "part": "infer",
+      "value": "f1b6a290aca7f88d"
+    },
+    {
+      "cell": "kmeans-random/denormal",
+      "part": "model",
+      "value": "8e8ece44376c7493"
+    },
+    {
+      "cell": "kmeans-random/denormal",
+      "part": "train",
+      "value": "ddb08cf02222e6a3"
+    },
+    {
+      "cell": "kmeans-random/denormal_ftz",
+      "part": "batch",
+      "value": "88799e781dfe5a5b"
+    },
+    {
+      "cell": "kmeans-random/denormal_ftz",
+      "part": "infer",
+      "value": "f1b6a290aca7f88d"
+    },
+    {
+      "cell": "kmeans-random/denormal_ftz",
+      "part": "model",
+      "value": "8e8ece44376c7493"
+    },
+    {
+      "cell": "kmeans-random/denormal_ftz",
+      "part": "train",
+      "value": "ddb08cf02222e6a3"
+    },
+    {
+      "cell": "kmeans-random/dupes",
+      "part": "batch",
+      "value": "d867364110410379"
+    },
+    {
+      "cell": "kmeans-random/dupes",
+      "part": "infer",
+      "value": "615650d1d33aa5a1"
+    },
+    {
+      "cell": "kmeans-random/dupes",
+      "part": "model",
+      "value": "5caae1d486d2182d"
+    },
+    {
+      "cell": "kmeans-random/dupes",
+      "part": "train",
+      "value": "b8953eb119af6144"
+    },
+    {
+      "cell": "kmeans-random/odd",
+      "part": "batch",
+      "value": "53b58fa53fc8a4c3"
+    },
+    {
+      "cell": "kmeans-random/odd",
+      "part": "infer",
+      "value": "df29a616a051e530"
+    },
+    {
+      "cell": "kmeans-random/odd",
+      "part": "model",
+      "value": "e0d1e2a7afc72753"
+    },
+    {
+      "cell": "kmeans-random/odd",
+      "part": "train",
+      "value": "f22e6751eeedc598"
+    },
+    {
+      "cell": "kmeans-random/negative",
+      "part": "batch",
+      "value": "5e632c6cf0418456"
+    },
+    {
+      "cell": "kmeans-random/negative",
+      "part": "infer",
+      "value": "01c6af7e36729c93"
+    },
+    {
+      "cell": "kmeans-random/negative",
+      "part": "model",
+      "value": "ec538ee79a5421b9"
+    },
+    {
+      "cell": "kmeans-random/negative",
+      "part": "train",
+      "value": "23ce9524cf23e596"
+    },
+    {
+      "cell": "kmeans-array/base",
+      "part": "batch",
+      "value": "4b1022a4b98908d1"
+    },
+    {
+      "cell": "kmeans-array/base",
+      "part": "infer",
+      "value": "ae9509c50c75d2bc"
+    },
+    {
+      "cell": "kmeans-array/base",
+      "part": "model",
+      "value": "ce0dcf87ec776455"
+    },
+    {
+      "cell": "kmeans-array/base",
+      "part": "train",
+      "value": "37ab2f0355ef716a"
+    },
+    {
+      "cell": "kmeans-array/ties",
+      "part": "batch",
+      "value": "3d1ce5fa3f9e09c4"
+    },
+    {
+      "cell": "kmeans-array/ties",
+      "part": "infer",
+      "value": "5f64992d5da78b8f"
+    },
+    {
+      "cell": "kmeans-array/ties",
+      "part": "model",
+      "value": "cdc008a193fd7e57"
+    },
+    {
+      "cell": "kmeans-array/ties",
+      "part": "train",
+      "value": "f7e7677d5ae7597f"
+    },
+    {
+      "cell": "kmeans-array/hashed",
+      "part": "batch",
+      "value": "694188ed807486c0"
+    },
+    {
+      "cell": "kmeans-array/hashed",
+      "part": "infer",
+      "value": "5b19e2ea451673e1"
+    },
+    {
+      "cell": "kmeans-array/hashed",
+      "part": "model",
+      "value": "9c877fbb3fe99c28"
+    },
+    {
+      "cell": "kmeans-array/hashed",
+      "part": "train",
+      "value": "a960d6d68f5c8665"
+    },
+    {
+      "cell": "kmeans-array/wide",
+      "part": "batch",
+      "value": "3acceb1e255e2796"
+    },
+    {
+      "cell": "kmeans-array/wide",
+      "part": "infer",
+      "value": "df4998fb3e12110e"
+    },
+    {
+      "cell": "kmeans-array/wide",
+      "part": "model",
+      "value": "06692d227986f0bf"
+    },
+    {
+      "cell": "kmeans-array/wide",
+      "part": "train",
+      "value": "ac99cd5354363ce1"
+    },
+    {
+      "cell": "kmeans-array/denormal",
+      "part": "batch",
+      "value": "8aaa92c6db31897f"
+    },
+    {
+      "cell": "kmeans-array/denormal",
+      "part": "infer",
+      "value": "c7e58f1805e93798"
+    },
+    {
+      "cell": "kmeans-array/denormal",
+      "part": "model",
+      "value": "625710908540a7ff"
+    },
+    {
+      "cell": "kmeans-array/denormal",
+      "part": "train",
+      "value": "92a2b78d865ad9b0"
+    },
+    {
+      "cell": "kmeans-array/denormal_ftz",
+      "part": "batch",
+      "value": "8aaa92c6db31897f"
+    },
+    {
+      "cell": "kmeans-array/denormal_ftz",
+      "part": "infer",
+      "value": "c7e58f1805e93798"
+    },
+    {
+      "cell": "kmeans-array/denormal_ftz",
+      "part": "model",
+      "value": "625710908540a7ff"
+    },
+    {
+      "cell": "kmeans-array/denormal_ftz",
+      "part": "train",
+      "value": "92a2b78d865ad9b0"
+    },
+    {
+      "cell": "kmeans-array/dupes",
+      "part": "batch",
+      "value": "7a59fb6deea2d1f2"
+    },
+    {
+      "cell": "kmeans-array/dupes",
+      "part": "infer",
+      "value": "08f7bb492ea1e9b0"
+    },
+    {
+      "cell": "kmeans-array/dupes",
+      "part": "model",
+      "value": "b1776833ecc1def9"
+    },
+    {
+      "cell": "kmeans-array/dupes",
+      "part": "train",
+      "value": "a71e34a5786a472e"
+    },
+    {
+      "cell": "kmeans-array/odd",
+      "part": "batch",
+      "value": "21e79ca2282ddc5f"
+    },
+    {
+      "cell": "kmeans-array/odd",
+      "part": "infer",
+      "value": "cb0a1ae7215c27aa"
+    },
+    {
+      "cell": "kmeans-array/odd",
+      "part": "model",
+      "value": "b6861440bb007c37"
+    },
+    {
+      "cell": "kmeans-array/odd",
+      "part": "train",
+      "value": "5b347e0f29ddb844"
+    },
+    {
+      "cell": "kmeans-array/negative",
+      "part": "batch",
+      "value": "c1a2aad03330b9d3"
+    },
+    {
+      "cell": "kmeans-array/negative",
+      "part": "infer",
+      "value": "d50bab746221d061"
+    },
+    {
+      "cell": "kmeans-array/negative",
+      "part": "model",
+      "value": "8f24f57baf792d57"
+    },
+    {
+      "cell": "kmeans-array/negative",
+      "part": "train",
+      "value": "64223107950d714a"
+    },
+    {
+      "cell": "kmeans-weighted/base",
+      "part": "batch",
+      "value": "bd21da2a20bcf33f"
+    },
+    {
+      "cell": "kmeans-weighted/base",
+      "part": "infer",
+      "value": "33403bafb4259ce4"
+    },
+    {
+      "cell": "kmeans-weighted/base",
+      "part": "model",
+      "value": "e8b41924fc98f304"
+    },
+    {
+      "cell": "kmeans-weighted/base",
+      "part": "train",
+      "value": "5080fbf55610f54e"
+    },
+    {
+      "cell": "kmeans-weighted/ties",
+      "part": "batch",
+      "value": "797f19f2820413c0"
+    },
+    {
+      "cell": "kmeans-weighted/ties",
+      "part": "infer",
+      "value": "f1a40d6c9595a677"
+    },
+    {
+      "cell": "kmeans-weighted/ties",
+      "part": "model",
+      "value": "65f5faf4242d792a"
+    },
+    {
+      "cell": "kmeans-weighted/ties",
+      "part": "train",
+      "value": "a7070391c3cc52fb"
+    },
+    {
+      "cell": "kmeans-weighted/hashed",
+      "part": "batch",
+      "value": "595c6444c7aa9abc"
+    },
+    {
+      "cell": "kmeans-weighted/hashed",
+      "part": "infer",
+      "value": "3a661e5929f5295e"
+    },
+    {
+      "cell": "kmeans-weighted/hashed",
+      "part": "model",
+      "value": "4bcb2f5de8c49236"
+    },
+    {
+      "cell": "kmeans-weighted/hashed",
+      "part": "train",
+      "value": "eded8c9746d545c7"
+    },
+    {
+      "cell": "kmeans-weighted/wide",
+      "part": "batch",
+      "value": "c64980738ee6589a"
+    },
+    {
+      "cell": "kmeans-weighted/wide",
+      "part": "infer",
+      "value": "e6cfd7471f95f25f"
+    },
+    {
+      "cell": "kmeans-weighted/wide",
+      "part": "model",
+      "value": "936fbfdb67d72490"
+    },
+    {
+      "cell": "kmeans-weighted/wide",
+      "part": "train",
+      "value": "5e333d411cffbf33"
+    },
+    {
+      "cell": "kmeans-weighted/denormal",
+      "part": "batch",
+      "value": "d4c912e6b87b383e"
+    },
+    {
+      "cell": "kmeans-weighted/denormal",
+      "part": "infer",
+      "value": "03780e8f5ba1bb21"
+    },
+    {
+      "cell": "kmeans-weighted/denormal",
+      "part": "model",
+      "value": "b9b31eab6a556e78"
+    },
+    {
+      "cell": "kmeans-weighted/denormal",
+      "part": "train",
+      "value": "c3613adfb9158691"
+    },
+    {
+      "cell": "kmeans-weighted/denormal_ftz",
+      "part": "batch",
+      "value": "d4c912e6b87b383e"
+    },
+    {
+      "cell": "kmeans-weighted/denormal_ftz",
+      "part": "infer",
+      "value": "03780e8f5ba1bb21"
+    },
+    {
+      "cell": "kmeans-weighted/denormal_ftz",
+      "part": "model",
+      "value": "b9b31eab6a556e78"
+    },
+    {
+      "cell": "kmeans-weighted/denormal_ftz",
+      "part": "train",
+      "value": "c3613adfb9158691"
+    },
+    {
+      "cell": "kmeans-weighted/dupes",
+      "part": "batch",
+      "value": "d38344596a34ea37"
+    },
+    {
+      "cell": "kmeans-weighted/dupes",
+      "part": "infer",
+      "value": "79cda2869bbc642b"
+    },
+    {
+      "cell": "kmeans-weighted/dupes",
+      "part": "model",
+      "value": "ac013121f8c58dd4"
+    },
+    {
+      "cell": "kmeans-weighted/dupes",
+      "part": "train",
+      "value": "a530038afd2318d6"
+    },
+    {
+      "cell": "kmeans-weighted/odd",
+      "part": "batch",
+      "value": "2ac9fe78151082ea"
+    },
+    {
+      "cell": "kmeans-weighted/odd",
+      "part": "infer",
+      "value": "86bea24bd326b655"
+    },
+    {
+      "cell": "kmeans-weighted/odd",
+      "part": "model",
+      "value": "f22e247490a77c1c"
+    },
+    {
+      "cell": "kmeans-weighted/odd",
+      "part": "train",
+      "value": "fc6107e901e7d7be"
+    },
+    {
+      "cell": "kmeans-weighted/negative",
+      "part": "batch",
+      "value": "aae24527d57c6fcc"
+    },
+    {
+      "cell": "kmeans-weighted/negative",
+      "part": "infer",
+      "value": "9c9857b78115542b"
+    },
+    {
+      "cell": "kmeans-weighted/negative",
+      "part": "model",
+      "value": "696412b2cd46c6e3"
+    },
+    {
+      "cell": "kmeans-weighted/negative",
+      "part": "train",
+      "value": "3bf996834a2fd658"
+    },
+    {
+      "cell": "dbscan-brute-l1/base",
+      "part": "batch",
+      "value": "df8d83ccb3f26700"
+    },
+    {
+      "cell": "dbscan-brute-l1/base",
+      "part": "infer",
+      "value": "291d58b2feb4ae4e"
+    },
+    {
+      "cell": "dbscan-brute-l1/base",
+      "part": "model",
+      "value": "619ee7c70d1194cb"
+    },
+    {
+      "cell": "dbscan-brute-l1/base",
+      "part": "train",
+      "value": "0e71495be68d20c8"
+    },
+    {
+      "cell": "dbscan-brute-l1/ties",
+      "part": "batch",
+      "value": "be9e40c554329827"
+    },
+    {
+      "cell": "dbscan-brute-l1/ties",
+      "part": "infer",
+      "value": "63990f64c63d296b"
+    },
+    {
+      "cell": "dbscan-brute-l1/ties",
+      "part": "model",
+      "value": "d68a5069f692910e"
+    },
+    {
+      "cell": "dbscan-brute-l1/ties",
+      "part": "train",
+      "value": "b7535355c1581603"
+    },
+    {
+      "cell": "dbscan-brute-l1/hashed",
+      "part": "batch",
+      "value": "829b11013d9ad8d2"
+    },
+    {
+      "cell": "dbscan-brute-l1/hashed",
+      "part": "infer",
+      "value": "d1549d3aba82ee07"
+    },
+    {
+      "cell": "dbscan-brute-l1/hashed",
+      "part": "model",
+      "value": "348e1dd4f2d4f25e"
+    },
+    {
+      "cell": "dbscan-brute-l1/hashed",
+      "part": "train",
+      "value": "eeb466d17ea9bfdc"
+    },
+    {
+      "cell": "dbscan-brute-l1/wide",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-brute-l1/wide",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-brute-l1/wide",
+      "part": "model",
+      "value": "0a40d6dc52184ff0"
+    },
+    {
+      "cell": "dbscan-brute-l1/wide",
+      "part": "train",
+      "value": "d17808b4b9261d5d"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal",
+      "part": "model",
+      "value": "8506a36c8f053030"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal",
+      "part": "train",
+      "value": "21d5ea1c72f42a78"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal_ftz",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal_ftz",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal_ftz",
+      "part": "model",
+      "value": "2355a0495915c885"
+    },
+    {
+      "cell": "dbscan-brute-l1/denormal_ftz",
+      "part": "train",
+      "value": "21d5ea1c72f42a78"
+    },
+    {
+      "cell": "dbscan-brute-l1/dupes",
+      "part": "batch",
+      "value": "df8d83ccb3f26700"
+    },
+    {
+      "cell": "dbscan-brute-l1/dupes",
+      "part": "infer",
+      "value": "291d58b2feb4ae4e"
+    },
+    {
+      "cell": "dbscan-brute-l1/dupes",
+      "part": "model",
+      "value": "619ee7c70d1194cb"
+    },
+    {
+      "cell": "dbscan-brute-l1/dupes",
+      "part": "train",
+      "value": "0e71495be68d20c8"
+    },
+    {
+      "cell": "dbscan-brute-l1/odd",
+      "part": "batch",
+      "value": "e01e7d990906951f"
+    },
+    {
+      "cell": "dbscan-brute-l1/odd",
+      "part": "infer",
+      "value": "1bec30ca0af7cd26"
+    },
+    {
+      "cell": "dbscan-brute-l1/odd",
+      "part": "model",
+      "value": "de8d884e6f24a87b"
+    },
+    {
+      "cell": "dbscan-brute-l1/odd",
+      "part": "train",
+      "value": "4b20175965069a15"
+    },
+    {
+      "cell": "dbscan-brute-l1/negative",
+      "part": "batch",
+      "value": "f7e7d24690d3107e"
+    },
+    {
+      "cell": "dbscan-brute-l1/negative",
+      "part": "infer",
+      "value": "d1fc6b1b88e17ea6"
+    },
+    {
+      "cell": "dbscan-brute-l1/negative",
+      "part": "model",
+      "value": "bce417cc6e526ff3"
+    },
+    {
+      "cell": "dbscan-brute-l1/negative",
+      "part": "train",
+      "value": "06e83e9f6128fb04"
+    },
+    {
+      "cell": "dbscan-weighted/base",
+      "part": "batch",
+      "value": "f7e7d24690d3107e"
+    },
+    {
+      "cell": "dbscan-weighted/base",
+      "part": "infer",
+      "value": "29d206737766caf0"
+    },
+    {
+      "cell": "dbscan-weighted/base",
+      "part": "model",
+      "value": "0db3aac99393d616"
+    },
+    {
+      "cell": "dbscan-weighted/base",
+      "part": "train",
+      "value": "3aa7f30692765cf2"
+    },
+    {
+      "cell": "dbscan-weighted/ties",
+      "part": "batch",
+      "value": "1b1361f65f9b5250"
+    },
+    {
+      "cell": "dbscan-weighted/ties",
+      "part": "infer",
+      "value": "9c8a2ca10937b6b1"
+    },
+    {
+      "cell": "dbscan-weighted/ties",
+      "part": "model",
+      "value": "cca8baca73f60bac"
+    },
+    {
+      "cell": "dbscan-weighted/ties",
+      "part": "train",
+      "value": "525addc009cffb40"
+    },
+    {
+      "cell": "dbscan-weighted/hashed",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-weighted/hashed",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-weighted/hashed",
+      "part": "model",
+      "value": "22074f6988a2878e"
+    },
+    {
+      "cell": "dbscan-weighted/hashed",
+      "part": "train",
+      "value": "d17808b4b9261d5d"
+    },
+    {
+      "cell": "dbscan-weighted/wide",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-weighted/wide",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-weighted/wide",
+      "part": "model",
+      "value": "12450128a5b4be8b"
+    },
+    {
+      "cell": "dbscan-weighted/wide",
+      "part": "train",
+      "value": "d17808b4b9261d5d"
+    },
+    {
+      "cell": "dbscan-weighted/denormal",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-weighted/denormal",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-weighted/denormal",
+      "part": "model",
+      "value": "0c1ef67464dfa955"
+    },
+    {
+      "cell": "dbscan-weighted/denormal",
+      "part": "train",
+      "value": "d3c48a5338826d18"
+    },
+    {
+      "cell": "dbscan-weighted/denormal_ftz",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-weighted/denormal_ftz",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-weighted/denormal_ftz",
+      "part": "model",
+      "value": "64b59d15319ec18c"
+    },
+    {
+      "cell": "dbscan-weighted/denormal_ftz",
+      "part": "train",
+      "value": "d3c48a5338826d18"
+    },
+    {
+      "cell": "dbscan-weighted/dupes",
+      "part": "batch",
+      "value": "f7e7d24690d3107e"
+    },
+    {
+      "cell": "dbscan-weighted/dupes",
+      "part": "infer",
+      "value": "29d206737766caf0"
+    },
+    {
+      "cell": "dbscan-weighted/dupes",
+      "part": "model",
+      "value": "0db3aac99393d616"
+    },
+    {
+      "cell": "dbscan-weighted/dupes",
+      "part": "train",
+      "value": "3aa7f30692765cf2"
+    },
+    {
+      "cell": "dbscan-weighted/odd",
+      "part": "batch",
+      "value": "ca397a1032011cd9"
+    },
+    {
+      "cell": "dbscan-weighted/odd",
+      "part": "infer",
+      "value": "22e3872de99d04f6"
+    },
+    {
+      "cell": "dbscan-weighted/odd",
+      "part": "model",
+      "value": "2c5e1b04c08b5d97"
+    },
+    {
+      "cell": "dbscan-weighted/odd",
+      "part": "train",
+      "value": "6a9b77cffd9e2493"
+    },
+    {
+      "cell": "dbscan-weighted/negative",
+      "part": "batch",
+      "value": "a8e67882b424a053"
+    },
+    {
+      "cell": "dbscan-weighted/negative",
+      "part": "infer",
+      "value": "3a6472714f51d8ab"
+    },
+    {
+      "cell": "dbscan-weighted/negative",
+      "part": "model",
+      "value": "fd44ca1342fbd3c5"
+    },
+    {
+      "cell": "dbscan-weighted/negative",
+      "part": "train",
+      "value": "bb6bd31e075693e9"
+    },
+    {
+      "cell": "linear-svc/base",
+      "part": "batch",
+      "value": "4703fe7f3dfdb475"
+    },
+    {
+      "cell": "linear-svc/base",
+      "part": "infer",
+      "value": "8b7651e50e3b4423"
+    },
+    {
+      "cell": "linear-svc/base",
+      "part": "train",
+      "value": "75aad58fec7390ff"
+    },
+    {
+      "cell": "linear-svc/ties",
+      "part": "batch",
+      "value": "45ba611938f7ad2b"
+    },
+    {
+      "cell": "linear-svc/ties",
+      "part": "infer",
+      "value": "07be19f3ca2d17bc"
+    },
+    {
+      "cell": "linear-svc/ties",
+      "part": "train",
+      "value": "c2aa3f983916641b"
+    },
+    {
+      "cell": "linear-svc/hashed",
+      "part": "batch",
+      "value": "1f525dd0040dcf91"
+    },
+    {
+      "cell": "linear-svc/hashed",
+      "part": "infer",
+      "value": "79eb25709cd60248"
+    },
+    {
+      "cell": "linear-svc/hashed",
+      "part": "train",
+      "value": "65abcec8f57a8a45"
+    },
+    {
+      "cell": "linear-svc/wide",
+      "part": "batch",
+      "value": "f50e970347bf31f1"
+    },
+    {
+      "cell": "linear-svc/wide",
+      "part": "infer",
+      "value": "cfabadae474666c7"
+    },
+    {
+      "cell": "linear-svc/wide",
+      "part": "train",
+      "value": "9de176c7999a2dad"
+    },
+    {
+      "cell": "linear-svc/denormal",
+      "part": "batch",
+      "value": "0b5367c992d26cd8"
+    },
+    {
+      "cell": "linear-svc/denormal",
+      "part": "infer",
+      "value": "3fb93e925016f00d"
+    },
+    {
+      "cell": "linear-svc/denormal",
+      "part": "train",
+      "value": "d081f039314208f5"
+    },
+    {
+      "cell": "linear-svc/denormal_ftz",
+      "part": "batch",
+      "value": "0b5367c992d26cd8"
+    },
+    {
+      "cell": "linear-svc/denormal_ftz",
+      "part": "infer",
+      "value": "3fb93e925016f00d"
+    },
+    {
+      "cell": "linear-svc/denormal_ftz",
+      "part": "train",
+      "value": "d081f039314208f5"
+    },
+    {
+      "cell": "linear-svc/dupes",
+      "part": "batch",
+      "value": "2f0a71aa569790ff"
+    },
+    {
+      "cell": "linear-svc/dupes",
+      "part": "infer",
+      "value": "53712a5c7592f671"
+    },
+    {
+      "cell": "linear-svc/dupes",
+      "part": "train",
+      "value": "40f48169cddc6cc0"
+    },
+    {
+      "cell": "linear-svc/odd",
+      "part": "batch",
+      "value": "141ce3adab9dcb7b"
+    },
+    {
+      "cell": "linear-svc/odd",
+      "part": "infer",
+      "value": "26d5a0fb26bbeb55"
+    },
+    {
+      "cell": "linear-svc/odd",
+      "part": "train",
+      "value": "10afd6285c4bba58"
+    },
+    {
+      "cell": "linear-svc/negative",
+      "part": "batch",
+      "value": "27ba03e754129b96"
+    },
+    {
+      "cell": "linear-svc/negative",
+      "part": "infer",
+      "value": "2989f07516efb96a"
+    },
+    {
+      "cell": "linear-svc/negative",
+      "part": "train",
+      "value": "83f95fb94959abc4"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/base",
+      "part": "batch",
+      "value": "e801d9c3101f57d9"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/base",
+      "part": "infer",
+      "value": "df62ae5ebd5b7fbf"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/base",
+      "part": "train",
+      "value": "35df54b9329814dd"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/ties",
+      "part": "batch",
+      "value": "ff1d5072cca20186"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/ties",
+      "part": "infer",
+      "value": "c21c96ccdd9deffe"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/ties",
+      "part": "train",
+      "value": "e4641ab66a832342"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/hashed",
+      "part": "batch",
+      "value": "445a16c8bb5a7f9a"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/hashed",
+      "part": "infer",
+      "value": "76717d0404344b19"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/hashed",
+      "part": "train",
+      "value": "620d038857a557ec"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/wide",
+      "part": "batch",
+      "value": "f4ff50e84873c708"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/wide",
+      "part": "infer",
+      "value": "a75fb07d2b6ab53f"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/wide",
+      "part": "train",
+      "value": "794879278cc9dad8"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal",
+      "part": "batch",
+      "value": "2e7c56e5920ebafe"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal",
+      "part": "infer",
+      "value": "90b688748d167c17"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal",
+      "part": "train",
+      "value": "f973f96a4d6ba19e"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal_ftz",
+      "part": "batch",
+      "value": "2e7c56e5920ebafe"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal_ftz",
+      "part": "infer",
+      "value": "90b688748d167c17"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/denormal_ftz",
+      "part": "train",
+      "value": "f973f96a4d6ba19e"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/dupes",
+      "part": "batch",
+      "value": "11566a618373e2f5"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/dupes",
+      "part": "infer",
+      "value": "2dd76108e2ce5440"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/dupes",
+      "part": "train",
+      "value": "e7b260324d253c86"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/odd",
+      "part": "batch",
+      "value": "6713cd6f8fe7f25d"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/odd",
+      "part": "infer",
+      "value": "bd1c7b0db6934b89"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/odd",
+      "part": "train",
+      "value": "8bf9dc27f8a7e804"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/negative",
+      "part": "batch",
+      "value": "c79e90b3b9742d43"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/negative",
+      "part": "infer",
+      "value": "a6006ac9df28d182"
+    },
+    {
+      "cell": "linear-svc-squared-hinge/negative",
+      "part": "train",
+      "value": "73e129cd84208a2d"
+    },
+    {
+      "cell": "linear-svr/base",
+      "part": "batch",
+      "value": "e7801cb7b691e705"
+    },
+    {
+      "cell": "linear-svr/base",
+      "part": "infer",
+      "value": "f0656381a19c7f59"
+    },
+    {
+      "cell": "linear-svr/base",
+      "part": "train",
+      "value": "720053d167b0cb5d"
+    },
+    {
+      "cell": "linear-svr/ties",
+      "part": "batch",
+      "value": "9b0eaddca429e720"
+    },
+    {
+      "cell": "linear-svr/ties",
+      "part": "infer",
+      "value": "4acceb891e824bd3"
+    },
+    {
+      "cell": "linear-svr/ties",
+      "part": "train",
+      "value": "967e1b6771aaabbe"
+    },
+    {
+      "cell": "linear-svr/hashed",
+      "part": "batch",
+      "value": "922e4085db06b0c0"
+    },
+    {
+      "cell": "linear-svr/hashed",
+      "part": "infer",
+      "value": "bb23d21977bfd00f"
+    },
+    {
+      "cell": "linear-svr/hashed",
+      "part": "train",
+      "value": "bd1adbacdc3080c5"
+    },
+    {
+      "cell": "linear-svr/wide",
+      "part": "batch",
+      "value": "db00506e3e159b92"
+    },
+    {
+      "cell": "linear-svr/wide",
+      "part": "infer",
+      "value": "80128670ec92387c"
+    },
+    {
+      "cell": "linear-svr/wide",
+      "part": "train",
+      "value": "81183e419fe30d98"
+    },
+    {
+      "cell": "linear-svr/denormal",
+      "part": "batch",
+      "value": "857aa80701517582"
+    },
+    {
+      "cell": "linear-svr/denormal",
+      "part": "infer",
+      "value": "89b86cfda7941f9d"
+    },
+    {
+      "cell": "linear-svr/denormal",
+      "part": "train",
+      "value": "8e82962cfc343600"
+    },
+    {
+      "cell": "linear-svr/denormal_ftz",
+      "part": "batch",
+      "value": "857aa80701517582"
+    },
+    {
+      "cell": "linear-svr/denormal_ftz",
+      "part": "infer",
+      "value": "89b86cfda7941f9d"
+    },
+    {
+      "cell": "linear-svr/denormal_ftz",
+      "part": "train",
+      "value": "8e82962cfc343600"
+    },
+    {
+      "cell": "linear-svr/dupes",
+      "part": "batch",
+      "value": "ca48315afcac1f47"
+    },
+    {
+      "cell": "linear-svr/dupes",
+      "part": "infer",
+      "value": "9fbdaff300abaaed"
+    },
+    {
+      "cell": "linear-svr/dupes",
+      "part": "train",
+      "value": "4066871f9f357564"
+    },
+    {
+      "cell": "linear-svr/odd",
+      "part": "batch",
+      "value": "5ec9644bc43851fa"
+    },
+    {
+      "cell": "linear-svr/odd",
+      "part": "infer",
+      "value": "e99f8c155d808866"
+    },
+    {
+      "cell": "linear-svr/odd",
+      "part": "train",
+      "value": "cb6c917166cdc79b"
+    },
+    {
+      "cell": "linear-svr/negative",
+      "part": "batch",
+      "value": "7093831875ae5a2b"
+    },
+    {
+      "cell": "linear-svr/negative",
+      "part": "infer",
+      "value": "e1e243d193399032"
+    },
+    {
+      "cell": "linear-svr/negative",
+      "part": "train",
+      "value": "04a79407d8d037b2"
+    },
+    {
+      "cell": "linear-svr-squared/base",
+      "part": "batch",
+      "value": "db3f72f9c3a60da7"
+    },
+    {
+      "cell": "linear-svr-squared/base",
+      "part": "infer",
+      "value": "1e081cb89312bcb6"
+    },
+    {
+      "cell": "linear-svr-squared/base",
+      "part": "train",
+      "value": "b61623550542d6a3"
+    },
+    {
+      "cell": "linear-svr-squared/ties",
+      "part": "batch",
+      "value": "41f130d7ff83bdde"
+    },
+    {
+      "cell": "linear-svr-squared/ties",
+      "part": "infer",
+      "value": "f52bea885a8b4b22"
+    },
+    {
+      "cell": "linear-svr-squared/ties",
+      "part": "train",
+      "value": "85643b761a0d568d"
+    },
+    {
+      "cell": "linear-svr-squared/hashed",
+      "part": "batch",
+      "value": "1e99f35e02cc3067"
+    },
+    {
+      "cell": "linear-svr-squared/hashed",
+      "part": "infer",
+      "value": "a7a79335060be98d"
+    },
+    {
+      "cell": "linear-svr-squared/hashed",
+      "part": "train",
+      "value": "0cf72bf267973164"
+    },
+    {
+      "cell": "linear-svr-squared/wide",
+      "part": "batch",
+      "value": "2e4e829bdb003de9"
+    },
+    {
+      "cell": "linear-svr-squared/wide",
+      "part": "infer",
+      "value": "5ccc7ebe1931c225"
+    },
+    {
+      "cell": "linear-svr-squared/wide",
+      "part": "train",
+      "value": "751161229f00366a"
+    },
+    {
+      "cell": "linear-svr-squared/denormal",
+      "part": "batch",
+      "value": "d0448519d3e27c3e"
+    },
+    {
+      "cell": "linear-svr-squared/denormal",
+      "part": "infer",
+      "value": "22052eaae7e3f6fe"
+    },
+    {
+      "cell": "linear-svr-squared/denormal",
+      "part": "train",
+      "value": "0207fc27b1703e10"
+    },
+    {
+      "cell": "linear-svr-squared/denormal_ftz",
+      "part": "batch",
+      "value": "d0448519d3e27c3e"
+    },
+    {
+      "cell": "linear-svr-squared/denormal_ftz",
+      "part": "infer",
+      "value": "22052eaae7e3f6fe"
+    },
+    {
+      "cell": "linear-svr-squared/denormal_ftz",
+      "part": "train",
+      "value": "0207fc27b1703e10"
+    },
+    {
+      "cell": "linear-svr-squared/dupes",
+      "part": "batch",
+      "value": "9ab206a0b4e0d787"
+    },
+    {
+      "cell": "linear-svr-squared/dupes",
+      "part": "infer",
+      "value": "b7c6775cbb3e1c1a"
+    },
+    {
+      "cell": "linear-svr-squared/dupes",
+      "part": "train",
+      "value": "27a8d8972f80bf4f"
+    },
+    {
+      "cell": "linear-svr-squared/odd",
+      "part": "batch",
+      "value": "9cde26156136fa46"
+    },
+    {
+      "cell": "linear-svr-squared/odd",
+      "part": "infer",
+      "value": "e8accad51e96adbb"
+    },
+    {
+      "cell": "linear-svr-squared/odd",
+      "part": "train",
+      "value": "a9fdd5e8c70b3e06"
+    },
+    {
+      "cell": "linear-svr-squared/negative",
+      "part": "batch",
+      "value": "58262bb1923ba1b2"
+    },
+    {
+      "cell": "linear-svr-squared/negative",
+      "part": "infer",
+      "value": "8a03c4a75dce72e4"
+    },
+    {
+      "cell": "linear-svr-squared/negative",
+      "part": "train",
+      "value": "b818eeb3739c2936"
+    },
+    {
+      "cell": "qn-squared/base",
+      "part": "batch",
+      "value": "b836d7648f99d7c5"
+    },
+    {
+      "cell": "qn-squared/base",
+      "part": "infer",
+      "value": "4b8ef687725457ca"
+    },
+    {
+      "cell": "qn-squared/base",
+      "part": "train",
+      "value": "f3d9322a06b59822"
+    },
+    {
+      "cell": "qn-squared/ties",
+      "part": "batch",
+      "value": "39e1187e5d9f8701"
+    },
+    {
+      "cell": "qn-squared/ties",
+      "part": "infer",
+      "value": "35b668b7b043e988"
+    },
+    {
+      "cell": "qn-squared/ties",
+      "part": "train",
+      "value": "9f8c16169e23f4da"
+    },
+    {
+      "cell": "qn-squared/hashed",
+      "part": "batch",
+      "value": "e9321f374b7b6e41"
+    },
+    {
+      "cell": "qn-squared/hashed",
+      "part": "infer",
+      "value": "498e9b177badc549"
+    },
+    {
+      "cell": "qn-squared/hashed",
+      "part": "train",
+      "value": "47417bbff5cfa492"
+    },
+    {
+      "cell": "qn-squared/wide",
+      "part": "batch",
+      "value": "07a40631b6e2a86f"
+    },
+    {
+      "cell": "qn-squared/wide",
+      "part": "infer",
+      "value": "0e6dc890fe1fb539"
+    },
+    {
+      "cell": "qn-squared/wide",
+      "part": "train",
+      "value": "a20f9dcaa03b280e"
+    },
+    {
+      "cell": "qn-squared/denormal",
+      "part": "batch",
+      "value": "15fcd94d21ac2a2f"
+    },
+    {
+      "cell": "qn-squared/denormal",
+      "part": "infer",
+      "value": "70349edd5a7acc6a"
+    },
+    {
+      "cell": "qn-squared/denormal",
+      "part": "train",
+      "value": "3f6ef324c6c1dcb5"
+    },
+    {
+      "cell": "qn-squared/denormal_ftz",
+      "part": "batch",
+      "value": "15fcd94d21ac2a2f"
+    },
+    {
+      "cell": "qn-squared/denormal_ftz",
+      "part": "infer",
+      "value": "70349edd5a7acc6a"
+    },
+    {
+      "cell": "qn-squared/denormal_ftz",
+      "part": "train",
+      "value": "3f6ef324c6c1dcb5"
+    },
+    {
+      "cell": "qn-squared/dupes",
+      "part": "batch",
+      "value": "6f0bd3ba80cc63df"
+    },
+    {
+      "cell": "qn-squared/dupes",
+      "part": "infer",
+      "value": "0c75d5c80258a67b"
+    },
+    {
+      "cell": "qn-squared/dupes",
+      "part": "train",
+      "value": "ac8268e88ea15217"
+    },
+    {
+      "cell": "qn-squared/odd",
+      "part": "batch",
+      "value": "14ebf2e68c7f8a60"
+    },
+    {
+      "cell": "qn-squared/odd",
+      "part": "infer",
+      "value": "d930ab5769fb701f"
+    },
+    {
+      "cell": "qn-squared/odd",
+      "part": "train",
+      "value": "97714f5dcc00977e"
+    },
+    {
+      "cell": "qn-squared/negative",
+      "part": "batch",
+      "value": "c35770aa827dc299"
+    },
+    {
+      "cell": "qn-squared/negative",
+      "part": "infer",
+      "value": "98cb612f68486b77"
+    },
+    {
+      "cell": "qn-squared/negative",
+      "part": "train",
+      "value": "1ac047b20137cd5c"
+    },
+    {
+      "cell": "qn-absolute/base",
+      "part": "batch",
+      "value": "af947d449b201efe"
+    },
+    {
+      "cell": "qn-absolute/base",
+      "part": "infer",
+      "value": "ecaa69ed68b5e381"
+    },
+    {
+      "cell": "qn-absolute/base",
+      "part": "train",
+      "value": "5369e6e1e3da54a7"
+    },
+    {
+      "cell": "qn-absolute/ties",
+      "part": "batch",
+      "value": "e268efe4ce9185c2"
+    },
+    {
+      "cell": "qn-absolute/ties",
+      "part": "infer",
+      "value": "72ba2998478989e4"
+    },
+    {
+      "cell": "qn-absolute/ties",
+      "part": "train",
+      "value": "fee67065daa5b8f7"
+    },
+    {
+      "cell": "qn-absolute/hashed",
+      "part": "batch",
+      "value": "fac29a3196bc2751"
+    },
+    {
+      "cell": "qn-absolute/hashed",
+      "part": "infer",
+      "value": "2d5b204a9c2de1fa"
+    },
+    {
+      "cell": "qn-absolute/hashed",
+      "part": "train",
+      "value": "0c759a2b6cf0b0e4"
+    },
+    {
+      "cell": "qn-absolute/wide",
+      "part": "batch",
+      "value": "3b90075d45eb4c89"
+    },
+    {
+      "cell": "qn-absolute/wide",
+      "part": "infer",
+      "value": "2b4e314f5af4e172"
+    },
+    {
+      "cell": "qn-absolute/wide",
+      "part": "train",
+      "value": "4decefc22bc2600e"
+    },
+    {
+      "cell": "qn-absolute/denormal",
+      "part": "batch",
+      "value": "24e333e57101b249"
+    },
+    {
+      "cell": "qn-absolute/denormal",
+      "part": "infer",
+      "value": "7835dd18065d74c8"
+    },
+    {
+      "cell": "qn-absolute/denormal",
+      "part": "train",
+      "value": "daf2cb615a761869"
+    },
+    {
+      "cell": "qn-absolute/denormal_ftz",
+      "part": "batch",
+      "value": "24e333e57101b249"
+    },
+    {
+      "cell": "qn-absolute/denormal_ftz",
+      "part": "infer",
+      "value": "7835dd18065d74c8"
+    },
+    {
+      "cell": "qn-absolute/denormal_ftz",
+      "part": "train",
+      "value": "daf2cb615a761869"
+    },
+    {
+      "cell": "qn-absolute/dupes",
+      "part": "batch",
+      "value": "1289816310601275"
+    },
+    {
+      "cell": "qn-absolute/dupes",
+      "part": "infer",
+      "value": "cd545ce3a8b532e8"
+    },
+    {
+      "cell": "qn-absolute/dupes",
+      "part": "train",
+      "value": "a1f6d9a0a1d7df41"
+    },
+    {
+      "cell": "qn-absolute/odd",
+      "part": "batch",
+      "value": "c8a3f25f50879f8d"
+    },
+    {
+      "cell": "qn-absolute/odd",
+      "part": "infer",
+      "value": "f44f7b769d66409c"
+    },
+    {
+      "cell": "qn-absolute/odd",
+      "part": "train",
+      "value": "9226f49758c1589e"
+    },
+    {
+      "cell": "qn-absolute/negative",
+      "part": "batch",
+      "value": "d22bd1c8f9c77ac6"
+    },
+    {
+      "cell": "qn-absolute/negative",
+      "part": "infer",
+      "value": "f4fec155ab62a0d3"
+    },
+    {
+      "cell": "qn-absolute/negative",
+      "part": "train",
+      "value": "f93dedb1c4678bca"
+    },
+    {
+      "cell": "spectral-precomputed/base",
+      "part": "batch",
+      "value": "403839d9afb03ede"
+    },
+    {
+      "cell": "spectral-precomputed/base",
+      "part": "infer",
+      "value": "bb2835f47f32e74d"
+    },
+    {
+      "cell": "spectral-precomputed/base",
+      "part": "model",
+      "value": "6b04b89cfa623e45"
+    },
+    {
+      "cell": "spectral-precomputed/base",
+      "part": "train",
+      "value": "8df6d51dbff9ddaf"
+    },
+    {
+      "cell": "spectral-precomputed/ties",
+      "part": "batch",
+      "value": "eba1461e59f20122"
+    },
+    {
+      "cell": "spectral-precomputed/ties",
+      "part": "infer",
+      "value": "77b660ca4b2a42e2"
+    },
+    {
+      "cell": "spectral-precomputed/ties",
+      "part": "model",
+      "value": "ea7aeb5dfe06471c"
+    },
+    {
+      "cell": "spectral-precomputed/ties",
+      "part": "train",
+      "value": "32ed236da838cb22"
+    },
+    {
+      "cell": "spectral-precomputed/hashed",
+      "part": "batch",
+      "value": "f37e31ace943997d"
+    },
+    {
+      "cell": "spectral-precomputed/hashed",
+      "part": "infer",
+      "value": "3aed3a887e2b0c41"
+    },
+    {
+      "cell": "spectral-precomputed/hashed",
+      "part": "model",
+      "value": "57673edfae833da5"
+    },
+    {
+      "cell": "spectral-precomputed/hashed",
+      "part": "train",
+      "value": "fafd67318e66c8e9"
+    },
+    {
+      "cell": "spectral-precomputed/wide",
+      "part": "batch",
+      "value": "73a372dffb458803"
+    },
+    {
+      "cell": "spectral-precomputed/wide",
+      "part": "infer",
+      "value": "c0ba56eeb5dcea34"
+    },
+    {
+      "cell": "spectral-precomputed/wide",
+      "part": "model",
+      "value": "710be55734b0c960"
+    },
+    {
+      "cell": "spectral-precomputed/wide",
+      "part": "train",
+      "value": "ebeb9c5c4008a66d"
+    },
+    {
+      "cell": "spectral-precomputed/denormal",
+      "part": "batch",
+      "value": "600fc84e875132a6"
+    },
+    {
+      "cell": "spectral-precomputed/denormal",
+      "part": "infer",
+      "value": "7cd8401e0437ce89"
+    },
+    {
+      "cell": "spectral-precomputed/denormal",
+      "part": "model",
+      "value": "0df4233607620b15"
+    },
+    {
+      "cell": "spectral-precomputed/denormal",
+      "part": "train",
+      "value": "134d1fdd8654374a"
+    },
+    {
+      "cell": "spectral-precomputed/denormal_ftz",
+      "part": "batch",
+      "value": "600fc84e875132a6"
+    },
+    {
+      "cell": "spectral-precomputed/denormal_ftz",
+      "part": "infer",
+      "value": "7cd8401e0437ce89"
+    },
+    {
+      "cell": "spectral-precomputed/denormal_ftz",
+      "part": "model",
+      "value": "0df4233607620b15"
+    },
+    {
+      "cell": "spectral-precomputed/denormal_ftz",
+      "part": "train",
+      "value": "134d1fdd8654374a"
+    },
+    {
+      "cell": "spectral-precomputed/dupes",
+      "part": "batch",
+      "value": "403839d9afb03ede"
+    },
+    {
+      "cell": "spectral-precomputed/dupes",
+      "part": "infer",
+      "value": "bb2835f47f32e74d"
+    },
+    {
+      "cell": "spectral-precomputed/dupes",
+      "part": "model",
+      "value": "6b04b89cfa623e45"
+    },
+    {
+      "cell": "spectral-precomputed/dupes",
+      "part": "train",
+      "value": "8df6d51dbff9ddaf"
+    },
+    {
+      "cell": "spectral-precomputed/odd",
+      "part": "batch",
+      "value": "b7fdd3972dd692b3"
+    },
+    {
+      "cell": "spectral-precomputed/odd",
+      "part": "infer",
+      "value": "dce8f63e8bca9703"
+    },
+    {
+      "cell": "spectral-precomputed/odd",
+      "part": "model",
+      "value": "c9fda73cee1e07c0"
+    },
+    {
+      "cell": "spectral-precomputed/odd",
+      "part": "train",
+      "value": "bbe40df82c9e623a"
+    },
+    {
+      "cell": "spectral-precomputed/negative",
+      "part": "batch",
+      "value": "43d927a591f2c6fa"
+    },
+    {
+      "cell": "spectral-precomputed/negative",
+      "part": "infer",
+      "value": "423f584e1c5cce33"
+    },
+    {
+      "cell": "spectral-precomputed/negative",
+      "part": "model",
+      "value": "8ff2c152fc6fba9f"
+    },
+    {
+      "cell": "spectral-precomputed/negative",
+      "part": "train",
+      "value": "6231ccf8fca2283f"
+    },
+    {
+      "cell": "spectral-embedding/base",
+      "part": "train",
+      "value": "8ba3b234b11555d3"
+    },
+    {
+      "cell": "spectral-embedding/ties",
+      "part": "train",
+      "value": "aa7d8da9aab7e642"
+    },
+    {
+      "cell": "spectral-embedding/hashed",
+      "part": "train",
+      "value": "d3d61c2839b8d641"
+    },
+    {
+      "cell": "spectral-embedding/wide",
+      "part": "train",
+      "value": "2a30361d02fdf598"
+    },
+    {
+      "cell": "spectral-embedding/denormal",
+      "part": "train",
+      "value": "4fed620e51580dbb"
+    },
+    {
+      "cell": "spectral-embedding/denormal_ftz",
+      "part": "train",
+      "value": "4fed620e51580dbb"
+    },
+    {
+      "cell": "spectral-embedding/dupes",
+      "part": "train",
+      "value": "8ba3b234b11555d3"
+    },
+    {
+      "cell": "spectral-embedding/odd",
+      "part": "train",
+      "value": "97fb425ccea5f8f3"
+    },
+    {
+      "cell": "spectral-embedding/negative",
+      "part": "train",
+      "value": "e5efa1522a422de1"
+    },
+    {
+      "cell": "kmeans-sqrt/base",
+      "part": "batch",
+      "value": "50d831d9342c295e"
+    },
+    {
+      "cell": "kmeans-sqrt/base",
+      "part": "infer",
+      "value": "58a73ee6f884f892"
+    },
+    {
+      "cell": "kmeans-sqrt/base",
+      "part": "model",
+      "value": "0effed928846f9bd"
+    },
+    {
+      "cell": "kmeans-sqrt/base",
+      "part": "train",
+      "value": "8864be3c295d6c4a"
+    },
+    {
+      "cell": "kmeans-sqrt/ties",
+      "part": "batch",
+      "value": "59f927df98783136"
+    },
+    {
+      "cell": "kmeans-sqrt/ties",
+      "part": "infer",
+      "value": "11403f38e806a8a7"
+    },
+    {
+      "cell": "kmeans-sqrt/ties",
+      "part": "model",
+      "value": "7181baa5430d7dab"
+    },
+    {
+      "cell": "kmeans-sqrt/ties",
+      "part": "train",
+      "value": "07a5cce02a00bdae"
+    },
+    {
+      "cell": "kmeans-sqrt/hashed",
+      "part": "batch",
+      "value": "9047d13746fde11f"
+    },
+    {
+      "cell": "kmeans-sqrt/hashed",
+      "part": "infer",
+      "value": "a06e759c2854f5c9"
+    },
+    {
+      "cell": "kmeans-sqrt/hashed",
+      "part": "model",
+      "value": "84c2a44a21e44403"
+    },
+    {
+      "cell": "kmeans-sqrt/hashed",
+      "part": "train",
+      "value": "ac3f2b1bd8367ffa"
+    },
+    {
+      "cell": "kmeans-sqrt/wide",
+      "part": "batch",
+      "value": "2830b761f5399579"
+    },
+    {
+      "cell": "kmeans-sqrt/wide",
+      "part": "infer",
+      "value": "37c2fbaaa28d56dc"
+    },
+    {
+      "cell": "kmeans-sqrt/wide",
+      "part": "model",
+      "value": "cb86b13af4ca5a13"
+    },
+    {
+      "cell": "kmeans-sqrt/wide",
+      "part": "train",
+      "value": "4bde18fe714ad92e"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal",
+      "part": "batch",
+      "value": "79378a3a1acbc98e"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal",
+      "part": "infer",
+      "value": "5613aee8380a3878"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal",
+      "part": "model",
+      "value": "7e1253b548caa109"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal",
+      "part": "train",
+      "value": "c2486d60db950886"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal_ftz",
+      "part": "batch",
+      "value": "79378a3a1acbc98e"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal_ftz",
+      "part": "infer",
+      "value": "5613aee8380a3878"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal_ftz",
+      "part": "model",
+      "value": "7e1253b548caa109"
+    },
+    {
+      "cell": "kmeans-sqrt/denormal_ftz",
+      "part": "train",
+      "value": "c2486d60db950886"
+    },
+    {
+      "cell": "kmeans-sqrt/dupes",
+      "part": "batch",
+      "value": "266157cdb4a673b5"
+    },
+    {
+      "cell": "kmeans-sqrt/dupes",
+      "part": "infer",
+      "value": "b92ddb041800ab7d"
+    },
+    {
+      "cell": "kmeans-sqrt/dupes",
+      "part": "model",
+      "value": "40878a0402655c43"
+    },
+    {
+      "cell": "kmeans-sqrt/dupes",
+      "part": "train",
+      "value": "66b6c6d6d5088c26"
+    },
+    {
+      "cell": "kmeans-sqrt/odd",
+      "part": "batch",
+      "value": "308b44148cf1b4d5"
+    },
+    {
+      "cell": "kmeans-sqrt/odd",
+      "part": "infer",
+      "value": "d57783b77ce4e554"
+    },
+    {
+      "cell": "kmeans-sqrt/odd",
+      "part": "model",
+      "value": "f9e8185ae7bbb0c8"
+    },
+    {
+      "cell": "kmeans-sqrt/odd",
+      "part": "train",
+      "value": "cd50fd82b95de87a"
+    },
+    {
+      "cell": "kmeans-sqrt/negative",
+      "part": "batch",
+      "value": "e97dcd5d4ed89145"
+    },
+    {
+      "cell": "kmeans-sqrt/negative",
+      "part": "infer",
+      "value": "8184b15e6474cb1c"
+    },
+    {
+      "cell": "kmeans-sqrt/negative",
+      "part": "model",
+      "value": "17f7794f0738050e"
+    },
+    {
+      "cell": "kmeans-sqrt/negative",
+      "part": "train",
+      "value": "5780022527a439a1"
+    },
+    {
+      "cell": "kmeans-classic-pp/base",
+      "part": "batch",
+      "value": "a710fad38f112c1c"
+    },
+    {
+      "cell": "kmeans-classic-pp/base",
+      "part": "infer",
+      "value": "e44226a81eebb7a8"
+    },
+    {
+      "cell": "kmeans-classic-pp/base",
+      "part": "model",
+      "value": "55fd7b42b82bed5a"
+    },
+    {
+      "cell": "kmeans-classic-pp/base",
+      "part": "train",
+      "value": "e6648c8209c562ac"
+    },
+    {
+      "cell": "kmeans-classic-pp/ties",
+      "part": "batch",
+      "value": "ff31663995ac52c6"
+    },
+    {
+      "cell": "kmeans-classic-pp/ties",
+      "part": "infer",
+      "value": "83ac9df1fe7b737d"
+    },
+    {
+      "cell": "kmeans-classic-pp/ties",
+      "part": "model",
+      "value": "1b9389c57ac86008"
+    },
+    {
+      "cell": "kmeans-classic-pp/ties",
+      "part": "train",
+      "value": "b0f1aa9e9e7adf6f"
+    },
+    {
+      "cell": "kmeans-classic-pp/hashed",
+      "part": "batch",
+      "value": "e06096a70b93c99d"
+    },
+    {
+      "cell": "kmeans-classic-pp/hashed",
+      "part": "infer",
+      "value": "8987a9c854625d1b"
+    },
+    {
+      "cell": "kmeans-classic-pp/hashed",
+      "part": "model",
+      "value": "9b441895a27cb6f4"
+    },
+    {
+      "cell": "kmeans-classic-pp/hashed",
+      "part": "train",
+      "value": "8aec37d06d525fce"
+    },
+    {
+      "cell": "kmeans-classic-pp/wide",
+      "part": "batch",
+      "value": "513be11997c08466"
+    },
+    {
+      "cell": "kmeans-classic-pp/wide",
+      "part": "infer",
+      "value": "364ff36014fc9d74"
+    },
+    {
+      "cell": "kmeans-classic-pp/wide",
+      "part": "model",
+      "value": "ad958243c642d0db"
+    },
+    {
+      "cell": "kmeans-classic-pp/wide",
+      "part": "train",
+      "value": "51beac4d46f297db"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal",
+      "part": "batch",
+      "value": "15dec882e28b9589"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal",
+      "part": "infer",
+      "value": "f86f206425b73e29"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal",
+      "part": "model",
+      "value": "a1d512cffe9f55e1"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal",
+      "part": "train",
+      "value": "d3ba0ebbb0af1b3e"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal_ftz",
+      "part": "batch",
+      "value": "15dec882e28b9589"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal_ftz",
+      "part": "infer",
+      "value": "f86f206425b73e29"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal_ftz",
+      "part": "model",
+      "value": "a1d512cffe9f55e1"
+    },
+    {
+      "cell": "kmeans-classic-pp/denormal_ftz",
+      "part": "train",
+      "value": "d3ba0ebbb0af1b3e"
+    },
+    {
+      "cell": "kmeans-classic-pp/dupes",
+      "part": "batch",
+      "value": "c4635b7f02d3b87c"
+    },
+    {
+      "cell": "kmeans-classic-pp/dupes",
+      "part": "infer",
+      "value": "a84b8a2e9fe29bb3"
+    },
+    {
+      "cell": "kmeans-classic-pp/dupes",
+      "part": "model",
+      "value": "be9fb4c81b880248"
+    },
+    {
+      "cell": "kmeans-classic-pp/dupes",
+      "part": "train",
+      "value": "a0389077dee20809"
+    },
+    {
+      "cell": "kmeans-classic-pp/odd",
+      "part": "batch",
+      "value": "192831cf947aa32b"
+    },
+    {
+      "cell": "kmeans-classic-pp/odd",
+      "part": "infer",
+      "value": "3b0d31ba504ffc5b"
+    },
+    {
+      "cell": "kmeans-classic-pp/odd",
+      "part": "model",
+      "value": "01cb00a5d860be9c"
+    },
+    {
+      "cell": "kmeans-classic-pp/odd",
+      "part": "train",
+      "value": "a47bec6025e076d8"
+    },
+    {
+      "cell": "kmeans-classic-pp/negative",
+      "part": "batch",
+      "value": "17eaba10a2e24c67"
+    },
+    {
+      "cell": "kmeans-classic-pp/negative",
+      "part": "infer",
+      "value": "2d1704444a719d70"
+    },
+    {
+      "cell": "kmeans-classic-pp/negative",
+      "part": "model",
+      "value": "5e9d9a063f022421"
+    },
+    {
+      "cell": "kmeans-classic-pp/negative",
+      "part": "train",
+      "value": "644cff6572372f33"
+    },
+    {
+      "cell": "mamba1-decode-session/base",
+      "part": "infer",
+      "value": "97e86b9db80719a7"
+    },
+    {
+      "cell": "mamba1-decode-session/base",
+      "part": "stepfull",
+      "value": "7d79ddc6d8ec34e4"
+    },
+    {
+      "cell": "mamba1-decode-session/base",
+      "part": "train",
+      "value": "036f89b10477d901"
+    },
+    {
+      "cell": "mamba1-decode-session/ties",
+      "part": "infer",
+      "value": "13aed38cf2e3c341"
+    },
+    {
+      "cell": "mamba1-decode-session/ties",
+      "part": "stepfull",
+      "value": "bd3ea42885c1f0f5"
+    },
+    {
+      "cell": "mamba1-decode-session/ties",
+      "part": "train",
+      "value": "3cc74db02ec1b22d"
+    },
+    {
+      "cell": "mamba1-decode-session/hashed",
+      "part": "infer",
+      "value": "b2e6c1006bf3a5ce"
+    },
+    {
+      "cell": "mamba1-decode-session/hashed",
+      "part": "stepfull",
+      "value": "12348ab88f4b097f"
+    },
+    {
+      "cell": "mamba1-decode-session/hashed",
+      "part": "train",
+      "value": "a9bb1090e91b7582"
+    },
+    {
+      "cell": "mamba1-decode-session/wide",
+      "part": "infer",
+      "value": "905c98cf2a276d1d"
+    },
+    {
+      "cell": "mamba1-decode-session/wide",
+      "part": "stepfull",
+      "value": "07799d0f4bc09ccf"
+    },
+    {
+      "cell": "mamba1-decode-session/wide",
+      "part": "train",
+      "value": "f765fff13969ae65"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal",
+      "part": "infer",
+      "value": "79e0f910c5525ef7"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal",
+      "part": "stepfull",
+      "value": "d33e740c49673bfc"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal",
+      "part": "train",
+      "value": "3f050da17bbc4341"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal_ftz",
+      "part": "infer",
+      "value": "79e0f910c5525ef7"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal_ftz",
+      "part": "stepfull",
+      "value": "d33e740c49673bfc"
+    },
+    {
+      "cell": "mamba1-decode-session/denormal_ftz",
+      "part": "train",
+      "value": "3f050da17bbc4341"
+    },
+    {
+      "cell": "mamba1-decode-session/dupes",
+      "part": "infer",
+      "value": "4f1ca2b3595ec583"
+    },
+    {
+      "cell": "mamba1-decode-session/dupes",
+      "part": "stepfull",
+      "value": "7f1ea504721cb325"
+    },
+    {
+      "cell": "mamba1-decode-session/dupes",
+      "part": "train",
+      "value": "ac67de529f894730"
+    },
+    {
+      "cell": "mamba1-decode-session/odd",
+      "part": "infer",
+      "value": "97e86b9db80719a7"
+    },
+    {
+      "cell": "mamba1-decode-session/odd",
+      "part": "stepfull",
+      "value": "7d79ddc6d8ec34e4"
+    },
+    {
+      "cell": "mamba1-decode-session/odd",
+      "part": "train",
+      "value": "036f89b10477d901"
+    },
+    {
+      "cell": "mamba1-decode-session/negative",
+      "part": "infer",
+      "value": "c0e8d2045bc0faf6"
+    },
+    {
+      "cell": "mamba1-decode-session/negative",
+      "part": "stepfull",
+      "value": "950eb9d64a333b48"
+    },
+    {
+      "cell": "mamba1-decode-session/negative",
+      "part": "train",
+      "value": "8f326fa28bc9d748"
+    },
+    {
+      "cell": "transformer-decode-session/base",
+      "part": "infer",
+      "value": "80ab5cc2b56af36f"
+    },
+    {
+      "cell": "transformer-decode-session/base",
+      "part": "stepfull",
+      "value": "2bd2002e82de9749"
+    },
+    {
+      "cell": "transformer-decode-session/base",
+      "part": "train",
+      "value": "44ed8cdc5dc0e0b9"
+    },
+    {
+      "cell": "transformer-decode-session/ties",
+      "part": "infer",
+      "value": "2912a1df502a940f"
+    },
+    {
+      "cell": "transformer-decode-session/ties",
+      "part": "stepfull",
+      "value": "1a3f572311d82358"
+    },
+    {
+      "cell": "transformer-decode-session/ties",
+      "part": "train",
+      "value": "3d31a6c8c65563d7"
+    },
+    {
+      "cell": "transformer-decode-session/hashed",
+      "part": "infer",
+      "value": "0e628f9d48f2496e"
+    },
+    {
+      "cell": "transformer-decode-session/hashed",
+      "part": "stepfull",
+      "value": "8129833714f163b2"
+    },
+    {
+      "cell": "transformer-decode-session/hashed",
+      "part": "train",
+      "value": "3ffde21001d551a1"
+    },
+    {
+      "cell": "transformer-decode-session/wide",
+      "part": "infer",
+      "value": "472ac906ecc50310"
+    },
+    {
+      "cell": "transformer-decode-session/wide",
+      "part": "stepfull",
+      "value": "4d8b013d3ce03bec"
+    },
+    {
+      "cell": "transformer-decode-session/wide",
+      "part": "train",
+      "value": "a52a0d87addfd3a4"
+    },
+    {
+      "cell": "transformer-decode-session/denormal",
+      "part": "infer",
+      "value": "409686c83a812662"
+    },
+    {
+      "cell": "transformer-decode-session/denormal",
+      "part": "stepfull",
+      "value": "40b8565d8f05e934"
+    },
+    {
+      "cell": "transformer-decode-session/denormal",
+      "part": "train",
+      "value": "4fcb8d8fda14d09b"
+    },
+    {
+      "cell": "transformer-decode-session/denormal_ftz",
+      "part": "infer",
+      "value": "409686c83a812662"
+    },
+    {
+      "cell": "transformer-decode-session/denormal_ftz",
+      "part": "stepfull",
+      "value": "40b8565d8f05e934"
+    },
+    {
+      "cell": "transformer-decode-session/denormal_ftz",
+      "part": "train",
+      "value": "4fcb8d8fda14d09b"
+    },
+    {
+      "cell": "transformer-decode-session/dupes",
+      "part": "infer",
+      "value": "b148c12305954963"
+    },
+    {
+      "cell": "transformer-decode-session/dupes",
+      "part": "stepfull",
+      "value": "336f7d17c2760221"
+    },
+    {
+      "cell": "transformer-decode-session/dupes",
+      "part": "train",
+      "value": "72aca467846eaed3"
+    },
+    {
+      "cell": "transformer-decode-session/odd",
+      "part": "infer",
+      "value": "80ab5cc2b56af36f"
+    },
+    {
+      "cell": "transformer-decode-session/odd",
+      "part": "stepfull",
+      "value": "2bd2002e82de9749"
+    },
+    {
+      "cell": "transformer-decode-session/odd",
+      "part": "train",
+      "value": "44ed8cdc5dc0e0b9"
+    },
+    {
+      "cell": "transformer-decode-session/negative",
+      "part": "infer",
+      "value": "5dac481538b009f5"
+    },
+    {
+      "cell": "transformer-decode-session/negative",
+      "part": "stepfull",
+      "value": "8578fb673b364852"
+    },
+    {
+      "cell": "transformer-decode-session/negative",
+      "part": "train",
+      "value": "b668b4163397c0c9"
+    }
+  ],
+  "fixtures": 9,
+  "lanes": 38,
+  "native_source_commit": "a97676ba18a09fb577ef9faae45ab19a01eec848",
+  "numeric_parts_exact_cpu": 1647,
+  "problems": [],
+  "reference_sha256": "590f49b1b30d2a158bcf51cdef1f43be4e01c5f84258886a837a3a8aac901fb3",
+  "reference_source_commit": "819a47ae48166e91951f54f54e64ee173658e32a",
+  "repeats": 1,
+  "source_commit": "c738f526163cc02ec6b7e1255a2dfb70923941b1"
+}
