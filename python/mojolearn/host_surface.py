@@ -1122,7 +1122,8 @@ ADAPTED_MODULES = {
 #: EVERY ENTRY NAMES WHAT REFUSES AND WHY. Until lane/close-no-cpu-path-gbdt
 #: (2026-09-20) this list held ONE entry ending "among them", which hid an
 #: unknown count behind a phrase. The count is 6 and it is below; the
-#: guard-by-guard enumeration each entry summarizes, with the exact refusal
+#: guard-by-guard enumeration each entry summarizes (50 by-name training
+#: refusal sites), with the exact refusal
 #: text and the line that raises it, is
 #: docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md, and the refusals are
 #: reproduced by fitting each configuration on a CPU-only install rather than

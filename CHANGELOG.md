@@ -30,7 +30,7 @@ be checked against a GPU column without owning a GPU.
 count behind that phrase, and one of the things it named (eval sets) had
 already been closed for Ordered boosting. It is now six entries, each naming
 what refuses and the structural reason. The guard-by-guard enumeration behind
-them, 48 by-name refusal sites in 16 configuration families, is
+them, 50 by-name training refusal sites in 16 configuration families, is
 `docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md`, and
 `tools/gbdt_cpu_refusal_probe.py` reproduces the table by fitting each
 configuration rather than reading the source.

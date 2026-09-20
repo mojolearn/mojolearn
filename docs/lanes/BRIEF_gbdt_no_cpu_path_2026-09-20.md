@@ -9,7 +9,15 @@ set absent, `mojolearn._backend._CPU_ONLY` set, inside
 `mojolearn._cpu_reference.reference_training()`), and the refusal column is
 the exception that fit raised. The probe is
 `tools/gbdt_cpu_refusal_probe.py`; run it against any gbdt host build and it
-prints the table again.
+prints the table again:
+
+    PYTHONPATH=python MOJOLEARN_HOST_DIR=<host set> \
+      python3 tools/gbdt_cpu_refusal_probe.py
+
+On this branch's build it reads **ok=30 refused=72**, with all fourteen rows
+of its control block OK. The control block matters: if any of those refuses,
+the probe measured a stale or broken binding and every REFUSED line under it
+means nothing.
 
 **A stale claim found on the way.** The old sentence said eval sets refuse
 "outside the gbdt-pointwise-l2-bayesian-eval configuration". That was already
@@ -25,18 +33,22 @@ OWED at the bottom.
 
 ---
 
-## 1. The enumeration: 48 by-name refusal sites, 16 configuration families
+## 1. The enumeration: 50 by-name TRAINING refusal sites, 16 configuration families
 
-`gbdt_fit` on a CPU-only install refuses through four functions, and the
-one-hot resolver refuses a fifth way:
+`gbdt_fit` on a CPU-only install refuses through three functions, and the
+one-hot resolver refuses a fourth way. Counted on this branch by the line
+that CALLS the refusal (a few of them are shadowed by an earlier guard on
+every input the public API can build, which is why the probe's table is
+shorter than this count):
 
-| refusal function | file | sites |
+| refusal function | file | call sites |
 |---|---|---|
-| `_refuse` | `bindings/_mojolearn_gbdt_host.mojo:243` | 24 |
-| `_refuse_pointwise` | `bindings/_mojolearn_gbdt_host.mojo:398` | 15 |
-| `_refuse_ordered_host` | `bindings/_mojolearn_gbdt_host.mojo:575` | 6 |
+| `_refuse` | `bindings/_mojolearn_gbdt_host.mojo`, `def _refuse` | 26 |
+| `_refuse_pointwise` | `bindings/_mojolearn_gbdt_host.mojo`, `def _refuse_pointwise` | 16 |
+| `_refuse_ordered_host` | `bindings/_mojolearn_gbdt_host.mojo`, `def _refuse_ordered_host` | 7 |
 | `gbdt_resolve_one_hot`'s CTR raise | `gbdt/host/gbdt_oracle_onehot.mojo` | 1 |
-| `_refuse_predict` | `bindings/_mojolearn_gbdt_host.mojo:1731` | 3 (predict, not training) |
+| **training total** | | **50** |
+| `_refuse_predict` | `bindings/_mojolearn_gbdt_host.mojo`, `def _refuse_predict` | 3 (PREDICT, not training, not counted above) |
 
 Grouped into what a caller can actually ask for, that is **16 configuration
 families**. The table gives each one, the refusal a fit raises, and whether
@@ -147,7 +159,8 @@ oblivious bin apply. Each is closable, arm by arm, by handing
 
 ### F6 the pointwise searcher outside its one configuration — CLOSABLE, NOT CLOSED
 
-Thirteen distinct refusals, every one measured:
+Fourteen configurations, every one measured, hitting thirteen distinct
+refusal sites (a missing detector and an IncToDec detector share one):
 
 | asked for | refusal |
 |---|---|
@@ -164,7 +177,7 @@ Thirteen distinct refusals, every one measured:
 | `feature_fraction=0.5` | `feature_fraction=0.5 under use_pointwise_searcher=True` |
 | `feature_border_type="Uniform"` | `feature_border_type under use_pointwise_searcher` |
 | `leaf_estimation_method="Gradient"` | `leaf_estimation_method code 0 (only Newton) under use_pointwise_searcher=True` |
-| `loss="RMSE"` | `loss='RMSE' under use_pointwise_searcher=True` |
+| `loss="RMSE"` | `loss='RMSE' under use_pointwise_searcher=True` -- the probe's row reaches the RMSE leaf-iteration guard first, because its base config pins `leaf_estimation_iterations=10`; the pointwise guard is still there and still reachable |
 
 `gbdt_oracle_pointwise.mojo` restates ONE launch shape of the pointwise
 kernels: the fold and partition geometry, the 8-bit fixed-point histogram at
