@@ -5966,6 +5966,20 @@ def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
     fit. Original global row replication is retained even for the float-partial
     binary/half-byte kernels. The root receives disjoint columns, never sums of
     separately rounded histograms. Prefix scans and split selection stay global.
+
+    THE NEGATIVE CONTROL. `-D MOJOLEARN_GBDT_PARALLEL_SABOTAGE=1` makes every
+    owner above rank 0 read its compressed feature columns one GROUP early.
+    The group count `(end_group - first_group)`, the bin range `first`, the
+    fold count, every descriptor and the copy-back all keep the true
+    `first_group`, so no allocation, length or validation changes; only the
+    packed columns a shard histograms do. `active` is `min(devices, groups)`,
+    so `first_group >= 1` whenever `rank >= 1`. It is a `comptime if`, so no
+    production bit can move, and it is INERT AT ONE DEVICE, which is what makes
+    a moved `par-boosting`, `par-boosting-clf`, `par-boosting-reg`,
+    `par-ordered`, `par-ordered-rmse`, `par-border-types` or `par-feature-freq`
+    cell attributable to the define rather than to the second device. Owed a
+    two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates
+    this driver, so no CPU column can watch it fire.
     """
     ctx.synchronize()
     var scale = ctx.enqueue_create_buffer[DType.float32](1)
@@ -6013,8 +6027,13 @@ def launch_feature_shards[hist2_smem_mode: Int, ridx_stats: Bool](
                 _feature_descriptor(device, desc_groups), _feature_descriptor(device, desc_sizes),
                 block.replication_groups))
             var inputs = List[DeviceBuffer[DType.uint32]]()
+            var source_group = first_group
+            comptime if is_defined["MOJOLEARN_GBDT_PARALLEL_SABOTAGE"]():
+                # Check-only arm: later owners read one packed group early.
+                if rank > 0:
+                    source_group = first_group - 1
             var columns = cindex.create_sub_buffer[DType.uint32](
-                (block.first_column + first_group) * n_rows, (end_group - first_group) * n_rows)
+                (block.first_column + source_group) * n_rows, (end_group - first_group) * n_rows)
             inputs.append(peer_clone(ctx, device, columns))
             inputs.append(peer_clone(ctx, device, row_index))
             inputs.append(peer_clone(ctx, device, p_off))

@@ -5,8 +5,20 @@ The logical shard count and order are independent of the physical device count.
 Each shard produces a mean-CE gradient. Reduction is a SUM, never an average:
 copy g[0], then add g[1], ..., g[K-1] with the IDENTICAL FTZ/FMA primitive.
 No collective chooses the arithmetic order. Qualification is recorded separately.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_BYTE_LM_PARALLEL_SABOTAGE=1` makes every
+optimizer-column OWNER above 0 read its gradient range one column early during
+the pooled reduction. It is a `comptime if`, so no production bit can move, and
+it is inert at one device, where owner 0 holds the whole range at offset 0.
+That guard is what makes a moved `par-byte-lm`, `par-byte-lm-model-pool` or
+`par-byte-lm-offload` cell attributable to the define rather than to the second
+device. Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`) AND a byte-LM
+GPU binding: those three lanes refuse on a CPU column with
+"rebuild bindings/build_byte_lm.sh", not with the cooperative driver's
+sentence, so they are owed a build as well as a box.
 """
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from core.step_phase import STEP_PHASE_TIMERS
@@ -240,7 +252,24 @@ struct ByteParallelTrainer(Movable, Writable):
                         for owner in range(width):
                             var first = self.trainers[owner].buffers.optimizer_first
                             var owned = self.trainers[owner].buffers.optimizer_count
-                            var part = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](first,owned)
+                            var source_first = first
+                            comptime if is_defined["MOJOLEARN_BYTE_LM_PARALLEL_SABOTAGE"]():
+                                # Check-only arm: later OWNERS read their
+                                # gradient columns one column early (`owner`,
+                                # not `rank`: `rank` is the microbatch index
+                                # within the wave, `owner` is the column-range
+                                # rank whose offset the shift is about). The
+                                # length `owned` is unchanged, so every
+                                # transfer, add and write-back keeps its size,
+                                # and the write-back at the bottom of the step
+                                # still uses the true `first`. INERT AT ONE
+                                # DEVICE: `optimizer_first` is 0 at owner 0.
+                                # The step's OWN returned losses are computed
+                                # before the reduction, so the move shows in
+                                # the parameters and in the next step.
+                                if owner > 0:
+                                    source_first = first - 1
+                            var part = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](source_first,owned)
                             transfer_bytes(self.contexts[rank], self.contexts[owner], part,
                                 self.pool_incoming[owner], owned, rank != owner)
                             if start + rank == 0:

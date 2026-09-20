@@ -6033,9 +6033,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
     par = fit_forest(ml.RandomForestClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
     plain = ml.RandomForestClassifier(**kw).fit(X, yc)
-    _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]), "plain predict_proba", plain.predict_proba(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
-                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    mismatch = _mismatch_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
+                               "plain predict_proba", plain.predict_proba(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 @lane("par-forest-et")
@@ -6044,8 +6047,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
     par = fit_forest(ml.ExtraTreesRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
     plain = ml.ExtraTreesRegressor(**kw).fit(X, yr)
-    _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+    mismatch = _mismatch_bytes("fit_forest predict", par.predict(X[:2048]),
+                               "plain predict", plain.predict(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh),))
 
 
 @lane("par-boosting")
@@ -6056,9 +6063,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=20, max_depth=6, loss="Logloss")
     par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
     plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-    _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
-                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    mismatch = _mismatch_bytes("fit_boosting predict", par.predict(X[:2048]),
+                               "plain predict", plain.predict(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 @lane("par-kmeans")
@@ -6066,8 +6076,12 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_kmeans
     par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())
     plain = ml.KMeans(n_clusters=8, random_state=3).fit(X)
-    _same_bytes("fit_kmeans centers", par.cluster_centers_, "plain centers", plain.cluster_centers_)
-    return _fit(dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_)), par, _km_probe(X, Xh))
+    mismatch = _mismatch_bytes("fit_kmeans centers", par.cluster_centers_,
+                               "plain centers", plain.cluster_centers_)
+    parts = dict(centers=_h(par.cluster_centers_), labels=_h(par.labels_))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, _km_probe(X, Xh))
 
 
 @lane("par-gram")
@@ -6076,8 +6090,11 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_gram_estimator
     par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())
     plain = ml.Ridge(alpha=1.0).fit(X, yr)
-    _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
-    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
+    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
 
 
 @lane("par-logistic")
@@ -6085,8 +6102,11 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_logistic
     par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())
     plain = ml.LogisticRegression(max_iter=50).fit(X, yc)
-    _same_bytes("fit_logistic coef", par.coef_, "plain coef", plain.coef_)
-    return _fit(dict(coef=_h(par.coef_), proba=_h(par.predict_proba(X[:256]))), par, lambda e: (e.predict_proba(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_logistic coef", par.coef_, "plain coef", plain.coef_)
+    parts = dict(coef=_h(par.coef_), proba=_h(par.predict_proba(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict_proba(Xh[:256]),))
 
 
 @lane("par-cd")
@@ -6094,8 +6114,11 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_coordinate_descent
     par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())
     plain = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
-    _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
-    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))), par, lambda e: (e.predict(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
+    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
 
 
 @lane("par-svm")
@@ -6105,9 +6128,13 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())
     plain = ml.SVC(**kw).fit(X[:2000], yc[:2000])
     dec = predict_svm(par, X[2000:2256], devices=_par_devices(), method="decision_function")
-    _same_bytes("predict_svm decision", dec, "plain decision", plain.decision_function(X[2000:2256]))
-    return _fit(dict(decision=_h(dec), predict=_h(predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict"))),
-                par, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+    mismatch = _mismatch_bytes("predict_svm decision", dec,
+                               "plain decision", plain.decision_function(X[2000:2256]))
+    parts = dict(decision=_h(dec),
+                 predict=_h(predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
 @lane("par-gp")
@@ -6118,9 +6145,11 @@ def _(ml, X, yc, yr, Xh=None):
     plain = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
     mean, std = predict_gaussian_process(par, X[256:320, :4], devices=_par_devices(), return_std=True)
     pm, ps = plain.predict(X[256:320, :4], return_std=True)
-    _same_bytes("predict_gaussian_process mean", mean, "plain mean", pm)
-    return _fit(dict(alpha=_h(par.alpha_), L=_h(par.L_), mean=_h(mean), std=_h(std)),
-                par, lambda e: e.predict(Xh[:64, :4], return_std=True))
+    mismatch = _mismatch_bytes("predict_gaussian_process mean", mean, "plain mean", pm)
+    parts = dict(alpha=_h(par.alpha_), L=_h(par.L_), mean=_h(mean), std=_h(std))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: e.predict(Xh[:64, :4], return_std=True))
 
 
 @lane("par-dbscan")
@@ -6128,8 +6157,11 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_dbscan
     par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.DBSCAN(eps=0.9, min_samples=5).fit(X[:6000, :4])
-    _same_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
-    return _fit(dict(labels=_h(par.labels_)), par, lambda e: (e.predict(Xh[:256, :4]),))
+    mismatch = _mismatch_bytes("fit_dbscan labels", par.labels_, "plain labels", plain.labels_)
+    parts = dict(labels=_h(par.labels_))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-scaler")
@@ -6324,14 +6356,18 @@ def _(ml, X, yc, yr, Xh=None):
             tr.train_step(shards)
         ck = tr.checkpoint()
     _ordered_replay_mlp(plain, steps)
-    for k in sorted(m.weights_):
-        _same_bytes(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
-                    "ordered single-device replay", np.asarray(plain.weights_[k]))
-    _same_bytes("ParallelNeuralTrainer predict_logits", np.asarray(m.predict_logits(Xm[:256])),
-                "ordered single-device replay predict_logits", np.asarray(plain.predict_logits(Xm[:256])))
-    return _fit(dict(weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
-                     logits=_h(np.asarray(m.predict_logits(Xm[:256]))),
-                     shards=_h(np.int64(ck["logical_shards"]))),
+    mismatch = _oracle_mismatch(
+        *[(f"ParallelNeuralTrainer weights_[{k}]", np.asarray(m.weights_[k]),
+           "ordered single-device replay", np.asarray(plain.weights_[k]))
+          for k in sorted(m.weights_)],
+        ("ParallelNeuralTrainer predict_logits", np.asarray(m.predict_logits(Xm[:256])),
+         "ordered single-device replay predict_logits", np.asarray(plain.predict_logits(Xm[:256]))))
+    parts = dict(weights=_h(*[np.asarray(m.weights_[k]) for k in sorted(m.weights_)]),
+                 logits=_h(np.asarray(m.predict_logits(Xm[:256]))),
+                 shards=_h(np.int64(ck["logical_shards"])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda e: (np.asarray(e.predict_logits(np.ascontiguousarray(Xh[:256, :8]))),))
 
 
@@ -6357,14 +6393,16 @@ def _(ml, X, yc, yr, Xh=None):
             tr.train_step(shards)
     _ordered_replay_samba(plain, steps)
     params, ref = m.parameters(), plain.parameters()
-    for k in sorted(params):
-        _same_bytes(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
-                    "ordered single-device replay", np.asarray(ref[k]))
-    _same_bytes("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
-                "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1])))
-    return _fit(dict(logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
-                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
-                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+    mismatch = _oracle_mismatch(
+        *[(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
+           "ordered single-device replay", np.asarray(ref[k])) for k in sorted(params)],
+        ("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
+         "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1]))))
+    parts = dict(logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                 params=_h(*[np.asarray(params[k]) for k in sorted(params)]))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
 
 
 @lane("par-byte-lm")
@@ -6501,8 +6539,12 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.KernelDensity(bandwidth=0.7).fit(X[:4096, :4])
     q = np.ascontiguousarray(X[4096:4352, :4])
     s = _pq(m, q, "score_samples")
-    _same_bytes("ParallelQueries score_samples", s, "plain score_samples", m.score_samples(q))
-    return _fit(dict(scores=_h(s)), m, lambda e: (_pq(e, Xh[:256, :4], "score_samples"),))
+    mismatch = _mismatch_bytes("ParallelQueries score_samples", s,
+                               "plain score_samples", m.score_samples(q))
+    parts = dict(scores=_h(s))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: (_pq(e, Xh[:256, :4], "score_samples"),))
 
 
 #: reference rows per ReferenceShardedNeighbors shard: the 4096-row index is four shards
@@ -6571,10 +6613,13 @@ def _(ml, X, yc, yr, Xh=None):
     A = np.ascontiguousarray(X[:2000, :4])
     par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())
     plain = ml.AgglomerativeClustering(n_clusters=4).fit(A)
-    _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
-    _same_bytes("fit_graph children_", par.children_, "plain children_", plain.children_)
-    return _fit(dict(labels=_h(par.labels_), children=_h(par.children_)), par,
-                lambda e: (e.predict(Xh[:256, :4]),))
+    mismatch = _oracle_mismatch(
+        ("fit_graph labels_", par.labels_, "plain labels_", plain.labels_),
+        ("fit_graph children_", par.children_, "plain children_", plain.children_))
+    parts = dict(labels=_h(par.labels_), children=_h(par.children_))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256, :4]),))
 
 
 @lane("par-graph-spectral")
@@ -6586,9 +6631,13 @@ def _(ml, X, yc, yr, Xh=None):
     A = np.ascontiguousarray(X[:2000, :4])
     par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())
     plain = ml.SpectralClustering(n_clusters=4, random_state=3).fit(A)
-    _same_bytes("fit_graph labels_", par.labels_, "plain labels_", plain.labels_)
-    _same_bytes("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_)
-    return _fit(dict(labels=_h(par.labels_), embedding=_h(par.embedding_)), par, "n/a:transductive")
+    mismatch = _oracle_mismatch(
+        ("fit_graph labels_", par.labels_, "plain labels_", plain.labels_),
+        ("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_))
+    parts = dict(labels=_h(par.labels_), embedding=_h(par.embedding_))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, "n/a:transductive")
 
 
 @lane("par-graph-umap")
@@ -6600,11 +6649,15 @@ def _(ml, X, yc, yr, Xh=None):
     A = np.ascontiguousarray(X[:1024, :8])
     par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())
     plain = ml.UMAP(**kw).fit(A)
-    _same_bytes("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_)
     q = np.ascontiguousarray(X[1024:1088, :8])
     t = transform_umap(par, q, devices=_par_devices())
-    _same_bytes("transform_umap", t, "plain transform", plain.transform(q))
-    return _fit(dict(embedding=_h(par.embedding_), transform=_h(t)),
+    mismatch = _oracle_mismatch(
+        ("fit_graph embedding_", par.embedding_, "plain embedding_", plain.embedding_),
+        ("transform_umap", t, "plain transform", plain.transform(q)))
+    parts = dict(embedding=_h(par.embedding_), transform=_h(t))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: (transform_umap(e, np.ascontiguousarray(Xh[:64, :8]), devices=_par_devices()),))
 
 
@@ -6618,8 +6671,11 @@ def _(ml, X, yc, yr, Xh=None):
                            devices=_par_devices())
     plain = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
     p = par.predict(X)
-    _same_bytes("fit_ordered_rmse predict", p, "plain predict", plain.predict(X))
-    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
+    mismatch = _mismatch_bytes("fit_ordered_rmse predict", p, "plain predict", plain.predict(X))
+    parts = dict(predict=_h(p))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh),))
 
 
 @lane("par-ordered")
@@ -6632,8 +6688,11 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
     plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
     p = par.predict(X)
-    _same_bytes("fit_boosting ordered predict", p, "plain predict", plain.predict(X))
-    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(Xh),))
+    mismatch = _mismatch_bytes("fit_boosting ordered predict", p, "plain predict", plain.predict(X))
+    parts = dict(predict=_h(p))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh),))
 
 
 @lane("par-border-types")
@@ -6642,16 +6701,19 @@ def _(ml, X, yc, yr, Xh=None):
     histograms partitioned by whole packed groups; border selection is host
     code on the root), each held to the plain one-device fit."""
     from mojolearn.parallel_ensemble import fit_boosting
-    parts, first = {}, None
+    parts, first, pairs = {}, None, []
     for bt in _GBDT_BORDER_TYPES:
         kw = dict(n_estimators=8, max_depth=4, border_count=32, loss="Logloss",
                   feature_border_type=bt)
         par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
         plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
         p = par.predict(X)
-        _same_bytes(f"fit_boosting {bt} predict", p, "plain predict", plain.predict(X))
+        pairs.append((f"fit_boosting {bt} predict", p, "plain predict", plain.predict(X)))
         parts[bt] = _h(p)
         first = first or par
+    mismatch = _oracle_mismatch(*pairs)
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
     return _fit(parts, first, lambda e: (e.predict(Xh),))
 
 
@@ -6664,8 +6726,11 @@ def _(ml, X, yc, yr, Xh=None):
                            devices=_par_devices())
     plain = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xc, yr)
     p = par.predict(Xc)
-    _same_bytes("fit_feature_freq predict", p, "plain predict", plain.predict(Xc))
-    return _fit(dict(predict=_h(p)), par, lambda e: (e.predict(_coded(Xh)),))
+    mismatch = _mismatch_bytes("fit_feature_freq predict", p, "plain predict", plain.predict(Xc))
+    parts = dict(predict=_h(p))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(_coded(Xh)),))
 
 
 @lane("par-boosting-pointwise")
@@ -6677,10 +6742,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=20, max_depth=6, loss="Logloss", use_pointwise_searcher=True)
     par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())
     plain = _gbdt(ml.GradientBoosting, **kw).fit(X, yc)
-    _same_bytes("fit_boosting pointwise predict_proba", par.predict_proba(X[:2048]),
-                "plain predict_proba", plain.predict_proba(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
-                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    mismatch = _mismatch_bytes("fit_boosting pointwise predict_proba", par.predict_proba(X[:2048]),
+                               "plain predict_proba", plain.predict_proba(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 def _hw_series(X):
@@ -6744,15 +6811,19 @@ def _(ml, X, yc, yr, Xh=None):
     d = _par_devices()
     m = ml.ExponentialSmoothing(S, seasonal="additive", seasonal_periods=12, ts_num=4).fit()
     sharded = predict_exponential_smoothing(m, m.n, m.n + 24, devices=d, series_per_shard=3)
-    _same_bytes("predict_exponential_smoothing(n, n + 24)", sharded,
-                "plain ExponentialSmoothing.predict(n, n + 24)", m.predict(m.n, m.n + 24))
     ahead = forecast_exponential_smoothing(m, 24, devices=d, series_per_shard=3)
-    _same_bytes("forecast_exponential_smoothing(24)", ahead,
-                "plain ExponentialSmoothing.forecast(24)", m.forecast(24))
     one = forecast_exponential_smoothing(m, 24, index=2, devices=d, series_per_shard=3)
-    _same_bytes("forecast_exponential_smoothing(24, index=2)", one,
-                "plain ExponentialSmoothing.forecast(24, index=2)", m.forecast(24, index=2))
-    return _fit(dict(predict=_h(sharded), forecast=_h(ahead), indexed=_h(one)), m,
+    mismatch = _oracle_mismatch(
+        ("predict_exponential_smoothing(n, n + 24)", sharded,
+         "plain ExponentialSmoothing.predict(n, n + 24)", m.predict(m.n, m.n + 24)),
+        ("forecast_exponential_smoothing(24)", ahead,
+         "plain ExponentialSmoothing.forecast(24)", m.forecast(24)),
+        ("forecast_exponential_smoothing(24, index=2)", one,
+         "plain ExponentialSmoothing.forecast(24, index=2)", m.forecast(24, index=2)))
+    parts = dict(predict=_h(sharded), forecast=_h(ahead), indexed=_h(one))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m,
                 lambda e: _same_bytes(
                     f"forecast_exponential_smoothing({FORECAST_HORIZON})",
                     forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
@@ -6858,20 +6929,22 @@ def _(ml, X, yc, yr, Xh=None):
     reduced = _ordered_replay_samba(plain, steps)
     params, ref = m.parameters(), plain.parameters()
     # zip() truncates, so a short list would quietly shrink the comparison.
-    _same_bytes("export_gradients tensor count", np.int64(len(grads)),
-                "ordered single-device replay tensor count", np.int64(len(reduced)))
-    for k, (g, r) in enumerate(zip(grads, reduced)):
-        _same_bytes(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
-                    "ordered single-device replay gradient", np.asarray(r))
-    for k in sorted(params):
-        _same_bytes(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
-                    "ordered single-device replay", np.asarray(ref[k]))
-    _same_bytes("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
-                "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1])))
-    return _fit(dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
-                     grads=_h(*[np.asarray(g) for g in grads]),
-                     params=_h(*[np.asarray(params[k]) for k in sorted(params)])),
-                m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
+    mismatch = _oracle_mismatch(
+        ("export_gradients tensor count", np.int64(len(grads)),
+         "ordered single-device replay tensor count", np.int64(len(reduced))),
+        *[(f"ParallelNeuralTrainer export_gradients[{k}]", np.asarray(g),
+           "ordered single-device replay gradient", np.asarray(r))
+          for k, (g, r) in enumerate(zip(grads, reduced))],
+        *[(f"ParallelNeuralTrainer parameters()[{k}]", np.asarray(params[k]),
+           "ordered single-device replay", np.asarray(ref[k])) for k in sorted(params)],
+        ("ParallelNeuralTrainer forward", np.asarray(m.forward(ids[:2, :-1])),
+         "ordered single-device replay forward", np.asarray(plain.forward(ids[:2, :-1]))))
+    parts = dict(loss=_h(np.asarray(losses)), logits=_h(np.asarray(m.forward(ids[:2, :-1]))),
+                 grads=_h(*[np.asarray(g) for g in grads]),
+                 params=_h(*[np.asarray(params[k]) for k in sorted(params)]))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: (np.asarray(e.forward(_ids(Xh, 2, 16))),))
 
 
 
@@ -6913,9 +6986,12 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())
     plain = ml.IsolationForest(n_estimators=16, random_state=5).fit(X)
     scores = score_isolation_forest(par, X, devices=_par_devices(), method="score_samples")
-    _same_bytes("score_isolation_forest", scores, "plain score_samples", plain.score_samples(X))
-    return _fit(dict(scores=_h(scores), predict=_h(par.predict(X[:512]))),
-                par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
+    mismatch = _mismatch_bytes("score_isolation_forest", scores,
+                               "plain score_samples", plain.score_samples(X))
+    parts = dict(scores=_h(scores), predict=_h(par.predict(X[:512])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.score_samples(Xh), e.predict(Xh[:512])))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14 night, drivers added by the multigpu lane)
@@ -6941,8 +7017,12 @@ def _(ml, X, yc, yr, Xh=None):
             return pool.predict(R), pool.predict_proba(R)
 
     pred, proba = pooled(m, X)
-    _same_bytes("ParallelForestPredictor predict_proba", proba, "parallel_groves predict_proba", m.predict_proba(X))
-    return _fit(dict(predict=_h(pred), proba=_h(proba)), m, lambda e: pooled(e, Xh))
+    mismatch = _mismatch_bytes("ParallelForestPredictor predict_proba", proba,
+                               "parallel_groves predict_proba", m.predict_proba(X))
+    parts = dict(predict=_h(pred), proba=_h(proba))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: pooled(e, Xh))
 
 
 @lane("par-gmm")
@@ -6953,12 +7033,17 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_components=4, max_iter=30, random_state=3)
     par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())
     plain = ml.GaussianMixture(**kw).fit(X[:6000, :4])
-    _same_bytes("fit_gaussian_mixture covariances_", par.covariances_, "plain covariances_", plain.covariances_)
     labels = predict_gaussian_mixture(par, X[:6000, :4], devices=_par_devices(), method="predict")
-    _same_bytes("predict_gaussian_mixture", labels, "plain predict", plain.predict(X[:6000, :4]))
-    return _fit(dict(weights=_h(par.weights_), means=_h(par.means_), covariances=_h(par.covariances_),
-                     precisions=_h(par.precisions_cholesky_), n_iter=_h(np.int64(par.n_iter_)),
-                     lower_bound=_h(np.float32(par.lower_bound_)), labels=_h(labels)),
+    mismatch = _oracle_mismatch(
+        ("fit_gaussian_mixture covariances_", par.covariances_,
+         "plain covariances_", plain.covariances_),
+        ("predict_gaussian_mixture", labels, "plain predict", plain.predict(X[:6000, :4])))
+    parts = dict(weights=_h(par.weights_), means=_h(par.means_), covariances=_h(par.covariances_),
+                 precisions=_h(par.precisions_cholesky_), n_iter=_h(np.int64(par.n_iter_)),
+                 lower_bound=_h(np.float32(par.lower_bound_)), labels=_h(labels))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: (predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="score_samples"),
                                 predict_gaussian_mixture(e, Xh[:64, :4], devices=_par_devices(), method="predict")))
 
@@ -6973,12 +7058,13 @@ def _(ml, X, yc, yr, Xh=None):
     rs = ml.resample
     dev = _par_devices()
     x = np.ascontiguousarray(yr[:4096])
-    parts = {}
+    parts, pairs = {}, []
     for name, kw in (("mean", dict(statistic="mean", n_resamples=2048)),
                      ("quantile", dict(statistic="quantile", q_or_prop=0.25, n_resamples=1024, alternative="less"))):
         b = pc.bootstrap(x, devices=dev, random_state=3, **kw)
         plain = rs.bootstrap(x, random_state=3, **kw)
-        _same_bytes("parallel bootstrap distribution", b.distribution, "bootstrap distribution", plain.distribution)
+        pairs.append(("parallel bootstrap distribution " + name, b.distribution,
+                      "bootstrap distribution", plain.distribution))
         parts["bootstrap-" + name] = _h(b.distribution, b.sorted_distribution,
                                         np.asarray([b.point_estimate, b.standard_error, b.confidence_interval[0],
                                                     b.confidence_interval[1]], dtype=np.float64))
@@ -6986,14 +7072,19 @@ def _(ml, X, yc, yr, Xh=None):
     c = np.ascontiguousarray(yr[512:1024])
     p = pc.permutation_test(a, c, devices=dev, statistic="diff_means", n_resamples=2048, random_state=3)
     plain = rs.permutation_test(a, c, statistic="diff_means", n_resamples=2048, random_state=3)
-    _same_bytes("parallel permutation null", p.null_distribution, "permutation null", plain.null_distribution)
+    pairs.append(("parallel permutation null", p.null_distribution,
+                  "permutation null", plain.null_distribution))
     parts["permutation"] = _h(p.null_distribution, np.asarray([p.statistic, p.pvalue], dtype=np.float64),
                               np.asarray([p.count_less, p.count_greater], dtype=np.int64))
     lo, hi = [0.0, 0.0], [1.0, 2.0]
     r = pc.monte_carlo_integrate("product", lo, hi, 65536 + 300, devices=dev, random_state=1)
     plain = rs.monte_carlo_integrate("product", lo, hi, 65536 + 300, random_state=1)
-    _same_bytes("parallel monte carlo", np.asarray([r.integral, r.mean]), "monte carlo", np.asarray([plain.integral, plain.mean]))
+    pairs.append(("parallel monte carlo", np.asarray([r.integral, r.mean]),
+                  "monte carlo", np.asarray([plain.integral, plain.mean])))
     parts["monte-carlo"] = _h(np.asarray([r.integral, r.mean, r.volume, r.closed_form], dtype=np.float64))
+    mismatch = _oracle_mismatch(*pairs)
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
     return _fit(parts)
 
 
@@ -7014,12 +7105,16 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_hdbscan
     par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
     plain = ml.HDBSCAN(min_cluster_size=5).fit(X[:6000, :4])
-    _same_bytes("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_)
-    _same_bytes("fit_hdbscan core_distances_", par.core_distances_, "plain core_distances_", plain.core_distances_)
-    return _fit(dict(labels=_h(par.labels_), core=_h(par.core_distances_),
-                     counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
-                                           par.n_condensed_clusters_], dtype=np.int64))),
-                par, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
+    mismatch = _oracle_mismatch(
+        ("fit_hdbscan labels_", par.labels_, "plain labels_", plain.labels_),
+        ("fit_hdbscan core_distances_", par.core_distances_,
+         "plain core_distances_", plain.core_distances_))
+    parts = dict(labels=_h(par.labels_), core=_h(par.core_distances_),
+                 counts=_h(np.asarray([par.n_clusters_, par.n_outliers_, par.n_boruvka_rounds_,
+                                       par.n_condensed_clusters_], dtype=np.int64)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: tuple(ml.hdbscan.approximate_predict(e, Xh[:256, :4])))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-15, the kernel-method and Cholesky drivers)
@@ -7042,12 +7137,16 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_cholesky(ml.Cholesky(), A, devices=dev)
     plain = ml.Cholesky().fit(A)
     assert par.info_ == 0, "par-cholesky lane: the Cauchy matrix did not factor (info=%d)" % par.info_
-    _same_bytes("fit_cholesky L_", par.L_, "plain L_", plain.L_)
     B = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200], yr[1200:1800]], 1).astype(np.float32))
     x = solve_cholesky(par, B, devices=dev)
-    _same_bytes("solve_cholesky", x, "plain solve", plain.solve(B))
-    return _fit(dict(L=_h(par.L_), logdet=_h(np.float64(par.logdet_)), info=_h(np.int64(par.info_)),
-                     nb=_h(np.int64(par.nb_)), jitter=_h(np.float32(par.jitter_)), solve=_h(x)),
+    mismatch = _oracle_mismatch(
+        ("fit_cholesky L_", par.L_, "plain L_", plain.L_),
+        ("solve_cholesky", x, "plain solve", plain.solve(B)))
+    parts = dict(L=_h(par.L_), logdet=_h(np.float64(par.logdet_)), info=_h(np.int64(par.info_)),
+                 nb=_h(np.int64(par.nb_)), jitter=_h(np.float32(par.jitter_)), solve=_h(x))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: (solve_cholesky(e, np.ascontiguousarray(Xh[:600, :3]), devices=_par_devices()),))
 
 
@@ -7063,11 +7162,14 @@ def _(ml, X, yc, yr, Xh=None):
     Y = np.ascontiguousarray(np.stack([yr[:600], yr[600:1200]], 1).astype(np.float32))
     par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
     plain = ml.KernelRidge(**kw).fit(X[:600, :4], Y)
-    _same_bytes("fit_kernel_method dual_coef_", par.dual_coef_, "plain dual_coef_", plain.dual_coef_)
     pred = apply_kernel_method(par, X[600:856, :4], devices=dev)
-    _same_bytes("apply_kernel_method predict", pred, "plain predict", plain.predict(X[600:856, :4]))
-    return _fit(dict(dual=_h(par.dual_coef_), info=_h(np.int64(par.info_)), predict=_h(pred)),
-                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+    mismatch = _oracle_mismatch(
+        ("fit_kernel_method dual_coef_", par.dual_coef_, "plain dual_coef_", plain.dual_coef_),
+        ("apply_kernel_method predict", pred, "plain predict", plain.predict(X[600:856, :4])))
+    parts = dict(dual=_h(par.dual_coef_), info=_h(np.int64(par.info_)), predict=_h(pred))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
 
 
 @lane("par-nystroem")
@@ -7081,14 +7183,18 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(kernel="rbf", gamma=0.5, n_components=32, random_state=7)
     par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)
     plain = ml.Nystroem(**kw).fit(X[:600, :4])
-    _same_bytes("fit_kernel_method components_", par.components_, "plain components_", plain.components_)
-    _same_bytes("fit_kernel_method normalization_", par.normalization_, "plain normalization_", plain.normalization_)
     out = apply_kernel_method(par, X[600:1624, :4], devices=dev)
-    _same_bytes("apply_kernel_method transform", out, "plain transform", plain.transform(X[600:1624, :4]))
-    return _fit(dict(components=_h(par.components_), indices=_h(par.component_indices_),
-                     normalization=_h(par.normalization_), eigenvalues=_h(par.eigenvalues_),
-                     eigenvectors=_h(par.eigenvectors_), sweeps=_h(np.int64(par.sweeps_)), transform=_h(out)),
-                par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
+    mismatch = _oracle_mismatch(
+        ("fit_kernel_method components_", par.components_, "plain components_", plain.components_),
+        ("fit_kernel_method normalization_", par.normalization_,
+         "plain normalization_", plain.normalization_),
+        ("apply_kernel_method transform", out, "plain transform", plain.transform(X[600:1624, :4])))
+    parts = dict(components=_h(par.components_), indices=_h(par.component_indices_),
+                 normalization=_h(par.normalization_), eigenvalues=_h(par.eigenvalues_),
+                 eigenvectors=_h(par.eigenvectors_), sweeps=_h(np.int64(par.sweeps_)), transform=_h(out))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (apply_kernel_method(e, Xh[:64, :4], devices=_par_devices()),))
 
 
 @lane("par-rbf-sampler")
@@ -7156,8 +7262,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
     par = fit_forest(ml.RandomForestRegressor(**kw), X, yr, devices=_par_devices(), trees_per_shard=4)
     plain = ml.RandomForestRegressor(**kw).fit(X, yr)
-    _same_bytes("fit_forest predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+    mismatch = _mismatch_bytes("fit_forest predict", par.predict(X[:2048]),
+                               "plain predict", plain.predict(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh),))
 
 
 @lane("par-forest-et-clf")
@@ -7168,10 +7278,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=16, max_depth=8, random_state=7)
     par = fit_forest(ml.ExtraTreesClassifier(**kw), X, yc, devices=_par_devices(), trees_per_shard=4)
     plain = ml.ExtraTreesClassifier(**kw).fit(X, yc)
-    _same_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
-                "plain predict_proba", plain.predict_proba(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X))),
-                par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+    mismatch = _mismatch_bytes("fit_forest predict_proba", par.predict_proba(X[:2048]),
+                               "plain predict_proba", plain.predict_proba(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
 @lane("par-boosting-clf")
@@ -7183,10 +7295,13 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=20, max_depth=6)
     par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())
     plain = _gbdt(ml.GradientBoostingClassifier, **kw).fit(X, yc)
-    _same_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
-                "plain predict_proba", plain.predict_proba(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
-                     decision=_h(par.decision_function(X[:512]))),
+    mismatch = _mismatch_bytes("fit_boosting predict_proba", par.predict_proba(X[:2048]),
+                               "plain predict_proba", plain.predict_proba(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)), proba=_h(par.predict_proba(X)),
+                 decision=_h(par.decision_function(X[:512])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: (e.predict(Xh), e.predict_proba(Xh), e.decision_function(Xh[:512])))
 
 
@@ -7197,8 +7312,12 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(n_estimators=20, max_depth=6)
     par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())
     plain = _gbdt(ml.GradientBoostingRegressor, **kw).fit(X, yr)
-    _same_bytes("fit_boosting predict", par.predict(X[:2048]), "plain predict", plain.predict(X[:2048]))
-    return _fit(dict(predict=_h(par.predict(X))), par, lambda e: (e.predict(Xh),))
+    mismatch = _mismatch_bytes("fit_boosting predict", par.predict(X[:2048]),
+                               "plain predict", plain.predict(X[:2048]))
+    parts = dict(predict=_h(par.predict(X)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh),))
 
 
 @lane("par-gram-ols")
@@ -7208,9 +7327,11 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_gram_estimator
     par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())
     plain = ml.LinearRegression().fit(X, yr)
-    _same_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
-    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
-                par, lambda e: (e.predict(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_gram_estimator coef", par.coef_, "plain coef", plain.coef_)
+    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
 
 
 @lane("par-gram-pca")
@@ -7220,10 +7341,13 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_gram_estimator
     par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())
     plain = ml.PCA(n_components=4).fit(X)
-    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
-    return _fit(dict(components=_h(par.components_), variance=_h(par.explained_variance_),
-                     transform=_h(par.transform(X[:256]))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_gram_estimator components", par.components_,
+                               "plain components", plain.components_)
+    parts = dict(components=_h(par.components_), variance=_h(par.explained_variance_),
+                 transform=_h(par.transform(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-gram-tsvd")
@@ -7233,9 +7357,12 @@ def _(ml, X, yc, yr, Xh=None):
     from mojolearn.parallel_classical import fit_gram_estimator
     par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())
     plain = ml.TruncatedSVD(n_components=4).fit(X)
-    _same_bytes("fit_gram_estimator components", par.components_, "plain components", plain.components_)
-    return _fit(dict(components=_h(par.components_), transform=_h(par.transform(X[:256]))),
-                par, lambda e: (e.transform(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_gram_estimator components", par.components_,
+                               "plain components", plain.components_)
+    parts = dict(components=_h(par.components_), transform=_h(par.transform(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.transform(Xh[:256]),))
 
 
 @lane("par-cd-elasticnet")
@@ -7246,9 +7373,11 @@ def _(ml, X, yc, yr, Xh=None):
     kw = dict(alpha=0.01, l1_ratio=0.5, max_iter=200)
     par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())
     plain = ml.ElasticNet(**kw).fit(X, yr)
-    _same_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
-    return _fit(dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256]))),
-                par, lambda e: (e.predict(Xh[:256]),))
+    mismatch = _mismatch_bytes("fit_coordinate_descent coef", par.coef_, "plain coef", plain.coef_)
+    parts = dict(coef=_h(par.coef_), predict=_h(par.predict(X[:256])))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
 
 
 @lane("par-svm-svr")
@@ -7261,8 +7390,11 @@ def _(ml, X, yc, yr, Xh=None):
     par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())
     plain = ml.SVR(**kw).fit(X[:2000], yr[:2000])
     pred = predict_svm(par, X[2000:2256], devices=_par_devices(), method="predict")
-    _same_bytes("predict_svm", pred, "plain predict", plain.predict(X[2000:2256]))
-    return _fit(dict(predict=_h(pred)), par, lambda e: (e.predict(Xh[:256]),))
+    mismatch = _mismatch_bytes("predict_svm", pred, "plain predict", plain.predict(X[2000:2256]))
+    parts = dict(predict=_h(pred))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:256]),))
 
 
 @lane("par-scaler-minmax")
@@ -7917,14 +8049,15 @@ def _(ml, X, yc, yr, Xh=None):
     xs, ys = X[:256, :4], yc[:256]
     par = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k), xs, ys, devices=dev)
     plain = ml.GaussianProcessClassifier(kernel=k).fit(xs, ys)
-    _same_bytes("fit_gaussian_process_classifier L", par.estimators_[0].L_,
-                "plain L", plain.estimators_[0].L_)
     k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
     y3 = _gpc_three_classes(X)
     par3 = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k3), xs, y3, devices=dev)
     plain3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, y3)
-    _same_bytes("fit_gaussian_process_classifier three-class proba", par3.predict_proba(X[256:320, :4]),
-                "plain three-class proba", plain3.predict_proba(X[256:320, :4]))
+    mismatch = _oracle_mismatch(
+        ("fit_gaussian_process_classifier L", par.estimators_[0].L_,
+         "plain L", plain.estimators_[0].L_),
+        ("fit_gaussian_process_classifier three-class proba", par3.predict_proba(X[256:320, :4]),
+         "plain three-class proba", plain3.predict_proba(X[256:320, :4])))
     flags = np.asarray([
         _refused(lambda: fit_gaussian_process_classifier(ml.GaussianProcessRegressor(kernel=k), xs, ys, devices=dev),
                  "requires mojolearn.GaussianProcessClassifier"),
@@ -7936,15 +8069,17 @@ def _(ml, X, yc, yr, Xh=None):
             ml.GaussianProcessClassifier(kernel=k), xs, np.zeros(256, dtype=np.int64), devices=dev),
             "at least two classes"),
     ], dtype=np.int64)
-    return _fit(dict(L=_h(*[e.L_ for e in par.estimators_]),
-                     pi=_h(*[e.pi_ for e in par.estimators_]),
-                     lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par.estimators_],
-                                     dtype=np.float64)),
-                     three_L=_h(*[e.L_ for e in par3.estimators_]),
-                     three_lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par3.estimators_],
-                                           dtype=np.float64)),
-                     flags=_h(flags)),
-                par, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+    parts = dict(L=_h(*[e.L_ for e in par.estimators_]),
+                 pi=_h(*[e.pi_ for e in par.estimators_]),
+                 lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par.estimators_],
+                                 dtype=np.float64)),
+                 three_L=_h(*[e.L_ for e in par3.estimators_]),
+                 three_lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par3.estimators_],
+                                       dtype=np.float64)),
+                 flags=_h(flags))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, par, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
 
 
 @lane("par-gpc-predict")
@@ -7991,15 +8126,17 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.GaussianProcessClassifier(kernel=k).fit(xs, yc[:256])
     proba = predict_gaussian_process_classifier(m, q, devices=dev, method="predict_proba")
     labels = predict_gaussian_process_classifier(m, q, devices=dev, method="predict")
-    _same_bytes("predict_gaussian_process_classifier proba", proba, "plain predict_proba", m.predict_proba(q))
-    _same_bytes("predict_gaussian_process_classifier predict", _label_codes(m, labels),
-                "plain predict", _label_codes(m, m.predict(q)))
     k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
     m3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, _gpc_three_classes(X))
     proba3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict_proba")
     labels3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict")
-    _same_bytes("predict_gaussian_process_classifier three-class proba", proba3,
-                "plain three-class predict_proba", m3.predict_proba(q))
+    mismatch = _oracle_mismatch(
+        ("predict_gaussian_process_classifier proba", proba,
+         "plain predict_proba", m.predict_proba(q)),
+        ("predict_gaussian_process_classifier predict", _label_codes(m, labels),
+         "plain predict", _label_codes(m, m.predict(q))),
+        ("predict_gaussian_process_classifier three-class proba", proba3,
+         "plain three-class predict_proba", m3.predict_proba(q)))
     flags = np.asarray([
         _refused(lambda: predict_gaussian_process_classifier(m, q, devices=dev, method="decision_function"),
                  "method must be predict or predict_proba"),
@@ -8009,10 +8146,12 @@ def _(ml, X, yc, yr, Xh=None):
         _refused(lambda: predict_gaussian_process_classifier(m, np.ascontiguousarray(q[:, :2]), devices=dev),
                  "features"),
     ], dtype=np.int64)
-    return _fit(dict(proba=_h(proba), labels=_h(_label_codes(m, labels)),
-                     three_proba=_h(proba3), three_labels=_h(_label_codes(m3, labels3)),
-                     flags=_h(flags)),
-                m, lambda e: (e.predict_proba(Xh[:64, :4]),))
+    parts = dict(proba=_h(proba), labels=_h(_label_codes(m, labels)),
+                 three_proba=_h(proba3), three_labels=_h(_label_codes(m3, labels3)),
+                 flags=_h(flags))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: (e.predict_proba(Xh[:64, :4]),))
 
 
 def _label_codes(estimator, labels):
@@ -8096,7 +8235,8 @@ def _(ml, X, yc, yr, Xh=None):
             got = np.ascontiguousarray(np.asarray(par.forward(A(ids))))
             params = np.concatenate([_hf_bytes(w) for _, w in sorted(par.parameters().items())])
             names_match = sorted(par.parameters()) == sorted(plain.parameters())
-        _same_bytes("ParallelCausalLM forward", got, "plain CausalLM forward", want)
+        mismatch = _mismatch_bytes("ParallelCausalLM forward", got,
+                                   "plain CausalLM forward", want)
         flags = np.asarray([
             names_match,
             _refused(lambda: ParallelCausalLM.load(root, layer_devices=owners[:-1]), "layer_devices"),
@@ -8105,7 +8245,10 @@ def _(ml, X, yc, yr, Xh=None):
                      "weight_format"),
             ml.models.ParallelCausalLM is ParallelCausalLM,
         ], dtype=np.int64)
-    return _fit(dict(logits=_h(got), params=_h(params), flags=_h(flags)))
+    parts = dict(logits=_h(got), params=_h(params), flags=_h(flags))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
 
 
 @lane("par-cross-val")
@@ -8187,8 +8330,8 @@ def _(ml, X, yc, yr, Xh=None):
     scores = cross_val_score(est, X, yr, devices=dev, cv=3)
     serial = ml.model_selection.cross_val_score(
         _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
-    _same_bytes("parallel cross_val_score", np.asarray(scores, dtype=np.float64),
-                "serial cross_val_score", np.asarray(serial, dtype=np.float64))
+    mismatch = _mismatch_bytes("parallel cross_val_score", np.asarray(scores, dtype=np.float64),
+                               "serial cross_val_score", np.asarray(serial, dtype=np.float64))
     flags = np.asarray([
         _refused(lambda: cross_val_score(est, X, yr, devices=()), "devices"),
         _refused(lambda: cross_val_score(
@@ -8196,7 +8339,10 @@ def _(ml, X, yc, yr, Xh=None):
             X, yr, devices=dev, cv=3), "IDENTICAL"),
         _refused(lambda: cross_val_score(est, X, yr, devices=dev, cv=3, error_score=0.0), "error_score"),
     ], dtype=np.int64)
-    return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64)), flags=_h(flags)))
+    parts = dict(scores=_h(np.asarray(scores, dtype=np.float64)), flags=_h(flags))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts)
 
 
 def _neural_inference(ml, lane_name, est):

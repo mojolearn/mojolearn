@@ -1,8 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Native KNN query rows for graph estimators, retaining original norm bytes."""
+"""Native KNN query rows for graph estimators, retaining original norm bytes.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_NEIGHBORS_PARALLEL_SABOTAGE=1` makes every
+owner above rank 0 read its query rows, and their norms, one row early. `rows`
+and `qt` are still derived from the true `first`, every allocation keeps its
+size, and the write-back keeps the true `shard.first`, so no length and no
+validation moves; only which query each shard answers does. It is a
+`comptime if`, so no production bit can move, and it is INERT AT ONE DEVICE:
+the shift is guarded by `rank > 0`, and `knn_device_count` caps the count at
+`rows`, so `first >= 1` whenever `rank >= 1`. That guard is what makes a moved
+`par-graph-agglomerative`, `par-graph-spectral` or `par-graph-umap` cell
+attributable to the define rather than to the second device. Owed a two-device
+column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
+"""
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.algorithm import sync_parallelize
 from std.os import getenv
+from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone
 from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -75,9 +89,14 @@ def parallel_knn_rows(
         var first = nq * rank // count
         var rows = nq * (rank + 1) // count - first
         var qt = min(query_tile, rows)
+        var source = first
+        comptime if is_defined["MOJOLEARN_NEIGHBORS_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their query rows one row early.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
-        var qv = queries.create_sub_buffer[DType.float32](first*d, rows*d)
-        var nv = query_norm.create_sub_buffer[DType.float32](first, rows)
+        var qv = queries.create_sub_buffer[DType.float32](source*d, rows*d)
+        var nv = query_norm.create_sub_buffer[DType.float32](source, rows)
         var q = peer_clone(ctx, device, qv)
         var qn = peer_clone(ctx, device, nv)
         var x = peer_clone(ctx, device, index)

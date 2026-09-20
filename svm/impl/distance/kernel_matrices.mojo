@@ -431,6 +431,19 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
     The feature axis is never split or padded. Original norm bytes and the
     original RBF epilogue are reused. The SMO working set, updates and stopping
     rules remain on the root. Per-call staging is not a speed/capacity claim.
+
+    THE NEGATIVE CONTROL. `-D MOJOLEARN_SVM_PARALLEL_SABOTAGE=1` makes every
+    owner above rank 0 read its left operand rows, and its RBF row norms, one
+    row early. `rows` is unchanged, the per-shard allocations keep their sizes
+    and the write-back keeps the true `shard.first`, so nothing but the values
+    contracted moves. It is a `comptime if`, so no production bit can move, and
+    it is INERT AT ONE DEVICE: the shift is guarded by `rank > 0` and a
+    one-device column has only rank 0. That is what makes a moved `par-svm`,
+    `par-svm-svr`, `par-kernel-ridge` or `par-nystroem` cell attributable to the
+    define rather than to the second device. (`MOJOLEARN_SVM_DEVICE_COUNT` is
+    also what `kernel_methods/checks/kernel_matrix.mojo` reads, which is why
+    the kernel-method lanes sit behind this one define.) Owed a two-device
+    column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
     """
     ctx.synchronize()
     var active = min(count, m)
@@ -441,10 +454,15 @@ def _kernel_rows(ctx: DeviceContext, kp: KernelParams,
     for rank in range(active):
         var first = m * rank // active
         var rows = m * (rank + 1) // active - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_SVM_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their left rows one row early.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
-        var av = a.create_sub_buffer[DType.float32](first * k, rows * k)
+        var av = a.create_sub_buffer[DType.float32](source * k, rows * k)
         var bv = b.create_sub_buffer[DType.float32](0, n * k)
-        var na = norm_a.create_sub_buffer[DType.float32](first if kp.kernel == KERNEL_RBF else 0,
+        var na = norm_a.create_sub_buffer[DType.float32](source if kp.kernel == KERNEL_RBF else 0,
                                                         rows if kp.kernel == KERNEL_RBF else 1)
         var nb = norm_b.create_sub_buffer[DType.float32](0, n if kp.kernel == KERNEL_RBF else 1)
         var local_a = peer_clone(ctx, device, av)

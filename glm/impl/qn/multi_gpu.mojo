@@ -3,8 +3,20 @@
 
 Each output cell retains the original STATS_TPB row partition and pinned sum.
 The loss, bias gradient, regularization and optimizer stay on the root.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_GLM_PARALLEL_SABOTAGE=1` packs every owner
+above rank 0 from one feature column early. The packed buffer keeps its
+`cells` length and the write-back keeps the true `shard.first`, so no
+allocation, length or validation changes; only which column of `X` each shard
+contracts against `dZ` does. It is a `comptime if`, so no production bit can
+move, and it is INERT AT ONE DEVICE: the shift is guarded by `rank > 0` and a
+one-device column has only rank 0. That is what makes a moved `par-logistic`
+cell attributable to the define rather than to the second device. Owed a
+two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this
+driver, so no CPU column can watch it fire.
 """
 from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.column_stats import STATS_TPB, xty_kernel
@@ -52,9 +64,14 @@ def gradient_columns(
         var first = columns * rank // active
         var width = columns * (rank + 1) // active - first
         var cells = rows * width
+        var source = first
+        comptime if is_defined["MOJOLEARN_GLM_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners pack from one feature column early.
+            if rank > 0:
+                source = first - 1
         var packed = ctx.enqueue_create_buffer[DType.float32](cells)
         ctx.enqueue_function[copy_columns_kernel[False]](x.unsafe_ptr(), packed.unsafe_ptr(),
-            Int32(columns), Int32(first), Int32(width), Int32(cells),
+            Int32(columns), Int32(source), Int32(width), Int32(cells),
             grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1))
         ctx.synchronize()
         var device = DeviceContext(device_id=rank)

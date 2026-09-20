@@ -1,6 +1,20 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Whole Gram output cells with the original contraction order on every GPU."""
+"""Whole Gram output cells with the original contraction order on every GPU.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_GRAM_PARALLEL_SABOTAGE=1` makes every
+owner above rank 0 contract from one output row early: the packed operand of
+the `tn` path is copied from `first - 1`, and the `nt` path's kernel is handed
+a first-cell index one row low. The destination sub-buffer keeps the true
+`first`, so nothing about a buffer length, an allocation or a validation
+changes -- only which values the shard contracts. It is a `comptime if`, so no
+production bit can move, and it is INERT AT ONE DEVICE: the shift is guarded by
+`rank > 0` and a one-device column has only rank 0, which is what makes a moved
+`par-gram`, `par-gram-ols`, `par-gram-pca` or `par-gram-tsvd` cell attributable
+to the define rather than to the second device. Owed a two-device column
+(`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
+"""
 from std.os import getenv
+from std.sys.compile import is_defined
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
@@ -50,6 +64,10 @@ struct GramOutputShard(Movable):
     var output: DeviceBuffer[DType.float32]
     var workspace: DeviceBuffer[DType.float32]
     var first: Int
+    #: the row this owner CONTRACTS FROM. Equal to `first` in every production
+    #: build; MOJOLEARN_GRAM_PARALLEL_SABOTAGE is the only thing that separates
+    #: them, and only above rank 0.
+    var read_first: Int
     var width: Int
 
     def __deinit__(deinit self):
@@ -86,6 +104,11 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
     for rank in range(count):
         var first = m*rank//count
         var width = m*(rank+1)//count-first
+        var source = first
+        comptime if is_defined["MOJOLEARN_GRAM_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners contract from one row early.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
         var a: DeviceBuffer[DType.float32]
         var b: DeviceBuffer[DType.float32]
@@ -93,7 +116,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
         comptime if tn:
             var packed = ctx.enqueue_create_buffer[DType.float32](k*width)
             ctx.enqueue_function[copy_columns_kernel[False]](x.unsafe_ptr(),packed.unsafe_ptr(),
-                Int32(m),Int32(first),Int32(width),Int32(k*width),
+                Int32(m),Int32(source),Int32(width),Int32(k*width),
                 grid_dim=((k*width+255)//256,1,1),block_dim=(256,1,1))
             ctx.synchronize()
             a = peer_clone(ctx,device,packed)
@@ -106,7 +129,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
         var output = device.enqueue_create_buffer[DType.float32](width*m)
         var workspace = device.enqueue_create_buffer[DType.float32](need)
         device.synchronize()
-        shards.append(GramOutputShard(device^,a^,b^,output^,workspace^,first,width))
+        shards.append(GramOutputShard(device^,a^,b^,output^,workspace^,first,source,width))
     var failed = List[Int](length=count,fill=0)
     var sp = rebind[MutPointer[GramOutputShard, MutUntrackedOrigin]](shards.unsafe_ptr())
     var fp = rebind[MutPointer[Int, MutUntrackedOrigin]](failed.unsafe_ptr())
@@ -117,7 +140,7 @@ def parallel_gram_outputs[tn: Bool](ctx: DeviceContext,
                 identical_gemm_into(s.ctx,s.output,s.a,s.b,s.workspace,s.width,m,k,OP_TN)
             else:
                 s.ctx.enqueue_function[pinned_gemm_nt_gram_kernel](s.output.unsafe_ptr(),s.a.unsafe_ptr(),
-                    Int32(m),Int32(m),Int32(k),Int32(s.first*m),Int32(s.width*m),
+                    Int32(m),Int32(m),Int32(k),Int32(s.read_first*m),Int32(s.width*m),
                     grid_dim=((s.width*m+255)//256,1,1),block_dim=(256,1,1))
             s.ctx.synchronize()
         except:

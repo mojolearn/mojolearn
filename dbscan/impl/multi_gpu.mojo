@@ -1,8 +1,22 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Disjoint DBSCAN neighborhood rows; original root core/label order."""
+"""Disjoint DBSCAN neighborhood rows; original root core/label order.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_DBSCAN_PARALLEL_SABOTAGE=1` makes every
+owner above rank 0 read its query rows one row early, in both partitions here:
+the ball-cover rows of `_rbc_rows` and the dense vertex-degree rows of
+`vertex_deg_dispatch`. Row counts, CSR offsets and every allocation are still
+computed from the true `first`, so no length and no validation moves; only the
+coordinates each shard measures against do. It is a `comptime if`, so no
+production bit can move, and it is INERT AT ONE DEVICE: the shift is guarded by
+`rank > 0`, and `_devices` caps the count at `rows` so `first >= 1` whenever
+`rank >= 1`. That guard is what makes a moved `par-dbscan` cell attributable to
+the define rather than to the second device. Owed a two-device column
+(`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
+"""
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from std.os import getenv
+from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from neighbors.impl.ball_cover.ball_cover import (
@@ -84,8 +98,13 @@ def _rbc_rows(
     for rank in range(count):
         var first = rows * rank // count
         var nr = rows * (rank + 1) // count - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_DBSCAN_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their query rows one row early.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
-        var qv = q.create_sub_buffer[DType.float32](first * features, nr * features)
+        var qv = q.create_sub_buffer[DType.float32](source * features, nr * features)
         var local_x = peer_clone(ctx, device, x)
         var local_q = peer_clone(ctx, device, qv)
         var local_r = peer_clone(ctx, device, r)
@@ -265,12 +284,17 @@ def vertex_deg_dispatch(
     for rank in range(count):
         var first = rows * rank // count
         var nr = rows * (rank + 1) // count - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_DBSCAN_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their query rows one row early.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
         var data = peer_clone(ctx, device, x)
         var local_adj = device.enqueue_create_buffer[DType.uint8](nr * references)
         var local_vd = device.enqueue_create_buffer[DType.int32](nr + 1)
         device.synchronize()
-        native_dense(device, local_adj, local_vd, data, start + first,
+        native_dense(device, local_adj, local_vd, data, start + source,
                      nr, references, features, eps, metric)
         shards.append(DenseShard(device^, data^, local_adj^, local_vd^, first, nr))
     var total = 0
