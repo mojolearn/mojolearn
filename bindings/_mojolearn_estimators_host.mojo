@@ -671,12 +671,10 @@ def ols_predict_binding(
         _positive(nf, "n_features")
         # DEVIATION 2920: X read in place, the rows split across the host
         # thread policy, the predictions written straight to `out`.
-        var coef = read_f32(coef_address, nf)
         host_ols_predict_into(
-            f32_ptr(x_address), host_list_ptr(coef), op, nr, nf, intercept,
+            f32_ptr(x_address), f32_ptr(coef_address), op, nr, nf, intercept,
             host_predict_task_count(nr),
         )
-        _ = coef^
     return PythonObject(0)
 
 
@@ -701,12 +699,10 @@ def tsvd_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        var components = read_f32(c_address, nc * nf)
         host_tsvd_transform_into(
-            f32_ptr(x_address), host_list_ptr(components), op, nr, nf, nc,
+            f32_ptr(x_address), f32_ptr(c_address), op, nr, nf, nc,
             host_predict_task_count(nr),
         )
-        _ = components^
     return PythonObject(0)
 
 
@@ -734,14 +730,10 @@ def pca_transform_binding(
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         _positive(nc, "n_components")
-        var mu = read_f32(m_address, nf)
-        var components = read_f32(c_address, nc * nf)
         host_pca_transform_into(
-            f32_ptr(x_address), host_list_ptr(mu), host_list_ptr(components),
+            f32_ptr(x_address), f32_ptr(m_address), f32_ptr(c_address),
             op, nr, nf, nc, host_predict_task_count(nr),
         )
-        _ = mu^
-        _ = components^
     return PythonObject(0)
 
 
@@ -893,19 +885,15 @@ def qn_decision_function_binding(
         # DEVIATION 2920: X read in place, the rows split across the host
         # thread policy, the scores written straight to `out`.
         if nc > 2:
-            var wm = read_f32(w_address, (nf + (1 if fi else 0)) * nc)
             host_qn_decision_multi_into(
-                f32_ptr(x_address), host_list_ptr(wm), op, nr, nf, nc, fi,
+                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, nc, fi,
                 host_predict_task_count(nr),
             )
-            _ = wm^
         else:
-            var w = read_f32(w_address, nf + (1 if fi else 0))
             host_qn_decision_into(
-                f32_ptr(x_address), host_list_ptr(w), op, nr, nf, fi,
+                f32_ptr(x_address), f32_ptr(w_address), op, nr, nf, fi,
                 host_predict_task_count(nr),
             )
-            _ = w^
     return PythonObject(0)
 
 
