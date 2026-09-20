@@ -1,0 +1,617 @@
+{
+ "schema": "mojolearn.lm-shards-probe.v1",
+ "shape": {
+  "batch": 1,
+  "length": 2048,
+  "d_model": 768,
+  "n_heads": 12,
+  "n_kv": 12,
+  "head_dim": 64,
+  "intermediate": 2048,
+  "n_layers": 12,
+  "vocab_size": 50257
+ },
+ "parameters": 162147840,
+ "steps_requested": 6,
+ "seed": 93261,
+ "arms": [
+  {
+   "schema": "mojolearn.lm-shards-probe.v1",
+   "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+   },
+   "parameters": 162147840,
+   "logical_shards": 2,
+   "devices": [
+    0
+   ],
+   "tokens_per_optimizer_step": 4096,
+   "corpus": null,
+   "reduction": "ordered_sum of per-shard mean cross-entropies",
+   "construct_seconds": 5.096857346594334,
+   "steps": [
+    {
+     "step": 1,
+     "seconds": 7.588748963549733,
+     "tokens_per_second": 539.7464087524703,
+     "first_call_includes_setup": true,
+     "losses_sha256": "17a0f16479c338e44a9598df42654b25f24c1eaedc31d391bc553b823025dd64",
+     "completed_steps": 1,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": 0,
+      "device_total_bytes": 48305799168,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 2,
+     "seconds": 0.38300866819918156,
+     "tokens_per_second": 10694.274934451087,
+     "first_call_includes_setup": false,
+     "losses_sha256": "80b73e146deac9b5125a13cb12b47d3a2fa53c1b73aad76d105a5909bacaea24",
+     "completed_steps": 2,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 3,
+     "seconds": 0.3824771214276552,
+     "tokens_per_second": 10709.137280449728,
+     "first_call_includes_setup": false,
+     "losses_sha256": "760bfb38bdcbc639ae005e65d4c40b40365070c933d7464d722fb26c8c59d8d9",
+     "completed_steps": 3,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 4,
+     "seconds": 0.3830896597355604,
+     "tokens_per_second": 10692.013986562288,
+     "first_call_includes_setup": false,
+     "losses_sha256": "b04728e5941a9f4c6e73abc272621f49ef8aea32bcd9df85448522902fd6db08",
+     "completed_steps": 4,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 5,
+     "seconds": 0.38241953775286674,
+     "tokens_per_second": 10710.74983267979,
+     "first_call_includes_setup": false,
+     "losses_sha256": "410fe4ea6b16b3591c27d0c3502d38a607c443f8e17c805b829b16492df0d943",
+     "completed_steps": 5,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 6,
+     "seconds": 0.3836364261806011,
+     "tokens_per_second": 10676.775510550091,
+     "first_call_includes_setup": false,
+     "losses_sha256": "5406d4946b246ee2e815fd4b7b0405a06279ff3b56745e0760d9c875ff31a32e",
+     "completed_steps": 6,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 6682652672,
+      "vm_hwm_bytes": 13833646080,
+      "ru_maxrss_bytes": 13833646080,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": 16684941312,
+      "peak_device_bytes": 16696475648,
+      "device_total_bytes": 48305799168,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 15,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    }
+   ],
+   "steady_median_seconds": 0.38300866819918156,
+   "steady_median_tokens_per_second": 10694.274934451087,
+   "export_seconds": 10.819060508161783,
+   "final_sha256": {
+    "parameters": "0021fa02891392202bd2ff2d750b7bf124193c85af0b00a699147fa79981300d",
+    "m": "0c684f9385bac0c4f51611daca250f8ab6e954f122465196a549af2ac2e437ce",
+    "v": "728aedcd521b34d23547f79fd5d71d94b3d17dfa5eb23ca8746ce4d94e29cb36",
+    "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+    "gradients": "c53f1bdba7ec23fbd3ed9d22f1ed393b163c4baf2b9cb20f6288046aeb3593bb"
+   },
+   "optimizer_ownership": [
+    {
+     "device": 0,
+     "first": 0,
+     "count": 162147840,
+     "moment_bytes": 1297182720,
+     "rollback_bytes": 1945774080,
+     "reduction_bytes": 1297182720
+    }
+   ],
+   "refused": null,
+   "peak_device_process_bytes": 16684941312,
+   "peak_device_wide_bytes": 16696475648,
+   "device_tool": "nvidia-smi"
+  },
+  {
+   "schema": "mojolearn.lm-shards-probe.v1",
+   "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+   },
+   "parameters": 162147840,
+   "logical_shards": 3,
+   "devices": [
+    0
+   ],
+   "tokens_per_optimizer_step": 6144,
+   "corpus": null,
+   "reduction": "ordered_sum of per-shard mean cross-entropies",
+   "construct_seconds": 5.879907531663775,
+   "steps": [
+    {
+     "step": 1,
+     "seconds": 6.786723930388689,
+     "tokens_per_second": 905.2968800586119,
+     "first_call_includes_setup": true,
+     "losses_sha256": "ed4a170aa89af8b31f529b2f638f2bfc9dc2bfadf869423728cf893be4d5dd22",
+     "completed_steps": 1,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": 16684941312,
+      "peak_device_bytes": 16696475648,
+      "device_total_bytes": 48305799168,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 2,
+     "seconds": 0.5658648442476988,
+     "tokens_per_second": 10857.71640075692,
+     "first_call_includes_setup": false,
+     "losses_sha256": "75652361fe950051936eaef8271c9ee7b4cc3adb50c6d87d4d2bff34d47b9c9f",
+     "completed_steps": 2,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 3,
+     "seconds": 0.5651932992041111,
+     "tokens_per_second": 10870.617200614026,
+     "first_call_includes_setup": false,
+     "losses_sha256": "59e17cc2cbdec16da803fb1fbcb01bfb267236699750158bdc51fc6d267e2c2c",
+     "completed_steps": 3,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 4,
+     "seconds": 0.5657248757779598,
+     "tokens_per_second": 10860.402755935105,
+     "first_call_includes_setup": false,
+     "losses_sha256": "f00070b084a6f96b5d192989c4e133a2baa0066d52cd40401dc8c285ce3006d9",
+     "completed_steps": 4,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 5,
+     "seconds": 0.5635328348726034,
+     "tokens_per_second": 10902.647760336733,
+     "first_call_includes_setup": false,
+     "losses_sha256": "c0c6cbd967af02fd04df88fec9dcbaae929dc44a75525afce37b940435d32a2d",
+     "completed_steps": 5,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 6,
+     "seconds": 0.5620665512979031,
+     "tokens_per_second": 10931.089896405514,
+     "first_call_includes_setup": false,
+     "losses_sha256": "2fe96a21f9698d175067b5afcd1c005772718d461ec3c33e6baaf8c5b1af3784",
+     "completed_steps": 6,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9281712128,
+      "vm_hwm_bytes": 16436088832,
+      "ru_maxrss_bytes": 16436088832,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 13,
+      "errors_total": 1,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    }
+   ],
+   "steady_median_seconds": 0.5651932992041111,
+   "steady_median_tokens_per_second": 10870.617200614026,
+   "export_seconds": 11.796736592426896,
+   "final_sha256": {
+    "parameters": "00b3bc2f5d540e14fb61a620a764684dfb2c91eaa6bf018645a9974a5d9830c3",
+    "m": "edcc8072d35bcdac068ecb61903bf0c487d2547b741a225e426da0487e4cd3f2",
+    "v": "c7def86d9e84a8b858ffdca62558cd9d671646868a17a5c8c732a1b1b5c4adbb",
+    "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+    "gradients": "0fa267d56022ca066fd75a64ed0984701f73aa878a1a1b50d8e432ecf2e86e3f"
+   },
+   "optimizer_ownership": [
+    {
+     "device": 0,
+     "first": 0,
+     "count": 162147840,
+     "moment_bytes": 1297182720,
+     "rollback_bytes": 1945774080,
+     "reduction_bytes": 1297182720
+    }
+   ],
+   "refused": null,
+   "peak_device_process_bytes": 16684941312,
+   "peak_device_wide_bytes": 16696475648,
+   "device_tool": "nvidia-smi"
+  },
+  {
+   "schema": "mojolearn.lm-shards-probe.v1",
+   "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+   },
+   "parameters": 162147840,
+   "logical_shards": 5,
+   "devices": [
+    0
+   ],
+   "tokens_per_optimizer_step": 10240,
+   "corpus": null,
+   "reduction": "ordered_sum of per-shard mean cross-entropies",
+   "construct_seconds": 5.6976680886000395,
+   "steps": [
+    {
+     "step": 1,
+     "seconds": 6.80919386446476,
+     "tokens_per_second": 1503.84909048333,
+     "first_call_includes_setup": true,
+     "losses_sha256": "def1973953a5941e561c5cfa05652135238930b493309f87d007ad9c38c7df65",
+     "completed_steps": 1,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": 16684941312,
+      "peak_device_bytes": 16696475648,
+      "device_total_bytes": 48305799168,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 2,
+     "seconds": 0.9190911799669266,
+     "tokens_per_second": 11141.440831113716,
+     "first_call_includes_setup": false,
+     "losses_sha256": "7773b7456f1de2de5b4b1813f16a74b0a3fe36f654d938cd0ae97935931f4e34",
+     "completed_steps": 2,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 3,
+     "seconds": 0.9233231879770756,
+     "tokens_per_second": 11090.37456584946,
+     "first_call_includes_setup": false,
+     "losses_sha256": "e7365c1b67eacb0b4fb8ced540d34c4d9f32f4c109f6818aee3a27017e9c31c7",
+     "completed_steps": 3,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 4,
+     "seconds": 0.919137628749013,
+     "tokens_per_second": 11140.8777964374,
+     "first_call_includes_setup": false,
+     "losses_sha256": "1c45df0b241568a924e7739aa220589d14561d17bb12d130bb9ff3e6fc8fa057",
+     "completed_steps": 4,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 14,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 5,
+     "seconds": 0.9189305193722248,
+     "tokens_per_second": 11143.38873737216,
+     "first_call_includes_setup": false,
+     "losses_sha256": "df303ee92894be15cf648c33d81ad0e9b02f304d38662e32a9c8c8cb4de173c2",
+     "completed_steps": 5,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": 16684941312,
+      "peak_device_bytes": 16696475648,
+      "device_total_bytes": 48305799168,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 15,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    },
+    {
+     "step": 6,
+     "seconds": 0.9189267754554749,
+     "tokens_per_second": 11143.43413807313,
+     "first_call_includes_setup": false,
+     "losses_sha256": "6cb853bfa56775d8e12373e7be9a7ae9b6cc3dab5f68664f6144892f82bd0a0e",
+     "completed_steps": 6,
+     "reduction": "ordered_sum",
+     "host": {
+      "vm_rss_bytes": 9283215360,
+      "vm_hwm_bytes": 16438525952,
+      "ru_maxrss_bytes": 16438525952,
+      "boundary": "process host memory (Python + native + pinned staging); not device memory"
+     },
+     "device": {
+      "tool": "nvidia-smi",
+      "peak_process_bytes": "unavailable",
+      "peak_device_bytes": "unavailable",
+      "device_total_bytes": null,
+      "sample_interval_seconds": 0.2,
+      "samples_total": 15,
+      "errors_total": 0,
+      "boundary": "vendor tool polled at the interval; peaks shorter than one interval are missed; device-wide used memory includes other processes; torch.cuda allocator statistics do not cover Mojo allocations and are not used"
+     }
+    }
+   ],
+   "steady_median_seconds": 0.9190911799669266,
+   "steady_median_tokens_per_second": 11141.440831113716,
+   "export_seconds": 11.429303841665387,
+   "final_sha256": {
+    "parameters": "60279ff64e772253c12ced6bb3018350a28fb24f51847720321426c6f77cd090",
+    "m": "fa2dc331182f33e6d13b85d21717c13e4ed947f0c0dbc8954e9e6c6b9f10734a",
+    "v": "79d75c8b3e5ad43b40d19d97423c14754fb031d73e65029ce073470dd933b343",
+    "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+    "gradients": "c027f7764e6af49c6cd74c955801ecb45ca1f6fe7a37f68eca0f5151609a9b74"
+   },
+   "optimizer_ownership": [
+    {
+     "device": 0,
+     "first": 0,
+     "count": 162147840,
+     "moment_bytes": 1297182720,
+     "rollback_bytes": 1945774080,
+     "reduction_bytes": 1297182720
+    }
+   ],
+   "refused": null,
+   "peak_device_process_bytes": 16684941312,
+   "peak_device_wide_bytes": 16696475648,
+   "device_tool": "nvidia-smi"
+  }
+ ],
+ "qualification": "one GPU, one shape; capacity and throughput only, not an opponent ratio and not a default gate"
+}

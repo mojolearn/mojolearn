@@ -1,0 +1,32 @@
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3840000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3880000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b38c0000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3900000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3940000000, nodemask=2)
+6653 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x314900000000, nodemask=1)
+{"shards": 2, "step": 1, "seconds": 10.158688055351377, "tokens_per_second": 403.2016710900298}
+{"shards": 2, "step": 2, "seconds": 0.3050463404506445, "tokens_per_second": 13427.468082223131}
+{"shards": 2, "step": 3, "seconds": 0.30448098480701447, "tokens_per_second": 13452.399999941272}
+{"shards": 2, "step": 4, "seconds": 0.3042517900466919, "tokens_per_second": 13462.533776289069}
+{"shards": 2, "step": 5, "seconds": 0.3041811864823103, "tokens_per_second": 13465.658568065988}
+{"shards": 2, "step": 6, "seconds": 0.3033686578273773, "tokens_per_second": 13501.724368410873}
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3980000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b39c0000000, nodemask=2)
+6586 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b3a00000000, nodemask=2)
+{"shards": 3, "step": 1, "seconds": 6.0832337737083435, "tokens_per_second": 1009.9891321872731}
+{"shards": 3, "step": 2, "seconds": 0.49460530281066895, "tokens_per_second": 12422.026138995674}
+{"shards": 3, "step": 3, "seconds": 0.5019647423177958, "tokens_per_second": 12239.90348730551}
+{"shards": 3, "step": 4, "seconds": 0.49502004124224186, "tokens_per_second": 12411.61869847081}
+{"shards": 3, "step": 5, "seconds": 0.49524473026394844, "tokens_per_second": 12405.987635093985}
+{"shards": 3, "step": 6, "seconds": 0.49509180895984173, "tokens_per_second": 12409.819530054792}
+{"shards": 5, "step": 1, "seconds": 6.323421195149422, "tokens_per_second": 1619.3765501268383}
+{"shards": 5, "step": 2, "seconds": 0.7074126154184341, "tokens_per_second": 14475.286101510992}
+{"shards": 5, "step": 3, "seconds": 0.7137821037322283, "tokens_per_second": 14346.114796738422}
+{"shards": 5, "step": 4, "seconds": 0.7067328486591578, "tokens_per_second": 14489.209068784257}
+{"shards": 5, "step": 5, "seconds": 0.7127839997410774, "tokens_per_second": 14366.203511470143}
+{"shards": 5, "step": 6, "seconds": 0.7061175480484962, "tokens_per_second": 14501.834755842543}
+{
+ "2": 13462.533776289069,
+ "3": 12409.819530054792,
+ "5": 14475.286101510992
+}
