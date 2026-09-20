@@ -363,6 +363,12 @@ def test_npz_files_identical_to_0_6_and_load_both_ways():
         arrays = _serialize.read_npz(old, "mojolearn-extratrees-1")
         assert _serialize.scalar_str(arrays, "estimator") == "ExtraTreesClassifier"
         assert arrays["format"] == "mojolearn-extratrees-1"
+        routing = _serialize.peek_npz(old, ("format", "estimator"))
+        assert routing == {
+            "format": "mojolearn-extratrees-1",
+            "estimator": "ExtraTreesClassifier",
+        }
+        assert _serialize.peek_npz(old, ("missing",)) == {}
         for name in ("offsets", "colid", "quesval", "left_child", "leaves", "meta", "model"):
             a = _serialize.exact(arrays, name, model[name].dtype)
             assert isinstance(a, Array) and a.shape == model[name].shape
