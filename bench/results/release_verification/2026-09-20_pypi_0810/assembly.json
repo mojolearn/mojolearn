@@ -1,0 +1,16 @@
+[
+  {
+    "platform": "macos",
+    "wheel": "/Users/andrewhendel/mojolearn-evidence/releases/0.8.10/artifact/mojolearn-0.8.10-py3-none-macosx_11_0_arm64.whl",
+    "sha256": "1f0a5d318236e943b4192721e917907df31ffec364762c973c9688254e8b1b03",
+    "unchanged_native_files": 66,
+    "package_source_commit": "fe27b1d053e2c44818dd08736721087880f03f2a"
+  },
+  {
+    "platform": "linux",
+    "wheel": "/Users/andrewhendel/mojolearn-evidence/releases/0.8.10/artifact/mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl",
+    "sha256": "c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c",
+    "unchanged_native_files": 124,
+    "package_source_commit": "fe27b1d053e2c44818dd08736721087880f03f2a"
+  }
+]

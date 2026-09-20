@@ -1,0 +1,84 @@
+# 0.8.10 candidate source
+
+This bounded release starts at 819a47ae48166e91951f54f54e64ee173658e32a, the native source used for public 0.8.9. It imports the parallel Python, verifier, reference, release metadata and relevant evidence changes through 74095a4bfd3b5bad7e5b3af53c2120fbfec535bc. Unrelated native optimization changes on main are outside this patch release.
+
+The alpha overlay must compare native compile inputs against the inherited wheel source and preserve every native artifact hash. The resulting wheel records its new package source commit separately from native source 819a47ae48166e91951f54f54e64ee173658e32a. Exact final-wheel installed qualification is required before publication; old-wheel receipts are not reused. This release proceeds with the currently validated reference table. At freeze, 378 AMD and 126 NVIDIA part-cells remain outstanding; ongoing collection is not claimed complete. The Apple trial matched 423 numeric parts to CPU references and 414 to GPU-only references. One-device cross-vendor agreement does not establish physical multi-GPU placement. Subsequent native-free changes include explicit causal-batch worker cleanup, its actual Apple check, and the preserved incomplete AMD memory-guard diagnostic.
+
+Selected paths imported from the main snapshot:
+
+- `.zenodo.json`
+- `CHANGELOG.md`
+- `CITATION.cff`
+- `bench/results/gbdt_cpu_parity/2026-09-20/explicit-average-regression.json`
+- `bench/results/identity_break/2026-09-20_final-amd-vendor-coverage/README.md`
+- `bench/results/identity_break/2026-09-20_final-amd-vendor-coverage/amd-mi325x-gfx942.json`
+- `bench/results/identity_break/2026-09-20_final-linux-hdbscan/README.md`
+- `bench/results/identity_break/2026-09-20_final-linux-hdbscan/cpu-amd-epyc.json`
+- `bench/results/identity_break/2026-09-20_final-nvidia-vendor-coverage/README.md`
+- `bench/results/identity_break/2026-09-20_final-nvidia-vendor-coverage/cpu-comparison.json`
+- `bench/results/identity_break/2026-09-20_final-nvidia-vendor-coverage/nvidia-h100.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/README.md`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/apple-causal-provenance.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/apple-m4-causal.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-arima-provenance.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-arima.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-rbf-provenance.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-rbf-sampler.json`
+- `bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/native-source-provenance.json`
+- `bench/results/parallel-next/apple-4459379a4/README.md`
+- `bench/results/parallel-next/apple-4459379a4/all-nine-scope.txt`
+- `bench/results/parallel-next/apple-4459379a4/all-nine.exit`
+- `bench/results/parallel-next/apple-4459379a4/all-nine.json`
+- `bench/results/parallel-next/apple-4459379a4/base.exit`
+- `bench/results/parallel-next/apple-4459379a4/base.json`
+- `bench/results/parallel-next/apple-4459379a4/base.json.errors.txt`
+- `bench/results/parallel-next/apple-4459379a4/lanes.txt`
+- `bench/results/parallel-next/apple-4459379a4/numeric-comparison.json`
+- `bench/results/parallel-next/apple-4459379a4/provenance.json`
+- `bench/results/parallel-next/reference-admission-445/README.md`
+- `bench/results/parallel-next/reference-admission-445/after-current-contract.json`
+- `bench/results/parallel-next/reference-admission-445/amd-collection-plan.json`
+- `bench/results/parallel-next/reference-admission-445/before-current-contract.json`
+- `bench/results/parallel-next/reference-admission-445/nvidia-collection-plan.json`
+- `bench/results/parallel-next/reference-admission-445/reused-amd-validation.json`
+- `bench/results/parallel-next/reference-admission-445/summary.json`
+- `bench/results/release089/apple-vendor-completion/README.md`
+- `bench/results/release089/apple-vendor-completion/apple.json`
+- `bench/results/release089/apple-vendor-completion/cpu-comparison.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/README.md`
+- `bench/results/release_verification/2026-09-20_pypi_089/linux-alpha-manifest.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/linux-light-smoke.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/linux-pypi-download.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/macos-alpha-manifest.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/macos-light-smoke.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/macos-pypi-download.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/zenodo-linux.json`
+- `bench/results/release_verification/2026-09-20_pypi_089/zenodo-macos.json`
+- `docs/lanes/CITING_release089.md`
+- `docs/lanes/HANDOFF_2026-09-20_exposure.md`
+- `docs/lanes/LANE_STATUS_release089-all-vendor-coverage.md`
+- `docs/lanes/release089-all-vendor-fixture-audit.json`
+- `docs/lanes/release089-raw-record-manifest.json`
+- `docs/lanes/release089-zenodo-verification/archive-content-verification.json`
+- `docs/lanes/release089-zenodo-verification/zenodo-api.json`
+- `python/mojolearn/__main__.py`
+- `python/mojolearn/_crossvendor_coverage.py`
+- `python/mojolearn/_parallel_pool.py`
+- `python/mojolearn/_parallel_worker.py`
+- `python/mojolearn/_verify_par.py`
+- `python/mojolearn/_verify_reference.py`
+- `python/mojolearn/models/parallel_causal_lm.py`
+- `python/mojolearn/parallel_classical.py`
+- `python/mojolearn/parallel_model_selection.py`
+- `python/mojolearn/tests/test_crossvendor_coverage.py`
+- `python/mojolearn/tests/test_devicepool_visibility.py`
+- `python/mojolearn/tests/test_parallel_arima_serialization.py`
+- `python/mojolearn/tests/test_parallel_causal_lm.py`
+- `python/mojolearn/tests/test_parallel_model_selection.py`
+- `python/mojolearn/tests/test_verify_par.py`
+- `python/mojolearn/tests/test_verify_reference_admit.py`
+- `python/mojolearn/verify_reference/table.json`
+- `tools/audit_parallel_coverage.py`
+- `tools/identity_break.py`
+- `tools/test_parallel_model_contract.py`
+- `tools/test_parallel_saved_models_runtime.py`

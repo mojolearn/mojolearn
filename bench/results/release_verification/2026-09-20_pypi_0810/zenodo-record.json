@@ -1,0 +1,141 @@
+{
+  "created": "2026-09-20T21:56:06.135327+00:00",
+  "modified": "2026-09-20T21:56:06.919368+00:00",
+  "id": 22864816,
+  "conceptrecid": "22068632",
+  "doi": "10.5281/zenodo.22864816",
+  "conceptdoi": "10.5281/zenodo.22068632",
+  "doi_url": "https://doi.org/10.5281/zenodo.22864816",
+  "metadata": {
+    "title": "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP",
+    "doi": "10.5281/zenodo.22864816",
+    "publication_date": "2026-09-20",
+    "description": "<p>mojolearn supports bitwise-identical training and inference across more than 50 machine-learning algorithms.</p>",
+    "access_right": "open",
+    "creators": [
+      {
+        "name": "Hendel, Andrew",
+        "affiliation": "Latent Archon",
+        "orcid": "0009-0000-9877-3623"
+      }
+    ],
+    "keywords": [
+      "machine learning",
+      "gpu",
+      "mojo",
+      "apple silicon",
+      "metal",
+      "cuda",
+      "rocm",
+      "gradient boosting",
+      "random forest",
+      "k-means",
+      "bitwise reproducibility",
+      "nvidia",
+      "amd",
+      "hip",
+      "bitwise identical",
+      "reproducibility",
+      "cross-vendor"
+    ],
+    "related_identifiers": [
+      {
+        "identifier": "https://github.com/mojolearn/mojolearn",
+        "relation": "isSupplementTo",
+        "resource_type": "software",
+        "scheme": "url"
+      }
+    ],
+    "version": "alpha-api-0.8.10-20260920",
+    "custom": {
+      "code:codeRepository": "https://github.com/mojolearn/mojolearn"
+    },
+    "resource_type": {
+      "title": "Software",
+      "type": "software"
+    },
+    "license": {
+      "id": "apache2.0"
+    },
+    "relations": {
+      "version": [
+        {
+          "index": 19,
+          "is_last": true,
+          "parent": {
+            "pid_type": "recid",
+            "pid_value": "22068632"
+          }
+        }
+      ]
+    }
+  },
+  "title": "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP",
+  "links": {
+    "self": "https://zenodo.org/api/records/22864816",
+    "self_html": "https://zenodo.org/records/22864816",
+    "preview_html": "https://zenodo.org/records/22864816?preview=1",
+    "doi": "https://doi.org/10.5281/zenodo.22864816",
+    "self_doi": "https://doi.org/10.5281/zenodo.22864816",
+    "self_doi_html": "https://zenodo.org/doi/10.5281/zenodo.22864816",
+    "reserve_doi": "https://zenodo.org/api/records/22864816/draft/pids/doi",
+    "parent": "https://zenodo.org/api/records/22068632",
+    "parent_html": "https://zenodo.org/records/22068632",
+    "parent_doi": "https://doi.org/10.5281/zenodo.22068632",
+    "parent_doi_html": "https://zenodo.org/doi/10.5281/zenodo.22068632",
+    "self_iiif_manifest": "https://zenodo.org/api/iiif/record:22864816/manifest",
+    "self_iiif_sequence": "https://zenodo.org/api/iiif/record:22864816/sequence/default",
+    "files": "https://zenodo.org/api/records/22864816/files",
+    "media_files": "https://zenodo.org/api/records/22864816/media-files",
+    "archive": "https://zenodo.org/api/records/22864816/files-archive",
+    "archive_media": "https://zenodo.org/api/records/22864816/media-files-archive",
+    "latest": "https://zenodo.org/api/records/22864816/versions/latest",
+    "latest_html": "https://zenodo.org/records/22864816/latest",
+    "versions": "https://zenodo.org/api/records/22864816/versions",
+    "draft": "https://zenodo.org/api/records/22864816/draft",
+    "access_links": "https://zenodo.org/api/records/22864816/access/links",
+    "access_grants": "https://zenodo.org/api/records/22864816/access/grants",
+    "access_users": "https://zenodo.org/api/records/22864816/access/users",
+    "access_request": "https://zenodo.org/api/records/22864816/access/request",
+    "access": "https://zenodo.org/api/records/22864816/access",
+    "communities": "https://zenodo.org/api/records/22864816/communities",
+    "communities-suggestions": "https://zenodo.org/api/records/22864816/communities-suggestions",
+    "request_deletion": "https://zenodo.org/api/records/22864816/request-deletion",
+    "file_modification": "https://zenodo.org/api/records/22864816/file-modification",
+    "quota_increase": "https://zenodo.org/api/records/22864816/quota-increase",
+    "requests": "https://zenodo.org/api/records/22864816/requests"
+  },
+  "updated": "2026-09-20T21:56:06.919368+00:00",
+  "recid": "22864816",
+  "revision": 3,
+  "files": [
+    {
+      "id": "292336f7-ee08-4597-aa7f-386aadb81fe6",
+      "key": "mojolearn/mojolearn-alpha-api-0.8.10-20260920.zip",
+      "size": 48686637,
+      "checksum": "md5:10ff0474951680baee978a4c6247195a",
+      "links": {
+        "self": "https://zenodo.org/api/records/22864816/files/mojolearn/mojolearn-alpha-api-0.8.10-20260920.zip/content"
+      }
+    }
+  ],
+  "swh": {},
+  "owners": [
+    {
+      "id": "1730602"
+    }
+  ],
+  "status": "published",
+  "stats": {
+    "downloads": 0,
+    "unique_downloads": 0,
+    "views": 102,
+    "unique_views": 91,
+    "version_downloads": 0,
+    "version_unique_downloads": 0,
+    "version_unique_views": 0,
+    "version_views": 0
+  },
+  "state": "done",
+  "submitted": true
+}
