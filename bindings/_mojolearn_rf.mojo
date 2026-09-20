@@ -40,6 +40,7 @@ from std.python.bindings import PythonModuleBuilder
 from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
+    forest_predict_resident_labels_gpu_binding,
     forest_resident_layout_binding, forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
@@ -972,6 +973,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[forest_vector_groves_binding]("forest_vector_groves")
         m.def_function[forest_predict_resident_into_gpu_binding[True]]("forest_predict_resident_into_gpu")
         m.def_function[forest_predict_resident_into_gpu_binding[True, True]]("forest_predict_resident_reuse_gpu")
+        m.def_function[forest_predict_resident_labels_gpu_binding[True]]("forest_predict_resident_labels_gpu")
         m.def_function[rf_classifier_fit_shard_binding]("rf_classifier_fit_shard")
         m.def_function[rf_regressor_fit_shard_binding]("rf_regressor_fit_shard")
         return m.finalize()

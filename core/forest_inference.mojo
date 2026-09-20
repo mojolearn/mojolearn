@@ -150,6 +150,43 @@ def forest_ordered_kernel[RF_INPUT: Bool, PACKED: Bool = False](
         output.unsafe_store(item,ftz(identical_div(ftz(total),Float32(trees))))
 
 
+def forest_argmax_kernel(
+    scores: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Int32, MutAnyOrigin], rows_in: Int32, outputs_in: Int32,
+):
+    """Row-wise first-max argmax; `-1` reports a non-finite score."""
+    var rows = Int(rows_in)
+    var outputs = Int(outputs_in)
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= rows:
+        return
+    var base = row * outputs
+    var best = 0
+    var best_value = scores.unsafe_load(base)
+    if (bitcast[DType.uint32](best_value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+        codes.unsafe_store(row, Int32(-1))
+        return
+    for c in range(1, outputs):
+        var value = scores.unsafe_load(base + c)
+        if (bitcast[DType.uint32](value) & UInt32(0x7f800000)) == UInt32(0x7f800000):
+            codes.unsafe_store(row, Int32(-1))
+            return
+        if value > best_value:
+            best = c
+            best_value = value
+    codes.unsafe_store(row, Int32(best))
+
+
+def launch_forest_argmax(ctx: DeviceContext,
+    mut scores: DeviceBuffer[DType.float32], mut codes: DeviceBuffer[DType.int32],
+    rows: Int, outputs: Int) raises:
+    if rows > 0:
+        ctx.enqueue_function[forest_argmax_kernel](
+            scores.unsafe_ptr(), codes.unsafe_ptr(), Int32(rows), Int32(outputs),
+            grid_dim=(rows + 127) // 128, block_dim=128,
+        )
+
+
 def forest_grove32_kernel[RF_INPUT: Bool, PACKED: Bool = False](
     offsets: MutPointer[Int32, MutAnyOrigin], columns: MutPointer[Int32, MutAnyOrigin],
     thresholds: MutPointer[Float32, MutAnyOrigin], left: MutPointer[Int32, MutAnyOrigin],

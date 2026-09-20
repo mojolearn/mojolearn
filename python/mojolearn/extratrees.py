@@ -496,7 +496,18 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         """The argmax of the vote (first max wins) mapped through
         `classes_`: an int64 or float64 `Array` for numeric labels, a
         Python list for str labels (DEVIATION 2340)."""
-        return decode_labels(self.classes_, argmax_rows(self._vote(X)))
+        if not hasattr(self, "_offsets"):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        _, n_features = Xa.shape
+        if n_features != self.n_features_in_:
+            raise ValueError(
+                f"X has {n_features} features, fit saw {self.n_features_in_}"
+            )
+        codes = self._predict_forest_labels(Xa)
+        if codes is not None:
+            return decode_labels(self.classes_, codes)
+        return decode_labels(self.classes_, argmax_rows(self._vote(Xa)))
 
 
 @forest_estimator("regressor")

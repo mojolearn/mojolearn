@@ -188,6 +188,23 @@ class ForestProtocol:
             resident.handle, _addr_ro(X), _addr(out),
             [int(rows), int(features), dimensions[2]])
 
+    def _predict_forest_labels(self, X):
+        """FAST-only resident classifier path returning device argmax codes."""
+        if self._effective_mode() != "fast" or self._prediction_engine() != "parallel_groves":
+            return None
+        native = self._bind()
+        function = getattr(native, "forest_predict_resident_labels_gpu", None)
+        if not callable(function):
+            return None
+        rows, features = X.shape
+        out = full((int(rows),), 0, "<i4")
+        resident = self._prepare_resident_forest(native)
+        wrote = function(resident.handle, _addr_ro(X), _addr(out),
+                         [int(rows), int(features), int(self._num_outputs)])
+        if wrote != rows:
+            raise RuntimeError(f"forest label prediction wrote {wrote} of {rows} rows")
+        return out
+
     def _prepare_resident_forest(self, native=None):
         """Prepare the existing immutable parallel-groves snapshot without a query."""
         if self._prediction_engine() != "parallel_groves":

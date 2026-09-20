@@ -7,7 +7,7 @@ native handle can be released while another call is using it.
 from std.python import PythonObject
 from std.sys.compile import is_defined
 from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
-from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into
+from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels
 
 
 def forest_pool_available() raises -> PythonObject:
@@ -125,6 +125,26 @@ def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = Fa
     resident_predict_into[RF_INPUT](Int(py=handle),
         xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
         rows, features, outputs, REUSE_IO)
+    return PythonObject(rows)
+
+
+def forest_predict_resident_labels_gpu_binding[RF_INPUT: Bool](
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject) raises -> PythonObject:
+    if len(params) != 3:
+        raise Error("resident label prediction requires rows, features, outputs")
+    var rows = Int(py=params[0])
+    var features = Int(py=params[1])
+    var outputs = Int(py=params[2])
+    if rows < 0 or features < 1 or outputs < 2:
+        raise Error("invalid resident label prediction dimensions")
+    if rows > 2147483647 // features or rows > 2147483647 // outputs:
+        raise Error("resident label prediction dimensions exceed Int32")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var op = _i32_ptr(Int(py=out_addr))
+    resident_predict_labels[RF_INPUT](Int(py=handle),
+        xp.unsafe_origin_cast[MutAnyOrigin](), op.unsafe_origin_cast[MutAnyOrigin](),
+        rows, features, outputs)
     return PythonObject(rows)
 
 

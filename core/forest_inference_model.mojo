@@ -15,7 +15,7 @@ from std.time import perf_counter_ns
 from max.algorithm import sync_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
-from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, FOREST_PACKED_NODES
+from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES
 from core.forest_inference_pool import PooledForest, forest_device_count
 
 
@@ -107,6 +107,7 @@ struct ResidentForest(Movable):
     var leaves: Optional[DeviceBuffer[DType.float32]]
     var input_workspace: Optional[DeviceBuffer[DType.float32]]
     var output_workspace: Optional[DeviceBuffer[DType.float32]]
+    var label_workspace: Optional[DeviceBuffer[DType.int32]]
     var input_stage: Optional[HostBuffer[DType.float32]]
     var workspace_rows: Int
     var features: Int
@@ -121,6 +122,7 @@ struct ResidentForest(Movable):
         self.pool = Optional[PooledForest]()
         self.input_workspace = Optional[DeviceBuffer[DType.float32]]()
         self.output_workspace = Optional[DeviceBuffer[DType.float32]]()
+        self.label_workspace = Optional[DeviceBuffer[DType.int32]]()
         self.input_stage = Optional[HostBuffer[DType.float32]]()
         self.workspace_rows = 0
         self.features = features
@@ -199,6 +201,7 @@ struct ResidentForest(Movable):
         # even when an upload/allocation exception bypasses explicit release.
         _ = self.pool^
         _ = self.output_workspace^
+        _ = self.label_workspace^
         _ = self.input_workspace^
         _ = self.input_stage^
         _ = self.leaves^
@@ -220,6 +223,7 @@ struct ResidentForest(Movable):
         if self.ctx:
             self.ctx.value().synchronize()
         self.output_workspace = None
+        self.label_workspace = None
         self.input_workspace = None
         self.input_stage = None
         self.workspace_rows = 0
@@ -343,6 +347,7 @@ struct ResidentForest(Movable):
             return
         self.input_workspace = None
         self.output_workspace = None
+        self.label_workspace = None
         self.input_stage = None
         self.workspace_rows = 0
         try:
@@ -357,9 +362,59 @@ struct ResidentForest(Movable):
             self.ctx.value().synchronize()
             self.input_workspace = None
             self.output_workspace = None
+            self.label_workspace = None
             self.input_stage = None
             raise e
         self.workspace_rows = rows
+
+    def predict_labels[RF_INPUT: Bool](mut self,
+        x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
+        rows: Int, features: Int, outputs: Int) raises:
+        """FAST classifier boundary: keep vote rows on device and return codes."""
+        if features != self.features or outputs != self.outputs or outputs < 2:
+            raise Error("resident forest dimensions differ from prepared snapshot")
+        if rows < 0 or rows > 2147483647 // features or rows > 2147483647 // outputs:
+            raise Error("resident forest prediction dimensions exceed Int32")
+        if self.pool:
+            require_finite_pointer(x, rows * features)
+            var votes = List[Float32](length=rows * outputs, fill=Float32(0))
+            self.pool.value().predict_into[RF_INPUT](
+                x, votes.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), rows)
+            for row in range(rows):
+                var best = 0
+                var best_value = votes[row * outputs]
+                for c in range(1, outputs):
+                    if votes[row * outputs + c] > best_value:
+                        best = c
+                        best_value = votes[row * outputs + c]
+                output.unsafe_store(row, Int32(best))
+            _ = votes^
+            return
+        if rows == 0:
+            require_finite_pointer(x, 0)
+            return
+        self.prepare_workspace(rows)
+        require_finite_pointer(x, rows * features)
+        try:
+            if not self.label_workspace:
+                self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
+            self.ctx.value().enqueue_copy(dst_buf=self.input_workspace.value(), src_ptr=x)
+            launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
+                self.ctx.value(), self.offsets.value(), self.columns.value(),
+                self.thresholds.value(), self.left.value(), self.leaves.value(),
+                self.input_workspace.value(), self.output_workspace.value(), rows,
+                features, outputs, self.trees,
+            )
+            launch_forest_argmax(self.ctx.value(), self.output_workspace.value(),
+                                 self.label_workspace.value(), rows, outputs)
+            self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=self.label_workspace.value())
+            self.ctx.value().synchronize()
+        except e:
+            self.ctx.value().synchronize()
+            raise e
+        for row in range(rows):
+            if output.unsafe_load(row) < 0:
+                raise Error("resident forest requires finite Float32 values")
 
 
 def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
@@ -476,3 +531,14 @@ def resident_predict_into[RF_INPUT: Bool](handle: Int,
     if handle not in state[].entries:
         raise Error("unknown or released resident forest handle")
     state[].entries[handle].predict_into[RF_INPUT](x, output, rows, features, outputs, reuse_io)
+
+
+def resident_predict_labels[RF_INPUT: Bool](handle: Int,
+    x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Int32, MutAnyOrigin],
+    rows: Int, features: Int, outputs: Int) raises:
+    var state = RF_REGISTRY.get_or_create_ptr()
+    comptime if not RF_INPUT:
+        state = ET_REGISTRY.get_or_create_ptr()
+    if handle not in state[].entries:
+        raise Error("unknown or released resident forest handle")
+    state[].entries[handle].predict_labels[RF_INPUT](x, output, rows, features, outputs)
