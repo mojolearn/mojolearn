@@ -26,7 +26,7 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **271** (212 single-device, 59 `par-*` multi-GPU drivers).
+- Lanes: **273** (214 single-device, 59 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **255**.
 - Source public API entries with ALL FOUR kinds on at least one lane: **212** of 255.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
@@ -46,12 +46,12 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 267 | 4 |
-| gpu column on all three classes | 235 | 36 |
-| cpu verifier declared | 237 | 34 |
-| sabotage seen to move a build | 230 | 41 |
-| batch part or named n/a | 271 | 0 |
-| ALL FOUR | 227 | 44 |
+| gpu column (any class) | 269 | 4 |
+| gpu column on all three classes | 235 | 38 |
+| cpu verifier declared | 239 | 34 |
+| sabotage seen to move a build | 230 | 43 |
+| batch part or named n/a | 273 | 0 |
+| ALL FOUR | 227 | 46 |
 
 Sabotage, split by what was actually watched:
 
@@ -59,7 +59,7 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 230 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 3 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 7 | the family declares a define; no committed pair moves this lane |
+| declared | 9 | the family declares a define; no committed pair moves this lane |
 | none | 31 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -104,7 +104,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessRegressor` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GradientBoosting` | 28 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GradientBoosting` | 30 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingRegressor` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -387,6 +387,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-lossguide | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-lossguide/gbdt-lossguide/cpu-sabotage.json` | part | yes |
 | gbdt-lossguide-newtoncosine | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-lossguide-newtoncosine/cpu-sabotage.json` | part | yes |
 | gbdt-multiclass | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-multiclass/gbdt-multiclass/cpu-sabotage.json` | part | yes |
+| gbdt-multiclass-defaults | apple | training | declared | - | part | NO |
 | gbdt-nan-modes | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-nan-modes/cpu-sabotage.json` | part | yes |
 | gbdt-onevsall | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-onevsall/gbdt-onevsall/cpu-sabotage.json` | part | yes |
 | gbdt-ordered | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.sabotage.json` | part | yes |
@@ -396,6 +397,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-parametric-losses | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-parametric-losses/cpu-sabotage.json` | part | yes |
 | gbdt-pointwise-l2-bayesian-eval | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-gbdt-modes/cpu-x86-forest-sabotage-host-infer.json` | part | yes |
 | gbdt-query-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-3b1b2d6f6/cpu-x86-64-runpod.sabotage.json` | part | yes |
+| gbdt-ranking-defaults | apple | training | declared | - | part | NO |
 | gbdt-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-rmse/gbdt-rmse/cpu-sabotage.json` | part | yes |
 | gbdt-stochastic-arms | - | training | declared | - | part | NO |
 | gbdt-symmetric | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-symmetric/gbdt-symmetric/cpu-sabotage.json` | part | yes |
@@ -653,9 +655,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 10**
+**GPU column on fewer than three classes: 12**
 
-> gbdt-symmetric-eval, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, mamba1-decode-session, qn-absolute, qn-squared, spectral-embedding, transformer-decode-session
+> gbdt-multiclass-defaults, gbdt-ranking-defaults, gbdt-symmetric-eval, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, mamba1-decode-session, qn-absolute, qn-squared, spectral-embedding, transformer-decode-session
 
 > (plus 22 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
@@ -665,9 +667,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Sabotage not seen to move a build: 7**
+**Sabotage not seen to move a build: 9**
 
-> gbdt-stochastic-arms, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, qn-absolute, qn-squared
+> gbdt-multiclass-defaults, gbdt-ranking-defaults, gbdt-stochastic-arms, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, qn-absolute, qn-squared
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 

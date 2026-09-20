@@ -1,0 +1,1421 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "f04f4128a9038dd1727a6f4fe9d61231ca8cc227",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-stochastic-arms/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3ae6c8868878bc9c"
+   ],
+   "parts": [
+    {
+     "predict": "6a4b9494b20e0528",
+     "regressor": "6a4b9494b20e0528",
+     "sym-RMSE-Bernoulli": "6c3038962d8b7e79",
+     "sym-RMSE-No": "18d2563314eae783",
+     "sym-Logloss-Bernoulli": "63fbe06a609e15bf",
+     "sym-Logloss-No": "016cff3861510650",
+     "Depthwise-RMSE": "307759f08b1155ce",
+     "Depthwise-RMSE-Bayesian": "5f6699a3cc46cda6",
+     "Depthwise-RMSE-Bernoulli": "c798e9140e0a2c30",
+     "Depthwise-Logloss-Bayesian": "341952bbf3b47d97",
+     "Depthwise-Logloss-Bernoulli": "fe289dab9649d3bb",
+     "Lossguide-RMSE": "517a179ccf34b914",
+     "Lossguide-RMSE-Bayesian": "dfedf6468d36dbfc",
+     "Lossguide-RMSE-Bernoulli": "c28554994c079514",
+     "Lossguide-Logloss-Bayesian": "a728205d1ec0ee33",
+     "Lossguide-Logloss-Bernoulli": "1eae24361479f9cd",
+     "Depthwise-RMSE-noise": "5f6699a3cc46cda6",
+     "Depthwise-Logloss-noise": "341952bbf3b47d97",
+     "sym-Quantile": "e15e3986362be90e",
+     "sym-MAE": "e15e3986362be90e",
+     "sym-LogLinQuantile": "13ed21de6be8f113",
+     "sym-MAPE": "c4fcd9ff52629606",
+     "sym-Poisson": "f7789405902e0e06",
+     "sym-Lq": "937e1d8f1a0879f0",
+     "sym-Expectile": "02e8982091a478af",
+     "sym-Tweedie": "d081036df06ed7e2",
+     "sym-Huber": "8197e6a410380e70",
+     "sym-CrossEntropy": "4947513c5d4bf959",
+     "loss_curves": "f975114645cb71f5"
+    }
+   ],
+   "infer": [
+    "d62f86f708218876"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "859b58261f5d7d64"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d62f86f708218876"
+   ],
+   "batch": [
+    "5884073f6cc24917"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 24.127991666988237,
+    "stages": {
+     "repeat=1/train": 23.993235458008712,
+     "repeat=1/infer-save-reload": 0.025130291003733873,
+     "repeat=1/batch": 0.10754804199677892,
+     "repeat=1/batchgrad": 6.654200842604041e-05,
+     "repeat=1/batchscale": 4.3333013309165835e-05,
+     "repeat=1/ragged": 3.816699609160423e-05,
+     "repeat=1/stepfull": 3.6084005841985345e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "83e84ea900175c81"
+   ],
+   "parts": [
+    {
+     "predict": "215dedb6ee6e814d",
+     "regressor": "215dedb6ee6e814d",
+     "sym-RMSE-Bernoulli": "5a9a387771540843",
+     "sym-RMSE-No": "437eaae2563962a7",
+     "sym-Logloss-Bernoulli": "27dbca1ddd846c80",
+     "sym-Logloss-No": "5d3ea47a243964f0",
+     "Depthwise-RMSE": "136bf7d537915746",
+     "Depthwise-RMSE-Bayesian": "c7ae9d614b93a915",
+     "Depthwise-RMSE-Bernoulli": "7222a9606cd10524",
+     "Depthwise-Logloss-Bayesian": "64a46d7a91131857",
+     "Depthwise-Logloss-Bernoulli": "d049328a33c6d08b",
+     "Lossguide-RMSE": "42a9804fdf006498",
+     "Lossguide-RMSE-Bayesian": "136476da884587b3",
+     "Lossguide-RMSE-Bernoulli": "d499688f1ed291b8",
+     "Lossguide-Logloss-Bayesian": "e93e19fee85068ae",
+     "Lossguide-Logloss-Bernoulli": "bf6400db88cadd8b",
+     "Depthwise-RMSE-noise": "c7ae9d614b93a915",
+     "Depthwise-Logloss-noise": "4a8cec8344888be6",
+     "sym-Quantile": "d5818ac03a2a322c",
+     "sym-MAE": "d5818ac03a2a322c",
+     "sym-LogLinQuantile": "92e03d9ba1b999e0",
+     "sym-MAPE": "36fdf59cf01417fe",
+     "sym-Poisson": "4657197a060cf776",
+     "sym-Lq": "a5d066bb0421de30",
+     "sym-Expectile": "b116756c49ad49d5",
+     "sym-Tweedie": "fd22b4977368f84d",
+     "sym-Huber": "3d26c7169bbb8ce3",
+     "sym-CrossEntropy": "2ff544723107712e",
+     "loss_curves": "3668fc6d66b43160"
+    }
+   ],
+   "infer": [
+    "df292a728f6c327f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "460bd5be4bbebed8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "df292a728f6c327f"
+   ],
+   "batch": [
+    "11cf55e5dd898c43"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 26.150017500011018,
+    "stages": {
+     "repeat=1/train": 25.96044808300212,
+     "repeat=1/infer-save-reload": 0.0157665410079062,
+     "repeat=1/batch": 0.1731631250004284,
+     "repeat=1/batchgrad": 0.0001840839977376163,
+     "repeat=1/batchscale": 4.695798270404339e-05,
+     "repeat=1/ragged": 4.350001108832657e-05,
+     "repeat=1/stepfull": 4.166699363850057e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "12ed3ab85dc019a7"
+   ],
+   "parts": [
+    {
+     "predict": "6c13fbbb97d76b6b",
+     "regressor": "6c13fbbb97d76b6b",
+     "sym-RMSE-Bernoulli": "8b7f6a6f90586a5a",
+     "sym-RMSE-No": "98e5e61135d71895",
+     "sym-Logloss-Bernoulli": "e5340c18cbafd30e",
+     "sym-Logloss-No": "c87e23101977c772",
+     "Depthwise-RMSE": "b8e3a58c096346e9",
+     "Depthwise-RMSE-Bayesian": "7564eb29d9a1450c",
+     "Depthwise-RMSE-Bernoulli": "498142d03e219476",
+     "Depthwise-Logloss-Bayesian": "9c0f0eadee71cccb",
+     "Depthwise-Logloss-Bernoulli": "1414af4113346fab",
+     "Lossguide-RMSE": "58dc90ed56716713",
+     "Lossguide-RMSE-Bayesian": "5f9ee10119715834",
+     "Lossguide-RMSE-Bernoulli": "15c539a3da796c9a",
+     "Lossguide-Logloss-Bayesian": "bf0c9ca05690566f",
+     "Lossguide-Logloss-Bernoulli": "4bb3f780997aa449",
+     "Depthwise-RMSE-noise": "7564eb29d9a1450c",
+     "Depthwise-Logloss-noise": "9c0f0eadee71cccb",
+     "sym-Quantile": "a3a417b57fae7358",
+     "sym-MAE": "a3a417b57fae7358",
+     "sym-LogLinQuantile": "87d9a2a98206516c",
+     "sym-MAPE": "212cfb506bcb79b6",
+     "sym-Poisson": "347d8510c612614e",
+     "sym-Lq": "10b50dd175328aab",
+     "sym-Expectile": "1c844e413e2614a6",
+     "sym-Tweedie": "37c376dba75c24be",
+     "sym-Huber": "c6692037cf5cff01",
+     "sym-CrossEntropy": "7756aa30da2d9026",
+     "loss_curves": "1168fe378cb365bc"
+    }
+   ],
+   "infer": [
+    "9c19a72de0a528b6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "127c7e64826c0a5c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9c19a72de0a528b6"
+   ],
+   "batch": [
+    "3f576b1553ed134c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 32.07022974998108,
+    "stages": {
+     "repeat=1/train": 31.908849792002002,
+     "repeat=1/infer-save-reload": 0.023172249988419935,
+     "repeat=1/batch": 0.1374568330065813,
+     "repeat=1/batchgrad": 0.00023012500605545938,
+     "repeat=1/batchscale": 4.9291003961116076e-05,
+     "repeat=1/ragged": 4.6083994675427675e-05,
+     "repeat=1/stepfull": 4.4832995627075434e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "345f1425179a18b9"
+   ],
+   "parts": [
+    {
+     "predict": "3774d5cbc8fbf8ef",
+     "regressor": "3774d5cbc8fbf8ef",
+     "sym-RMSE-Bernoulli": "8b9d5ec60c36ae07",
+     "sym-RMSE-No": "4b63dd9eed8b8eef",
+     "sym-Logloss-Bernoulli": "8d2d0b699450ac9b",
+     "sym-Logloss-No": "6013902583654103",
+     "Depthwise-RMSE": "f3a7a1d7da65bc3e",
+     "Depthwise-RMSE-Bayesian": "824f94c5c8c938db",
+     "Depthwise-RMSE-Bernoulli": "a93f4ee2a71b761b",
+     "Depthwise-Logloss-Bayesian": "c29f1a870c247db9",
+     "Depthwise-Logloss-Bernoulli": "ac8e8acd566328de",
+     "Lossguide-RMSE": "0faa2531f438b4e5",
+     "Lossguide-RMSE-Bayesian": "abd4798894254458",
+     "Lossguide-RMSE-Bernoulli": "e667c0316fc17b08",
+     "Lossguide-Logloss-Bayesian": "9ed6ac13c13bac37",
+     "Lossguide-Logloss-Bernoulli": "78343559f5cc0bdf",
+     "Depthwise-RMSE-noise": "824f94c5c8c938db",
+     "Depthwise-Logloss-noise": "c29f1a870c247db9",
+     "sym-Quantile": "9aefe736f8d0303f",
+     "sym-MAE": "9aefe736f8d0303f",
+     "sym-LogLinQuantile": "7b17320a4e0271f4",
+     "sym-MAPE": "5db4c91c07afff95",
+     "sym-Poisson": "9a45f411668f3c46",
+     "sym-Lq": "da2694639e4d3b4c",
+     "sym-Expectile": "b60114e2a1712704",
+     "sym-Tweedie": "70ca5e82b5f4072c",
+     "sym-Huber": "2a104de06c436314",
+     "sym-CrossEntropy": "0fdc2485d2dbb6c4",
+     "loss_curves": "d6bd549bcbb6a24a"
+    }
+   ],
+   "infer": [
+    "f8866fcfb6c33898"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "90b9a4b691cf26d9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f8866fcfb6c33898"
+   ],
+   "batch": [
+    "ee9cacd4fabf02d5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 33.495877334004035,
+    "stages": {
+     "repeat=1/train": 33.33097837501555,
+     "repeat=1/infer-save-reload": 0.017481291986769065,
+     "repeat=1/batch": 0.14650904198060744,
+     "repeat=1/batchgrad": 0.0003257080097682774,
+     "repeat=1/batchscale": 3.9457983803004026e-05,
+     "repeat=1/ragged": 3.4500000765547156e-05,
+     "repeat=1/stepfull": 5.2041985327377915e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6f8db54d81c5f449"
+   ],
+   "parts": [
+    {
+     "predict": "f9084fc76b56e40f",
+     "regressor": "f9084fc76b56e40f",
+     "sym-RMSE-Bernoulli": "630dda7587c84a03",
+     "sym-RMSE-No": "2e4d1fd80b2a612d",
+     "sym-Logloss-Bernoulli": "2b203fe9b1651169",
+     "sym-Logloss-No": "441914b734320781",
+     "Depthwise-RMSE": "36060e56c4b52e6a",
+     "Depthwise-RMSE-Bayesian": "86703d1818835cca",
+     "Depthwise-RMSE-Bernoulli": "ea18600213e9b147",
+     "Depthwise-Logloss-Bayesian": "8cd16ef196bbdb85",
+     "Depthwise-Logloss-Bernoulli": "32ef0f38db77984f",
+     "Lossguide-RMSE": "3f16e0ce9155d56f",
+     "Lossguide-RMSE-Bayesian": "fe3416a8f83f7e69",
+     "Lossguide-RMSE-Bernoulli": "26912c7e4f4c8771",
+     "Lossguide-Logloss-Bayesian": "7d26016a849bbf9f",
+     "Lossguide-Logloss-Bernoulli": "141e943ce3a7670f",
+     "Depthwise-RMSE-noise": "86703d1818835cca",
+     "Depthwise-Logloss-noise": "8cd16ef196bbdb85",
+     "sym-Quantile": "d93a0bf02279accc",
+     "sym-MAE": "d93a0bf02279accc",
+     "sym-LogLinQuantile": "5d34ee099c647a14",
+     "sym-MAPE": "84a494feb85fa4a2",
+     "sym-Poisson": "43a4f0d062e4c7c6",
+     "sym-Lq": "f5592e6ee116ff54",
+     "sym-Expectile": "34bf72d243f13967",
+     "sym-Tweedie": "39c404c7205951fb",
+     "sym-Huber": "0edc792d09f5d2ac",
+     "sym-CrossEntropy": "4947513c5d4bf959",
+     "loss_curves": "052de3d92222cdee"
+    }
+   ],
+   "infer": [
+    "5591f0672dfffe4a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3af1d1d5fb95082e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5591f0672dfffe4a"
+   ],
+   "batch": [
+    "79228de39f558868"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 29.863954916014336,
+    "stages": {
+     "repeat=1/train": 29.74153541700798,
+     "repeat=1/infer-save-reload": 0.016586166981142014,
+     "repeat=1/batch": 0.1045528750109952,
+     "repeat=1/batchgrad": 6.487499922513962e-05,
+     "repeat=1/batchscale": 4.1834020521491766e-05,
+     "repeat=1/ragged": 3.8291997043415904e-05,
+     "repeat=1/stepfull": 3.7291989428922534e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6f8db54d81c5f449"
+   ],
+   "parts": [
+    {
+     "predict": "f9084fc76b56e40f",
+     "regressor": "f9084fc76b56e40f",
+     "sym-RMSE-Bernoulli": "630dda7587c84a03",
+     "sym-RMSE-No": "2e4d1fd80b2a612d",
+     "sym-Logloss-Bernoulli": "2b203fe9b1651169",
+     "sym-Logloss-No": "441914b734320781",
+     "Depthwise-RMSE": "36060e56c4b52e6a",
+     "Depthwise-RMSE-Bayesian": "86703d1818835cca",
+     "Depthwise-RMSE-Bernoulli": "ea18600213e9b147",
+     "Depthwise-Logloss-Bayesian": "8cd16ef196bbdb85",
+     "Depthwise-Logloss-Bernoulli": "32ef0f38db77984f",
+     "Lossguide-RMSE": "3f16e0ce9155d56f",
+     "Lossguide-RMSE-Bayesian": "fe3416a8f83f7e69",
+     "Lossguide-RMSE-Bernoulli": "26912c7e4f4c8771",
+     "Lossguide-Logloss-Bayesian": "7d26016a849bbf9f",
+     "Lossguide-Logloss-Bernoulli": "141e943ce3a7670f",
+     "Depthwise-RMSE-noise": "86703d1818835cca",
+     "Depthwise-Logloss-noise": "8cd16ef196bbdb85",
+     "sym-Quantile": "d93a0bf02279accc",
+     "sym-MAE": "d93a0bf02279accc",
+     "sym-LogLinQuantile": "5d34ee099c647a14",
+     "sym-MAPE": "84a494feb85fa4a2",
+     "sym-Poisson": "43a4f0d062e4c7c6",
+     "sym-Lq": "f5592e6ee116ff54",
+     "sym-Expectile": "34bf72d243f13967",
+     "sym-Tweedie": "39c404c7205951fb",
+     "sym-Huber": "0edc792d09f5d2ac",
+     "sym-CrossEntropy": "4947513c5d4bf959",
+     "loss_curves": "052de3d92222cdee"
+    }
+   ],
+   "infer": [
+    "5591f0672dfffe4a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3af1d1d5fb95082e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5591f0672dfffe4a"
+   ],
+   "batch": [
+    "79228de39f558868"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 28.866141791979317,
+    "stages": {
+     "repeat=1/train": 28.681093958002748,
+     "repeat=1/infer-save-reload": 0.01920316700125113,
+     "repeat=1/batch": 0.16534075001254678,
+     "repeat=1/batchgrad": 5.904200952500105e-05,
+     "repeat=1/batchscale": 4.158299998380244e-05,
+     "repeat=1/ragged": 3.6958022974431515e-05,
+     "repeat=1/stepfull": 3.5667006159201264e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "119d62f0f2b109de"
+   ],
+   "parts": [
+    {
+     "predict": "2f00eafc7e7357bd",
+     "regressor": "2f00eafc7e7357bd",
+     "sym-RMSE-Bernoulli": "e5c08e9b22494ab2",
+     "sym-RMSE-No": "2a247d5c6e1716c3",
+     "sym-Logloss-Bernoulli": "63fbe06a609e15bf",
+     "sym-Logloss-No": "977e7398c068679b",
+     "Depthwise-RMSE": "57a85caf373d23b6",
+     "Depthwise-RMSE-Bayesian": "e5279396aa6af687",
+     "Depthwise-RMSE-Bernoulli": "b4201bfc18c70004",
+     "Depthwise-Logloss-Bayesian": "e87c43a44499ebad",
+     "Depthwise-Logloss-Bernoulli": "d9152977e5eb9bf3",
+     "Lossguide-RMSE": "d264a0a41bfbee73",
+     "Lossguide-RMSE-Bayesian": "775fe08f0c0bd791",
+     "Lossguide-RMSE-Bernoulli": "5182b6a0d094251d",
+     "Lossguide-Logloss-Bayesian": "d2363cd82329cbd1",
+     "Lossguide-Logloss-Bernoulli": "ba88006c130c8973",
+     "Depthwise-RMSE-noise": "e5279396aa6af687",
+     "Depthwise-Logloss-noise": "b2bfe24023c64a8d",
+     "sym-Quantile": "cccaecbbb127486d",
+     "sym-MAE": "cccaecbbb127486d",
+     "sym-LogLinQuantile": "a149b06ba3057f4a",
+     "sym-MAPE": "5795aba1f0990337",
+     "sym-Poisson": "33a044c94072fcda",
+     "sym-Lq": "355f420f26b76a0e",
+     "sym-Expectile": "c10eaef59e811f9e",
+     "sym-Tweedie": "56dad028d01a3591",
+     "sym-Huber": "13e364c2445938e6",
+     "sym-CrossEntropy": "4947513c5d4bf959",
+     "loss_curves": "79a291322d613a5e"
+    }
+   ],
+   "infer": [
+    "d87c554d26dc170d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "e24edfe02ab0d5cb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d87c554d26dc170d"
+   ],
+   "batch": [
+    "2601925b5cf3af50"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 14.709430208982667,
+    "stages": {
+     "repeat=1/train": 14.649173791985959,
+     "repeat=1/infer-save-reload": 0.007366750010987744,
+     "repeat=1/batch": 0.052294959023129195,
+     "repeat=1/batchgrad": 0.0001684580056462437,
+     "repeat=1/batchscale": 2.62079993262887e-05,
+     "repeat=1/ragged": 2.320797648280859e-05,
+     "repeat=1/stepfull": 2.13750172406435e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d68f8a8fa35a7506"
+   ],
+   "parts": [
+    {
+     "predict": "612ef71f0d2956c2",
+     "regressor": "612ef71f0d2956c2",
+     "sym-RMSE-Bernoulli": "a8c0aa330b0f35ef",
+     "sym-RMSE-No": "d0bd08847ce14218",
+     "sym-Logloss-Bernoulli": "15a8334609aa38b8",
+     "sym-Logloss-No": "598ea41880c4b3d2",
+     "Depthwise-RMSE": "59c7ca9b5168ab14",
+     "Depthwise-RMSE-Bayesian": "fbd32ce66a5707df",
+     "Depthwise-RMSE-Bernoulli": "92d5064959c5f7ad",
+     "Depthwise-Logloss-Bayesian": "446ce14f5b2ae904",
+     "Depthwise-Logloss-Bernoulli": "c1951c19eaf2d787",
+     "Lossguide-RMSE": "689d36cb9caabb54",
+     "Lossguide-RMSE-Bayesian": "679968d7fdd42a1e",
+     "Lossguide-RMSE-Bernoulli": "46c82f8f25105cf4",
+     "Lossguide-Logloss-Bayesian": "d65f53b67e321e02",
+     "Lossguide-Logloss-Bernoulli": "616479c61d24c984",
+     "Depthwise-RMSE-noise": "fbd32ce66a5707df",
+     "Depthwise-Logloss-noise": "446ce14f5b2ae904",
+     "sym-Quantile": "f2ff5b95d5ab8a9e",
+     "sym-MAE": "f2ff5b95d5ab8a9e",
+     "sym-LogLinQuantile": "9fda60c6760c020d",
+     "sym-MAPE": "fd704b1e92bd1a77",
+     "sym-Poisson": "ed198e33a28b73d1",
+     "sym-Lq": "7b14f56ed7f6d717",
+     "sym-Expectile": "cf0ba3a78d31eeea",
+     "sym-Tweedie": "8e3be20b40ac573f",
+     "sym-Huber": "4c67ac0314710b79",
+     "sym-CrossEntropy": "3dde1f619f44e30c",
+     "loss_curves": "6f020e8ca4887ed4"
+    }
+   ],
+   "infer": [
+    "355462e21a80891e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "57687c98a84570a4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "355462e21a80891e"
+   ],
+   "batch": [
+    "2da3ca867000b802"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 18.836093250021804,
+    "stages": {
+     "repeat=1/train": 18.757231333001982,
+     "repeat=1/infer-save-reload": 0.011862417013617232,
+     "repeat=1/batch": 0.06635170901427045,
+     "repeat=1/batchgrad": 0.00010408301022835076,
+     "repeat=1/batchscale": 2.8457987355068326e-05,
+     "repeat=1/ragged": 2.5792018277570605e-05,
+     "repeat=1/stepfull": 2.3917004000395536e-05
+    }
+   }
+  },
+  "gbdt-stochastic-arms/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0744b11cb297c837"
+   ],
+   "parts": [
+    {
+     "predict": "a1eeb8d6cf9ec95d",
+     "regressor": "a1eeb8d6cf9ec95d",
+     "sym-RMSE-Bernoulli": "5155f3f7ce2fef51",
+     "sym-RMSE-No": "059e6a222cce16f8",
+     "sym-Logloss-Bernoulli": "50764111a47697d2",
+     "sym-Logloss-No": "2d0d6f7cc2245ea9",
+     "Depthwise-RMSE": "3fe2ac1a26bd62d9",
+     "Depthwise-RMSE-Bayesian": "a3f469f49bbb187a",
+     "Depthwise-RMSE-Bernoulli": "007fa4db79a0ebb8",
+     "Depthwise-Logloss-Bayesian": "fc5ceb8f021adf1d",
+     "Depthwise-Logloss-Bernoulli": "d6cc44ecefb1e2c5",
+     "Lossguide-RMSE": "c0c54d368214c19a",
+     "Lossguide-RMSE-Bayesian": "c4df2e637faea43c",
+     "Lossguide-RMSE-Bernoulli": "c2b9df439f19b1f3",
+     "Lossguide-Logloss-Bayesian": "0166cc270743c31b",
+     "Lossguide-Logloss-Bernoulli": "137beac96721cc71",
+     "Depthwise-RMSE-noise": "a3f469f49bbb187a",
+     "Depthwise-Logloss-noise": "fd879f3006fc8926",
+     "sym-Quantile": "b3fdc669fb1008df",
+     "sym-MAE": "b3fdc669fb1008df",
+     "sym-LogLinQuantile": "b739813c608aba7b",
+     "sym-MAPE": "a540b994ba918ec3",
+     "sym-Poisson": "a3b86c776360c309",
+     "sym-Lq": "16cce04e44a484da",
+     "sym-Expectile": "ca78ff29e9e193bb",
+     "sym-Tweedie": "8b8212997aecd266",
+     "sym-Huber": "e90b3d9e6eb7b233",
+     "sym-CrossEntropy": "db4c1fab98b35ca1",
+     "loss_curves": "aa34e6b8f7b8d6d3"
+    }
+   ],
+   "infer": [
+    "56c5a83c86bd5d59"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f7d9e4939d216699"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "56c5a83c86bd5d59"
+   ],
+   "batch": [
+    "6333c33ddc34e51c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 23.764051208010642,
+    "stages": {
+     "repeat=1/train": 23.596257249999326,
+     "repeat=1/infer-save-reload": 0.017486458003986627,
+     "repeat=1/batch": 0.1497435829951428,
+     "repeat=1/batchgrad": 5.991599755361676e-05,
+     "repeat=1/batchscale": 3.570900298655033e-05,
+     "repeat=1/ragged": 3.2499985536560416e-05,
+     "repeat=1/stepfull": 3.1042000045999885e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "d89d4be80a376a888a87dd0617af64cd4b83b893d7571919070a5bb55e7d9bb6",
+    "size": 935496,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "67b91095808473d61a4cb031108f08828e74e32207de4869a0ea71c3d3035710",
+    "size": 708272,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "59bf698e9b0107d186f68f49c95f7efe7fa2ea35b1fe38ade5a8e91ae8d59b96",
+    "size": 1474776,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/Users/andrewhendel/mojolearn-evidence/all-algorithms/cpu-package/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "10ba5ca55bfea0133bee933f446c96499bc30b065d088645e0dee0bbb17927a9",
+  "options": {
+   "require_backend": null,
+   "require_cpu": true,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "gbdt-stochastic-arms",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "cpu-apple-m4",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "9164a05114be8980b7676d9a2b451e6ed4e309bbe490dd2e3b9fe190eb610f66",
+  "provenance": {
+   "commit": "f04f4128a9038dd1727a6f4fe9d61231ca8cc227",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
