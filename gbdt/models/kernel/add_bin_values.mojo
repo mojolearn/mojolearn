@@ -28,6 +28,9 @@ cannot see it; comparing against the learn cursor can.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 
 def compute_bins_and_add_kernel(
@@ -95,23 +98,36 @@ def compute_bins_and_add_kernel(
     var dim = Int(block_idx.y)
     var dim_count = Int(dim_count_in)
     var plane = dim * Int(cursor_stride_in)
+    # One copy of the tiny tree descriptor per block instead of one global
+    # load per row and level. Symmetric trees cap depth at 32.
+    var meta = stack_allocation[
+        5 * 32, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    if tid < depth:
+        meta.unsafe_store(tid, feature_offset.unsafe_load(tid))
+        meta.unsafe_store(32 + tid, feature_shift.unsafe_load(tid))
+        meta.unsafe_store(64 + tid, feature_mask.unsafe_load(tid))
+        meta.unsafe_store(96 + tid, split_bin.unsafe_load(tid))
+        meta.unsafe_store(128 + tid, UInt32(take_equal.unsafe_load(tid)))
+    barrier()
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
 
     while i < n_rows:
         var leaf = 0
         for level in range(depth):
-            var off = Int(feature_offset.unsafe_load(level))
-            var shift = feature_shift.unsafe_load(level)
-            var mask = feature_mask.unsafe_load(level) << shift
-            var value = split_bin.unsafe_load(level) << shift
+            var off = Int(meta.unsafe_load(level))
+            var shift = meta.unsafe_load(32 + level)
+            var mask = meta.unsafe_load(64 + level) << shift
+            var value = meta.unsafe_load(96 + level) << shift
             var feature_val = compressed_index.unsafe_load(off + i) & mask
             # their `takeEqual[level] ? (featureVal == value) : (featureVal
             # > value)` (`add_model_value.cu:110`): `>` is the ordered
             # predicate (`EBinSplitType::TakeBin`), `==` the one-hot one
             # (`TakeVal`), per LEVEL exactly as their mask arrays carry it.
             var split: Bool
-            if take_equal.unsafe_load(level) != UInt8(0):
+            if meta.unsafe_load(128 + level) != UInt32(0):
                 split = feature_val == value
             else:
                 split = feature_val > value
