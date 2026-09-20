@@ -453,8 +453,6 @@ def ivf_flat_search_traced(
     var dlist_data = upload_f32(ctx, index.list_data)
     var dq_norm = ctx.enqueue_create_buffer[DType.float32](n_queries)
     var dlist_norm = ctx.enqueue_create_buffer[DType.float32](index.n_rows)
-    ctx.synchronize()
-
     compute_row_norms(ctx, dq, dq_norm, n_queries, dim)
     # THE CANDIDATE NORMS ARE COMPUTED OVER `list_data`, NOT OVER THE
     # ORIGINAL ROWS, AND THAT IS BIT-EXACT RATHER THAN CLOSE.
@@ -463,18 +461,15 @@ def ivf_flat_search_traced(
     # what lets `check_nprobe_equals_nlists_is_brute_force` compare against
     # a `knn_search` whose norms were taken over the unpermuted matrix.
     compute_row_norms(ctx, dlist_data, dlist_norm, index.n_rows, dim)
-    ctx.synchronize()
     if trace.enabled:
         trace.record_device(ctx, "ivf.query_norm", dq_norm, n_queries)
 
     # ---- step 1: query-to-centroid distances ---------------------------
     var dcoarse = ctx.enqueue_create_buffer[DType.float32](n_queries * n_lists)
-    ctx.synchronize()
     _expanded_distances(
         ctx, dcoarse, dq, 0, dcenters, dq_norm, dcenter_norm,
         n_queries, n_lists, dim, tile_tpb, expand_tpb,
     )
-    ctx.synchronize()
     if trace.enabled:
         trace.record_device(
             ctx, "ivf.coarse_dist", dcoarse, n_queries * n_lists
@@ -504,13 +499,10 @@ def ivf_flat_search_traced(
     var dpbuf_idx = ctx.enqueue_create_buffer[DType.uint32](
         n_queries * 2 * probe_buf_len
     )
-    ctx.synchronize()
     _select_top_k(
         ctx, dcoarse, dprobe_dist, dprobe_idx, dpbuf_val, dpbuf_idx,
         n_queries, n_lists, n_probes, probe_buf_len,
     )
-    ctx.synchronize()
-
     var probe_dist = download_f32(ctx, dprobe_dist, n_queries * n_probes)
     var probe_ids = download_u32(ctx, dprobe_idx, n_queries * n_probes)
     for q in range(n_queries):
@@ -558,8 +550,6 @@ def ivf_flat_search_traced(
         max_cand * dim
     )
     var hcand_norm = ctx.enqueue_create_host_buffer[DType.float32](max_cand)
-    ctx.synchronize()
-
     var out_dist = List[Float32]()
     var out_idx = List[UInt32]()
     var cand_counts = List[Int32]()
@@ -615,20 +605,14 @@ def ivf_flat_search_traced(
             hcand_norm.unsafe_ptr().unsafe_store(i, cand_norm[i])
         ctx.enqueue_copy(dst_buf=dcand_vec, src_ptr=hcand_vec.unsafe_ptr())
         ctx.enqueue_copy(dst_buf=dcand_norm, src_ptr=hcand_norm.unsafe_ptr())
-        ctx.synchronize()
-
         _expanded_distances(
             ctx, dcand_dist, dq, q, dcand_vec, dq_norm, dcand_norm,
             1, n_cand, dim, tile_tpb, expand_tpb,
         )
-        ctx.synchronize()
-
         _select_top_k(
             ctx, dcand_dist, dsel_val, dsel_idx, dcbuf_val, dcbuf_idx,
             1, n_cand, selected, cand_buf_len,
         )
-        ctx.synchronize()
-
         var sel_dist = download_f32(ctx, dsel_val, selected)
         var sel_pos = download_u32(ctx, dsel_idx, selected)
         var sel_orig = postprocess_neighbors(sel_pos, cand_orig, selected)
