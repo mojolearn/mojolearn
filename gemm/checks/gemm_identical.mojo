@@ -4453,29 +4453,9 @@ def _shipped_body_kpack_hg[
             )
             return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
-        comptime if GEMM_REUSE_GROUP_WS:
-            var gl = gemm_default_ksplit_leaves(m, n, k)
-            var part = contract_partition(k)
-            if gl > 0 and part[1] > 0:
-                var rg = _ksplit_resolve_leaves(gl, part[1])
-                if len(ws) >= m * n * rg[1]:
-                    # Same two kernels and same stream, with caller-owned
-                    # scratch kept alive until the caller's final fence.
-                    _kpack_launch[
-                        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
-                        GEMM_KPACK_KS, GEMM_KPACK_FS, True, SAB,
-                        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
-                    ](ctx, ws, a, b, m, n, k, part[0], part[1],
-                      gemm_operand_strides(op, m, n, k), rg[0], rg[1])
-                    comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
-                        _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
-                    return
-                # Older callers with only plan-sized scratch retain the
-                # allocating path; they never write past a small buffer.
-        _kpack_run[
-            GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, GEMM_KPACK_FS, SAB,
-            GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
-        ](ctx, c, a, b, m, n, k, op, gemm_default_ksplit_leaves(m, n, k))
+        _kpack_hg_run_with_ws[GEMM_KPACK_FS, SAB](
+            ctx, c, a, b, ws, m, n, k, op
+        )
         return
     identical_gemm_with_plan(
         ctx, c, a, b, ws, m, n, k, op, choose_gemm_plan(m, n, k)
@@ -5194,6 +5174,23 @@ def gemm_kpack_register_slots(slots: Int) -> Int:
     return 0
 
 
+def gemm_kpack_fold_slots_for(p_count: Int, group_leaves: Int) -> Int:
+    """Smallest compiled kpack fold-stack class covering this launch.
+
+    A stack with `FS` indexed levels covers at most `2^(FS-1)` leaves: the
+    final power-of-two push occupies level `FS-1`. Group mode never folds
+    more than `group_leaves`; all-leaves mode folds `p_count`.
+    """
+    var bound = p_count
+    if group_leaves > 0 and group_leaves < bound:
+        bound = group_leaves
+    if bound <= 8:
+        return 4
+    if bound <= 128:
+        return 8
+    return GEMM_KPACK_FS
+
+
 @always_inline
 def _kpack_gather_gs[G: Int, KS: Int](tid: Int, outer_fast: Bool) -> Tuple[Int, Int]:
     """DEVIATION 2706: `(g, step)` thread `tid` stages under GATHER: the
@@ -5428,9 +5425,10 @@ def identical_gemm_kpack_kernel[
         "identical_gemm_kpack_kernel: GATHER needs a 16-byte page and one (group, step)"
         " pair per thread: TR * KS == TC * KS == the block size"
     )
-    comptime assert FS >= GEMM_FOLD_LEVELS, (
+    comptime assert FS >= GEMM_FOLD_LEVELS or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"](), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"
-        " profile cap CONTRACT_MAX_LEAVES"
+        " profile cap CONTRACT_MAX_LEAVES (smaller stacks are trial-only and"
+        " must be host-bounded by the launched group leaf count)"
     )
 
     var m = Int(m_in)
@@ -5809,6 +5807,93 @@ def _kpack_run[
     _ksplit_fold_launch(ctx, c, gws, m, n, rg[1])
     ctx.synchronize()
     _ = gws
+
+
+def _kpack_hg_run_with_ws[
+    FS: Int, SAB: Bool
+](
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises:
+    """The shipped kpack-hg launch mechanics with an explicit fold-stack
+    extent. `FS` changes only unused thread-local storage above the highest
+    reachable leaf-tree level; it cannot change the fold DAG."""
+    var gl = gemm_default_ksplit_leaves(m, n, k)
+    var part = contract_partition(k)
+    comptime if GEMM_REUSE_GROUP_WS:
+        if gl > 0 and part[1] > 0:
+            var rg = _ksplit_resolve_leaves(gl, part[1])
+            if len(ws) >= m * n * rg[1]:
+                _kpack_launch[
+                    GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC,
+                    GEMM_KPACK_KS, FS, True, SAB,
+                    GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+                ](ctx, ws, a, b, m, n, k, part[0], part[1],
+                  gemm_operand_strides(op, m, n, k), rg[0], rg[1])
+                comptime if not is_defined["MOJOLEARN_GEMM_SABOTAGE_WS_FOLD"]():
+                    _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
+                return
+            # Older callers with only plan-sized scratch retain the
+            # allocating path; they never write past a small buffer.
+    _kpack_run[
+        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS, FS, SAB,
+        GEMM_KPACK_PAD, GEMM_KPACK_ALIGN, 0, True, True,
+    ](ctx, c, a, b, m, n, k, op, gl)
+
+
+def identical_gemm_kpack_fold_specialized_trial_into(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    mut ws: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+) raises:
+    """Trial-only shipped dispatch with the kpack local fold stack bounded by
+    this call's maximum leaves per group. The GPT-3-small `k=768` and
+    `k=3072` cases need 4 and 8 slots rather than the profile-wide 16.
+
+    The branch is host-side and depends only on `contract_partition(k)` and
+    the existing group rule. It never changes a leaf, merge, or operation.
+    """
+    comptime if not GEMM_ARM_TRIAL:
+        raise Error(
+            "identical_gemm_kpack_fold_specialized_trial_into needs "
+            "-D MOJOLEARN_GEMM_ARM_TRIAL=1"
+        )
+    comptime if not GEMM_BODY_KPACK_HG:
+        identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+        return
+    if m <= 0 or n <= 0:
+        return
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        if k == 768 and (m >= 4096 or (m >= 2048 and n >= 1024)):
+            identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+            return
+    if choose_gemm_plan(m, n, k) != PLAN_TUNED_128_8X8:
+        identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
+        return
+    var p_count = contract_partition(k)[1]
+    var gl = gemm_default_ksplit_leaves(m, n, k)
+    var fs = gemm_kpack_fold_slots_for(p_count, gl)
+    if fs == 4:
+        _kpack_hg_run_with_ws[4, False](ctx, c, a, b, ws, m, n, k, op)
+    elif fs == 8:
+        _kpack_hg_run_with_ws[8, False](ctx, c, a, b, ws, m, n, k, op)
+    else:
+        _kpack_hg_run_with_ws[GEMM_KPACK_FS, False](
+            ctx, c, a, b, ws, m, n, k, op
+        )
 
 
 def _kpack_geometry_run[

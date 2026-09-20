@@ -10,6 +10,7 @@ from gemm.checks.gemm_identical import (
     choose_gemm_plan, gemm_plan_name, identical_gemm_into,
     identical_gemm_with_plan,
     identical_gemm_step_geometry_into, gemm_step_geometry_name,
+    identical_gemm_kpack_fold_specialized_trial_into,
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_NT, OP_TN, op_name
@@ -56,6 +57,7 @@ def run_op(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int,
     if geom_text.byte_length() > 0:
         geom = Int(geom_text)
     var baseline_shipped = String(getenv("MOJOLEARN_PROD_GEMM_BASELINE_SHIPPED")) == "1"
+    var fold_specialized = String(getenv("MOJOLEARN_PROD_GEMM_FOLD_SPECIALIZED")) == "1"
     var a = ctx.enqueue_create_buffer[DType.float32](m * k)
     var b = ctx.enqueue_create_buffer[DType.float32](n * k)
     var c = ctx.enqueue_create_buffer[DType.float32](m * n)
@@ -73,7 +75,9 @@ def run_op(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int,
         identical_gemm_into(ctx, cref, a, b, ws, m, n, k, op)
     else:
         identical_gemm_with_plan(ctx, cref, a, b, ws, m, n, k, op, 10)
-    if geom >= 0 and op == OP_NT:
+    if fold_specialized:
+        identical_gemm_kpack_fold_specialized_trial_into(ctx, c, a, b, ws, m, n, k, op)
+    elif geom >= 0 and op == OP_NT:
         identical_gemm_step_geometry_into(ctx, c, a, b, ws, m, n, k, op, geom, False)
     elif forced >= 0:
         identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, forced)
@@ -87,7 +91,9 @@ def run_op(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int,
             var candidate = (arm == 0) == (rep % 2 == 1)
             var t0 = perf_counter_ns()
             if candidate:
-                if geom >= 0 and op == OP_NT:
+                if fold_specialized:
+                    identical_gemm_kpack_fold_specialized_trial_into(ctx, c, a, b, ws, m, n, k, op)
+                elif geom >= 0 and op == OP_NT:
                     identical_gemm_step_geometry_into(ctx, c, a, b, ws, m, n, k, op, geom, False)
                 elif forced >= 0:
                     identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, op, forced)

@@ -159,6 +159,7 @@ from gemm.checks.gemm_identical import (
     gemm_default_ksplit_leaves_at,
     _kpack_gather_gs,
     gemm_kpack_addr,
+    gemm_kpack_fold_slots_for,
     gemm_kpack_register_slots,
     gemm_kpack_stage_outer,
     gemm_kpack_stage_p,
@@ -188,6 +189,8 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_floats,
     identical_gemm_workspace_max_floats,
 )
+
+
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN, fold_balanced_tree, op_name
 from gemm.checks.gemm_step_arms import (
     GEMM_STEP_LM_CALLS,
@@ -1623,6 +1626,26 @@ def check_lm_calls(ctx: DeviceContext, mut failures: List[String]) raises:
                 )
 
 
+def check_kpack_fold_slot_classes(mut failures: List[String]):
+    """The trial's smaller local stack always covers the launched leaves."""
+    for p in range(1, 1025):
+        for gl in List[Int]([0, 1, 2, 4, 8, 16, 32, 64, 128, 256]):
+            var bound = p
+            if gl > 0 and gl < bound:
+                bound = gl
+            var fs = gemm_kpack_fold_slots_for(p, gl)
+            if fs != 4 and fs != 8 and fs != TUNED_FOLD_SLOTS:
+                failures.append("kpack fold slots returned unsupported class " + String(fs))
+                return
+            if bound > (1 << (fs - 1)):
+                failures.append(
+                    "kpack fold slots under-cover P=" + String(p) + " gl=" + String(gl)
+                    + " bound=" + String(bound) + " FS=" + String(fs)
+                )
+                return
+    print("check_kpack_fold_slot_classes OK: FS4/FS8/FS16 cover every P<=1024 and group class")
+
+
 def main() raises:
     print(
         "== gemm/checks/gemm_step_arms_check.mojo [" + numeric_mode_name() + "] trial="
@@ -1665,6 +1688,7 @@ def main() raises:
     check_kpack_page_is_a_bijection(failures)
     check_kpack_gather_covers_the_page(failures)
     check_kpack_rule_hand_counts(failures)
+    check_kpack_fold_slot_classes(failures)
     check_kfold_lanes_is_the_stack_fold(failures)
     check_kfold_rule_hand_counts(failures)
     var ctx = DeviceContext()
