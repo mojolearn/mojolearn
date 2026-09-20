@@ -41,7 +41,9 @@ def main():
             detail = (type(e).__name__ + ": " + str(e)).replace("\t", " ").replace("\n", " ")[:240]
         rows.append((cls_name, loss, policy, boot, status, detail))
 
-    for cls_name, y in (("GradientBoostingRegressor", yr), ("GradientBoostingClassifier", yb)):
+    # the classifier takes integer labels; GradientBoosting takes float32
+    for cls_name, y in (("GradientBoostingRegressor", yr),
+                        ("GradientBoostingClassifier", yb.astype(np.int64))):
         cls = getattr(ml, cls_name)
         loss = "RMSE" if "Regressor" in cls_name else "Logloss"
         for policy in ("SymmetricTree", "Depthwise", "Lossguide"):
