@@ -22,3 +22,7 @@ signs (-1.2%, +1.8%, -6.8%).
 Disposition: retain NVIDIA's 128-thread default. Neither wider occupancy arm
 has reproducible evidence across the rotated public-fit comparison. This is
 a stability rejection, not a fixed percentage-threshold rejection.
+
+The guarded RunPod `frl0dgmbtedkxs` was terminated at 2026-09-20 13:57:43
+America/New_York: DELETE returned HTTP 204, followed by verified GET HTTP 404
+at 13:57:44. No machine address, lease state, or credential is retained here.
