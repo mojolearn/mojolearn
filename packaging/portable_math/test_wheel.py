@@ -60,7 +60,8 @@ def test_numpy_policy_rejects_runtime_and_payload_dependencies(tmp_path, name, c
     assert audit.numpy_errors(path, name)
 
 
-def test_numpy_remains_available_to_independent_verification(tmp_path):
+@pytest.mark.parametrize("relative", ["mojolearn/_identity_break.py", "mojolearn/_verify_par.py"])
+def test_numpy_remains_available_to_independent_verification(tmp_path, relative):
     path = tmp_path / '_identity_break.py'
     path.write_text('import numpy as np\n')
-    assert not audit.numpy_errors(path, 'mojolearn/_identity_break.py')
+    assert not audit.numpy_errors(path, relative)
