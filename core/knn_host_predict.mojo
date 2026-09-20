@@ -939,3 +939,34 @@ def host_rbc_knn_row(
             # THE VALUE ARM (see KNN_HOST_SABOTAGE), after the root.
             reported = host_sabotage_value_flip(reported)
         out_dist[q * k + o] = reported
+
+
+def host_rbc_knn_search(
+    index: List[Float32], n_index: Int, queries: List[Float32], n_queries: Int,
+    d: Int, k: Int, metric: Int, metric_arg: Float32,
+    mut out_idx: List[Int32], mut out_dist: List[Float32],
+    requested_tasks: Int = 0,
+):
+    """All exact RBC k-NN rows, split over independent query rows.
+
+    One requested task is the serial proof arm. Zero uses the common CPU
+    inference policy. Tasks own disjoint output rows and preserve every
+    distance fold and row selection order.
+    """
+    var tasks = requested_tasks
+    if tasks <= 0:
+        tasks = host_predict_task_count(n_queries)
+    tasks = max(1, min(tasks, n_queries))
+    var chunk = host_predict_chunk(n_queries, tasks)
+    def _rows(c: Int) {imm index, imm queries, mut out_idx, mut out_dist, imm chunk, imm n_queries, imm n_index, imm d, imm k, imm metric, imm metric_arg}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_queries)
+        for q in range(lo, hi):
+            host_rbc_knn_row(
+                index, n_index, queries, q, d, k, metric, metric_arg,
+                out_idx, out_dist,
+            )
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
