@@ -1,0 +1,61 @@
+420 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x117b00000000, nodemask=1)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz source=kernel_matrix.attn_default_arm_for baseline_is_default=False candidate_is_default=False baseline_requested=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 candidate_requested=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32
+baseline=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 candidate=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 rounds=9 warmups=3
+PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=False resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=-
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 is_default=False resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=-
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 dv MATCH 0 of 1572864
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.351324 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.485911 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.320085 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.448241 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.331465 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.46204 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.330514 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.50392 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.310314 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.467231 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.346754 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.488041 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.346904 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.470691 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.320394 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.421361 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.295794 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.392761 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.313145 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.431581 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.293615 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.411661 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.323504 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.458731 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.332824 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.439661 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.331094 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.447011 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.303484 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.52405 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.318814 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.458241 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.324695 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.425871 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwd hashed 1.320295 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 fwdbwd hashed 4.423671 ms
+TABLE kind=hashed shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.323504 | 4.870099880317702 | 4.458241 | 3.1347370000000003 | 5.140460485201788 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.320295 | 4.881936742924877 | 4.448241 | 3.1279460000000006 | 5.151620801637879 | 1.0024305174222428 | 1.0022480796341744
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 vs stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32)

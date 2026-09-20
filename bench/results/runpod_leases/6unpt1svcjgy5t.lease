@@ -1,0 +1,5 @@
+pod='6unpt1svcjgy5t'
+target='-p 27558 root@81.27.69.178'
+armed_utc='2026-09-20T15:27:09Z'
+deadline_epoch=1789920729
+minutes=45
