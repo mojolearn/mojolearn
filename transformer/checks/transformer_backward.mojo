@@ -1866,7 +1866,10 @@ struct LlamaBackwardStages(Movable):
             wide = it
 
         self.in_d_residual2 = _zeros[False](ctx, m * dm)
-        self.d_down_proj_out = _zeros[False](ctx, m * dm)
+        # Both residual-add branches receive the incoming cotangent
+        # unchanged. They are read-only afterward, so retain one allocation
+        # while preserving the two separately named trace stages.
+        self.d_down_proj_out = self.in_d_residual2.create_sub_buffer[DType.float32](0, m * dm)
         self.d_mlp_gated = _zeros[False](ctx, m * it)
         self.dw_down = _zeros[False](ctx, dm * it)
         self.d_silu_out = _zeros[False](ctx, m * it)
@@ -2862,14 +2865,6 @@ def llama_decoder_layer_backward_device(
     step_count_launch()
     ctx.enqueue_function[bwd_copy_kernel](
         bst.in_d_residual2.unsafe_ptr(),
-        d_out.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    step_count_launch()
-    ctx.enqueue_function[bwd_copy_kernel](
-        bst.d_down_proj_out.unsafe_ptr(),
         d_out.unsafe_ptr(),
         Int32(m * dm),
         grid_dim=(_grid(m * dm), 1, 1),
