@@ -399,6 +399,9 @@ comptime BWD_NORM_FUSED_TRIAL = is_defined[
 comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
 ]()
+comptime BWD_GATED_SILU_SPLIT_TRIAL = is_defined[
+    "MOJOLEARN_BWD_GATED_SILU_SPLIT_TRIAL"
+]()
 
 
 def llama_backward_sabotage_name() -> String:
@@ -750,6 +753,40 @@ def bwd_silu_backward_kernel(
 
     var r4 = ftz(pinned_mul(sg, r3))
     dg.unsafe_store(i, ftz(pinned_mul(ftz(dsi.unsafe_load(i)), r4)))
+
+
+def bwd_mul2_silu_backward_kernel(
+    dsi: MutPointer[Float32, MutAnyOrigin],
+    dup: MutPointer[Float32, MutAnyOrigin],
+    dg: MutPointer[Float32, MutAnyOrigin],
+    d_gated: MutPointer[Float32, MutAnyOrigin],
+    up: MutPointer[Float32, MutAnyOrigin],
+    silu_out: MutPointer[Float32, MutAnyOrigin],
+    gate: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """Fuse S21's two products with the clean S20 SiLU backward.
+
+    Every stored value keeps the split kernels' per-cell arithmetic and
+    rounding. `dsi_v` is rounded before its store and before it feeds `dg`,
+    exactly matching the store/load seam in the split spelling.
+    """
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var av = ftz(d_gated.unsafe_load(i))
+    var dsi_v = ftz(pinned_mul(av, ftz(up.unsafe_load(i))))
+    dsi.unsafe_store(i, dsi_v)
+    dup.unsafe_store(i, ftz(pinned_mul(av, ftz(silu_out.unsafe_load(i)))))
+
+    var x = ftz(gate.unsafe_load(i))
+    var sg = ftz(identical_sigmoid(x))
+    var r1 = ftz(ftz(Float32(1.0)) - ftz(sg))
+    var r2 = ftz(pinned_mul(x, r1))
+    var r3 = ftz(ftz(Float32(1.0)) + ftz(r2))
+    var r4 = ftz(pinned_mul(sg, r3))
+    dg.unsafe_store(i, ftz(pinned_mul(dsi_v, r4)))
 
 
 # ===========================================================================
@@ -3066,17 +3103,35 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     # STAGE 4-5. S21's backward, two `pinned_mul`s. ROUTING.
     # =====================================================================
+    var fuse_gated_silu = False
+    comptime if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and TARGET_COLUMN == COLUMN_APPLE
+        and not BWD_ANY_SABOTAGE
+        and not BWD_GATED_SILU_SPLIT_TRIAL
+    ):
+        fuse_gated_silu = True
     step_count_launch()
-    ctx.enqueue_function[bwd_mul2_kernel](
-        bst.d_silu_out.unsafe_ptr(),
-        bst.d_up_proj_out.unsafe_ptr(),
-        bst.d_mlp_gated.unsafe_ptr(),
-        fwd.up_proj.unsafe_ptr(),
-        fwd.silu_out.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    if fuse_gated_silu:
+        ctx.enqueue_function[bwd_mul2_silu_backward_kernel](
+            bst.d_silu_out.unsafe_ptr(), bst.d_up_proj_out.unsafe_ptr(),
+            bst.d_gate_proj_out.unsafe_ptr(), bst.d_mlp_gated.unsafe_ptr(),
+            fwd.up_proj.unsafe_ptr(), fwd.silu_out.unsafe_ptr(),
+            fwd.gate_proj.unsafe_ptr(), Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[bwd_mul2_kernel](
+            bst.d_silu_out.unsafe_ptr(),
+            bst.d_up_proj_out.unsafe_ptr(),
+            bst.d_mlp_gated.unsafe_ptr(),
+            fwd.up_proj.unsafe_ptr(),
+            fwd.silu_out.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3089,16 +3144,17 @@ def llama_decoder_layer_backward_device(
     # =====================================================================
     # STAGE 6. S20's backward. NEW ARITHMETIC. DEVIATION 1411.
     # =====================================================================
-    step_count_launch()
-    ctx.enqueue_function[bwd_silu_backward_kernel](
-        bst.d_gate_proj_out.unsafe_ptr(),
-        bst.d_silu_out.unsafe_ptr(),
-        fwd.gate_proj.unsafe_ptr(),
-        fwd.silu_out.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
+    if not fuse_gated_silu:
+        step_count_launch()
+        ctx.enqueue_function[bwd_silu_backward_kernel](
+            bst.d_gate_proj_out.unsafe_ptr(),
+            bst.d_silu_out.unsafe_ptr(),
+            fwd.gate_proj.unsafe_ptr(),
+            fwd.silu_out.unsafe_ptr(),
+            Int32(m * it),
+            grid_dim=(_grid(m * it), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
