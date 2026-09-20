@@ -12,7 +12,10 @@ from gemm.checks.gemm_identical import identical_gemm_workspace_max_floats
 
 def main() raises:
     comptime rows = 7
-    comptime vocab = 513
+    # Exercise a complete 1024-token chunk plus the one-token tail.  The
+    # backward must keep both dHidden's token fold and dWeight's row fold
+    # unchanged across that boundary.
+    comptime vocab = LM_HEAD_V2_CHUNK + 1
     comptime width = 17
     var hidden = List[Float32]()
     for i in range(rows * width):
