@@ -8,6 +8,10 @@
 # for the exact Linux or macOS wheel. It stages and checks that receipt before
 # publication and selects the bounded light workflow for that one platform.
 # Without it, retain the full native Linux release/certification route.
+# MOJOLEARN_ARTIFACT_SOURCE_COMMIT optionally pins an older frozen artifact
+# source when only pack/publish tools changed; defaults to HEAD. The release
+# tag still names the current tools, while the wheel and receipt keep their
+# original source witness.
 #
 # Optional installed qualification (run it when numerics changed or the
 # release is paper evidence; docs/RELEASE_CHECKLIST.md step 4):
@@ -54,6 +58,10 @@ esac
 REPO="${MOJOLEARN_REPO:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 cd "$REPO"
 HEAD_SHA=$(git rev-parse HEAD)
+ARTIFACT_SOURCE_COMMIT="${MOJOLEARN_ARTIFACT_SOURCE_COMMIT:-$HEAD_SHA}"
+[[ "$ARTIFACT_SOURCE_COMMIT" =~ ^[0-9a-f]{40}$ ]] || {
+  echo "MOJOLEARN_ARTIFACT_SOURCE_COMMIT must be a full lowercase commit SHA" >&2; exit 2;
+}
 VERSION=$(sed -n 's/^__version__ = "\(.*\)"$/\1/p' python/mojolearn/_version.py)
 mkdir -p "$WORK"; WORK=$(cd "$WORK" && pwd)
 ART="$WORK/artifact"; rm -rf "$ART"; mkdir -p "$ART"; cp "$WHL" "$ART/"
@@ -85,7 +93,7 @@ if [ -n "${MOJOLEARN_QUAL_SM89:-}" ]; then
 fi
 
 echo "== manifest =="
-python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$HEAD_SHA" "$LSHA" "$(basename "$LIGHT_ASSET")" <<'EOF'
+python3 - "$ART/alpha-manifest.json" "$VERSION" "$(basename "$WHL")" "$WSHA" "$TSHA" "$ARTIFACT_SOURCE_COMMIT" "$LSHA" "$(basename "$LIGHT_ASSET")" <<'EOF'
 import json, sys
 out, version, wheel, wsha, tsha, source, smoke_sha, smoke_name = sys.argv[1:]
 doc = {"schema": "mojolearn.alpha-release.v1", "version": version, "release_profile": "alpha-api",
@@ -104,16 +112,16 @@ else
 fi
 
 if [ -n "$LIGHT_ASSET" ]; then
-  python3 tools/check_light_release.py "$ART" --source-commit "$HEAD_SHA" --platform "$LIGHT_PLATFORM"
+  python3 tools/check_light_release.py "$ART" --source-commit "$ARTIFACT_SOURCE_COMMIT" --platform "$LIGHT_PLATFORM"
 fi
 
 echo "== GitHub release $TAG =="
 git rev-parse -q --verify "refs/tags/$TAG" >/dev/null || { git tag -a "$TAG" -m "mojolearn $VERSION $LIGHT_PLATFORM wheel" "$HEAD_SHA"; git push origin "refs/tags/$TAG"; }
 if ! gh release view "$TAG" >/dev/null 2>&1; then
-  NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast, deterministic and identical modes, built from $HEAD_SHA. See CHANGELOG.md."
+  NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast, deterministic and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
-  [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $HEAD_SHA. See CHANGELOG.md."
+  [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
   # shellcheck disable=SC2086
   gh release create "$TAG" --latest --target "$HEAD_SHA" --title "mojolearn $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
@@ -122,7 +130,7 @@ fi
 
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
 # Choose explicitly: old calls keep full certification, receipts use bounded admission.
-gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
+gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile="$VALIDATION_PROFILE" -f light_platform="$LIGHT_PLATFORM" -f artifact_source_commit="$ARTIFACT_SOURCE_COMMIT" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
 sleep 20
 RUN=$(gh run list --workflow release-provenance.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 echo "run $RUN"
