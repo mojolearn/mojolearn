@@ -29,6 +29,7 @@ the GPU columns is the CPU identity gate's, not this file's.
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
 import re
+import os
 import sys
 from pathlib import Path
 
@@ -97,8 +98,9 @@ def test_oracles_import_no_gpu_and_no_device_module():
         assert not GPU_IMPORTS.search(text), f"{rel} imports a GPU module"
         assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{rel} imports DeviceContext"
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", gp, re.M))) == [
-        "checks.numerics", "cholesky.host.chol_oracle", "gemm.host.identical_gemm",
-        "std.memory", "std.sys.compile",
+        "checks.numerics", "cholesky.host.chol_oracle",
+        "core.host_predict_threads", "gemm.host.identical_gemm",
+        "max.algorithm", "std.memory", "std.sys.compile",
     ]
     assert sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", chol, re.M))) == [
         "checks.numerics", "gemm.host.identical_gemm", "std.memory",
@@ -121,6 +123,9 @@ def test_oracles_spell_the_bit_carrying_constructs():
     assert "if not (raw > Float32(0.0)):" in gp, "the variance clamp is a comparison, never a max"
     assert "gemm_oracle(kcross, dual, OP_TN, n_star, 1, n_train)" in gp
     assert "var third = ftz(identical_div(ss, Float32(3.0)))" in gp, "K**2 / 3 is a divide"
+    assert "sync_parallelize(_rbf_rows, tasks)" in gp
+    assert "sync_parallelize(_matern_rows, tasks)" in gp
+    assert "slotp.unsafe_store(i * n + j" in gp, "parallel rows must own disjoint cells"
 
 
 def test_sabotage_define_moves_the_distance():
@@ -156,17 +161,26 @@ def test_gaussian_process_fits_on_the_host_when_built():
         lambda: mojolearn.ConstantKernel(1.0) * mojolearn.Matern([1.0, 2.0, 0.5, 4.0], nu=2.5)
         + mojolearn.WhiteKernel(0.1),
     )
-    for make in kernels:
-        outs = []
-        for _ in range(2):
-            m = mojolearn.GaussianProcessRegressor(kernel=make()).fit(x, y)
-            assert m.info_ == 0, m.info_
-            mean, std = m.predict(xs, return_std=True)
-            outs.append((np.asarray(m.L_).tobytes(), np.asarray(m.alpha_).tobytes(),
-                         np.float64(m.log_marginal_likelihood_value_).tobytes(),
-                         np.asarray(mean).tobytes(), np.asarray(std).tobytes()))
-            assert np.isfinite(m.log_marginal_likelihood_value_)
-        assert outs[0] == outs[1], "two host fits returned different bytes"
+    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+    try:
+        for make in kernels:
+            outs = []
+            # One and several row tasks must be the same numerical path.
+            for threads in ("1", "4"):
+                os.environ["MOJOLEARN_CPU_THREADS"] = threads
+                m = mojolearn.GaussianProcessRegressor(kernel=make()).fit(x, y)
+                assert m.info_ == 0, m.info_
+                mean, std = m.predict(xs, return_std=True)
+                outs.append((np.asarray(m.L_).tobytes(), np.asarray(m.alpha_).tobytes(),
+                             np.float64(m.log_marginal_likelihood_value_).tobytes(),
+                             np.asarray(mean).tobytes(), np.asarray(std).tobytes()))
+                assert np.isfinite(m.log_marginal_likelihood_value_)
+            assert outs[0] == outs[1], "GP bytes moved with CPU row task count"
+    finally:
+        if previous_threads is None:
+            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+        else:
+            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
 
 
 if __name__ == "__main__":
