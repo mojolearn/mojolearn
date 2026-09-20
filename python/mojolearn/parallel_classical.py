@@ -130,8 +130,10 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     if type(series_per_shard) is not int or series_per_shard < 1:
         raise ValueError('series_per_shard must be a positive integer')
     data, batch, observations, copied = _series_major(y, 'y')
+    # Keep the caller's trend spelling: resolving None to 'c'/'n' preserves
+    # k_, but changes the returned configuration and serialized model bytes.
     params = dict(order=estimator.order, seasonal_order=estimator.seasonal_order,
-                  trend='c' if estimator.k_ else 'n', method=estimator.method,
+                  trend=estimator.trend, method=estimator.method,
                   maxiter=estimator.maxiter, numeric_mode='identical')
     requests = [('arima_fit', params, (data[start:start + series_per_shard],))
                 for start in range(0, batch, series_per_shard)]
