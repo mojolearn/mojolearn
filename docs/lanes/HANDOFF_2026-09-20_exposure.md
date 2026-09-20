@@ -19,7 +19,7 @@ a GPU arm, and each is in the verifier harness. Work tree:
 
 ## State on main
 
-264 lanes: 204 EXPOSED, 59 NOT APPLICABLE (every `par-*` driver; all 59 now
+270 lanes: 210 EXPOSED, 59 NOT APPLICABLE (every `par-*` driver; all 59 now
 carry a two-device column, checked with `verify --par`), 1 OWED.
 `python3 tools/lane_accounting.py --check` prints OK.
 
@@ -27,7 +27,7 @@ Landed today: the peer's NVIDIA columns (squashed), both decode sessions,
 `language-model-config`, the last four `par-*` lanes
 (`bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/`), and
 `SpectralEmbedding` (class, both bindings, lane, CPU == RTX 4090 on nine
-fixtures).
+fixtures), and the six QN objectives.
 
 ## Open, in priority order
 
@@ -45,12 +45,11 @@ fixtures).
    Depthwise and Lossguide). Branch `origin/lane/gbdt-cpu-default-parity`
    (4 commits, in progress, NOT merged): a matrix script, the before matrix,
    and the default regressor training on a CPU. Not yet shown equal to a GPU.
-3. **Six QN objectives** (LinearSVC, LinearSVR, QN regressor). Branch
-   `origin/lane/expose-qn-objectives` (2 commits, NOT merged): Python classes,
-   six lanes, CPU column 54 of 54 STABLE. Its NVIDIA column was in flight.
-   Merge when CPU == GPU; resolve `table.json` and
-   `docs/VERIFICATION_MATRIX.md` conflicts by taking main's and regenerating
-   (commands below).
+3. **Six QN objectives: MERGED.** `mojolearn.svm.LinearSVC`, `LinearSVR` and
+   `mojolearn.QNRegressor`, six lanes, CPU == RTX 4090 on all 54 cells. Left
+   over: the classes have no save/load, no lane fits the l1 penalty on the
+   hinge and QN losses, and `LinearSVR` defaults to `penalty='l1'` like the
+   reference library, not like scikit-learn.
 4. **Evidence taken against Sep 19 binaries, to redo from today's source.**
    The built bindings in the main checkout (`python/mojolearn/host`,
    `identical`, `.dylibs`) date from Sep 19 and are symlinked into the work
