@@ -1,8 +1,9 @@
 # Chunked LM-head / cross-entropy v2 foundation
 
-Status: normative CPU oracle plus an opt-in device forward/loss stage exported
-as `chunked_lm_head_v2_loss`. V1 remains the default everywhere; the v2
-backward and trainer selector remain future stages.
+Status: normative CPU oracle plus opt-in device inference and training stages,
+exported as `chunked_lm_head_v2_loss` and `chunked_lm_head_v2_train`. The
+training selector returns loss, `dHidden`, and `dWeight`; V1 remains the
+default everywhere and no existing trainer is silently rerouted.
 
 Profile name: `mojolearn.identical.lm_head.chunked.fp32.v2`.
 
@@ -71,7 +72,7 @@ pixi run mojo build -I . -D MOJOLEARN_NUMERIC_IDENTICAL \
 ```
 
 It crosses two complete vocabulary chunks and a one-token tail, checks the
-loss, row maxima, and denominators bit-for-bit against the CPU oracle, and
-checks a repeated device launch. The device stage allocates only three
+loss, row maxima, denominators, `dHidden`, and `dWeight` bit-for-bit against
+the CPU oracle, and checks repeated device loss and gradient cells. The stage allocates only three
 `[rows]` scratch arrays and one scalar beyond its inputs: `(3*rows+1)*4`
 bytes. It never allocates full logits or dlogits.
