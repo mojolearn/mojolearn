@@ -75,11 +75,35 @@ def prf_finish_kernel(
     average: Int32, positive: Int32, zero: Int32,
     result: MutPointer[Float32, MutAnyOrigin],
 ):
-    if Int(thread_idx.x) != 0:
-        return
     var k = Int(k_in)
     var selected = Int(selected_in)
     var width = selected if average == 0 else 1
+    # There is no reduction in the per-class (`average=None`) result: every
+    # class reads three integer counts and writes three disjoint cells.  Let
+    # the launch cover those classes directly.  Thread zero retains the
+    # warning-bit scan so its public layout and meaning stay unchanged.
+    if average == 0:
+        var c = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+        if c < selected:
+            var tp = Int64(counts.unsafe_load(c))
+            var support = Int64(counts.unsafe_load(k+c))
+            var predicted = Int64(counts.unsafe_load(2*k+c))
+            comptime for metric in range(3):
+                var denominator = predicted if metric == 0 else (support if metric == 1 else support+predicted)
+                var numerator = tp if metric < 2 else 2*tp
+                result.unsafe_store(metric*width+c, count_ratio(numerator, denominator, zero))
+        if c == 0:
+            comptime for metric in range(3):
+                var undefined = False
+                for j in range(selected):
+                    var support = Int64(counts.unsafe_load(k+j))
+                    var predicted = Int64(counts.unsafe_load(2*k+j))
+                    var denominator = predicted if metric == 0 else (support if metric == 1 else support+predicted)
+                    undefined = undefined or denominator == 0
+                result.unsafe_store(3*width+metric, Float32(1 if undefined else 0))
+        return
+    if Int(thread_idx.x) != 0:
+        return
     var tp_sum = Int64(0)
     var true_sum = Int64(0)
     var pred_sum = Int64(0)
@@ -192,7 +216,8 @@ def precision_recall_fscore(
     var result = ctx.enqueue_create_buffer[DType.float32](3*width+3)
     ctx.enqueue_function[prf_finish_kernel](
         counts.unsafe_ptr(), Int32(k), Int32(selected), Int32(average), Int32(positive), Int32(zero), result.unsafe_ptr(),
-        grid_dim=1, block_dim=32,
+        grid_dim=ceildiv(selected,256) if average == 0 else 1,
+        block_dim=256 if average == 0 else 32,
     )
     ctx.synchronize()
     _ = counts^
