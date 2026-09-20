@@ -366,11 +366,12 @@ Plain arm, naming the arm in the refusal.
 An eval set does not reach the learn cursor, the borders, the splits or the
 leaves on the Plain doc-parallel path. Five CPU-only checks say so:
 
-1. **Cross-lane, on the recorded column.** `gbdt-symmetric-eval`'s first fit
-   is `gbdt-symmetric`'s fit plus an eval set. Their `predict` and `proba`
-   parts are the same bytes on the CPU column: `7f15e34e477a4eae` and
-   `dc63b1265ff9fd00` on `base` in both lanes. If an eval set ever reaches
-   the fit, the two lanes disagree and both are in the gate.
+1. **Cross-lane, on the recorded column, all nine fixtures.**
+   `gbdt-symmetric-eval`'s first fit is `gbdt-symmetric`'s fit plus an eval
+   set. Their `predict` and `proba` parts are the same bytes in
+   `cpu-apple-m4.json` and `cpu-apple-m4-gbdt-symmetric.json`, 9 of 9 (the
+   table is in that directory's README). If an eval set ever reaches the fit,
+   the two lanes disagree and both are in the gate.
 2. With `use_best_model=False`, the learn curve, `predict(X)` and
    `predict(Xh)` of a fit WITH an eval set are bitwise the same fit's
    without one; the saved file differs in 9 bytes, all zip CRCs over
@@ -390,35 +391,44 @@ cursor takes. The MODEL is untouched, so only the new cells should move; the
 family's own arm (`-D MOJOLEARN_HOST_SABOTAGE=1`) moves the LEAVES and would
 read DIVERGENT on this lane whether or not the held-out restatement is right.
 
-The first run of the arm, against the lane's FIRST shape (all three fits at
-gbdt-symmetric's 20 depth-6 trees, rate 0.03):
+**The arm on the lane's FIRST shape** (all three fits at gbdt-symmetric's 20
+depth-6 trees, rate 0.03) read `DIVERGENT=9` with
 
 ```
-summary: DIVERGENT=9            (9 of 9 fixtures)
-summary (infer/model): IDENTICAL=18
-summary (batch): IDENTICAL=9
 parts differ: test_loss_curve, od_test_loss_curve
 parts agree:  predict, proba, learn_loss_curve, best_iteration,
               od_predict, od_stopped, od_best_iteration,
               shrunk_predict, shrunk_proba
 ```
 
-Two readings, and both matter.
-
-The arm **works**: every fixture moved, and it moved the held-out curve and
-NOTHING else. `predict`, `proba` and the learn curve are untouched, and the
-infer, model and batch columns are IDENTICAL x2, which is the statement that
-this control isolates the new arithmetic.
-
-And it **caught the lane being inert**. `od_stopped`, `od_best_iteration`,
+The arm worked and the LANE did not. `od_stopped`, `od_best_iteration`,
 `shrunk_predict` and `shrunk_proba` did not move under a deliberate defect,
 because at that shape the held-out curve is still falling at the last tree on
-all nine fixtures: the detector never fired, the shrink never cut, and the two
-stopping fits were byte for byte the plain fit. Two thirds of the lane hashed
-something and would have hashed the same something with the detector deleted.
-The stopping fits now run 30 depth-7 trees at learning_rate 1.8, measured to
-overfit on every fixture (detector fires at 11 to 17 trees, shrink cuts at 9
-to 25 of 30), and the lane RAISES if either stops biting.
+all nine fixtures: the detector never fired, the shrink never cut, and the
+two stopping fits were byte for byte the plain fit. Two thirds of the lane
+hashed something and would have hashed the same something with the detector
+deleted. The stopping fits now run 30 depth-7 trees at learning_rate 1.8,
+measured to overfit on every fixture (the detector fires at 11 to 17 trees,
+the shrink cuts at 9 to 25 of 30), and the lane RAISES if either stops biting.
+
+**The arm on the shape that bites** (the recorded pair,
+`bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/`):
+
+```
+summary: DIVERGENT=9                      (9 of 9 fixtures)
+summary (infer/model): DIVERGENT=2, IDENTICAL=16
+summary (batch):       DIVERGENT=1, IDENTICAL=8
+```
+
+On eight fixtures the parts that moved are exactly the three held-out curves
+and nothing else. On `ties` the one ULP moved the DETECTOR'S DECISION, so
+`od_predict`, `od_stopped`, `od_best_iteration`, `shrunk_predict` and
+`shrunk_proba` moved with it and the saved model moved too (`ties model`
+`3d9527be61a9c17f` -> `f03dce461215f14a`). `predict`, `proba`,
+`learn_loss_curve` and the plain fit's `best_iteration` never move on any
+fixture, which is the isolation claim; `ties` is the demonstration that a
+wrong held-out cursor can change the model a user is handed, which is why
+this arm is worth having beside the family's own.
 
 ### What the CPU column says
 
@@ -447,13 +457,18 @@ all of them CPU-column-only. So no committed GPU cell of the other 27 gbdt
 lanes can have moved, and re-running them would be re-recording bytes that
 cannot have changed.
 
-The CPU side of the claim has been run and is not owed:
+The CPU side of the claim has been run and is not owed. It is committed under
+`bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/`:
 
 * the new lane's CPU column, all nine fixtures at `--repeats 2`, 9 of 9
   STABLE on train, infer, model and batch, `admit()` -> `None`;
-* all 27 pre-existing gbdt lanes on `base`, once under the binding before
-  this change and once after, 231 of 231 parts identical;
-* the negative control column, DIVERGENT on 9 of 9.
+* the negative control column beside it, DIVERGENT on 9 of 9;
+* `gbdt-symmetric` on the same nine fixtures and the same binding, for the
+  cross-lane equality;
+* and, not committed because it is a before/after of one binding rather than
+  a column anyone will diff again, all 27 pre-existing gbdt lanes on `base`
+  under the binding before this change and after it: 231 of 231 parts
+  identical, 0 moved.
 
 Until the GPU columns land, `gbdt-symmetric-eval`'s cells read OWED against
 the three committed columns (`--owed-json`), and the lane sits in
