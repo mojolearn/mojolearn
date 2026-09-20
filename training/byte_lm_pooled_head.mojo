@@ -69,7 +69,10 @@ struct BytePooledHead(Movable):
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
-        self.ce_shift = _zeros(ctx, M * V)
+        # Match ByteTrainBuffers' qualified CE lifetime schedule.  The
+        # shift kernel loads logits[cell] before its same-cell store, and no
+        # pooled/offload trace retains logits after CE begins.
+        self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
         self.ce_expo = _zeros(ctx, M * V)
         self.ce_denom = _zeros(ctx, M)
         self.ce_logdenom = _zeros(ctx, M)
@@ -81,8 +84,11 @@ struct BytePooledHead(Movable):
         self.ce_row = _zeros(ctx, M)
         self.ce_total = _zeros(ctx, 1)
         self.ce_loss = _zeros(ctx, 1)
-        self.ce_weights = _zeros(ctx, M * V)
-        self.ce_dlogits = _zeros(ctx, M * V)
+        # CE backward consumes expo cell-locally into weights and then
+        # dlogits on the same in-order context.  Neither intermediate is
+        # retained by IdentityTrace in the pooled production paths.
+        self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+        self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
         self.ce_ones = _ones(ctx, identical_ce_ones_floats(M, V))
         self.ce_ws = _zeros(
             ctx, identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
