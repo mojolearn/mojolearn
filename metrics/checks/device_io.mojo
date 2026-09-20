@@ -43,7 +43,7 @@ def download_f32(
             var view = buf.create_sub_buffer[DType.float32](0, n)
             ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Float32]()
+    var out = List[Float32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
     _ = h^
@@ -61,7 +61,7 @@ def download_i32(
             var view = buf.create_sub_buffer[DType.int32](0, n)
             ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[Int32]()
+    var out = List[Int32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
     _ = h^
@@ -79,7 +79,7 @@ def download_u32(
             var view = buf.create_sub_buffer[DType.uint32](0, n)
             ctx.enqueue_copy(dst_ptr=h.unsafe_ptr(), src_buf=view)
     ctx.synchronize()
-    var out = List[UInt32]()
+    var out = List[UInt32](capacity=n)
     for i in range(n):
         out.append(h.unsafe_ptr().unsafe_load(i))
     _ = h^
