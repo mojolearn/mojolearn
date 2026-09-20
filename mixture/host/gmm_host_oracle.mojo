@@ -472,8 +472,15 @@ def gmmh_e_step(
     n: Int,
     d: Int,
     ncomp: Int,
+    output_level: Int = 3,
 ) -> GmmHostEStep:
-    """`gmm_e_step` at GMM_SAB_NONE."""
+    """`gmm_e_step` at GMM_SAB_NONE.
+
+    ``output_level`` stops after weighted log probability (0), logsumexp
+    (1), or log responsibilities (2).  Training's default 3 also computes
+    mean likelihood.  This changes no arithmetic in any requested output;
+    the host scoring APIs no longer construct values they discard.
+    """
     var dd = d * d
     var mahal = List[Float32](length=n * ncomp, fill=Float32(0.0))
     for kc in range(ncomp):
@@ -504,6 +511,11 @@ def gmmh_e_step(
         var lp = ftz(half + ftz(log_det_chol[k]))
         wlp[idx] = ftz(lp + ftz(log_weights[k]))
 
+    if output_level == 0:
+        return GmmHostEStep(
+            wlp^, List[Float32](), List[Float32](), Float32(0.0)
+        )
+
     var lse = List[Float32](length=n, fill=Float32(0.0))
     for i in range(n):
         var base = i * ncomp
@@ -520,10 +532,16 @@ def gmmh_e_step(
             s = ftz(s + ftz(identical_exp(ftz(wlp[base + k] - max_exp))))
         lse[i] = ftz(identical_log(s) + max_exp)
 
+    if output_level == 1:
+        return GmmHostEStep(wlp^, lse^, List[Float32](), Float32(0.0))
+
     var logresp = List[Float32](length=n * ncomp, fill=Float32(0.0))
     for idx in range(n * ncomp):
         var i = idx // ncomp
         logresp[idx] = ftz(ftz(wlp[idx]) - ftz(lse[i]))
+
+    if output_level == 2:
+        return GmmHostEStep(wlp^, lse^, logresp^, Float32(0.0))
 
     var acc = Float32(0.0)
     for i in range(n):
@@ -623,13 +641,16 @@ def _score_e_step(
     d: Int,
     x: List[Float32],
     n: Int,
+    output_level: Int,
 ) raises -> GmmHostEStep:
     """The scoring entries' E-step: the log weights through `_safe_log`."""
     gmmh_validate_data(x, n, d)
     var lw = List[Float32](capacity=ncomp)
     for k in range(ncomp):
         lw.append(_safe_log(weights[k]))
-    return gmmh_e_step(x, means, prec, log_det_chol, lw, n, d, ncomp)
+    return gmmh_e_step(
+        x, means, prec, log_det_chol, lw, n, d, ncomp, output_level
+    )
 
 
 def gmmh_score_samples(
@@ -643,7 +664,9 @@ def gmmh_score_samples(
     n: Int,
 ) raises -> List[Float32]:
     """`gaussian_mixture_score_samples`: the logsumexp per row."""
-    var es = _score_e_step(weights, means, prec, log_det_chol, ncomp, d, x, n)
+    var es = _score_e_step(
+        weights, means, prec, log_det_chol, ncomp, d, x, n, 1
+    )
     return es.lse.copy()
 
 
@@ -659,7 +682,9 @@ def gmmh_predict_proba(
 ) raises -> List[Float32]:
     """`gaussian_mixture_predict_proba`: `exp(log_resp)` through
     `_exp_resp`."""
-    var es = _score_e_step(weights, means, prec, log_det_chol, ncomp, d, x, n)
+    var es = _score_e_step(
+        weights, means, prec, log_det_chol, ncomp, d, x, n, 2
+    )
     var out = List[Float32](capacity=n * ncomp)
     for i in range(n * ncomp):
         out.append(ftz(identical_exp(ftz(es.logresp[i]))))
@@ -678,7 +703,9 @@ def gmmh_predict(
 ) raises -> List[Int32]:
     """`gaussian_mixture_predict`: `argmax_kernel` over the weighted log
     probabilities, the lowest index on a tie."""
-    var es = _score_e_step(weights, means, prec, log_det_chol, ncomp, d, x, n)
+    var es = _score_e_step(
+        weights, means, prec, log_det_chol, ncomp, d, x, n, 0
+    )
     var out = List[Int32](capacity=n)
     for i in range(n):
         var base = i * ncomp
