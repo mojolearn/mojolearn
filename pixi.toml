@@ -1208,6 +1208,7 @@ check-svm-oracle = "mojo run -I . svm/svc_main.mojo -- oracle"
 # 2026-08-23 with NO invoker (no task, no tools/ script, no workflow) until
 # 2026-09-14; both build for the IDENTICAL tier the shipped estimators bind.
 check-glm-multinomial = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/multinomial_check.mojo"
+check-glm-host-probability = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/host_probability_parallel_check.mojo"
 check-glm-qn-losses = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/qn_losses_check.mojo"
 # The softmax gate's negative control: the same check with the log-sum-exp
 # fold walked descending on purpose (MOJOLEARN_SOFTMAX_SABOTAGE); it must

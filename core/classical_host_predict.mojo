@@ -119,6 +119,7 @@ from checks.numerics import (
 )
 from core.host_predict_threads import (
     HostF32Ptr,
+    HostF64Ptr,
     host_list_ptr,
     host_predict_chunk,
     host_predict_task_count,
@@ -293,12 +294,40 @@ def host_qn_sigmoid(
     `p = 1 / (1 + identical_exp64(-Float64(z)))` in float64, `1 - p` for
     class 0, `p` for class 1, `(n_rows, 2)` row-major."""
     var out = List[Float64](length=2 * n_rows, fill=Float64(0.0))
-    for i in range(n_rows):
-        var z = Float64(scores[i])
-        var p = 1.0 / (1.0 + identical_exp64(-z))
-        out[2 * i] = 1.0 - p
-        out[2 * i + 1] = p
+    host_qn_sigmoid_into(
+        host_list_ptr(scores), rebind[HostF64Ptr](out.unsafe_ptr()), n_rows,
+        1,
+    )
     return out^
+
+
+def host_qn_sigmoid_into(
+    scores: HostF32Ptr, dst: HostF64Ptr, n_rows: Int, tasks: Int,
+):
+    """`host_qn_sigmoid` over caller-owned buffers, split by rows.
+
+    A row owns both adjacent output cells and performs the same Float64
+    conversion, exponential, division and subtraction as the serial entry.
+    No reduction crosses rows, so task scheduling cannot move a bit.
+    """
+    if n_rows <= 0:
+        return
+    var t = max(1, min(tasks, n_rows))
+    var chunk = host_predict_chunk(n_rows, t)
+
+    def _rows(c: Int) {imm scores, imm dst, imm chunk, imm n_rows}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_rows)
+        for i in range(lo, hi):
+            var z = Float64(scores.unsafe_load(i))
+            var p = 1.0 / (1.0 + identical_exp64(-z))
+            dst.unsafe_store(2 * i, 1.0 - p)
+            dst.unsafe_store(2 * i + 1, p)
+
+    if t == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, t)
 
 
 def host_qn_decision_multi(
@@ -353,21 +382,50 @@ def host_qn_softmax(
     `p_c = identical_exp64(z_c - m) / s`; `(n_rows, C)` float64
     row-major."""
     var out = List[Float64](length=n_rows * n_classes, fill=Float64(0.0))
-    for i in range(n_rows):
-        var base = i * n_classes
-        var m = Float64(scores[base])
-        for c in range(1, n_classes):
-            var v = Float64(scores[base + c])
-            if v > m:
-                m = v
-        var s = 0.0
-        for c in range(n_classes):
-            var z = Float64(scores[base + c])
-            s = s + identical_exp64(z - m)
-        for c in range(n_classes):
-            var z = Float64(scores[base + c])
-            out[base + c] = identical_exp64(z - m) / s
+    host_qn_softmax_into(
+        host_list_ptr(scores), rebind[HostF64Ptr](out.unsafe_ptr()), n_rows,
+        n_classes, 1,
+    )
     return out^
+
+
+def host_qn_softmax_into(
+    scores: HostF32Ptr, dst: HostF64Ptr, n_rows: Int, n_classes: Int,
+    tasks: Int,
+):
+    """`host_qn_softmax` over caller-owned buffers, split by rows.
+
+    Each task retains the reference's strict ascending maximum, sum and
+    output loops within every row. Rows share no state, so parallelism and
+    the removal of the two boundary Lists are bitwise inert.
+    """
+    if n_rows <= 0:
+        return
+    var t = max(1, min(tasks, n_rows))
+    var chunk = host_predict_chunk(n_rows, t)
+
+    def _rows(task: Int) {imm scores, imm dst, imm chunk, imm n_rows, imm n_classes}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n_rows)
+        for i in range(lo, hi):
+            var base = i * n_classes
+            var m = Float64(scores.unsafe_load(base))
+            for c in range(1, n_classes):
+                var v = Float64(scores.unsafe_load(base + c))
+                if v > m:
+                    m = v
+            var s = 0.0
+            for c in range(n_classes):
+                var z = Float64(scores.unsafe_load(base + c))
+                s = s + identical_exp64(z - m)
+            for c in range(n_classes):
+                var z = Float64(scores.unsafe_load(base + c))
+                dst.unsafe_store(base + c, identical_exp64(z - m) / s)
+
+    if t == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, t)
 
 
 def host_center(
