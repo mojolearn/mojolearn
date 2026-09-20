@@ -914,6 +914,30 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
                 wrong_reason.append(f"{lane}: held back as 'unwatched', but its fixture has moved past "
                                     f"the shipped reference ({revisions.get(lane)!r}), so its reason is "
                                     "'stale reference' and a run would prove nothing")
+            elif len(_reference_classes(table, lane)) < 2:
+                # THE OTHER HALF OF THE `one column` RULE, WHICH THE VOCABULARY
+                # ALREADY CLAIMED AND THE CODE DID NOT MAKE
+                # (lane/new-lane-reference-promotion, 2026-09-20). The comment
+                # over PUBLIC_PENDING_LANES says of `one column` that
+                # "test_host_surface counts the classes in each cell's `cols`
+                # and fails BOTH when a lane here has gained a second class and
+                # when one held as `unwatched` has only one". Only the first
+                # half existed. MEASURED: moving `saved-model-host-infer`, whose
+                # cells rest on `cpu` alone, from `one column` to `unwatched`
+                # was watched to PASS this test, while the converse (a
+                # four-class lane called `one column`) was watched to fail. A
+                # reason that can be swapped for a weaker one without anything
+                # noticing is the prose floor this file exists to replace, and
+                # it is the exact condition a promotion has to get right: the
+                # two reasons differ only in whether a second device class has
+                # ever reproduced the number.
+                classes = sorted(_reference_classes(table, lane))
+                wrong_reason.append(
+                    f"{lane}: held back as 'unwatched', which says nothing static is left, but the "
+                    f"shipped table's cells for it rest on a SINGLE device class "
+                    f"({', '.join(classes) or 'none'}), so its reference has one witness and "
+                    "nothing has ever reproduced it. Its reason is 'one column', and what it owes "
+                    "is a second column, not a watched run")
         elif why == "qualification pending":
             assert lane in with_cells and lane not in stale, lane
             assert len(_reference_classes(table, lane)) >= 2, lane
