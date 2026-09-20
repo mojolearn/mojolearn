@@ -365,6 +365,14 @@ def test_a_comparison_without_commitments_still_agrees_and_says_it_is_weaker():
 
 
 def test_a_verified_pair_says_so_on_the_result_line():
+    """UPDATED 2026-09-20, lane/compare-challenge-nonce, and the update is the
+    finding. This used to assert `WEAKER THAN IT LOOKS` was absent from a
+    commitment-verified pair. It is not absent any more, because a verified
+    commitment answers ORDER and never answered EXECUTION: our reference table
+    pins every expected cell hash, so both of these documents could have been
+    written out of it and committed to without running. The commitment half of
+    the result line is unqualified, as it always was; the challenge half is
+    qualified, because this pair answers no challenge."""
     a, b = _honest_pair()
     la, lb = va.seal_document(a), va.seal_document(b)
     r = va.compare_documents(a, b, "a.json", "b.json", commitment_a=la, commitment_b=lb)
@@ -373,9 +381,10 @@ def test_a_verified_pair_says_so_on_the_result_line():
     assert r["provenance"]["commitments_verified"] is True
     text = va.format_compare(r)
     assert la in text and lb in text, "both published commitments must be printed"
-    assert "WEAKER THAN IT LOOKS" not in text
     tail = text[text.index("RESULT: AGREE"):]
     assert "neither set of numbers could have been copied" in tail, tail
+    assert "WEAKER THAN IT LOOKS: no commitment was exchanged" not in tail, tail
+    assert "WEAKER THAN IT LOOKS: no challenge was answered" in tail, tail
 
 
 def test_one_sided_commitment_names_the_party_that_is_not_bound():
@@ -613,7 +622,11 @@ def test_cli_the_whole_protocol_end_to_end(tmp_path):
         ok = _run_cli(["verify", "--compare", pa, pb, "--commitment-a", la,
                        "--commitment-b", lb], dict(MOJOLEARN_NUMERIC_MODE=tier))
         assert ok.returncode == va.EXIT_VERIFIED, ok.stdout[-2000:] + ok.stderr[-2000:]
-        assert "RESULT: AGREE" in ok.stdout and "WEAKER THAN IT LOOKS" not in ok.stdout
+        assert "RESULT: AGREE" in ok.stdout
+        # the commitment qualifier is gone; the challenge one is not, because
+        # these documents answer no challenge (lane/compare-challenge-nonce)
+        assert "WEAKER THAN IT LOOKS: no commitment was exchanged" not in ok.stdout
+        assert "WEAKER THAN IT LOOKS: no challenge was answered" in ok.stdout
 
         # 3. the forgery, handed over instead
         forged = _forged_from(json.loads(Path(pa).read_text()))
