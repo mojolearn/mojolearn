@@ -42,9 +42,9 @@
 #                                      $HOME/.mojolearn-runner
 #
 # Then, from ANOTHER terminal, dispatch exactly one run:
-#   gh workflow run release-provenance.yml -f publish=none      (build only)
-#   gh workflow run release-provenance.yml -f publish=testpypi
-#   gh workflow run release-provenance.yml -f publish=pypi
+#   gh workflow run release-provenance.yml -f validation_profile=full -f publish=none      (build only)
+#   gh workflow run release-provenance.yml -f validation_profile=full -f publish=testpypi
+#   gh workflow run release-provenance.yml -f validation_profile=full -f publish=pypi
 # The full procedure is docs/PYPI_RELEASE.md.
 set -eu
 
@@ -144,9 +144,9 @@ say "labels:        self-hosted (automatic), $LABELS"
 say "repository:    https://github.com/$REPO"
 say ""
 say "From ANOTHER terminal, dispatch exactly one run:"
-say "  gh workflow run release-provenance.yml -f publish=none       # build only"
-say "  gh workflow run release-provenance.yml -f publish=testpypi"
-say "  gh workflow run release-provenance.yml -f publish=pypi"
+say "  gh workflow run release-provenance.yml -f validation_profile=full -f publish=none       # build only"
+say "  gh workflow run release-provenance.yml -f validation_profile=full -f publish=testpypi"
+say "  gh workflow run release-provenance.yml -f validation_profile=full -f publish=pypi"
 say "then: gh run watch"
 say ""
 

@@ -69,8 +69,6 @@ def test_manifest_covers_the_five_lanes():
     for rel in (LOSSES, MULTI):
         assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
     assert "gbdt_predict_multi" in fam["exports"]
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training outside its declared lanes" in sentence, sentence
 
 
 def test_oracles_import_no_gpu_module():

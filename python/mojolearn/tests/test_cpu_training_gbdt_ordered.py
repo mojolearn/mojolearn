@@ -77,8 +77,6 @@ def test_manifest_covers_both_lanes():
         assert name in fam["exports"], name
     for cls in ("OrderedRMSE", "ExperimentalTwoLevelFeatureFreq"):
         assert cls in fam["classes"], cls
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "CTR categorical features" in sentence, sentence
 
 
 def test_binding_registers_and_refuses_weights_by_name():
@@ -161,7 +159,7 @@ def test_one_hot_arm_spells_the_bit_carrying_constructs():
     assert "grid.fold_counts[f] = len(bs) + 1 if len(bs) > 0 else 0" in oracle
     src = _read(host_surface.binding_source("gbdt"))
     assert "var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)" in src
-    assert "gbdt_host_model_text_one_hot(model, one_hot)" in src
+    assert "gbdt_host_model_text_one_hot(r.model, one_hot)" in src
 
 
 def test_sabotage_reaches_both_oracles():

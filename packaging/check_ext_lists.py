@@ -297,9 +297,9 @@ def main():
             print(f"              MISSING (ships without a gate): {', '.join(missing)}")
         if extra:
             print(f"              EXTRA (named but not a module): {', '.join(extra)}")
-    sys.path.insert(0, str(ROOT / "python"))
-    from mojolearn import _backend
-    host_bad = host_problems(_read_tree, set(_backend._HOST_MODULES.values()))
+    # _backend._HOST_MODULES delegates to this manifest. Keep the inventory
+    # check usable before building binaries, as the release checklist requires.
+    host_bad = host_problems(_read_tree, set(_manifest().routed_modules().values()))
     if host_bad:
         print("\n".join(host_bad))
         bad += len(host_bad)

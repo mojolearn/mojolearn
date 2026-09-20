@@ -88,7 +88,9 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
 fi
 
 echo "== dispatch release-provenance.yml publish=$PUBLISH =="
-gh workflow run release-provenance.yml --ref "$TAG" -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
+# This command stages fresh native artifacts, without light-smoke receipts.
+# Select the full path explicitly; the workflow defaults to the light patch path.
+gh workflow run release-provenance.yml --ref "$TAG" -f validation_profile=full -f publish="$PUBLISH" -f alpha_candidate_tag="$TAG" -f alpha_manifest_sha256="$MSHA"
 sleep 20
 RUN=$(gh run list --workflow release-provenance.yml --limit 1 --json databaseId --jq '.[0].databaseId')
 echo "run $RUN"
