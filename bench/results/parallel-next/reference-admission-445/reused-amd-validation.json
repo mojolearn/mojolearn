@@ -1,0 +1,89 @@
+{
+  "record": "bench/results/identity_break/2026-09-19_par-lane-amd-class/amd-amd-instinct-mi300x-gfx942.par-one.json",
+  "sha256": "5d19222705d052cb07f4825a679687160d1545e290db50de96cd016aee2209d3",
+  "source_commit": "331cdfaa32df4927dc3c5adc9a4c014820200289",
+  "commit_source": "commit.txt",
+  "admission": "accepted by current _verify_reference.admit",
+  "fixture_and_heldout_hashes": "all nine equal current harness",
+  "lanes_with_matching_revision": [
+    "par-boosting-clf",
+    "par-boosting-reg",
+    "par-cd-elasticnet",
+    "par-forest-et-clf",
+    "par-forest-pool",
+    "par-forest-reg",
+    "par-gram-ols",
+    "par-gram-pca",
+    "par-gram-tsvd",
+    "par-queries-nn",
+    "par-rbf-sampler",
+    "par-scaler-minmax",
+    "par-svm-svr"
+  ],
+  "par_arima_excluded": true,
+  "package": {
+    "version": "0.8.8",
+    "package_dir": "/root/mojolearn/python/mojolearn",
+    "numpy": "2.5.2",
+    "python": "3.14.7",
+    "par_devices": "0",
+    "bindings": [
+      {
+        "module": "_mojolearn",
+        "sha256": "da3ad63748b802ab59766095c2704ac7f7286a2df1736c86c1e9a1de3df78403",
+        "size": 2922728
+      },
+      {
+        "module": "_mojolearn_estimators",
+        "sha256": "c3d67a457faf386474ac6b0736496320a39d0eacb70a4ab6d07ca7251aa6bfe3",
+        "size": 3826408
+      },
+      {
+        "module": "_mojolearn_gbdt",
+        "sha256": "f953bb84bb523c7bbec9d631c4b038ae67fa73f369107db4e250117a65de65d8",
+        "size": 6179400
+      },
+      {
+        "module": "_mojolearn_kernel_methods",
+        "sha256": "6d3c535763e8428b5a337a92210dc82e056e7896bdce05a6312da67aeeba9974",
+        "size": 1845632
+      },
+      {
+        "module": "_mojolearn_linalg",
+        "sha256": "36c65f5f3c1b7043f3eba5b61a843e4492938dfa9fe3918df03dab44f8d21a9a",
+        "size": 1477568
+      },
+      {
+        "module": "_mojolearn_metrics",
+        "sha256": "09f1ddb50700832b48cd5cadeb24e0291a1489d34a019859b0f39b85b69ebee4",
+        "size": 4044232
+      },
+      {
+        "module": "_mojolearn_preprocessing",
+        "sha256": "a3bbebd1aecac96add90fda044da2e912a40dd7a9657bf529e251d5afefcd66f",
+        "size": 327072
+      },
+      {
+        "module": "_mojolearn_rf",
+        "sha256": "d8a0497c10c53e0600af277d92c37ef1d0a7acc83031990dc0c6ca09c2a6bed6",
+        "size": 1917792
+      },
+      {
+        "module": "_mojolearn_solver",
+        "sha256": "e1d08e2e6760bf80db6b7f4276091fe9795e3e962aa6a32868d7c2051b606d63",
+        "size": 1733984
+      },
+      {
+        "module": "_mojolearn_svm",
+        "sha256": "0989dc5464deb8ae3e00efaa132fabc854d4610de2436e377012b16b99514785",
+        "size": 2102488
+      },
+      {
+        "module": "_mojolearn_trees",
+        "sha256": "9d59a547f50caaddaf93a99e3dd3f1ca6f1a5db4f47f17d61590721f8abf42d1",
+        "size": 1506608
+      }
+    ]
+  },
+  "limitation": "Historical source0.8.8 device0 native fingerprints; admitted as compatible reference evidence, not execution or qualification of the next release wheel."
+}

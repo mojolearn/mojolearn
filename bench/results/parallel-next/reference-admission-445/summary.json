@@ -1,0 +1,67 @@
+{
+  "scope": "Next-release one-device cross-vendor reference admission; no physical multi-GPU qualification",
+  "base_commit": "44f05f572",
+  "table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5",
+  "selected_lanes": [
+    "par-arima",
+    "par-boosting-clf",
+    "par-boosting-reg",
+    "par-causal-lm",
+    "par-cd-elasticnet",
+    "par-cross-val",
+    "par-forecast-arima",
+    "par-forecast-holtwinters",
+    "par-forest-et-clf",
+    "par-forest-pool",
+    "par-forest-reg",
+    "par-gpc-fit",
+    "par-gpc-predict",
+    "par-gram-ols",
+    "par-gram-pca",
+    "par-gram-tsvd",
+    "par-graph-umap",
+    "par-holtwinters",
+    "par-ivf",
+    "par-queries-nn",
+    "par-queries-radius",
+    "par-rbf-sampler",
+    "par-scaler",
+    "par-scaler-minmax",
+    "par-svm-svr"
+  ],
+  "historical_baseline": {
+    "incomplete_parts": 810,
+    "missing_vendor_values": 1539
+  },
+  "before_current_contract": {
+    "incomplete_parts": 846,
+    "missing_vendor_values": 1647,
+    "by_vendor": {
+      "amd": 765,
+      "apple": 756,
+      "nvidia": 126
+    }
+  },
+  "after_current_contract": {
+    "incomplete_parts": 441,
+    "missing_vendor_values": 504,
+    "by_vendor": {
+      "amd": 378,
+      "apple": 0,
+      "nvidia": 126
+    }
+  },
+  "fresh_apple": {
+    "cells": 225,
+    "numeric_comparisons": 837,
+    "lanes": 25
+  },
+  "reused_amd": {
+    "source": "bench/results/identity_break/2026-09-19_par-lane-amd-class/amd-amd-instinct-mi300x-gfx942.par-one.json",
+    "newly_admitted_numeric_values": 387,
+    "newly_admitted_na_values": 18
+  },
+  "conflicts": 0,
+  "changed_unselected_cells": 0,
+  "published_089_artifacts_changed": false
+}
