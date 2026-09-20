@@ -40,6 +40,14 @@ jobs:
         run: |
           python3 tools/fixture_floors.py --self-test
           python3 tools/fixture_floors.py
+      - name: Every lane is in the shipped table or declared pending
+        # Three lanes added since v0.8.8 were in NEITHER on 2026-09-20. Each
+        # mechanism refused them for a correct reason and handed them to the
+        # other, so nothing failed and nothing counted. --self-test runs
+        # first, for the same reason it does above.
+        run: |
+          python3 tools/lane_accounting.py --self-test
+          python3 tools/lane_accounting.py --check
       - name: Every workflow parses, and only this one starts by itself
         run: |
           python3 -m venv /tmp/yaml-venv

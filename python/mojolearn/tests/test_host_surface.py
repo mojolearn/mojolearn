@@ -1016,3 +1016,63 @@ def test_the_fixture_floor_check_refuses_a_violating_shrink(capsys):
     has a floorable dimension) and requires each one to be REFUSED by name."""
     mod = _fixture_floors()
     assert mod.self_test(path=str(ROOT / "tools" / "identity_break.py")) is True, capsys.readouterr().out
+
+
+def _lane_accounting():
+    """`tools/lane_accounting.py` loaded by path, like the readers above, so
+    this test needs no built binding."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("lane_accounting", ROOT / "tools" / "lane_accounting.py")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
+    """NEITHER IS NOT A STATE A LANE MAY BE IN (lane/new-lane-reference-promotion,
+    2026-09-20).
+
+    Two mechanisms account for a lane. The SHIPPED TABLE gives it a number an
+    installed `verify --all` can check, and `PUBLIC_PENDING_LANES` says, with
+    the reason written down, that it has none. Every test above checks one or
+    the other. None of them asks whether a lane is in EITHER, and on
+    2026-09-20 three were in neither: `par-forecast-arima`,
+    `par-forecast-holtwinters` and `par-ivf`, all added since v0.8.8, all SEEN
+    on a vendor class in a committed column, none of it in the artifact the
+    wheel ships.
+
+    Neither list was wrong on its own terms, which is exactly how this
+    happens. `PUBLIC_PENDING_LANES` only ever admits lanes that could become
+    PUBLIC, and `PUBLIC_EXCLUDED_PREFIXES` excludes every `par-` driver from
+    the public set -- the test above even states that a prefix-excluded lane
+    "must not be required in PUBLIC_PENDING_LANES", and it is right. So one
+    mechanism refused the lanes for a good reason and handed them to the
+    other, which had not admitted a record for them yet. Each refusal was
+    correct and the lanes were still invisible to both.
+
+    This is the check that owns the gap between them. It is deliberately the
+    weakest possible statement -- accounted for AT ALL, not accounted for
+    WELL -- because the strong statements already have tests and a lane they
+    never see cannot fail one."""
+    mod = _lane_accounting()
+    bad = mod.check()
+    assert bad == [], "lanes that no mechanism accounts for:\n  " + "\n  ".join(bad)
+
+
+def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
+    """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the counting
+    nobody did. `--self-test` builds eight worlds from the real tree -- a
+    lane whose table cells vanish, a deleted pending declaration, a new lane
+    registered and nothing else, an UNCOVERED lane losing its cells (which
+    must not be told to use a list that cannot take it), a lane reader that
+    under-reads, a reader that disagrees with the harness's own LANES, a
+    pending reason that outlived its lane, and a blank reason -- and requires
+    each to be REFUSED BY NAME.
+
+    It also asserts the clean direction first: a lane with no table cells
+    that IS declared pending reads clean, which is the claim that makes
+    declaring a real alternative to promoting rather than a second-class
+    one."""
+    mod = _lane_accounting()
+    assert mod.self_test(verbose=True) is True, capsys.readouterr().out
