@@ -143,7 +143,7 @@ def test_oracle_imports_no_gpu_module():
         "gbdt.gpu_data.grid_policy", "gbdt.gpu_util.kernel.random_gen",
         "gbdt.grid_creator.binarization",
         "gbdt.options.data_processing_options",
-        "std.math", "std.memory", "std.sys.compile",
+        "max.algorithm", "std.math", "std.memory", "std.sys.compile",
     ], imports
     for rel in REUSED_HOST_MODULES:
         body = _read(rel)
@@ -168,6 +168,17 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "borders.append(ftz(half_below + half_above))" in text, "the phase B border midpoint flush"
     assert "var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)" in text, (
         "the grid must take the phase B border search, not the imported calc_quantization"
+    )
+    assert "sync_parallelize(_grid_column, n_features)" in text
+    assert "obp.unsafe_store(f * out_cap + b, q[0][b])" in text, (
+        "parallel feature searches must publish into disjoint flat slots"
+    )
+    assert "_ = sample_idx^" in text, "the sampled-index owner must outlive the worker join"
+    refusal = "There are nan factors and nan values for float features are"
+    precheck = text.index("if nan_mode == NAN_MODE_FORBIDDEN:", text.index("def gbdt_host_grid"))
+    launch = text.index("sync_parallelize(_grid_column, n_features)", precheck)
+    assert precheck < launch and refusal in text[precheck:launch], (
+        "Forbidden NaNs must retain their exact serial public refusal before workers launch"
     )
 
 
