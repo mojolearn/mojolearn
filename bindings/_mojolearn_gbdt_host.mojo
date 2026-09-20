@@ -153,8 +153,10 @@ from gbdt.host.gbdt_oracle_multiclass import (
 )
 from gbdt.host.gbdt_oracle_rmse import (
     GbdtRmseHostFit,
+    _rmse_starting_approx,
     gbdt_rmse_host_fit,
     gbdt_rmse_host_model_text,
+    gbdt_text_with_bias,
 )
 from gbdt.host.gbdt_oracle_depthwise import (
     GBDT_HOST_GROW_LOSSGUIDE,
@@ -317,6 +319,7 @@ def _resolve_pointwise_loss(
     iterations_override: Int,
     bootstrap_type: String,
     subsample: Float32,
+    bagging_temperature: Float32 = Float32(1.0),
 ) raises -> GbdtHostLoss:
     """What `train` resolves for these losses, restated because the option
     modules import a kernel module: `make_loss_description` and `validate`
@@ -406,6 +409,14 @@ def _resolve_pointwise_loss(
     elif bootstrap_type == String("Poisson"):
         boot_kind = GBDT_BOOT_POISSON
         boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Bayesian"):
+        if subsample >= Float32(0.0):
+            raise Error(
+                "Error: default bootstrap type (bayesian) doesn't support"
+                " 'subsample' option"
+            )
+        boot_kind = GBDT_BOOT_BAYESIAN
+        boot_param = bagging_temperature
     return GbdtHostLoss(
         objective, kernel_alpha, estimator_alpha, method, iterations,
         boot_kind, boot_param, Float32(0.5),
@@ -1133,8 +1144,6 @@ def gbdt_fit_binding(
             + " under loss='RMSE' (only 1, the searcher's own leaves of"
             " DEVIATION 64; the RMSE Newton walker is not restated)"
         )
-    if is_rmse and grow_code != 0:
-        _refuse("loss='RMSE' under grow_policy code " + String(grow_code) + " (Depthwise or Lossguide)")
     if use_pointwise and border_type != BORDER_TYPE_GREEDY_LOG_SUM:
         _refuse("feature_border_type under use_pointwise_searcher")
     if use_pointwise:
@@ -1149,13 +1158,27 @@ def gbdt_fit_binding(
     # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
     # the searcher knobs of that lane are restated as well
     var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
-    # the symmetric Logloss fit's stochastic arm, CatBoost's GPU defaults
-    # (Bayesian bootstrap, random_strength 1): gbdt_oracle.mojo::gbdt_host_fit,
-    # lane/catboost-parity (the gbdt-catboost-defaults lane); numeric
-    # columns only, as the one-hot arm is measured without it
+    # the symmetric Logloss and RMSE fits' stochastic arm, CatBoost's GPU
+    # defaults (Bayesian bootstrap, random_strength 1):
+    # gbdt_oracle.mojo::gbdt_host_fit and gbdt_oracle_rmse.mojo::
+    # gbdt_rmse_host_fit; numeric columns only, as the one-hot arm is
+    # measured without it
     var symmetric_stochastic = (
-        grow_code == 0 and loss == String("Logloss") and not is_pointwise
-        and not is_multi and not is_rmse and n_flags == 0
+        grow_code == 0 and (loss == String("Logloss") or is_rmse)
+        and not is_pointwise and not is_multi and n_flags == 0
+    )
+    # the non-symmetric driver's stochastic arm, Logloss and RMSE:
+    # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
+    # bootstrap kind and the strength as options under both policies
+    var ns_stochastic = grow_code != 0 and (loss == String("Logloss") or is_rmse)
+    # the pointwise losses' stochastic arm (gbdt_oracle_losses.mojo::
+    # gbdt_losses_host_fit); the querywise losses take no bootstrap and their
+    # noise is not restated
+    var pw_stochastic = (
+        is_pointwise and grow_code == 0
+        and pw_objective != GBDT_OBJ_QUERY_RMSE
+        and pw_objective != GBDT_OBJ_PAIR_LOGIT
+        and pw_objective != GBDT_OBJ_YETI_RANK
     )
     if grow_code == GBDT_HOST_GROW_LOSSGUIDE:
         if score_function != GBDT_HOST_SCORE_NEWTON_L2 and score_function != GBDT_HOST_SCORE_NEWTON_COSINE:
@@ -1184,8 +1207,11 @@ def gbdt_fit_binding(
     if bootstrap_type != String("") and bootstrap_type != String("No"):
         var pw_boot = is_pointwise and (
             bootstrap_type == String("Poisson") or bootstrap_type == String("Bernoulli")
+        ) or pw_stochastic and bootstrap_type == String("Bayesian")
+        var lg_boot = ns_stochastic and (
+            bootstrap_type == String("Bayesian")
+            or bootstrap_type == String("Bernoulli")
         )
-        var lg_boot = lossguide_knobs and bootstrap_type == String("Bernoulli")
         var sym_boot = symmetric_stochastic and (
             bootstrap_type == String("Bayesian")
             or bootstrap_type == String("Bernoulli")
@@ -1230,10 +1256,10 @@ def gbdt_fit_binding(
             " (overfitting_detector.cpp:122-124) and this refuses rather"
             " than silently never firing."
         )
-    if random_strength != Float32(0.0) and not lossguide_knobs and not symmetric_stochastic:
+    if random_strength != Float32(0.0) and not ns_stochastic and not symmetric_stochastic and not pw_stochastic:
         _refuse(
             "random_strength=" + String(random_strength)
-            + " outside Lossguide with Logloss and SymmetricTree with Logloss"
+            + " under loss='" + loss + "'"
         )
     # the quantile family's constant (`sample_quantile.mojo`), shared with
     # the device fit, lane/catboost-parity
@@ -1380,9 +1406,17 @@ def gbdt_fit_binding(
         ns_boot = GBDT_BOOT_BERNOULLI
         var subsample = Float32(Float64(py=params[19]))
         ns_boot_param = subsample if subsample >= Float32(0.0) else Float32(0.66)
+    elif bootstrap_type == String("Bayesian") and grow_code != 0:
+        if Float32(Float64(py=params[19])) >= Float32(0.0):
+            raise Error(
+                "Error: default bootstrap type (bayesian) doesn't support"
+                " 'subsample' option"
+            )
+        ns_boot = GBDT_BOOT_BAYESIAN
+        ns_boot_param = Float32(Float64(py=params[18]))
     var ns_loss = GbdtHostLoss(
-        GBDT_OBJ_LOGLOSS, border, Float32(0.5), ns_method, ns_iterations,
-        ns_boot, ns_boot_param, border,
+        GBDT_OBJ_RMSE if is_rmse else GBDT_OBJ_LOGLOSS, border, Float32(0.5),
+        ns_method, ns_iterations, ns_boot, ns_boot_param, border,
     )
     if is_pointwise:
         pw_loss = _resolve_pointwise_loss(
@@ -1390,7 +1424,7 @@ def gbdt_fit_binding(
             Float32(Float64(py=params[11])), Float32(Float64(py=params[12])),
             Float32(Float64(py=params[13])), Float32(Float64(py=params[14])),
             leaf_method, leaf_iterations, bootstrap_type,
-            Float32(Float64(py=params[19])),
+            Float32(Float64(py=params[19])), Float32(Float64(py=params[18])),
         )
     # the symmetric stochastic arm's bootstrap, `train`'s resolution
     # (`gbdt/train.mojo`), the Ordered arm's words above
@@ -1488,7 +1522,7 @@ def gbdt_fit_binding(
             var pw_model = gbdt_losses_host_fit(
                 x, y, n_rows, n_features, p, pw_loss, host_group_sizes,
                 host_pair_winners, host_pair_losers, host_pair_weights,
-                pw_start,
+                pw_start, random_strength,
             )
             losses = pw_model.losses.copy()
             best_iteration = pw_model.best_iteration
@@ -1498,7 +1532,8 @@ def gbdt_fit_binding(
             # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
             # 1597-1600`): unset is True for RMSE
             var fit = gbdt_rmse_host_fit(
-                x, y, n_rows, n_features, p, boost_from_average != 0
+                x, y, n_rows, n_features, p, boost_from_average != 0,
+                sym_boot_kind, sym_boot_param, random_strength,
             )
             text = gbdt_rmse_host_model_text(fit)
             losses = fit.model.losses.copy()
@@ -1544,8 +1579,17 @@ def gbdt_fit_binding(
                 score_function, child_hessian, min_split_gain,
                 random_strength, feature_fraction, ns_loss,
             )
-            var ns_model = gbdt_host_fit_non_symmetric(x, y, n_rows, n_features, tp)
-            text = gbdt_host_ns_model_text(ns_model)
+            # RMSE's starting constant, unset resolving True
+            # (`gbdt/train.mojo:1597-1600`), written as the model's bias
+            var ns_start = Float64(0.0)
+            if is_rmse and boost_from_average != 0:
+                ns_start = _rmse_starting_approx(y, n_rows)
+            var ns_model = gbdt_host_fit_non_symmetric(
+                x, y, n_rows, n_features, tp, ns_start
+            )
+            text = gbdt_text_with_bias(
+                gbdt_host_ns_model_text(ns_model), len(ns_model.losses), ns_start
+            )
             losses = ns_model.losses.copy()
 
     var learn = Python.list()

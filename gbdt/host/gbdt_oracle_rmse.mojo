@@ -81,8 +81,10 @@ predictions move. The symmetric arm's walker sabotage never runs here.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-rmse lane is the measurement.
 """
+from std.math import exp, log
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add
+from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
 from gbdt.gpu_data.grid_policy import (
@@ -98,6 +100,7 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostModel,
     GbdtHostParams,
     _binarize_columns,
+    _bootstrap_pass,
     _choose_scale_from_magnitudes,
     _cosine_gain,
     _deterministic_sum_lanes,
@@ -105,6 +108,8 @@ from gbdt.host.gbdt_oracle import (
     _halving_fold,
     _one_byte_block,
     _partition_stat,
+    _target_std_dev,
+    gbdt_bootstrap_seeds,
     gbdt_f64_token,
     gbdt_host_grid,
     gbdt_host_model_text,
@@ -249,10 +254,20 @@ def gbdt_rmse_host_fit(
     n_features: Int,
     params: GbdtHostParams,
     boost_from_average: Bool,
+    bootstrap_kind: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
+    random_strength: Float32 = Float32(0.0),
 ) raises -> GbdtRmseHostFit:
     """`train` then `fit_with_test` on RMSE with the searcher's leaves (see
     the module docstring for what that covers and what mirrors what).
-    `boost_from_average` is the RESOLVED flag (`train.mojo:1580-1605`)."""
+    `boost_from_average` is the RESOLVED flag (`train.mojo:1580-1605`).
+
+    `bootstrap_kind` (`GBDT_BOOT_*`, -1 none) and `random_strength` are the
+    stochastic arm of `gbdt_oracle.mojo::gbdt_host_fit_eval`, the same draws
+    in the same order. The searcher's leaves are read off the stats planes
+    (`need_estimation` is False, `doc_parallel_boosting.mojo:1484-1497`), so
+    under a bootstrap they are the BOOTSTRAPPED planes' leaves, as the
+    device's `apply_to_cursor` tail computes them."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -318,12 +333,43 @@ def gbdt_rmse_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
 
+    # the stochastic arm (`doc_parallel_boosting.mojo:1470-1523`)
+    var bootstrap_on = bootstrap_kind >= 0
+    var boot_seeds = List[UInt64]()
+    if bootstrap_on:
+        boot_seeds = gbdt_bootstrap_seeds(params.random_seed)
+    var noise_rand = TRandom(params.random_seed)
+
     for iteration in range(params.n_estimators):
         # ---- the gradients, the learn loss and the magnitudes ----
         _rmse_search_pass(y, cursor, n_rows, stats, fv_part, mag_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
+        # `calc_score_model_length_mult` and the per-tree seed, drawn every
+        # tree whether or not the noise is on
+        var noise_mult = Float64(0.0)
+        if random_strength != Float32(0.0):
+            var model_left = exp(
+                log(Float64(n_rows))
+                - Float64(iteration) * Float64(params.learning_rate)
+            )
+            noise_mult = model_left / (1.0 + model_left)
+        var tree_seed = noise_rand.next_uniform_l()
+        if bootstrap_on:
+            var bm = _bootstrap_pass(
+                bootstrap_kind, boot_seeds, stats, n_rows, bootstrap_param
+            )
+            mags[0] = bm[0]
+            mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        # `run_tree_layout`'s ScoreStdDev over the bootstrapped planes
+        var score_std_dev = Float32(0.0)
+        if random_strength != Float32(0.0):
+            score_std_dev = Float32(
+                Float64(Float32(noise_mult * Float64(random_strength)))
+                * _target_std_dev(stats, n_rows)
+            )
+        var level_rand = TRandom(tree_seed)
 
         # ---- `run_tree_layout_traced`, every level (TWIN of the loop in
         # `gbdt_oracle.mojo::gbdt_host_fit`) ----
@@ -343,6 +389,8 @@ def gbdt_rmse_host_fit(
         var winners_bf = List[UInt32]()
         var n_live = 1
         for depth in range(max_depth):
+            # `Random.NextUniformL()`, one draw per level before the launch
+            var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
             var compute = List[Int]()
@@ -416,7 +464,8 @@ def gbdt_rmse_host_fit(
             var best_bin = GBDT_SENTINEL
             for bf in range(hist_cells):
                 var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg
+                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
+                    score_std_dev, level_seed, bf_feature[bf],
                 )
                 if gain > best_gain:
                     best_gain = gain
@@ -580,15 +629,13 @@ def gbdt_rmse_host_fit(
     )
 
 
-def gbdt_rmse_host_model_text(fit: GbdtRmseHostFit) raises -> String:
-    """`model_text` (`model_text.mojo:374-670`): the symmetric oracle's text
-    with the `bias` record after the `losses` header record when the bias is
-    not zero (`:405-410`), the one record a seeded fit adds."""
-    var base = gbdt_host_model_text(fit.model)
-    # non-zero BY BITS, as `model_text` (a -0.0 bias is written)
-    if bitcast[DType.uint64](fit.bias) == UInt64(0):
-        return base^
-    var header = String("losses ") + String(len(fit.model.losses))
+def gbdt_text_with_bias(base: String, n_losses: Int, bias: Float64) raises -> String:
+    """`model_text`'s `bias` record (`model_text.mojo:405-410`), written
+    after the `losses` header record when the bias is not zero BY BITS (a
+    -0.0 bias is written). Shared by the symmetric and non-symmetric text."""
+    if bitcast[DType.uint64](bias) == UInt64(0):
+        return base.copy()
+    var header = String("losses ") + String(n_losses)
     var out = String("")
     var inserted = False
     var pieces = base.split("\n")
@@ -600,8 +647,15 @@ def gbdt_rmse_host_model_text(fit: GbdtRmseHostFit) raises -> String:
             break
         out += line + "\n"
         if not inserted and line == header:
-            out += String("bias ") + gbdt_f64_token(fit.bias) + "\n"
+            out += String("bias ") + gbdt_f64_token(bias) + "\n"
             inserted = True
     if not inserted:
         raise Error("gbdt host: the model text has no `losses` header record")
     return out^
+
+
+def gbdt_rmse_host_model_text(fit: GbdtRmseHostFit) raises -> String:
+    """The symmetric oracle's text with the `bias` record a seeded fit adds."""
+    return gbdt_text_with_bias(
+        gbdt_host_model_text(fit.model), len(fit.model.losses), fit.bias
+    )

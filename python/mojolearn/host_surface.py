@@ -621,6 +621,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
     "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
     "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
+    # lane/gbdt-cpu-default-parity (2026-09-20)
+    "gbdt-stochastic-arms": "gradient boosting with the bootstraps and the score noise on the RMSE loss and on Depthwise and Lossguide trees",
     # lane/close-no-cpu-path-gbdt (2026-09-20)
     "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
@@ -2315,6 +2317,10 @@ FAMILIES = (
             # cells read OWED against the three columns until the next
             # coordinated record takes it.
             "gbdt-symmetric-eval",
+            # lane/gbdt-cpu-default-parity (2026-09-20): the bootstraps and
+            # the score noise as options of gbdt_oracle_rmse.mojo and
+            # gbdt_oracle_depthwise.mojo, and RMSE on the non-symmetric driver
+            "gbdt-stochastic-arms",
         ),
         inference_lanes=(),
         forest_kinds=(),

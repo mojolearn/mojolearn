@@ -1,0 +1,43 @@
+# cpu_only=True
+class	loss	grow_policy	bootstrap_type	status	detail
+GradientBoostingRegressor	RMSE	SymmetricTree	default	OK	
+GradientBoostingRegressor	RMSE	SymmetricTree	Bayesian	OK	
+GradientBoostingRegressor	RMSE	SymmetricTree	Bernoulli	OK	
+GradientBoostingRegressor	RMSE	SymmetricTree	No	OK	
+GradientBoostingRegressor	RMSE	Depthwise	default	OK	
+GradientBoostingRegressor	RMSE	Depthwise	Bayesian	OK	
+GradientBoostingRegressor	RMSE	Depthwise	Bernoulli	OK	
+GradientBoostingRegressor	RMSE	Depthwise	No	OK	
+GradientBoostingRegressor	RMSE	Lossguide	default	OK	
+GradientBoostingRegressor	RMSE	Lossguide	Bayesian	OK	
+GradientBoostingRegressor	RMSE	Lossguide	Bernoulli	OK	
+GradientBoostingRegressor	RMSE	Lossguide	No	OK	
+GradientBoostingClassifier	Logloss	SymmetricTree	default	OK	
+GradientBoostingClassifier	Logloss	SymmetricTree	Bayesian	OK	
+GradientBoostingClassifier	Logloss	SymmetricTree	Bernoulli	OK	
+GradientBoostingClassifier	Logloss	SymmetricTree	No	OK	
+GradientBoostingClassifier	Logloss	Depthwise	default	OK	
+GradientBoostingClassifier	Logloss	Depthwise	Bayesian	OK	
+GradientBoostingClassifier	Logloss	Depthwise	Bernoulli	OK	
+GradientBoostingClassifier	Logloss	Depthwise	No	OK	
+GradientBoostingClassifier	Logloss	Lossguide	default	OK	
+GradientBoostingClassifier	Logloss	Lossguide	Bayesian	OK	
+GradientBoostingClassifier	Logloss	Lossguide	Bernoulli	OK	
+GradientBoostingClassifier	Logloss	Lossguide	No	OK	
+GradientBoosting	MultiClass	SymmetricTree	default	REFUSED	Exception: no CPU implementation of _mojolearn_gbdt.gbdt_fit for bootstrap_type='Bayesian' under loss='MultiClass'; the gbdt host binding trains the declared GBDT lanes only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise and mu
+GradientBoosting	MultiClassOneVsAll	SymmetricTree	default	REFUSED	Exception: no CPU implementation of _mojolearn_gbdt.gbdt_fit for bootstrap_type='Bayesian' under loss='MultiClassOneVsAll'; the gbdt host binding trains the declared GBDT lanes only (SymmetricTree with Cosine and the Logloss, RMSE, pointwis
+GradientBoosting	RMSE	SymmetricTree	default	OK	
+GradientBoosting	Logloss	SymmetricTree	default	OK	
+GradientBoosting	CrossEntropy	SymmetricTree	default	OK	
+GradientBoosting	Quantile	SymmetricTree	default	OK	
+GradientBoosting	MAE	SymmetricTree	default	OK	
+GradientBoosting	LogLinQuantile	SymmetricTree	default	OK	
+GradientBoosting	MAPE	SymmetricTree	default	OK	
+GradientBoosting	Poisson	SymmetricTree	default	OK	
+GradientBoosting	Lq	SymmetricTree	default	OK	
+GradientBoosting	Expectile	SymmetricTree	default	OK	
+GradientBoosting	Tweedie	SymmetricTree	default	OK	
+GradientBoosting	Huber	SymmetricTree	default	OK	
+GradientBoosting	QueryRMSE	SymmetricTree	default	REFUSED	NotImplementedError: mojolearn: CatBoost's GPU default for loss='QueryRMSE' is a Bayesian bootstrap over whole queries (bootstrap_options.h:18), which this implementation does not restate; the default is refused by name rather than replaced
+GradientBoosting	PairLogit	SymmetricTree	default	REFUSED	NotImplementedError: mojolearn: CatBoost's GPU default for loss='PairLogit' is a Bayesian bootstrap over whole queries (bootstrap_options.h:18), which this implementation does not restate; the default is refused by name rather than replaced
+GradientBoosting	YetiRank	SymmetricTree	default	REFUSED	NotImplementedError: mojolearn: CatBoost's GPU default for loss='YetiRank' is a Bayesian bootstrap over whole queries (bootstrap_options.h:18), which this implementation does not restate; the default is refused by name rather than replaced 
