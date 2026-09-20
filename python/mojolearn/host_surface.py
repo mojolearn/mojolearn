@@ -3142,7 +3142,8 @@ PUBLIC_PENDING_LANES = {
     # and batch. So its debt is unchanged and is a RECORD: one CPU column
     # over all nine fixtures at `--repeats 2` with the batch part run. It is
     # not a GPU debt and not a rental.
-    "language-model-config": "no reference",
+    # ADMITTED 2026-09-20: language-model-config carries cells in the shipped table now
+    # (bench/results/identity_break/2026-09-20_language-model-config/, nine fixtures, 4 s).
 
     # lane/linalg-public (2026-09-19). Adding these three to the linalg
     # family's `training_lanes` made them public reference lanes with no
