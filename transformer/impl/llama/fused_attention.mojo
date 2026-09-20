@@ -1300,6 +1300,17 @@ comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BA
 The backward consequently takes the existing exact recompute launcher. The
 default remains the tuned estash route on columns whose matrix selects it."""
 
+def attention_v1_backward_memory_profile() -> String:
+    return String("v1-recompute") if ATTN_V1_RECOMPUTE_BACKWARD else String("v1-estash-default")
+
+def attention_v1_retained_exp_cells(b:Int,l:Int,nh:Int,s:Int) -> Int:
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD or not ATTN_SHIPPED_BWD_ESTASH:
+        return 0
+    return b*l*nh*s
+
+def attention_v1_retained_exp_bytes(b:Int,l:Int,nh:Int,s:Int) -> Int:
+    return 4*attention_v1_retained_exp_cells(b,l,nh,s)
+
 comptime ATTN_DEFAULT_ESTASH_DRES = (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_DRES) != 0
 """Whether the column default carries DEVIATION 2651's `_dres` bit, so a
 shipped build instantiates that one estash backward and not both."""

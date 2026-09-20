@@ -140,6 +140,11 @@ export MOJOLEARN_SKIP_BUILD_GATE=1
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
+case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
+    estash) MEMORY_DEFINE= ;;
+    recompute) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1" ;;
+    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash or recompute' >&2; exit 2 ;;
+esac
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-transformer.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
@@ -151,7 +156,7 @@ out="$tmpdir/_mojolearn_transformer.so"
 # export function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
-    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
+    $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE $MEMORY_DEFINE \
     $LINK_FLAGS \
     -I . -I bindings \
     bindings/_mojolearn_transformer.mojo \

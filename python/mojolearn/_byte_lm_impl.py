@@ -363,7 +363,7 @@ def _sha(path):
     return digest.hexdigest()
 
 
-def _binding_metadata(binding):
+def _binding_metadata(binding, shape):
     root = Path(__file__).resolve().parents[2]
     names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
              'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
@@ -381,6 +381,10 @@ def _binding_metadata(binding):
         arm, default, trial, resolved = binding.byte_lm_attention_arm()
         attention = dict(arm=str(arm), default=str(default), trial_build=bool(int(trial)),
                          resolved_hd64=str(resolved))
+        if hasattr(binding, 'byte_lm_attention_memory_profile'):
+            memory_profile, retained_bytes = binding.byte_lm_attention_memory_profile(list(shape.native_shape))
+            attention['memory_profile'] = str(memory_profile)
+            attention['retained_exp_bytes_per_layer'] = int(retained_bytes)
     # DEVIATION 2648: the step glue arm the native step runs and whether the
     # binding is a glue trial build. None for a binding without the read-back.
     step_glue = None
@@ -835,7 +839,7 @@ class SmallByteLanguageModelTrainer:
         binding = _load(state_shape(self._state))
         if binding is not self._runtime_binding:
             self._suspend_session()
-            self._runtime = _binding_metadata(binding)
+            self._runtime = _binding_metadata(binding, state_shape(self._state))
             self._runtime_binding = binding
         return binding
 
