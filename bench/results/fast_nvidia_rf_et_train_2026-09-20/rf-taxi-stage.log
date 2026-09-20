@@ -1,0 +1,88 @@
+FSPEED-CTR-TRACE lane=rf MOJOLEARN_CTR_TRACE=1 (the fit prints its CTR config split and prep marker; DEVIATION 2634 is observable)
+FSPEED-NOTE lane=rf arms=ours metric=devices delta=1.000000 reason=devices=gpu (auto); on an NVIDIA box the vendors' CPU arms do not run, so a lane whose only opponent is a CPU library has NO legal opponent here and says so
+1855 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b88c0000000, nodemask=2)
+BENCH_BINDING arm=ours requested=fast resolved=fast compiled=fast vendor=cuda path=/root/mojolearn/python/mojolearn/_mojolearn_rf.so
+FSPEED-SCALE stage=before rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=before Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.
+FSPEED-HEADER family=forest lane=rf arm=ours mode=FAST device=NVIDIA_L40S rounds=1 size=shipped
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.063404128 s
+  bin_dataset	0.005746435 s
+  host_setup	0.001831894 s
+  row_sampling	0.012740863 s
+  host_stage_items	0.009458319 s
+  host_phase_upload	0.009140129 s
+  host_launch_setup	0.032483889 s
+  host_hist_zero	0.011973646 s
+  host_hist_launch	0.015910846 s
+  host_best_launch	0.100213688 s
+  host_splits_download	9.7251e-05 s
+  host_begin_tree	0.13591875 s
+  flush_splits	0.003138057 s
+  device_wait	0.8304303 s
+  host_read_splits	0.00898505 s
+  host_enq_partition	0.097827857 s
+  host_queue_push	0.045056943 s
+  host_enq_hist	0.043506942 s
+  host_enq_hist_retry	0.02324803 s
+  tree_copy	0.015421744 s
+  leaf_values	0.05057133 s
+  host_teardown	0.000368605 s
+  fit_total	1.351720689 s
+  other	-0.165754007 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	0.221884227 s
+  bind_pinned_alloc	0.732711586 s
+  bind_host_copy	0.005969267 s
+  bind_h2d	0.003908391 s
+  bind_release_buffers	1.09e-05 s
+  bind_release_ctx	3.1501e-05 s
+  bind_export_retain	0.000153822 s
+  binding_total	2.320884973 s
+FSPEED-WARMUP lane=rf arm=ours shape=taxi-1000000x16 ms=2359.230
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  quantiles	0.000379585 s
+  bin_dataset	0.000109322 s
+  host_setup	9.1221e-05 s
+  row_sampling	0.001508241 s
+  host_stage_items	0.009481 s
+  host_phase_upload	0.009134794 s
+  host_launch_setup	0.008487741 s
+  host_hist_zero	0.00755134 s
+  host_hist_launch	0.007627471 s
+  host_best_launch	0.0074501 s
+  host_splits_download	9.8741e-05 s
+  host_begin_tree	0.002024896 s
+  flush_splits	0.003055445 s
+  device_wait	0.833872282 s
+  host_read_splits	0.008592644 s
+  host_enq_partition	0.053409012 s
+  host_queue_push	0.034868538 s
+  host_enq_hist	0.042105861 s
+  host_enq_hist_retry	0.023344441 s
+  tree_copy	0.009141021 s
+  leaf_values	0.033994718 s
+  host_teardown	0.000367384 s
+  fit_total	1.060266314 s
+  other	-0.036429484 s
+== MOJOLEARN_STAGE_TIMES (wall; drains per stage;
+   NOT a certifiable timing -- see ensemble/instruments.mojo)
+  bind_ctx_create	4.7611e-05 s
+  bind_pinned_alloc	1.561e-05 s
+  bind_host_copy	0.003125551 s
+  bind_h2d	0.002559133 s
+  bind_release_buffers	1.0391e-05 s
+  bind_release_ctx	2.331e-05 s
+  bind_export_retain	6.0651e-05 s
+  binding_total	1.066252012 s
+FSPEED-ORDER lane=rf round=1 arms=ours
+FSPEED lane=rf arm=ours shape=taxi-1000000x16 round=1 ms=1104.320 hash=dadf56da766bfb3c
+FSPEED-ACC lane=rf arm=ours metric=logloss value=0.525910
+FSPEED-ACC lane=rf arm=ours metric=auc value=0.617154
+FSPEED-FIT lane=rf arm=ours library=mojolearn trees=100 nodes=2146016 leaves=1073058 depth_max=16 source=flat forest arrays
+FSPEED-FIT-VERDICT lane=rf arms=ours leaves=ours:1073058 spread=- verdict=UNKNOWN reason=fewer than two arms exposed a leaf count; an unread comparison is not a fair one
+FSPEED-SCALE stage=after rows=1000000 features=16 input_mib=61.0 large_candidate=true
+FSPEED-REMINDER stage=after Optimize for large datasets; confirm representative feature/class counts, tree depth and memory pressure before making speed/default decisions.

@@ -1,0 +1,22 @@
+CONFIG 0 sorted False items 4 copies 1
+HIST_COLUMNS 0 classes 2
+CANARY warmup 5.041655 nodes 119
+CANARY warmup 3.197922 nodes 119
+CANARY warmup 3.143391 nodes 119
+CANARY warmup 3.456985 nodes 119
+CANARY warmup 3.202801 nodes 119
+CANARY pre 3.158491 nodes 119
+SUM rf-clf@1000000x28 140004670886/499700
+ARM rf-clf@1000000x28 291.480669
+MODEL rf-clf@1000000x28 10220206359389784804
+ARM rf-clf@1000000x28 290.883502
+MODEL rf-clf@1000000x28 10220206359389784804
+ARM rf-clf@1000000x28 293.771819
+MODEL rf-clf@1000000x28 10220206359389784804
+ARM rf-clf@1000000x28 291.079004
+MODEL rf-clf@1000000x28 10220206359389784804
+ARM rf-clf@1000000x28 290.796801
+MODEL rf-clf@1000000x28 10220206359389784804
+CANARY post 3.496045 nodes 119
+769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525b40000000, nodemask=1)
+769 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x386180000000, nodemask=2)

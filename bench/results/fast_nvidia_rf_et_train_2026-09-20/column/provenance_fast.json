@@ -1,0 +1,18 @@
+{
+  "git_head": "bce8082a0855e9278de8c7ab723d5ef9d2eefd93",
+  "binary_sha256": {
+    "reference": "8233742256bdc4bcf18f7feb6dfb6e64dd6156841693f191bf665725e7c0b6f5",
+    "columns2": "cad0825883b3aa26bb6dad91e8ee09824b19138b510cd1f4af142dddf9e102d5",
+    "columns4": "a2599404a51d08002e7ef190362b93e396898bc32d82785c949464128fac5b40"
+  },
+  "command": {
+    "mode": "fast",
+    "rows": 1000000,
+    "cols": 28,
+    "build_only": false,
+    "skip_build": true,
+    "output_dir": "/root/evidence/column",
+    "binary_dir": "/root/evidence/column",
+    "prewarm": true
+  }
+}
