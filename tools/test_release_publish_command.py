@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublishCommandTests(unittest.TestCase):
-    def invoke(self, platform, receipt=True, failed=False):
+    def invoke(self, platform, receipt=True, failed=False, artifact_source=None):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
@@ -37,7 +37,7 @@ class PublishCommandTests(unittest.TestCase):
                 expanded={'scope': 'expanded'},
                 jobs=[dict(name=name, exit_code=0) for name in sorted(gate.JOBS)])))
             scripts = {
-                'git': '#!/bin/sh\nif [ "$1" = rev-parse ]; then echo ' + source + '; fi\n',
+                'git': '#!/bin/sh\nif [ "$1" = rev-parse ]; then echo ' + ('b' * 40 if artifact_source else source) + '; fi\n',
                 'gh': '#!/bin/sh\nprintf "%s\\n" "$*" >> "$COMMAND_RECORD"\n'
                       'if [ "$1 $2" = "release view" ]; then exit 1; fi\n'
                       'if [ "$1 $2" = "run list" ]; then echo 42; fi\n',
@@ -51,6 +51,8 @@ class PublishCommandTests(unittest.TestCase):
             env = {k: v for k, v in os.environ.items() if not k.startswith('MOJOLEARN_')}
             env.update(PATH=str(root / 'bin') + os.pathsep + env['PATH'],
                        MOJOLEARN_REPO=str(root), COMMAND_RECORD=str(root / 'commands'))
+            if artifact_source is not None:
+                env['MOJOLEARN_ARTIFACT_SOURCE_COMMIT'] = artifact_source
             command = ['bash', str(ROOT / 'tools/release_linux_publish.sh'), str(wheel),
                        'alpha-api-0.8.9-test', 'none', str(root / 'work')]
             if receipt:
@@ -58,7 +60,8 @@ class PublishCommandTests(unittest.TestCase):
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
             record = root / 'commands'
             calls = record.read_text() if record.exists() else ''
-            manifest = json.loads((root / 'work/artifact/alpha-manifest.json').read_text())
+            manifest_path = root / 'work/artifact/alpha-manifest.json'
+            manifest = json.loads(manifest_path.read_text()) if manifest_path.exists() else {}
             return result, calls, manifest
 
     def test_both_platforms_stage_receipt_and_select_their_light_batch(self):
@@ -76,6 +79,20 @@ class PublishCommandTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn('installed smoke did not pass', result.stderr)
         self.assertEqual(calls, '')
+
+    def test_updated_tools_keep_the_original_artifact_source(self):
+        result, calls, manifest = self.invoke('macos', artifact_source='a' * 40)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertEqual(manifest['light_smoke']['source_commit'], 'a' * 40)
+        self.assertIn('artifact_source_commit=' + 'a' * 40, calls)
+        self.assertIn('--target ' + 'b' * 40, calls)
+
+    def test_invalid_artifact_source_stops_before_external_calls(self):
+        result, calls, manifest = self.invoke('linux', artifact_source='not-a-sha')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('full lowercase commit SHA', result.stderr)
+        self.assertEqual(calls, '')
+        self.assertEqual(manifest, {})
 
     def test_existing_linux_call_keeps_full_profile(self):
         result, calls, manifest = self.invoke('linux', receipt=False)
