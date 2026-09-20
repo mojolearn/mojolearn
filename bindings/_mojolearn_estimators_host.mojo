@@ -70,8 +70,8 @@ from core.classical_host_predict import (
     CLASSICAL_HOST_SABOTAGE,
     host_ols_predict_into,
     host_pca_transform_into,
-    host_pca_whiten_inverse_transform,
-    host_pca_whiten_transform,
+    host_pca_whiten_inverse_transform_into,
+    host_pca_whiten_transform_into,
     host_qn_decision_into,
     host_qn_decision_multi_into,
     host_qn_sigmoid_into,
@@ -101,7 +101,7 @@ from decomposition.host.pca_full_oracle import (
 from gemm.host.identical_gemm import GEMM_ORACLE_HOST_SABOTAGE, OP_TN, gemm_oracle
 from glm.host.glm_oracle import host_ols_fit, host_ridge_fit
 from glm.host.qn_oracle import QN_ORACLE_HOST_SABOTAGE, host_qn_fit
-from core.host_predict_threads import host_list_ptr, host_predict_task_count
+from core.host_predict_threads import HostF32Ptr, host_list_ptr, host_predict_task_count
 from kde.host.kde_oracle import KDE_ORACLE_HOST_SABOTAGE, oracle_score_samples_into
 from kde.impl.neighbors.kernel_density import (
     kde_fit_validate,
@@ -753,6 +753,13 @@ def _whiten_finite(values: List[Float32], what: String) raises:
             raise Error("PCA whitening requires finite inputs and outputs")
 
 
+def _whiten_finite_ptr(values: HostF32Ptr, count: Int, what: String) raises:
+    """The same finite refusal over caller-owned memory, without a copy."""
+    for i in range(count):
+        if not isfinite(values.unsafe_load(i)):
+            raise Error("PCA whitening requires finite inputs and outputs")
+
+
 def _pca_whiten_apply(
     input_addr: PythonObject,
     mean_addr: PythonObject,
@@ -808,27 +815,28 @@ def _pca_whiten_apply(
             raise Error("PCA whitening output must not overlap any input")
     var op = f32_ptr(oa)
     with GILReleased(Python()):
-        var x = read_f32(xa, input_count)
         var mu = read_f32(ma, nf)
         var components = read_f32(ca, nc * nf)
         var singular = read_f32(sa, nc)
-        _whiten_finite(x, "input")
+        var xp = f32_ptr(xa)
+        _whiten_finite_ptr(xp, input_count, "input")
         _whiten_finite(mu, "mean")
         _whiten_finite(components, "components")
         _whiten_finite(singular, "singular")
         for i in range(nc):
             if singular[i] < Float32(0):
                 raise Error("PCA whitening singular values must be nonnegative")
-        var out = (
-            host_pca_whiten_inverse_transform(
-                x, components, singular, mu, nr, nf, nc, nfit
-            ) if inverse else host_pca_whiten_transform(
-                x, mu, components, singular, nr, nf, nc, nfit
+        if inverse:
+            host_pca_whiten_inverse_transform_into(
+                xp, components, singular, mu, op, nr, nf, nc, nfit,
+                host_predict_task_count(nr),
             )
-        )
-        _whiten_finite(out, "output")
-        for i in range(output_count):
-            op[i] = out[i]
+        else:
+            host_pca_whiten_transform_into(
+                xp, mu, components, singular, op, nr, nf, nc, nfit,
+                host_predict_task_count(nr),
+            )
+        _whiten_finite_ptr(op, output_count, "output")
     return PythonObject(0)
 
 

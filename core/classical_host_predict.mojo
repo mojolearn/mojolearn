@@ -595,6 +595,27 @@ def host_pca_whiten_transform(
     return host_pca_transform(x, mu, components_w, n_rows, n_cols, n_components)
 
 
+def host_pca_whiten_transform_into(
+    x: HostF32Ptr, mu: List[Float32], components: List[Float32],
+    singular: List[Float32], dst: HostF32Ptr, n_rows: Int, n_cols: Int,
+    n_components: Int, n_fit_rows: Int, tasks: Int,
+):
+    """The whitened forward transform over caller-owned buffers.
+
+    Only the small component matrix is materialized because whitening changes
+    it.  Input rows and output cells stay in caller memory, exactly as in the
+    non-whitened ``host_pca_transform_into`` path.
+    """
+    var components_w = host_whiten_components(
+        components, singular, n_components, n_cols, n_fit_rows, False
+    )
+    host_pca_transform_into(
+        x, host_list_ptr(mu), host_list_ptr(components_w), dst, n_rows, n_cols,
+        n_components, tasks,
+    )
+    _ = components_w^
+
+
 def host_pca_whiten_inverse_transform(
     scores: List[Float32], components: List[Float32], singular: List[Float32],
     mu: List[Float32], n_rows: Int, n_cols: Int, n_components: Int,
@@ -615,3 +636,40 @@ def host_pca_whiten_inverse_transform(
             components_t[f * n_components + c] = components_w[c * n_cols + f]
     var product = host_gemm_nt(scores, components_t, n_rows, n_cols, n_components)
     return host_center(product, mu, n_rows, n_cols, Float32(1.0))
+
+
+def host_pca_whiten_inverse_transform_into(
+    scores: HostF32Ptr, components: List[Float32], singular: List[Float32],
+    mu: List[Float32], dst: HostF32Ptr, n_rows: Int, n_cols: Int,
+    n_components: Int, n_fit_rows: Int, tasks: Int,
+):
+    """The whitened inverse transform over caller-owned buffers.
+
+    The transpose remains pure data movement.  The GEMM writes directly into
+    ``dst`` and the final mean shift visits those same cells in place; both
+    statements are identical to the List-returning reference above.
+    """
+    var components_w = host_whiten_components(
+        components, singular, n_components, n_cols, n_fit_rows, True
+    )
+    var components_t = List[Float32](
+        length=n_cols * n_components, fill=Float32(0.0)
+    )
+    for c in range(n_components):
+        for f in range(n_cols):
+            components_t[f * n_components + c] = components_w[c * n_cols + f]
+    host_gemm_nt_into(
+        scores, host_list_ptr(components_t), dst, n_rows, n_cols,
+        n_components, tasks,
+    )
+    for i in range(n_rows):
+        for f in range(n_cols):
+            var idx = i * n_cols + f
+            dst.unsafe_store(
+                idx,
+                host_center_cell(
+                    dst.unsafe_load(idx), mu[f], Float32(1.0)
+                ),
+            )
+    _ = components_t^
+    _ = components_w^
