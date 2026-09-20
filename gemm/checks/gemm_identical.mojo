@@ -148,6 +148,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
+    COLUMN_APPLE,
     PINNED_ACC_COLS_PER_TH,
     PINNED_ACC_ROWS_PER_TH,
     PINNED_KBLK,
@@ -2444,6 +2445,17 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
         return base
     if m < 32 or n < 32 or m * n < 128 * 1024:
         return base
+    # Large transformer-training batches on Apple are throughput-bound by
+    # the 128x128 tile's per-thread accumulator footprint.  On an M3 Max,
+    # 64x64 cut the median by 26.3%, 27.8%, and 29.7% at n=2304, 3072, and
+    # 1024 respectively (m=32768, k=768), with zero bit mismatches across
+    # all 209,715,200 output cells.  It preserves the identical leaf/fold
+    # DAG while exposing four times as many output tiles.  Keep this an
+    # IDENTICAL-only scheduling choice; FAST and DETERMINISTIC retain their
+    # existing dispatcher unchanged.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
+        if m >= 32768 and n >= 1024 and k == 768:
+            return PLAN_TUNED_64_4X4
     if m >= 2 * TUNED_BM_WIDE and n >= 2 * TUNED_BN_WIDE:
         return PLAN_TUNED_128_8X8
     if m >= TUNED_BM_WIDE and n >= TUNED_BN_WIDE:
