@@ -61,12 +61,10 @@ def bpe_append(
                 best_at = k
         if best_at < 0:
             break
-        # Merge: the boundary between the two pieces disappears.
-        var merged = List[Int]()
-        for k in range(len(bounds)):
-            if k != best_at + 1:
-                merged.append(bounds[k])
-        bounds = merged^
+        # Merge: the boundary between the two pieces disappears.  List.pop
+        # shifts the suffix in place; rebuilding the whole list here used to
+        # allocate and copy every surviving boundary after every merge.
+        _ = bounds.pop(best_at + 1)
 
     for k in range(len(bounds) - 1):
         var id = ranks.rank(data, bounds[k], bounds[k + 1] - bounds[k])
