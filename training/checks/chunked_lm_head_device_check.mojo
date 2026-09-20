@@ -2,6 +2,7 @@
 """Device/CPU bit gate for the opt-in chunked LM-head v2 forward loss."""
 from max.gpu.host import DeviceContext
 from training.chunked_lm_head_v2 import (
+    LM_HEAD_V2_CHUNK,
     chunked_lm_head_v2_train_host, chunked_lm_head_v2_gemm_forward_into,
     chunked_lm_head_v2_gemm_backward_into,
 )
@@ -60,8 +61,8 @@ def main() raises:
     var rd = ctx.enqueue_create_buffer[DType.float32](rows)
     var dhd = ctx.enqueue_create_buffer[DType.float32](rows * width)
     var dwd = ctx.enqueue_create_buffer[DType.float32](vocab * width)
-    var chunk = ctx.enqueue_create_buffer[DType.float32](rows * 256)
-    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(rows, 256, width))
+    var chunk = ctx.enqueue_create_buffer[DType.float32](rows * LM_HEAD_V2_CHUNK)
+    var ws = ctx.enqueue_create_buffer[DType.float32](identical_gemm_workspace_max_floats(rows, LM_HEAD_V2_CHUNK, width))
     ctx.enqueue_copy(dst_buf=hd, src_ptr=hp)
     ctx.enqueue_copy(dst_buf=wd, src_ptr=wp)
     ctx.enqueue_copy(dst_buf=td, src_ptr=tp)

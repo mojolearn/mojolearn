@@ -69,6 +69,7 @@ from training.checks.loss import (
 )
 from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
+    LM_HEAD_V2_CHUNK,
     chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
 )
 from training.checks.optimizer import (
@@ -399,7 +400,7 @@ def _byte_validate_allocations(config: ByteConfig) raises:
     if not config.chunked_lm_head_v2:
         widths.append(config.vocab_size)
     else:
-        _byte_check_gemm(m, min(config.vocab_size, 256), config.d_model)
+        _byte_check_gemm(m, min(config.vocab_size, LM_HEAD_V2_CHUNK), config.d_model)
     for width in widths:
         _byte_check_gemm(m, width, config.d_model)
     _byte_check_gemm(m, config.d_model, config.intermediate)
@@ -540,7 +541,7 @@ struct ByteBuffers(Movable):
         self.targets = _zeros_i32(ctx, M)
 
         self.x = _zeros(ctx, M * DM)
-        self.logits = _zeros(ctx, M * min(V, 256) if config.chunked_lm_head_v2 else M * V)
+        self.logits = _zeros(ctx, M * min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else M * V)
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
@@ -609,7 +610,7 @@ struct ByteBuffers(Movable):
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
         self.ce_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN))
 
-        self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(M, min(V, 256) if config.chunked_lm_head_v2 else V, DM))
+        self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(M, min(V, LM_HEAD_V2_CHUNK) if config.chunked_lm_head_v2 else V, DM))
         self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
 
         var scratch = emb_run_scratch_ints(V, M)

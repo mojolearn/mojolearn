@@ -13,7 +13,11 @@ from std.memory import bitcast
 from gemm.checks.gemm_identical import identical_gemm_into
 from gemm.checks.gemm_oracle import OP_NT
 
-comptime LM_HEAD_V2_CHUNK = 256
+# Four passes visit every vocabulary chunk (max, denominator/loss, dHidden,
+# dWeight). 1024 keeps the workspace bounded while quartering the launch
+# count versus the original 256-cell slice; chunk boundaries do not alter
+# any row/token fold order.
+comptime LM_HEAD_V2_CHUNK = 1024
 comptime LM_HEAD_V2_TPB = 256
 
 
