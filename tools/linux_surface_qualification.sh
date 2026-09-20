@@ -47,9 +47,8 @@ if [[ "$ACTION" = build || "$ACTION" = build-tier ]]; then
     mkdir -p "$DEST"
     DEST=$(cd "$DEST" && pwd)
     cd "$ROOT"
-    # One compiler at a time; legacy 45 or explicitly requested byte-LM 46 outputs.
+    # Preserve the admitted build concurrency and per-compiler affinity caps.
     [[ -z $(ls -A "$DEST") ]] || { echo 'Refusing reused build directory'; exit 2; }
-    export MOJOLEARN_BUILD_JOBS=1
     unset MOJOLEARN_BUILD_SCRIPTS MOJOLEARN_BUILD_TIERS
     if [[ "$ACTION" = build-tier ]]; then
         tier=${2:?tier}

@@ -1343,7 +1343,7 @@ def gbdt_fit_binding(
             + " is outside the " + String(perm_count)
             + " permutations this fit builds"
         )
-    if boost_from_average != -1 and boost_from_average != 0:
+    if boost_from_average != -1 and boost_from_average != 0 and boost_from_average != 1:
         raise Error(
             "boost_from_average must be -1 (their data-dependent"
             " default), 0 or 1; got " + String(boost_from_average)
