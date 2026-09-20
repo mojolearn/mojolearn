@@ -378,8 +378,8 @@ def forest_host_gbdt_predict_binding(
     Logloss sigmoid) is the Python layer's call to `forest_host_gbdt_sigmoid`,
     as it is `gbdt_sigmoid` for the GPU binding."""
     var entry = String("forest_host_gbdt_predict")
-    if len(addresses) != 15 or len(params) != 8:
-        raise Error(entry + ": expected 15 addresses and 8 params")
+    if len(addresses) != 15 or (len(params) != 8 and len(params) != 9):
+        raise Error(entry + ": expected 15 addresses and 8 or 9 params")
     var n_rows = _index(params[0])
     var n_cols = _index(params[1])
     var n_trees = _index(params[2])
@@ -388,6 +388,7 @@ def forest_host_gbdt_predict_binding(
     var n_splits = _index(params[5])
     var n_leaf_values = _index(params[6])
     var n_borders = _index(params[7])
+    var row_major = len(params) == 9 and _index(params[8]) != 0
     if n_rows <= 0 or n_rows > FOREST_HOST_MAX_ROWS:
         raise Error(entry + ": n_rows must be in [1, 2^30]")
     if n_cols <= 0 or n_cols > FOREST_HOST_MAX_ROWS:
@@ -429,7 +430,7 @@ def forest_host_gbdt_predict_binding(
             tree_offsets_p, split_feature_p, split_bin_p, split_take_bin_p,
             node_left_p, node_right_p, leaf_offsets_p, leaves_p,
             n_trees, dim, non_symmetric, n_splits, n_leaf_values, bias_value,
-            out,
+            out, row_major=row_major,
         )
         for i in range(n_rows * dim):
             op[i] = out[i]
