@@ -1110,3 +1110,43 @@ def rbf_sampler_transform_host(
     # DEVIATION 1946: the context dies LAST, after every value built on it.
     _ = ctx^
     return out^
+
+
+def rbf_sampler_transform_host_into[out_origin: MutOrigin, //](
+    model: RBFSamplerModel,
+    x: List[Float32],
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+    tpb: Int = KM_RF_TPB,
+    sabotage: Int = KMSAB_NONE,
+) raises:
+    """The public transform written directly to caller-owned host storage."""
+    km_validate_matrix(x, n_rows, model.n_features, "rbf_sampler transform X")
+    var d = model.n_features
+    var dd = model.n_components
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, x)
+    var dw = _upload(ctx, model.random_weights)
+    var db = _upload(ctx, model.random_offset)
+    var dp = ctx.enqueue_create_buffer[DType.float32](n_rows * dd)
+    var gws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_rows, dd, d)
+    )
+    ctx.synchronize()
+    identical_gemm_into(ctx, dp, dx, dw, gws, n_rows, dd, d, OP_NN)
+    ctx.synchronize()
+    trace.record_device(ctx, "rf.projection", dp, n_rows * dd)
+    km_feature_map_epilogue(
+        ctx, dp, db, n_rows, dd, model.scale, tpb, sabotage
+    )
+    ctx.synchronize()
+    trace.record_device(ctx, "rf.feature_map", dp, n_rows * dd)
+    ctx.enqueue_copy(dst_ptr=output, src_buf=dp)
+    ctx.synchronize()
+    _ = dx^
+    _ = dw^
+    _ = db^
+    _ = dp^
+    _ = gws^
+    _ = ctx^

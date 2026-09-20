@@ -49,7 +49,7 @@ from kernel_methods.estimator import (
     nystroem_fit_host,
     nystroem_transform_host,
     rbf_sampler_fit_host,
-    rbf_sampler_transform_host,
+    rbf_sampler_transform_host_into,
 )
 from svm.impl.svm_parameter import KernelParams
 
@@ -507,8 +507,7 @@ def _rbf_sampler_transform_run(
     op: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
     var trace = IdentityTrace()
-    var out = rbf_sampler_transform_host(model, x, m, trace)
-    copy_f32(out.unsafe_ptr(), op, m * model.n_components)
+    rbf_sampler_transform_host_into(model, x, m, op, trace)
 
 
 def rbf_sampler_transform_binding(
