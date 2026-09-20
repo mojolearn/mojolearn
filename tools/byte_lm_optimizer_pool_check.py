@@ -67,7 +67,10 @@ def main():
             assert sum(x['moment_bytes'] + x['rollback_bytes'] for x in replicas.optimizer_ownership()) == 40*shape.n_total
             assert sum(x['reduction_bytes'] for x in ownership) == 8*shape.n_total
             replicated = replicas.optimizer_ownership()
-            assert replicated[0]['reduction_bytes'] == 8*shape.n_total
+            # The replicated path now aliases its incoming staging buffer to
+            # rank zero's dead gradient after that rank enters the fold, so
+            # only the distinct total accumulator remains allocated.
+            assert replicated[0]['reduction_bytes'] == 4*shape.n_total
             assert replicated[1]['reduction_bytes'] == 0
             same(initial, pool.state_dict(rank=1))
             for step in range(3):
