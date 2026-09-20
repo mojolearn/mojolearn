@@ -1586,7 +1586,10 @@ def _(ml, X, yc, yr, Xh=None):
     for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
                      ("Poisson", {}), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
                      ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
-        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
+        # Poisson's exponent overflows on `wide`'s targets on every device
+        # (no split has a finite score), so it takes a count target of 1 or 2
+        y = yc.astype(np.float32) + np.float32(1.0) if loss == "Poisson" else ypos
+        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, y)
         parts["sym-%s" % loss] = _h(g.predict(X))
     ce = ml.GradientBoosting(n_estimators=8, loss="CrossEntropy").fit(X, yc.astype(np.float32))
     parts["sym-CrossEntropy"] = _h(ce.predict(X))
