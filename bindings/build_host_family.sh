@@ -18,7 +18,7 @@
 #   MOJOLEARN_NUMERIC_MODE          identical only (the default); anything else is refused
 #   MOJOLEARN_TARGET_COLUMN         cpu only (the default); anything else is refused
 #   MOJOLEARN_GPU_ARCHS             refused on Linux: a CPU build takes no GPU arch
-#   MOJOLEARN_BUILD_JOBS            compile jobs, default 2
+#   MOJOLEARN_COMPILE_JOBS          compile jobs, default 2
 #   MOJOLEARN_BUILD_EXTRA_DEFINES   trial defines, e.g. "-D MOJOLEARN_HOST_SABOTAGE=1"
 #                                   (the gate's negative control for the routed
 #                                   set; the byte LM's is
@@ -97,7 +97,7 @@ if [ "$family" = tokenizer ]; then
 fi
 host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j "${MOJOLEARN_BUILD_JOBS:-2}" --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
     "$source_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
 ln "$host_tmpdir/_mojolearn_${family}_host.so" "$host_destination"
