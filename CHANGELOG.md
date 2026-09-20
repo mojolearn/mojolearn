@@ -10,9 +10,14 @@ contain the detailed investigation record.
 - Parallel ARIMA preserves the caller's trend configuration and saved-model metadata.
 - Cross-validation supports explicit Metal `devices=(0,)`, with a checked child
   process. Multiple Metal devices remain unsupported.
+- Parallel causal language models support assigning every layer to Metal device 0.
 - `verify --par all` runs all fixtures by default. Every lane/fixture must carry
   its own placement witness; another cell's successful placement cannot certify it.
   Explicit `--fixtures` selections still override the default.
+- Require actual model bytes for parallel estimators with supported serialization,
+  and reject full-part records with missing fields. Add a native-free coverage
+  audit that identifies missing vendor values, stale revisions and CPU/GPU disagreement.
+- Simplify future Zenodo descriptions and remove incorrect derivation links.
 
 ## 0.8.9 (published 2026-09-20)
 

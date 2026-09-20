@@ -1,0 +1,778 @@
+{
+  "collection_plan": {
+    "par-arima": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ]
+    },
+    "par-forest-pool": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "infer",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ]
+    },
+    "par-holtwinters": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ]
+    },
+    "par-queries-radius": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ]
+    },
+    "par-rbf-sampler": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ]
+    },
+    "par-resample": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "batch",
+          "reason": "missing_vendor"
+        },
+        {
+          "kind": "numeric",
+          "part": "train",
+          "reason": "missing_vendor"
+        }
+      ]
+    },
+    "par-scaler": {
+      "base": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "denormal_ftz": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "dupes": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "hashed": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "negative": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "odd": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "ties": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ],
+      "wide": [
+        {
+          "kind": "numeric",
+          "part": "model",
+          "reason": "stale_na"
+        }
+      ]
+    }
+  },
+  "reference_table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5",
+  "required_values": 126,
+  "scope": "one-device cross-vendor reference coverage; not physical multi-GPU qualification",
+  "vendor": "nvidia"
+}

@@ -1,0 +1,957 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4-causal-bcdf",
+ "commit": "bcdfc9ab77eff46f937f656f936c53f96369bad0",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "par-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5973844169930089,
+    "stages": {
+     "repeat=1/train": 0.2790696250158362,
+     "repeat=1/infer-save-reload": 1.8624996300786734e-05,
+     "repeat=1/batch": 0.3176332089933567,
+     "repeat=1/batchgrad": 0.0002671249967534095,
+     "repeat=1/batchscale": 3.1957984901964664e-05,
+     "repeat=1/ragged": 2.995799877680838e-05,
+     "repeat=1/stepfull": 2.7582980692386627e-05
+    }
+   }
+  },
+  "par-causal-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6caf9f0f7ae562d"
+   ],
+   "parts": [
+    {
+     "logits": "31c30f8c0ea0ad9c",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "73aef1570825d468"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6064737089909613,
+    "stages": {
+     "repeat=1/train": 0.23565116699319333,
+     "repeat=1/infer-save-reload": 1.7707992810755968e-05,
+     "repeat=1/batch": 0.36997950001386926,
+     "repeat=1/batchgrad": 0.00034145801328122616,
+     "repeat=1/batchscale": 3.683401155285537e-05,
+     "repeat=1/ragged": 3.2625015592202544e-05,
+     "repeat=1/stepfull": 3.0041992431506515e-05
+    }
+   }
+  },
+  "par-causal-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37c495fc132ea9db"
+   ],
+   "parts": [
+    {
+     "logits": "a0641131ca09b686",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b2dfd7cd9cf444df"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6164897909911815,
+    "stages": {
+     "repeat=1/train": 0.27422012499300763,
+     "repeat=1/infer-save-reload": 1.575000351294875e-05,
+     "repeat=1/batch": 0.34174508301657625,
+     "repeat=1/batchgrad": 0.0001452089927624911,
+     "repeat=1/batchscale": 3.200001083314419e-05,
+     "repeat=1/ragged": 2.8875016141682863e-05,
+     "repeat=1/stepfull": 2.6458001229912043e-05
+    }
+   }
+  },
+  "par-causal-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f711a5aa202b3e41"
+   ],
+   "parts": [
+    {
+     "logits": "5deeb2b77b89c972",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "97051f4a7819532e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.7377500000002328,
+    "stages": {
+     "repeat=1/train": 0.32902091700816527,
+     "repeat=1/infer-save-reload": 1.662501017563045e-05,
+     "repeat=1/batch": 0.4081331249908544,
+     "repeat=1/batchgrad": 0.00019729201449081302,
+     "repeat=1/batchscale": 3.5834003938362e-05,
+     "repeat=1/ragged": 3.245798870921135e-05,
+     "repeat=1/stepfull": 2.96669895760715e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f1c5288260c678cd"
+   ],
+   "parts": [
+    {
+     "logits": "3333a75866b17725",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0c52595dfa1179f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.7306442089902703,
+    "stages": {
+     "repeat=1/train": 0.3217783749860246,
+     "repeat=1/infer-save-reload": 1.937500201165676e-05,
+     "repeat=1/batch": 0.40807545799179934,
+     "repeat=1/batchgrad": 0.00023583299480378628,
+     "repeat=1/batchscale": 8.249998791143298e-05,
+     "repeat=1/ragged": 3.491700044833124e-05,
+     "repeat=1/stepfull": 3.170801210217178e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dba9613ece4fdadb"
+   ],
+   "parts": [
+    {
+     "logits": "8a41f078bdfa8cd9",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ecda286f05a73eaa"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6568937079864554,
+    "stages": {
+     "repeat=1/train": 0.3033617500041146,
+     "repeat=1/infer-save-reload": 1.604200224392116e-05,
+     "repeat=1/batch": 0.35292174998903647,
+     "repeat=1/batchgrad": 0.00016833297559060156,
+     "repeat=1/batchscale": 2.962502185255289e-05,
+     "repeat=1/ragged": 2.7082976885139942e-05,
+     "repeat=1/stepfull": 2.4707987904548645e-05
+    }
+   }
+  },
+  "par-causal-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6031375000020489,
+    "stages": {
+     "repeat=1/train": 0.231782499991823,
+     "repeat=1/infer-save-reload": 1.704200985841453e-05,
+     "repeat=1/batch": 0.37078674999065697,
+     "repeat=1/batchgrad": 0.0001729580108076334,
+     "repeat=1/batchscale": 3.058297443203628e-05,
+     "repeat=1/ragged": 2.824998227879405e-05,
+     "repeat=1/stepfull": 2.4333014152944088e-05
+    }
+   }
+  },
+  "par-causal-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.0306939579895698,
+    "stages": {
+     "repeat=1/train": 0.546229499974288,
+     "repeat=1/infer-save-reload": 1.691700890660286e-05,
+     "repeat=1/batch": 0.48392012499971315,
+     "repeat=1/batchgrad": 0.00017579199629835784,
+     "repeat=1/batchscale": 2.404101542197168e-05,
+     "repeat=1/ragged": 2.0167004549875855e-05,
+     "repeat=1/stepfull": 1.783299376256764e-05
+    }
+   }
+  },
+  "par-causal-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86e92270cebe985b"
+   ],
+   "parts": [
+    {
+     "logits": "3a2a57ac304f0b7b",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "921a3eb50c0e6439"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.0380124159855768,
+    "stages": {
+     "repeat=1/train": 0.44750720899901353,
+     "repeat=1/infer-save-reload": 1.7000013031065464e-05,
+     "repeat=1/batch": 0.5894757919886615,
+     "repeat=1/batchgrad": 0.0002902910055126995,
+     "repeat=1/batchscale": 8.720901678316295e-05,
+     "repeat=1/ragged": 9.350001346319914e-05,
+     "repeat=1/stepfull": 8.320799679495394e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-causal-lm"
+ ],
+ "degenerate_column": "apple-metal",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.9",
+  "package_dir": "/private/tmp/mojolearn-par-causal-apple-bcdf/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "7f7c2b678dd82d493ebcfeaaced36706a20017a91ec1e79dfc6ad4baf8c441ff",
+    "size": 3093520
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "4a1b0f3ac791c0baed86f979004a5e22f480bb4a8b9e7a91c49bf52f6839fadc",
+    "size": 725024
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "6f63f3bc633b0f0e44e4de4122228a165d0956eb1b2577c09bfec9df8e1c9eab",
+    "size": 4945472
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "9963aa694263d870154afd71224244d362c7cdbdc1e144429b74cd190abfbdf6",
+    "size": 372432
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "64a28a839496d22572421b985a0db3a937bf44c294bc088fa043cadfaa9adbf9",
+    "size": 4198864
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "a6c18a94764b6551716fb395a3641d740a49a71f618de13f492cb0424c7f033e",
+    "size": 7358240
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "7e9bb60054acdac647dccfa3474f0ece11878d01c9171dd362e9ba48b5fb2143",
+    "size": 2471248
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "30b3eabe766320f5e8630a05e33467ad7f1663b3d37a4eadc407042aeeb5e2fc",
+    "size": 2059872
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "b3b38f39a5ca0b539cb58219e29d57888259d194ac6122207782698a10d3070a",
+    "size": 1256624
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "8ce77fd791036b78e33c0022bac53af197a84fcd9ecc5e86efac687e437ae117",
+    "size": 2399920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "bd83ad2d95d0a97fbafc46f031128a7d8920714b59fdd20873da07823c126dbe",
+    "size": 2064624
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "c0adb344eade9b6bf3ddd5d71aee6dea4bbf110b407f455d53a63d2916989b95",
+    "size": 3627712
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "29637c426b85cb60c3a19bc44cb1a6d3b8f7e79f006dd80f443525d8daefcdef",
+    "size": 4818288
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "db4ce88f67da9f8d5ab1255a4a01979ab9e12405a10254ec8e22f19fde81607f",
+    "size": 3145584
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "02eed8e797fc3e767fe8130b2dc7472ec643c625eebd00f6119c364c4e35b83e",
+    "size": 379616
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "a8cc99b3b131705cee2c6f3f2092221a8d824fe816ff6f287a3b705b0a1c7a3f",
+    "size": 1220720
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "4b535c199793ada49e7312427256aa70ba80a6de23119213485ffef392969a71",
+    "size": 1891408
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "23fc54c37b8f608c763caf34f841685106a2ab3a0715433891e87864db4d0d68",
+    "size": 2289584
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "186f6d3ff43eaa7926c732dcfa926831f6b55abba110adf353ff886388178a7c",
+    "size": 2644976
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "f0b69da294ba4c56681ce55f837d0c3d308650580e5d98a611c80d09e89730aa",
+    "size": 2461504
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "0adb3d194085cb79d41e5a2adfc295ec3559052c4f45228e56b5dd9b2c2397ef",
+    "size": 3903360
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "96feeadf86506c451d0997fd5503aa0728083eb3639f5064787fcfce4abef22c",
+    "size": 1564096
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "eaf4b40ce225fbf3eefc21fb131880b594433878da02ae1b4a32f0373e88eefd",
+    "size": 634096
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "0a4d2d492265ed2174c62be01c0afbc42441ef7bddd9d017d573c0ecc15ae439",
+  "options": {
+   "require_backend": "metal",
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-causal-lm",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "apple-m4-causal-bcdf",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "7a49d53a8a191eb547b60ed4de384fb48ff98d8f8066f5ef154b9ddaec7de5e3",
+  "provenance": {
+   "commit": "bcdfc9ab77eff46f937f656f936c53f96369bad0",
+   "mode": "identical",
+   "vendor": "apple-m4-causal-bcdf",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
