@@ -8,6 +8,19 @@ from mojolearn import _backend, _serialize
 
 CLASSES = [RandomForestClassifier, RandomForestRegressor, ExtraTreesClassifier, ExtraTreesRegressor]
 
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_auto_engine_is_fast_only(cls):
+    fast = cls(numeric_mode='fast')
+    assert fast.inference_engine == 'auto'
+    assert fast._prediction_engine() == 'parallel_groves'
+    for mode in ('deterministic', 'identical'):
+        model = cls(numeric_mode=mode)
+        assert model.inference_engine == 'auto'
+        assert model._prediction_engine() == 'sequential'
+    assert cls(numeric_mode='fast', inference_engine='sequential')._prediction_engine() == 'sequential'
+
+
 @pytest.mark.parametrize('cls', CLASSES)
 def test_engine_routes_and_revalidates(cls, monkeypatch):
     old, new = object(), object()
