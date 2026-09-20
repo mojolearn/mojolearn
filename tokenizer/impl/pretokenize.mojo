@@ -56,6 +56,24 @@ comptime CLASS_SPACE = 3
 
 
 def _in_class(classes: UnicodeClasses, cp: Int, which: Int) -> Bool:
+    # ASCII dominates ordinary training corpora.  Its membership in the
+    # three Unicode properties is fixed, so do not pay three range-table
+    # binary searches per punctuation byte (letter, number, then the three
+    # tests in `is_other`).  This is exactly the pinned Unicode table's
+    # answer, only stated directly for U+0000..U+007F.
+    if cp >= 0 and cp < 0x80:
+        var letter = (cp >= 0x41 and cp <= 0x5A) or (
+            cp >= 0x61 and cp <= 0x7A
+        )
+        var number = cp >= 0x30 and cp <= 0x39
+        var space = cp == 0x20 or (cp >= 0x09 and cp <= 0x0D)
+        if which == CLASS_LETTER:
+            return letter
+        if which == CLASS_NUMBER:
+            return number
+        if which == CLASS_SPACE:
+            return space
+        return not (letter or number or space)
     if which == CLASS_LETTER:
         return classes.is_letter(cp)
     if which == CLASS_NUMBER:
@@ -76,6 +94,14 @@ def _run_end(
     var j = start
     var n = len(data)
     while j < n:
+        # One-byte ASCII needs neither UTF-8 decoding nor a tuple result.
+        # `_in_class` has the exact constant-time ASCII property map.
+        var byte = Int(data[j])
+        if byte < 0x80:
+            if not _in_class(classes, byte, which):
+                break
+            j += 1
+            continue
         var step = decode_codepoint(data, j)
         var cp = step[0]
         if cp < 0 or not _in_class(classes, cp, which):
@@ -127,16 +153,23 @@ def pretoken_end(
         return apos
 
     # 2, 3, 4.   ?\p{L}++ |  ?\p{N}++ |  ?[^\s\p{L}\p{N}]++
-    for which in range(3):
-        var cls = CLASS_LETTER if which == 0 else (
-            CLASS_NUMBER if which == 1 else CLASS_OTHER
-        )
-        var start = i
-        if Int(data[i]) == 0x20 and i + 1 < n:
-            start = i + 1
-        var end = _run_end(data, start, classes, cls)
-        if end > start:
-            return end
+    # These classes are mutually exclusive.  Classify the first codepoint
+    # once and enter only the run that can match; trying all three in source
+    # order produced the same answer but repeated Unicode-table searches.
+    var start = i
+    if Int(data[i]) == 0x20 and i + 1 < n:
+        start = i + 1
+    var first = decode_codepoint(data, start)[0]
+    if first >= 0:
+        var cls = CLASS_OTHER
+        if _in_class(classes, first, CLASS_LETTER):
+            cls = CLASS_LETTER
+        elif _in_class(classes, first, CLASS_NUMBER):
+            cls = CLASS_NUMBER
+        elif _in_class(classes, first, CLASS_SPACE):
+            cls = CLASS_SPACE
+        if cls != CLASS_SPACE:
+            return _run_end(data, start, classes, cls)
 
     # 5.  \s++$   -- possessive: the maximal run must reach end of text
     var ws_end = _run_end(data, i, classes, CLASS_SPACE)
