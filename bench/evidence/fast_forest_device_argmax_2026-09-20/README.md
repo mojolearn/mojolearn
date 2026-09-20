@@ -80,7 +80,7 @@ model-quality claim.
 | ET | tie (47) | 8/16/4 | 500k | yes | .118616 | .039126 | .028201 | 1.387x |
 
 All 18 repeated `predict_proba` byte hashes were stable. There were no timing
-regressions; four binary/small-class cases fall below 10%, but the operation
+regressions. Four binary/small-class cases have smaller gains, but the operation
 still removes the materialized host vote matrix and remains faster. Dispatch
 uses only the compiled numeric mode, configured inference engine, binding
 availability, and shape metadata; it never inspects feature or label values.

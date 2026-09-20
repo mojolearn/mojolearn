@@ -62,6 +62,9 @@ pressure recorded. Size is not a universal row cutoff: feature count, classes,
 bins, tree depth and device memory also determine the workload. Small synthetic
 fixtures remain useful for correctness, smoke tests and isolated diagnostics;
 they do not establish a large-data speed gain or justify a speed default.
+There is no fixed minimum percentage speedup: small reproducible improvements
+may ship when they generalize and justify their complexity. See the
+[performance acceptance policy](docs/PERFORMANCE_ACCEPTANCE.md).
 See the [tree roadmap](docs/lanes/DECISION_TREE_ROADMAP.md) and
 [GPU measurement plan](docs/lanes/TREE_GPU_MEASUREMENT_NEXT.md).
 

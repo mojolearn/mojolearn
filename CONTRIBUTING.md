@@ -86,6 +86,13 @@ The pull-request template asks for:
 - hardware columns actually exercised;
 - performance evidence when a performance claim changes.
 
+Performance work follows the
+[performance acceptance policy](docs/PERFORMANCE_ACCEPTANCE.md). There is no
+fixed 10% or other percentage threshold. Evidence must establish the claimed
+scope, numerical or quality contract, generality, and absence of meaningful
+regressions;
+review weighs measured benefit against complexity and risk.
+
 Maintainers run cross-vendor certification after local review. A contributor
 is not expected to own or rent a second vendor, let alone a third.
 
