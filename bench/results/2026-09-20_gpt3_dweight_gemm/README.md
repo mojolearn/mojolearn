@@ -37,5 +37,12 @@ returned HTTP 204 and immediate verification GET returned HTTP 404.
 
 The read-only allocator reported no free AMD route: Hot Aisle had no matching
 stock, DigitalOcean already had one live GPU droplet, and RunPod reported no
-MI300X stock. No AMD resource was touched or created. Production source stays
-uncommitted until the requested AMD isolation/dispatch measurement is made.
+MI300X stock. No AMD resource was touched or created. The production guard is
+compile-time restricted to `NUMERIC_IDENTICAL` plus `COLUMN_APPLE`; AMD and
+NVIDIA therefore retain their existing routing byte-for-byte. The dispatch
+gate asserts plan 10 for the new shapes on every non-Apple column and in every
+non-IDENTICAL mode.
+
+Local gates passed on Apple: IDENTICAL and default production dispatch,
+`check-gemm-identity`, `check-transformer-backward` (17 fixtures and 37 exact
+stages), and `check-train-step`.
