@@ -190,6 +190,10 @@ comptime GBDT_BOOT_SEEDS = 65536
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime GBDT_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+comptime GBDT_HOST_BINARIZE_LINEAR = is_defined[
+    "MOJOLEARN_GBDT_HOST_BINARIZE_LINEAR"
+]()
+"""A/B receipt only: restore the pre-optimization linear border scan."""
 
 #: `MSE_BLOCK_SIZE` (`pointwise_targets.mojo:143`), the target kernel's block.
 comptime GBDT_MSE_BLOCK = 256
@@ -770,10 +774,28 @@ def _binarize_columns(
                         + " but there were no NaNs in the learn dataset"
                     )
                 v = sub
+            # `grid.borders[f]` is ascending.  The device kernel's answer is
+            # the number of borders STRICTLY below `v`, i.e. lower_bound(v).
+            # A linear walk used to repeat as many as 128 comparisons for
+            # every row of every host fit; binary search returns the same
+            # insertion point in ceil(log2(nb)) comparisons.  Keep the
+            # comparison written as `border < v` so signed zero and equality
+            # retain the exact `v > border` semantics above.
             var index = UInt32(0)
-            for b in range(nb):
-                if v > grid.borders[f][b]:
-                    index += 1
+            comptime if GBDT_HOST_BINARIZE_LINEAR:
+                for b in range(nb):
+                    if v > grid.borders[f][b]:
+                        index += 1
+            else:
+                var lo = 0
+                var hi = nb
+                while lo < hi:
+                    var mid = lo + (hi - lo) // 2
+                    if grid.borders[f][mid] < v:
+                        lo = mid + 1
+                    else:
+                        hi = mid
+                index = UInt32(lo)
             cindex[base + r] = cindex[base + r] | ((index & cf.mask) << cf.shift)
     return cindex^
 
