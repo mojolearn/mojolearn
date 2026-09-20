@@ -100,7 +100,8 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     #
     # A future import needs its own sentence here before it is added.
     assert sorted(set(imports)) == [
-        "checks.numerics", "std.builtin.sort", "std.math", "std.memory", "std.sys.compile",
+        "checks.numerics", "core.host_predict_threads", "max.algorithm",
+        "std.builtin.sort", "std.math", "std.memory", "std.sys.compile",
     ], imports
 
 
@@ -112,6 +113,9 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "comptime RF_RNG_STRIDE = 110592" in text
     assert "var terminal = s.pure != Int32(0)" in text, "a pure node is a leaf (RETRY_PURE_NODES off)"
     assert "x[i] = ftz(x[i])" in text, "X is flushed before the quantiles"
+    assert text.count("if n_cells < (1 << 19):") == 1
+    assert "sync_parallelize(_flush_cells, flush_tasks)" in text
+    assert "sync_parallelize(_bin_columns, bin_tasks)" in text
     assert "identical_mul_add(-val, val, gain)" in text
 
 

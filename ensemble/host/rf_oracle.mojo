@@ -106,8 +106,10 @@ from std.math import ceildiv, floor
 from std.memory import bitcast
 from std.builtin.sort import sort
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_log, identical_mul_add
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1064,11 +1066,24 @@ def host_compute_quantiles(
 
     # DEVIATION 314's binned matrix, the same index `lower_bound` returns.
     var bins = List[Int32](length=n_rows * n_cols, fill=Int32(0))
-    for col in range(n_cols):
-        var nb = Int(out.n_bins[col])
-        for row in range(n_rows):
-            var b = host_lower_bound(out.values, col * max_n_bins, nb, x[col * n_rows + row])
-            bins[col * n_rows + row] = Int32(b)
+    var bin_tasks = host_predict_task_count(n_cols)
+    if n_rows * n_cols < (1 << 19):
+        bin_tasks = 1
+    var bin_chunk = host_predict_chunk(n_cols, bin_tasks)
+    def _bin_columns(task: Int) {imm x, imm out, mut bins, imm n_rows, imm n_cols, imm max_n_bins, imm bin_chunk}:
+        var lo = task * bin_chunk
+        var hi = min(lo + bin_chunk, n_cols)
+        for col in range(lo, hi):
+            var nb = Int(out.n_bins[col])
+            for row in range(n_rows):
+                var b = host_lower_bound(
+                    out.values, col * max_n_bins, nb, x[col * n_rows + row]
+                )
+                bins[col * n_rows + row] = Int32(b)
+    if bin_tasks == 1:
+        _bin_columns(0)
+    else:
+        sync_parallelize(_bin_columns, bin_tasks)
     out.bins = bins^
     return out^
 
@@ -1439,8 +1454,20 @@ def rf_host_fit(
             + " rounds to " + String(n_sampled) + " sampled rows; a tree needs at least one"
         )
     # `ftz_features_kernel` (`:1260-1275`), in place, once.
-    for i in range(n_rows * n_cols):
-        x[i] = ftz(x[i])
+    var n_cells = n_rows * n_cols
+    var flush_tasks = host_predict_task_count(n_cells)
+    if n_cells < (1 << 19):
+        flush_tasks = 1
+    var flush_chunk = host_predict_chunk(n_cells, flush_tasks)
+    def _flush_cells(task: Int) {mut x, imm n_cells, imm flush_chunk}:
+        var lo = task * flush_chunk
+        var hi = min(lo + flush_chunk, n_cells)
+        for i in range(lo, hi):
+            x[i] = ftz(x[i])
+    if flush_tasks == 1:
+        _flush_cells(0)
+    else:
+        sync_parallelize(_flush_cells, flush_tasks)
     var q = host_compute_quantiles(x, n_rows, n_cols, p.max_n_bins, p.seed)
     # `fit_forest` calls `prepare_weights` before the first tree
     # (`randomforest.mojo:2567-2568`).
