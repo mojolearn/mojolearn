@@ -451,13 +451,15 @@ def qn_fit_binding(
     `n_classes > 2`, lane/cpu-training-batch3). params: n_rows, n_features,
     n_classes, penalty_l1, penalty_l2, grad_tol, change_tol, max_iter,
     linesearch_max_iter, lbfgs_memory, fit_intercept, penalty_normalized,
-    has_sample_weight, and an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
-    the value a 13-field call gets). `coef_addr` holds `n_targets *
+    has_sample_weight, an OPTIONAL 14th, the loss id (QN_LOSS_LOGISTIC,
+    the value a 13-field call gets; all eight ids since
+    lane/expose-qn-objectives, 2026-09-20), and an OPTIONAL 15th, `svr_eps`
+    (0 when absent). `coef_addr` holds `n_targets *
     (n_features + fit_intercept)` floats, written; `info_addr[0]` receives
     the objective, `[1]` the OPT_RETCODE; returns num_iters.
     `sample_weight` is refused BY NAME."""
-    if len(params) != 13 and len(params) != 14:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
+    if len(params) < 13 or len(params) > 15:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, and an optional 15th, svr_eps")
     var x_address = _index(x_addr)
     var y_address = _index(y_addr)
     var wp = f32_ptr(_index(coef_addr))
@@ -475,7 +477,8 @@ def qn_fit_binding(
     var fit_intercept = _index(params[10]) != 0
     var normalized = _index(params[11]) != 0
     var has_sw = _index(params[12]) != 0
-    var loss = _index(params[13]) if len(params) == 14 else 0
+    var loss = _index(params[13]) if len(params) >= 14 else 0
+    var svr_eps = Float64(py=params[14]) if len(params) == 15 else 0.0
     var iters = 0
     with GILReleased(Python()):
         _positive(nr, "n_rows")
@@ -485,7 +488,7 @@ def qn_fit_binding(
         var coef = List[Float32]()
         var r = host_qn_fit(
             x, y, nr, nf, nc, l1, l2, grad_tol, change_tol, max_iter, ls_max,
-            mem, fit_intercept, normalized, has_sw, loss, coef,
+            mem, fit_intercept, normalized, has_sw, loss, coef, svr_eps,
         )
         for i in range(len(coef)):
             wp[i] = coef[i]

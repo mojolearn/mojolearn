@@ -52,8 +52,12 @@ WHAT IS RESTATED, AND WHERE THE ORIGINAL IS.
                            ftz(l2 * w[j])`, `acc = ftz(acc + ftz(ftz(half_l2
                            * w) * w))`, the tree, `ftz`) then the loss with
                            `beta = 1` and `ftz(loss + reg)` on the host.
-  `host_grad_norm`         `GLMWithData.grad_norm` for the logistic loss,
-                           `nrm_max`.
+  `host_grad_norm`         `GLMWithData.grad_norm`: `nrm_max` for the
+                           logistic and softmax losses, `squaredNorm * 0.5`
+                           and `nrm1` for the six one-target losses of
+                           `glm_linear.mojo` and `glm_svm.mojo`
+                           (`host_one_target_lz` / `_dlz`,
+                           lane/expose-qn-objectives, 2026-09-20).
   `HostLBFGSParam`         `LBFGSParam.from_params`, `glm/impl/qn/qn_util.
                            mojo:112`, defaults included; `check_param`.
   `host_check_convergence` `check_convergence`, `qn_util.mojo:172`.
@@ -146,7 +150,13 @@ comptime QN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: `qn.h`'s loss ids, `glm/impl/linear_model/qn.mojo`.
 comptime QN_LOSS_LOGISTIC = 0
+comptime QN_LOSS_SQUARED = 1
 comptime QN_LOSS_SOFTMAX = 2
+comptime QN_LOSS_SVC_L1 = 3
+comptime QN_LOSS_SVC_L2 = 4
+comptime QN_LOSS_SVR_L1 = 5
+comptime QN_LOSS_SVR_L2 = 6
+comptime QN_LOSS_ABS = 7
 
 #: `LINE_SEARCH_RETCODE` and `OPT_RETCODE`, `qn_util.mojo`.
 comptime LBFGS_LS_BT_ARMIJO = 1
@@ -262,14 +272,84 @@ def host_logistic_dlz(y: Float32, z: Float32) -> Float32:
     return ftz(q - y)
 
 
+# `glm_linear.mojo` and `glm_svm.mojo`: the six one-target `Lz` / `Dlz`
+# pairs, each the device spelling (the two `identical_mul_add`s, the
+# value-first clamp, DEVIATION 714's `2 (z - s)`).
+
+
+def host_hinge(s: Float32, z: Float32) -> Float32:
+    """`max(1 - s z, 0)` value-first: `-0.0` and `+0.0` both give `+0.0`."""
+    var v = ftz(identical_mul_add(-s, z, Float32(1.0)))
+    return v if v > Float32(0.0) else Float32(0.0)
+
+
+def host_svr_dead_zone(t: Float32, eps: Float32) -> Float32:
+    if t > eps:
+        return ftz(t - eps)
+    if t < -eps:
+        return ftz(-t - eps)
+    return Float32(0.0)
+
+
+def host_one_target_lz(loss: Int, y: Float32, z: Float32, eps: Float32) -> Float32:
+    """`Lz::operator()(y, z)` of the loss `loss`."""
+    if loss == QN_LOSS_LOGISTIC:
+        return host_logistic_lz(y, z)
+    if loss == QN_LOSS_SQUARED:
+        var diff = ftz(z - y)
+        return ftz(ftz(diff * diff) * Float32(0.5))
+    if loss == QN_LOSS_ABS:
+        return abs(ftz(z - y))
+    if loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2:
+        var s = ftz(identical_mul_add(Float32(2.0), y, Float32(-1.0)))
+        var t = host_hinge(s, z)
+        return t if loss == QN_LOSS_SVC_L1 else ftz(t * t)
+    var d = host_svr_dead_zone(ftz(y - z), eps)
+    return d if loss == QN_LOSS_SVR_L1 else ftz(d * d)
+
+
+def host_one_target_dlz(loss: Int, y: Float32, z: Float32, eps: Float32) -> Float32:
+    """`Dlz::operator()(y, z)` of the loss `loss`."""
+    if loss == QN_LOSS_LOGISTIC:
+        return host_logistic_dlz(y, z)
+    if loss == QN_LOSS_SQUARED:
+        return ftz(z - y)
+    if loss == QN_LOSS_ABS:
+        if z > y:
+            return Float32(1.0)
+        if z < y:
+            return Float32(-1.0)
+        return Float32(0.0)
+    if loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2:
+        var s = ftz(identical_mul_add(Float32(2.0), y, Float32(-1.0)))
+        if not (ftz(s * z) <= Float32(1.0)):
+            return Float32(0.0)
+        if loss == QN_LOSS_SVC_L1:
+            return -s
+        return ftz(Float32(2.0) * ftz(z - s))
+    var t = ftz(y - z)
+    if loss == QN_LOSS_SVR_L1:
+        if t > eps:
+            return Float32(-1.0)
+        if t < -eps:
+            return Float32(1.0)
+        return Float32(0.0)
+    var inner = Float32(0.0)
+    if t > eps:
+        inner = ftz(t - eps)
+    elif t < -eps:
+        inner = ftz(t + eps)
+    return ftz(Float32(-2.0) * inner)
+
+
 #: `SOFTMAX_MAX_SEED`, `glm/impl/qn/glm_softmax.mojo`.
 comptime HOST_SOFTMAX_MAX_SEED = Float32(-1e9)
 
 
 struct HostGLM(Movable):
-    """`GLMWithData`: the logistic loss at `C == 1`, or the softmax loss at
-    `C > 1`; the data, the dims, `l2`, and the `z` and `loss_terms`
-    scratch."""
+    """`GLMWithData`: a one-target loss (`loss`, with `svr_eps` for the
+    two SVR losses) at `C == 1`, or the softmax loss at `C > 1`; the data,
+    the dims, `l2`, and the `z` and `loss_terms` scratch."""
 
     var n_rows: Int
     var d: Int
@@ -277,6 +357,8 @@ struct HostGLM(Movable):
     var fit_intercept: Bool
     var n_param: Int
     var l2: Float32
+    var loss: Int
+    var svr_eps: Float32
     var x: List[Float32]
     var y: List[Float32]
     var z: List[Float32]
@@ -292,6 +374,8 @@ struct HostGLM(Movable):
         fit_intercept: Bool,
         l2: Float32,
         n_targets: Int = 1,
+        loss: Int = QN_LOSS_LOGISTIC,
+        svr_eps: Float32 = Float32(0.0),
     ):
         self.n_rows = n_rows
         self.d = d
@@ -299,6 +383,8 @@ struct HostGLM(Movable):
         self.fit_intercept = fit_intercept
         self.n_param = (d + (1 if fit_intercept else 0)) * n_targets
         self.l2 = l2
+        self.loss = loss
+        self.svr_eps = svr_eps
         self.x = x^
         self.y = y^
         self.z = List[Float32](length=n_rows * n_targets, fill=Float32(0.0))
@@ -362,8 +448,10 @@ struct HostGLM(Movable):
             for i in range(n):
                 var yi = self.y[i]
                 var zi = self.z[i]
-                self.loss_terms[i] = ftz(host_logistic_lz(yi, zi) * normalization)
-                self.z[i] = host_logistic_dlz(yi, zi)
+                self.loss_terms[i] = ftz(
+                    host_one_target_lz(self.loss, yi, zi, self.svr_eps) * normalization
+                )
+                self.z[i] = host_one_target_dlz(self.loss, yi, zi, self.svr_eps)
         var partials = List[Float32](length=STATS_TPB, fill=Float32(0.0))
         for t in range(STATS_TPB):
             var acc = Float32(0.0)
@@ -467,6 +555,21 @@ struct HostGLM(Movable):
         return ftz(loss_host + reg_host)
 
     def grad_norm(self, g: List[Float32]) -> Float32:
+        """`GLMWithData.grad_norm`: `squaredNorm * 0.5` for the squared,
+        SVC-L2 and SVR-L2 losses, `nrm1` for the absolute, SVC-L1 and SVR-L1
+        losses, `nrmMax` for the logistic and softmax losses."""
+        if (
+            self.loss == QN_LOSS_SQUARED
+            or self.loss == QN_LOSS_SVC_L2
+            or self.loss == QN_LOSS_SVR_L2
+        ):
+            return host_squared_norm(g, self.n_param) * Float32(0.5)
+        if (
+            self.loss == QN_LOSS_ABS
+            or self.loss == QN_LOSS_SVC_L1
+            or self.loss == QN_LOSS_SVR_L1
+        ):
+            return host_nrm1(g, self.n_param)
         return host_nrm_max(g, self.n_param)
 
 
@@ -1014,14 +1117,38 @@ def host_qn_fit(
     has_sample_weight: Bool,
     loss: Int,
     mut coef: List[Float32],
+    svr_eps: Float64 = 0.0,
 ) raises -> HostQNFit:
     """`qn_fit_host` then `qn_fit_x` and `qn_fit` (module docstring).
     `coef` is resized to `n_param` and zero-initialized here as
     `solvers/qn.pyx:552-554` does (no warm start)."""
-    if loss != QN_LOSS_LOGISTIC and loss != QN_LOSS_SOFTMAX:
+    # `glm/estimator.mojo::qn_check_loss_args`, the same refusals.
+    var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
+    var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
+    var is_binary = (
+        loss == QN_LOSS_LOGISTIC or loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2
+    )
+    if not (is_regression or is_binary or loss == QN_LOSS_SOFTMAX):
         raise Error(
-            "qn_fit: loss " + String(loss) + " is not routed from this entry;"
-            " QN_LOSS_LOGISTIC (0) and QN_LOSS_SOFTMAX (2) are"
+            "qn_fit: loss " + String(loss) + " is not a qn_loss_type id;"
+            " 0 to 7 are (glm/impl/linear_model/qn.mojo)"
+        )
+    if is_regression and n_classes != 1:
+        raise Error(
+            "qn_fit: loss " + String(loss) + " is a regression loss and needs"
+            " n_classes == 1, got " + String(n_classes)
+        )
+    if is_binary and n_classes != 2:
+        raise Error(
+            "qn_fit: loss " + String(loss) + " needs n_classes == 2, got "
+            + String(n_classes)
+        )
+    if not (svr_eps >= 0.0) or svr_eps > 3.0e38:
+        raise Error("qn_fit: svr_eps must be finite and non-negative, got " + String(svr_eps))
+    if svr_eps != 0.0 and not is_svr:
+        raise Error(
+            "qn_fit: svr_eps is read by the two SVR losses only; loss "
+            + String(loss) + " must be given 0"
         )
     if has_sample_weight:
         raise Error(
@@ -1029,8 +1156,6 @@ def host_qn_fit(
             " glm_base.cuh:115-122, and the weighted arm of getLossAndDZ);"
             " refused by name. See glm/NOT_IMPLEMENTED.tsv"
         )
-    if loss == QN_LOSS_LOGISTIC and n_classes != 2:
-        raise Error("qn.h: logistic loss invalid C")
     if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
         raise Error("qn.h: softmax invalid C")
     if n_rows <= 0 or n_features <= 0:
@@ -1045,13 +1170,16 @@ def host_qn_fit(
     var l1 = Float32(penalty_l1)
     if penalty_normalized:
         l1 = l1 / Float32(n_rows)
-    var n_targets = 1 if loss == QN_LOSS_LOGISTIC else n_classes
+    var n_targets = n_classes if loss == QN_LOSS_SOFTMAX else 1
     var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     coef = List[Float32](length=n_param, fill=Float32(0.0))
     var param = HostLBFGSParam.from_params(
         grad_tol, change_tol, max_iter, linesearch_max_iter, lbfgs_memory
     )
-    var f = HostGLM(x.copy(), y.copy(), n_rows, n_features, fit_intercept, l2, n_targets)
+    var f = HostGLM(
+        x.copy(), y.copy(), n_rows, n_features, fit_intercept, l2, n_targets,
+        loss, Float32(svr_eps),
+    )
     # `qn_minimize`: L-BFGS when `l1 == 0` (exact), OWL-QN otherwise, with
     # `pg_limit = D * C` (C == 1 on the binary logistic loss).
     if l1 != Float32(0.0):
