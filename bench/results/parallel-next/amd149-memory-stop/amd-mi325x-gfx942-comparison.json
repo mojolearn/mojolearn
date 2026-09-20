@@ -1,0 +1,3534 @@
+{
+  "record": "/Users/andrewhendel/mojolearn-evidence/parallel-next-amd149/remote/parallel-next/amd-mi325x-gfx942.json",
+  "record_sha256": "c9aeb139b2d7fd27448ded32bc2f3526b37a090108aec04a4638727ef6c711ee",
+  "reference_table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5",
+  "complete": false,
+  "cells": 112,
+  "counts": {
+    "agree_cpu": 248,
+    "agree_apple": 192
+  },
+  "findings": [],
+  "parts": [
+    {
+      "cell": "par-scaler/base",
+      "part": "train",
+      "value": "c4cc661617a4b9a7",
+      "reference_vendor": "cpu",
+      "target": "c4cc661617a4b9a7",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/base",
+      "part": "infer",
+      "value": "fa0fbdef7ccae250",
+      "reference_vendor": "cpu",
+      "target": "fa0fbdef7ccae250",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/base",
+      "part": "model",
+      "value": "3adc4c98c02a61b6",
+      "reference_vendor": "cpu",
+      "target": "3adc4c98c02a61b6",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/base",
+      "part": "batch",
+      "value": "917ae37b02618ab5",
+      "reference_vendor": "cpu",
+      "target": "917ae37b02618ab5",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/ties",
+      "part": "train",
+      "value": "1ecadb87b13bb827",
+      "reference_vendor": "cpu",
+      "target": "1ecadb87b13bb827",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/ties",
+      "part": "infer",
+      "value": "4c66195589867f60",
+      "reference_vendor": "cpu",
+      "target": "4c66195589867f60",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/ties",
+      "part": "model",
+      "value": "b10d8fc2c81e61e7",
+      "reference_vendor": "cpu",
+      "target": "b10d8fc2c81e61e7",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/ties",
+      "part": "batch",
+      "value": "789ad47ddd5c18b0",
+      "reference_vendor": "cpu",
+      "target": "789ad47ddd5c18b0",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/hashed",
+      "part": "train",
+      "value": "212f9506f7d20854",
+      "reference_vendor": "cpu",
+      "target": "212f9506f7d20854",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/hashed",
+      "part": "infer",
+      "value": "fc7e9239e772ec64",
+      "reference_vendor": "cpu",
+      "target": "fc7e9239e772ec64",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/hashed",
+      "part": "model",
+      "value": "56f8f885e1f14002",
+      "reference_vendor": "cpu",
+      "target": "56f8f885e1f14002",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/hashed",
+      "part": "batch",
+      "value": "f929bcdbb2293a30",
+      "reference_vendor": "cpu",
+      "target": "f929bcdbb2293a30",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/wide",
+      "part": "train",
+      "value": "5f7db2fcea40d3ca",
+      "reference_vendor": "cpu",
+      "target": "5f7db2fcea40d3ca",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/wide",
+      "part": "infer",
+      "value": "3e17d9ac3db242ba",
+      "reference_vendor": "cpu",
+      "target": "3e17d9ac3db242ba",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/wide",
+      "part": "model",
+      "value": "a5b9d7c55d36b98e",
+      "reference_vendor": "cpu",
+      "target": "a5b9d7c55d36b98e",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/wide",
+      "part": "batch",
+      "value": "e0463d8bf2244791",
+      "reference_vendor": "cpu",
+      "target": "e0463d8bf2244791",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal",
+      "part": "train",
+      "value": "bada066f93657c5e",
+      "reference_vendor": "cpu",
+      "target": "bada066f93657c5e",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal",
+      "part": "infer",
+      "value": "d0a324ba42db1e9c",
+      "reference_vendor": "cpu",
+      "target": "d0a324ba42db1e9c",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal",
+      "part": "model",
+      "value": "68df93d8ec0c437b",
+      "reference_vendor": "cpu",
+      "target": "68df93d8ec0c437b",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal",
+      "part": "batch",
+      "value": "adc8b864c7fd6591",
+      "reference_vendor": "cpu",
+      "target": "adc8b864c7fd6591",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal_ftz",
+      "part": "train",
+      "value": "bada066f93657c5e",
+      "reference_vendor": "cpu",
+      "target": "bada066f93657c5e",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal_ftz",
+      "part": "infer",
+      "value": "d0a324ba42db1e9c",
+      "reference_vendor": "cpu",
+      "target": "d0a324ba42db1e9c",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal_ftz",
+      "part": "model",
+      "value": "68df93d8ec0c437b",
+      "reference_vendor": "cpu",
+      "target": "68df93d8ec0c437b",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/denormal_ftz",
+      "part": "batch",
+      "value": "adc8b864c7fd6591",
+      "reference_vendor": "cpu",
+      "target": "adc8b864c7fd6591",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/dupes",
+      "part": "train",
+      "value": "871f6df54f615520",
+      "reference_vendor": "cpu",
+      "target": "871f6df54f615520",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/dupes",
+      "part": "infer",
+      "value": "89d88a83a11d2485",
+      "reference_vendor": "cpu",
+      "target": "89d88a83a11d2485",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/dupes",
+      "part": "model",
+      "value": "05c29b3ea7e5d0fd",
+      "reference_vendor": "cpu",
+      "target": "05c29b3ea7e5d0fd",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/dupes",
+      "part": "batch",
+      "value": "303de898d7f06932",
+      "reference_vendor": "cpu",
+      "target": "303de898d7f06932",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/odd",
+      "part": "train",
+      "value": "800e5f9835ae6ce5",
+      "reference_vendor": "cpu",
+      "target": "800e5f9835ae6ce5",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/odd",
+      "part": "infer",
+      "value": "6a7a884532f89e93",
+      "reference_vendor": "cpu",
+      "target": "6a7a884532f89e93",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/odd",
+      "part": "model",
+      "value": "05cf9a316c018eea",
+      "reference_vendor": "cpu",
+      "target": "05cf9a316c018eea",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/odd",
+      "part": "batch",
+      "value": "76422b3deb83eac1",
+      "reference_vendor": "cpu",
+      "target": "76422b3deb83eac1",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/negative",
+      "part": "train",
+      "value": "8f955b500b7eea17",
+      "reference_vendor": "cpu",
+      "target": "8f955b500b7eea17",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/negative",
+      "part": "infer",
+      "value": "bd2b7e506db725c8",
+      "reference_vendor": "cpu",
+      "target": "bd2b7e506db725c8",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/negative",
+      "part": "model",
+      "value": "d35ffb14a4d2873d",
+      "reference_vendor": "cpu",
+      "target": "d35ffb14a4d2873d",
+      "agrees": true
+    },
+    {
+      "cell": "par-scaler/negative",
+      "part": "batch",
+      "value": "28349e692d1c6f69",
+      "reference_vendor": "cpu",
+      "target": "28349e692d1c6f69",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/base",
+      "part": "train",
+      "value": "377790cb117abb61",
+      "reference_vendor": "cpu",
+      "target": "377790cb117abb61",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/base",
+      "part": "infer",
+      "value": "9f76be0396a666ca",
+      "reference_vendor": "cpu",
+      "target": "9f76be0396a666ca",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/base",
+      "part": "model",
+      "value": "6ae822845884aedf",
+      "reference_vendor": "cpu",
+      "target": "6ae822845884aedf",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/base",
+      "part": "batch",
+      "value": "cef3c859431cbbaf",
+      "reference_vendor": "cpu",
+      "target": "cef3c859431cbbaf",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/ties",
+      "part": "train",
+      "value": "990e96a6d7fd2874",
+      "reference_vendor": "cpu",
+      "target": "990e96a6d7fd2874",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/ties",
+      "part": "infer",
+      "value": "e699bca0934688f0",
+      "reference_vendor": "cpu",
+      "target": "e699bca0934688f0",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/ties",
+      "part": "model",
+      "value": "a70bbb860b0f3fcf",
+      "reference_vendor": "cpu",
+      "target": "a70bbb860b0f3fcf",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/ties",
+      "part": "batch",
+      "value": "7abdf42416059c68",
+      "reference_vendor": "cpu",
+      "target": "7abdf42416059c68",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/hashed",
+      "part": "train",
+      "value": "d4ed8b9405da9691",
+      "reference_vendor": "cpu",
+      "target": "d4ed8b9405da9691",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/hashed",
+      "part": "infer",
+      "value": "06461dad67cfb784",
+      "reference_vendor": "cpu",
+      "target": "06461dad67cfb784",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/hashed",
+      "part": "model",
+      "value": "913af384ea04d543",
+      "reference_vendor": "cpu",
+      "target": "913af384ea04d543",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/hashed",
+      "part": "batch",
+      "value": "4d744e464df6b3d6",
+      "reference_vendor": "cpu",
+      "target": "4d744e464df6b3d6",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/wide",
+      "part": "train",
+      "value": "440f5eba6a3ddede",
+      "reference_vendor": "cpu",
+      "target": "440f5eba6a3ddede",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/wide",
+      "part": "infer",
+      "value": "956bebc3f45a1c69",
+      "reference_vendor": "cpu",
+      "target": "956bebc3f45a1c69",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/wide",
+      "part": "model",
+      "value": "1f7be9c37fb3f5d6",
+      "reference_vendor": "cpu",
+      "target": "1f7be9c37fb3f5d6",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/wide",
+      "part": "batch",
+      "value": "9103785606065f64",
+      "reference_vendor": "cpu",
+      "target": "9103785606065f64",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal",
+      "part": "train",
+      "value": "7dbefd70378dfac6",
+      "reference_vendor": "cpu",
+      "target": "7dbefd70378dfac6",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal",
+      "part": "infer",
+      "value": "aab930a9e876ec1e",
+      "reference_vendor": "cpu",
+      "target": "aab930a9e876ec1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal",
+      "part": "model",
+      "value": "b1397e7ed5a747b5",
+      "reference_vendor": "cpu",
+      "target": "b1397e7ed5a747b5",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal",
+      "part": "batch",
+      "value": "a5e918e8c07deeeb",
+      "reference_vendor": "cpu",
+      "target": "a5e918e8c07deeeb",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal_ftz",
+      "part": "train",
+      "value": "7dbefd70378dfac6",
+      "reference_vendor": "cpu",
+      "target": "7dbefd70378dfac6",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal_ftz",
+      "part": "infer",
+      "value": "aab930a9e876ec1e",
+      "reference_vendor": "cpu",
+      "target": "aab930a9e876ec1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal_ftz",
+      "part": "model",
+      "value": "87b2ac97204e1a6e",
+      "reference_vendor": "cpu",
+      "target": "87b2ac97204e1a6e",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/denormal_ftz",
+      "part": "batch",
+      "value": "a5e918e8c07deeeb",
+      "reference_vendor": "cpu",
+      "target": "a5e918e8c07deeeb",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/dupes",
+      "part": "train",
+      "value": "377790cb117abb61",
+      "reference_vendor": "cpu",
+      "target": "377790cb117abb61",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/dupes",
+      "part": "infer",
+      "value": "9f76be0396a666ca",
+      "reference_vendor": "cpu",
+      "target": "9f76be0396a666ca",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/dupes",
+      "part": "model",
+      "value": "6ae822845884aedf",
+      "reference_vendor": "cpu",
+      "target": "6ae822845884aedf",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/dupes",
+      "part": "batch",
+      "value": "cef3c859431cbbaf",
+      "reference_vendor": "cpu",
+      "target": "cef3c859431cbbaf",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/odd",
+      "part": "train",
+      "value": "20bf64323fc5fa12",
+      "reference_vendor": "cpu",
+      "target": "20bf64323fc5fa12",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/odd",
+      "part": "infer",
+      "value": "4aa662dbcc728e65",
+      "reference_vendor": "cpu",
+      "target": "4aa662dbcc728e65",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/odd",
+      "part": "model",
+      "value": "859442a49f63a8d0",
+      "reference_vendor": "cpu",
+      "target": "859442a49f63a8d0",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/odd",
+      "part": "batch",
+      "value": "8e0a0c4068873ad7",
+      "reference_vendor": "cpu",
+      "target": "8e0a0c4068873ad7",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/negative",
+      "part": "train",
+      "value": "29f18fa209679839",
+      "reference_vendor": "cpu",
+      "target": "29f18fa209679839",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/negative",
+      "part": "infer",
+      "value": "4e0defb4e0feb99f",
+      "reference_vendor": "cpu",
+      "target": "4e0defb4e0feb99f",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/negative",
+      "part": "model",
+      "value": "d3fa0fbbec979263",
+      "reference_vendor": "cpu",
+      "target": "d3fa0fbbec979263",
+      "agrees": true
+    },
+    {
+      "cell": "par-arima/negative",
+      "part": "batch",
+      "value": "a00b86402bf13b42",
+      "reference_vendor": "cpu",
+      "target": "a00b86402bf13b42",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/base",
+      "part": "train",
+      "value": "a44b54d65768bf5e",
+      "reference_vendor": "cpu",
+      "target": "a44b54d65768bf5e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/base",
+      "part": "infer",
+      "value": "9f76be0396a666ca",
+      "reference_vendor": "cpu",
+      "target": "9f76be0396a666ca",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/base",
+      "part": "model",
+      "value": "6ae822845884aedf",
+      "reference_vendor": "cpu",
+      "target": "6ae822845884aedf",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/base",
+      "part": "batch",
+      "value": "ec97b45a1c88081b",
+      "reference_vendor": "cpu",
+      "target": "ec97b45a1c88081b",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/ties",
+      "part": "train",
+      "value": "8d68e00817197a31",
+      "reference_vendor": "cpu",
+      "target": "8d68e00817197a31",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/ties",
+      "part": "infer",
+      "value": "e699bca0934688f0",
+      "reference_vendor": "cpu",
+      "target": "e699bca0934688f0",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/ties",
+      "part": "model",
+      "value": "a70bbb860b0f3fcf",
+      "reference_vendor": "cpu",
+      "target": "a70bbb860b0f3fcf",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/ties",
+      "part": "batch",
+      "value": "f339cdfecd860934",
+      "reference_vendor": "cpu",
+      "target": "f339cdfecd860934",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/hashed",
+      "part": "train",
+      "value": "9e1a5684478a1da9",
+      "reference_vendor": "apple",
+      "target": "9e1a5684478a1da9",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/hashed",
+      "part": "infer",
+      "value": "06461dad67cfb784",
+      "reference_vendor": "apple",
+      "target": "06461dad67cfb784",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/hashed",
+      "part": "model",
+      "value": "913af384ea04d543",
+      "reference_vendor": "apple",
+      "target": "913af384ea04d543",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/hashed",
+      "part": "batch",
+      "value": "331526a2ec20a264",
+      "reference_vendor": "apple",
+      "target": "331526a2ec20a264",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/wide",
+      "part": "train",
+      "value": "22d66d253aa30eaa",
+      "reference_vendor": "apple",
+      "target": "22d66d253aa30eaa",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/wide",
+      "part": "infer",
+      "value": "956bebc3f45a1c69",
+      "reference_vendor": "apple",
+      "target": "956bebc3f45a1c69",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/wide",
+      "part": "model",
+      "value": "1f7be9c37fb3f5d6",
+      "reference_vendor": "apple",
+      "target": "1f7be9c37fb3f5d6",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/wide",
+      "part": "batch",
+      "value": "a820c7d8f0125432",
+      "reference_vendor": "apple",
+      "target": "a820c7d8f0125432",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal",
+      "part": "train",
+      "value": "a07e96734bdd4228",
+      "reference_vendor": "apple",
+      "target": "a07e96734bdd4228",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal",
+      "part": "infer",
+      "value": "aab930a9e876ec1e",
+      "reference_vendor": "apple",
+      "target": "aab930a9e876ec1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal",
+      "part": "model",
+      "value": "b1397e7ed5a747b5",
+      "reference_vendor": "apple",
+      "target": "b1397e7ed5a747b5",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal",
+      "part": "batch",
+      "value": "251c7a81a0fec8ce",
+      "reference_vendor": "apple",
+      "target": "251c7a81a0fec8ce",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal_ftz",
+      "part": "train",
+      "value": "a07e96734bdd4228",
+      "reference_vendor": "apple",
+      "target": "a07e96734bdd4228",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal_ftz",
+      "part": "infer",
+      "value": "aab930a9e876ec1e",
+      "reference_vendor": "apple",
+      "target": "aab930a9e876ec1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal_ftz",
+      "part": "model",
+      "value": "87b2ac97204e1a6e",
+      "reference_vendor": "apple",
+      "target": "87b2ac97204e1a6e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/denormal_ftz",
+      "part": "batch",
+      "value": "251c7a81a0fec8ce",
+      "reference_vendor": "apple",
+      "target": "251c7a81a0fec8ce",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/dupes",
+      "part": "train",
+      "value": "a44b54d65768bf5e",
+      "reference_vendor": "apple",
+      "target": "a44b54d65768bf5e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/dupes",
+      "part": "infer",
+      "value": "9f76be0396a666ca",
+      "reference_vendor": "apple",
+      "target": "9f76be0396a666ca",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/dupes",
+      "part": "model",
+      "value": "6ae822845884aedf",
+      "reference_vendor": "apple",
+      "target": "6ae822845884aedf",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/dupes",
+      "part": "batch",
+      "value": "ec97b45a1c88081b",
+      "reference_vendor": "apple",
+      "target": "ec97b45a1c88081b",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/odd",
+      "part": "train",
+      "value": "ff437787c18ef5c5",
+      "reference_vendor": "apple",
+      "target": "ff437787c18ef5c5",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/odd",
+      "part": "infer",
+      "value": "4aa662dbcc728e65",
+      "reference_vendor": "apple",
+      "target": "4aa662dbcc728e65",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/odd",
+      "part": "model",
+      "value": "859442a49f63a8d0",
+      "reference_vendor": "apple",
+      "target": "859442a49f63a8d0",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/odd",
+      "part": "batch",
+      "value": "aa9de9b88df728f4",
+      "reference_vendor": "apple",
+      "target": "aa9de9b88df728f4",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/negative",
+      "part": "train",
+      "value": "0682211121cf732a",
+      "reference_vendor": "apple",
+      "target": "0682211121cf732a",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/negative",
+      "part": "infer",
+      "value": "4e0defb4e0feb99f",
+      "reference_vendor": "apple",
+      "target": "4e0defb4e0feb99f",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/negative",
+      "part": "model",
+      "value": "d3fa0fbbec979263",
+      "reference_vendor": "apple",
+      "target": "d3fa0fbbec979263",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-arima/negative",
+      "part": "batch",
+      "value": "ce5a5438ad2aff04",
+      "reference_vendor": "apple",
+      "target": "ce5a5438ad2aff04",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/base",
+      "part": "train",
+      "value": "b4fa4ebf9623f5d0",
+      "reference_vendor": "cpu",
+      "target": "b4fa4ebf9623f5d0",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/base",
+      "part": "infer",
+      "value": "3eb3a2ab621fbb97",
+      "reference_vendor": "cpu",
+      "target": "3eb3a2ab621fbb97",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/base",
+      "part": "model",
+      "value": "2ee81955e923d21f",
+      "reference_vendor": "cpu",
+      "target": "2ee81955e923d21f",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/base",
+      "part": "batch",
+      "value": "cf44ff75b01d7995",
+      "reference_vendor": "cpu",
+      "target": "cf44ff75b01d7995",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/ties",
+      "part": "train",
+      "value": "d4e4484a004f4042",
+      "reference_vendor": "cpu",
+      "target": "d4e4484a004f4042",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/ties",
+      "part": "infer",
+      "value": "5f3eec45e2afb437",
+      "reference_vendor": "cpu",
+      "target": "5f3eec45e2afb437",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/ties",
+      "part": "model",
+      "value": "57306f414d5af0b4",
+      "reference_vendor": "cpu",
+      "target": "57306f414d5af0b4",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/ties",
+      "part": "batch",
+      "value": "16ab4d049490ae29",
+      "reference_vendor": "cpu",
+      "target": "16ab4d049490ae29",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/hashed",
+      "part": "train",
+      "value": "cdc57602d696879d",
+      "reference_vendor": "cpu",
+      "target": "cdc57602d696879d",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/hashed",
+      "part": "infer",
+      "value": "362bee6da9e01a6a",
+      "reference_vendor": "cpu",
+      "target": "362bee6da9e01a6a",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/hashed",
+      "part": "model",
+      "value": "d6588b0e2d717746",
+      "reference_vendor": "cpu",
+      "target": "d6588b0e2d717746",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/hashed",
+      "part": "batch",
+      "value": "6e26724c529968f1",
+      "reference_vendor": "cpu",
+      "target": "6e26724c529968f1",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/wide",
+      "part": "train",
+      "value": "4ea06c29cad72c3a",
+      "reference_vendor": "cpu",
+      "target": "4ea06c29cad72c3a",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/wide",
+      "part": "infer",
+      "value": "2561486a5ba9ea00",
+      "reference_vendor": "cpu",
+      "target": "2561486a5ba9ea00",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/wide",
+      "part": "model",
+      "value": "76078d052fa5fc25",
+      "reference_vendor": "cpu",
+      "target": "76078d052fa5fc25",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/wide",
+      "part": "batch",
+      "value": "af3f119fb1c99a87",
+      "reference_vendor": "cpu",
+      "target": "af3f119fb1c99a87",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal",
+      "part": "train",
+      "value": "b31c83097872381e",
+      "reference_vendor": "cpu",
+      "target": "b31c83097872381e",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal",
+      "part": "infer",
+      "value": "0d8e5847c0de67f1",
+      "reference_vendor": "cpu",
+      "target": "0d8e5847c0de67f1",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal",
+      "part": "model",
+      "value": "c6abf4949fd3ef45",
+      "reference_vendor": "cpu",
+      "target": "c6abf4949fd3ef45",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal",
+      "part": "batch",
+      "value": "0032b46732b142a5",
+      "reference_vendor": "cpu",
+      "target": "0032b46732b142a5",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal_ftz",
+      "part": "train",
+      "value": "b31c83097872381e",
+      "reference_vendor": "cpu",
+      "target": "b31c83097872381e",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal_ftz",
+      "part": "infer",
+      "value": "0d8e5847c0de67f1",
+      "reference_vendor": "cpu",
+      "target": "0d8e5847c0de67f1",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal_ftz",
+      "part": "model",
+      "value": "83650c2063c0b192",
+      "reference_vendor": "cpu",
+      "target": "83650c2063c0b192",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/denormal_ftz",
+      "part": "batch",
+      "value": "0032b46732b142a5",
+      "reference_vendor": "cpu",
+      "target": "0032b46732b142a5",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/dupes",
+      "part": "train",
+      "value": "ad02d42d5b3fded7",
+      "reference_vendor": "cpu",
+      "target": "ad02d42d5b3fded7",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/dupes",
+      "part": "infer",
+      "value": "469e7731aa72a0fd",
+      "reference_vendor": "cpu",
+      "target": "469e7731aa72a0fd",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/dupes",
+      "part": "model",
+      "value": "5167cd08ec11b8bd",
+      "reference_vendor": "cpu",
+      "target": "5167cd08ec11b8bd",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/dupes",
+      "part": "batch",
+      "value": "b3e5ffef9bb9967c",
+      "reference_vendor": "cpu",
+      "target": "b3e5ffef9bb9967c",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/odd",
+      "part": "train",
+      "value": "99a3e94304f0d55a",
+      "reference_vendor": "cpu",
+      "target": "99a3e94304f0d55a",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/odd",
+      "part": "infer",
+      "value": "ef0450b6bc48f488",
+      "reference_vendor": "cpu",
+      "target": "ef0450b6bc48f488",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/odd",
+      "part": "model",
+      "value": "5f50d73e7a4f1146",
+      "reference_vendor": "cpu",
+      "target": "5f50d73e7a4f1146",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/odd",
+      "part": "batch",
+      "value": "aa014d1a0ed67389",
+      "reference_vendor": "cpu",
+      "target": "aa014d1a0ed67389",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/negative",
+      "part": "train",
+      "value": "4b7b50fe64e2d7af",
+      "reference_vendor": "cpu",
+      "target": "4b7b50fe64e2d7af",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/negative",
+      "part": "infer",
+      "value": "9a8506316edc0a0a",
+      "reference_vendor": "cpu",
+      "target": "9a8506316edc0a0a",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/negative",
+      "part": "model",
+      "value": "86a355173ea5999a",
+      "reference_vendor": "cpu",
+      "target": "86a355173ea5999a",
+      "agrees": true
+    },
+    {
+      "cell": "par-queries-radius/negative",
+      "part": "batch",
+      "value": "51cba43fba357cdd",
+      "reference_vendor": "cpu",
+      "target": "51cba43fba357cdd",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/base",
+      "part": "train",
+      "value": "9ec2f266855a6302",
+      "reference_vendor": "apple",
+      "target": "9ec2f266855a6302",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/base",
+      "part": "infer",
+      "value": "01d01e040df02560",
+      "reference_vendor": "apple",
+      "target": "01d01e040df02560",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/base",
+      "part": "model",
+      "value": "9b11e3caf5fdbf13",
+      "reference_vendor": "apple",
+      "target": "9b11e3caf5fdbf13",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/base",
+      "part": "batch",
+      "value": "f3da34387964fee6",
+      "reference_vendor": "apple",
+      "target": "f3da34387964fee6",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/ties",
+      "part": "train",
+      "value": "a65fa255a80dbe89",
+      "reference_vendor": "apple",
+      "target": "a65fa255a80dbe89",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/ties",
+      "part": "infer",
+      "value": "69412caad3ac2091",
+      "reference_vendor": "apple",
+      "target": "69412caad3ac2091",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/ties",
+      "part": "model",
+      "value": "03f1b126e7267505",
+      "reference_vendor": "apple",
+      "target": "03f1b126e7267505",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/ties",
+      "part": "batch",
+      "value": "ab5f844f74a71632",
+      "reference_vendor": "apple",
+      "target": "ab5f844f74a71632",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/hashed",
+      "part": "train",
+      "value": "76594cd269df24c3",
+      "reference_vendor": "apple",
+      "target": "76594cd269df24c3",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/hashed",
+      "part": "infer",
+      "value": "ef4dca78cab25a8a",
+      "reference_vendor": "apple",
+      "target": "ef4dca78cab25a8a",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/hashed",
+      "part": "model",
+      "value": "40f0b0a8228eeb29",
+      "reference_vendor": "apple",
+      "target": "40f0b0a8228eeb29",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/hashed",
+      "part": "batch",
+      "value": "797d65e02259921c",
+      "reference_vendor": "apple",
+      "target": "797d65e02259921c",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/wide",
+      "part": "train",
+      "value": "383854621bb512d9",
+      "reference_vendor": "apple",
+      "target": "383854621bb512d9",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/wide",
+      "part": "infer",
+      "value": "434ad4834cf6ac99",
+      "reference_vendor": "apple",
+      "target": "434ad4834cf6ac99",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/wide",
+      "part": "model",
+      "value": "373b2b40f0a4f4b0",
+      "reference_vendor": "apple",
+      "target": "373b2b40f0a4f4b0",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/wide",
+      "part": "batch",
+      "value": "3730ec2999871cce",
+      "reference_vendor": "apple",
+      "target": "3730ec2999871cce",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal",
+      "part": "train",
+      "value": "ccfec6d66ea17fb3",
+      "reference_vendor": "apple",
+      "target": "ccfec6d66ea17fb3",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal",
+      "part": "infer",
+      "value": "d3b17552fe76de7e",
+      "reference_vendor": "apple",
+      "target": "d3b17552fe76de7e",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal",
+      "part": "model",
+      "value": "b2e26b4d4348b799",
+      "reference_vendor": "apple",
+      "target": "b2e26b4d4348b799",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal",
+      "part": "batch",
+      "value": "6afb90d3cdd5b32f",
+      "reference_vendor": "apple",
+      "target": "6afb90d3cdd5b32f",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal_ftz",
+      "part": "train",
+      "value": "ccfec6d66ea17fb3",
+      "reference_vendor": "apple",
+      "target": "ccfec6d66ea17fb3",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal_ftz",
+      "part": "infer",
+      "value": "d3b17552fe76de7e",
+      "reference_vendor": "apple",
+      "target": "d3b17552fe76de7e",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal_ftz",
+      "part": "model",
+      "value": "5889a802cc5cd9cc",
+      "reference_vendor": "apple",
+      "target": "5889a802cc5cd9cc",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/denormal_ftz",
+      "part": "batch",
+      "value": "6afb90d3cdd5b32f",
+      "reference_vendor": "apple",
+      "target": "6afb90d3cdd5b32f",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/dupes",
+      "part": "train",
+      "value": "9ec2f266855a6302",
+      "reference_vendor": "apple",
+      "target": "9ec2f266855a6302",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/dupes",
+      "part": "infer",
+      "value": "01d01e040df02560",
+      "reference_vendor": "apple",
+      "target": "01d01e040df02560",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/dupes",
+      "part": "model",
+      "value": "9b11e3caf5fdbf13",
+      "reference_vendor": "apple",
+      "target": "9b11e3caf5fdbf13",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/dupes",
+      "part": "batch",
+      "value": "f3da34387964fee6",
+      "reference_vendor": "apple",
+      "target": "f3da34387964fee6",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/odd",
+      "part": "train",
+      "value": "9b9d0fa9ad02e0e4",
+      "reference_vendor": "apple",
+      "target": "9b9d0fa9ad02e0e4",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/odd",
+      "part": "infer",
+      "value": "3da4ff5741c4cbff",
+      "reference_vendor": "apple",
+      "target": "3da4ff5741c4cbff",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/odd",
+      "part": "model",
+      "value": "338703ec3d735a5d",
+      "reference_vendor": "apple",
+      "target": "338703ec3d735a5d",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/odd",
+      "part": "batch",
+      "value": "ee25637280e38b12",
+      "reference_vendor": "apple",
+      "target": "ee25637280e38b12",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/negative",
+      "part": "train",
+      "value": "0d3ab3dcad302a48",
+      "reference_vendor": "apple",
+      "target": "0d3ab3dcad302a48",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/negative",
+      "part": "infer",
+      "value": "dd796bb63a2bc9c3",
+      "reference_vendor": "apple",
+      "target": "dd796bb63a2bc9c3",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/negative",
+      "part": "model",
+      "value": "29643ed48b1ea061",
+      "reference_vendor": "apple",
+      "target": "29643ed48b1ea061",
+      "agrees": true
+    },
+    {
+      "cell": "par-graph-umap/negative",
+      "part": "batch",
+      "value": "c66407069061568f",
+      "reference_vendor": "apple",
+      "target": "c66407069061568f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/base",
+      "part": "train",
+      "value": "0e73adb47576ba74",
+      "reference_vendor": "apple",
+      "target": "0e73adb47576ba74",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/base",
+      "part": "infer",
+      "value": "d7a4f4eeda536f16",
+      "reference_vendor": "apple",
+      "target": "d7a4f4eeda536f16",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/base",
+      "part": "model",
+      "value": "3ebe10dd16986fee",
+      "reference_vendor": "apple",
+      "target": "3ebe10dd16986fee",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/base",
+      "part": "batch",
+      "value": "1b7f902bed2f8264",
+      "reference_vendor": "apple",
+      "target": "1b7f902bed2f8264",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/ties",
+      "part": "train",
+      "value": "b08dd75a1fd4de8a",
+      "reference_vendor": "apple",
+      "target": "b08dd75a1fd4de8a",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/ties",
+      "part": "infer",
+      "value": "529e6b54d8cfe020",
+      "reference_vendor": "apple",
+      "target": "529e6b54d8cfe020",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/ties",
+      "part": "model",
+      "value": "e1ea00b03e0a3d16",
+      "reference_vendor": "apple",
+      "target": "e1ea00b03e0a3d16",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/ties",
+      "part": "batch",
+      "value": "e60f8dc009c82663",
+      "reference_vendor": "apple",
+      "target": "e60f8dc009c82663",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/hashed",
+      "part": "train",
+      "value": "457ba1962b5ee0f3",
+      "reference_vendor": "apple",
+      "target": "457ba1962b5ee0f3",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/hashed",
+      "part": "infer",
+      "value": "f472f8f2e506ce3e",
+      "reference_vendor": "apple",
+      "target": "f472f8f2e506ce3e",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/hashed",
+      "part": "model",
+      "value": "b80eb3b72b5c95c7",
+      "reference_vendor": "apple",
+      "target": "b80eb3b72b5c95c7",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/hashed",
+      "part": "batch",
+      "value": "cd945653faa71f59",
+      "reference_vendor": "apple",
+      "target": "cd945653faa71f59",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/wide",
+      "part": "train",
+      "value": "c143f163f1e23772",
+      "reference_vendor": "apple",
+      "target": "c143f163f1e23772",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/wide",
+      "part": "infer",
+      "value": "e8fde999f64eec22",
+      "reference_vendor": "apple",
+      "target": "e8fde999f64eec22",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/wide",
+      "part": "model",
+      "value": "c24f27aa4e7d989f",
+      "reference_vendor": "apple",
+      "target": "c24f27aa4e7d989f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/wide",
+      "part": "batch",
+      "value": "0cc769bdafb5820b",
+      "reference_vendor": "apple",
+      "target": "0cc769bdafb5820b",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal",
+      "part": "train",
+      "value": "0e73adb47576ba74",
+      "reference_vendor": "apple",
+      "target": "0e73adb47576ba74",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal",
+      "part": "infer",
+      "value": "d7a4f4eeda536f16",
+      "reference_vendor": "apple",
+      "target": "d7a4f4eeda536f16",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal",
+      "part": "model",
+      "value": "337411e478a47dd5",
+      "reference_vendor": "apple",
+      "target": "337411e478a47dd5",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal",
+      "part": "batch",
+      "value": "1b7f902bed2f8264",
+      "reference_vendor": "apple",
+      "target": "1b7f902bed2f8264",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal_ftz",
+      "part": "train",
+      "value": "0e73adb47576ba74",
+      "reference_vendor": "apple",
+      "target": "0e73adb47576ba74",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal_ftz",
+      "part": "infer",
+      "value": "d7a4f4eeda536f16",
+      "reference_vendor": "apple",
+      "target": "d7a4f4eeda536f16",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal_ftz",
+      "part": "model",
+      "value": "337411e478a47dd5",
+      "reference_vendor": "apple",
+      "target": "337411e478a47dd5",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/denormal_ftz",
+      "part": "batch",
+      "value": "1b7f902bed2f8264",
+      "reference_vendor": "apple",
+      "target": "1b7f902bed2f8264",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/dupes",
+      "part": "train",
+      "value": "d6c73836e3381dd4",
+      "reference_vendor": "apple",
+      "target": "d6c73836e3381dd4",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/dupes",
+      "part": "infer",
+      "value": "d2d7de40eeb0e888",
+      "reference_vendor": "apple",
+      "target": "d2d7de40eeb0e888",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/dupes",
+      "part": "model",
+      "value": "c110a1e501e287f1",
+      "reference_vendor": "apple",
+      "target": "c110a1e501e287f1",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/dupes",
+      "part": "batch",
+      "value": "ae28684d368e2b6f",
+      "reference_vendor": "apple",
+      "target": "ae28684d368e2b6f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/odd",
+      "part": "train",
+      "value": "ff7a264740642731",
+      "reference_vendor": "apple",
+      "target": "ff7a264740642731",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/odd",
+      "part": "infer",
+      "value": "96ab641b67fe93b4",
+      "reference_vendor": "apple",
+      "target": "96ab641b67fe93b4",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/odd",
+      "part": "model",
+      "value": "2762eab7c9aadc51",
+      "reference_vendor": "apple",
+      "target": "2762eab7c9aadc51",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/odd",
+      "part": "batch",
+      "value": "7b18f6ba4d9bf426",
+      "reference_vendor": "apple",
+      "target": "7b18f6ba4d9bf426",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/negative",
+      "part": "train",
+      "value": "ba631525958c6163",
+      "reference_vendor": "apple",
+      "target": "ba631525958c6163",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/negative",
+      "part": "infer",
+      "value": "09e6dfe70a9e8341",
+      "reference_vendor": "apple",
+      "target": "09e6dfe70a9e8341",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/negative",
+      "part": "model",
+      "value": "a003b5a16d9f7e2f",
+      "reference_vendor": "apple",
+      "target": "a003b5a16d9f7e2f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ordered/negative",
+      "part": "batch",
+      "value": "6f79c5a5836408fb",
+      "reference_vendor": "apple",
+      "target": "6f79c5a5836408fb",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/base",
+      "part": "train",
+      "value": "10ef01c731a66a06",
+      "reference_vendor": "apple",
+      "target": "10ef01c731a66a06",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/base",
+      "part": "infer",
+      "value": "df725acd3908c4f9",
+      "reference_vendor": "apple",
+      "target": "df725acd3908c4f9",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/base",
+      "part": "model",
+      "value": "4499afe4e3ed96be",
+      "reference_vendor": "apple",
+      "target": "4499afe4e3ed96be",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/base",
+      "part": "batch",
+      "value": "deba437782731acd",
+      "reference_vendor": "apple",
+      "target": "deba437782731acd",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/ties",
+      "part": "train",
+      "value": "a7eca40195af6ded",
+      "reference_vendor": "apple",
+      "target": "a7eca40195af6ded",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/ties",
+      "part": "infer",
+      "value": "8ee7f9352fb63cc0",
+      "reference_vendor": "apple",
+      "target": "8ee7f9352fb63cc0",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/ties",
+      "part": "model",
+      "value": "7e32a31d0097a69c",
+      "reference_vendor": "apple",
+      "target": "7e32a31d0097a69c",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/ties",
+      "part": "batch",
+      "value": "355457a0a246a2a1",
+      "reference_vendor": "apple",
+      "target": "355457a0a246a2a1",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/hashed",
+      "part": "train",
+      "value": "7f756ddfe38a2ebe",
+      "reference_vendor": "apple",
+      "target": "7f756ddfe38a2ebe",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/hashed",
+      "part": "infer",
+      "value": "74e7fcf52b8b2c4a",
+      "reference_vendor": "apple",
+      "target": "74e7fcf52b8b2c4a",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/hashed",
+      "part": "model",
+      "value": "6d959300597b3068",
+      "reference_vendor": "apple",
+      "target": "6d959300597b3068",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/hashed",
+      "part": "batch",
+      "value": "34cb9dc84217d641",
+      "reference_vendor": "apple",
+      "target": "34cb9dc84217d641",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/wide",
+      "part": "train",
+      "value": "85cc9ad0a84c9aec",
+      "reference_vendor": "apple",
+      "target": "85cc9ad0a84c9aec",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/wide",
+      "part": "infer",
+      "value": "a8c4137b0a3660e2",
+      "reference_vendor": "apple",
+      "target": "a8c4137b0a3660e2",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/wide",
+      "part": "model",
+      "value": "76527f36b20dab4a",
+      "reference_vendor": "apple",
+      "target": "76527f36b20dab4a",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/wide",
+      "part": "batch",
+      "value": "49c82a3106bba3a6",
+      "reference_vendor": "apple",
+      "target": "49c82a3106bba3a6",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal",
+      "part": "train",
+      "value": "10ef01c731a66a06",
+      "reference_vendor": "apple",
+      "target": "10ef01c731a66a06",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal",
+      "part": "infer",
+      "value": "df725acd3908c4f9",
+      "reference_vendor": "apple",
+      "target": "df725acd3908c4f9",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal",
+      "part": "model",
+      "value": "5375b98ac5eca8d2",
+      "reference_vendor": "apple",
+      "target": "5375b98ac5eca8d2",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal",
+      "part": "batch",
+      "value": "deba437782731acd",
+      "reference_vendor": "apple",
+      "target": "deba437782731acd",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal_ftz",
+      "part": "train",
+      "value": "10ef01c731a66a06",
+      "reference_vendor": "apple",
+      "target": "10ef01c731a66a06",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal_ftz",
+      "part": "infer",
+      "value": "df725acd3908c4f9",
+      "reference_vendor": "apple",
+      "target": "df725acd3908c4f9",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal_ftz",
+      "part": "model",
+      "value": "5375b98ac5eca8d2",
+      "reference_vendor": "apple",
+      "target": "5375b98ac5eca8d2",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/denormal_ftz",
+      "part": "batch",
+      "value": "deba437782731acd",
+      "reference_vendor": "apple",
+      "target": "deba437782731acd",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/dupes",
+      "part": "train",
+      "value": "cbcef08fd74fc613",
+      "reference_vendor": "apple",
+      "target": "cbcef08fd74fc613",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/dupes",
+      "part": "infer",
+      "value": "fd23741816d7611d",
+      "reference_vendor": "apple",
+      "target": "fd23741816d7611d",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/dupes",
+      "part": "model",
+      "value": "e4178a57a728a449",
+      "reference_vendor": "apple",
+      "target": "e4178a57a728a449",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/dupes",
+      "part": "batch",
+      "value": "eaf5c67e384055c5",
+      "reference_vendor": "apple",
+      "target": "eaf5c67e384055c5",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/odd",
+      "part": "train",
+      "value": "c24d55c7434cf391",
+      "reference_vendor": "apple",
+      "target": "c24d55c7434cf391",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/odd",
+      "part": "infer",
+      "value": "f78a6ffb8b9c4a27",
+      "reference_vendor": "apple",
+      "target": "f78a6ffb8b9c4a27",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/odd",
+      "part": "model",
+      "value": "eab81b63a3e306ab",
+      "reference_vendor": "apple",
+      "target": "eab81b63a3e306ab",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/odd",
+      "part": "batch",
+      "value": "a24f8fe40fa919ba",
+      "reference_vendor": "apple",
+      "target": "a24f8fe40fa919ba",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/negative",
+      "part": "train",
+      "value": "d638f3adaf1d0bb8",
+      "reference_vendor": "apple",
+      "target": "d638f3adaf1d0bb8",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/negative",
+      "part": "infer",
+      "value": "922b88f982e8dfe9",
+      "reference_vendor": "apple",
+      "target": "922b88f982e8dfe9",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/negative",
+      "part": "model",
+      "value": "846dc3e9b49543c0",
+      "reference_vendor": "apple",
+      "target": "846dc3e9b49543c0",
+      "agrees": true
+    },
+    {
+      "cell": "par-border-types/negative",
+      "part": "batch",
+      "value": "58c475080fa02b79",
+      "reference_vendor": "apple",
+      "target": "58c475080fa02b79",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/base",
+      "part": "train",
+      "value": "aa71e2e60daefca2",
+      "reference_vendor": "cpu",
+      "target": "aa71e2e60daefca2",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/base",
+      "part": "infer",
+      "value": "649ba9e2deb0116b",
+      "reference_vendor": "cpu",
+      "target": "649ba9e2deb0116b",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/base",
+      "part": "model",
+      "value": "2b788f20f8d8c145",
+      "reference_vendor": "cpu",
+      "target": "2b788f20f8d8c145",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/base",
+      "part": "batch",
+      "value": "232d55481f01f239",
+      "reference_vendor": "cpu",
+      "target": "232d55481f01f239",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/ties",
+      "part": "train",
+      "value": "7e871bd012a3962e",
+      "reference_vendor": "cpu",
+      "target": "7e871bd012a3962e",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/ties",
+      "part": "infer",
+      "value": "6174df6113828371",
+      "reference_vendor": "cpu",
+      "target": "6174df6113828371",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/ties",
+      "part": "model",
+      "value": "dc2d6a661f911c91",
+      "reference_vendor": "cpu",
+      "target": "dc2d6a661f911c91",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/ties",
+      "part": "batch",
+      "value": "f061dca8388dc5d3",
+      "reference_vendor": "cpu",
+      "target": "f061dca8388dc5d3",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/hashed",
+      "part": "train",
+      "value": "372d451f62fa6901",
+      "reference_vendor": "cpu",
+      "target": "372d451f62fa6901",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/hashed",
+      "part": "infer",
+      "value": "87e9ebb626a4a6aa",
+      "reference_vendor": "cpu",
+      "target": "87e9ebb626a4a6aa",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/hashed",
+      "part": "model",
+      "value": "0530ffbeced1027e",
+      "reference_vendor": "cpu",
+      "target": "0530ffbeced1027e",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/hashed",
+      "part": "batch",
+      "value": "f5419cbf7bf23ec0",
+      "reference_vendor": "cpu",
+      "target": "f5419cbf7bf23ec0",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/wide",
+      "part": "train",
+      "value": "e8ca2175544f1a73",
+      "reference_vendor": "cpu",
+      "target": "e8ca2175544f1a73",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/wide",
+      "part": "infer",
+      "value": "600b74954f7ec426",
+      "reference_vendor": "cpu",
+      "target": "600b74954f7ec426",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/wide",
+      "part": "model",
+      "value": "3280cb2f403e61bb",
+      "reference_vendor": "cpu",
+      "target": "3280cb2f403e61bb",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/wide",
+      "part": "batch",
+      "value": "f035af87f7c31bfd",
+      "reference_vendor": "cpu",
+      "target": "f035af87f7c31bfd",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal",
+      "part": "train",
+      "value": "e33dcd8e2af3c5ed",
+      "reference_vendor": "cpu",
+      "target": "e33dcd8e2af3c5ed",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal",
+      "part": "infer",
+      "value": "ae5d01a90ca7a3a0",
+      "reference_vendor": "cpu",
+      "target": "ae5d01a90ca7a3a0",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal",
+      "part": "model",
+      "value": "999974b61bbe0004",
+      "reference_vendor": "cpu",
+      "target": "999974b61bbe0004",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal",
+      "part": "batch",
+      "value": "61ee91ed7913e382",
+      "reference_vendor": "cpu",
+      "target": "61ee91ed7913e382",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal_ftz",
+      "part": "train",
+      "value": "e33dcd8e2af3c5ed",
+      "reference_vendor": "cpu",
+      "target": "e33dcd8e2af3c5ed",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal_ftz",
+      "part": "infer",
+      "value": "ae5d01a90ca7a3a0",
+      "reference_vendor": "cpu",
+      "target": "ae5d01a90ca7a3a0",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal_ftz",
+      "part": "model",
+      "value": "999974b61bbe0004",
+      "reference_vendor": "cpu",
+      "target": "999974b61bbe0004",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/denormal_ftz",
+      "part": "batch",
+      "value": "61ee91ed7913e382",
+      "reference_vendor": "cpu",
+      "target": "61ee91ed7913e382",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/dupes",
+      "part": "train",
+      "value": "aa71e2e60daefca2",
+      "reference_vendor": "cpu",
+      "target": "aa71e2e60daefca2",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/dupes",
+      "part": "infer",
+      "value": "649ba9e2deb0116b",
+      "reference_vendor": "cpu",
+      "target": "649ba9e2deb0116b",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/dupes",
+      "part": "model",
+      "value": "2b788f20f8d8c145",
+      "reference_vendor": "cpu",
+      "target": "2b788f20f8d8c145",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/dupes",
+      "part": "batch",
+      "value": "232d55481f01f239",
+      "reference_vendor": "cpu",
+      "target": "232d55481f01f239",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/odd",
+      "part": "train",
+      "value": "02b67bfea83a5c15",
+      "reference_vendor": "cpu",
+      "target": "02b67bfea83a5c15",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/odd",
+      "part": "infer",
+      "value": "a3554de5fcae28c3",
+      "reference_vendor": "cpu",
+      "target": "a3554de5fcae28c3",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/odd",
+      "part": "model",
+      "value": "3c4ad8350c73bac5",
+      "reference_vendor": "cpu",
+      "target": "3c4ad8350c73bac5",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/odd",
+      "part": "batch",
+      "value": "65da76de08e2f1f4",
+      "reference_vendor": "cpu",
+      "target": "65da76de08e2f1f4",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/negative",
+      "part": "train",
+      "value": "27548b32b8c6abe8",
+      "reference_vendor": "cpu",
+      "target": "27548b32b8c6abe8",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/negative",
+      "part": "infer",
+      "value": "8b0aed3120b09339",
+      "reference_vendor": "cpu",
+      "target": "8b0aed3120b09339",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/negative",
+      "part": "model",
+      "value": "e97d48fa0ba847d0",
+      "reference_vendor": "cpu",
+      "target": "e97d48fa0ba847d0",
+      "agrees": true
+    },
+    {
+      "cell": "par-holtwinters/negative",
+      "part": "batch",
+      "value": "513abc3b48ebb80c",
+      "reference_vendor": "cpu",
+      "target": "513abc3b48ebb80c",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/base",
+      "part": "train",
+      "value": "5e8ffa04d8c2fb3d",
+      "reference_vendor": "cpu",
+      "target": "5e8ffa04d8c2fb3d",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/base",
+      "part": "infer",
+      "value": "2ba6e3fe81256474",
+      "reference_vendor": "cpu",
+      "target": "2ba6e3fe81256474",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/base",
+      "part": "model",
+      "value": "2b788f20f8d8c145",
+      "reference_vendor": "cpu",
+      "target": "2b788f20f8d8c145",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/base",
+      "part": "batch",
+      "value": "77ca9a518446c250",
+      "reference_vendor": "cpu",
+      "target": "77ca9a518446c250",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/ties",
+      "part": "train",
+      "value": "e3926af4c3fcb55a",
+      "reference_vendor": "cpu",
+      "target": "e3926af4c3fcb55a",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/ties",
+      "part": "infer",
+      "value": "9894a75e19343d02",
+      "reference_vendor": "cpu",
+      "target": "9894a75e19343d02",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/ties",
+      "part": "model",
+      "value": "dc2d6a661f911c91",
+      "reference_vendor": "cpu",
+      "target": "dc2d6a661f911c91",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/ties",
+      "part": "batch",
+      "value": "60326d25dd4491b2",
+      "reference_vendor": "cpu",
+      "target": "60326d25dd4491b2",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/hashed",
+      "part": "train",
+      "value": "a6b51ab4b2179bd4",
+      "reference_vendor": "apple",
+      "target": "a6b51ab4b2179bd4",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/hashed",
+      "part": "infer",
+      "value": "064801efb15ab008",
+      "reference_vendor": "apple",
+      "target": "064801efb15ab008",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/hashed",
+      "part": "model",
+      "value": "0530ffbeced1027e",
+      "reference_vendor": "apple",
+      "target": "0530ffbeced1027e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/hashed",
+      "part": "batch",
+      "value": "df0ed8c8912f42ea",
+      "reference_vendor": "apple",
+      "target": "df0ed8c8912f42ea",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/wide",
+      "part": "train",
+      "value": "84779b08ee76181f",
+      "reference_vendor": "apple",
+      "target": "84779b08ee76181f",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/wide",
+      "part": "infer",
+      "value": "1ed7d450da2f1e7e",
+      "reference_vendor": "apple",
+      "target": "1ed7d450da2f1e7e",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/wide",
+      "part": "model",
+      "value": "3280cb2f403e61bb",
+      "reference_vendor": "apple",
+      "target": "3280cb2f403e61bb",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/wide",
+      "part": "batch",
+      "value": "4371fe4d83f38591",
+      "reference_vendor": "apple",
+      "target": "4371fe4d83f38591",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal",
+      "part": "train",
+      "value": "61084170fa566d6f",
+      "reference_vendor": "apple",
+      "target": "61084170fa566d6f",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal",
+      "part": "infer",
+      "value": "3baf29a408512838",
+      "reference_vendor": "apple",
+      "target": "3baf29a408512838",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal",
+      "part": "model",
+      "value": "999974b61bbe0004",
+      "reference_vendor": "apple",
+      "target": "999974b61bbe0004",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal",
+      "part": "batch",
+      "value": "e14ccee0b3733785",
+      "reference_vendor": "apple",
+      "target": "e14ccee0b3733785",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal_ftz",
+      "part": "train",
+      "value": "61084170fa566d6f",
+      "reference_vendor": "apple",
+      "target": "61084170fa566d6f",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal_ftz",
+      "part": "infer",
+      "value": "3baf29a408512838",
+      "reference_vendor": "apple",
+      "target": "3baf29a408512838",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal_ftz",
+      "part": "model",
+      "value": "999974b61bbe0004",
+      "reference_vendor": "apple",
+      "target": "999974b61bbe0004",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/denormal_ftz",
+      "part": "batch",
+      "value": "e14ccee0b3733785",
+      "reference_vendor": "apple",
+      "target": "e14ccee0b3733785",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/dupes",
+      "part": "train",
+      "value": "5e8ffa04d8c2fb3d",
+      "reference_vendor": "apple",
+      "target": "5e8ffa04d8c2fb3d",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/dupes",
+      "part": "infer",
+      "value": "2ba6e3fe81256474",
+      "reference_vendor": "apple",
+      "target": "2ba6e3fe81256474",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/dupes",
+      "part": "model",
+      "value": "2b788f20f8d8c145",
+      "reference_vendor": "apple",
+      "target": "2b788f20f8d8c145",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/dupes",
+      "part": "batch",
+      "value": "77ca9a518446c250",
+      "reference_vendor": "apple",
+      "target": "77ca9a518446c250",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/odd",
+      "part": "train",
+      "value": "9109112cb670e19d",
+      "reference_vendor": "apple",
+      "target": "9109112cb670e19d",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/odd",
+      "part": "infer",
+      "value": "ce81b5ac876ab24b",
+      "reference_vendor": "apple",
+      "target": "ce81b5ac876ab24b",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/odd",
+      "part": "model",
+      "value": "3c4ad8350c73bac5",
+      "reference_vendor": "apple",
+      "target": "3c4ad8350c73bac5",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/odd",
+      "part": "batch",
+      "value": "4fc21213f0a13c49",
+      "reference_vendor": "apple",
+      "target": "4fc21213f0a13c49",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/negative",
+      "part": "train",
+      "value": "ecbbbcfd88aa3baa",
+      "reference_vendor": "apple",
+      "target": "ecbbbcfd88aa3baa",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/negative",
+      "part": "infer",
+      "value": "badfe6614be23470",
+      "reference_vendor": "apple",
+      "target": "badfe6614be23470",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/negative",
+      "part": "model",
+      "value": "e97d48fa0ba847d0",
+      "reference_vendor": "apple",
+      "target": "e97d48fa0ba847d0",
+      "agrees": true
+    },
+    {
+      "cell": "par-forecast-holtwinters/negative",
+      "part": "batch",
+      "value": "309b6269cad54229",
+      "reference_vendor": "apple",
+      "target": "309b6269cad54229",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/base",
+      "part": "train",
+      "value": "82ac27da71d34ea9",
+      "reference_vendor": "cpu",
+      "target": "82ac27da71d34ea9",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/base",
+      "part": "infer",
+      "value": "fd6eed35b1338d17",
+      "reference_vendor": "cpu",
+      "target": "fd6eed35b1338d17",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/base",
+      "part": "model",
+      "value": "dcfefe31adc21c6c",
+      "reference_vendor": "cpu",
+      "target": "dcfefe31adc21c6c",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/base",
+      "part": "batch",
+      "value": "6baf3cfbde509312",
+      "reference_vendor": "cpu",
+      "target": "6baf3cfbde509312",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/ties",
+      "part": "train",
+      "value": "1f1a8383ed41ed53",
+      "reference_vendor": "cpu",
+      "target": "1f1a8383ed41ed53",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/ties",
+      "part": "infer",
+      "value": "c62b1be91d40fc43",
+      "reference_vendor": "cpu",
+      "target": "c62b1be91d40fc43",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/ties",
+      "part": "model",
+      "value": "2254dcdb3f209c1d",
+      "reference_vendor": "cpu",
+      "target": "2254dcdb3f209c1d",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/ties",
+      "part": "batch",
+      "value": "166f61a6e1f346b8",
+      "reference_vendor": "cpu",
+      "target": "166f61a6e1f346b8",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/hashed",
+      "part": "train",
+      "value": "10ba4e138bc9450c",
+      "reference_vendor": "apple",
+      "target": "10ba4e138bc9450c",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/hashed",
+      "part": "infer",
+      "value": "49c22df302ee0334",
+      "reference_vendor": "apple",
+      "target": "49c22df302ee0334",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/hashed",
+      "part": "model",
+      "value": "9d809fde4ffc96cc",
+      "reference_vendor": "apple",
+      "target": "9d809fde4ffc96cc",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/hashed",
+      "part": "batch",
+      "value": "648bf9fc3764372d",
+      "reference_vendor": "apple",
+      "target": "648bf9fc3764372d",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/wide",
+      "part": "train",
+      "value": "58e21feb2047a65f",
+      "reference_vendor": "apple",
+      "target": "58e21feb2047a65f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/wide",
+      "part": "infer",
+      "value": "2bfe5d9bde8a2564",
+      "reference_vendor": "apple",
+      "target": "2bfe5d9bde8a2564",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/wide",
+      "part": "model",
+      "value": "809bc63c73b2c093",
+      "reference_vendor": "apple",
+      "target": "809bc63c73b2c093",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/wide",
+      "part": "batch",
+      "value": "3e09f4c3db3c3e66",
+      "reference_vendor": "apple",
+      "target": "3e09f4c3db3c3e66",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal",
+      "part": "train",
+      "value": "4e3aa53b96708090",
+      "reference_vendor": "apple",
+      "target": "4e3aa53b96708090",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal",
+      "part": "infer",
+      "value": "3ff4c07c575048cf",
+      "reference_vendor": "apple",
+      "target": "3ff4c07c575048cf",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal",
+      "part": "model",
+      "value": "c3a1727313e23983",
+      "reference_vendor": "apple",
+      "target": "c3a1727313e23983",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal",
+      "part": "batch",
+      "value": "45f49934c58d1518",
+      "reference_vendor": "apple",
+      "target": "45f49934c58d1518",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal_ftz",
+      "part": "train",
+      "value": "4e3aa53b96708090",
+      "reference_vendor": "apple",
+      "target": "4e3aa53b96708090",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal_ftz",
+      "part": "infer",
+      "value": "3ff4c07c575048cf",
+      "reference_vendor": "apple",
+      "target": "3ff4c07c575048cf",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal_ftz",
+      "part": "model",
+      "value": "1f2b8dd1cf726bc0",
+      "reference_vendor": "apple",
+      "target": "1f2b8dd1cf726bc0",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/denormal_ftz",
+      "part": "batch",
+      "value": "45f49934c58d1518",
+      "reference_vendor": "apple",
+      "target": "45f49934c58d1518",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/dupes",
+      "part": "train",
+      "value": "5f192f5e269eccfd",
+      "reference_vendor": "apple",
+      "target": "5f192f5e269eccfd",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/dupes",
+      "part": "infer",
+      "value": "4ae50eab359ba1e9",
+      "reference_vendor": "apple",
+      "target": "4ae50eab359ba1e9",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/dupes",
+      "part": "model",
+      "value": "3163ed44a2b28c07",
+      "reference_vendor": "apple",
+      "target": "3163ed44a2b28c07",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/dupes",
+      "part": "batch",
+      "value": "99ec531fb8ae409f",
+      "reference_vendor": "apple",
+      "target": "99ec531fb8ae409f",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/odd",
+      "part": "train",
+      "value": "fdeb7028fa3d4458",
+      "reference_vendor": "apple",
+      "target": "fdeb7028fa3d4458",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/odd",
+      "part": "infer",
+      "value": "1e0c2401db49a53d",
+      "reference_vendor": "apple",
+      "target": "1e0c2401db49a53d",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/odd",
+      "part": "model",
+      "value": "2ab1fd5fac4563e2",
+      "reference_vendor": "apple",
+      "target": "2ab1fd5fac4563e2",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/odd",
+      "part": "batch",
+      "value": "8149b10d16c8ebaa",
+      "reference_vendor": "apple",
+      "target": "8149b10d16c8ebaa",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/negative",
+      "part": "train",
+      "value": "bfb587574d151b90",
+      "reference_vendor": "apple",
+      "target": "bfb587574d151b90",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/negative",
+      "part": "infer",
+      "value": "71333eccc89915b1",
+      "reference_vendor": "apple",
+      "target": "71333eccc89915b1",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/negative",
+      "part": "model",
+      "value": "ec79d31b3169a984",
+      "reference_vendor": "apple",
+      "target": "ec79d31b3169a984",
+      "agrees": true
+    },
+    {
+      "cell": "par-ivf/negative",
+      "part": "batch",
+      "value": "9786387eb7123b42",
+      "reference_vendor": "apple",
+      "target": "9786387eb7123b42",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/base",
+      "part": "train",
+      "value": "53f3a09fc600d61d",
+      "reference_vendor": "cpu",
+      "target": "53f3a09fc600d61d",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/base",
+      "part": "infer",
+      "value": "fc0b4c2f28c2e079",
+      "reference_vendor": "cpu",
+      "target": "fc0b4c2f28c2e079",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/base",
+      "part": "model",
+      "value": "81b8bb9e635d8e83",
+      "reference_vendor": "cpu",
+      "target": "81b8bb9e635d8e83",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/base",
+      "part": "batch",
+      "value": "b46f1f9043e091a8",
+      "reference_vendor": "cpu",
+      "target": "b46f1f9043e091a8",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/ties",
+      "part": "train",
+      "value": "f7640639a72e6940",
+      "reference_vendor": "cpu",
+      "target": "f7640639a72e6940",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/ties",
+      "part": "infer",
+      "value": "ede5baa0c8969b06",
+      "reference_vendor": "cpu",
+      "target": "ede5baa0c8969b06",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/ties",
+      "part": "model",
+      "value": "7b9bf869ad365c26",
+      "reference_vendor": "cpu",
+      "target": "7b9bf869ad365c26",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/ties",
+      "part": "batch",
+      "value": "c5069c7b59de4ee1",
+      "reference_vendor": "cpu",
+      "target": "c5069c7b59de4ee1",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/hashed",
+      "part": "train",
+      "value": "04ea8fda33a7b3dc",
+      "reference_vendor": "cpu",
+      "target": "04ea8fda33a7b3dc",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/hashed",
+      "part": "infer",
+      "value": "9da411da0b1e3037",
+      "reference_vendor": "cpu",
+      "target": "9da411da0b1e3037",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/hashed",
+      "part": "model",
+      "value": "f4c2aca55d9362f2",
+      "reference_vendor": "cpu",
+      "target": "f4c2aca55d9362f2",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/hashed",
+      "part": "batch",
+      "value": "0419fbbe5d340ea4",
+      "reference_vendor": "cpu",
+      "target": "0419fbbe5d340ea4",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/wide",
+      "part": "train",
+      "value": "38186a8759df8c24",
+      "reference_vendor": "cpu",
+      "target": "38186a8759df8c24",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/wide",
+      "part": "infer",
+      "value": "209675fda33ccf51",
+      "reference_vendor": "cpu",
+      "target": "209675fda33ccf51",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/wide",
+      "part": "model",
+      "value": "a3ba1f8be78a6a1e",
+      "reference_vendor": "cpu",
+      "target": "a3ba1f8be78a6a1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/wide",
+      "part": "batch",
+      "value": "e8e16299ce5b249c",
+      "reference_vendor": "cpu",
+      "target": "e8e16299ce5b249c",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal",
+      "part": "train",
+      "value": "98250ecb42f48515",
+      "reference_vendor": "cpu",
+      "target": "98250ecb42f48515",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal",
+      "part": "infer",
+      "value": "cd21375d6187b126",
+      "reference_vendor": "cpu",
+      "target": "cd21375d6187b126",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal",
+      "part": "model",
+      "value": "1ed2aed7cb4ce5f2",
+      "reference_vendor": "cpu",
+      "target": "1ed2aed7cb4ce5f2",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal",
+      "part": "batch",
+      "value": "ba78f499f85cae98",
+      "reference_vendor": "cpu",
+      "target": "ba78f499f85cae98",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal_ftz",
+      "part": "train",
+      "value": "98250ecb42f48515",
+      "reference_vendor": "cpu",
+      "target": "98250ecb42f48515",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal_ftz",
+      "part": "infer",
+      "value": "cd21375d6187b126",
+      "reference_vendor": "cpu",
+      "target": "cd21375d6187b126",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal_ftz",
+      "part": "model",
+      "value": "b91daefb85705ccd",
+      "reference_vendor": "cpu",
+      "target": "b91daefb85705ccd",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/denormal_ftz",
+      "part": "batch",
+      "value": "ba78f499f85cae98",
+      "reference_vendor": "cpu",
+      "target": "ba78f499f85cae98",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/dupes",
+      "part": "train",
+      "value": "53f3a09fc600d61d",
+      "reference_vendor": "cpu",
+      "target": "53f3a09fc600d61d",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/dupes",
+      "part": "infer",
+      "value": "fc0b4c2f28c2e079",
+      "reference_vendor": "cpu",
+      "target": "fc0b4c2f28c2e079",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/dupes",
+      "part": "model",
+      "value": "81b8bb9e635d8e83",
+      "reference_vendor": "cpu",
+      "target": "81b8bb9e635d8e83",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/dupes",
+      "part": "batch",
+      "value": "b46f1f9043e091a8",
+      "reference_vendor": "cpu",
+      "target": "b46f1f9043e091a8",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/odd",
+      "part": "train",
+      "value": "adff85182ac93351",
+      "reference_vendor": "cpu",
+      "target": "adff85182ac93351",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/odd",
+      "part": "infer",
+      "value": "1af8d13ad9045833",
+      "reference_vendor": "cpu",
+      "target": "1af8d13ad9045833",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/odd",
+      "part": "model",
+      "value": "d5a786c8bdd995bf",
+      "reference_vendor": "cpu",
+      "target": "d5a786c8bdd995bf",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/odd",
+      "part": "batch",
+      "value": "1d0177239abe0a3c",
+      "reference_vendor": "cpu",
+      "target": "1d0177239abe0a3c",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/negative",
+      "part": "train",
+      "value": "6c906f7311c4464c",
+      "reference_vendor": "cpu",
+      "target": "6c906f7311c4464c",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/negative",
+      "part": "infer",
+      "value": "b7e320a5c79c2f12",
+      "reference_vendor": "cpu",
+      "target": "b7e320a5c79c2f12",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/negative",
+      "part": "model",
+      "value": "42456472e82844f7",
+      "reference_vendor": "cpu",
+      "target": "42456472e82844f7",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-fit/negative",
+      "part": "batch",
+      "value": "c2f1bdf1ba2a74f9",
+      "reference_vendor": "cpu",
+      "target": "c2f1bdf1ba2a74f9",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/base",
+      "part": "train",
+      "value": "2f1217bcae26e6a9",
+      "reference_vendor": "cpu",
+      "target": "2f1217bcae26e6a9",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/base",
+      "part": "infer",
+      "value": "fb0a0cfb1fee8dab",
+      "reference_vendor": "cpu",
+      "target": "fb0a0cfb1fee8dab",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/base",
+      "part": "model",
+      "value": "81b8bb9e635d8e83",
+      "reference_vendor": "cpu",
+      "target": "81b8bb9e635d8e83",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/base",
+      "part": "batch",
+      "value": "b46f1f9043e091a8",
+      "reference_vendor": "cpu",
+      "target": "b46f1f9043e091a8",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/ties",
+      "part": "train",
+      "value": "b7725384674bcb9b",
+      "reference_vendor": "cpu",
+      "target": "b7725384674bcb9b",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/ties",
+      "part": "infer",
+      "value": "36faf8506fbac21b",
+      "reference_vendor": "cpu",
+      "target": "36faf8506fbac21b",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/ties",
+      "part": "model",
+      "value": "7b9bf869ad365c26",
+      "reference_vendor": "cpu",
+      "target": "7b9bf869ad365c26",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/ties",
+      "part": "batch",
+      "value": "c5069c7b59de4ee1",
+      "reference_vendor": "cpu",
+      "target": "c5069c7b59de4ee1",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/hashed",
+      "part": "train",
+      "value": "a84c7a9a2f90ff21",
+      "reference_vendor": "cpu",
+      "target": "a84c7a9a2f90ff21",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/hashed",
+      "part": "infer",
+      "value": "4b0cface672a3d34",
+      "reference_vendor": "cpu",
+      "target": "4b0cface672a3d34",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/hashed",
+      "part": "model",
+      "value": "f4c2aca55d9362f2",
+      "reference_vendor": "cpu",
+      "target": "f4c2aca55d9362f2",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/hashed",
+      "part": "batch",
+      "value": "0419fbbe5d340ea4",
+      "reference_vendor": "cpu",
+      "target": "0419fbbe5d340ea4",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/wide",
+      "part": "train",
+      "value": "6c0ef697f0ddafb7",
+      "reference_vendor": "cpu",
+      "target": "6c0ef697f0ddafb7",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/wide",
+      "part": "infer",
+      "value": "a94e0eb4bddf6c35",
+      "reference_vendor": "cpu",
+      "target": "a94e0eb4bddf6c35",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/wide",
+      "part": "model",
+      "value": "a3ba1f8be78a6a1e",
+      "reference_vendor": "cpu",
+      "target": "a3ba1f8be78a6a1e",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/wide",
+      "part": "batch",
+      "value": "e8e16299ce5b249c",
+      "reference_vendor": "cpu",
+      "target": "e8e16299ce5b249c",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal",
+      "part": "train",
+      "value": "a12033812c60523b",
+      "reference_vendor": "cpu",
+      "target": "a12033812c60523b",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal",
+      "part": "infer",
+      "value": "552aa9dfdcaccfb7",
+      "reference_vendor": "cpu",
+      "target": "552aa9dfdcaccfb7",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal",
+      "part": "model",
+      "value": "1ed2aed7cb4ce5f2",
+      "reference_vendor": "cpu",
+      "target": "1ed2aed7cb4ce5f2",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal",
+      "part": "batch",
+      "value": "ba78f499f85cae98",
+      "reference_vendor": "cpu",
+      "target": "ba78f499f85cae98",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal_ftz",
+      "part": "train",
+      "value": "a12033812c60523b",
+      "reference_vendor": "cpu",
+      "target": "a12033812c60523b",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal_ftz",
+      "part": "infer",
+      "value": "552aa9dfdcaccfb7",
+      "reference_vendor": "cpu",
+      "target": "552aa9dfdcaccfb7",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal_ftz",
+      "part": "model",
+      "value": "b91daefb85705ccd",
+      "reference_vendor": "cpu",
+      "target": "b91daefb85705ccd",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/denormal_ftz",
+      "part": "batch",
+      "value": "ba78f499f85cae98",
+      "reference_vendor": "cpu",
+      "target": "ba78f499f85cae98",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/dupes",
+      "part": "train",
+      "value": "2f1217bcae26e6a9",
+      "reference_vendor": "cpu",
+      "target": "2f1217bcae26e6a9",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/dupes",
+      "part": "infer",
+      "value": "fb0a0cfb1fee8dab",
+      "reference_vendor": "cpu",
+      "target": "fb0a0cfb1fee8dab",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/dupes",
+      "part": "model",
+      "value": "81b8bb9e635d8e83",
+      "reference_vendor": "cpu",
+      "target": "81b8bb9e635d8e83",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/dupes",
+      "part": "batch",
+      "value": "b46f1f9043e091a8",
+      "reference_vendor": "cpu",
+      "target": "b46f1f9043e091a8",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/odd",
+      "part": "train",
+      "value": "9f285470331c3d0a",
+      "reference_vendor": "cpu",
+      "target": "9f285470331c3d0a",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/odd",
+      "part": "infer",
+      "value": "1ef823d8e4a69428",
+      "reference_vendor": "cpu",
+      "target": "1ef823d8e4a69428",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/odd",
+      "part": "model",
+      "value": "d5a786c8bdd995bf",
+      "reference_vendor": "cpu",
+      "target": "d5a786c8bdd995bf",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/odd",
+      "part": "batch",
+      "value": "1d0177239abe0a3c",
+      "reference_vendor": "cpu",
+      "target": "1d0177239abe0a3c",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/negative",
+      "part": "train",
+      "value": "fb79c0d34c7353ab",
+      "reference_vendor": "cpu",
+      "target": "fb79c0d34c7353ab",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/negative",
+      "part": "infer",
+      "value": "29771f8e07c66d7e",
+      "reference_vendor": "cpu",
+      "target": "29771f8e07c66d7e",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/negative",
+      "part": "model",
+      "value": "42456472e82844f7",
+      "reference_vendor": "cpu",
+      "target": "42456472e82844f7",
+      "agrees": true
+    },
+    {
+      "cell": "par-gpc-predict/negative",
+      "part": "batch",
+      "value": "c2f1bdf1ba2a74f9",
+      "reference_vendor": "cpu",
+      "target": "c2f1bdf1ba2a74f9",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/base",
+      "part": "train",
+      "value": "5171c3ffeb9dd8f8",
+      "reference_vendor": "cpu",
+      "target": "5171c3ffeb9dd8f8",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/base",
+      "part": "batch",
+      "value": "2d58207bcc498e7c",
+      "reference_vendor": "cpu",
+      "target": "2d58207bcc498e7c",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/ties",
+      "part": "train",
+      "value": "e6caf9f0f7ae562d",
+      "reference_vendor": "cpu",
+      "target": "e6caf9f0f7ae562d",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/ties",
+      "part": "batch",
+      "value": "73aef1570825d468",
+      "reference_vendor": "cpu",
+      "target": "73aef1570825d468",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/hashed",
+      "part": "train",
+      "value": "37c495fc132ea9db",
+      "reference_vendor": "cpu",
+      "target": "37c495fc132ea9db",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/hashed",
+      "part": "batch",
+      "value": "b2dfd7cd9cf444df",
+      "reference_vendor": "cpu",
+      "target": "b2dfd7cd9cf444df",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/wide",
+      "part": "train",
+      "value": "f711a5aa202b3e41",
+      "reference_vendor": "cpu",
+      "target": "f711a5aa202b3e41",
+      "agrees": true
+    },
+    {
+      "cell": "par-causal-lm/wide",
+      "part": "batch",
+      "value": "97051f4a7819532e",
+      "reference_vendor": "cpu",
+      "target": "97051f4a7819532e",
+      "agrees": true
+    }
+  ]
+}
