@@ -3,7 +3,7 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased
+## 0.8.10 (unreleased)
 
 - Parallel workers now set native device counts to their own visible device
   group, preventing inherited multi-GPU settings from reaching a single-GPU worker.
