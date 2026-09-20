@@ -1,0 +1,577 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "8be118b4c629a7006f287b6586ce53a30966b5b7",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "par-graph-agglomerative/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c9e7daffb48878f",
+    "6c9e7daffb48878f"
+   ],
+   "parts": [
+    {
+     "labels": "02ca572ae936a2fa",
+     "children": "61fbeb98d7761d71"
+    },
+    {
+     "labels": "02ca572ae936a2fa",
+     "children": "61fbeb98d7761d71"
+    }
+   ],
+   "infer": [
+    "3a6472714f51d8ab",
+    "3a6472714f51d8ab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9bb9f86300c44f5f",
+    "9bb9f86300c44f5f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a6472714f51d8ab",
+    "3a6472714f51d8ab"
+   ],
+   "batch": [
+    "a8e67882b424a053",
+    "a8e67882b424a053"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 5.361491747200489,
+    "stages": {
+     "repeat=1/train": 3.3742429707199335,
+     "repeat=1/infer-save-reload": 0.004033168777823448,
+     "repeat=1/batch": 0.016568917781114578,
+     "repeat=1/batchgrad": 5.158036947250366e-05,
+     "repeat=1/batchscale": 4.0339305996894836e-05,
+     "repeat=1/ragged": 3.915466368198395e-05,
+     "repeat=1/stepfull": 3.85139137506485e-05,
+     "repeat=2/train": 1.9398157615214586,
+     "repeat=2/infer-save-reload": 0.004485027864575386,
+     "repeat=2/batch": 0.021428175270557404,
+     "repeat=2/batchgrad": 8.814036846160889e-05,
+     "repeat=2/batchscale": 7.96634703874588e-05,
+     "repeat=2/ragged": 8.549541234970093e-05,
+     "repeat=2/stepfull": 7.78883695602417e-05
+    }
+   }
+  },
+  "par-graph-agglomerative/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e0ddbabe3fa9e85c",
+    "e0ddbabe3fa9e85c"
+   ],
+   "parts": [
+    {
+     "labels": "8033ec9dd0710431",
+     "children": "edcd67f3c2ea5e9b"
+    },
+    {
+     "labels": "8033ec9dd0710431",
+     "children": "edcd67f3c2ea5e9b"
+    }
+   ],
+   "infer": [
+    "d161892b4ef55128",
+    "d161892b4ef55128"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "64a8cd1101ec17ba",
+    "64a8cd1101ec17ba"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d161892b4ef55128",
+    "d161892b4ef55128"
+   ],
+   "batch": [
+    "a8e67882b424a053",
+    "a8e67882b424a053"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.9469433818012476,
+    "stages": {
+     "repeat=1/train": 1.9525765608996153,
+     "repeat=1/infer-save-reload": 0.004525575786828995,
+     "repeat=1/batch": 0.021523769944906235,
+     "repeat=1/batchgrad": 8.817948400974274e-05,
+     "repeat=1/batchscale": 7.345341145992279e-05,
+     "repeat=1/ragged": 7.28406012058258e-05,
+     "repeat=1/stepfull": 7.311254739761353e-05,
+     "repeat=2/train": 1.9408780243247747,
+     "repeat=2/infer-save-reload": 0.00449773296713829,
+     "repeat=2/batch": 0.02189905196428299,
+     "repeat=2/batchgrad": 8.217990398406982e-05,
+     "repeat=2/batchscale": 6.694719195365906e-05,
+     "repeat=2/ragged": 6.458349525928497e-05,
+     "repeat=2/stepfull": 6.407313048839569e-05
+    }
+   }
+  },
+  "par-gmm/base": {
+   "verdict": "REFUSED",
+   "error": "ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 232 bytes of 256\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6790, in _\n    _same_bytes(\"fit_gaussian_mixture covariances_\", par.covariances_, \"plain covariances_\", plain.covariances_)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1697, in _same_bytes\n    raise ValueError(message)\nValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 232 bytes of 256",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 2.030231749638915,
+    "stages": {
+     "repeat=1/train": 2.0289615374058485
+    }
+   }
+  },
+  "par-gmm/ties": {
+   "verdict": "REFUSED",
+   "error": "ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 242 bytes of 256\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6790, in _\n    _same_bytes(\"fit_gaussian_mixture covariances_\", par.covariances_, \"plain covariances_\", plain.covariances_)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1697, in _same_bytes\n    raise ValueError(message)\nValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 242 bytes of 256",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 1.9753436632454395,
+    "stages": {
+     "repeat=1/train": 1.9741469491273165
+    }
+   }
+  },
+  "par-resample/base": {
+   "verdict": "REFUSED",
+   "error": "ValueError: parallel bootstrap distribution and bootstrap distribution differ: 3564 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6815, in _\n    _same_bytes(\"parallel bootstrap distribution\", b.distribution, \"bootstrap distribution\", plain.distribution)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1697, in _same_bytes\n    raise ValueError(message)\nValueError: parallel bootstrap distribution and bootstrap distribution differ: 3564 bytes of 8192",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 3.3505837693810463,
+    "stages": {
+     "repeat=1/train": 3.3493846859782934
+    }
+   }
+  },
+  "par-resample/ties": {
+   "verdict": "REFUSED",
+   "error": "ValueError: parallel bootstrap distribution and bootstrap distribution differ: 2925 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6815, in _\n    _same_bytes(\"parallel bootstrap distribution\", b.distribution, \"bootstrap distribution\", plain.distribution)\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1697, in _same_bytes\n    raise ValueError(message)\nValueError: parallel bootstrap distribution and bootstrap distribution differ: 2925 bytes of 8192",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 3.3427100237458944,
+    "stages": {
+     "repeat=1/train": 3.3415468651801348
+    }
+   }
+  },
+  "par-hdbscan/base": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6849, in _\n    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 404, in fit_hdbscan\n    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 272, in execute\n    state.fit(*args)\n    ~~~~~~~~~^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 51, in guarded\n    return method(self, *args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/hdbscan.py\", line 220, in fit\n    n_clusters = ext.hdbscan_fit(\n        addrs,\n    ...<3 lines>...\n         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],\n    )\nException: mst: Number of edges found by MST is invalid. This may be due to loss in precision. Try increasing precision of weights. (found 6000 > 5999)",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 1.9756335597485304,
+    "stages": {
+     "repeat=1/train": 1.9731625840067863
+    }
+   }
+  },
+  "par-hdbscan/ties": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6849, in _\n    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 404, in fit_hdbscan\n    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 272, in execute\n    state.fit(*args)\n    ~~~~~~~~~^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 51, in guarded\n    return method(self, *args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/hdbscan.py\", line 220, in fit\n    n_clusters = ext.hdbscan_fit(\n        addrs,\n    ...<3 lines>...\n         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],\n    )\nException: mst: Number of edges found by MST is invalid. This may be due to loss in precision. Try increasing precision of weights. (found 6000 > 5999)",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 1.967500263825059,
+    "stages": {
+     "repeat=1/train": 1.9654186870902777
+    }
+   }
+  },
+  "par-cholesky/base": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6876, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 307, in execute\n    native = state._extension()\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 132, in _extension\n    mod, readback = self._door()\n                    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 126, in _door\n    return self._bind(), \"gp_numeric_mode\"\n           ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 113, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1587, in binding\n    module = getattr(selected, name)\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1455, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.13411253690719604,
+    "stages": {
+     "repeat=1/train": 0.1321531943976879
+    }
+   }
+  },
+  "par-cholesky/ties": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6876, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 307, in execute\n    native = state._extension()\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 132, in _extension\n    mod, readback = self._door()\n                    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 126, in _door\n    return self._bind(), \"gp_numeric_mode\"\n           ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 113, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1587, in binding\n    module = getattr(selected, name)\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1455, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.13587849214673042,
+    "stages": {
+     "repeat=1/train": 0.1338765900582075
+    }
+   }
+  },
+  "par-kernel-ridge/base": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6898, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 289, in execute\n    state.fit(*args)\n    ~~~~~~~~~^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 51, in guarded\n    return method(self, *args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/kernel_methods.py\", line 223, in fit\n    info = self._extension().kernel_ridge_fit(\n        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.\n    ...<3 lines>...\n        [n, d, t, kernel, degree, gamma, coef0, alpha],\n    )\nException: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=317, the leading minor of order 317 failed). kernel=rbf, n_samples=600. cuML catches this and silently returns a LEAST-SQUARES solution instead (kernel_ridge.py:26-44, behind a warnings.warn); this lane refuses, because a fit that returns a different estimator than the one it was asked for is a wrong answer with no error. THE CLOSURE IS alpha: raise it. A float32 kernel matrix needs a larger ridge than cuML's float64 one at the same data (DEVIATION 1661). To close it properly, implementation an SVD-based least-squares arm -- there is one at solver/checks/lstsq.mojo -- and gate BOTH sides of the branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 2.077917519956827,
+    "stages": {
+     "repeat=1/train": 2.0752919297665358
+    }
+   }
+  },
+  "par-kernel-ridge/ties": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6898, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 483, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 289, in execute\n    state.fit(*args)\n    ~~~~~~~~~^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 51, in guarded\n    return method(self, *args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/kernel_methods.py\", line 223, in fit\n    info = self._extension().kernel_ridge_fit(\n        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.\n    ...<3 lines>...\n        [n, d, t, kernel, degree, gamma, coef0, alpha],\n    )\nException: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=317, the leading minor of order 317 failed). kernel=rbf, n_samples=600. cuML catches this and silently returns a LEAST-SQUARES solution instead (kernel_ridge.py:26-44, behind a warnings.warn); this lane refuses, because a fit that returns a different estimator than the one it was asked for is a wrong answer with no error. THE CLOSURE IS alpha: raise it. A float32 kernel matrix needs a larger ridge than cuML's float64 one at the same data (DEVIATION 1661). To close it properly, implementation an SVD-based least-squares arm -- there is one at solver/checks/lstsq.mojo -- and gate BOTH sides of the branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 2.0728559233248234,
+    "stages": {
+     "repeat=1/train": 2.070872647687793
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-cholesky",
+  "par-gmm",
+  "par-graph-agglomerative",
+  "par-hdbscan",
+  "par-kernel-ridge",
+  "par-resample"
+ ],
+ "degenerate_column": "nvidia-1gpu",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0,1",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "486a5ad6a8ec3a69c706dc7dc5730df8f545c576b710c5a802b4e8f8820aa813",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "cf4d3ac5ff2bbd9055439be66b473f0002b4550d4f55e2e69daa26b0cdda8e21",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "8050b24d4062cf962be05b86ddae1127e2d40bc34a0e745b8889c71304f6833a",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "3dd331a948d0d430e1da1713e2bd187819134a9a6b055f8b516d9b5a88761061",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "a2b3dc8eaff76b394b0903661cd624646d186b4bff2981d6c74cc82461bed3a0",
+    "size": 10423528
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "443ad6e830a26c7fa9d0aecfc7491186f901a9df31ed5ebad3c408926657026e",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "4f5503628330d1198921d2ec032dde9a42e1e887ec24cf715e20a3d67c01ebdb",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "ac194215a7f02e5146a6d1bf701f490b63b62cb3dc2e56ae701dc8b0ee1a0f9d",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "fd21deda33e6d7c397876f3a4fc1b8e7e0e91e691cfde39109f998636eed7d20",
+    "size": 3036448
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "bfd3b3dec7e95cad5efc812357d401fe7bcf58df15477fbe62de75e91fa9f4b1",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-cholesky,par-kernel-ridge,par-hdbscan,par-graph-agglomerative,par-gmm,par-resample",
+   "skip": "",
+   "fixtures": "base,ties",
+   "repeats": 2,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "2f0bc2ab95e88906ee29c76ac19a2e54cc0422dccdb22c0fd53ad51395ef51f2",
+  "provenance": {
+   "commit": "8be118b4c629a7006f287b6586ce53a30966b5b7",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    }
+   }
+  }
+ }
+}

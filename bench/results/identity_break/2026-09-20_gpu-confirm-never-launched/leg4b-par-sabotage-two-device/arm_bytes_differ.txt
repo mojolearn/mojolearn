@@ -1,0 +1,14 @@
+3,4c3,4
+< ee9739f65724544188e72922229f9f73232cf0f0d513bbcec3e2dd4bef729a48  python/mojolearn/identical/_mojolearn_hdbscan.so
+< 18b0e898c200758608bc8b5a9a5b3004e5799f5fd9f17cadcbbeb5b564389d17  python/mojolearn/identical/_mojolearn_kernel_methods.so
+---
+> cf4d3ac5ff2bbd9055439be66b473f0002b4550d4f55e2e69daa26b0cdda8e21  python/mojolearn/identical/_mojolearn_hdbscan.so
+> 8050b24d4062cf962be05b86ddae1127e2d40bc34a0e745b8889c71304f6833a  python/mojolearn/identical/_mojolearn_kernel_methods.so
+7c7
+< dcdc3d31976bb1b7799c02c5c7d554a894cd171848fec8327c178971bb36c4a9  python/mojolearn/identical/_mojolearn_mixture.so
+---
+> 443ad6e830a26c7fa9d0aecfc7491186f901a9df31ed5ebad3c408926657026e  python/mojolearn/identical/_mojolearn_mixture.so
+9c9
+< 22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9  python/mojolearn/identical/_mojolearn_resample.so
+---
+> ac194215a7f02e5146a6d1bf701f490b63b62cb3dc2e56ae701dc8b0ee1a0f9d  python/mojolearn/identical/_mojolearn_resample.so

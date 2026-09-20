@@ -1,0 +1,103 @@
+| lane/fixture                 | verdict    | nvidia-nvidia-geforce-rtx-4090-sm_89 | nvidia-nvidia-geforce-rtx-4090-sm_89 |
+|------------------------------|------------|------------------|------------------|
+| par-cholesky/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-cholesky/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-gmm/base                 | IDENTICAL x2 | 2e2f431921382642 | 2e2f431921382642 |
+| par-gmm/ties                 | IDENTICAL x2 | 391ad032f87985dd | 391ad032f87985dd |
+| par-graph-agglomerative/base | IDENTICAL x2 | 6c9e7daffb48878f | 6c9e7daffb48878f |
+| par-graph-agglomerative/ties | IDENTICAL x2 | e0ddbabe3fa9e85c | e0ddbabe3fa9e85c |
+| par-hdbscan/base             | IDENTICAL x2 | 1032d54b827b0e0c | 1032d54b827b0e0c |
+| par-hdbscan/ties             | IDENTICAL x2 | 444bc82f0a607cfb | 444bc82f0a607cfb |
+| par-kernel-ridge/base        | IDENTICAL x2 | e243a5ab9bfb9ff5 | e243a5ab9bfb9ff5 |
+| par-kernel-ridge/ties        | IDENTICAL x2 | cb949195fbe57da4 | cb949195fbe57da4 |
+| par-resample/base            | IDENTICAL x2 | 16b7c5812583951d | 16b7c5812583951d |
+| par-resample/ties            | IDENTICAL x2 | ee360747ea316f42 | ee360747ea316f42 |
+
+summary: IDENTICAL=10, REFUSED=2
+
+| lane/fixture                 | column | verdict      | nvidia-nvidia-geforce-rtx-4090-sm_89 | nvidia-nvidia-geforce-rtx-4090-sm_89 |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-gmm/base                 | infer  | IDENTICAL x2 | 85fe32a2a96f9f7b | 85fe32a2a96f9f7b |
+| par-gmm/base                 | model  | IDENTICAL x2 | c4a997dc3ae320a2 | c4a997dc3ae320a2 |
+| par-gmm/base                 | batch  | IDENTICAL x2 | 7ba1e60c59f6aad6 | 7ba1e60c59f6aad6 |
+| par-gmm/base                 | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-gmm/base                 | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-gmm/base                 | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-gmm/base                 | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-gmm/ties                 | infer  | IDENTICAL x2 | b826318a10f37b16 | b826318a10f37b16 |
+| par-gmm/ties                 | model  | IDENTICAL x2 | fa63a34d1b2e5088 | fa63a34d1b2e5088 |
+| par-gmm/ties                 | batch  | IDENTICAL x2 | fe518740b7ec427e | fe518740b7ec427e |
+| par-gmm/ties                 | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-gmm/ties                 | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-gmm/ties                 | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-gmm/ties                 | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/base | infer  | IDENTICAL x2 | 3a6472714f51d8ab | 3a6472714f51d8ab |
+| par-graph-agglomerative/base | model  | IDENTICAL x2 | 9bb9f86300c44f5f | 9bb9f86300c44f5f |
+| par-graph-agglomerative/base | batch  | IDENTICAL x2 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/base | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-graph-agglomerative/base | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-graph-agglomerative/base | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-graph-agglomerative/base | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-graph-agglomerative/ties | infer  | IDENTICAL x2 | d161892b4ef55128 | d161892b4ef55128 |
+| par-graph-agglomerative/ties | model  | IDENTICAL x2 | 64a8cd1101ec17ba | 64a8cd1101ec17ba |
+| par-graph-agglomerative/ties | batch  | IDENTICAL x2 | a8e67882b424a053 | a8e67882b424a053 |
+| par-graph-agglomerative/ties | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-graph-agglomerative/ties | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-graph-agglomerative/ties | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-graph-agglomerative/ties | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-hdbscan/base             | infer  | IDENTICAL x2 | a104cfe065750353 | a104cfe065750353 |
+| par-hdbscan/base             | model  | IDENTICAL x2 | 886b0c2a69e8f5b9 | 886b0c2a69e8f5b9 |
+| par-hdbscan/base             | batch  | IDENTICAL x2 | 43c868ddda4bae13 | 43c868ddda4bae13 |
+| par-hdbscan/base             | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-hdbscan/base             | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-hdbscan/base             | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-hdbscan/base             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-hdbscan/ties             | infer  | IDENTICAL x2 | 324146f46faedded | 324146f46faedded |
+| par-hdbscan/ties             | model  | IDENTICAL x2 | a282d01525378b33 | a282d01525378b33 |
+| par-hdbscan/ties             | batch  | IDENTICAL x2 | a5c1950592d1d992 | a5c1950592d1d992 |
+| par-hdbscan/ties             | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-hdbscan/ties             | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-hdbscan/ties             | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-hdbscan/ties             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-kernel-ridge/base        | infer  | IDENTICAL x2 | debe00d116acc0e0 | debe00d116acc0e0 |
+| par-kernel-ridge/base        | model  | IDENTICAL x2 | 9a6ab1c1cacac805 | 9a6ab1c1cacac805 |
+| par-kernel-ridge/base        | batch  | IDENTICAL x2 | 6763a1e46d080fa1 | 6763a1e46d080fa1 |
+| par-kernel-ridge/base        | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-kernel-ridge/base        | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-kernel-ridge/base        | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-kernel-ridge/base        | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-kernel-ridge/ties        | infer  | IDENTICAL x2 | df5816c733355692 | df5816c733355692 |
+| par-kernel-ridge/ties        | model  | IDENTICAL x2 | 56eb82130d1dfdc6 | 56eb82130d1dfdc6 |
+| par-kernel-ridge/ties        | batch  | IDENTICAL x2 | 841571214fc43760 | 841571214fc43760 |
+| par-kernel-ridge/ties        | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-kernel-ridge/ties        | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-kernel-ridge/ties        | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-kernel-ridge/ties        | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/base            | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/base            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/base            | batch  | IDENTICAL x2 | e234c2830f21479b | e234c2830f21479b |
+| par-resample/base            | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-resample/base            | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-resample/base            | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-resample/base            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-resample/ties            | infer  | N/A          | n/a:function     | n/a:function     |
+| par-resample/ties            | model  | N/A          | n/a:no-save      | n/a:no-save      |
+| par-resample/ties            | batch  | IDENTICAL x2 | a5f0ee3a2c5e0107 | a5f0ee3a2c5e0107 |
+| par-resample/ties            | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-resample/ties            | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-resample/ties            | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-resample/ties            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+
+infer/model: 4 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): IDENTICAL=16, N/A=4, NOT-COMPARED=4
+batch: 2 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): IDENTICAL=10, NOT-COMPARED=2
+summary (rlpair): 
+batchgrad: 2 column cells not compared (no JSON here carries them; they predate the batchgrad part)
+summary (batchgrad): N/A=10, NOT-COMPARED=2
+batchscale: 2 column cells not compared (no JSON here carries them; they predate the batchscale part)
+summary (batchscale): N/A=10, NOT-COMPARED=2
+ragged: 2 column cells not compared (no JSON here carries them; they predate the ragged part)
+summary (ragged): N/A=10, NOT-COMPARED=2
+stepfull: 2 column cells not compared (no JSON here carries them; they predate the stepfull part)
+summary (stepfull): N/A=10, NOT-COMPARED=2
