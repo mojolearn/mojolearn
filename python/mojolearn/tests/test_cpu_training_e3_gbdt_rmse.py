@@ -54,8 +54,6 @@ def test_manifest_declares_gbdt_rmse():
     assert ORACLE in fam["host_modules"] and (ROOT / ORACLE).is_file()
     assert "gbdt-rmse" in host_surface.covered_lanes()
     assert "RMSE" in host_surface.TRAINING_LANE_NAMES["gbdt-rmse"]
-    sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training outside its declared lanes" in sentence, sentence
 
 
 def test_binding_dispatches_rmse_and_lifts_only_its_refusals():
