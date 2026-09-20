@@ -93,7 +93,7 @@ def minimize(fun, x0, lo, hi):
     n_eval = 1
     if not math.isfinite(f):
         return x, f, 0, n_eval, "nonfinite-start"
-    hist_s, hist_y, hist_rho = [], [], []
+    hist_s, hist_y, hist_rho, hist_gamma = [], [], [], []
     n_iter = 0
     first = True
     while True:
@@ -116,7 +116,7 @@ def minimize(fun, x0, lo, hi):
             for i in range(n):
                 q[i] = q[i] - a[p] * yp[i]
         if k > 0:
-            gamma = _dot(hist_s[k - 1], hist_y[k - 1]) / _dot(hist_y[k - 1], hist_y[k - 1])
+            gamma = hist_gamma[k - 1]
             q = [gamma * v for v in q]
         for p in range(k):
             b = hist_rho[p] * _dot(hist_y[p], q)
@@ -126,7 +126,7 @@ def minimize(fun, x0, lo, hi):
         d = [0.0 if active[i] else -q[i] for i in range(n)]
         gd = _dot(g, d)
         if not gd < 0.0:
-            hist_s, hist_y, hist_rho = [], [], []
+            hist_s, hist_y, hist_rho, hist_gamma = [], [], [], []
             d = [0.0 if active[i] else -g[i] for i in range(n)]
             gd = _dot(g, d)
             if not gd < 0.0:
@@ -161,10 +161,16 @@ def minimize(fun, x0, lo, hi):
             hist_s.append(s)
             hist_y.append(y)
             hist_rho.append(1.0 / sy)
+            # The next two-loop recursion used to recompute these same two
+            # ascending dots on every iteration.  Cache their already-
+            # computed quotient with the pair: identical operands, division,
+            # and bits, without two extra Python loops over theta.
+            hist_gamma.append(sy / yy)
             if len(hist_s) > M:
                 hist_s.pop(0)
                 hist_y.pop(0)
                 hist_rho.pop(0)
+                hist_gamma.pop(0)
         f_old = f
         x, f, g = xt, ft, gt
         n_iter += 1
