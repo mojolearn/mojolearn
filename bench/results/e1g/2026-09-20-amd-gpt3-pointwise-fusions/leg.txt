@@ -1,0 +1,50 @@
+commit=e3122767a parent 74095a4bf
+commit_sha=e3122767a079cb6b0574a67f25a5180688b8d0fc
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=gpt3-pointwise-fusions
+minutes=60
+gates=0
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=tools/gpt3_pointwise_fusions_cv_leg.sh
+extra_sha256=c45bc97a1d215413ebc9610724bec8cbd8b2e56c3ba3134c8ebe266e8be7fb38
+bundle_bytes=14313078
+bundle_sha256=b7a2a2536644e7edd9c7bdcba309294bf3c0fa5566ce3a054ca0bedc448850ad
+source_sha256_local=b2bc6af024ffc98952f5c9fb91bd991922cae8e72f3c0135b5ede54255a05604
+mode=rent
+started=2026-09-20T21:39:13Z
+balance_before_cents=2822
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-20T21:39:16Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-20T21:39:23Z
+vm_ref=48e3722c-7db2-41ff-b846-5adebeb318d9
+vm_name=enc1-gpuvm002
+description=mojolearn:gpt3-pointwise-fusions:20260920T213916Z
+ssh=hotaisle@23.183.40.67:22 running_after_seconds=11
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=5
+image_pull=pull_exit=0 pull_seconds=100
+work_seconds=3208
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=SKIPPED
+remote_card_exit=SKIPPED
+remote_extra_exit=1
+remote_body_exit=0
+finished=2026-09-20T21:49:21Z
+lease_used_seconds=605
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-20T21:49:27Z
+balance_after_cents=2783
