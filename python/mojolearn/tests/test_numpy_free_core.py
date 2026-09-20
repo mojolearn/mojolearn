@@ -258,6 +258,10 @@ def test_npy_bytes_identical_to_numpy():
                 want = _numpy_npy(x)
                 got_np = _serialize.encode_npy(x)
                 _assert_same_bytes(got_np, want, f"encode_npy(ndarray {dt.__name__} {shape} {order})")
+                streamed = io.BytesIO()
+                _serialize.write_npy(streamed, x)
+                _assert_same_bytes(streamed.getvalue(), want,
+                                   f"write_npy(ndarray {dt.__name__} {shape} {order})")
                 got_arr = _serialize.encode_npy(Array.from_buffer(x))
                 _assert_same_bytes(got_arr, want, f"encode_npy(Array {dt.__name__} {shape} {order})")
                 back = np.load(io.BytesIO(got_arr))
