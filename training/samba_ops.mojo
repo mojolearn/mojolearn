@@ -230,9 +230,9 @@ def samba_rms_norm_backward_host(
     ctx.synchronize()
     llama_rms_norm(ctx, sumsq, y, x, w, m, dm, eps)
     ctx.synchronize()
-    bwd_rms_norm(
+    bwd_rms_norm[0](
         ctx, dot_out, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq,
-        m, dm, eps,
+        dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, eps,
     )
     ctx.synchronize()
     ctx.enqueue_copy(dst_ptr=dx_ptr, src_buf=dx)

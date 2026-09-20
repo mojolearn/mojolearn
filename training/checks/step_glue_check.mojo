@@ -295,7 +295,7 @@ def _norm_backward(ctx: DeviceContext, x_host: List[Float32], w_host: List[Float
     var dprod = _zeros(ctx, m * dm)
     var rstd = _zeros(ctx, m)
     var dvcoef = _zeros(ctx, m)
-    bwd_rms_norm(ctx, dot, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq, m, dm, NORM_EPS)
+    bwd_rms_norm[0](ctx, dot, dx, dw, dh, dprod, rstd, dvcoef, ones, dy, x, w, sumsq, dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), dx.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), False, m, dm, NORM_EPS)
     ctx.synchronize()
     var result = download_f32(ctx, dot, m)
     _append(result, download_f32(ctx, dx, m * dm))
