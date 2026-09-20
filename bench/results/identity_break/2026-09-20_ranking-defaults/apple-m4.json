@@ -1,0 +1,901 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "apple-m4-ranking-defaults",
+ "commit": "d97c62ad4b3558cd0811e2ed91f0cd0df0fcc991",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "gbdt-ranking-defaults/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "158923b876af061c"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "04ab7b7f17e88c0c",
+     "QueryRMSE_loss_curve": "a9a5d3a7d371be0e",
+     "PairLogit_predict": "9a264ee2e564d714",
+     "PairLogit_loss_curve": "fd7f14368a419deb",
+     "YetiRank_predict": "ed3ab0dba6cbac3e",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "3bea141d6615e8da"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "30c8158e6167057e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3bea141d6615e8da"
+   ],
+   "batch": [
+    "bb96232d13593533"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.7405027090280782,
+    "stages": {
+     "repeat=1/train": 0.6769015419995412,
+     "repeat=1/infer-save-reload": 0.010699957987526432,
+     "repeat=1/batch": 0.05256833299063146,
+     "repeat=1/batchgrad": 5.787500413134694e-05,
+     "repeat=1/batchscale": 2.6708992663770914e-05,
+     "repeat=1/ragged": 2.4334003683179617e-05,
+     "repeat=1/stepfull": 2.441700780764222e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "282ec31e126959e9"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "0db0667ecc427103",
+     "QueryRMSE_loss_curve": "63b4be6b8acec7cf",
+     "PairLogit_predict": "dd741d5b161d4537",
+     "PairLogit_loss_curve": "9782c94bc999c36e",
+     "YetiRank_predict": "d7b905878a2b172b",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "2f0d5d7ad4d07f08"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "ef6bee949b16f00e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2f0d5d7ad4d07f08"
+   ],
+   "batch": [
+    "c8f382d350d562be"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6115335419890471,
+    "stages": {
+     "repeat=1/train": 0.5339297919999808,
+     "repeat=1/infer-save-reload": 0.0040785419987514615,
+     "repeat=1/batch": 0.07315691700205207,
+     "repeat=1/batchgrad": 0.00010795801063068211,
+     "repeat=1/batchscale": 2.3667002096772194e-05,
+     "repeat=1/ragged": 2.1957996068522334e-05,
+     "repeat=1/stepfull": 2.13750172406435e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e7b0cbbc702bf136"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "8fb5b41b5e1dbcec",
+     "QueryRMSE_loss_curve": "9ed8e63961c2a132",
+     "PairLogit_predict": "74f7cd19e0b270d4",
+     "PairLogit_loss_curve": "c4f4b4df85abe40b",
+     "YetiRank_predict": "c82e0f59b379da0d",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "cf471a8a78b7bf3b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c1eeb1c2f78a556e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cf471a8a78b7bf3b"
+   ],
+   "batch": [
+    "582ae4f9638de255"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.602521416003583,
+    "stages": {
+     "repeat=1/train": 0.5456452920043375,
+     "repeat=1/infer-save-reload": 0.006248541991226375,
+     "repeat=1/batch": 0.0502920420258306,
+     "repeat=1/batchgrad": 7.983300019986928e-05,
+     "repeat=1/batchscale": 2.416700590401888e-05,
+     "repeat=1/ragged": 2.254202263429761e-05,
+     "repeat=1/stepfull": 2.274999860674143e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "955aa5f32d5d8333"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "73e35d8e75dc014e",
+     "QueryRMSE_loss_curve": "8a4b479ef3e80053",
+     "PairLogit_predict": "ad8d0ebc7cb35199",
+     "PairLogit_loss_curve": "4bca2792037a2932",
+     "YetiRank_predict": "9f15b6cd0cd77f2a",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "c5d8660dbbdeef7a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2072c4a1d764011f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c5d8660dbbdeef7a"
+   ],
+   "batch": [
+    "e1bee4a3d1a97983"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5995702499931213,
+    "stages": {
+     "repeat=1/train": 0.5166226250003092,
+     "repeat=1/infer-save-reload": 0.006266292009968311,
+     "repeat=1/batch": 0.07633316700230353,
+     "repeat=1/batchgrad": 0.00010075001046061516,
+     "repeat=1/batchscale": 2.2833992261439562e-05,
+     "repeat=1/ragged": 2.1625019144266844e-05,
+     "repeat=1/stepfull": 2.108400803990662e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "18c272e69773d73b"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "046e2aa203fec243",
+     "QueryRMSE_loss_curve": "9257e8cadd7b2167",
+     "PairLogit_predict": "54a3be72926a345f",
+     "PairLogit_loss_curve": "f5bbda6e046e27bd",
+     "YetiRank_predict": "00ed2aef51ef73c0",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "6be06ff790346e86"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0783f45c64f31f3c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6be06ff790346e86"
+   ],
+   "batch": [
+    "c710037368d0349b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5713829169981182,
+    "stages": {
+     "repeat=1/train": 0.515438834001543,
+     "repeat=1/infer-save-reload": 0.005975459003821015,
+     "repeat=1/batch": 0.04966754198540002,
+     "repeat=1/batchgrad": 6.054199184291065e-05,
+     "repeat=1/batchscale": 2.4208013201132417e-05,
+     "repeat=1/ragged": 2.4667009711265564e-05,
+     "repeat=1/stepfull": 2.283402136527002e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "18c272e69773d73b"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "046e2aa203fec243",
+     "QueryRMSE_loss_curve": "9257e8cadd7b2167",
+     "PairLogit_predict": "54a3be72926a345f",
+     "PairLogit_loss_curve": "f5bbda6e046e27bd",
+     "YetiRank_predict": "00ed2aef51ef73c0",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "6be06ff790346e86"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0783f45c64f31f3c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "6be06ff790346e86"
+   ],
+   "batch": [
+    "c710037368d0349b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.6002862080058549,
+    "stages": {
+     "repeat=1/train": 0.5172645409766119,
+     "repeat=1/infer-save-reload": 0.006337250000797212,
+     "repeat=1/batch": 0.07634045800659806,
+     "repeat=1/batchgrad": 0.00011066600563935935,
+     "repeat=1/batchscale": 2.387500717304647e-05,
+     "repeat=1/ragged": 2.158299321308732e-05,
+     "repeat=1/stepfull": 2.1500018192455173e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ee97fcd90a17f531"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "793393fdeabaccb3",
+     "QueryRMSE_loss_curve": "b70431e7c8051a5d",
+     "PairLogit_predict": "f592eed163447e79",
+     "PairLogit_loss_curve": "b3c1f221fb02ea1d",
+     "YetiRank_predict": "6e7775c62a45f0b6",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "b883d585d8318a16"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "0a4e48a13ecd2999"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b883d585d8318a16"
+   ],
+   "batch": [
+    "47f639b18ae06f22"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5701636660087388,
+    "stages": {
+     "repeat=1/train": 0.5163956659962423,
+     "repeat=1/infer-save-reload": 0.005711958016036078,
+     "repeat=1/batch": 0.047713665990158916,
+     "repeat=1/batchgrad": 0.00010479099000804126,
+     "repeat=1/batchscale": 2.2791995434090495e-05,
+     "repeat=1/ragged": 2.1208979887887836e-05,
+     "repeat=1/stepfull": 2.19999928958714e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "61d01fa614281a93"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "25952706d2cc050f",
+     "QueryRMSE_loss_curve": "21b023762504ea8a",
+     "PairLogit_predict": "e8565b26ca93e9db",
+     "PairLogit_loss_curve": "cb533c2596af2071",
+     "YetiRank_predict": "943a714b1ee41b3c",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "b97e79e2ce19a3ba"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fc39cc49fb78abf2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b97e79e2ce19a3ba"
+   ],
+   "batch": [
+    "78e14b58a5edb2b5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5652602920017671,
+    "stages": {
+     "repeat=1/train": 0.5195348749984987,
+     "repeat=1/infer-save-reload": 0.006515084009151906,
+     "repeat=1/batch": 0.03894633302115835,
+     "repeat=1/batchgrad": 6.404099985957146e-05,
+     "repeat=1/batchscale": 1.5416007954627275e-05,
+     "repeat=1/ragged": 1.4249992091208696e-05,
+     "repeat=1/stepfull": 1.420799526385963e-05
+    }
+   }
+  },
+  "gbdt-ranking-defaults/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8bf14c5b42154d85"
+   ],
+   "parts": [
+    {
+     "QueryRMSE_predict": "0d2f295376601f0c",
+     "QueryRMSE_loss_curve": "e398c17798d2d9a3",
+     "PairLogit_predict": "f3d92ecf00e95377",
+     "PairLogit_loss_curve": "40ea2daf11d0fe25",
+     "YetiRank_predict": "fe9d45789f307bf2",
+     "YetiRank_loss_curve": "c3d07a59af53c1bc"
+    }
+   ],
+   "infer": [
+    "073dcdebb46aab53"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "08a18bc1db7e5c1b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "073dcdebb46aab53"
+   ],
+   "batch": [
+    "4e9adc13b268f285"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5967303749930579,
+    "stages": {
+     "repeat=1/train": 0.5087639580015093,
+     "repeat=1/infer-save-reload": 0.006204749981407076,
+     "repeat=1/batch": 0.0814550000068266,
+     "repeat=1/batchgrad": 5.775000317953527e-05,
+     "repeat=1/batchscale": 2.6374997105449438e-05,
+     "repeat=1/ragged": 2.19999928958714e-05,
+     "repeat=1/stepfull": 2.158299321308732e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/Users/andrewhendel/mojolearn-wt/ranking-defaults/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "c584b46b89201d672b92b2a03eb9a5e03ebd1a3fc2a4ab9c49f4bb06e586dc12",
+    "size": 3093360
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "06a27c267ab9a655fd7f436247babfb8f9398f0c8fb1ebada654fc5ad5ce95c4",
+    "size": 7382784
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "068358f91a62f9559258f67acd74c372ed7b40a2f8c30e1f41579f16d805d1e0",
+  "options": {
+   "require_backend": "metal",
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "gbdt-ranking-defaults",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "apple-m4-ranking-defaults",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "7f516c76932d47fe7e1400fcca466fc3ee1ee05766babf23e8daa3b7286848ff",
+  "provenance": {
+   "commit": "d97c62ad4b3558cd0811e2ed91f0cd0df0fcc991",
+   "mode": "identical",
+   "vendor": "apple-m4-ranking-defaults",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
