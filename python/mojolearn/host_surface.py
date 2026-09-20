@@ -621,6 +621,8 @@ TRAINING_LANE_NAMES = {
     "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
     "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
     "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
+    # lane/close-no-cpu-path-gbdt (2026-09-20)
+    "gbdt-symmetric-eval": "gradient boosting with an eval set, the overfitting detector and best-model truncation",
     "gbdt-feature-freq": "the two-level FeatureFreq estimator",
     # The same lane branch: the pointwise searcher with L2 scores, the
     # Bayesian bootstrap, boost from average on Logloss, row weights and an
@@ -1091,7 +1093,13 @@ GATE_SABOTAGE_OWN_DEFINES = {
     # And the quantile constant's arm (their delta adjust skipped): it moves
     # gbdt-bfa-quantile only.
     "gbdt": ("MOJOLEARN_BORDER_TYPES_SABOTAGE", "MOJOLEARN_ORDERED_SABOTAGE",
-             "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE"),
+             "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE",
+             # lane/close-no-cpu-path-gbdt (2026-09-20): one ULP onto every
+             # value the HELD-OUT cursor takes. The family's own arm moves
+             # the leaves, so it reads DIVERGENT on the eval lane whether or
+             # not the held-out restatement is right; this one moves the
+             # held-out cells and nothing else.
+             "MOJOLEARN_GBDT_EVAL_SABOTAGE"),
     "forest": ("MOJOLEARN_GBDT_CTR_HOST_SABOTAGE",),
     "linalg": ("MOJOLEARN_LOWBIT_CONVERT_SABOTAGE",),
     "tokenizer": ("MOJOLEARN_TOKENIZER_HOST_SABOTAGE", "MOJOLEARN_BPE_TRAINER_SABOTAGE"),
@@ -1123,8 +1131,71 @@ ADAPTED_MODULES = {
 #: The lanes with NO CPU path of any kind, as the README states them. A
 #: lane leaves this list the day its host lane merges; docs_facts fails the
 #: README until the marked span is rewritten.
+#:
+#: EVERY ENTRY NAMES WHAT REFUSES AND WHY. Until lane/close-no-cpu-path-gbdt
+#: (2026-09-20) this list held ONE entry ending "among them", which hid an
+#: unknown count behind a phrase. The count is 6 and it is below; the
+#: guard-by-guard enumeration each entry summarizes (50 by-name training
+#: refusal sites), with the exact refusal
+#: text and the line that raises it, is
+#: docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md, and the refusals are
+#: reproduced by fitting each configuration on a CPU-only install rather than
+#: read off the source.
+#:
+#: WHAT IS NOT HERE, AND WAS. "eval sets ... outside the
+#: gbdt-pointwise-l2-bayesian-eval configuration" was already stale when this
+#: was rewritten: Ordered boosting took an eval set, the detector and
+#: use_best_model at 000dbd2cf (2026-09-19), and this lane added them to the
+#: Plain SymmetricTree Logloss fit through
+#: gbdt/host/gbdt_oracle_eval.mojo. What remains of that item is entry 4.
 NO_CPU_PATH = (
-    "gradient boosting training outside its declared lanes (CTR categorical features, and sample weights, eval sets and the pointwise searcher outside the gbdt-pointwise-l2-bayesian-eval configuration, among them)",
+    "gradient boosting training with sample weights on any arm (`gbdt_fit` "
+    "refuses `sample_weight`, and `class_weights` outside MultiClass and "
+    "MultiClassOneVsAll, which reach the device through the same per-row "
+    "weight column): the device's weighted target, histogram and "
+    "partition-reduce kernels are a second launch arm (`has_weights`) and "
+    "the gbdt/host oracles restate the unit-weight arm only",
+
+    "gradient boosting training on a CTR categorical column, a "
+    "`cat_features` column with more than `one_hot_max_size` categories: "
+    "the CTR calcers build ordered target statistics over several "
+    "permutations, with their online counters, grids and tables joined back "
+    "into the compressed index, and the host path is pinned to one "
+    "permutation with no calcer. One-hot categorical columns DO train, "
+    "`ExperimentalTwoLevelFeatureFreq` has its own CPU route "
+    "(gbdt/host/gbdt_oracle_feature_freq.mojo) except on a tree whose level "
+    "winner is the tensor column itself, and CTR INFERENCE from a saved "
+    "model is closed; it is the calcer tables' training that is not",
+
+    "gradient boosting training with a categorical or one-hot column "
+    "outside SymmetricTree with Logloss and Plain boosting: the one-hot "
+    "grid and the `take_bin` equality split are restated in the symmetric "
+    "searcher alone",
+
+    "gradient boosting training with an eval set or the overfitting "
+    "detector outside SymmetricTree with Logloss, Ordered boosting and the "
+    "pointwise searcher's own lane: the held-out curve runs THAT arm's loss "
+    "kernel (the multilogit and one-vs-all launches, `launch_approximate` at "
+    "each pointwise objective) and the non-symmetric shapes put a tree on "
+    "the cursor through a different apply, and neither is restated",
+
+    "gradient boosting training with the pointwise searcher outside the "
+    "gbdt-pointwise-l2-bayesian-eval configuration (L2 scores, the Bayesian "
+    "bootstrap, Newton leaves, sample weights, an eval set with the Iter "
+    "detector, boost_from_average on, GreedyLogSum borders, numeric "
+    "columns): every other option selects a different launch shape of the "
+    "pointwise kernels and one shape is restated",
+
+    "gradient boosting training at a (loss, grow_policy, score_function, "
+    "leaf_estimation_method, bootstrap_type) combination outside the ones "
+    "the gbdt/host oracles restate, each refused by name: RMSE and the "
+    "pointwise losses under Depthwise and Lossguide, score functions and "
+    "leaf estimators outside each policy's covered pair, most (bootstrap, "
+    "loss) pairs, Depthwise's min_split_gain, min_child_hessian and "
+    "min_data_in_leaf, random_strength and feature_fraction outside Logloss, "
+    "boost_from_average outside RMSE and the quantile family, and a NaN in X "
+    "outside SymmetricTree with Logloss -- each one its own device kernel or "
+    "its own searcher gate order",
 )
 
 #: The read-back trio every host binding exports under its own prefix,
@@ -2236,6 +2307,14 @@ FAMILIES = (
             # lane/catboost-parity: the SymmetricTree defaults, the Bayesian
             # bootstrap and score noise through gbdt_oracle.mojo::gbdt_host_fit
             "gbdt-catboost-defaults",
+            # lane/close-no-cpu-path-gbdt (2026-09-20): an eval set, the
+            # overfitting detector and `use_best_model` on the PLAIN
+            # SymmetricTree Logloss fit, through
+            # gbdt/host/gbdt_oracle_eval.mojo. GPU COLUMN OWED: this lane is
+            # new here and no committed GPU record hashes it yet, so its
+            # cells read OWED against the three columns until the next
+            # coordinated record takes it.
+            "gbdt-symmetric-eval",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -2243,13 +2322,17 @@ FAMILIES = (
             "GradientBoosting", "GradientBoostingClassifier", "GradientBoostingRegressor",
             "model_selection.cross_val_score", "OrderedRMSE", "ExperimentalTwoLevelFeatureFreq",
         ),
-        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE, PairLogit and YetiRank losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, OrderedRMSE and the two-level FeatureFreq estimator",
+        display="gradient boosting on symmetric trees with the pointwise, multiclass, QueryRMSE, PairLogit and YetiRank losses, either NaN mode and the classifier and regressor adapters, and on depthwise and lossguide trees with the Logloss loss; one-hot categorical columns, the pointwise searcher with L2 scores, the Bayesian bootstrap and an eval set, an eval set with the overfitting detector and use_best_model on the Plain symmetric Logloss fit, OrderedRMSE and the two-level FeatureFreq estimator",
         host_modules=(
             "gbdt/host/gbdt_oracle.mojo", "gbdt/host/gbdt_oracle_rmse.mojo",
             "gbdt/host/gbdt_oracle_depthwise.mojo", "gbdt/host/gbdt_oracle_lossguide.mojo",
             "gbdt/host/gbdt_oracle_losses.mojo", "gbdt/host/gbdt_oracle_multiclass.mojo",
             "gbdt/host/gbdt_oracle_ordered.mojo", "gbdt/host/gbdt_oracle_feature_freq.mojo",
             "gbdt/host/gbdt_oracle_pointwise.mojo", "gbdt/host/gbdt_oracle_onehot.mojo",
+            # lane/close-no-cpu-path-gbdt: the held-out cursor, curve,
+            # detector and shrink of the Plain SymmetricTree Logloss fit
+            "gbdt/host/gbdt_oracle_eval.mojo",
+            "gbdt/overfitting_detector/overfitting_detector.mojo",
             "gbdt/host/gbdt_oracle_query.mojo", "gbdt/host/gbdt_oracle_pair.mojo",
             "gbdt/data/pairs.mojo",
             "gbdt/host/gbdt_oracle_yeti.mojo", "gbdt/data/yeti_rank_tasks.mojo",
@@ -2267,10 +2350,14 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: the boosting fit, which is twenty-one covered lanes, the largest block of "
+            # COUNTED, not carried forward: this said "twenty-one" while the
+            # family declared 26 training lanes (lane/close-no-cpu-path-gbdt,
+            # 2026-09-20). len(family("gbdt")["training_lanes"]) is the number.
+            "Ships: the boosting fit, which is twenty-seven declared training lanes, the largest block of "
             "checkable surface any one binding holds. Saved models still predict through the "
-            "shipped forest binding. CPU training of CTR categorical features still refuses by "
-            "name (NO_CPU_PATH). At about 1.3 MB it is the largest host binding."
+            "shipped forest binding. CPU training of sample weights and of CTR categorical "
+            "features still refuses by name (NO_CPU_PATH). At about 1.4 MB it is the largest "
+            "host binding."
         ),
         ships_in_wheel=True,
     ),
@@ -3027,6 +3114,14 @@ PUBLIC_PENDING_LANES = {
     # against the next NVIDIA leg, recorded in docs/NEXT_WHEEL_COVERAGE.md. It
     # is a reason to take an NVIDIA column, not a reason to hide five core
     # neural blocks from the verifier a user runs.
+    # lane/close-no-cpu-path-gbdt (2026-09-20). The lane is new in that
+    # branch and no record of any kind carries it: the CPU column exists (it
+    # is how the lane was closed) and the three GPU columns are OWED to the
+    # next coordinated record, which is where GPU columns are taken. Until
+    # one lands there is no reference to ship, so an installed `verify --all`
+    # is told not to ask rather than left reading OWED.
+    "gbdt-symmetric-eval": "no reference",
+
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
     # committed record and no shipped table cell describes it yet, and a
     # public lane with no reference makes an installed `verify --all` read
@@ -3790,7 +3885,19 @@ def inference_sentence():
 
 
 def no_cpu_path_sentence():
-    return _join(list(NO_CPU_PATH))
+    """`NO_CPU_PATH` as the README states it, NUMBERED and semicolon-joined.
+
+    `_join`'s comma-and is right for a list of short nouns and wrong here:
+    every entry below carries its own commas and its own structural reason,
+    and comma-joining them reads as one undifferentiated clause with no way
+    to count the items. The count is the point (the entry this replaced
+    ended "among them"), so the sentence carries it."""
+    items = list(NO_CPU_PATH)
+    if len(items) <= 1:
+        return "".join(items)
+    return "; ".join(
+        "(%d) %s" % (i + 1, text) for i, text in enumerate(items)
+    )
 
 
 def _join(items):

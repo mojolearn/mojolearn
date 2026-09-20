@@ -26,7 +26,7 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **262** (203 single-device, 59 `par-*` multi-GPU drivers).
+- Lanes: **263** (204 single-device, 59 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **244**.
 - Source public API entries with ALL FOUR kinds on at least one lane: **193** of 244.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
@@ -46,18 +46,18 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 253 | 9 |
-| gpu column on all three classes | 235 | 27 |
-| cpu verifier declared | 224 | 38 |
-| sabotage seen to move a build | 217 | 45 |
-| batch part or named n/a | 262 | 0 |
-| ALL FOUR | 212 | 50 |
+| gpu column (any class) | 253 | 10 |
+| gpu column on all three classes | 235 | 28 |
+| cpu verifier declared | 225 | 38 |
+| sabotage seen to move a build | 218 | 45 |
+| batch part or named n/a | 263 | 0 |
+| ALL FOUR | 212 | 51 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 217 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 218 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 0 | only the harness batch switch moved; the probe can fail, the build is unproven |
 | declared | 7 | the family declares a define; no committed pair moves this lane |
 | none | 38 | no define reaches the lane and nothing has moved it |
@@ -104,7 +104,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `GaussianMixture` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GaussianProcessRegressor` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `GradientBoosting` | 26 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `GradientBoosting` | 27 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingRegressor` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -387,6 +387,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-query-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/gbdt-query-rmse/cpu-sabotage.json` | part | yes |
 | gbdt-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-rmse/gbdt-rmse/cpu-sabotage.json` | part | yes |
 | gbdt-symmetric | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-symmetric/gbdt-symmetric/cpu-sabotage.json` | part | yes |
+| gbdt-symmetric-eval | - | training | seen(build) | `bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/cpu-apple-m4-sabotage.json (clean partner at another commit)` | part | NO |
 | gbdt-tensor-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-tensor-ctr-tables/gbdt-tensor-ctr-tables/cpu-sabotage.json` | part | yes |
 | gbdt-yeti-rank | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-classical-completion/gbdt-yeti-rank/cpu-sabotage.json` | part | yes |
 | gemm-bf16 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-neural-completion/records/gemm-bf16/cpu-sabotage.json` | n/a n/a:profile lane; the products are hashed whole | yes |
@@ -627,9 +628,9 @@ been advertising 13 gaps that cannot be closed. A $3.34 two-device
 MI300X leg was bought on 2026-09-19 before this was noticed; what it
 proved is real and is reported under the driver heading below, not here.
 
-**No GPU column at all: 2**
+**No GPU column at all: 3**
 
-> mamba1-decode-session, transformer-decode-session
+> gbdt-symmetric-eval, mamba1-decode-session, transformer-decode-session
 
 > (plus 4 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 

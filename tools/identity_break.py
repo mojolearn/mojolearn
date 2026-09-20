@@ -1370,6 +1370,80 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
+@lane("gbdt-symmetric-eval")
+def _(ml, X, yc, yr, Xh=None):
+    """The symmetric Logloss fit WITH A HELD-OUT SET: their test cursor, the
+    held-out curve, the Iter detector and `use_best_model`
+    (lane/close-no-cpu-path-gbdt, 2026-09-20; the CPU route is
+    gbdt/host/gbdt_oracle_eval.mojo, which closed the last Plain arm that
+    refused an eval set by name). The eval set is the lane's own held-out
+    slice with its labels.
+
+    THREE FITS, AND THE SECOND TWO HAVE A SHAPE OF THEIR OWN FOR A REASON.
+
+    `m` is gbdt-symmetric's fit exactly (20 depth-6 trees at `_gbdt`'s
+    recorded options) plus an eval set, with the detector off and
+    `use_best_model` off. Its `predict` and `proba` must therefore be
+    gbdt-symmetric's, bit for bit, on every column: an eval set does not
+    reach the learn cursor, the borders, the splits or the leaves on the
+    Plain doc-parallel path, and if it ever does, the two lanes disagree.
+    What is new in it is `test_loss_curve` alone.
+
+    `od` and `sh` run 30 depth-7 trees at learning_rate 1.8 because AT THE
+    RECORDED SHAPE THE DETECTOR NEVER FIRES AND THE SHRINK NEVER CUTS. That
+    was measured, not assumed: at 20 depth-6 trees and rate 0.03 the
+    held-out curve is still falling at the last tree on all nine fixtures,
+    so `od` and `sh` came out byte-identical to `m` and the whole
+    detector-and-shrink half of this lane was REACHED BUT INERT -- it hashed
+    something, and it would have hashed the same something with the
+    detector deleted. The sabotage arm proved it: under
+    -D MOJOLEARN_GBDT_EVAL_SABOTAGE=1 the two curve parts moved on all nine
+    fixtures and `od_stopped`, `od_best_iteration`, `shrunk_predict` and
+    `shrunk_proba` did not move at all. The shape below overfits on purpose,
+    and the two asserts are what keep it overfitting: a change that makes
+    the curve monotone again reads REFUSED on this lane rather than passing
+    with nothing measured."""
+    ych = labels_for(Xh, HELDOUT_SEED)[0]
+    base = dict(n_estimators=20, max_depth=6, loss="Logloss")
+    m = _gbdt(ml.GradientBoosting, use_best_model=False, **base).fit(
+        X, yc, eval_set=(Xh, ych))
+    # the overfitting shape (measured: fires and cuts on all nine fixtures)
+    stop = dict(n_estimators=30, max_depth=7, loss="Logloss",
+                learning_rate=1.8, l2_leaf_reg=3.0)
+    od = _gbdt(ml.GradientBoosting, od_type="Iter", od_wait=2,
+               use_best_model=False, **stop).fit(X, yc, eval_set=(Xh, ych))
+    sh = _gbdt(ml.GradientBoosting, use_best_model=True,
+               best_model_min_trees=3, **stop).fit(X, yc, eval_set=(Xh, ych))
+    if not od.stopped_early_ or len(od.test_loss_curve_) >= stop["n_estimators"]:
+        raise RuntimeError(
+            "gbdt-symmetric-eval: the Iter detector did not fire (trees="
+            + str(len(od.test_loss_curve_)) + " of " + str(stop["n_estimators"])
+            + ", stopped_early_=" + str(od.stopped_early_) + "). The detector"
+            " half of this lane would hash the same bytes as the fit without"
+            " one, which is not a measurement; retune the overfitting shape"
+            " rather than record this.")
+    sh_curve = np.asarray(sh.test_loss_curve_, dtype=np.float64)
+    sh_cut = int(np.argmin(sh_curve)) + 1
+    if not 0 < sh_cut < len(sh_curve):
+        raise RuntimeError(
+            "gbdt-symmetric-eval: ShrinkToBestIteration did not cut (argmin+1="
+            + str(sh_cut) + " of " + str(len(sh_curve)) + " trees). Same"
+            " problem as above, on the shrink instead of the detector.")
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)),
+                     test_loss_curve=_h(np.asarray(m.test_loss_curve_, dtype=np.float64)),
+                     learn_loss_curve=_h(np.asarray(m.loss_curve_, dtype=np.float64)),
+                     best_iteration=_h(np.asarray([m.best_iteration_], dtype=np.int64)),
+                     od_predict=_h(od.predict(X)),
+                     od_test_loss_curve=_h(np.asarray(od.test_loss_curve_, dtype=np.float64)),
+                     od_learn_loss_curve=_h(np.asarray(od.loss_curve_, dtype=np.float64)),
+                     od_stopped=_h(np.asarray([od.stopped_early_, len(od.test_loss_curve_)], dtype=np.int64)),
+                     od_best_iteration=_h(np.asarray([od.best_iteration_, sh.best_iteration_], dtype=np.int64)),
+                     shrunk_predict=_h(sh.predict(X)),
+                     shrunk_proba=_h(sh.predict_proba(X)),
+                     shrunk_test_loss_curve=_h(sh_curve)),
+                sh, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
 @lane("gbdt-depthwise")
 def _(ml, X, yc, yr, Xh=None):
     m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, grow_policy="Depthwise",
@@ -8322,7 +8396,8 @@ def _rows_calls(*methods, sl=slice(None), prep=None, min_batch=1, refusal=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"),
             "gbdt-ordered",
-            "rf-clf", "et-clf", "gbdt-symmetric", "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
+            "rf-clf", "et-clf", "gbdt-symmetric", "gbdt-symmetric-eval",
+            "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
             "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
             "par-forest", "par-boosting", "par-forest-et-clf")
 _batch_decl(_rows_calls("predict"),

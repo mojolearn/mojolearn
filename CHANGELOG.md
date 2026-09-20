@@ -9,6 +9,42 @@ contain the detailed investigation record.
   It selects the resident parallel-groves predictor in FAST mode, while
   DETERMINISTIC and IDENTICAL retain the historical sequential traversal.
   Passing either engine explicitly remains authoritative.
+## Unreleased (lane/close-no-cpu-path-gbdt)
+
+**An eval set, the overfitting detector and `use_best_model` now have a CPU
+verification route** on the Plain SymmetricTree Logloss fit, through the new
+host oracle `gbdt/host/gbdt_oracle_eval.mojo`. Until this lane, `gbdt_fit`
+refused `eval_set` BY NAME on every Plain arm, so no early-stopping fit could
+be checked against a GPU column without owning a GPU.
+
+- The oracle restates four pieces of `fit_with_test`: `CreateCursors`' test
+  seed, `_apply_last_tree_to_test`, `_test_loss` through the same Logloss
+  kernel the learn curve uses, and `ShrinkToBestIteration`'s second
+  best-iteration tracker, which is not the detector's.
+- It does NOT narrow the fit. An eval set does not reach the learn cursor,
+  the borders, the splits or the leaves on the Plain doc-parallel path, and
+  with `use_best_model` off a fit WITH an eval set has the same model bytes,
+  learn curve and predictions as the same fit without one.
+- New identity_break lane **`gbdt-symmetric-eval`**, and a negative control of
+  its own, `-D MOJOLEARN_GBDT_EVAL_SABOTAGE=1`, which moves the held-out
+  cells and nothing else. The family's own arm moves the leaves and so cannot
+  tell a broken test cursor from a broken fit. The control earned its keep on
+  the first run: it read DIVERGENT on all nine fixtures for the two held-out
+  CURVES and did not move the detector or shrink parts at all, because at the
+  lane's first shape the held-out curve never turned and those two fits were
+  byte for byte the fit without an eval set. The stopping fits now overfit on
+  purpose, and the lane raises if the detector stops firing.
+- **GPU COLUMNS OWED.** The lane has a CPU column only; its cells read OWED
+  against the three committed GPU records until the next coordinated record.
+
+**`NO_CPU_PATH` no longer ends "among them".** Its single entry hid an unknown
+count behind that phrase, and one of the things it named (eval sets) had
+already been closed for Ordered boosting. It is now six entries, each naming
+what refuses and the structural reason. The guard-by-guard enumeration behind
+them, 50 by-name training refusal sites in 16 configuration families, is
+`docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md`, and
+`tools/gbdt_cpu_refusal_probe.py` reproduces the table by fitting each
+configuration rather than reading the source.
 
 ## Unreleased (lane/compare-challenge-nonce)
 

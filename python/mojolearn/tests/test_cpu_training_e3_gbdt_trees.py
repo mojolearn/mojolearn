@@ -60,8 +60,18 @@ def test_manifest_covers_both_lanes():
         assert rel in fam["host_modules"] and (ROOT / rel).is_file(), rel
     covered = host_surface.covered_lanes()
     assert "gbdt-depthwise" in covered and "gbdt-lossguide" in covered
+    # The sentence still says gradient boosting training is what has no CPU
+    # route, and it now says WHICH training (lane/close-no-cpu-path-gbdt,
+    # 2026-09-20: the entry that ended "among them" became six numbered
+    # entries). Pin the two the depthwise and lossguide lanes care about
+    # rather than the old prose, which would have gone red on any rewrite
+    # and green on a rewrite that said nothing.
     sentence = host_surface.no_cpu_path_sentence()
-    assert "gradient boosting training outside its declared lanes" in sentence, sentence
+    assert sentence.startswith("(1) gradient boosting training"), sentence
+    assert "(6) gradient boosting training at a (loss, grow_policy" in sentence, sentence
+    assert "sample weights" in sentence and "CTR categorical column" in sentence, sentence
+    # and it must NOT claim the two lanes above have no CPU route
+    assert "Depthwise with Logloss" not in sentence, sentence
 
 
 def test_oracles_import_no_gpu_module():

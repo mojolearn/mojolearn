@@ -49,6 +49,20 @@ gbdt-pointwise-l2-bayesian-eval lane (`_gbdt_fit_pointwise_arm`,
 under SymmetricTree with Logloss (gbdt-categorical-ctr,
 `gbdt/host/gbdt_oracle_onehot.mojo`).
 
+AN EVAL SET, THE OVERFITTING DETECTOR AND `use_best_model` on the PLAIN
+SymmetricTree Logloss fit (lane/close-no-cpu-path-gbdt, 2026-09-20, the
+gbdt-symmetric-eval lane), through `gbdt/host/gbdt_oracle_eval.mojo`:
+their `testCursor` (`_apply_last_tree_to_test`), the held-out curve
+(`_test_loss` through the same Logloss kernel the learn curve uses), the
+shared detector and `ShrinkToBestIteration`. An eval set does not reach the
+learn cursor, the borders, the splits or the leaves on this path, so the
+model text of a fit WITH one is the model text of the same fit without one
+and what the arm adds is `test_loss_curve_`, `best_iteration_` and
+`stopped_early_`. Every OTHER Plain arm (RMSE, the pointwise losses,
+MultiClass, Depthwise, Lossguide) still refuses an eval set BY NAME: their
+test cursor runs the same four pieces over a different loss kernel or a
+different model shape, and neither is restated.
+
 ABSENT, and so refused BY NAME through `_HostBinding`: `gbdt_per_round_paths`
 and the two `*_parallel_available` probes.
 
@@ -97,6 +111,7 @@ from gbdt.data.quantization import (
     NAN_TREATMENT_AS_IS,
     NAN_TREATMENT_AS_TRUE,
 )
+from gbdt.host.gbdt_oracle_eval import GbdtHostEval, gbdt_eval_want_best_model
 from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_BAYESIAN,
     GBDT_BOOT_BERNOULLI,
@@ -105,6 +120,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostParams,
     gbdt_host_fit,
+    gbdt_host_fit_eval,
     gbdt_host_model_text,
 )
 from gbdt.host.gbdt_oracle_losses import (
@@ -246,13 +262,14 @@ def _refuse(what: String) raises:
     cover reads REFUSED and never a hash."""
     raise Error(
         "no CPU implementation of _mojolearn_gbdt.gbdt_fit for " + what
-        + "; the gbdt host binding trains the twelve declared GBDT lanes"
+        + "; the gbdt host binding trains the declared GBDT lanes"
         " only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise"
         " and multiclass losses, Depthwise with Logloss and Cosine,"
         " Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample"
-        " weights, CTR categoricals or eval set outside the pointwise"
-        " searcher's own lane; one-hot categorical columns under"
-        " SymmetricTree with Logloss), see"
+        " weights and no CTR categoricals anywhere; an eval set and the"
+        " overfitting detector on SymmetricTree with Logloss and on the"
+        " Ordered and pointwise-searcher arms only; one-hot categorical"
+        " columns under SymmetricTree with Logloss), see"
         " gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it"
     )
 
@@ -847,6 +864,32 @@ def _gbdt_fit_ordered_arm(
     return out
 
 
+def _gbdt_host_eval_arm(
+    eval_x_address: Int,
+    eval_y_address: Int,
+    n_eval_rows: Int,
+    n_features: Int,
+    od_kind: Int,
+    od_pvalue: Float64,
+    od_wait: Int,
+    use_best_model: Int,
+    best_model_min_trees: Int,
+) raises -> GbdtHostEval:
+    """The held-out pool `gbdt_host_fit_eval` reads, with `use_best_model`
+    resolved by their `UpdateUseBestModel` rule from the held-out target
+    (`options_helper.cpp:100-113`), exactly as the Ordered arm resolves it.
+    CALL IT WITH THE GIL RELEASED: it reads the two addresses directly."""
+    if n_eval_rows <= 0:
+        return GbdtHostEval.none()
+    var ex = read_f32(eval_x_address, n_eval_rows * n_features)
+    var ey = read_f32(eval_y_address, n_eval_rows)
+    var want_best = gbdt_eval_want_best_model(use_best_model, ey, n_eval_rows)
+    return GbdtHostEval(
+        ex^, ey^, n_eval_rows, od_kind, od_pvalue, od_wait, want_best,
+        best_model_min_trees,
+    )
+
+
 def gbdt_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -1156,10 +1199,37 @@ def gbdt_fit_binding(
         _refuse("class_weights outside MultiClass and MultiClassOneVsAll")
     if n_flags != 0 and (is_rmse or grow_code != 0 or is_pointwise or is_multi):
         _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss")
-    if n_eval_rows != 0:
-        _refuse("eval_set")
-    if od_type.byte_length() > 0 or od_pvalue >= 0.0 or od_wait >= 0:
-        _refuse("the overfitting detector (od_type, od_pvalue, od_wait)")
+    # the HELD-OUT arm (lane/close-no-cpu-path-gbdt, 2026-09-20): their
+    # `testCursor`, held-out curve, overfitting detector and
+    # `ShrinkToBestIteration`, restated in gbdt/host/gbdt_oracle_eval.mojo
+    # for the SymmetricTree Logloss fit of gbdt/host/gbdt_oracle.mojo and
+    # for that fit ONLY. Every other Plain arm still refuses by name: their
+    # test cursor runs the same four pieces over a different loss kernel and
+    # a different model shape, and neither is restated.
+    var eval_arm_ok = (
+        grow_code == 0 and loss == String("Logloss") and not is_pointwise
+        and not is_multi and not is_rmse
+    )
+    if n_eval_rows != 0 and not eval_arm_ok:
+        _refuse(
+            "eval_set outside SymmetricTree with Logloss (the held-out arm"
+            " of gbdt/host/gbdt_oracle_eval.mojo covers that fit only)"
+        )
+    var od = load_overfitting_detector_options(od_type, od_pvalue, od_wait)
+    var od_kind = od.od_type
+    if od_kind != OD_NONE and not eval_arm_ok:
+        _refuse(
+            "the overfitting detector (od_type, od_pvalue, od_wait) outside"
+            " SymmetricTree with Logloss"
+        )
+    if od_kind != OD_NONE and n_eval_rows == 0:
+        raise Error(
+            "od_type is set but there is no held-out set. Stopping on the"
+            " LEARN loss would stop on a curve that falls almost by"
+            " construction; their own detector is inert without a test set"
+            " (overfitting_detector.cpp:122-124) and this refuses rather"
+            " than silently never firing."
+        )
     if random_strength != Float32(0.0) and not lossguide_knobs and not symmetric_stochastic:
         _refuse(
             "random_strength=" + String(random_strength)
@@ -1264,12 +1334,12 @@ def gbdt_fit_binding(
             "boost_from_average must be -1 (their data-dependent"
             " default), 0 or 1; got " + String(boost_from_average)
         )
-    if use_best_model == 1:
+    if use_best_model == 1 and n_eval_rows == 0:
         raise Error(
             "use_best_model=1 needs an eval set: pass eval_x_colmajor"
             " and eval_y, or leave it unset."
         )
-    elif use_best_model != 0 and use_best_model != -1:
+    elif use_best_model != 0 and use_best_model != -1 and use_best_model != 1:
         raise Error(
             "use_best_model must be -1 (unset), 0 or 1, got "
             + String(use_best_model)
@@ -1363,12 +1433,22 @@ def gbdt_fit_binding(
             if v != v:
                 has_nan = True
                 break
+        if not has_nan and n_eval_rows > 0:
+            var exs = f32_ptr(Int(py=eval_x_addr))
+            for i in range(n_eval_rows * n_features):
+                var v = exs.unsafe_load(i)
+                if v != v:
+                    has_nan = True
+                    break
     if has_nan:
         _refuse(
             "an X carrying NaN under loss='" + loss + "' and grow_policy code "
             + String(grow_code) + " (NaN is measured on SymmetricTree with"
             " Logloss only, the gbdt-nan-modes lane)"
         )
+    var eval_x_address = Int(py=eval_x_addr)
+    var eval_y_address = Int(py=eval_y_addr)
+    var test_losses = List[Float64]()
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
         var y = read_f32(y_address, n_rows)
@@ -1428,20 +1508,35 @@ def gbdt_fit_binding(
             # the one-hot categorical arm (gbdt-categorical-ctr):
             # gbdt/host/gbdt_oracle_onehot.mojo
             var one_hot = gbdt_resolve_one_hot(flags, x, n_rows, n_features)
-            var model = gbdt_host_fit(x, y, n_rows, n_features, p, one_hot)
-            text = gbdt_host_model_text_one_hot(model, one_hot)
-            losses = model.losses.copy()
-            best_iteration = model.best_iteration
-            stopped_early = model.stopped_early
-        elif grow_code == 0:
-            var model = gbdt_host_fit(
-                x, y, n_rows, n_features, p, List[Bool](),
-                sym_boot_kind, sym_boot_param, random_strength,
+            var ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
             )
-            text = gbdt_host_model_text(model)
-            losses = model.losses.copy()
-            best_iteration = model.best_iteration
-            stopped_early = model.stopped_early
+            var r = gbdt_host_fit_eval(
+                x, y, n_rows, n_features, p, one_hot, -1, Float32(1.0),
+                Float32(0.0), ev^,
+            )
+            text = gbdt_host_model_text_one_hot(r.model, one_hot)
+            losses = r.model.losses.copy()
+            best_iteration = r.eval.best_iteration
+            stopped_early = r.eval.stopped_early
+            test_losses = r.eval.test_losses.copy()
+        elif grow_code == 0:
+            var ev = _gbdt_host_eval_arm(
+                eval_x_address, eval_y_address, n_eval_rows, n_features,
+                od_kind, od.auto_stop_p_value, od.iterations_wait,
+                use_best_model, best_model_min_trees,
+            )
+            var r = gbdt_host_fit_eval(
+                x, y, n_rows, n_features, p, List[Bool](),
+                sym_boot_kind, sym_boot_param, random_strength, ev^,
+            )
+            text = gbdt_host_model_text(r.model)
+            losses = r.model.losses.copy()
+            best_iteration = r.eval.best_iteration
+            stopped_early = r.eval.stopped_early
+            test_losses = r.eval.test_losses.copy()
         else:
             # Depthwise and Lossguide: gbdt/host/gbdt_oracle_depthwise.mojo
             var tp = GbdtHostTreeParams(
@@ -1457,6 +1552,8 @@ def gbdt_fit_binding(
     for i in range(len(losses)):
         learn.append(PythonObject(losses[i]))
     var test = Python.list()
+    for i in range(len(test_losses)):
+        test.append(PythonObject(test_losses[i]))
     var out = Python.list()
     out.append(PythonObject(text))
     out.append(PythonObject(best_iteration))
