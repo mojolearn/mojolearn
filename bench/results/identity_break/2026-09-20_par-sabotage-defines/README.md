@@ -257,3 +257,66 @@ a lane may still leave the interesting path alone.
 The two-process and driver-sabotage columns are deliberately NOT committed
 here; `docs/multi_gpu/PAR_SABOTAGE_ARMS.md` says why, and their hashes are in
 section 5 above.
+
+## ADDED AFTER THE FACT: four of these arms have now been watched FIRING
+
+A two-device RTX 4090 leg landed while this branch was being written and
+reported `par-gmm`, `par-resample`, `par-hdbscan` and `par-kernel-ridge`
+**inert at one device and firing at two** -- the behaviour a correct
+`rank > 0` arm must have. Their cells read REFUSED rather than DIVERGENT, so
+`negative_control_moves` credited nothing. In that leg's own words:
+
+> a working arm and a broken arm produce the same census verdict, and only the
+> refusal text separates them.
+
+That is this lane's premise, measured on real devices. **No new define was
+written for those four** -- their defines already existed (`GMM`, `RESAMPLE`,
+`HIERARCHY`, and `CHOLESKY` plus `SVM` for KernelRidge) and are listed in
+section 3 as "(existed)". What they needed is the oracle treatment, and all
+four are in the 44 lanes rewritten here: `par-gmm` and `par-hdbscan` to
+`_oracle_mismatch` over two pairs, `par-kernel-ridge` over two, `par-resample`
+over four. On the next two-device column those four should read DIVERGENT and
+be credited, with no rebuild of the arm itself.
+
+WHICH OUTCOME EVERY ARM ON THIS BRANCH PRODUCES. A moved hash the census
+counts, not a refusal it does not -- for all 44 `par-*` lanes, because the
+audit reads **0** with a bare body oracle. That is a mechanism claim for the
+34 owed lanes and a MEASURED one for the 15 watched in section 5, every one of
+which read DIVERGENT and not one REFUSED.
+
+TWO FOOTNOTES FROM THAT LEG, kept rather than resolved:
+
+* `par-graph-agglomerative` read IDENTICAL there, and nobody has determined
+  whether it is reached-but-inert or never-reached. That leg carried no
+  neighbors arm at all, so IDENTICAL is what it should have read;
+  `MOJOLEARN_NEIGHBORS_PARALLEL_SABOTAGE` is written here and is untested, and
+  whether `graph_fit` for `AgglomerativeClustering` actually enters
+  `neighbors/impl/multi_gpu.mojo::parallel_knn_rows` is NOT established by
+  anything on this branch.
+* `par-cholesky` gave that leg no information because its build list omitted
+  `build_gp`. `docs/multi_gpu/PAR_SABOTAGE_ARMS.md` lists every script each
+  define reaches, computed with `tools/bincache.py`'s own import-closure
+  resolver, so the next leg can build the right set rather than rediscover
+  this. `par-cholesky` is UNMEASURED, not armless.
+
+## ON `--repeats`
+
+Every column in this directory is `--repeats 2`, because
+`verification_matrix.stable_digest()` refuses a part with fewer than two
+repeats and a sabotage column at one repeat has its move silently discarded.
+Andrew's standing instruction as of 2026-09-20 is `--repeats 1` everywhere.
+THIS BRANCH CHANGES NO DEFAULT either way -- `tools/identity_break.py`'s
+`--repeats` default is untouched -- and the number above is what these
+particular columns were produced with, recorded rather than argued. The
+conflict between the two rules is real and is not this lane's to settle.
+
+## ONE COMPILE CHECK, AND ONLY ONE
+
+`sh bindings/build_solver.sh` on this Mac (Metal column, one core, `nice -n 19`)
+built `_mojolearn_solver.so` successfully with the
+`MOJOLEARN_SOLVER_PARALLEL_SABOTAGE` edit in `solver/multi_gpu.mojo` in place.
+That proves ONE thing and not a second: the edit does not break the CLEAN
+build of the one binding that reaches that module. The `comptime if` branch is
+not compiled when the define is absent, so this says NOTHING about whether the
+armed branch compiles, and the other twelve modules were not compiled at all.
+A stop instruction arrived before any further build was started.
