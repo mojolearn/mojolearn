@@ -418,8 +418,8 @@ the held-out curve is right.
 
 ## 3. OWED: the GPU columns
 
-No piecemeal GPU column was taken. When the next coordinated record runs, the
-new lane needs one column per vendor:
+No piecemeal GPU column was taken; GPU columns are taken in one coordinated
+record. What the next one owes is ONE lane, on each vendor:
 
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \
@@ -427,15 +427,23 @@ MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \
   --json bench/results/identity_break/<record>/<vendor>.json
 ```
 
-and the whole gbdt block should be re-run beside it, because
-`bindings/_mojolearn_gbdt_host.mojo` and `gbdt/host/gbdt_oracle.mojo` both
-changed:
+**Only that one.** The GPU binding `bindings/_mojolearn_gbdt.mojo` and every
+device module under `gbdt/` that a GPU fit reaches are untouched by this
+branch: the changes are `bindings/_mojolearn_gbdt_host.mojo`,
+`gbdt/host/gbdt_oracle.mojo` and the new `gbdt/host/gbdt_oracle_eval.mojo`,
+all of them CPU-column-only. So no committed GPU cell of the other 27 gbdt
+lanes can have moved, and re-running them would be re-recording bytes that
+cannot have changed.
 
-```sh
-MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \
-  --lanes "$(python3 python/mojolearn/host_surface.py --covered-lanes | tr ',' '\n' | grep '^gbdt' | paste -sd, -)" \
-  --repeats 2 --json bench/results/identity_break/<record>/<vendor>-gbdt.json
-```
+The CPU side of the claim has been run and is not owed:
 
-Until those land, `gbdt-symmetric-eval`'s cells read OWED against the three
-committed columns, which is what `--owed-json` is for.
+* the new lane's CPU column, all nine fixtures at `--repeats 2`, 9 of 9
+  STABLE on train, infer, model and batch, `admit()` -> `None`;
+* all 27 pre-existing gbdt lanes on `base`, once under the binding before
+  this change and once after, 231 of 231 parts identical;
+* the negative control column, DIVERGENT on 9 of 9.
+
+Until the GPU columns land, `gbdt-symmetric-eval`'s cells read OWED against
+the three committed columns (`--owed-json`), and the lane sits in
+`host_surface.PUBLIC_PENDING_LANES` as `no reference` so an installed
+`verify --all` is told not to ask for it.
