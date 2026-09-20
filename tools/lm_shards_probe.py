@@ -71,7 +71,7 @@ def run(args):
     results = []
     for shards in args.shards:
         record = dict(schema=SCHEMA, shape=shape.to_dict(), parameters=shape.n_total,
-                      logical_shards=shards, devices=[0],
+                      logical_shards=shards, devices=list(args.devices),
                       tokens_per_optimizer_step=shape.batch * shape.length * shards,
                       corpus=corpus.describe() if corpus is not None else None,
                       reduction='ordered_sum of per-shard mean cross-entropies')
@@ -79,7 +79,7 @@ def run(args):
         sampler.start()
         try:
             t0 = time.perf_counter()
-            trainer = Parallel(state, devices=(0,), logical_shards=shards)
+            trainer = Parallel(state, devices=tuple(args.devices), logical_shards=shards)
             record['construct_seconds'] = time.perf_counter() - t0
             steps = []
             index = 0
@@ -105,6 +105,17 @@ def run(args):
             record['steady_median_seconds'] = steady[len(steady) // 2]
             record['steady_median_tokens_per_second'] = (
                 shape.batch * shape.length * shards / record['steady_median_seconds'])
+            export_start = time.perf_counter()
+            final_state = trainer.state_dict()
+            final_grad = trainer.export_gradients()
+            record['export_seconds'] = time.perf_counter() - export_start
+            record['final_sha256'] = {
+                key: _sha(np.asarray(final_state[key]).tobytes())
+                for key in ('parameters', 'm', 'v', 'flags')
+            }
+            record['final_sha256']['gradients'] = _sha(
+                np.asarray(final_grad).tobytes())
+            record['optimizer_ownership'] = trainer.optimizer_ownership()
             record['refused'] = None
             try:
                 trainer.close()
@@ -130,7 +141,7 @@ def run(args):
         results.append(record)
         (out / 'result.json').write_text(json.dumps(
             dict(schema=SCHEMA, shape=shape.to_dict(), parameters=shape.n_total,
-                 steps_requested=args.steps, arms=results,
+                 steps_requested=args.steps, seed=args.seed, arms=results,
                  qualification='one GPU, one shape; capacity and throughput only, '
                                'not an opponent ratio and not a default gate'), indent=1))
     print(json.dumps({r['logical_shards']: (r['refused'] or r.get('steady_median_tokens_per_second'))
@@ -146,10 +157,15 @@ def main():
     parser.add_argument('--shards', nargs='+', type=int, default=[1, 2, 4, 8, 16])
     parser.add_argument('--steps', type=int, default=3)
     parser.add_argument('--seed', type=int, default=93261)
+    parser.add_argument('--devices', nargs='+', type=int, default=[0],
+                        help='ordered physical device ids; compare separate runs with 0 and 0 1')
     parser.add_argument('--corpus', type=Path, default=None)
     parser.add_argument('--sample-interval', type=float, default=0.2)
     parser.add_argument('--gpu-index', type=int, default=0)
     args = parser.parse_args()
+    if (not args.devices or any(i < 0 for i in args.devices)
+            or len(set(args.devices)) != len(args.devices)):
+        parser.error('--devices must be distinct nonnegative integers')
     import os
     if os.environ.get('MOJOLEARN_NUMERIC_MODE') != 'identical':
         parser.error('requires MOJOLEARN_NUMERIC_MODE=identical in the environment')
