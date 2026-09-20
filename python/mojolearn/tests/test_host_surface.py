@@ -452,7 +452,22 @@ def test_gate_sabotage_defines_reach_the_tokenizer_and_the_ctr_arm():
     for name, defines in host_surface.GATE_SABOTAGE_OWN_DEFINES.items():
         text = "".join(_read(rel) for rel in sources[name])
         for define in defines:
-            assert f'is_defined["{define}"]' in text, f"{define} is read by no {name} source"
+            # WHITESPACE-TOLERANT ON PURPOSE (2026-09-19). This read
+            # `f'is_defined["{define}"]' in text` and went red on
+            # MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE when a perf commit wrapped
+            # the very same call across two lines:
+            #
+            #     comptime SAMPLE_QUANTILE_SABOTAGE = is_defined[
+            #         "MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE"
+            #     ]()
+            #
+            # The switch was intact and the arm still fired; the substring
+            # was what broke. A check on a STRING SPELLING is not a check on
+            # the PROPERTY, and this one failed in the safe direction only by
+            # luck -- the same brittleness would pass a define that had been
+            # commented out on one line.
+            assert re.search(r'is_defined\s*\[\s*"%s"\s*\]' % re.escape(define), text), (
+                f"{define} is read by no {name} source")
     with pytest.raises(KeyError):
         host_surface.sabotage_build_defines("nonesuch")
 

@@ -86,7 +86,22 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     assert not re.search(r"^\s*from .*import.*DeviceContext", text, re.M), f"{ORACLE} imports DeviceContext"
     imports = re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)
-    assert sorted(set(imports)) == ["checks.numerics", "std.math", "std.memory", "std.sys.compile"], imports
+    # THE LIST IS AN ALLOWLIST, NOT A RECORD. It exists so a new import into
+    # the oracle is REVIEWED rather than noticed, because this file has to be
+    # a bit-exact restatement of the device RF.
+    #
+    # `std.builtin.sort` was admitted 2026-09-19 (4c80aeb2c) and the argument
+    # is worth keeping next to it, since an unstable sort in an oracle is
+    # normally exactly the bug the `ties` fixture hunts: the quantile keys are
+    # INTEGERS already encoding the complete float total order, so two equal
+    # keys are identical BITS. An unstable sort can therefore only reorder
+    # elements that are indistinguishable, and stability is unobservable. It
+    # replaced an O(n^2) insertion sort.
+    #
+    # A future import needs its own sentence here before it is added.
+    assert sorted(set(imports)) == [
+        "checks.numerics", "std.builtin.sort", "std.math", "std.memory", "std.sys.compile",
+    ], imports
 
 
 def test_oracle_spells_the_bit_carrying_constructs():

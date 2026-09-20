@@ -1151,6 +1151,12 @@ FAMILIES = (
             "byte_lm_host_profile", "byte_lm_host_logits", "byte_lm_host_loss",
             "byte_lm_host_train_step", "all_finite_f32", "all_finite_f64",
             "cast_f64_to_f32",
+            # Greedy next bytes, the decode entry a9d933e4f added while
+            # skipping discarded decode logits. It shipped as an EXPORT
+            # without a manifest row, which is the exact drift
+            # test_binding_exports_exactly_the_manifest exists to catch:
+            # a function a user can call that the surface does not declare.
+            "byte_lm_host_next",
         ),
         gate=".github/workflows/byte-lm-cpu-gate.yml and tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
