@@ -530,6 +530,50 @@ def host_weighted_accuracy(
     return ftz(identical_div(sn, sd))
 
 
+def host_weighted_accuracy_ptr(
+    y_true: MutPointer[Int32, MutUntrackedOrigin],
+    y_pred: MutPointer[Int32, MutUntrackedOrigin],
+    w: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises -> Float32:
+    """Pointer/slab spelling with the pinned tree unchanged."""
+    if n <= 0:
+        raise Error("weighted accuracy_score: n must be positive, got " + String(n))
+    var chunks = host_chunk_count(n)
+    var num_partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var den_partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var num_slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    var den_slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    for c in range(chunks):
+        for t in range(PINNED_SUM_W):
+            var i = c * PINNED_SUM_W + t
+            if i < n:
+                comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                    i = (i + 1) % n
+                var wi = ftz(w.unsafe_load(i))
+                comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                    if i == 0 and n > 1:
+                        wi = Float32(0.0)
+                den_slab[t] = wi
+                num_slab[t] = wi if y_true.unsafe_load(i) == y_pred.unsafe_load(i) else Float32(0.0)
+            else:
+                num_slab[t] = Float32(0.0)
+                den_slab[t] = Float32(0.0)
+        var step = PINNED_SUM_W // 2
+        while step > 0:
+            for t in range(step):
+                num_slab[t] = ftz(num_slab[t] + num_slab[t + step])
+                den_slab[t] = ftz(den_slab[t] + den_slab[t + step])
+            step //= 2
+        num_partials[c] = num_slab[0]
+        den_partials[c] = den_slab[0]
+    var sn = host_fold_partials(num_partials, chunks)
+    var sd = host_fold_partials(den_partials, chunks)
+    if sd <= Float32(0.0):
+        raise Error("weighted accuracy_score: the weights must have positive total")
+    return ftz(identical_div(sn, sd))
+
+
 def host_weighted_r2(
     y: List[Float32], y_hat: List[Float32], w: List[Float32], n: Int
 ) raises -> Float32:
