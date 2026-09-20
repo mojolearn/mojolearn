@@ -23,6 +23,7 @@ MATH_SYMBOLS = {root + suffix for root in ROOTS for suffix in ("", "f", "l")}
 NUMPY_ORACLES = {
     "mojolearn/_identity_break.py", "mojolearn/_identity.py",
     "mojolearn/_verify_all.py", "mojolearn/_verify_distributed.py",
+    "mojolearn/_verify_par.py",
     "mojolearn/_verify_parallel_cv.py", "mojolearn/_parallel_cv_witness.py",
 }
 

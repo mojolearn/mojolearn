@@ -1,0 +1,15 @@
+{
+  "source_commit": "a97676ba18a09fb577ef9faae45ab19a01eec848",
+  "cpu_binding_sha256": "13ea0b9d770eee4a5655af80559d589b86f15c9d586027364099b4184fb7fbfd",
+  "test_file": "python/mojolearn/tests/test_gbdt_release_parity.py",
+  "cpu_result": ".......                                                                  [100%]\n7 passed in 1.87s",
+  "metal_result": ".......                                                                  [100%]\n7 passed in 1.58s",
+  "scope": "Fresh CPU host build; Metal development binding. Regression tests, not final installed-wheel qualification.",
+  "losses": [
+    "RMSE",
+    "MAE",
+    "Quantile",
+    "MAPE"
+  ],
+  "assertion": "Explicit boost_from_average=True predictions and loss curves exactly equal the default; three existing held-out/grow-policy regressions also pass."
+}
