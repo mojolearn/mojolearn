@@ -5,6 +5,33 @@ a GPU arm, and each is in the verifier harness. Work tree:
 `/Users/andrewhendel/mojolearn-wt/takeover-exposure`, branch
 `lane/takeover-exposure`, which equals `origin/main` at the time of writing.
 
+## Release integration update (2026-09-20, after the original handoff)
+
+The open-item list below is historical. The release integration is merged and
+pushed to main (integration merge `c44fd9fde`). The native 0.8.9 candidate is
+frozen at `a97676ba18a09fb577ef9faae45ab19a01eec848`; publication is pending
+fresh platform builds and installed-wheel qualification.
+
+- QN's six objective lanes are merged; all 54 CPU/NVIDIA cells agree.
+- The CPU GBDT implementation was integrated and rebuilt. The public CPU
+  configuration matrix now passes **41/41**, including non-symmetric policies.
+- The device held-out cursor is initialized when `boost_from_average=False`.
+  The restored `gbdt-symmetric-eval` lane agrees across fresh CPU and Metal
+  builds, including every numeric part.
+- New stochastic, multiclass-default, and ranking-default lanes have matching
+  CPU/Metal evidence committed under `bench/results/identity_break/`.
+- Explicit `boost_from_average=True` now works for its four supported losses;
+  the seven release regressions pass on fresh CPU and on Metal.
+- Accounting passes: **273 lanes**, all with table cells; **214 exposed**,
+  **59 parallel lanes not applicable to a single-device invocation**; no
+  public algorithm lacks a lane. The verification matrix matches 255 public
+  API entries. This is coverage accounting, not a claim that every final
+  wheel has already completed qualification.
+- Fresh source-built x86 CPU bindings reproduce all nine language-model-config
+  fixtures. The generic default-constructor smoke was interrupted during a
+  long 1000-tree Ordered GBDT fit; it is not recorded as passing. The bounded
+  41-configuration GBDT matrix is the completed CPU fit evidence.
+
 ## Rules that changed today (owner's decisions)
 
 - CPU training is PUBLIC. `fit` on a CPU-only install trains
