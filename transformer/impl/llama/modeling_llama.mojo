@@ -2496,6 +2496,52 @@ def kv_append_kernel(
     new_cache.unsafe_store(i, v)
 
 
+def kv_append2_kernel(
+    new_k: MutPointer[Float32, MutAnyOrigin],
+    new_v: MutPointer[Float32, MutAnyOrigin],
+    old_k: MutPointer[Float32, MutAnyOrigin],
+    old_v: MutPointer[Float32, MutAnyOrigin],
+    fresh_k: MutPointer[Float32, MutAnyOrigin],
+    fresh_v: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nkv_in: Int32,
+    hd_in: Int32,
+    s_old_in: Int32,
+):
+    """Append K and V with `kv_append_kernel`'s one shared index walk.
+
+    Each destination remains a plain bit copy from its original source.  K
+    and V are independent; only their integer address calculation and launch
+    are shared.
+    """
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nkv = Int(nkv_in)
+    var hd = Int(hd_in)
+    var s_old = Int(s_old_in)
+    var s_new = s_old + l
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= b * nkv * s_new * hd:
+        return
+    var d = i % hd
+    var rest = i // hd
+    var j = rest % s_new
+    var rest2 = rest // s_new
+    var kvh = rest2 % nkv
+    var bb = rest2 // nkv
+    var src_i: Int
+    if j < s_old:
+        src_i = ((bb * nkv + kvh) * s_old + j) * hd + d
+        new_k.unsafe_store(i, old_k.unsafe_load(src_i))
+        new_v.unsafe_store(i, old_v.unsafe_load(src_i))
+    else:
+        var t = j - s_old
+        src_i = (bb * l + t) * nkv * hd + kvh * hd + d
+        new_k.unsafe_store(i, fresh_k.unsafe_load(src_i))
+        new_v.unsafe_store(i, fresh_v.unsafe_load(src_i))
+
+
 def kv_window_gather_kernel(
     work: MutPointer[Float32, MutAnyOrigin],
     ring: MutPointer[Float32, MutAnyOrigin],
@@ -4279,22 +4325,12 @@ def llama_attention_forward(
     #      updated in place. The recorded `kv.k_cache` stage is that span.
     if window == 0:
         step_count_launch()
-        ctx.enqueue_function[kv_append_kernel](
+        ctx.enqueue_function[kv_append2_kernel](
             stages.k_cache.unsafe_ptr(),
-            kv.k.unsafe_ptr(),
-            stages.k_rope.unsafe_ptr(),
-            Int32(b),
-            Int32(l),
-            Int32(nkv),
-            Int32(hd),
-            Int32(s_old),
-            grid_dim=(_grid(b * nkv * s * hd), 1, 1),
-            block_dim=(LLAMA_TPB, 1, 1),
-        )
-        step_count_launch()
-        ctx.enqueue_function[kv_append_kernel](
             stages.v_cache.unsafe_ptr(),
+            kv.k.unsafe_ptr(),
             kv.v.unsafe_ptr(),
+            stages.k_rope.unsafe_ptr(),
             stages.v_proj.unsafe_ptr(),
             Int32(b),
             Int32(l),
