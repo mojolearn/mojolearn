@@ -2,7 +2,7 @@
 
 This bounded release starts at 819a47ae48166e91951f54f54e64ee173658e32a, the native source used for public 0.8.9. It imports the parallel Python, verifier, reference, release metadata and relevant evidence changes through 74095a4bfd3b5bad7e5b3af53c2120fbfec535bc. Unrelated native optimization changes on main are outside this patch release.
 
-The alpha overlay must compare native compile inputs against the inherited wheel source and preserve every native artifact hash. The resulting wheel records its new package source commit separately from native source 819a47ae48166e91951f54f54e64ee173658e32a. Exact final-wheel installed qualification is required before publication; old-wheel receipts are not reused. Pending AMD/NVIDIA reference collection must be integrated before the final package-source freeze.
+The alpha overlay must compare native compile inputs against the inherited wheel source and preserve every native artifact hash. The resulting wheel records its new package source commit separately from native source 819a47ae48166e91951f54f54e64ee173658e32a. Exact final-wheel installed qualification is required before publication; old-wheel receipts are not reused. This release proceeds with the currently validated reference table. At freeze, 378 AMD and 126 NVIDIA part-cells remain outstanding; ongoing collection is not claimed complete. The Apple trial matched 423 numeric parts to CPU references and 414 to GPU-only references. One-device cross-vendor agreement does not establish physical multi-GPU placement. Subsequent native-free changes include explicit causal-batch worker cleanup, its actual Apple check, and the preserved incomplete AMD memory-guard diagnostic.
 
 Selected paths imported from the main snapshot:
 
