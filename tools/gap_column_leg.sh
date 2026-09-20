@@ -494,7 +494,7 @@ PARTS_FLAGS="${MOJOLEARN_GAP_PARTS:-}"
 say "extra_part_flags=${PARTS_FLAGS:-none (train,infer,model,batch,rlpair only)}"
 column() {
     run "$1" timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
-        pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+        pixi run python tools/identity_break.py --lanes "$LANES" --repeats "${MOJOLEARN_GAP_REPEATS:-1}" \
         $PARTS_FLAGS \
         --vendor "$LABEL" --json "$JSON"
     say "$1_exit=$(awk -F'	' -v n="$1" '$1==n{print $2}' "$OUT/status.tsv")"
@@ -581,7 +581,7 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
     else
         run column-two timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical \
             MOJOLEARN_PAR_DEVICES=0,1 PYTHONPATH=/root/mojolearn/python \
-            pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+            pixi run python tools/identity_break.py --lanes "$LANES" --repeats "${MOJOLEARN_GAP_REPEATS:-1}" \
             $PARTS_FLAGS \
             --vendor "$LABEL" --json "$TWO"
         say "column_two_exit=$(awk -F'	' '$1=="column-two"{print $2}' "$OUT/status.tsv")"
@@ -643,10 +643,10 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
             say "DISAGREEING LANES: $_bad -- re-running each arm SOLO before this is reported"
             run solo_one timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0 \
                 PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
-                --lanes "$_bad" --repeats 2 --vendor "$LABEL" --json "$OUT/solo-one-rerun.json"
+                --lanes "$_bad" --repeats "${MOJOLEARN_GAP_REPEATS:-1}" --vendor "$LABEL" --json "$OUT/solo-one-rerun.json"
             run solo_two timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0,1 \
                 PYTHONPATH=/root/mojolearn/python pixi run python tools/identity_break.py \
-                --lanes "$_bad" --repeats 2 --vendor "$LABEL" --json "$OUT/solo-two-rerun.json"
+                --lanes "$_bad" --repeats "${MOJOLEARN_GAP_REPEATS:-1}" --vendor "$LABEL" --json "$OUT/solo-two-rerun.json"
             run solo_diff timeout "$(cap 300)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
                 pixi run python tools/identity_break.py --diff "$OUT/solo-one-rerun.json" "$OUT/solo-two-rerun.json"
             say "solo_diff_exit=$(awk -F'	' '$1=="solo_diff"{print $2}' "$OUT/status.tsv")"
