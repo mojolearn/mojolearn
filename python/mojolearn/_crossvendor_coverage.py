@@ -80,10 +80,14 @@ def audit(table, contract, fixtures, vendors=VENDORS):
                 # Any numerical witness, including CPU, proves this is not
                 # a unanimous N/A role. Never let stale GPU N/A hide it.
                 observed = []
+                cpu_value = None
                 if isinstance(ent, dict):
-                    for column in ent.get('cols', {}).values():
-                        observed.append(ent.get('ref') if isinstance(column, int) else
-                                        column[1] if isinstance(column, (list, tuple)) and len(column) == 2 else None)
+                    for device, column in ent.get('cols', {}).items():
+                        value = (ent.get('ref') if isinstance(column, int) else
+                                 column[1] if isinstance(column, (list, tuple)) and len(column) == 2 else None)
+                        observed.append(value)
+                        if device == 'cpu':
+                            cpu_value = value
                 requires_numeric = expected == 'numeric' or any(_numeric(v) for v in observed)
                 recorded_na = (expected == 'recorded' and observed and
                                all(_na(v) for v in observed) and len(set(observed)) == 1)
@@ -96,7 +100,11 @@ def audit(table, contract, fixtures, vendors=VENDORS):
                         reasons[vendor] = 'contract_mismatch'
                     elif not _numeric(value) and not _na(value):
                         reasons[vendor] = 'invalid_value'
-                if len(set(v for v in values.values() if isinstance(v, str))) > 1:
+                if _numeric(cpu_value):
+                    for vendor, value in values.items():
+                        if value != cpu_value:
+                            reasons.setdefault(vendor, 'cpu_value_mismatch')
+                elif len(set(v for v in values.values() if isinstance(v, str))) > 1:
                     for vendor in values:
                         reasons.setdefault(vendor, 'value_mismatch')
                 if isinstance(ent, dict) and ent.get('conflict'):
@@ -110,7 +118,11 @@ def audit(table, contract, fixtures, vendors=VENDORS):
                     totals['incomplete_parts'] += 1
                     totals[kind + '_incomplete_parts'] += 1
                     gaps.append(dict(lane=lane, fixture=fixture, part=part, expected=expected,
-                                     kind=kind, values=values, reasons=reasons))
+                                     kind=kind, values=values, reasons=reasons,
+                                     cpu_role=('numeric' if _numeric(cpu_value) else
+                                               'not_applicable' if _na(cpu_value) else 'missing'),
+                                     cpu_value=cpu_value,
+                                     target=cpu_value if _numeric(cpu_value) else None))
                     for vendor, reason in sorted(reasons.items()):
                         plans[vendor].setdefault(lane, {}).setdefault(fixture, []).append(
                             dict(part=part, kind=kind, reason=reason))
