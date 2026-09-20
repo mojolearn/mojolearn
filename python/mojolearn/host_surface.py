@@ -420,6 +420,17 @@ TRAINING_LANE_NAMES = {
     # file). No GPU record carries these lanes yet, so their cells are OWED.
     "gpc": "the binary Gaussian process classifier",
     "gpc-multiclass": "the one-vs-rest Gaussian process classifier",
+    # lane/unlaned-public-algorithms (2026-09-20): the two
+    # `parallel_gaussian_process` entries `tools/verification_matrix.py`
+    # reported with NO identity lane at all. Their shards are CLASSES, cut in
+    # the driver's own Python and merged there in class order, and each shard
+    # is this family's host `gpc_fit`/`gpc_predict` -- the same arithmetic the
+    # two lanes above hash -- so `gpc_class_fit` and `gpc_class_predict`
+    # joined `_parallel_pool.CPU_OPERATIONS` and these two take a CPU column.
+    # `PUBLIC_EXCLUDED_PREFIXES` keeps every `par-*` lane out of the public
+    # reference set, so being covered here does not make them public.
+    "par-gpc-fit": "the class-sharded Gaussian process classifier fit",
+    "par-gpc-predict": "the class-sharded Gaussian process classifier prediction",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -1885,7 +1896,10 @@ FAMILIES = (
         # gpc_predict under the GPU binding's contract.
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
                         "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize",
-                        "gp-optimize", "gp-optimize-restarts"),
+                        "gp-optimize", "gp-optimize-restarts",
+                        # lane/unlaned-public-algorithms (2026-09-20): the class-sharded
+                        # GPC drivers, whose shard IS this family's gpc_fit/gpc_predict
+                        "par-gpc-fit", "par-gpc-predict"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
@@ -2785,6 +2799,24 @@ PUBLIC_EXCLUDED_PREFIXES = ("par-",)
 #:                     expanded property/hardware completion plan is not met.
 #:                     Current repeated references remain required; this is
 #:                     neither missing CPU execution nor release admission.
+#:   no cpu route      THE ONE REASON A COVERED LANE CANNOT HAVE, and the
+#:                     only entry here that is not a covered lane
+#:                     (lane/unlaned-public-algorithms, 2026-09-20). The
+#:                     lane's public surface REFUSES BY NAME on a CPU-only
+#:                     install, so no CPU column can ever carry it and no
+#:                     host family can ever declare it: the reference it owes
+#:                     is owed on a GPU column and on no other. Every other
+#:                     reason here says "the evidence has not been taken
+#:                     yet"; this one says "this box is the wrong box, and
+#:                     always will be". It is CHECKED against
+#:                     `identity_break.GPU_ONLY_LANES`, which is what
+#:                     `tools/identity_break.py` uses to drop the lane from a
+#:                     full-column CPU run, so the reason cannot be used as
+#:                     an escape hatch for a lane that merely has no CPU
+#:                     column yet. `tools/lane_accounting.py`'s invariant is
+#:                     satisfied by the entry; `verification_matrix`'s
+#:                     `cpu_vacuous_lanes()` derives the same fact
+#:                     independently from `lane_applicability`.
 #:
 #: THE THIRTEEN `stale reference` LANES WERE RESOLVED ON 2026-09-16 by the
 #: regeneration lane/expose-stepfull landed, and the split is the one the
@@ -2947,6 +2979,36 @@ PUBLIC_PENDING_LANES = {
     # legacy `identity` still restricts itself to its original column scope.
     # All twelve low-bit weight lanes gained strict all-nine CPU references
     # and complete native control pairs in 2026-09-17_cpu-complete-dependencies.
+    #
+    # lane/unlaned-public-algorithms (2026-09-20): the six public entries
+    # tools/verification_matrix.py reported with NO identity lane at all.
+    # None of the six has a shipped-table cell, and `tools/lane_accounting.py`
+    # is right to demand that each say so here rather than sit between the two
+    # mechanisms. They split by WHY the cell is missing, and the split is not
+    # cosmetic: two owe a record, four owe a different box.
+    #
+    # The class-sharded Gaussian process classifier drivers ARE covered lanes
+    # -- they take a CPU column, recorded in
+    # bench/results/identity_break/2026-09-20_unlaned-public-algorithms/ with
+    # a sabotage pair that moved every cell -- but no committed record carries
+    # a GPU hash for them and the shipped table has no cell, so an installed
+    # `verify --all` would read OWED for every part. `PUBLIC_EXCLUDED_PREFIXES`
+    # already keeps every `par-` lane out of the public set; this says why the
+    # table is empty as well.
+    "par-gpc-fit": "no reference",
+    "par-gpc-predict": "no reference",
+    # The four with no CPU column at all. `mamba1_session_create` and
+    # `transformer_decode_session_create` exist only in
+    # bindings/_mojolearn_mamba.mojo and bindings/_mojolearn_transformer.mojo;
+    # ParallelCausalLM and parallel cross-validation refuse unless
+    # `_backend.vendor()` is cuda or hip, before either builds a layer or
+    # prepares a fold. A CPU run cannot make these covered lanes, today or
+    # ever, so `no reference` would be the wrong reason: it promises a record
+    # this box can take.
+    "mamba1-decode-session": "no cpu route",
+    "transformer-decode-session": "no cpu route",
+    "par-causal-lm": "no cpu route",
+    "par-cross-val": "no cpu route",
 }
 
 

@@ -10,6 +10,17 @@ That recipe needs a second document, and a stranger on the day they install
 the wheel has nobody to get one from. These are ours, so the recipe works
 immediately.
 
+**These two documents answer NO CHALLENGE.** They were taken before
+`verify --challenge` existed (lane/compare-challenge-nonce, 2026-09-20), so
+the comparison below sits at the weaker rung of the ladder: both commitments
+verify, which shows the two files were fixed before they met, and nothing here
+shows either was COMPUTED rather than written out of the reference table the
+wheel ships. A current `verify --compare` of this pair prints that on the
+`RESULT: AGREE` line. Re-taking them at the stronger rung means rerunning
+`verify --all` on both boxes and walking the six steps of Recipe 4; the files
+here cannot be edited into a challenged pair, because the challenge is derived
+from commitments that are already published.
+
 **Comparing against our document is WEAKER than comparing against a
 stranger's, and it is not a substitute.** It puts us back in the loop: the
 answer then rests on our having run what we say we ran on the hardware we say

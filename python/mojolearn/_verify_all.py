@@ -1040,6 +1040,14 @@ COMMITMENT_EXCLUDES = {
     "elapsed_s": "wall clock; nobody compares it and it would bind a party to a stopwatch",
     "lane_seconds": "wall clock, per lane; same reason",
     REVEAL_KEY: "the nonce and the commitment itself; a hash cannot cover itself",
+    # `CHALLENGE_KEY`, spelled out because it is defined below this line. The
+    # challenge is derived FROM this commitment, so the response cannot exist
+    # when the commitment is taken; covering it would break every already
+    # published line the moment its party answered the challenge, which is a
+    # check firing on the protocol working. It gets its own commitment
+    # instead (`seal_challenge`), published in its own round.
+    "challenge": ("the challenge response; it is derived from this commitment and so comes "
+                  "into existence after it. Bound separately by the challenge commitment"),
 }
 
 
@@ -1347,7 +1355,600 @@ def _commitment_lines(c, la, lb):
     return lines
 
 
-def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitment_b=None):
+# ------------------------------------------------------- the challenge nonce
+#
+# WHAT COMMIT-REVEAL ABOVE DOES NOT DO. A commitment binds a party to a
+# document before they can see the other's, which settles ORDER. It says
+# nothing about EXECUTION. `mojolearn/verify_reference/table.json` ships in
+# the wheel and pins the expected hash of every cell, so a party can write a
+# well formed evidence document straight out of that table, seal it, publish
+# the commitment first, and hand over a file that never ran anything. Two
+# such documents read AGREE with both commitments verified, and every
+# structural defence above is satisfied, because nothing above ever asks
+# where a hash came from.
+#
+# Closing it needs a value NEITHER PARTY CONTROLS, mixed into what the run
+# computes, so the answer cannot be written before the value exists. The
+# tension is obvious and it is the whole design problem: a challenge that
+# changes the inputs produces hashes the shipped table cannot check. It
+# resolves because `--compare` IS PEER TO PEER AND READS NO TABLE -- it
+# compares two documents to each other, and `compare_documents` has never
+# imported `verify_reference`. A challenge-derived fixture is therefore fine
+# HERE, and only here, as long as both parties derive the same one and
+# neither could have known it in advance.
+#
+# WHERE THE CHALLENGE COMES FROM: the two published commitments themselves.
+#
+#     challenge = sha256(domain || min(c_a, c_b) || max(c_a, c_b))
+#
+# Neither party can compute it before both commitments are published, neither
+# controls it alone, and it needs no network, no beacon and no third party --
+# which matters, because Recipe 4 exists to remove third parties from the
+# answer, and a comparer that had to reach a beacon server to check a
+# challenge would put one back. It also binds the challenge TO THIS PAIR OF
+# DOCUMENTS: a response computed for some other exchange derives from other
+# commitments and is caught by arithmetic rather than by being unlikely.
+# Sorting the two means neither party has to be "A".
+#
+# THE PROTOCOL GROWS ONE ROUND, and that is the price of it:
+#   1  each party runs `verify --all --json-out mine.json`
+#   2  `verify --commitment mine.json`                -> publish that line
+#   3  EXCHANGE THE TWO LINES, not the documents
+#   4  `verify --challenge mine.json --challenge-from <c_a> <c_b>` reruns the
+#      lanes the document already ran, on the challenge fixture, appends the
+#      answers and prints a SECOND line                -> publish that too
+#   5  exchange the second lines, THEN exchange the documents
+#   6  `verify --compare a.json b.json --commitment-a/-b
+#      --challenge-commitment-a/-b`
+# Step 5 is not ceremony. Two honest challenge blocks are IDENTICAL -- that
+# is the point of them -- so a response that was not committed to before the
+# exchange can simply be copied out of the other party's file by whoever
+# receives it first, which is the same move commit-reveal exists to stop, one
+# level in. Binding the response is what makes it evidence about the party
+# who carries it rather than evidence that somebody, somewhere, ran.
+#
+# WHAT A CHALLENGE DOES NOT PROVE, written here beside what it does, because
+# an adversary model nobody wrote down is a defence nobody can check:
+#   * IT DOES NOT PROVE TWO PEOPLE. One party with one machine can play both
+#     sides: run the challenge once, write both documents around the one
+#     answer, seal both, publish all four lines in the right order. Every
+#     check in this file passes, and the device blocks that make the pair look
+#     independent are self-reported strings. Nothing here reaches that, and a
+#     verified challenge must never be read as if it did.
+#   * WHOEVER PUBLISHES THEIR COMMITMENT LAST CAN STEER IT. A reseal draws a
+#     fresh nonce and costs nothing, so the second publisher can grind
+#     commitments until the derived challenge is one they like. That buys
+#     nothing against synthesis -- every candidate challenge still has to be
+#     RUN before it can be answered -- but it does mean the challenge fixture
+#     is not an unbiased draw, and a pair who wish to avoid a fixture that
+#     would expose them can steer away from it.
+#   * IT PROVES EXECUTION OF WHAT IT COVERS, ON ONE FIXTURE. A party who runs
+#     the challenge honestly and writes the rest of the document out of the
+#     table still passes, and what they have demonstrated is exactly the
+#     challenge block: those lanes, that fixture, that hardware. That is why
+#     the challenge runs the document's WHOLE lane set rather than a sample,
+#     and why a narrowed challenge shows up as cells only one side carries.
+#   * THE FIXTURE KIND IS FIXED. The challenge varies the VALUES, never the
+#     pathology: it is the `hashed` fixture's counter-mode stream reseeded, so
+#     it says nothing about denormals, ties or duplicate rows that the nine
+#     recorded fixtures cover and it is not a substitute for them.
+
+CHALLENGE_FORMAT = "mojolearn.verify-challenge.v1"
+
+#: Domain separation, for the same reason `_COMMITMENT_DOMAIN` has it and
+#: distinct from it by construction. THE TWO VALUES MUST NEVER BE
+#: INTERCHANGEABLE: a challenge is derived from commitments and looks exactly
+#: like one -- 64 hex characters printed in the same kind of message -- so a
+#: shared domain would let a value lifted from one slot be replayed in the
+#: other. Three separators, three jobs: one for a document commitment, one
+#: for the challenge derived from a pair of them, one for the commitment over
+#: the challenge response.
+_CHALLENGE_DOMAIN = b"mojolearn.verify-challenge.v1\n"
+_CHALLENGE_COMMITMENT_DOMAIN = b"mojolearn.verify-challenge-commitment.v1\n"
+
+#: Where a challenged document carries its answers. A TOP-LEVEL KEY OF ITS
+#: OWN, never rows in `cells`: the cells are judged against the reference
+#: table and every one of these is unreferenced by construction, so folding
+#: them in would turn `verify --all`'s own verdict into OWED for a block that
+#: is not the table's business.
+CHALLENGE_KEY = "challenge"
+
+#: Where the SECOND commitment lives, inside the existing reveal block.
+CHALLENGE_NONCE_FIELD = "challenge_nonce"
+CHALLENGE_COMMITMENT_FIELD = "challenge_commitment"
+
+#: The fixture kind the challenge reseeds. `hashed` is the one fixture whose
+#: values come from a counter-mode sha256 stream rather than a numpy RNG
+#: family (identity_break._hashed_uniform), so the draw carries no assumption
+#: about a bit generator beyond the labels, and two parties on two vendors get
+#: the same bytes from the same challenge or the mismatch is visible as a
+#: fixture digest rather than as a cell divergence.
+CHALLENGE_FIXTURE_KIND = "hashed"
+
+#: What the challenge commitment covers, in the order `challenge_preimage`
+#: builds it, held by a test against what `challenge_report` reads.
+CHALLENGE_COVERS = ("format", "challenge", "derived_from", "fixture",
+                    "harness_sha256", "lanes", "cells")
+
+#: Left out, with the reason.
+CHALLENGE_EXCLUDES = {
+    "seconds": "wall clock; no comparison reads it and covering it would bind a party to a stopwatch",
+}
+
+#: Challenge states, most to least informative, mirroring `_COMMITMENT_OK`.
+#: `absent` and `self-declared` are WEAKER RESULTS, not failures.
+_CHALLENGE_OK = ("verified", "absent", "self-declared")
+
+
+def derive_challenge(commitment_a, commitment_b):
+    """`(challenge_hex, problem)` from the two commitments published before
+    the exchange.
+
+    SORTED, so neither party has to be "A" and both derive the same value
+    from the same pair without agreeing an order first. EQUAL COMMITMENTS ARE
+    REFUSED: two parties cannot draw the same nonce, so one commitment
+    presented twice is one party pretending to be two, and deriving a
+    challenge from it would hand that forgery a challenge it can answer."""
+    a, pa = read_published_commitment(commitment_a)
+    if pa:
+        return None, f"challenge cannot be derived: {pa}"
+    b, pb = read_published_commitment(commitment_b)
+    if pb:
+        return None, f"challenge cannot be derived: {pb}"
+    if a == b:
+        return None, ("challenge cannot be derived: the two commitments are the same value "
+                      f"({a}). That is one commitment presented twice, not two parties each "
+                      "binding themselves before the exchange")
+    lo, hi = sorted((a, b))
+    h = hashlib.sha256()
+    h.update(_CHALLENGE_DOMAIN)
+    h.update(lo.encode("ascii"))
+    h.update(b"\n")
+    h.update(hi.encode("ascii"))
+    h.update(b"\n")
+    return h.hexdigest(), None
+
+
+def challenge_seeds(challenge):
+    """(training seed, held-out seed) from the challenge.
+
+    Two INDEPENDENT halves of the digest, not `seed` and `seed + 1`: the
+    harness's own held-out draw is the training kind at a different seed, and
+    a held-out block that shared a stream with the training block would hand
+    the lanes rows they had already seen."""
+    if not isinstance(challenge, str) or not _COMMITMENT_HEX.match(challenge):
+        raise ValueError("a challenge is 64 lowercase hex characters")
+    return int(challenge[:16], 16), int(challenge[16:32], 16)
+
+
+def challenge_fixture(harness, challenge):
+    """`((X, y_clf, y_reg), held_X)` for one challenge, through the harness's
+    OWN fixture builder at a challenge-derived seed.
+
+    NOTHING NEW IS DEFINED HERE. The fixture kind, the row count, the label
+    rule and the hash are the harness's, so a challenge cell is the cell the
+    harness would write for that input and a reader can reproduce it with
+    `identity_break.fixture('hashed', seed=...)` and nothing else."""
+    train_seed, held_seed = challenge_seeds(challenge)
+    data = harness.fixture(CHALLENGE_FIXTURE_KIND, seed=train_seed)
+    held = harness.fixture(CHALLENGE_FIXTURE_KIND, seed=held_seed)[0]
+    return data, held
+
+
+def challenge_fixture_block(harness, challenge):
+    """The digests of the challenge fixture, so two parties who somehow drew
+    DIFFERENT bytes from the same challenge see that, by name, instead of
+    reading it as every cell diverging."""
+    (X, yc, yr), held = challenge_fixture(harness, challenge)
+    train_seed, held_seed = challenge_seeds(challenge)
+    return dict(kind=CHALLENGE_FIXTURE_KIND, n=int(X.shape[0]), d=int(X.shape[1]),
+                train_seed=str(train_seed), heldout_seed=str(held_seed),
+                X=harness._h(X), y_clf=harness._h(yc), y_reg=harness._h(yr),
+                heldout_X=harness._h(held))
+
+
+def challenge_preimage(block):
+    """The canonical bytes the challenge commitment is taken over.
+
+    Built the same way `commitment_preimage` is, for the same reasons: parsed
+    values re-serialized canonically rather than file bytes, so reindenting an
+    honest document cannot break it; rows sorted, so their order is not a
+    change; DUPLICATES KEPT, so a party is bound to the block a structural
+    refusal describes rather than to a tidied one."""
+    if not isinstance(block, dict):
+        raise ValueError(f"not a challenge block (it is {type(block).__name__})")
+    cells = []
+    for r in (block.get("cells") or []):
+        cells.append([r.get("lane"), r.get("part"), r.get("value")]
+                     if isinstance(r, dict) else r)
+    cells.sort(key=lambda c: json.dumps(c, sort_keys=True, default=str))
+    covered = dict(
+        format=block.get("format"),
+        challenge=block.get("challenge"),
+        # the pair it was derived from: without this a response could be
+        # moved to another exchange whose challenge happened to match
+        derived_from=block.get("derived_from"),
+        # the input the answers are answers TO
+        fixture=block.get("fixture"),
+        harness_sha256=block.get("harness_sha256"),
+        lanes=block.get("lanes"),
+        cells=cells,
+    )
+    assert tuple(covered) == CHALLENGE_COVERS, "CHALLENGE_COVERS no longer names what is covered"
+    return json.dumps(covered, sort_keys=True, separators=(",", ":"),
+                      ensure_ascii=True, default=str).encode("utf-8")
+
+
+def challenge_commitment_digest(doc, nonce):
+    """sha256 over domain, nonce, THE DOCUMENT'S OWN ROUND-ONE COMMITMENT and
+    the challenge preimage, in that order.
+
+    The round-one commitment is in there so the second line cannot be lifted
+    off one document and presented for another: it is the value that names
+    which document this response belongs to, and it is already published."""
+    if not isinstance(nonce, str) or not re.match(r"\A[0-9a-f]{16,128}\Z", nonce):
+        raise ValueError("a nonce is 16 to 128 lowercase hex characters")
+    block = doc.get(CHALLENGE_KEY) if isinstance(doc, dict) else None
+    if not isinstance(block, dict):
+        raise ValueError("this document carries no challenge block")
+    reveal = doc.get(REVEAL_KEY) if isinstance(doc, dict) else None
+    round_one = reveal.get("commitment") if isinstance(reveal, dict) else None
+    h = hashlib.sha256()
+    h.update(_CHALLENGE_COMMITMENT_DOMAIN)
+    h.update(nonce.encode("ascii"))
+    h.update(b"\n")
+    h.update(str(round_one).encode("utf-8"))
+    h.update(b"\n")
+    h.update(challenge_preimage(block))
+    return h.hexdigest()
+
+
+def seal_challenge(doc, nonce=None):
+    """Attach a second nonce and commitment, over the challenge block, and
+    return the line to publish. The document must already be sealed: the
+    challenge derives from its round-one commitment, so there is no order in
+    which this comes first."""
+    import secrets
+    reveal = doc.get(REVEAL_KEY) if isinstance(doc, dict) else None
+    if not isinstance(reveal, dict) or not isinstance(reveal.get("commitment"), str):
+        raise ValueError("this document has no round-one commitment to bind the challenge to; "
+                         "run `verify --commitment` on it first")
+    nonce = nonce or secrets.token_hex(NONCE_BYTES)
+    commitment = challenge_commitment_digest(doc, nonce)
+    reveal[CHALLENGE_NONCE_FIELD] = nonce
+    reveal[CHALLENGE_COMMITMENT_FIELD] = commitment
+    reveal["challenge_covers"] = list(CHALLENGE_COVERS)
+    return commitment
+
+
+def challenge_structure_problems(block, label):
+    """Every complaint about one challenge block, read on its own.
+
+    A BLOCK THAT DOES NOT PARSE IS NOT A WEAKER RESULT, IT IS A BROKEN ONE.
+    An absent challenge is legal and labelled; a present one that cannot be
+    read is a claim the document makes and cannot back."""
+    out = []
+    if not isinstance(block, dict):
+        return [f"{label}: `{CHALLENGE_KEY}` is {type(block).__name__}, expected an object"]
+    if block.get("format") != CHALLENGE_FORMAT:
+        out.append(f"{label}: challenge format is {block.get('format')!r}, expected "
+                   f"{CHALLENGE_FORMAT!r}")
+    value = block.get("challenge")
+    if not isinstance(value, str) or not _COMMITMENT_HEX.match(value):
+        out.append(f"{label}: `challenge` is {value!r}, expected 64 hex characters")
+    src = block.get("derived_from")
+    if not isinstance(src, list) or len(src) != 2 or not all(
+            isinstance(x, str) and _COMMITMENT_HEX.match(x) for x in src):
+        out.append(f"{label}: `derived_from` is {src!r}, expected the two 64-character "
+                   "commitments the challenge was derived from")
+    elif isinstance(value, str):
+        # THE DERIVATION IS RECOMPUTED, NEVER TAKEN ON TRUST. A party who
+        # chooses their own challenge and writes any two commitments beside it
+        # is caught here, before anything it answers is read.
+        want, problem = derive_challenge(src[0], src[1])
+        if problem:
+            out.append(f"{label}: {problem}")
+        elif want != value:
+            out.append(f"{label}: the challenge it carries ({value}) is not the challenge its own "
+                       f"`derived_from` pair produces ({want}). A challenge is not a value a party "
+                       "chooses; it is what the two published commitments hash to")
+    if not isinstance(block.get("fixture"), dict):
+        out.append(f"{label}: challenge block carries no `fixture` digests, so there is no way to "
+                   "tell a different input from a different answer")
+    rows, seen = block.get("cells"), {}
+    if not isinstance(rows, list):
+        out.append(f"{label}: challenge `cells` is {type(rows).__name__}, expected a list")
+    else:
+        for i, r in enumerate(rows):
+            if not isinstance(r, dict):
+                out.append(f"{label}: challenge cells[{i}] is {type(r).__name__}, expected an object")
+                continue
+            key = (r.get("lane"), r.get("part"))
+            if key in seen:
+                # the same refusal `_read_cells` makes, for the same reason
+                out.append(f"{label}: challenge {key[0]} {key[1]} appears twice (rows "
+                           f"{seen[key]} and {i})")
+                continue
+            seen[key] = i
+    return out
+
+
+def _challenge_cells(block):
+    """`{(lane, part): value}` for one challenge block, last row losing to
+    the duplicate complaint above rather than overwriting."""
+    out, seen = {}, set()
+    for r in (block.get("cells") or []):
+        if not isinstance(r, dict):
+            continue
+        key = (r.get("lane"), r.get("part"))
+        if key in seen:
+            continue
+        seen.add(key)
+        out[key] = r.get("value")
+    return out
+
+
+def challenge_state(doc, published, label):
+    """What one document's CHALLENGE COMMITMENT does and does not prove.
+
+    Exactly `commitment_state` one level in, and for the same reason: a second
+    commitment that travels inside the document proves nothing, because
+    anyone holding the document can recompute it. Only a line the other party
+    held before the exchange binds a response."""
+    out = dict(label=label, state="absent", published=None, recomputed=None,
+               nonce=None, problem=None)
+    reveal = doc.get(REVEAL_KEY) if isinstance(doc, dict) else None
+    reveal = reveal if isinstance(reveal, dict) else {}
+    pub, pub_problem = (None, None) if published is None else read_published_commitment(published)
+    out["published"] = pub
+    if published is not None and pub is None:
+        out.update(state="UNREADABLE", problem=f"{label}: challenge commitment: {pub_problem}")
+        return out
+    nonce = reveal.get(CHALLENGE_NONCE_FIELD)
+    if not isinstance(nonce, str):
+        if pub is None:
+            return out
+        out.update(state="UNSEALED", problem=(
+            f"{label}: {pub} was published as its challenge commitment, but the document carries "
+            f"no `{CHALLENGE_NONCE_FIELD}`, so nothing can be checked against it. An unverifiable "
+            "commitment is not a verified one"))
+        return out
+    out["nonce"] = nonce
+    try:
+        recomputed = challenge_commitment_digest(doc, nonce)
+    except (ValueError, TypeError) as exc:
+        out.update(state="UNREADABLE",
+                   problem=f"{label}: cannot recompute its challenge commitment: {exc}")
+        return out
+    out["recomputed"] = recomputed
+    stored = reveal.get(CHALLENGE_COMMITMENT_FIELD)
+    if isinstance(stored, str) and stored != recomputed:
+        out.update(state="SELF-INCONSISTENT", problem=(
+            f"{label}: the challenge response does not match the challenge commitment the document "
+            f"carries itself (carries {stored}, recomputes to {recomputed}); it was edited after "
+            "it was sealed"))
+        return out
+    if pub is None:
+        out.update(state="self-declared")
+        return out
+    if pub != recomputed:
+        out.update(state="MISMATCH", problem=(
+            f"{label}: does not match the challenge commitment published for it "
+            f"(published {pub}, this document commits to {recomputed})"))
+        return out
+    out.update(state="verified")
+    return out
+
+
+def challenge_report(a, b, label_a, label_b, commitment_a=None, commitment_b=None,
+                     challenge_commitment_a=None, challenge_commitment_b=None):
+    """The challenge block of a comparison: whether the two documents answer
+    the same challenge, whether that challenge is the one this pair of
+    commitments produces, and whether either response was bound before the
+    exchange.
+
+    ABSENCE IS NOT A FAILURE, and never becomes one. Two documents from a
+    release that predates this feature carry no challenge; they still compare,
+    and what they lose is the strongest sentence, not the comparison. The
+    failures are a challenge that is PRESENT and does not hold up, and a
+    challenge that only one side carries, which cannot be checked at all.
+    """
+    ba = a.get(CHALLENGE_KEY) if isinstance(a, dict) else None
+    bb = b.get(CHALLENGE_KEY) if isinstance(b, dict) else None
+    asked = challenge_commitment_a is not None or challenge_commitment_b is not None
+    out = dict(present_a=ba is not None, present_b=bb is not None, challenge=None,
+               problems=[], broken=False, both_verified=False, published_by=[],
+               a=dict(label=label_a, state="absent", published=None, recomputed=None,
+                      nonce=None, problem=None),
+               b=dict(label=label_b, state="absent", published=None, recomputed=None,
+                      nonce=None, problem=None),
+               agree=[], differ=[], moved=[], uncomputed=[], n_a=[], n_a_differing=[],
+               only_in_a=[], only_in_b=[], lanes=0)
+    if ba is None and bb is None:
+        if asked:
+            out["problems"].append(
+                f"a challenge commitment was passed for this comparison, but neither {label_a} nor "
+                f"{label_b} carries a `{CHALLENGE_KEY}` block, so there is no response to check it "
+                "against. Either the wrong files were handed over, or the challenge step was never "
+                "run")
+            out["broken"] = True
+        return out
+    if ba is None or bb is None:
+        one, other = (label_b, label_a) if ba is None else (label_a, label_b)
+        out["problems"].append(
+            f"only {one} answers a challenge; {other} carries none. A challenge is answered by BOTH "
+            "parties or by neither: one response alone shows that somebody ran something after the "
+            "commitments were published, and cannot show which of these two documents was computed")
+        out["broken"] = True
+        return out
+    problems = (challenge_structure_problems(ba, label_a)
+                + challenge_structure_problems(bb, label_b))
+    if problems:
+        out.update(problems=problems, broken=True)
+        return out
+    if ba.get("challenge") != bb.get("challenge"):
+        out.update(problems=[
+            f"{label_a} answers challenge {ba.get('challenge')} and {label_b} answers "
+            f"{bb.get('challenge')}. Two different challenges are two different questions; these "
+            "responses were not produced for the same exchange"], broken=True)
+        return out
+    out["challenge"] = ba.get("challenge")
+    if sorted(ba.get("derived_from")) != sorted(bb.get("derived_from")):
+        out.update(problems=[
+            f"{label_a} and {label_b} agree on a challenge but not on where it came from "
+            f"({ba.get('derived_from')} against {bb.get('derived_from')})"], broken=True)
+        return out
+    src = sorted(ba.get("derived_from"))
+    # THE PAIR THE CHALLENGE NAMES MUST BE THESE TWO DOCUMENTS. Every check
+    # above is satisfied by a stale response: a correctly derived challenge
+    # from an earlier exchange, or from a different pair entirely, answered
+    # honestly and then presented here. The commitments name the documents, so
+    # this is where a response is tied to the files in hand.
+    def _own_commitment(d):
+        reveal = d.get(REVEAL_KEY) if isinstance(d, dict) else None
+        value = reveal.get("commitment") if isinstance(reveal, dict) else None
+        return value if isinstance(value, str) and _COMMITMENT_HEX.match(value) else None
+
+    carried = [_own_commitment(a), _own_commitment(b)]
+    carried = sorted(carried, key=lambda x: (x is None, x or ""))
+    if None in carried:
+        out["problems"].append(
+            f"a challenge derived from {src[0][:16]}... is answered here, but one of these "
+            "documents carries no commitment of its own, so there is no way to tell that the "
+            "challenge was derived from THESE two documents")
+    elif carried != src:
+        out["problems"].append(
+            f"the challenge was derived from {src}, which is not the pair of commitments these two "
+            f"documents carry ({carried}). This response belongs to a different exchange: a "
+            "challenge answered for another pair, or for an earlier seal of these files")
+    published = []
+    for line, doc in ((commitment_a, a), (commitment_b, b)):
+        got, _problem = (None, None) if line is None else read_published_commitment(line)
+        if got:
+            published.append(got)
+    if len(published) == 2 and sorted(published) != src:
+        out["problems"].append(
+            f"the challenge was derived from {src}, which is not the pair of commitments published "
+            f"for this comparison ({sorted(published)}). A challenge that does not come from the "
+            "two published lines is a value one of the parties chose")
+    sa = challenge_state(a, challenge_commitment_a, label_a)
+    sb = challenge_state(b, challenge_commitment_b, label_b)
+    out["a"], out["b"] = sa, sb
+    out["problems"] += [s["problem"] for s in (sa, sb) if s["problem"]]
+    if sa["published"] and sa["published"] == sb["published"]:
+        out["problems"].append(
+            f"{label_a} and {label_b} were checked against the SAME published challenge commitment "
+            f"({sa['published']}); that is one line handed over twice, not two parties each "
+            "binding their own response")
+    if sa["nonce"] and sa["nonce"] == sb["nonce"]:
+        out["problems"].append(
+            f"{label_a} and {label_b} carry the same challenge nonce ({sa['nonce']}); a nonce is "
+            f"{NONCE_BYTES * 8} random bits, so one document's challenge reveal was copied from "
+            "the other")
+    fa, fb = ba.get("fixture"), bb.get("fixture")
+    if fa != fb:
+        # NOT NECESSARILY AN ATTACK, and it is named rather than absorbed: if
+        # two boxes derive different bytes from one challenge, every challenge
+        # cell would otherwise read DIVERGENT for a reason that is not
+        # arithmetic, which is this project's worst failure shape.
+        out["problems"].append(
+            f"{label_a} and {label_b} answer the same challenge over DIFFERENT input: the challenge "
+            f"fixture digests differ ({fa} against {fb}). Either one document's fixture block was "
+            "edited, or the two machines drew different bytes from the same seed (compare their "
+            "numpy versions); either way the answers are answers to different questions")
+    out["published_by"] = [s["label"] for s in (sa, sb) if s["published"]]
+    out["broken"] = bool(out["problems"])
+    if out["broken"]:
+        return out
+    out["both_verified"] = sa["state"] == "verified" and sb["state"] == "verified"
+    ca, cb = _challenge_cells(ba), _challenge_cells(bb)
+    lanes = set()
+    for key in sorted(set(ca) & set(cb), key=lambda k: tuple("" if x is None else str(x) for x in k)):
+        va_, vb_ = ca[key], cb[key]
+        ka, kb = _value_kind(va_), _value_kind(vb_)
+        row = dict(lane=key[0], fixture=f"challenge:{out['challenge'][:12]}", part=key[1],
+                   a=va_, b=vb_, kind_a=ka, kind_b=kb, state_a=None, state_b=None)
+        lanes.add(key[0])
+        if "moved" in (ka, kb):
+            out["moved"].append(row)
+        elif "missing" in (ka, kb):
+            out["uncomputed"].append(row)
+        elif ka == "n/a" and kb == "n/a":
+            (out["n_a"] if va_ == vb_ else out["n_a_differing"]).append(row)
+        elif va_ != vb_:
+            out["differ"].append(row)
+        else:
+            out["agree"].append(row)
+    # sorted through the same None-safe key the cell comparison uses: a row
+    # whose lane or part is null is not a reason for this to raise
+    def _k(key):
+        return tuple("" if x is None else str(x) for x in key)
+
+    out["only_in_a"] = [[k[0], f"challenge:{out['challenge'][:12]}", k[1]]
+                        for k in sorted(set(ca) - set(cb), key=_k)]
+    out["only_in_b"] = [[k[0], f"challenge:{out['challenge'][:12]}", k[1]]
+                        for k in sorted(set(cb) - set(ca), key=_k)]
+    out["lanes"] = len(lanes)
+    return out
+
+
+def _challenge_lines(c, la, lb):
+    """The paragraph a reader sees about the challenge. A comparison run
+    without one is NOT a failure and must not be printed as one; it is the
+    same kind of weaker result a comparison without commitments already is,
+    and it is labelled in the same voice."""
+    lines = []
+    if c["broken"]:
+        lines.append("CHALLENGE: BROKEN. A challenge is at issue in this comparison and it does not")
+        lines.append("hold up, so nothing below can be read as evidence that either document was")
+        lines.append("computed rather than written out of the reference table.")
+        for m in c["problems"]:
+            lines.append(f"  {m}")
+        return lines
+    if not c["present_a"] and not c["present_b"]:
+        lines.append("CHALLENGE: none. Neither document answers a challenge, so nothing here shows")
+        lines.append("that either party RAN anything. The reference table ships in the wheel and")
+        lines.append("pins the expected hash of every cell, so a well formed document can be")
+        lines.append("written straight out of it and committed to without executing a line; a")
+        lines.append("commitment settles the ORDER of the two files, never their execution. This")
+        lines.append("result is WEAKER for the same reason a comparison without commitments is.")
+        lines.append("To close it, after publishing commitments and exchanging the two lines:")
+        lines.append("  python -m mojolearn verify --challenge mine.json \\")
+        lines.append("      --challenge-from <your line> <their line>   # publish the second line")
+        lines.append("then exchange documents and add")
+        lines.append(f"  --challenge-commitment-a <{la}'s second line> --challenge-commitment-b <{lb}'s>")
+        return lines
+    answered = len(c["agree"]) + len(c["differ"]) + len(c["moved"]) + len(c["uncomputed"]) \
+        + len(c["n_a"]) + len(c["n_a_differing"])
+    lines.append(f"CHALLENGE: {c['challenge']}")
+    lines.append("  derived by both parties from the two commitments published before the")
+    lines.append(f"  exchange, and answered by both: {answered} cell parts over {c['lanes']} lanes on a")
+    lines.append("  fixture neither party could have drawn before those commitments existed, so")
+    lines.append("  neither answer could have been written out of the shipped reference table.")
+    if c["both_verified"]:
+        lines.append("  Both responses were committed to before the documents were exchanged:")
+        lines.append(f"    {la}: {c['a']['recomputed']}")
+        lines.append(f"    {lb}: {c['b']['recomputed']}")
+    elif c["published_by"]:
+        bound = c["published_by"][0]
+        free = lb if bound == la else la
+        lines.append(f"  WEAKER: only {bound}'s response is bound. No challenge commitment was")
+        lines.append(f"  published for {free}, so {free} could have copied the response block out")
+        lines.append("  of the other file after it arrived; two honest responses are identical,")
+        lines.append("  which is exactly what makes one copyable.")
+    else:
+        lines.append("  WEAKER: neither response was committed to before the exchange. Two honest")
+        lines.append("  responses are IDENTICAL, so whichever party received the other's file")
+        lines.append("  first could have copied the challenge block into their own. What this")
+        lines.append("  shows is that SOMEBODY ran the challenge after the commitments were")
+        lines.append("  published, not that both of these documents did.")
+        lines.append("  Publish the second line the --challenge step prints, and pass it back as")
+        lines.append("  --challenge-commitment-a/--challenge-commitment-b.")
+    return lines
+
+
+def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitment_b=None,
+                      challenge_commitment_a=None, challenge_commitment_b=None):
     """Diff two evidence documents: where two machines agree, and where they do not.
 
     THE POINT IS THAT WE ARE NOT IN THE LOOP. Everything else this command
@@ -1395,6 +1996,16 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
     `_commitment_lines` says so in the output in the same place and the same
     voice `same_device` is called weaker than `independent`.
 
+    AND A COMMITMENT STILL DOES NOT SAY A DOCUMENT CAME FROM A RUN. It settles
+    order, not execution: the reference table ships in the wheel with every
+    expected cell hash in it, so a document can be written out of the table and
+    committed to without executing anything. The CHALLENGE block closes that,
+    and it can exist here because this function reads no table -- it compares
+    two documents to each other -- so a fixture derived from the two published
+    commitments is a perfectly good question to ask, and one neither party
+    could have answered in advance. `challenge_report` holds what it proves and
+    the three things it does not.
+
     AGREE IS THE LAST OUTCOME TRIED, and that ordering is the point. On
     2026-09-16 `verdict()` was fixed for the same defect one level down: it
     returned VERIFIED as soon as ONE part read IDENTICAL, before it looked at
@@ -1413,6 +2024,11 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
     # file you were promised" is a thing a reader must be told whether or not
     # the file also failed to parse as evidence.
     commitment = commitment_report(a, b, label_a, label_b, commitment_a, commitment_b)
+    # THE SAME, ONE LEVEL IN, and computed for a malformed document too: "this
+    # file does not answer the challenge it says it answers" is a thing a
+    # reader must be told whether or not the file also failed to parse.
+    challenge = challenge_report(a, b, label_a, label_b, commitment_a, commitment_b,
+                                 challenge_commitment_a, challenge_commitment_b)
 
     def _sortkey(k):
         return tuple("" if x is None else str(x) for x in k)
@@ -1450,6 +2066,22 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
             agree.append(row)
     only_a = [] if problems else sorted(set(ca) - set(cb), key=_sortkey)
     only_b = [] if problems else sorted(set(cb) - set(ca), key=_sortkey)
+    # THE CHALLENGE CELLS JOIN THE SAME BUCKETS, and that is why they are kept
+    # in the same shape. A challenge answer that differs between the two boxes
+    # is not a broken challenge, it is a DIVERGENCE on a fixture nobody chose --
+    # the strongest finding this command can produce -- and it must reach the
+    # same MISMATCH the recorded fixtures reach, by the same ladder, rather
+    # than a softer outcome of its own.
+    challenge_only_a, challenge_only_b = [], []
+    if not problems and not challenge["broken"]:
+        agree += challenge["agree"]
+        differ += challenge["differ"]
+        moved += challenge["moved"]
+        uncomputed += challenge["uncomputed"]
+        na += challenge["n_a"]
+        na_differ += challenge["n_a_differing"]
+        challenge_only_a = [tuple(k) for k in challenge["only_in_a"]]
+        challenge_only_b = [tuple(k) for k in challenge["only_in_b"]]
 
     da, db = (a.get("device") or {}) if isinstance(a, dict) else {}, \
              (b.get("device") or {}) if isinstance(b, dict) else {}
@@ -1478,6 +2110,8 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
         own_detail_a=(a.get("detail") if isinstance(a, dict) else None),
         own_detail_b=(b.get("detail") if isinstance(b, dict) else None),
         commitments_verified=commitment["both_verified"],
+        challenge=challenge["challenge"],
+        challenge_verified=challenge["both_verified"],
     )
 
     if problems:
@@ -1489,6 +2123,18 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
         # those cells is honest. Only MALFORMED outranks it, because a file
         # that will not parse was never a document at all.
         verdict_, code = "COMMITMENT BROKEN", EXIT_MISMATCH
+    elif challenge["broken"]:
+        # DIRECTLY UNDER COMMITMENT BROKEN, by the same reasoning and not by
+        # taste. A challenge that does not hold up means the reader does not
+        # know that these cells were COMPUTED rather than written out of the
+        # table we ship, so no headline about those cells is honest yet. It
+        # sits below COMMITMENT BROKEN because a document that is not the one
+        # its party committed to is not a document whose challenge is worth
+        # reading, and above every cell outcome because an unsound claim about
+        # provenance outranks any count of matching hashes. ABSENCE OF A
+        # CHALLENGE NEVER REACHES HERE: that is a weaker AGREE, labelled on
+        # the RESULT line, exactly as a comparison without commitments is.
+        verdict_, code = "CHALLENGE BROKEN", EXIT_MISMATCH
     elif same_document:
         verdict_, code = "SAME DOCUMENT", EXIT_CANNOT_RUN
     elif context_problems:
@@ -1499,7 +2145,7 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
         verdict_, code = "SELF-CONTRADICTED", EXIT_MISMATCH
     elif agreed_div:
         verdict_, code = "AGREED ON A DIVERGENT ANSWER", EXIT_MISMATCH
-    elif only_a or only_b or uncomputed or na_differ:
+    elif only_a or only_b or challenge_only_a or challenge_only_b or uncomputed or na_differ:
         verdict_, code = "INCOMPLETE", EXIT_CANNOT_RUN
     elif agree:
         verdict_, code = "AGREE", EXIT_VERIFIED
@@ -1508,10 +2154,12 @@ def compare_documents(a, b, label_a="A", label_b="B", commitment_a=None, commitm
     return dict(format="mojolearn.verify-compare.v1", verdict=verdict_, exit=code,
                 labels=dict(a=label_a, b=label_b), provenance=prov, problems=problems,
                 context_problems=context_problems, commitment=commitment,
+                challenge=challenge,
                 agree=len(agree), differ=len(differ), n_a=len(na), moved=len(moved),
                 uncomputed=len(uncomputed), n_a_differing=len(na_differ),
                 agreed_divergent=len(agreed_div),
-                only_in_a=[list(k) for k in only_a], only_in_b=[list(k) for k in only_b],
+                only_in_a=[list(k) for k in only_a] + [list(k) for k in challenge_only_a],
+                only_in_b=[list(k) for k in only_b] + [list(k) for k in challenge_only_b],
                 differing=differ, agreeing=agree, self_contradicted=moved,
                 not_computed=uncomputed, n_a_differing_cells=na_differ,
                 agreed_divergent_cells=agreed_div)
@@ -1533,6 +2181,10 @@ def format_compare(r):
     commitment = r.get("commitment") or dict(broken=False, both_verified=False,
                                              published_by=[], problems=[],
                                              a=dict(state="absent"), b=dict(state="absent"))
+    challenge = r.get("challenge") or dict(broken=False, both_verified=False, present_a=False,
+                                           present_b=False, challenge=None, published_by=[],
+                                           problems=[], lanes=0, agree=[], differ=[], moved=[],
+                                           uncomputed=[], n_a=[], n_a_differing=[])
     lines = ["# python -m mojolearn verify --compare", ""]
     if r["problems"]:
         lines.append("THESE FILES ARE NOT BOTH READABLE EVIDENCE DOCUMENTS:")
@@ -1545,6 +2197,9 @@ def format_compare(r):
         # ALSO not the file its party committed to says more about why it is
         # malformed than the parse errors do.
         lines += _commitment_lines(commitment, la, lb)
+        if challenge["broken"]:
+            lines.append("")
+            lines += _challenge_lines(challenge, la, lb)
         lines.append("")
         lines.append("RESULT: MALFORMED. Nothing was compared, and this is NOT a pass.")
         return "\n".join(lines)
@@ -1562,16 +2217,17 @@ def format_compare(r):
         if p.get(key):
             lines.append(f"    {lbl}: {p[key]}")
     lines.append("")
-    if commitment["broken"]:
+    if commitment["broken"] or challenge["broken"]:
         # THE INDEPENDENCE SENTENCE IS EXACTLY WHAT A FORGER WANTS A SKIMMER TO
         # READ, and it is read out of the provenance block, which is the part a
         # broken commitment says cannot be taken at face value. Printing "two
         # independent machines reaching the same bits" above a broken
         # commitment would hand the forgery the strongest line this command has.
         lines.append("THE PROVENANCE ABOVE CANNOT BE TAKEN AT FACE VALUE. A document here does not")
-        lines.append("match the commitment its party published before the exchange, so the hardware")
-        lines.append("it names is not something this comparison can stand behind. Nothing is said")
-        lines.append("here about how independent the two machines were.")
+        lines.append("match a commitment its party published before the exchange, or does not")
+        lines.append("answer the challenge it says it answers, so the hardware it names is not")
+        lines.append("something this comparison can stand behind. Nothing is said here about how")
+        lines.append("independent the two machines were.")
     elif p["same_document"]:
         lines.append("THESE TWO FILES ARE BYTE-IDENTICAL. That is one document handed over twice,")
         lines.append("not two parties comparing, and it can only ever agree with itself.")
@@ -1587,6 +2243,8 @@ def format_compare(r):
         lines.append("than two genuinely different vendors would give.")
     lines.append("")
     lines += _commitment_lines(commitment, la, lb)
+    lines.append("")
+    lines += _challenge_lines(challenge, la, lb)
     lines.append("")
     lines.append(f"  agree {r['agree']}   differ {r['differ']}   self-contradicted {r['moved']}   "
                  f"neither computed {r['uncomputed']}   agreed on a divergence "
@@ -1616,7 +2274,15 @@ def format_compare(r):
             if len(keys) > 20:
                 lines.append(f"  ... and {len(keys) - 20} more")
     lines.append("")
-    if r["verdict"] == "COMMITMENT BROKEN":
+    if r["verdict"] == "CHALLENGE BROKEN":
+        lines.append("RESULT: CHALLENGE BROKEN. A challenge is at issue in this comparison and it")
+        lines.append("does not hold up, so whatever the cells say, they are not shown to have been")
+        lines.append("computed rather than written out of the reference table we ship. This is NOT")
+        lines.append("a pass.")
+        lines.extend("  " + problem for problem in challenge["problems"])
+        if p["same_document"]:
+            lines.append("  (the two files are also byte-identical: one document handed over twice)")
+    elif r["verdict"] == "COMMITMENT BROKEN":
         lines.append("RESULT: COMMITMENT BROKEN. A document here is not the document its party")
         lines.append("committed to before the exchange, so whatever its cells say, they cannot be")
         lines.append("read as an independent run. This is NOT a pass.")
@@ -1638,6 +2304,27 @@ def format_compare(r):
             # without the reason it is weaker.
             lines.append("WEAKER THAN IT LOOKS: no commitment was exchanged, so neither document is")
             lines.append("shown to have been computed rather than copied. See COMMITMENTS above.")
+        # AND THE SECOND QUALIFIER, for the second question, at the same
+        # indentation because it is NOT an alternative to the first. A
+        # commitment says these two files were fixed before they met; it says
+        # nothing about either having run, because our reference table pins
+        # every expected cell hash and a document can be written out of it.
+        # Both sentences ride on the RESULT line, and a reader who is shown
+        # only one of them is being told half of it.
+        if challenge["both_verified"]:
+            lines.append("Both answered a challenge neither could have known before those")
+            lines.append("commitments existed, and each response was committed to before the")
+            lines.append("exchange, so neither document could have been written out of our")
+            lines.append("reference table without running.")
+        elif challenge["challenge"]:
+            lines.append("WEAKER THAN IT LOOKS: the challenge was answered but the responses were")
+            lines.append("not both committed to before the exchange, so one could have been copied")
+            lines.append("from the other. See CHALLENGE above.")
+        else:
+            lines.append("WEAKER THAN IT LOOKS: no challenge was answered, so neither document is")
+            lines.append("shown to have been COMPUTED at all; our reference table pins every")
+            lines.append("expected cell hash and a document can be written out of it. See CHALLENGE")
+            lines.append("above.")
     elif r["verdict"] == "MISMATCH":
         lines.append(f"RESULT: MISMATCH. {r['differ']} cell parts differ; they are named above.")
     elif r["verdict"] == "SELF-CONTRADICTED":
@@ -1692,7 +2379,9 @@ def _cmd_compare(args):
                 return _compare_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {p}: {exc}")
         r = compare_documents(docs[0], docs[1], os.path.basename(pa), os.path.basename(pb),
                               commitment_a=getattr(args, "commitment_a", None),
-                              commitment_b=getattr(args, "commitment_b", None))
+                              commitment_b=getattr(args, "commitment_b", None),
+                              challenge_commitment_a=getattr(args, "challenge_commitment_a", None),
+                              challenge_commitment_b=getattr(args, "challenge_commitment_b", None))
     except Exception as exc:                      # never let a crash exit 1 and read as MISMATCH
         return _compare_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
                                 f"comparing raised {type(exc).__name__}: {exc}")
@@ -1811,6 +2500,215 @@ def _cmd_commitment(args):
     lines.append("you anything, so you could not have copied their answers into it.")
     _emit("\n".join(lines))
     return EXIT_VERIFIED
+
+
+def _challenge_refusal(args, code, headline, detail):
+    """One `RESULT:` line out of every path, the same discipline `--compare`
+    keeps: a command that dies silently must never be mistaken for one that
+    answered a challenge."""
+    if getattr(args, "json", False):
+        _emit(json.dumps(dict(format=CHALLENGE_FORMAT, verdict=headline, exit=code,
+                              detail=detail), indent=1, sort_keys=True))
+    else:
+        _emit(f"# python -m mojolearn verify --challenge\n\nRESULT: {headline}. {detail}")
+    return code
+
+
+def _cmd_challenge(args, ml):
+    """`verify --challenge DOC --challenge-from C_A C_B`: answer the challenge
+    this pair of published commitments derives to, and append the answers.
+
+    IT IS A SEPARATE STEP FOR THE SAME REASON `--commitment` IS ONE. The
+    challenge cannot exist until both commitments are published, and both
+    commitments cannot exist until both documents do, so no amount of code
+    inside `--all` can produce a challenge answer: the ordering is the
+    mechanism, and the party owns it. Running it here, over a document that is
+    already sealed, is what makes the ordering visible in the file.
+
+    IT REFUSES A DOCUMENT THE CHALLENGE IS NOT ABOUT. The pair of commitments
+    names two documents; if this one's own commitment is not one of them, then
+    either the wrong file is in hand or the wrong lines are, and answering
+    anyway would produce a response `--compare` must later reject. Better to
+    say so here, before the run, than after it.
+
+    Cost: the document's own lane set on ONE fixture, so about a ninth of what
+    `--all` cost on the same box.
+    """
+    path = args.challenge
+    pair = getattr(args, "challenge_from", None)
+    if not pair or len(pair) != 2:
+        return _challenge_refusal(args, EXIT_USAGE, "USAGE",
+            "--challenge needs --challenge-from <the commitment you published> <the one they "
+            "published>. The challenge IS those two lines hashed together; there is nothing to "
+            "answer without them.")
+    try:
+        with open(path, "r", encoding="utf-8") as fh:
+            doc = json.load(fh)
+    except (OSError, ValueError) as exc:
+        return _challenge_refusal(args, EXIT_USAGE, "CANNOT READ", f"cannot read {path}: {exc}")
+    if not isinstance(doc, dict) or doc.get("format") != COMPARE_INPUT_FORMAT:
+        fmt = doc.get("format") if isinstance(doc, dict) else type(doc).__name__
+        return _challenge_refusal(args, EXIT_USAGE, "NOT AN EVIDENCE DOCUMENT",
+            f"{path} announces {fmt!r}, expected {COMPARE_INPUT_FORMAT!r}.")
+    challenge, problem = derive_challenge(pair[0], pair[1])
+    if problem:
+        return _challenge_refusal(args, EXIT_USAGE, "CANNOT DERIVE", problem)
+    derived_from = sorted(read_published_commitment(x)[0] for x in pair)
+    reveal = doc.get(REVEAL_KEY)
+    mine = reveal.get("commitment") if isinstance(reveal, dict) else None
+    if not isinstance(mine, str):
+        return _challenge_refusal(args, EXIT_USAGE, "NOT SEALED",
+            f"{path} carries no commitment of its own. Seal it with `verify --commitment {path}` "
+            "and publish that line FIRST; the challenge is derived from it, so a document answered "
+            "before it was sealed is a document whose answer belongs to nobody.")
+    if mine not in derived_from:
+        return _challenge_refusal(args, EXIT_USAGE, "WRONG DOCUMENT",
+            f"{path} commits to {mine}, which is neither of the two lines the challenge was "
+            f"derived from ({derived_from[0]}, {derived_from[1]}). Either this is not the document "
+            "you published a commitment for, or one of the lines is wrong. Answering anyway would "
+            "produce a response `--compare` has to reject.")
+    existing = doc.get(CHALLENGE_KEY)
+    if isinstance(existing, dict) and existing.get("challenge") == challenge:
+        # IDEMPOTENT, the same way sealing is. Running this twice must not
+        # invalidate a second line the party has already published.
+        line = (reveal.get(CHALLENGE_COMMITMENT_FIELD)
+                if isinstance(reveal.get(CHALLENGE_NONCE_FIELD), str) else None)
+        if line and challenge_commitment_digest(doc, reveal[CHALLENGE_NONCE_FIELD]) != line:
+            return _challenge_refusal(args, EXIT_MISMATCH, "BROKEN",
+                f"{path} was edited after its challenge was sealed. If you have already published "
+                "the second line, this document is not the one you published it for.")
+        if line:
+            return _challenge_printout(args, path, doc, challenge, line, reran=False)
+    elif isinstance(existing, dict):
+        return _challenge_refusal(args, EXIT_USAGE, "ALREADY ANSWERED",
+            f"{path} already answers challenge {existing.get('challenge')}, and this pair of "
+            f"commitments derives {challenge}. A document answers ONE challenge: overwriting the "
+            "first would let a party keep trying pairs until one suited them. Start from the "
+            "document as it was written by `--all`.")
+
+    try:
+        harness_file, harness_how = harness_path()
+        harness = load_harness(harness_file)
+    except FileNotFoundError as exc:
+        return _challenge_refusal(args, EXIT_NO_REFERENCE, "NO HARNESS", str(exc))
+    except CannotRun as exc:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN", str(exc))
+    harness_sha = vref.sha256_file(harness_file)
+    want = (doc.get("verification_contract") or {}).get("harness_sha256")
+    if want and want != harness_sha:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "DIFFERENT HARNESS",
+            f"{path} was written by harness {want} and this process loaded {harness_sha}. A "
+            "challenge answered by a different harness is an answer to a different question, and "
+            "`--compare` would read the pair as INCOMPARABLE.")
+    lanes = [l for l in (doc.get("lanes") or []) if l in harness.LANES]
+    missing = [l for l in (doc.get("lanes") or []) if l not in harness.LANES]
+    asked = [x for x in (getattr(args, "lanes", "") or "").split(",") if x]
+    if asked:
+        unknown = [l for l in asked if l not in lanes]
+        if unknown:
+            return _challenge_refusal(args, EXIT_USAGE, "USAGE",
+                f"--lanes names lanes this document did not run: {unknown}")
+        lanes = [l for l in lanes if l in asked]
+    if not lanes:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "NOTHING TO RUN",
+            f"{path} names no lane this install can run{f' (it names {missing})' if missing else ''}. "
+            "A challenge over no lane answers nothing.")
+
+    log = (lambda s: _emit(s, sys.stderr)) if getattr(args, "json", False) else _emit
+    log(f"# verify --challenge: {challenge}")
+    log(f"#   derived from {derived_from[0]}")
+    log(f"#             and {derived_from[1]}")
+    log(f"#   {len(lanes)} lanes on one challenge fixture; about a ninth of what --all cost here")
+    try:
+        fixture_block = challenge_fixture_block(harness, challenge)
+        data, held = challenge_fixture(harness, challenge)
+    except Exception as exc:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+            f"building the challenge fixture raised {type(exc).__name__}: {exc}")
+    started = time.time()
+    rows = []
+    from ._cpu_reference import reference_training
+    fixture_name = f"challenge:{challenge[:12]}"
+    with reference_training():
+        for lane in lanes:
+            t0 = time.time()
+            parts = run_cell(harness, ml, lane, fixture_name, data, held,
+                             max(1, int(getattr(args, "repeats", 1) or 1)))
+            for part, (value, error) in parts.items():
+                rows.append(dict(lane=lane, part=part, value=value, error=error))
+            log(f"  {lane:<34} {time.time() - t0:6.1f}s")
+    doc[CHALLENGE_KEY] = dict(
+        format=CHALLENGE_FORMAT, challenge=challenge, derived_from=derived_from,
+        fixture=fixture_block, harness_sha256=harness_sha, lanes=lanes,
+        cells=rows, seconds=round(time.time() - started, 2))
+    try:
+        line = seal_challenge(doc)
+    except (ValueError, TypeError) as exc:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+            f"sealing the challenge raised {type(exc).__name__}: {exc}")
+    try:
+        with open(path, "w", encoding="utf-8") as fh:
+            json.dump(doc, fh, indent=1, sort_keys=True)
+            fh.write("\n")
+    except OSError as exc:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN",
+            f"cannot write the challenge answers back into {path}: {exc}")
+    return _challenge_printout(args, path, doc, challenge, line, reran=True)
+
+
+def _challenge_printout(args, path, doc, challenge, line, reran):
+    """The second line to publish, and the sidecar beside it."""
+    block = doc[CHALLENGE_KEY]
+    sidecar = path + ".challenge.commitment"
+    try:
+        with open(sidecar, "w", encoding="utf-8") as fh:
+            json.dump(dict(format=CHALLENGE_FORMAT, challenge_commitment=line,
+                           challenge=challenge, derived_from=block["derived_from"],
+                           document=os.path.basename(path), covers=list(CHALLENGE_COVERS),
+                           note=("Publish this SECOND line, or just the commitment string, BEFORE "
+                                 "you exchange documents. Two honest challenge responses are "
+                                 "identical, so a response nobody was bound to can simply be "
+                                 "copied out of the other party's file.")),
+                      fh, indent=1, sort_keys=True)
+            fh.write("\n")
+    except OSError as exc:
+        return _challenge_refusal(args, EXIT_CANNOT_RUN, "CANNOT RUN", f"cannot write {sidecar}: {exc}")
+    answered = sum(1 for r in block["cells"] if isinstance(r.get("value"), str))
+    if getattr(args, "json", False):
+        _emit(json.dumps(dict(format=CHALLENGE_FORMAT, challenge=challenge,
+                              challenge_commitment=line, document=path, sidecar=sidecar,
+                              derived_from=block["derived_from"], lanes=block["lanes"],
+                              fixture=block["fixture"], answered=answered, ran=reran,
+                              covers=list(CHALLENGE_COVERS), excludes=CHALLENGE_EXCLUDES),
+                         indent=1, sort_keys=True))
+        return EXIT_VERIFIED
+    lines = ["# python -m mojolearn verify --challenge", ""]
+    lines.append(f"  document   {path}")
+    lines.append(f"  challenge  {challenge}")
+    lines.append(f"  derived    {block['derived_from'][0]}")
+    lines.append(f"             {block['derived_from'][1]}")
+    lines.append(f"  fixture    {block['fixture']['kind']} n={block['fixture']['n']} "
+                 f"d={block['fixture']['d']}, X={block['fixture']['X']}")
+    lines.append(f"  answered   {answered} cell parts over {len(block['lanes'])} lanes"
+                 f"{'' if reran else ' (already in the document; not rerun)'}")
+    lines.append("")
+    lines.append("PUBLISH THIS SECOND LINE NOW, BEFORE YOU EXCHANGE DOCUMENTS:")
+    lines.append("")
+    lines.append(f"  {line}")
+    lines.append("")
+    lines.append(f"(the same value is in {sidecar}; either form is accepted)")
+    lines.append("")
+    lines.append("Then exchange documents and either party runs:")
+    lines.append("")
+    lines.append("  python -m mojolearn verify --compare mine.json theirs.json \\")
+    lines.append("      --commitment-a <line 1 you published> --commitment-b <line 1 they published> \\")
+    lines.append("      --challenge-commitment-a <line 2 yours> --challenge-commitment-b <line 2 theirs>")
+    lines.append("")
+    lines.append("RESULT: ANSWERED. These hashes are answers to a fixture that did not exist until")
+    lines.append("both commitments were published, so they could not have been written out of the")
+    lines.append("reference table in the wheel. What they do NOT show is that two PEOPLE ran them:")
+    lines.append("one party with one machine can answer once and write both documents around it.")
+    return _emit("\n".join(lines)) or EXIT_VERIFIED
 
 
 def _compare_refusal(args, code, headline, detail):
@@ -1972,12 +2870,22 @@ def cmd_verify_all(args):
     # numeric mode, so it must not be gated behind them -- the whole point is
     # that a third party can run it on a machine that has none of ours.
     if getattr(args, "compare", None):
+        if getattr(args, "challenge", None):
+            _emit("USAGE: --challenge ANSWERS a challenge on one document and needs the machine "
+                  "that ran it; --compare CHECKS two answered documents against each other. Use "
+                  "--challenge-commitment-a/--challenge-commitment-b with --compare.", sys.stderr)
+            return EXIT_USAGE
         return _cmd_compare(args)
     # Sealing a document is the same kind of thing: a pure function over one
     # JSON file, run by a party who may have none of our bindings.
     if getattr(args, "commitment", None):
         return _cmd_commitment(args)
-    for flag in ("commitment_a", "commitment_b"):
+    if getattr(args, "challenge_from", None) and not getattr(args, "challenge", None):
+        _emit("USAGE: --challenge-from gives the two published commitments a challenge is derived "
+              "from; it needs --challenge <your document> to answer it.", sys.stderr)
+        return EXIT_USAGE
+    for flag in ("commitment_a", "commitment_b", "challenge_commitment_a",
+                 "challenge_commitment_b"):
         if getattr(args, flag, None):
             _emit(f"USAGE: --{flag.replace('_', '-')} is only meaningful with --compare; it is "
                   "the commitment that party published before the two documents were exchanged.",
@@ -2007,6 +2915,8 @@ def cmd_verify_all(args):
                        "run with MOJOLEARN_NUMERIC_MODE=identical (or leave it unset)")
     if getattr(args, "emit_models", None):
         return _cmd_emit_models(args, ml)
+    if getattr(args, "challenge", None):
+        return _cmd_challenge(args, ml)
     if getattr(args, "self_test", False):
         return _cmd_self_test(args, ml)
     if getattr(args, "cross_check", None):

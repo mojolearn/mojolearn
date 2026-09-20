@@ -145,13 +145,24 @@ MOJOLEARN_NUMERIC_MODE=identical python3 -m mojolearn verify --all --json-out mi
 #    Publish that line anywhere, by any means, BEFORE the exchange.
 python3 -m mojolearn verify --commitment mine.json
 
-# 3. now swap the documents, nonces included: email, a gist, a USB stick
+# 3. EXCHANGE THE TWO COMMITMENT LINES. Not the documents yet.
 
-# 4. either party, on any machine; this step needs no GPU, no binding and no
+# 4. answer the challenge those two lines hash to. This reruns the lanes your
+#    document already ran, on a fixture neither of you could have drawn
+#    before step 3, and prints a SECOND line. Publish that one too, still
+#    before the documents are exchanged. Costs about a ninth of step 1.
+python3 -m mojolearn verify --challenge mine.json \
+    --challenge-from <your line> <their line>
+
+# 5. now swap the documents, nonces included: email, a gist, a USB stick
+
+# 6. either party, on any machine; this step needs no GPU, no binding and no
 #    numeric mode, and it is reached before any of them is checked
 python3 -m mojolearn verify --compare mine.json theirs.json \
     --commitment-a <the line you published> \
-    --commitment-b <the line they published>
+    --commitment-b <the line they published> \
+    --challenge-commitment-a <your second line> \
+    --challenge-commitment-b <their second line>
 ```
 
 **Step 2 is not optional ceremony.** Without it, whoever receives the other's
@@ -167,10 +178,87 @@ result, and a BROKEN commitment outranks every cell outcome including
 **What a commitment does NOT prove is that a document came from a run.** Our
 shipped `verify_reference/table.json` pins the expected hash of every cell, so
 a party can synthesise a well-formed document from the table and commit to
-that without executing anything. Closing it needs a challenge nonce, a value
-neither party controls mixed into what the run computes, so a document cannot
-be written ahead of time. That is designed and parked, not built. Until it
-exists, read a commitment as evidence about ORDER, not about execution.
+that without executing anything. A commitment on its own is evidence about
+ORDER, not about execution.
+
+**Steps 3 and 4 are what closes that, and they are why the protocol has two
+rounds.** The challenge is
+
+    challenge = sha256("mojolearn.verify-challenge.v1\n" || min(c_a, c_b) || max(c_a, c_b))
+
+over the two commitments published in step 2. Neither party can compute it
+before both are published, neither controls it alone, and it is derived by
+both parties from values that are already public, so checking it needs no
+network, no beacon and no third party. Step 4 reseeds the harness's `hashed`
+fixture from it -- `identity_break.fixture('hashed', seed=...)`, the one
+fixture whose values come from a counter-mode sha256 stream rather than a
+numpy RNG family -- reruns the document's own lane set on it, and records the
+answers in a `challenge` block. Those hashes are in no table we ship and could
+not have been written before step 3.
+
+The obvious question is how cells with no reference can be checked at all.
+They are not checked against a reference: **`--compare` is peer-to-peer and
+reads no table.** It compares two documents to each other, and always has, so
+a fixture neither party could have known is a perfectly good question to ask
+there and nowhere else. The `challenge` block is deliberately kept out of
+`cells` for that reason: `verify --all` judges cells against the table, and an
+unreferenced cell in there would read OWED.
+
+The second published line, in step 4, is not ceremony either. **Two honest
+challenge responses are identical** -- that is what makes them comparable --
+so a response nobody was bound to can simply be copied out of the other
+party's file by whoever receives it first, which is the move commit-reveal
+exists to stop, one level in. The challenge commitment is a separate digest
+under its own domain separator, over the response and the document's own
+round-one commitment, so a second line cannot be lifted off one document and
+presented for another.
+
+### What the challenge proves, and the three things it does not
+
+The adversary model, written down, because a defence nobody can check is not
+one. Each row says what an adversary who controls one side can still do.
+
+| adversary | what they do | what happens |
+|---|---|---|
+| the transcriber | receives the other file first, pastes its cells under their own provenance | caught by the round-one commitment (`COMMITMENT BROKEN`) |
+| the synthesist | writes a whole document out of the shipped table, runs nothing, commits to it first | they have no challenge to answer: the fixture did not exist when they wrote the file, and no hash for it is in the table. Their file carries no `challenge` block, the honest party's does, and a one-sided challenge is `CHALLENGE BROKEN` |
+| the response thief | synthesises the document, then copies the other party's `challenge` block after the exchange | caught by the second published line: they had to commit to a response before the exchange, and what they hand over is not it |
+| the replayer | answers a challenge honestly for one exchange and presents it in another | the challenge names the two commitments it came from; the comparer recomputes the derivation and checks that pair against the two documents in hand and against the two published lines |
+| the chooser | picks a challenge they have already answered and writes two commitments beside it | the derivation is recomputed, never believed. A challenge that is not what its own pair hashes to is `CHALLENGE BROKEN` |
+
+**The three holes this does not close, stated plainly.**
+
+1. **It does not prove two PEOPLE.** One party with one machine can play both
+   sides: run the challenge once, write both documents around the one answer,
+   seal both, publish all four lines in the right order. Every check passes,
+   and the device blocks that make the pair look independent are self-reported
+   strings. Nothing in this tool reaches that, and nothing in it can: two
+   parties being two parties is established outside the software or not at
+   all. A verified challenge must never be read as if it settled that.
+2. **Whoever publishes their commitment last can steer the challenge.** A
+   reseal draws a fresh nonce and costs nothing, so the second publisher can
+   grind commitments until the derived challenge is one they like. That buys
+   nothing against synthesis -- every candidate challenge still has to be RUN
+   before it can be answered -- but the challenge fixture is therefore **not
+   an unbiased draw**, and a pair who wish to steer away from a fixture that
+   would expose them can. If that matters to you, publish first.
+3. **It proves execution of what it covers, on ONE fixture.** A party who
+   answers the challenge honestly and writes the rest of their document out
+   of the table still passes, and what they have demonstrated is exactly the
+   challenge block: those lanes, that fixture, that hardware. That is why the
+   challenge runs the document's whole lane set rather than a sample, and why
+   a narrowed challenge shows up as cells only one side carries
+   (`INCOMPLETE`). The challenge also varies the VALUES and never the
+   pathology: it is the `hashed` fixture reseeded, so it says nothing about
+   denormals, ties or duplicate rows, and it does not replace the nine
+   recorded fixtures.
+
+**A comparison with no challenge is still legal and still compares.** It is
+labelled a weaker result, in the same place and the same voice a comparison
+without commitments already is, and the `RESULT: AGREE` line itself carries
+the reason. Documents written by releases before this feature carry no
+`challenge` block and compare exactly as they did; adding one does not move a
+document's round-one commitment, which is what makes step 4 possible at all.
 
 `--compare` takes the lane set from the two documents. It never enumerates,
 greps or imports a lane list of its own, so it cannot quietly compare a
@@ -184,6 +272,8 @@ same bits is broken out and given a non-agreeing outcome.
 | verdict | exit | what it means |
 |---|---|---|
 | `MALFORMED` | 2 | a document could not be read as an evidence document. A DUPLICATE `(lane, fixture, part)` row makes the WHOLE document unreadable rather than last-wins, because last-wins would let one party paste the other's answer over their own. Nothing is compared, and this is **not** a pass |
+| `COMMITMENT BROKEN` | 1 | a document is not the one its party committed to before the exchange: it does not match the published line, it carries no nonce to check one against, it was edited after sealing, one commitment was presented for both, or the two carry the same nonce. Only `MALFORMED` outranks it, because until you know a document is the one that was committed to, no headline about its cells is honest |
+| `CHALLENGE BROKEN` | 1 | a challenge is answered here and the answer does not hold up: only one document carries one, the two answer different challenges, the challenge is not what its own pair of commitments hashes to, the pair is not the pair in hand or the pair published, a response does not match the challenge commitment published for it, the two carry the same challenge nonce, or the two answered over different input. Until that is settled the reader does not know these cells were COMPUTED rather than written out of our table, so it outranks every cell outcome. ABSENCE of a challenge never lands here: that is a weaker `AGREE`, labelled on the RESULT line |
 | `SAME DOCUMENT` | 4 | the two files are byte-identical: one document passed twice, which compares nothing |
 | `INCOMPARABLE` | 4 | the two runs do not share a recorded input contract: a different or missing harness digest, different fixture or held-out fingerprints, or a different property protocol. Equal hashes over different inputs are not an agreement |
 | `MISMATCH` | 1 | at least one cell part both sides computed came out with different bits. This is a finding; keep both files |
@@ -222,7 +312,12 @@ so this recipe works on the day you install the wheel rather than on the day
 you find a second party. Its README says which device classes are there; as
 of the first publication it is **CPU only**, two boxes, and the comparison
 between them reads `AGREE` on 5,174 cell parts with both commitments
-verified.
+verified. **That pair answers no challenge**, because it was taken before the
+challenge existed, so it sits at the weaker rung: it shows the two files were
+fixed before they met, not that either was computed rather than written out of
+the table. Re-taking it at the stronger rung means rerunning `verify --all` on
+both boxes and walking the six steps above, which is a fresh pair of CPU runs;
+the files in that directory are not editable into one.
 
 **This is weaker than comparing with a stranger, and it does not replace it.**
 Comparing against our document puts us back in the loop: the answer then rests

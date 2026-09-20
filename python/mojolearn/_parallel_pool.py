@@ -88,12 +88,36 @@ from concurrent.futures import ThreadPoolExecutor
 #: forecast inference binding uses, so the CPU column runs the driver's split
 #: and merge unchanged against the same host arithmetic the GPU column's
 #: shard runs.
+#: lane/unlaned-public-algorithms (2026-09-20) adds the GaussianProcess
+#: CLASSIFIER's class-level shards, the two operations
+#: `parallel_gaussian_process` sends. IT WAS CHECKED AGAINST THIS DOCSTRING'S
+#: BAR, NOT ASSUMED: the partition is one-vs-rest CLASSES, built in Python
+#: (`columns = [1] if len(classes) == 2 else range(len(classes))`, one
+#: `('gpc_class_fit', ...)` request per column with its own 0/1 target vector
+#: built by a Python comprehension); the merge is the driver's own Python,
+#: `_set_fitted` over the fits in class order for the fit and, for the
+#: prediction, the per-class columns normalized or arg-maxed row by row in
+#: `predict_gaussian_process_classifier` itself. NOTHING is split inside a
+#: binding: the worker calls `GaussianProcessClassifier._fit_binary` and
+#: `._latent`, which are the single `gpc_fit` and `gpc_predict` entries the
+#: gp family's host binding exports (bindings/gp_host.mojo over
+#: gaussian_process/host/gpc_oracle.mojo and gpc_steps.mojo), and the host
+#: kernel matrix those stand on says in its own docstring that it is the
+#: one-device path with MOJOLEARN_GP_DEVICE_COUNT unset -- the ROW-sharded GP
+#: driver (par-gp's `gp_fit`) is deliberately still absent from this set for
+#: exactly that reason. The pool is NOT cooperative, so each worker is handed
+#: one device index and could not split across devices even if a kernel
+#: wanted to. The class shard's own arithmetic is the same host arithmetic the
+#: covered `gpc` and `gpc-multiclass` lanes already hash. It is NOT a device
+#: claim: at one device the partition is one process per class, which is what
+#: `identity_break._par_devices`'s docstring says of every `par-*` lane.
 CPU_OPERATIONS = frozenset((
     'scaler_fit', 'scaler_transform', 'arima_fit', 'holtwinters_fit',
     'forecast_predict',
     'neighbor_query', 'neighbor_reference', 'neighbor_vote',
     'forest_fit', 'mlp_gradient', 'samba_gradient', 'rbf_sampler_rows',
     'ivf_store', 'ivf_search_stored', 'ivf_finalize',
+    'gpc_class_fit', 'gpc_class_predict',
 ))
 
 #: The cooperative operations the CPU route admits, and only from a
