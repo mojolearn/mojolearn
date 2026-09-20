@@ -70,6 +70,8 @@ from std.memory import bitcast
 from std.math import abs
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
 from checks.numerics import (
     ftz,
     identical_cos,
@@ -79,6 +81,11 @@ from checks.numerics import (
     identical_mul_add,
     identical_sqrt,
     identical_tanh,
+)
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
 )
 from cholesky.host.chol_oracle import chol_host_factor_lower, chol_host_solve
 from decomposition.host.pca_oracle import (
@@ -219,17 +226,34 @@ def kmh_kernel_matrix(
     """
     kmh_validate_kernel(kernel, degree, gamma, coef0, "kernel matrix")
     if kernel == KMH_KERNEL_LAPLACIAN:
-        var out = List[Float32]()
+        var out = List[Float32](length=m * n, fill=Float32(0.0))
+        var op = host_list_ptr(out)
         var gain = Float32(-gamma)
-        for i in range(m):
-            for j in range(n):
-                var acc = Float32(0.0)
-                for pos in range(k):
-                    var c = pos
-                    comptime if is_defined["MOJOLEARN_HOST_SABOTAGE"]():
-                        c = k - 1 - pos
-                    acc = ftz(acc + abs(ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))))
-                out.append(ftz(identical_exp(ftz(identical_mul(gain, acc)))))
+        var tasks = host_predict_task_count(m)
+        if m * n * k < 32768:
+            tasks = 1
+        var chunk = host_predict_chunk(m, tasks)
+
+        def _rows(task: Int) {imm a, imm b, imm m, imm n, imm k, imm gain, imm chunk, imm op}:
+            var lo = task * chunk
+            var hi = min(lo + chunk, m)
+            for i in range(lo, hi):
+                for j in range(n):
+                    var acc = Float32(0.0)
+                    for pos in range(k):
+                        var c = pos
+                        comptime if is_defined["MOJOLEARN_HOST_SABOTAGE"]():
+                            c = k - 1 - pos
+                        acc = ftz(acc + abs(ftz(ftz(a[i * k + c]) - ftz(b[j * k + c]))))
+                    op.unsafe_store(
+                        i * n + j,
+                        ftz(identical_exp(ftz(identical_mul(gain, acc)))),
+                    )
+
+        if tasks == 1:
+            _rows(0)
+        else:
+            sync_parallelize(_rows, tasks)
         return out^
     var dot = gemm_oracle(a, b, OP_NT, m, n, k)
     if kernel == KMH_KERNEL_LINEAR:
