@@ -48,7 +48,12 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
-from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import (
+    COLUMN_AMD,
+    COLUMN_APPLE,
+    COLUMN_NVIDIA,
+    TARGET_COLUMN,
+)
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
@@ -399,8 +404,14 @@ comptime BWD_NORM_FUSED_TRIAL = is_defined[
 comptime BWD_NORM2_RESIDUAL_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_NORM2_RESIDUAL_SPLIT_TRIAL"
 ]()
+comptime BWD_NORM2_RESIDUAL_FUSED_TRIAL = is_defined[
+    "MOJOLEARN_BWD_NORM2_RESIDUAL_FUSED_TRIAL"
+]()
 comptime BWD_GATED_SILU_SPLIT_TRIAL = is_defined[
     "MOJOLEARN_BWD_GATED_SILU_SPLIT_TRIAL"
+]()
+comptime BWD_GATED_SILU_FUSED_TRIAL = is_defined[
+    "MOJOLEARN_BWD_GATED_SILU_FUSED_TRIAL"
 ]()
 
 
@@ -3106,7 +3117,12 @@ def llama_decoder_layer_backward_device(
     var fuse_gated_silu = False
     comptime if (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and TARGET_COLUMN == COLUMN_APPLE
+        and (
+            TARGET_COLUMN == COLUMN_APPLE
+            or TARGET_COLUMN == COLUMN_NVIDIA
+            or TARGET_COLUMN == COLUMN_AMD
+            or BWD_GATED_SILU_FUSED_TRIAL
+        )
         and not BWD_ANY_SABOTAGE
         and not BWD_GATED_SILU_SPLIT_TRIAL
     ):
@@ -3208,7 +3224,12 @@ def llama_decoder_layer_backward_device(
     var fuse_norm2_residual = False
     comptime if (
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
-        and TARGET_COLUMN == COLUMN_APPLE
+        and (
+            TARGET_COLUMN == COLUMN_APPLE
+            or TARGET_COLUMN == COLUMN_NVIDIA
+            or TARGET_COLUMN == COLUMN_AMD
+            or BWD_NORM2_RESIDUAL_FUSED_TRIAL
+        )
         and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL
     ):
         fuse_norm2_residual = True

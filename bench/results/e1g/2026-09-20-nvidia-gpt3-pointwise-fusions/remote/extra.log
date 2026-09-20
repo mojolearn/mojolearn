@@ -1,0 +1,594 @@
+1351 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38fe40000000, nodemask=2)
+1399 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x19b840000000, nodemask=2)
+1412 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79bb40000000, nodemask=2)
+1438 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b4ac0000000, nodemask=2)
+1464 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x59b140000000, nodemask=2)
+1490 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b7340000000, nodemask=2)
+1516 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5ae740000000, nodemask=2)
+1542 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b0800000000, nodemask=2)
+1568 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3a8fc0000000, nodemask=2)
+1594 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5be1c0000000, nodemask=2)
+1620 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58c480000000, nodemask=2)
+1646 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x389c00000000, nodemask=2)
+1672 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x189380000000, nodemask=2)
+1698 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3ab380000000, nodemask=2)
+1724 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b2e00000000, nodemask=2)
+1750 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58dcc0000000, nodemask=2)
+1776 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7ab680000000, nodemask=2)
+1837 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79a280000000, nodemask=2)
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:946:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:68: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+                                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2143:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2669:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:745:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:777:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+Imported from /root/mojolearn/transformer/impl/llama/fused_attention.mojo:117:
+/root/mojolearn/core/device_scan.mojo:416:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:138:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1743:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5554:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5555:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5570:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5571:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5619:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5620:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5629:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5630:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5653:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5654:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+1915 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7831c0000000, nodemask=2)
+1977 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x12c600000000, nodemask=1)
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:946:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:68: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+                                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2143:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2669:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:745:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:777:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+Imported from /root/mojolearn/transformer/impl/llama/fused_attention.mojo:117:
+/root/mojolearn/core/device_scan.mojo:416:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:138:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1743:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5554:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5555:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5570:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5571:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5619:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5620:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5629:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5630:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5653:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5654:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+2029 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x792c40000000, nodemask=2)
+2091 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3b9b40000000, nodemask=2)
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:946:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:68: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+                                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2143:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2669:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:745:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:777:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+Imported from /root/mojolearn/transformer/impl/llama/fused_attention.mojo:117:
+/root/mojolearn/core/device_scan.mojo:416:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:138:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1743:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5554:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5555:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5570:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5571:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5619:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5620:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5629:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5630:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5653:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5654:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+2128 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f640000000, nodemask=2)
+2190 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a3f80000000, nodemask=2)
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:946:52: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        ctx.enqueue_copy(dst_ptr=host.unsafe_ptr() + offset, src_buf=views[i])
+                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:68: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+                                                 ~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:958:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2143:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 6.2 clause (c), the length half, **with DEVIATION 1529's
+       ^
+/root/mojolearn/transformer/checks/transformer_backward_check.mojo:2669:8: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with '*'
+    """Plan 5.3, DEVIATION 1416, **demonstrated and NOT gated, and DEVIATION
+       ^
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:745:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:360:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:777:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+Imported from /root/mojolearn/transformer/impl/llama/fused_attention.mojo:117:
+/root/mojolearn/core/device_scan.mojo:416:40: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                self.part.unsafe_ptr() + self.offsets[slot], buf.unsafe_ptr(),
+                ~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+/root/mojolearn/transformer/checks/transformer_backward.mojo:138:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:304:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:372:
+Imported from /root/mojolearn/transformer/checks/transformer_backward.mojo:58:
+/root/mojolearn/transformer/impl/llama/fused_attention.mojo:1743:32: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+    var raw = host.unsafe_ptr().bitcast[UInt8]()
+              ~~~~~~~~~~~~~~~~~^~~~~~~~
+                                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5554:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5555:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5570:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5571:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5619:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5620:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5629:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5630:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5653:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/transformer/checks/transformer_backward_check.mojo:307:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5654:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+2227 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b8740000000, nodemask=2)
+Traceback (most recent call last):
+  File "<stdin>", line 27, in <module>
+  File "/usr/lib/python3.11/statistics.py", line 565, in median
+    raise StatisticsError("no median for empty data")
+statistics.StatisticsError: no median for empty data
