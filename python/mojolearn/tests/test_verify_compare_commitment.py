@@ -476,6 +476,76 @@ def test_a_document_edited_after_sealing_is_reported_even_with_no_exchange():
     assert "edited after sealing" in va.format_compare(r)
 
 
+@pytest.mark.parametrize("wrap,name", [
+    (lambda s: [s], "list"),
+    (lambda s: {"value": s}, "dict"),
+    (lambda s: int(s[:8], 16), "int"),
+    (lambda s: None, "NoneType"),
+])
+def test_a_commitment_in_the_wrong_type_is_malformed_not_self_declared(wrap, name):
+    """THE INPUT THAT USED TO PASS, closed 2026-09-20. The catch above was
+    guarded by `isinstance(stored, str) and stored != recomputed`, so a
+    document edited after sealing whose carried commitment was the right
+    value in the WRONG TYPE skipped the comparison entirely and read
+    `self-declared`, which is in `_COMMITMENT_OK`: `broken=False`, AGREE,
+    exit 0. The identical edit with the commitment left as a string reads
+    SELF-INCONSISTENT and exits 1, so the forgery was a type change away.
+
+    A one-element list is the shape to start from because it is the shape
+    this repository has already been bitten by once, in a cell-hash
+    comparison guarded the same way."""
+    a, b = _honest_pair()
+    va.seal_document(a)
+    va.seal_document(b)
+    a["cells"][0]["value"] = "ffff0000ffff0000"
+    a[va.REVEAL_KEY]["commitment"] = wrap(a[va.REVEAL_KEY]["commitment"])
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["commitment"]["a"]["state"] == "MALFORMED", r["commitment"]["a"]
+    assert r["commitment"]["broken"] is True
+    assert r["verdict"] == "COMMITMENT BROKEN" and r["exit"] == va.EXIT_MISMATCH
+    assert name in va.format_compare(r)
+    assert "MALFORMED" not in va._COMMITMENT_OK
+
+
+def test_a_malformed_commitment_outranks_the_published_comparison():
+    """Malformed sits exactly where the self-consistency catch sits, which is
+    ABOVE the published line, so a party cannot choose which complaint their
+    edited document draws by changing the field's type."""
+    a, b = _honest_pair()
+    published = va.seal_document(a)
+    va.seal_document(b)
+    a["cells"][0]["value"] = "ffff0000ffff0000"
+    a[va.REVEAL_KEY]["commitment"] = [a[va.REVEAL_KEY]["commitment"]]
+    st = va.commitment_state(a, published, "a.json")
+    assert st["state"] == "MALFORMED" and st["problem"]
+    # the same document with its commitment left as a string, which is what a
+    # type change was a way around
+    a[va.REVEAL_KEY]["commitment"] = a[va.REVEAL_KEY]["commitment"][0]
+    assert va.commitment_state(a, published, "a.json")["state"] == "SELF-INCONSISTENT"
+    # and an UNEDITED document with a malformed commitment is still malformed,
+    # even though its published line matches perfectly
+    c, _ = _honest_pair()
+    line = va.seal_document(c)
+    assert va.commitment_state(c, line, "c.json")["state"] == "verified"
+    c[va.REVEAL_KEY]["commitment"] = [c[va.REVEAL_KEY]["commitment"]]
+    assert va.commitment_state(c, line, "c.json")["state"] == "MALFORMED"
+
+
+def test_an_unsealed_document_is_still_absent_not_malformed():
+    """NARROWING, not a new refusal. A document that carries no reveal block
+    at all, or one with no nonce, is `absent` or `UNSEALED` exactly as
+    before; only a block that CLAIMS to be sealed and carries a commitment
+    that is not a string is MALFORMED."""
+    a, b = _honest_pair()
+    assert va.commitment_state(a, None, "a.json")["state"] == "absent"
+    va.seal_document(a)
+    del a[va.REVEAL_KEY]["nonce"]
+    assert va.commitment_state(a, None, "a.json")["state"] == "absent"
+    r = va.compare_documents(a, b, "a.json", "b.json")
+    assert r["commitment"]["broken"] is False
+    assert r["verdict"] == "AGREE" and r["exit"] == va.EXIT_VERIFIED
+
+
 def test_sealing_does_not_disarm_the_byte_identical_refusal():
     """A REGRESSION THIS FEATURE WOULD OTHERWISE CAUSE. `same_document`
     refuses one document handed over twice. A nonce is random per seal, so a

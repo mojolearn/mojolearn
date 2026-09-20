@@ -399,6 +399,22 @@ sentence.
 refused on exactly one of the two columns, which is a defect only a two-device
 run can see. Both exit non-zero.
 
+**A run that ran nothing is not a pass.** The result is a ladder, worst first,
+and it is the one `verify --all` already uses:
+
+| result | when | exit |
+|---|---|---|
+| `MISMATCH` | a `DIVERGENT`, `MOVED` or `ONE-COLUMN` part. A wrong answer outranks an absent one, so this is read first | non-zero |
+| `INCOMPLETE` | nothing disagreed, but a part `REFUSED` on BOTH columns. Absence is not agreement, and the parts that did run do not make up for the ones that did not | non-zero |
+| `NOTHING COMPARED` | no part produced two hashes. A column of `N/A` and `CPU-ROUTE-LIMIT` establishes nothing | non-zero |
+| `VERIFIED` | at least one part was compared and every compared part agreed | 0 |
+
+Until 2026-09-20 the verdict was "no gating verdict was counted", and `REFUSED`
+does not gate, so a run in which every part refused on both columns printed
+`THE TWO COLUMNS AGREE on 0 compared cell parts` and exited 0. Measured on a
+CPU-only install outside the reference-training scope: 65 refused parts, exit
+0, `VERIFIED`.
+
 **Apple is excluded structurally, not by policy.** `DevicePool._start` admits
 the metal vendor only at a single device and raises for any other group, so no
 Mac can produce a two-device `par-*` column with this code. The command says so

@@ -165,7 +165,40 @@ def self_test(verbose=True):
         print("NOT REFUSED: a lane the run never compared appeared in the verdicts")
     elif verbose:
         print("held: a lane the run never compared is ABSENT, not promoted")
-    print(f"{'OK' if ok else 'BROKEN'}: {len(cases) + 1} cases")
+    # AND THE EXIT STATUS, which is the part a caller actually reads. Until
+    # 2026-09-20 it was `0 if not missing else 1` and `missing` covered only
+    # lanes the document never mentions, so a named lane that HELD exited 0
+    # and a document with no cells printed `0 of 0 lane(s) read clean` and
+    # exited 0. Every case below ran through `main` and must exit non-zero.
+    exit_cases = [
+        ("a named lane that HELD",
+         _doc(_cells("a", IDENTICAL=8) + _cells("a", OWED=1)), ["--lanes", "a"], 1),
+        ("a named lane that HELD beside one that promoted",
+         _doc(_cells("a", IDENTICAL=9) + _cells("b", REFUSED=9)), ["--lanes", "a,b"], 1),
+        ("a named lane the document never mentions",
+         _doc(_cells("a", IDENTICAL=9)), ["--lanes", "b"], 1),
+        ("a document with no judged cell part at all", _doc([]), [], 1),
+        ("a document whose every lane HELD", _doc(_cells("a", REFUSED=9)), [], 1),
+        ("the named lanes all read clean",
+         _doc(_cells("a", IDENTICAL=9) + _cells("b", IDENTICAL=9)), ["--lanes", "a,b"], 0),
+    ]
+    import io
+    import contextlib
+    import tempfile
+    for title, doc, extra, want_rc in exit_cases:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", delete=False) as fh:
+            json.dump(doc, fh)
+            path = fh.name
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            rc = main([path] + extra)
+        if rc != want_rc:
+            ok = False
+            print(f"WRONG EXIT: {title}: exit {rc}, expected {want_rc}")
+            print("  " + buf.getvalue().strip().replace("\n", "\n  "))
+        elif verbose:
+            print(f"exit {rc}: {title}")
+    print(f"{'OK' if ok else 'BROKEN'}: {len(cases) + 1 + len(exit_cases)} cases")
     return ok
 
 
@@ -209,8 +242,44 @@ def main(argv=None):
     for lane in missing:
         print(f"ABSENT   {lane:<{width}}  the run did not compare it at all, which is not a pass")
     promoted = [r["lane"] for r in rows if r["clean"]]
+    held = [r["lane"] for r in rows if not r["clean"]]
     print(f"\n{len(promoted)} of {len(rows) + len(missing)} lane(s) read clean end to end")
-    return 0 if not missing else 1
+    # THE EXIT STATUS USED TO BE `0 if not missing else 1` (2026-09-20). With
+    # no `--lanes`, `want` is empty, so `missing` is empty and 1 was
+    # unreachable: a document in which every lane HELD, and a document with no
+    # cells at all -- `0 of 0 lane(s) read clean` -- both exited 0. Even WITH
+    # `--lanes`, a named lane that HELD exited 0, because `missing` only ever
+    # covered lanes the document does not mention: measured the same day,
+    # `--lanes umap` over a run that REFUSED it 45 times printed
+    # `0 of 1 lane(s) read clean end to end` and exited 0. The thirteen lanes
+    # promoted that day rested partly on this tool.
+    #
+    # A HOLD is now a non-zero exit, and NAMING THE LANES IS WHAT MAKES THIS A
+    # GATE. With `--lanes`, every named lane must be present and clean. Without
+    # it the command is a SURVEY over whatever the document happens to carry:
+    # a full run always holds lanes this box cannot compare, so failing on that
+    # would be a gate that cannot pass, and it says so rather than implying a
+    # verdict it did not give.
+    if not rows and not missing:
+        print("NOTHING WAS READ: these documents carry no judged cell part, so no lane was "
+              "compared. That is not a pass.")
+        return 1
+    if want:
+        if missing or held:
+            print(f"HELD: {len(held) + len(missing)} of the {len(want)} lane(s) named with --lanes "
+                  "did not read clean" + (f" ({', '.join(sorted(held + missing))})" if held or missing else "")
+                  + ". Nothing is promoted on this run.")
+            return 1
+        print(f"CLEAN: every one of the {len(want)} lane(s) named with --lanes read clean end to "
+              "end on this run.")
+        return 0
+    print(f"SURVEY, NOT A GATE: no --lanes was given, so this is every lane these documents "
+          f"carry, {len(held)} of which HELD. Name the lanes a promotion rests on with --lanes "
+          "to gate on them.")
+    if not promoted:
+        print("No lane read clean, so there is nothing here to promote.")
+        return 1
+    return 0
 
 
 if __name__ == "__main__":
