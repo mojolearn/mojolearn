@@ -1,0 +1,219 @@
+{
+  "table_sha256": "e95fbbb863933bbd611fcb8a2e4722efdd3bf33f7d7cc78f179882c3abd0b7c9",
+  "scope": "parallel lanes; each recorded numeric part over every recorded fixture",
+  "counts": {
+    "cpu_backed_numeric_parts": 771,
+    "cpu_plus_three_gpu_exact": 771,
+    "gpu_only_numeric_parts": 1164,
+    "three_gpu_exact_without_numeric_cpu_reference": 1164
+  },
+  "cpu_reference_absent_by_lane_part": {
+    "par-boosting": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-boosting-clf": {
+      "batch": 9,
+      "infer": 9,
+      "train": 9
+    },
+    "par-boosting-pointwise": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-boosting-reg": {
+      "batch": 9,
+      "infer": 9,
+      "train": 9
+    },
+    "par-border-types": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-byte-lm": {
+      "train": 9
+    },
+    "par-byte-lm-model-pool": {
+      "train": 9
+    },
+    "par-byte-lm-offload": {
+      "train": 9
+    },
+    "par-cd": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-cd-elasticnet": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-cholesky": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-dbscan": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-feature-freq": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-forecast-arima": {
+      "batch": 7,
+      "infer": 7,
+      "model": 7,
+      "train": 7
+    },
+    "par-forecast-holtwinters": {
+      "batch": 7,
+      "infer": 7,
+      "model": 7,
+      "train": 7
+    },
+    "par-forest-pool": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gmm": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gp": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gram": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gram-ols": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gram-pca": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-gram-tsvd": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-graph-agglomerative": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-graph-spectral": {
+      "train": 9
+    },
+    "par-graph-umap": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-hdbscan": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-iforest": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-ivf": {
+      "batch": 7,
+      "infer": 7,
+      "model": 7,
+      "train": 7
+    },
+    "par-kernel-ridge": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-kmeans": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-logistic": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-nystroem": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-ordered": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-ordered-rmse": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-resample": {
+      "batch": 9,
+      "train": 9
+    },
+    "par-svm": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    },
+    "par-svm-svr": {
+      "batch": 9,
+      "infer": 9,
+      "model": 9,
+      "train": 9
+    }
+  },
+  "findings": []
+}
