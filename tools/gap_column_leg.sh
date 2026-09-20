@@ -564,9 +564,46 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
         say "par_diff_exit=$(awk -F'	' '$1=="par_diff"{print $2}' "$OUT/status.tsv")"
         grep -E 'summary|DIVERGENT|MOVED|REFUSED|NOT-COMPARED' "$OUT/logs/par_diff.log" | head -40 >> "$G"
         cp "$OUT/logs/par_diff.log" "$OUT/par_diff.log" 2>/dev/null
-        _bad=$(grep -E '^\| *par-[a-z0-9/_-]+ ' "$OUT/logs/par_diff.log" 2>/dev/null \
-               | grep -E 'DIVERGENT|MOVED' | awk -F'|' '{print $2}' | awk '{print $1}' \
-               | cut -d/ -f1 | sort -u | tr '\n' ',' | sed 's/,$//')
+        # THE SELECTOR MUST MATCH EVERY WAY A CELL CAN DISAGREE, NOT TWO OF
+        # THEM (2026-09-20). This grep read `DIVERGENT|MOVED`, and the line
+        # above it -- the one that writes the gate file -- already knew the
+        # set is larger: `DIVERGENT|MOVED|REFUSED|NOT-COMPARED`. So a cell
+        # reading ONE-COLUMN or REFUSED was reported in the gate and then
+        # silently left out of the solo re-run set, and the column came home
+        # looking cleaner than the run had been. An earlier lease on
+        # tools/two_device_par_class_amd_leg.sh, which carries the same
+        # selector at its line 334, ended without ever asking the question a
+        # second time for exactly this reason.
+        #
+        # ONE-COLUMN is the case the narrow pattern could never match: it is
+        # what `--diff` prints when a cell exists on ONE side only, which is
+        # precisely the shape a par-* lane takes when the two-device arm
+        # refuses and the one-device arm does not.
+        #
+        # AND THE SELECTOR IS POSITIVE, NOT A LONGER DENYLIST. An earlier fix
+        # here enumerated the failure verdicts
+        # (DIVERGENT|MOVED|REFUSED|ONE-COLUMN|NOT-COMPARED), which is the same
+        # mistake one size larger: a verdict added later is silently dropped
+        # again, exactly as ONE-COLUMN was. This selects a lane UNLESS the
+        # verdict is one of the three that mean "no disagreement" --
+        # `IDENTICAL xN`, `N/A`, `NOT-COMPARED` -- so a new verdict is caught
+        # by default and has to be explicitly excused to be ignored.
+        #
+        # Taken verbatim from tools/two_device_par_class_amd_leg.sh, which
+        # carries the same phase; the two files had already drifted into two
+        # copies of one selector and fixing only one would have left the other
+        # to be found again. Measured on a log carrying one row of each
+        # verdict: the old grep selected 3 lanes, this selects 6.
+        _bad=$(awk -F'|' '
+            { lane = $2; sub(/^ +/, "", lane); sub(/ +$/, "", lane) }
+            lane !~ /^par-[a-z0-9_-]+\// { next }
+            {
+                v = $3; sub(/^ +/, "", v); sub(/ +$/, "", v)
+                if (v ~ /^[a-z]/) { v = $4; sub(/^ +/, "", v); sub(/ +$/, "", v) }
+                if (v ~ /^IDENTICAL x[0-9]+$/ || v == "N/A" || v == "NOT-COMPARED") next
+                sub(/\/.*/, "", lane); print lane
+            }' "$OUT/logs/par_diff.log" 2>/dev/null \
+            | sort -u | tr '\n' ',' | sed 's/,$//')
         if [ -n "$_bad" ]; then
             say "DISAGREEING LANES: $_bad -- re-running each arm SOLO before this is reported"
             run solo_one timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0 \
