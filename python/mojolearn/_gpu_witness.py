@@ -9,6 +9,7 @@ import ctypes as C
 from ctypes.util import find_library
 import os
 import re
+import sys
 
 
 def _library(vendor):
@@ -68,6 +69,52 @@ def visible_gpu_inventory(vendor):
                             if key in os.environ})
 
 
+def worker_process_inventory():
+    """This worker's PROCESS identity, and nothing else.
+
+    THE CPU ROUTE'S PLACEMENT RECORD (lane/cpu-routes-gpu-only-four,
+    2026-09-20), and it is NOT a device inventory and must never be read as
+    one. `visible_gpu_inventory` above asks a vendor driver which physical
+    GPUs this process can see; there is no such question on a CPU-only
+    install, where `DevicePool` gives a worker no visibility mask at all and
+    a "device index" means one worker process. So this records the one fact
+    that IS true there -- which OS process answered -- under its own `kind`,
+    so a reader who mistakes the two has to ignore the word `process` in
+    every field. It admits that the driver's folds were dispatched to
+    separate processes. It admits NOTHING about hardware, isolation,
+    residency or throughput, and a column carrying it owes the two-device
+    GPU column exactly as before."""
+    return dict(kind='worker-process-identity', vendor='cpu', pid=os.getpid(),
+                ppid=os.getppid())
+
+
+def require_distinct_processes(records, count):
+    """Require one distinct worker PROCESS per requested index.
+
+    The CPU counterpart of `require_distinct_workers`, deliberately a
+    SEPARATE function rather than a vendor branch inside it: the GPU check
+    demands a UUID, a PCI bus id and a local ordinal zero, and softening any
+    of those to let a CPU record through would have weakened the only place
+    that refuses two MIG instances on one card. Nothing here is a device
+    claim; see `worker_process_inventory`."""
+    if type(count) is not int or count < 1:
+        raise RuntimeError('worker placement requires a positive worker count')
+    if len(records) != count:
+        raise RuntimeError('worker inventory count differs from requested indices')
+    pids = set()
+    for record in records:
+        if record.get('kind') != 'worker-process-identity' or record.get('vendor') != 'cpu':
+            raise RuntimeError('worker inventory has the wrong kind or vendor')
+        pid, ppid = record.get('pid'), record.get('ppid')
+        if type(pid) is not int or pid < 1 or type(ppid) is not int or ppid < 1:
+            raise RuntimeError('worker inventory lacks process identity')
+        if ppid != os.getpid():
+            raise RuntimeError('worker inventory came from a process this driver did not start')
+        if pid in pids:
+            raise RuntimeError('workers resolve to a repeated process')
+        pids.add(pid)
+
+
 def require_distinct_workers(records, vendor, count):
     """Require one visible physical device per worker, with no repeated GPU.
 
@@ -97,3 +144,78 @@ def require_distinct_workers(records, vendor, count):
         uuids.add(uuid)
         buses.add(bus)
         pids.add(pid)
+
+
+#: How long a child may take to answer the driver's device count. Loading a
+#: driver library on a cold box is seconds, not minutes.
+INVENTORY_TIMEOUT_S = 120
+
+
+def unmasked_device_count(vendor, timeout=INVENTORY_TIMEOUT_S):
+    """How many GPUs this box shows a process that sets no visibility mask.
+
+    THERE WAS NO SUCH DOOR BEFORE THIS (2026-09-20, lane/par-verify-and-
+    queries-nn). `visible_gpu_inventory` is the closest thing the package has
+    and every caller runs it INSIDE a worker whose mask has already been set
+    to one device, so every existing answer is `1` by construction and none of
+    them answers "does this box have two". A verifier that wants two devices
+    and cannot count them is a verifier that reports a clean pass over a
+    one-device run.
+
+    IT COUNTS IN A CHILD, on purpose. The caller is usually about to fit on
+    this box's GPU through the Mojo runtime, and driver initialization in the
+    parent is state the parent did not ask for. A child process pays it and
+    exits. The child prints the inventory as JSON on stdout; anything else,
+    including a non-zero exit or a timeout, is reported as the refusal it is
+    rather than guessed at.
+    """
+    import json
+    import subprocess
+    if vendor not in ('cuda', 'hip'):
+        raise RuntimeError('a device count requires CUDA or HIP; this install reads ' + repr(vendor))
+    child = subprocess.run([sys.executable, '-m', 'mojolearn._gpu_witness', vendor],
+                           capture_output=True, text=True, timeout=timeout)
+    if child.returncode != 0:
+        detail = (child.stderr or child.stdout or '').strip().splitlines()
+        raise RuntimeError('the GPU driver could not be asked how many devices this box has: '
+                           + (detail[-1] if detail else f'exit {child.returncode}'))
+    try:
+        answer = json.loads(child.stdout)
+        return int(answer['count'])
+    except (ValueError, KeyError, TypeError) as exc:
+        raise RuntimeError('the device count child did not answer a count: ' + repr(exc)) from None
+
+
+def require_device_count(vendor, count, timeout=INVENTORY_TIMEOUT_S):
+    """Refuse BY NAME unless this box shows at least `count` GPUs.
+
+    This is the guard that keeps a two-device column honest before it starts,
+    rather than after it has produced hashes nobody can place.
+    """
+    if type(count) is not int or count < 1:
+        raise RuntimeError('a device requirement must be a positive integer')
+    have = unmasked_device_count(vendor, timeout=timeout)
+    if have < count:
+        raise RuntimeError(f'this box shows {have} {vendor} device(s) and the requested column '
+                           f'needs {count}. A column recorded here would be a one-device column '
+                           'wearing a two-device name, which is the failure the count exists to '
+                           'stop. Run it on a box with the devices, or name fewer.')
+    return have
+
+
+def main(argv=None):
+    """`python -m mojolearn._gpu_witness <vendor>`: the unmasked inventory as
+    JSON. Exists so `unmasked_device_count` can pay the driver init in a child
+    and leave the parent's process state alone."""
+    import json
+    argv = list(sys.argv[1:] if argv is None else argv)
+    if len(argv) != 1 or argv[0] not in ('cuda', 'hip'):
+        print('usage: python -m mojolearn._gpu_witness {cuda|hip}', file=sys.stderr)
+        return 2
+    inventory = visible_gpu_inventory(argv[0])
+    print(json.dumps(dict(count=len(inventory['devices']), inventory=inventory)))
+    return 0
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

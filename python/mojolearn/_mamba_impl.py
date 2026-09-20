@@ -179,6 +179,34 @@ def _want_shape(a, what, name, shape, alt=None):
     )
 
 
+def _exports(ext, name):
+    """Whether the loaded binding exports `name`. On a CPU-only install the
+    stand-in for a GPU binding RAISES ImportError by name from `__getattr__`
+    (`_backend.py::_HostBinding`), and `hasattr` swallows only
+    AttributeError, so a bare `hasattr` probe would take the whole CPU host
+    route down. The same guard `_transformer_impl._exports` carries, for the
+    same reason; a probe is not a use."""
+    try:
+        return hasattr(ext, name)
+    except ImportError:
+        return False
+
+
+def _private_copy(a):
+    """A fresh float32 C-order buffer holding `a`'s bytes.
+
+    The resident decode session's OWNERSHIP clause: the session COPIES the
+    weights and the state at open, so a caller's later edit to either is not
+    observed. On the GPU arm the copy lands in device memory
+    (`MambaDeviceWeights`, `MambaDeviceState`); on the host arm it lands
+    here, in a buffer of this process, which is the same promise with the
+    same visibility and the same refresh door (`load_state`)."""
+    pb = probe(a)
+    out = empty(tuple(int(d) for d in pb.shape), "<f4")
+    memcopy(addr(out, name="copy"), addr_ro(a, name="source"), 4 * int(out.size))
+    return out
+
+
 def _state_buf(a, what, name, shape):
     """A state buffer: float32, C-contiguous, WRITABLE, exactly `shape`.
     No silent fixups at all -- the state is read AND written in place
@@ -646,8 +674,22 @@ class Mamba1Block(_MambaBase):
         `h` are STALE and `forward`/`step` on this block refuse the state
         by name. Edits to the weights after open are NOT observed: close
         and open a new session. Edits to the state arrays are not observed
-        either: `load_state()` re-uploads them. A block whose binding
-        exports no session (the CPU host route) refuses by name."""
+        either: `load_state()` re-uploads them.
+
+        THE CPU HOST ROUTE TAKES THIS DOOR TOO (lane/cpu-routes-gpu-only-four,
+        2026-09-20). A host binding exports no `mamba1_session_*` entry and
+        never will -- there is no device context to hold anything resident in
+        -- but the session's ARITHMETIC is not the residency: `step` is
+        `mamba_step`, the block at L = 1 with the state carried, which the
+        host binding exports under the per-call name `mamba1_decode_step`
+        (`bindings/_mojolearn_mamba_host.mojo`, `mamba_block_oracle` at L = 1,
+        the same entry `Mamba1Block.step` takes). So on the host route this
+        object holds its own copies of the ten weights and the two state
+        pieces and calls that entry per token, in the same order and with the
+        same addresses `Mamba1Block._call` builds. It is the ownership
+        wrapper, not new arithmetic, and it earns no speed claim of any kind:
+        on the host every step re-reads the weights exactly as the per-call
+        step does."""
         return Mamba1DecodeSession(self, state)
 
     __call__ = forward
@@ -657,10 +699,10 @@ def _refuse_resident(state, what):
     owner = getattr(state, "_resident_session", None)
     if owner is not None:
         raise ValueError(
-            f"mojolearn {what}: the state is owned by an open "
-            "Mamba1DecodeSession (its pieces live on the device and the "
-            "caller's buffers are stale); call sync_state() or close() on the "
-            "session first"
+            f"mojolearn {what}: the state is owned by an open resident "
+            "Mamba1DecodeSession (its pieces live in the session, on the "
+            "device or on the host, and the caller's buffers are stale); "
+            "call sync_state() or close() on the session first"
         )
 
 
@@ -676,8 +718,19 @@ class Mamba1DecodeSession:
                    back; also the context manager exit
 
     Every output is BYTE FOR BYTE the per-call `step` on the same block
-    and state. The session holds its own device context; it is not
-    thread-safe and refuses re-entrant use."""
+    and state. On a GPU binding the session holds its own device context;
+    it is not thread-safe and refuses re-entrant use.
+
+    TWO ARMS, ONE CLASS AND ONE SET OF BYTES. On a binding that exports
+    `mamba1_session_create` the weights, the state and the L = 1 stages are
+    RESIDENT on the device across steps. On the host route
+    (`bindings/_mojolearn_mamba_host.mojo`, which exports no session entry)
+    the session owns its copies HERE and each `step` is the host binding's
+    `mamba1_decode_step` on them: the same certified entry, the same
+    fourteen addresses in the same order, so the byte-for-byte claim above
+    holds on both arms and is what the `mamba1-decode-session` lane hashes.
+    The host arm is the OWNERSHIP wrapper only and makes NO speed claim: it
+    re-reads the weights on every step exactly as the per-call step does."""
 
     def __init__(self, block, state):
         what = "Mamba1DecodeSession"
@@ -688,11 +741,16 @@ class Mamba1DecodeSession:
             create = getattr(ext, "mamba1_session_create", None)
         except ImportError:
             create = None
-        if create is None:
+        # THE HOST ARM. No device session entry, but the decode entry the
+        # session would have run is right there under its per-call name.
+        host = create is None and _exports(ext, "mamba1_decode_step")
+        if create is None and not host:
             raise NotImplementedError(
                 f"mojolearn {what}: the loaded {type(block).__name__} binding "
-                "exports no resident decode session (the CPU host route and "
-                "older GPU builds); the per-call step() is the path here"
+                "exports neither a resident decode session nor the per-call "
+                "mamba1_decode_step entry the host arm runs; rebuild "
+                "bindings/build_mamba.sh (or build_mamba_host.sh) in "
+                "IDENTICAL mode"
             )
         if state is None:
             raise ValueError(f"mojolearn {what}: state is required (allocate_state)")
@@ -706,13 +764,21 @@ class Mamba1DecodeSession:
         self._block = block
         self._state = state
         self._ext = ext
-        self._native = create()
         self._open = False
         self._b = b
         w = block._w
-        addrs = ([addr_ro(a, name="weight") for a in w]
-                 + [addr(win, name="conv_window"), addr(h, name="h")])
-        ext.mamba1_session_open(self._native, addrs, [b, block.d_model])
+        if host:
+            # The ten weights and the two state pieces COPIED, which is the
+            # ownership clause the device arm satisfies with an upload.
+            self._native = None
+            self._hw = [_private_copy(a) for a in w]
+            self._win = _private_copy(win)
+            self._h = _private_copy(h)
+        else:
+            self._native = create()
+            addrs = ([addr_ro(a, name="weight") for a in w]
+                     + [addr(win, name="conv_window"), addr(h, name="h")])
+            ext.mamba1_session_open(self._native, addrs, [b, block.d_model])
         self._open = True
         state._resident_session = self
 
@@ -737,7 +803,20 @@ class Mamba1DecodeSession:
         if b != self._b:
             raise ValueError(f"mojolearn {what}: the session holds {self._b} rows, x has B = {b}")
         y = empty((b, 1, blk.d_model), "<f4")
-        self._ext.mamba1_session_step(self._native, [addr_ro(x, name="x"), addr(y, name="y")])
+        if self._native is None:
+            # ORDER MATCHES `Mamba1Block._call`, which is the order
+            # `bindings/_mojolearn_mamba_host.mojo::mamba1_decode_step`
+            # documents: x, the ten weights, conv_window, h, y_out. The
+            # session's own buffers stand where the caller's would.
+            hw = self._hw
+            self._ext.mamba1_decode_step(
+                [addr_ro(x, name="x")]
+                + [addr_ro(a, name="weight") for a in hw]
+                + [addr(self._win, name="conv_window"), addr(self._h, name="h"),
+                   addr(y, name="y")],
+                [b, blk.d_model])
+        else:
+            self._ext.mamba1_session_step(self._native, [addr_ro(x, name="x"), addr(y, name="y")])
         return y
 
     def _state_addrs(self, what):
@@ -750,17 +829,33 @@ class Mamba1DecodeSession:
         what = "Mamba1DecodeSession.sync_state"
         self._require_open(what)
         win, h = self._state_addrs(what)
-        self._ext.mamba1_session_export_state(
-            self._native, [addr(win, name="conv_window"), addr(h, name="h")])
+        if self._native is None:
+            memcopy(addr(win, name="conv_window"), addr_ro(self._win, name="resident"),
+                    4 * int(self._win.size))
+            memcopy(addr(h, name="h"), addr_ro(self._h, name="resident"), 4 * int(self._h.size))
+        else:
+            self._ext.mamba1_session_export_state(
+                self._native, [addr(win, name="conv_window"), addr(h, name="h")])
         return self._state
 
     def load_state(self):
         what = "Mamba1DecodeSession.load_state"
         self._require_open(what)
         win, h = self._state_addrs(what)
-        self._ext.mamba1_session_load_state(
-            self._native, [addr(win, name="conv_window"), addr(h, name="h")])
+        if self._native is None:
+            memcopy(addr(self._win, name="resident"), addr_ro(win, name="conv_window"),
+                    4 * int(self._win.size))
+            memcopy(addr(self._h, name="resident"), addr_ro(h, name="h"), 4 * int(self._h.size))
+        else:
+            self._ext.mamba1_session_load_state(
+                self._native, [addr(win, name="conv_window"), addr(h, name="h")])
         return self._state
+
+    def _release(self):
+        if self._native is None:
+            self._hw = self._win = self._h = None
+        else:
+            self._ext.mamba1_session_close(self._native)
 
     def close(self):
         if not self._open:
@@ -770,7 +865,7 @@ class Mamba1DecodeSession:
         finally:
             self._open = False
             self._state._resident_session = None
-            self._ext.mamba1_session_close(self._native)
+            self._release()
 
     def __enter__(self):
         return self
@@ -784,7 +879,7 @@ class Mamba1DecodeSession:
             if getattr(self, "_open", False):
                 self._open = False
                 self._state._resident_session = None
-                self._ext.mamba1_session_close(self._native)
+                self._release()
         except Exception:
             pass
 

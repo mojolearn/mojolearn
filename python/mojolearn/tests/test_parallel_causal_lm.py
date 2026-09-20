@@ -1,41 +1,71 @@
 # SPDX-License-Identifier: Apache-2.0
-"""`mojolearn.models.ParallelCausalLM`. THIS IS A TEST AND NOT AN IDENTITY
-LANE, and the reason is the class's own first line.
+"""`mojolearn.models.ParallelCausalLM`: the unit contracts beside its lane.
 
-`tools/verification_matrix.py` reported `models.ParallelCausalLM` with no
-lane on 2026-09-19 and lane/models-namespace-lanes gave the rest of the
-`mojolearn.models` namespace three (`hf-checkpoint`, `hf-tokenizer`,
-`hf-causal-lm`). This one deliberately got none. `ParallelCausalLM.load` and
-`__init__` both raise NotImplementedError unless `_backend.vendor()` is
-'cuda' or 'hip' -- the refusal is by name and comes before a file is opened
--- so on the CPU column, on Apple and in that harness there is no arithmetic
-to hash at all. A lane would record REFUSED on every fixture of every column
-this project actually runs, and a column total cannot tell a REFUSED from a
-build that did not run. Writing one would have added a row that cannot fail.
+WHAT CHANGED ON 2026-09-20 (lane/cpu-routes-gpu-only-four). This file used to
+open by explaining why `par-causal-lm` could not be an identity lane: `load`
+and `__init__` both raised NotImplementedError unless `_backend.vendor()` was
+'cuda' or 'hip', so on every column this project runs there was no arithmetic
+to hash. That is no longer true. On a CPU-only install a "device index" is one
+WORKER PROCESS, each layer is built from `CausalLM`'s own CPU route and the
+class's claim -- "Output and state mathematics are the ordinary CausalLM
+path" -- is held byte for byte against a plain in-process `CausalLM` by the
+`par-causal-lm` lane in `tools/identity_break.py`, which takes a CPU column.
 
-What CAN be pinned without two CUDA devices is pinned here: the vendor
-refusal before any checkpoint read, the layer-map validation before a worker
-is started, the worker-index arithmetic and the closed-model refusal, the
-remote state's ownership and idempotent release, and -- in the last test --
-the real CPU numerics of the ordinary `CausalLM` path driven through
-emulated RPC, held to the plain model's digest. That last one is NOT
-physical two-GPU evidence and says so; the transport is mocked.
+SO THE DIVISION OF LABOUR IS NOW THE ORDINARY ONE. The lane hashes the
+arithmetic; this file pins the contracts a hash cannot see: the refusal for a
+GPU install of the wrong vendor before any checkpoint read, the CPU route's
+admission through `_parallel_pool.CPU_OPERATIONS`, the layer-map validation
+before a worker is started, the worker-index arithmetic and the closed-model
+refusal, the remote state's ownership and idempotent release, and -- in the
+last test -- the CPU numerics driven through emulated RPC, held to the plain
+model's digest. That last one is NOT physical two-GPU evidence and says so;
+the transport is mocked.
 
 What is still owed is a run on two real CUDA or HIP devices
 (docs/lanes/LANE_STATUS_causal-lm-distributed-proof.md's outstanding item).
-The day this box has one, the question is whether `ParallelCausalLM` belongs
-in `identity_break` as a `par-*` lane, which `tools/lane_applicability.py`
-already refuses on a zero-device column, rather than here.
+A one-process-per-index CPU column is the DEGENERATE case of the device axis,
+exactly as `identity_break._par_devices`'s docstring says of every `par-*`
+lane, and it is AGREEMENT with the plain path rather than a claim that either
+is right.
 """
 from types import SimpleNamespace
 import pytest
 from mojolearn.models import parallel_causal_lm as mod
 
 
-def test_cpu_rejected_before_checkpoint_read(monkeypatch):
-    monkeypatch.setattr(mod._backend, 'vendor', lambda: 'cpu')
+@pytest.mark.parametrize('vendor', ['cpu', 'metal'])
+def test_gpu_install_of_the_wrong_vendor_rejected_before_checkpoint_read(monkeypatch, vendor):
+    """A GPU INSTALL whose vendor is not CUDA or HIP still refuses, before a
+    file is opened. `_CPU_ONLY is None` here, so this is Metal and the case
+    of a GPU install reporting `cpu` -- NOT the CPU-only host route, which
+    `test_cpu_only_install_takes_the_host_route` covers. The two are
+    different facts and the vocabulary keeps them apart."""
+    monkeypatch.setattr(mod._backend, 'vendor', lambda: vendor)
+    monkeypatch.setattr(mod._backend, '_CPU_ONLY', None)
     with pytest.raises(NotImplementedError, match='CUDA or HIP'):
         mod.ParallelCausalLM.load('/does/not/exist', layer_devices=(0,1))
+
+
+def test_cpu_only_install_takes_the_host_route(monkeypatch):
+    """lane/cpu-routes-gpu-only-four (2026-09-20). On a CPU-only install the
+    route is `cpu` and `load` gets as far as reading the checkpoint, which is
+    what the FileNotFoundError here proves: the vendor refusal no longer
+    stands in front of it."""
+    monkeypatch.setattr(mod._backend, 'vendor', lambda: 'cpu')
+    monkeypatch.setattr(mod._backend, '_CPU_ONLY', 'no identical binding on this box')
+    assert mod._admit_route() == 'cpu'
+    with pytest.raises(FileNotFoundError):
+        mod.ParallelCausalLM.load('/does/not/exist', layer_devices=(0,1))
+
+
+def test_the_layer_operation_is_gated_by_cpu_operations():
+    """`causal_lm_layer` is admitted on the CPU route, a neighbour is not.
+    `_rpc` addresses one worker and so never passes through `pool.map`'s
+    admission, which is why it calls `_cpu_refusal` itself; this asserts the
+    set it consults says yes to this operation and no in general."""
+    from mojolearn._parallel_pool import _cpu_refusal
+    assert _cpu_refusal([('causal_lm_layer', 'run', ())], False) is None
+    assert _cpu_refusal([('gbdt_fit', None, ())], False) is not None
 
 
 @pytest.mark.parametrize('devices', [(0,), (0,-1), (0,True)])

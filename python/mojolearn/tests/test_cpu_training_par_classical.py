@@ -51,7 +51,13 @@ LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters":
          # lane/unlaned-public-algorithms (2026-09-20): the GaussianProcess
          # CLASSIFIER's class-level shards, the two public entries
          # tools/verification_matrix.py reported with no identity lane at all
-         "par-gpc-fit": "gp", "par-gpc-predict": "gp"}
+         "par-gpc-fit": "gp", "par-gpc-predict": "gp",
+         # lane/cpu-routes-gpu-only-four (2026-09-20): the two drivers that
+         # checked `_backend.vendor()` before they built a layer or prepared
+         # a fold. On a CPU-only install a device index is one worker
+         # PROCESS, and everything either driver does with it is its own
+         # Python; the shards are the neural and gbdt host families'.
+         "par-causal-lm": "neural", "par-cross-val": "gbdt"}
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit", "rbf_sampler_rows"),
@@ -156,6 +162,43 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "    if operation == 'gpc_class_predict':\n" in worker
     assert "        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)\n" in worker
     wanted.update(("gpc_class_fit", "gpc_class_predict"))
+    # ParallelCausalLM's one operation and cross_val_score's two
+    # (lane/cpu-routes-gpu-only-four, 2026-09-20). `causal_lm_layer` is the
+    # ONLY admitted operation that does not go through `pool.map`:
+    # `_rpc` addresses a single worker by index, so it calls `_cpu_refusal`
+    # itself and that call is what this checks, in place of the
+    # "non-cooperative pool" body check every other operation gets. The
+    # partition is `layer_devices`, one index per layer, and the merge is
+    # `CausalLM._run`'s sequential hand-off; the worker builds the route it
+    # was TOLD, never a route it guessed.
+    causal = _read("python/mojolearn/models/parallel_causal_lm.py")
+    assert "pool = DevicePool(devices)" in causal and "cooperative=True" not in causal
+    assert "refusal = _cpu_refusal([request], False)" in causal
+    assert "request = ('causal_lm_layer', operation, args)" in causal
+    assert "self._rpc(device, 'route', self.route)" in causal
+    assert "return [_RemoteBlock(self, i, weights, kwargs) for i, weights in enumerate(layers)]" in causal
+    assert "MOJOLEARN_" not in causal
+    layer_worker = _read("python/mojolearn/_causal_lm_worker.py")
+    assert "block = _block_classes(_route)[kind](weights, **kwargs)" in layer_worker
+    assert "prims = _GpuPrimitives() if _route == 'gpu' else _CpuPrimitives()" in layer_worker
+    assert "raise RuntimeError('loaded-model worker was not told its route')" in layer_worker
+    wanted.add("causal_lm_layer")
+    # cross_val_score's fold dispatch and its process witness. The split is
+    # `_prepare_folds`/`_take_rows` -- the SERIAL API's own fold code -- and
+    # the merge is `scores.extend(results)` in fold order. The device
+    # inventory is the one piece with no CPU counterpart, so the host route
+    # asks a DIFFERENT question through a DIFFERENT function; the GPU check
+    # must still be the one the GPU route calls.
+    cv = _read("python/mojolearn/parallel_model_selection.py")
+    assert "pool = DevicePool(devices)" in cv and "cooperative=True" not in cv
+    assert "requests.append(('cross_val_fold', _clone(prototype)," in cv
+    assert "scores.extend(results)" in cv
+    assert "pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)" in cv
+    assert "require_distinct_workers(inventory, vendor, width)" in cv
+    assert "MOJOLEARN_" not in cv
+    assert "    if operation == 'cross_val_fold':\n" in worker
+    assert "        return _fit_score_fold(state, *args)\n" in worker
+    wanted.update(("cross_val_fold", "worker_identity"))
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
     assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
     cooperative = set()
