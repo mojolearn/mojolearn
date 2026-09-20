@@ -46,12 +46,12 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 255 | 8 |
+| gpu column (any class) | 256 | 7 |
 | gpu column on all three classes | 235 | 28 |
 | cpu verifier declared | 229 | 34 |
 | sabotage seen to move a build | 229 | 34 |
 | batch part or named n/a | 263 | 0 |
-| ALL FOUR | 221 | 42 |
+| ALL FOUR | 222 | 41 |
 
 Sabotage, split by what was actually watched:
 
@@ -387,7 +387,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-query-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-3b1b2d6f6/cpu-x86-64-runpod.sabotage.json` | part | yes |
 | gbdt-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-rmse/gbdt-rmse/cpu-sabotage.json` | part | yes |
 | gbdt-symmetric | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-symmetric/gbdt-symmetric/cpu-sabotage.json` | part | yes |
-| gbdt-symmetric-eval | - | training | seen(build) | `bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/cpu-apple-m4-sabotage.json (clean partner at another commit)` | part | NO |
+| gbdt-symmetric-eval | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/cpu-apple-m4-sabotage.json (clean partner at another commit)` | part | yes |
 | gbdt-tensor-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | part | yes |
 | gbdt-yeti-rank | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-yeti-rank/cpu-apple-m4.sabotage.json` | part | yes |
 | gemm-bf16 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-neural-completion/records/gemm-bf16/cpu-sabotage.json` | n/a n/a:profile lane; the products are hashed whole | yes |
@@ -628,15 +628,15 @@ been advertising 13 gaps that cannot be closed. A $3.34 two-device
 MI300X leg was bought on 2026-09-19 before this was noticed; what it
 proved is real and is reported under the driver heading below, not here.
 
-**No GPU column at all: 1**
+**No GPU column at all: 0**
 
-> gbdt-symmetric-eval
+> none
 
 > (plus 4 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 2**
+**GPU column on fewer than three classes: 3**
 
-> mamba1-decode-session, transformer-decode-session
+> gbdt-symmetric-eval, mamba1-decode-session, transformer-decode-session
 
 > (plus 18 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 

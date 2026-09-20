@@ -3120,7 +3120,14 @@ PUBLIC_PENDING_LANES = {
     # next coordinated record, which is where GPU columns are taken. Until
     # one lands there is no reference to ship, so an installed `verify --all`
     # is told not to ask rather than left reading OWED.
-    # ADMITTED 2026-09-20: gbdt-symmetric-eval carries cells in the shipped table now.
+    # WITHDRAWN 2026-09-20, THE SAME DAY IT WAS ADMITTED. Its CPU column and
+    # its first GPU column DISAGREE (RTX 4090,
+    # bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/):
+    # the held-out loss curve differs on all nine fixtures, the model differs
+    # on dupes and negative where that moves the early-stopping cut, and wide
+    # refuses on the GPU because the shrink never cuts there. The CPU eval
+    # oracle had never been run against a GPU. No reference until the two agree.
+    "gbdt-symmetric-eval": "no reference",
 
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
     # committed record and no shipped table cell describes it yet, and a
