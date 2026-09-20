@@ -1,7 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Explicit layer-owner inference, using canonical CausalLM arithmetic.
 
-Each selected CUDA/HIP device has one persistent isolated worker. Only its
+Each selected CUDA/HIP device has one persistent isolated worker. Metal
+supports one worker on device zero, with every layer assigned to that worker. Only its
 assigned layers are constructed there. Hidden activations cross boundaries via
 host memory; this is sequential model parallelism, not tensor parallelism or a
 throughput claim. Standard block states remain host-backed in their owner
@@ -25,9 +26,8 @@ for byte to a plain in-process `CausalLM` on the same weights. WHAT IT DOES
 NOT CHECK is device isolation, memory residency or anything physical: one
 process per index is the degenerate case of the device axis and two GPUs
 remain owed. It is AGREEMENT with the plain path, not a claim that either is
-right. METAL IS STILL REFUSED, deliberately: `DevicePool` gives an Apple
-group no visibility mask at all, so "one device per owner" would be a
-sentence with nothing behind it there, which is worse than a refusal.
+right. Metal admits only device zero: its worker uses the ordinary GPU
+route, and no visibility mask or physical multi-device isolation is claimed.
 """
 from .. import _backend
 from .._parallel_pool import DevicePool, _cpu_refusal
@@ -36,12 +36,16 @@ from .causal_lm import CausalLM
 __all__ = ['ParallelCausalLM']
 
 
-def _admit_route():
-    """`gpu` on CUDA or HIP, `cpu` on a CPU-only install, a refusal otherwise.
+def _admit_route(layer_devices=()):
+    """`gpu` on CUDA/HIP or single-device Metal; `cpu` on a CPU-only install.
 
     Called in the same two places the vendor check used to sit, and before a
     layer is built or a checkpoint is read."""
     vendor = _backend.vendor()
+    if vendor == 'metal':
+        if not layer_devices or any(type(d) is not int or d != 0 for d in layer_devices):
+            raise ValueError('Metal ParallelCausalLM requires every layer owner to be device 0')
+        return 'gpu'
     if vendor in ('cuda', 'hip'):
         return 'gpu'
     if _backend._CPU_ONLY is not None:
@@ -113,7 +117,8 @@ class _RemotePrimitives:
 class ParallelCausalLM(CausalLM):
     """Experimental layer ownership. Use ``load(path, layer_devices=(0, 1))``.
 
-    One device index per checkpoint layer; repeated indices are allowed. Close
+    One device index per checkpoint layer; repeated indices are allowed.
+    Metal requires every index to be zero (one worker on one GPU). Close
     explicitly or use a context manager. Calls and states must not be used
     concurrently. Output and state mathematics are the ordinary CausalLM path.
     """
@@ -122,7 +127,7 @@ class ParallelCausalLM(CausalLM):
         if (len(self.layer_devices) != plan.n_layers or
                 any(type(d) is not int or d < 0 for d in self.layer_devices)):
             raise ValueError('layer_devices requires one nonnegative device index per layer')
-        self.route = _admit_route()
+        self.route = _admit_route(self.layer_devices)
         self._closed = False
         self._pools = {}
         try:
@@ -149,8 +154,13 @@ class ParallelCausalLM(CausalLM):
         from .safetensors import Checkpoint
         if weight_format not in ('float32', 'bfloat16', 'int8'):
             raise ValueError('unsupported weight_format')
-        _admit_route()
+        layer_devices = tuple(layer_devices)
+        if not layer_devices or any(type(d) is not int or d < 0 for d in layer_devices):
+            raise ValueError('layer_devices requires one nonnegative device index per layer')
+        _admit_route(layer_devices)
         plan = plan_for(HFConfig.from_json(path))
+        if len(layer_devices) != plan.n_layers:
+            raise ValueError('layer_devices requires one nonnegative device index per layer')
         ckpt = Checkpoint.open(path)
         try:
             weights = cls._read_weights(ckpt, plan, weight_format)

@@ -56,6 +56,48 @@ def clean_column():
     )
 
 
+def full_part_column():
+    column = clean_column()
+    column.update(parts_collected=['batch', 'batchgrad', 'batchscale', 'ragged', 'rlpair', 'stepfull'],
+                  partial_column=False, parts_omitted=[], repeats=1)
+    cell = column['cells']['ols/base']
+    for part in ('infer', 'model', 'batch', 'batchgrad', 'batchscale', 'ragged', 'stepfull'):
+        cell[part] = ['n/a:not-applicable']
+        cell[part + '_verdict'] = 'N/A'
+    return column
+
+
+@pytest.mark.parametrize('part', ['infer', 'model', 'batch', 'stepfull', 'batchgrad', 'batchscale', 'ragged'])
+@pytest.mark.parametrize('field', ['values', 'verdict'])
+def test_modern_full_column_cannot_silently_drop_a_declared_part(part, field):
+    column = full_part_column()
+    del column['cells']['ols/base'][part if field == 'values' else part + '_verdict']
+    assert vref.admit(column, 'clean.json') == f'incomplete declared part: ols/base {part}'
+
+
+def test_modern_full_column_preserves_explicit_na_and_failed_probes():
+    column = full_part_column()
+    assert vref.admit(column, 'clean.json') is None
+    column['cells']['ols/base'].update(model=[None], model_verdict='REFUSED', probe_error='save failed')
+    assert vref.admit(column, 'clean.json') is None
+    assert vref._part_value(column['cells']['ols/base'], 'model') is None
+
+
+def test_modern_full_column_preserves_failed_training_evidence():
+    column = full_part_column()
+    column['cells']['ols/base'] = dict(verdict='REFUSED', error='fit failed', hashes=[])
+    assert vref.admit(column, 'clean.json') is None
+
+
+def test_modern_full_column_cannot_shrink_declared_parts_or_repeats():
+    column = full_part_column()
+    column['parts_collected'].remove('batch')
+    assert vref.admit(column, 'clean.json') == 'incomplete full-part declaration'
+    column = full_part_column()
+    column['repeats'] = 2
+    assert 'incomplete declared repeats' in vref.admit(column, 'clean.json')
+
+
 # ------------------------------------------------- the trap this test exists for
 
 def test_clean_column_in_a_sabotage_named_directory_is_admitted():

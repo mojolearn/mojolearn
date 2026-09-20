@@ -18,26 +18,8 @@ date-released: "2026-09-20"
 doi: 10.5281/zenodo.22068632
 repository-code: "https://github.com/mojolearn/mojolearn"
 abstract: >-
-  A GPU machine-learning library written in Mojo, and the first one to give
-  the same source three vendors and the same BITS across them. Its
-  distinguishing result is a three-tier numeric contract selected at runtime,
-  where the strictest tier produces bit-identical answers on Apple Silicon
-  via Metal, NVIDIA via CUDA and AMD via ROCm, verified by per-stage identity
-  cards diffed across the three at pinned commits.
-  Every line of Mojo in this repository was written for it. That includes the
-  determinism ladder and its pinned-arithmetic primitives, the Metal backend,
-  the host-side control plane every estimator is reached through, the identity
-  cards and host oracles and the sabotage methodology that gates them, the
-  bit-identical FP32 GEMM contract, portable elementary functions that replace
-  the host math library, a portable model serialization format, and the
-  transformer and Mamba identity work.
-  The estimator surface covers gradient-boosted oblivious trees, random
-  forests, extremely randomized trees, k-means, brute-force and IVF nearest
-  neighbors, DBSCAN, HDBSCAN, PCA, UMAP, ridge and logistic regression,
-  coordinate descent, support vector classification, kernel ridge regression,
-  Gaussian processes, Gaussian mixtures, kernel density estimation,
-  single-linkage and spectral clustering, isolation forests, Holt-Winters,
-  ARIMA, scoring metrics, and transformer and Mamba training and inference.
+  mojolearn supports bitwise-identical training and inference across more than
+  50 machine-learning algorithms.
 keywords:
   - machine learning
   - GPU
