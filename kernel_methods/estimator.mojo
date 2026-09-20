@@ -944,6 +944,60 @@ def nystroem_transform_host(
     return out^
 
 
+def nystroem_transform_host_into[out_origin: MutOrigin, //](
+    model: NystroemModel,
+    x: List[Float32],
+    n_rows: Int,
+    output: MutPointer[Float32, out_origin],
+    mut trace: IdentityTrace,
+    elem_tpb: Int = KM_EPILOGUE_TPB,
+    sabotage: Int = KMSAB_NONE,
+) raises:
+    """The public transform written directly to caller-owned host storage."""
+    km_validate_matrix(x, n_rows, model.n_features, "nystroem transform X")
+    var kp = nystroem_params(model)
+    var q = model.n_components
+    var d = model.n_features
+    var ctx = DeviceContext()
+    var dx = _upload(ctx, x)
+    var dc = _upload(ctx, model.components)
+    var dnorm = _upload(ctx, model.normalization)
+    var dk = ctx.enqueue_create_buffer[DType.float32](n_rows * q)
+    var na = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    var nb = ctx.enqueue_create_buffer[DType.float32](q)
+    var kws = ctx.enqueue_create_buffer[DType.float32](
+        km_kernel_workspace_floats(n_rows, q, d)
+    )
+    var demb = ctx.enqueue_create_buffer[DType.float32](n_rows * q)
+    var gws = ctx.enqueue_create_buffer[DType.float32](
+        identical_gemm_workspace_max_floats(n_rows, q, q)
+    )
+    ctx.synchronize()
+    km_kernel_matrix(
+        ctx, kp, dk, dx, dc, n_rows, q, d, na, nb, kws, elem_tpb, sabotage
+    )
+    ctx.synchronize()
+    trace.record_device(ctx, "nys.cross_kernel", dk, n_rows * q)
+    var op = OP_NT
+    if sabotage == KMSAB_EMBED_OP_NN:
+        op = OP_NN
+    identical_gemm_into(ctx, demb, dk, dnorm, gws, n_rows, q, q, op)
+    ctx.synchronize()
+    trace.record_device(ctx, "nys.embedding", demb, n_rows * q)
+    ctx.enqueue_copy(dst_ptr=output, src_buf=demb)
+    ctx.synchronize()
+    _ = dx^
+    _ = dc^
+    _ = dnorm^
+    _ = dk^
+    _ = na^
+    _ = nb^
+    _ = kws^
+    _ = demb^
+    _ = gws^
+    _ = ctx^
+
+
 # ===========================================================================
 # RBFSampler
 # ===========================================================================
