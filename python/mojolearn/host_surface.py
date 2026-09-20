@@ -3138,21 +3138,6 @@ PUBLIC_PENDING_LANES = {
     # against the next NVIDIA leg, recorded in docs/NEXT_WHEEL_COVERAGE.md. It
     # is a reason to take an NVIDIA column, not a reason to hide five core
     # neural blocks from the verifier a user runs.
-    # lane/close-no-cpu-path-gbdt (2026-09-20). The lane is new in that
-    # branch and no record of any kind carries it: the CPU column exists (it
-    # is how the lane was closed) and the three GPU columns are OWED to the
-    # next coordinated record, which is where GPU columns are taken. Until
-    # one lands there is no reference to ship, so an installed `verify --all`
-    # is told not to ask rather than left reading OWED.
-    # WITHDRAWN 2026-09-20, THE SAME DAY IT WAS ADMITTED. Its CPU column and
-    # its first GPU column DISAGREE (RTX 4090,
-    # bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/):
-    # the held-out loss curve differs on all nine fixtures, the model differs
-    # on dupes and negative where that moves the early-stopping cut, and wide
-    # refuses on the GPU because the shrink never cuts there. The CPU eval
-    # oracle had never been run against a GPU. No reference until the two agree.
-    "gbdt-symmetric-eval": "no reference",
-
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
     # committed record and no shipped table cell describes it yet, and a
     # public lane with no reference makes an installed `verify --all` read
