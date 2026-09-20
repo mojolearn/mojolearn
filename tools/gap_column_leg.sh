@@ -437,9 +437,30 @@ say "import_check=$(tail -1 "$OUT/logs/import_check.log" 2>/dev/null)"
 # ------------------------------------------------------------------ the deliverable
 # Default fixtures, default size, two repeats in one process, one device. No
 # sabotage switch is set anywhere in this run.
+#
+# MOJOLEARN_GAP_PARTS: FIVE OF NINE PARTS IS NOT A COLUMN (2026-09-20).
+# `_verify_reference.PARTS` is train, infer, model, batch, stepfull and
+# `OPTIONAL_PARTS` is batchgrad, batchscale, ragged, rlpair. Of those nine,
+# `identity_break` runs train/infer/model/batch/rlpair by default and needs
+# --step-full, --batch-grad, --batch-scale and --ragged to be ASKED for the
+# rest. Every gap column this body has recorded was therefore five parts
+# wide, and the four neural lanes it was supposed to have closed --
+# transformer, transformer-window, samba, samba-untied-dropout-accum -- came
+# home carrying a current, admissible NVIDIA column with NO `stepfull` cell
+# in it. A missing part reads as a covered lane, which is the whole trouble:
+# nothing refuses, nothing is flagged, and the gap stays open while the
+# matrix counts the lane as done.
+#
+# So the extra part flags are a VARIABLE, the caller names them, and the
+# gate line below records what this column actually asked for. Unset keeps
+# the historical five-part behaviour rather than silently changing the shape
+# of every column this body has ever produced.
+PARTS_FLAGS="${MOJOLEARN_GAP_PARTS:-}"
+say "extra_part_flags=${PARTS_FLAGS:-none (train,infer,model,batch,rlpair only)}"
 column() {
     run "$1" timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
         pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+        $PARTS_FLAGS \
         --vendor "$LABEL" --json "$JSON"
     say "$1_exit=$(awk -F'	' -v n="$1" '$1==n{print $2}' "$OUT/status.tsv")"
     grep -E '^cells=|MOVED|DIVERGENT|REFUSED|RELOAD' "$OUT/logs/$1.log" | head -120 >> "$G"
@@ -526,6 +547,7 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
         run column-two timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical \
             MOJOLEARN_PAR_DEVICES=0,1 PYTHONPATH=/root/mojolearn/python \
             pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+            $PARTS_FLAGS \
             --vendor "$LABEL" --json "$TWO"
         say "column_two_exit=$(awk -F'	' '$1=="column-two"{print $2}' "$OUT/status.tsv")"
         grep -E '^cells=|MOVED|DIVERGENT|REFUSED|RELOAD' "$OUT/logs/column-two.log" | head -120 >> "$G"
