@@ -64,8 +64,18 @@ ordered-shard reduction reaches no GEMM. Its independent oracle must catch
 the changed native result, including the cancellation fixture ending at three.
 """
 from std.math import isfinite
+from std.sys.compile import is_defined
+from std.sys.info import num_physical_cores
 
-from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_rsqrt
+from max.algorithm import sync_parallelize
+
+from checks.numerics import (
+    ftz,
+    identical_div,
+    identical_mul,
+    identical_mul_add,
+    identical_rsqrt,
+)
 from embedding.checks.embedding_oracle import (
     EmbConfig,
     emb_backward_oracle,
@@ -76,7 +86,12 @@ from gemm.checks.gemm_backward import (
     gemm_backward_a_call,
     gemm_backward_b_call,
 )
-from gemm.host.identical_gemm import OP_NN, OP_NT, gemm_oracle, GEMM_ORACLE_HOST_SABOTAGE
+from gemm.host.identical_gemm import (
+    OP_NN,
+    OP_NT,
+    gemm_oracle,
+    GEMM_ORACLE_HOST_SABOTAGE,
+)
 from training.checks.optimizer_oracle import microbatch_split_is_identical
 
 
@@ -85,12 +100,29 @@ comptime HOST_BWD_NEG_HALF: Float32 = -0.5
 comptime HOST_BWD_TWO: Float32 = 2.0
 
 
+comptime HOST_RMS_PARALLEL_CELLS = 32768
+"""Keep small normalization calls serial; split meaningful tensors by rows."""
+
+comptime HOST_RMS_FORCE_SERIAL = is_defined["MOJOLEARN_HOST_RMS_FORCE_SERIAL"]()
+"""Benchmark control for the previous serial row schedule."""
+
+
+def _host_rms_tasks(m: Int, dm: Int) -> Int:
+    comptime if HOST_RMS_FORCE_SERIAL:
+        return 1
+    if m * dm < HOST_RMS_PARALLEL_CELLS:
+        return 1
+    return max(1, min(m, num_physical_cores()))
+
+
 def host_samba_refuse_nonfinite(name: String, values: List[Float32]) raises:
     """`_refuse_nonfinite`, `samba_ops.mojo:53`, in its words."""
     for i in range(len(values)):
         if not isfinite(values[i]):
             raise Error(
-                "mojolearn samba ops: non-finite " + name + " at flat index "
+                "mojolearn samba ops: non-finite "
+                + name
+                + " at flat index "
                 + String(i)
             )
 
@@ -110,12 +142,18 @@ def host_samba_embedding_forward(
 
 
 def host_samba_embedding_backward(
-    dy: List[Float32], ids: List[Int32], n_positions: Int, vocab: Int, width: Int
+    dy: List[Float32],
+    ids: List[Int32],
+    n_positions: Int,
+    vocab: Int,
+    width: Int,
 ) raises -> List[Float32]:
     if n_positions < 1 or vocab < 1 or width < 1:
         raise Error("mojolearn samba ops: embedding shape must be positive")
     host_samba_refuse_nonfinite("embedding upstream gradient", dy)
-    return emb_backward_oracle(dy, ids, EmbConfig.llama(vocab, width), List[Float32]())
+    return emb_backward_oracle(
+        dy, ids, EmbConfig.llama(vocab, width), List[Float32]()
+    )
 
 
 # ===========================================================================
@@ -132,13 +170,26 @@ def _refuse_rms(m: Int, dm: Int, eps: Float32) raises:
 
 def host_rms_row_sumsq(x: List[Float32], m: Int, dm: Int) -> List[Float32]:
     """S1 per row: `acc = ftz(fma(x_j, x_j, acc))`, ascending from `+0.0`."""
-    var sumsq = List[Float32](capacity=m)
-    for t in range(m):
-        var acc = Float32(0.0)
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            acc = ftz(identical_mul_add(xj, xj, acc))
-        sumsq.append(acc)
+    var sumsq = List[Float32](length=m, fill=Float32(0.0))
+    var tasks = _host_rms_tasks(m, dm)
+    var chunk = (m + tasks - 1) // tasks
+    var xp = x.unsafe_ptr()
+    var sp = sumsq.unsafe_ptr()
+
+    def _rows(task: Int) {imm xp, imm sp, imm chunk, imm m, imm dm}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, m)
+        for t in range(lo, hi):
+            var acc = Float32(0.0)
+            for j in range(dm):
+                var xj = ftz(xp.unsafe_load(t * dm + j))
+                acc = ftz(identical_mul_add(xj, xj, acc))
+            sp.unsafe_store(t, acc)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return sumsq^
 
 
@@ -149,18 +200,45 @@ def host_samba_rms_norm_forward(
     host_samba_refuse_nonfinite("rms_norm input", x)
     host_samba_refuse_nonfinite("rms_norm weight", w)
     var sumsq = host_rms_row_sumsq(x, m, dm)
-    var y = List[Float32](capacity=m * dm)
-    for t in range(m):
-        var mean = ftz(identical_div(sumsq[t], Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
-        for j in range(dm):
-            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
-            y.append(ftz(identical_mul(ftz(w[j]), inner)))
+    var y = List[Float32](length=m * dm, fill=Float32(0.0))
+    var tasks = _host_rms_tasks(m, dm)
+    var chunk = (m + tasks - 1) // tasks
+    var xp = x.unsafe_ptr()
+    var wp = w.unsafe_ptr()
+    var sp = sumsq.unsafe_ptr()
+    var yp = y.unsafe_ptr()
+
+    def _rows(
+        task: Int,
+    ) {imm xp, imm wp, imm sp, imm yp, imm chunk, imm m, imm dm, imm eps}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, m)
+        for t in range(lo, hi):
+            var mean = ftz(identical_div(sp.unsafe_load(t), Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+            for j in range(dm):
+                var inner = ftz(
+                    identical_mul(ftz(xp.unsafe_load(t * dm + j)), rstd)
+                )
+                yp.unsafe_store(
+                    t * dm + j,
+                    ftz(identical_mul(ftz(wp.unsafe_load(j)), inner)),
+                )
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return y^
 
 
 def host_samba_rms_norm_backward(
-    dy: List[Float32], x: List[Float32], w: List[Float32], m: Int, dm: Int, eps: Float32
+    dy: List[Float32],
+    x: List[Float32],
+    w: List[Float32],
+    m: Int,
+    dm: Int,
+    eps: Float32,
 ) raises -> Tuple[List[Float32], List[Float32]]:
     """`(dx[m, dm], dw[dm])`."""
     _refuse_rms(m, dm, eps)
@@ -168,35 +246,76 @@ def host_samba_rms_norm_backward(
     host_samba_refuse_nonfinite("rms_norm weight", w)
     host_samba_refuse_nonfinite("rms_norm upstream gradient", dy)
     var sumsq = host_rms_row_sumsq(x, m, dm)
-    var dx = List[Float32](capacity=m * dm)
-    var dprod = List[Float32](capacity=m * dm)
-    for t in range(m):
-        # `bwd_norm_dh_kernel`, then `bwd_norm_dot_kernel`'s `c` fold.
-        var dh = List[Float32](capacity=dm)
-        var c = Float32(0.0)
-        for j in range(dm):
-            var dhj = ftz(identical_mul(ftz(dy[t * dm + j]), ftz(w[j])))
-            dh.append(dhj)
-            c = ftz(identical_mul_add(dhj, ftz(x[t * dm + j]), c))
-        c = ftz(c)
-        var mean = ftz(identical_div(ftz(sumsq[t]), Float32(dm)))
-        var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
-        var r2 = ftz(identical_mul(rstd, rstd))
-        var r3 = ftz(identical_mul(r2, rstd))
-        var cr3 = ftz(identical_mul(c, r3))
-        var da = ftz(identical_mul(HOST_BWD_NEG_HALF, cr3))
-        var dv = ftz(identical_div(da, Float32(dm)))
-        # `bwd_norm_dx_kernel`.
-        for j in range(dm):
-            var xj = ftz(x[t * dm + j])
-            var dx1 = ftz(identical_mul(ftz(dh[j]), rstd))
-            var tx = ftz(identical_mul(HOST_BWD_TWO, xj))
-            var dx2 = ftz(identical_mul(dv, tx))
-            dx.append(ftz(ftz(dx1) + ftz(dx2)))
-            var inner = ftz(identical_mul(xj, rstd))
-            dprod.append(ftz(identical_mul(ftz(dy[t * dm + j]), inner)))
+    var dx = List[Float32](length=m * dm, fill=Float32(0.0))
+    var dprod = List[Float32](length=m * dm, fill=Float32(0.0))
+    var dh = List[Float32](length=m * dm, fill=Float32(0.0))
+    var tasks = _host_rms_tasks(m, dm)
+    var chunk = (m + tasks - 1) // tasks
+    var dyp = dy.unsafe_ptr()
+    var xp = x.unsafe_ptr()
+    var wp = w.unsafe_ptr()
+    var sp = sumsq.unsafe_ptr()
+    var dxp = dx.unsafe_ptr()
+    var dpp = dprod.unsafe_ptr()
+    var dhp = dh.unsafe_ptr()
+
+    def _rows(
+        task: Int,
+    ) {
+        imm dyp,
+        imm xp,
+        imm wp,
+        imm sp,
+        imm dxp,
+        imm dpp,
+        imm dhp,
+        imm chunk,
+        imm m,
+        imm dm,
+        imm eps,
+    }:
+        var lo = task * chunk
+        var hi = min(lo + chunk, m)
+        for t in range(lo, hi):
+            # `bwd_norm_dh_kernel`, then `bwd_norm_dot_kernel`'s `c` fold.
+            var c = Float32(0.0)
+            for j in range(dm):
+                var cell = t * dm + j
+                var dhj = ftz(
+                    identical_mul(
+                        ftz(dyp.unsafe_load(cell)), ftz(wp.unsafe_load(j))
+                    )
+                )
+                dhp.unsafe_store(cell, dhj)
+                c = ftz(identical_mul_add(dhj, ftz(xp.unsafe_load(cell)), c))
+            c = ftz(c)
+            var mean = ftz(identical_div(ftz(sp.unsafe_load(t)), Float32(dm)))
+            var rstd = ftz(identical_rsqrt(ftz(mean + eps)))
+            var r2 = ftz(identical_mul(rstd, rstd))
+            var r3 = ftz(identical_mul(r2, rstd))
+            var cr3 = ftz(identical_mul(c, r3))
+            var da = ftz(identical_mul(HOST_BWD_NEG_HALF, cr3))
+            var dv = ftz(identical_div(da, Float32(dm)))
+            # `bwd_norm_dx_kernel`.
+            for j in range(dm):
+                var cell = t * dm + j
+                var xj = ftz(xp.unsafe_load(cell))
+                var dx1 = ftz(identical_mul(ftz(dhp.unsafe_load(cell)), rstd))
+                var tx = ftz(identical_mul(HOST_BWD_TWO, xj))
+                var dx2 = ftz(identical_mul(dv, tx))
+                dxp.unsafe_store(cell, ftz(ftz(dx1) + ftz(dx2)))
+                var inner = ftz(identical_mul(xj, rstd))
+                dpp.unsafe_store(
+                    cell, ftz(identical_mul(ftz(dyp.unsafe_load(cell)), inner))
+                )
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     var ones = List[Float32](length=m, fill=Float32(1.0))
     var dw = gemm_oracle(ones, dprod, OP_NN, 1, dm, m)
+    _ = dh^
     return (dx^, dw^)
 
 
@@ -216,7 +335,9 @@ def host_samba_linear_forward(
 
 
 def _gemm_by_call(
-    dc: List[Float32], other: List[Float32], call: Tuple[Int, Int, Int, Int, Int]
+    dc: List[Float32],
+    other: List[Float32],
+    call: Tuple[Int, Int, Int, Int, Int],
 ) -> List[Float32]:
     if call[4] == BWD_DC_LEFT:
         return gemm_oracle(dc, other, call[0], call[1], call[2], call[3])
@@ -224,7 +345,12 @@ def _gemm_by_call(
 
 
 def host_samba_linear_backward(
-    dc: List[Float32], a: List[Float32], w: List[Float32], m: Int, n: Int, k: Int
+    dc: List[Float32],
+    a: List[Float32],
+    w: List[Float32],
+    m: Int,
+    n: Int,
+    k: Int,
 ) raises -> Tuple[List[Float32], List[Float32]]:
     """`(da[m, k], dw[n, k])`: `identical_gemm_backward_a_into(da, dc, W)`
     and `identical_gemm_backward_b_into(dw, dc, A)` at the forward's
@@ -264,7 +390,9 @@ def host_samba_validate_accumulation(n: Int, a: Int, t_tokens: Int) raises:
     if t_tokens > 0 and not microbatch_split_is_identical(t_tokens, a):
         raise Error(
             "mojolearn samba ops: MISALIGNED microbatch split, T = "
-            + String(t_tokens) + " tokens at A = " + String(a)
+            + String(t_tokens)
+            + " tokens at A = "
+            + String(a)
             + " does not satisfy optimizer contract clause 9.2 (leaf size,"
             " T mod L, A divides P, A a power of two); this accumulation"
             " would be a different numerical experiment from the unsplit step"
