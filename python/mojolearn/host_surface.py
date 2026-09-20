@@ -1148,7 +1148,11 @@ NO_CPU_PATH = (
     "the CTR calcers build ordered target statistics over several "
     "permutations, with their online counters, grids and tables joined back "
     "into the compressed index, and the host path is pinned to one "
-    "permutation with no calcer (one-hot categorical columns do train)",
+    "permutation with no calcer. One-hot categorical columns DO train, "
+    "`ExperimentalTwoLevelFeatureFreq` has its own CPU route "
+    "(gbdt/host/gbdt_oracle_feature_freq.mojo) except on a tree whose level "
+    "winner is the tensor column itself, and CTR INFERENCE from a saved "
+    "model is closed; it is the calcer tables' training that is not",
 
     "gradient boosting training with a categorical or one-hot column "
     "outside SymmetricTree with Logloss and Plain boosting: the one-hot "

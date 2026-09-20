@@ -31,6 +31,18 @@ sentence was being written about. Every number in this file comes from a
 binding built from this branch's own source, and the probe prints the host
 set it loaded so that a reader can tell.
 
+**A NEGATIVE CONTROL PAIRED ACROSS TWO COMMITS COUNTS FOR NOTHING, AND SAYS
+SO QUIETLY.** The first committed pair here had the clean column at
+`c252ad3f4` and the sabotage column at `f10de99cf`, twenty minutes apart, with
+only documentation between them. `tools/verification_matrix.py` pairs a
+sabotage column with a clean one of the same device class and PREFERS a
+partner at the same commit; the only same-commit partner was a column of a
+different lane, so it found no move and reported `gbdt-symmetric-eval`'s
+sabotage as `declared` -- the rung that means "the switch exists, nobody has
+watched it fail". The arm had been watched failing, on nine fixtures. Both
+columns were retaken back to back at one commit. A control is evidence only
+where the tool that counts it can see the pair.
+
 **A stale claim found on the way.** The old sentence said eval sets refuse
 "outside the gbdt-pointwise-l2-bayesian-eval configuration". That was already
 wrong before this lane: 000dbd2cf (2026-09-19) gave Ordered boosting an eval
@@ -117,14 +129,26 @@ GradientBoosting(cat_features=[0]).fit(X8, y)   # column 0 has 8 categories
 The single largest item. The CTR calcers build ordered target statistics over
 `permutation_count` permutations with their online counters, quantize each
 statistic on its own grid, and join the result back into the compressed
-index; `ExperimentalTwoLevelFeatureFreq` adds the tensor registry on top.
-None of it is restated, and the host binding pins `perm_count = 1`
+index. None of that is restated, and the host binding pins `perm_count = 1`
 (`bindings/_mojolearn_gbdt_host.mojo`, "perm_count = 1").
 
-Note what *is* already closed: the **inference** side. `gbdt-categorical-ctr-tables`
-and `gbdt-tensor-ctr-tables` load a Metal-saved CTR model on the CPU column
-and predict through `forest_host_gbdt_expand_ctr`; it is the *training* of the
-tables that has no CPU route.
+**BE PRECISE ABOUT WHAT IS AND IS NOT ALREADY THERE**, because two
+neighbouring things are:
+
+* **The FeatureFreq tensor estimator DOES train on a CPU.**
+  `ExperimentalTwoLevelFeatureFreq` has its own binding entry
+  (`gbdt_fit_two_level_feature_freq`), its own oracle
+  (`gbdt/host/gbdt_oracle_feature_freq.mojo`) and its own covered lane
+  (`gbdt-feature-freq`), and that oracle restates the tensor table, its
+  mixed-radix key, its counts and its one Float32 division. What it refuses
+  by name is `sample_weight`, a BinaryFeatures column, and a tree whose LEVEL
+  WINNER is the tensor column itself. So "tensor CTR training has no CPU
+  route" would be wrong; the correct statement is the one above, about
+  `cat_features` inside an ordinary `GradientBoosting` fit.
+* **CTR INFERENCE is closed.** `gbdt-categorical-ctr-tables` and
+  `gbdt-tensor-ctr-tables` load a Metal-saved CTR model on the CPU column and
+  predict through `forest_host_gbdt_expand_ctr`. It is the TRAINING of the
+  calcer tables that has no CPU route.
 
 ### F4 one-hot categorical columns outside SymmetricTree Logloss Plain — CLOSABLE, NOT CLOSED
 
@@ -369,9 +393,9 @@ leaves on the Plain doc-parallel path. Five CPU-only checks say so:
 1. **Cross-lane, on the recorded column, all nine fixtures.**
    `gbdt-symmetric-eval`'s first fit is `gbdt-symmetric`'s fit plus an eval
    set. Their `predict` and `proba` parts are the same bytes in
-   `cpu-apple-m4.json` and `cpu-apple-m4-gbdt-symmetric.json`, 9 of 9 (the
-   table is in that directory's README). If an eval set ever reaches the fit,
-   the two lanes disagree and both are in the gate.
+   `cpu-apple-m4.json`, which carries BOTH lanes, 9 of 9 (the table is in
+   that directory's README). If an eval set ever reaches the fit, the two
+   lanes disagree and both are in the gate.
 2. With `use_best_model=False`, the learn curve, `predict(X)` and
    `predict(Xh)` of a fit WITH an eval set are bitwise the same fit's
    without one; the saved file differs in 9 bytes, all zip CRCs over
