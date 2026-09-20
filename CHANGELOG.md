@@ -3,6 +3,37 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (lane/compare-challenge-nonce)
+
+**`verify --compare` can now tell a run from a transcription.** A commitment
+settled the ORDER of two evidence documents and nothing else: the reference
+table ships in the wheel with the expected hash of every cell in it, so a
+party could write a whole document out of that table, seal it, publish the
+commitment first and hand over a file that never executed a line.
+
+- **New `verify --challenge DOC --challenge-from C_A C_B`.** The challenge is
+  `sha256(domain || min(c_a, c_b) || max(c_a, c_b))` over the two commitments
+  published before the exchange, so neither party can compute it in advance
+  and neither controls it alone. It reseeds `identity_break.fixture('hashed')`
+  from that value, reruns the document's own lane set on it (about a ninth of
+  what `--all` cost on the same box), appends a `challenge` block and prints a
+  SECOND line to publish before the documents are exchanged. Two honest
+  responses are identical, so an uncommitted response can simply be copied.
+- **New `--challenge-commitment-a` / `--challenge-commitment-b`** on
+  `--compare`, and a new verdict rung **`CHALLENGE BROKEN` (exit 1)**,
+  directly under `COMMITMENT BROKEN` and above every cell outcome. A
+  comparison with NO challenge is unchanged: still `AGREE`, still exit 0,
+  labelled a weaker result on the RESULT line, exactly as a comparison
+  without commitments already is. Documents from earlier releases compare as
+  before, and answering a challenge does not move a document's round-one
+  commitment.
+- What it does NOT prove is in `docs/VERIFY_EXTERNALLY.md` beside what it
+  does: it does not prove two PEOPLE; whoever publishes their commitment last
+  can grind nonces to steer the challenge, so the fixture is not an unbiased
+  draw; and it proves execution of what it covers, on one fixture of one
+  kind. `bench/results/verify_reports/` predates the feature and sits at the
+  weaker rung.
+
 ## Unreleased (lane/catboost-parity)
 
 **BEHAVIOR CHANGE: `GradientBoosting`'s SymmetricTree defaults are now CatBoost's

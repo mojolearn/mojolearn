@@ -77,6 +77,13 @@ def _wants_suite(args):
                 or getattr(args, "commitment", None)
                 or getattr(args, "commitment_a", None)
                 or getattr(args, "commitment_b", None)
+                # answering a challenge is a run, not a card check, and the
+                # compare-side flags must not fall through to the k-means card
+                # either
+                or getattr(args, "challenge", None)
+                or getattr(args, "challenge_from", None)
+                or getattr(args, "challenge_commitment_a", None)
+                or getattr(args, "challenge_commitment_b", None)
                 or getattr(args, "coverage", False)
                 or getattr(args, "include_pending", False)
                 or getattr(args, "models_only", False)
@@ -306,6 +313,38 @@ def build_parser():
                         "without commitments is not an error; it is labelled a "
                         "weaker result")
     v.add_argument("--commitment-b", dest="commitment_b", metavar="C", default=None,
+                   help="with --compare: the same, for the SECOND document")
+    v.add_argument("--challenge", metavar="DOC", default=None,
+                   help="ANSWER A CHALLENGE NEITHER PARTY CHOSE, so the "
+                        "document cannot have been written without running. A "
+                        "commitment settles the ORDER of two documents; it "
+                        "says nothing about execution, because the reference "
+                        "table ships in the wheel with every expected cell "
+                        "hash in it and a document can be written straight out "
+                        "of it. After both parties publish their commitments "
+                        "and exchange the two lines, this reruns DOC's own "
+                        "lanes on a fixture derived from that pair, appends "
+                        "the answers and prints a SECOND line to publish. "
+                        "Needs --challenge-from. Costs about a ninth of what "
+                        "--all cost on the same box")
+    v.add_argument("--challenge-from", dest="challenge_from", nargs=2,
+                   metavar=("C_A", "C_B"), default=None,
+                   help="with --challenge: the two commitments published "
+                        "before the exchange, as the 64-character lines "
+                        "themselves or paths to the .commitment files. The "
+                        "challenge is those two hashed together in sorted "
+                        "order, so neither party controls it alone and neither "
+                        "could have known it before both were published")
+    v.add_argument("--challenge-commitment-a", dest="challenge_commitment_a", metavar="C",
+                   default=None,
+                   help="with --compare: the SECOND line the FIRST party "
+                        "published, over their challenge response, before the "
+                        "documents were exchanged. Two honest responses are "
+                        "identical, so a response nobody was bound to can be "
+                        "copied out of the other file. A comparison without "
+                        "these is not an error; it is labelled a weaker result")
+    v.add_argument("--challenge-commitment-b", dest="challenge_commitment_b", metavar="C",
+                   default=None,
                    help="with --compare: the same, for the SECOND document")
     v.add_argument("--json-out", dest="json_out", metavar="PATH", default=None,
                    help="with --all: also write the full evidence document "
