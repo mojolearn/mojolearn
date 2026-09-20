@@ -12,6 +12,8 @@ by `tools/attention_v2_oracle.py`. Device block size, warp width, and vendor
 may not alter this order. Partial tiles behave as if absent cells do not exist.
 The weighted-value update is one pinned `fma(weight, value, accumulator)`;
 rescaling remains a separately rounded multiply.
+Backward dot products and gradient folds likewise use one pinned FMA per
+term; exponentiation uses the same `portable_expf` leaf as forward.
 
 This is intentionally not v1 arithmetic. A separating fixture must differ in
 bits from materialized v1 while remaining numerically close. V1 remains the

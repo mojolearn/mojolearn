@@ -21,9 +21,9 @@ class AttentionV2BackwardOracleTest(unittest.TestCase):
         self.assertTrue(all(x.tobytes() == y.tobytes() for x, y in zip(a, b)))
         self.assertEqual(tuple(x.shape for x in a), (q.shape, k.shape, v.shape))
         expected = (
-            "7b580ecc8daf1cc278997e7fdadbb8757dd9c80142e5e5c4ce926233e7563ed5",
-            "b1f6f1999d1c19a91a4734a1c57b82fd6bb61c3db7ea30f318acc3f787aaa862",
-            "56a6cbc9eee3483a8ff0aab9aa55859cc5e5e4b0edaed805b5331699cd892121",
+            "932cd778e83535b4675af51c8da7bcdac32e0b14850e8cdf46f3d556f7d1bd5b",
+            "01ede2b25915794307237ede5b1feb5fbcff8ee2ac6ab121e77d3bd0a523bccd",
+            "9ba8159489ec0eae519776664751032ab6c29bd58c1c823de71377ac8d6eee82",
         )
         self.assertEqual(tuple(hashlib.sha256(x.tobytes()).hexdigest() for x in a),
                          expected)

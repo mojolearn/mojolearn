@@ -6,8 +6,8 @@ the forward row from Q and K, then spells dQ in ascending key order and dK/dV
 in ascending query order.  Device scheduling may not change those logical
 folds.  TILE is part of the arithmetic contract.
 """
-import math
 import numpy as np
+from tools.attention_v2_oracle import exp32, _fma32
 
 TILE = 32
 
@@ -16,14 +16,10 @@ def f32(x):
     return np.float32(x)
 
 
-def exp32(x):
-    return f32(math.exp(float(f32(x))))
-
-
 def _dot(a, b):
     acc = f32(0.0)
     for i in range(a.size):
-        acc = f32(acc + f32(f32(a[i]) * f32(b[i])))
+        acc = _fma32(a[i], b[i], acc)
     return acc
 
 
@@ -68,14 +64,14 @@ def _row_backward(qrow, keys, values, dyrow, scale, visible):
         if visible[j]:
             probs[j] = f32(exp32(f32(scores[j] - m)) / z)
             dyv[j] = _dot(dyrow, values[j])
-            zdot = f32(zdot + f32(probs[j] * dyv[j]))
+            zdot = _fma32(probs[j], dyv[j], zdot)
     ds = np.zeros(keys.shape[0], np.float32)
     dq = np.zeros(keys.shape[1], np.float32)
     for j in range(keys.shape[0]):
         if visible[j]:
             ds[j] = f32(f32(probs[j] * f32(dyv[j] - zdot)) * f32(scale))
             for d in range(keys.shape[1]):
-                dq[d] = f32(dq[d] + f32(ds[j] * f32(keys[j, d])))
+                dq[d] = _fma32(ds[j], keys[j, d], dq[d])
     return probs, ds, dq
 
 
@@ -109,7 +105,7 @@ def attention_v2_backward(q, k, v, dy, scale=1.0, mask=None,
         for i in order:
             if visible[i, j]:
                 for d in range(k.shape[1]):
-                    dk[j, d] = f32(dk[j, d] + f32(ds[i, j] * f32(q[i, d])))
+                    dk[j, d] = _fma32(ds[i, j], q[i, d], dk[j, d])
                 for d in range(v.shape[1]):
-                    dv[j, d] = f32(dv[j, d] + f32(probs[i, j] * f32(dy[i, d])))
+                    dv[j, d] = _fma32(probs[i, j], dy[i, d], dv[j, d])
     return dq, dk, dv
