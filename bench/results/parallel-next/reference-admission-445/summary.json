@@ -54,7 +54,9 @@
   "fresh_apple": {
     "cells": 225,
     "numeric_comparisons": 837,
-    "lanes": 25
+    "lanes": 25,
+    "numeric_cpu_comparisons": 423,
+    "numeric_gpu_reference_comparisons_without_cpu": 414
   },
   "reused_amd": {
     "source": "bench/results/identity_break/2026-09-19_par-lane-amd-class/amd-amd-instinct-mi300x-gfx942.par-one.json",
