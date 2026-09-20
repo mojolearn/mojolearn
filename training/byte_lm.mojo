@@ -92,6 +92,7 @@ from transformer.impl.llama.fused_attention import (
 from transformer.impl.llama.modeling_llama import (
     BLOCK_ANY_SABOTAGE, LlamaDims, LlamaDeviceWeights, LlamaDeviceStages,
     LlamaRopeTable, LlamaKVCache, llama_decoder_layer_forward,
+    residual_next_norm_fusion_enabled,
     timing_on, timing_tick,
 )
 
@@ -1145,12 +1146,39 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         # Backward reads the per-layer stages.k_cache/v_cache, not this scratch.
         tr.prefill_cache.s = 0
         var prefix = String("byte.block") + String(layer) + ".forward"
+        var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
+            M, tr.weights[layer].opts.norm_kind, tr.weights[layer].opts.norm_bias
+        )
+        var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
+            M, tr.weights[layer + 1].opts.norm_kind,
+            tr.weights[layer + 1].opts.norm_bias,
+        )
         if layer == 0:
-            llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                tr.buffers.x, config.batch, config.length, 0, trace, prefix)
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(tr.forward[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
+            else:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.buffers.x, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready)
         else:
-            llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
-                tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix)
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(tr.forward[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(tr.weights[layer + 1].eps))
+            else:
+                llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
+                    tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
+                    norm1_ready=norm1_ready)
         step_count_sync()
         ctx.synchronize()
         comptime if BYTE_LM_RELEASE_EAGER:
