@@ -3,6 +3,13 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (FAST forest inference default)
+
+- Random Forest and Extra Trees now default `inference_engine` to `"auto"`.
+  It selects the resident parallel-groves predictor in FAST mode, while
+  DETERMINISTIC and IDENTICAL retain the historical sequential traversal.
+  Passing either engine explicitly remains authoritative.
+
 ## Unreleased (lane/compare-challenge-nonce)
 
 **`verify --compare` can now tell a run from a transcription.** A commitment

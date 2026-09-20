@@ -36,8 +36,11 @@ published for it. Why not is under
 [Which families offer which tiers](#which-families-offer-which-tiers).
 
 RF/ET offer `inference_engine="sequential"` (existing host prediction) and
-experimental `inference_engine="parallel_groves"` (shared GPU prediction).
-Both retain GPU training; see the [inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
+`inference_engine="parallel_groves"` (shared GPU prediction). The default
+`"auto"` selects parallel groves only in the `fast` tier and retains the
+sequential engine in `deterministic` and `identical`; either explicit spelling
+overrides it. Both retain GPU training; see the
+[inference algorithms and numerical contract](docs/FOREST_INFERENCE_ENGINES.md).
 
 Since 0.8.0 the library has no NumPy runtime dependency and returns
 `mojolearn.Array` objects. Existing NumPy inputs remain supported; callers can

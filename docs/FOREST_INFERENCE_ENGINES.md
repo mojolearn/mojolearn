@@ -5,8 +5,9 @@ trained forest can now be evaluated with either inference algorithm:
 
 | `inference_engine` | Execution and arithmetic |
 | --- | --- |
-| `sequential` (default) | Existing host traversal. Each row accumulates trees in increasing tree order, then divides by the tree count. |
-| `parallel_groves` (experimental, opt-in) | Shared GPU traversal for RF and ET. Rows, output components and 32 fixed tree groups run in parallel. Each group accumulates trees g, g+32, ...; a fixed 16/8/4/2/1 reduction combines the groups before division. |
+| `auto` (default) | `parallel_groves` in FAST; `sequential` in DETERMINISTIC and IDENTICAL. |
+| `sequential` | Existing host traversal. Each row accumulates trees in increasing tree order, then divides by the tree count. |
+| `parallel_groves` | Shared GPU traversal for RF and ET. Rows, output components and 32 fixed tree groups run in parallel. Each group accumulates trees g, g+32, ...; a fixed 16/8/4/2/1 reduction combines the groups before division. |
 
 ```python
 from mojolearn import RandomForestClassifier
@@ -42,8 +43,10 @@ comparisons. Equality, including signed zero, routes left in both engines.
 Changing addition order can change probabilities/regression predictions and,
 near ties, class predictions. Cross-GPU identity of one inference algorithm is
 a different contract from matching the other algorithm's bits. Do not expect
-`parallel_groves` to reproduce every sequential result. The existing engine
-remains available and is still the default. No training mode is deprecated.
+`parallel_groves` to reproduce every sequential result. Explicitly selecting
+either engine overrides `auto`. The reproducibility tiers keep sequential as
+their automatic selection; FAST makes the throughput choice. No training mode
+is deprecated.
 
 The bounded new path accepts finite Float32 features, thresholds and leaves;
 non-finite inputs/results and malformed tree graphs are refused. Host code
@@ -67,8 +70,8 @@ Within `parallel_groves`, vector-leaf traversal reuse is now the default for
 per-output addition and the same fixed reduction graph. The compile-time
 `MOJOLEARN_FOREST_SCALAR_GROVES` switch forces the scalar-output reference;
 outputs one and above eight retain that fallback. No enable flag is required.
-This is an implementation choice inside the existing opt-in GPU engine, not
-another public inference algorithm or a change to the `sequential` default.
+This is an implementation choice inside the GPU engine, not another public
+inference algorithm.
 
 The promotion follows exact scalar/vector output checks and stable large
 resident-kernel measurements: Apple M4 FAST improved the two-output fixture;
@@ -101,7 +104,8 @@ subnormals, cancellation and malformed graphs. Public H100 checks cover all
 four estimators, an independent fixed-graph oracle, repeat calls, both inference
 algorithms and versioned save/load. These are bounded checks: HIP, broader
 objectives/weights/feature distributions and large-model cross-vendor output
-coverage remain pending. The option stays experimental and opt-in.
+coverage remain pending. For that reason the reproducibility tiers do not
+select it automatically; FAST does, and explicit selection remains available.
 
 Training comparisons are independent of inference timing. The campaign's
 [raw evidence](../bench/results/tree_tuning_h100_2026-09-10/README.md) records
@@ -134,7 +138,8 @@ Year, Covtype), RF/HIGGS throughput, and Metal FAST RF/HIGGS single calls.
 Gains were modest: roughly 1–2% in most qualified cells and 5.5% for ET/HIGGS
 single calls. No ET throughput gain is certified; those pairs were noisy. The
 Metal Year cell and NVIDIA RF single calls also failed stability. Those noisy
-cells do not justify a speed claim or the default selection.
+cells did not by themselves justify the later FAST-only automatic selection;
+the million-row end-to-end qualification does.
 
 RF/HIGGS throughput was a qualified competitor comparison for this one cell
 on the H100 (2026-09-10): 21.09 ms/call versus cuML's 10.70 ms/call, averaged
