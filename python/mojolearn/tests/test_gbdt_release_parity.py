@@ -34,3 +34,15 @@ def test_cpu_rmse_honors_non_symmetric_grow_policy(grow_policy):
     ).fit(x, x[:, 0] + x[:, 1] * x[:, 2])
     assert "\nntree 0 " in str(model.model_)
     assert np.isfinite(np.asarray(model.predict(x))).all()
+
+
+@pytest.mark.parametrize("loss", ["RMSE", "MAE", "Quantile", "MAPE"])
+def test_explicit_average_matches_default_for_supported_losses(loss):
+    x, _ = _data()
+    y = (10 + x[:, 0] + 0.4 * x[:, 1]).astype(np.float32)
+    params = dict(n_estimators=3, max_depth=3, loss=loss,
+                  boosting_type="Plain", bootstrap_type="No", random_strength=0)
+    default = GradientBoosting(**params).fit(x, y)
+    explicit = GradientBoosting(**params, boost_from_average=True).fit(x, y)
+    np.testing.assert_array_equal(explicit.predict(x), default.predict(x))
+    np.testing.assert_array_equal(explicit.loss_curve_, default.loss_curve_)
