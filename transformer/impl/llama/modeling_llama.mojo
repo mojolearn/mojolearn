@@ -1887,6 +1887,17 @@ def residual_rms_norm_kernel(
         )
 
 
+def residual_next_norm_fusion_enabled(
+    m: Int, norm_kind: Int, norm_bias: Bool
+) -> Bool:
+    """The measured cross-block residual2 -> norm1 route."""
+    return (
+        not is_defined["MOJOLEARN_DISABLE_RESIDUAL2_NEXT_NORM"]()
+        and TARGET_COLUMN == COLUMN_APPLE and m <= 2048
+        and norm_kind == NORM_RMSNORM and not norm_bias
+    )
+
+
 def llama_rms_norm(
     ctx: DeviceContext,
     mut sumsq: DeviceBuffer[DType.float32],
@@ -4769,6 +4780,11 @@ def llama_decoder_layer_forward_planted(
     mut trace: IdentityTrace,
     prefix: String,
     materialize: Bool = True,
+    norm1_ready: Bool = False,
+    next_norm_sumsq: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_eps: Optional[Float32] = None,
 ) raises:
     """`LlamaDecoderLayer.forward(hidden_states, ...)` (:295-324).
 
@@ -4927,19 +4943,20 @@ def llama_decoder_layer_forward_planted(
     # lane/block-options: `llama_norm` is `llama_rms_norm` (this launch,
     # unchanged) at the default record and the variant kernel otherwise
     # (DEVIATIONS 2936-2938).
-    llama_norm(
-        ctx,
-        stages.norm1_sumsq,
-        stages.norm1_out,
-        x,
-        w.norm1_w,
-        w.norm1_b,
-        m,
-        dm,
-        w.eps,
-        w.opts.norm_kind,
-        w.opts.norm_bias,
-    )
+    if not norm1_ready:
+        llama_norm(
+            ctx,
+            stages.norm1_sumsq,
+            stages.norm1_out,
+            x,
+            w.norm1_w,
+            w.norm1_b,
+            m,
+            dm,
+            w.eps,
+            w.opts.norm_kind,
+            w.opts.norm_bias,
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5049,15 +5066,29 @@ def llama_decoder_layer_forward_planted(
     pc.mark(ctx)
 
     # ---- residual + hidden_states (:323). S23, the same imported kernel.
-    step_count_launch()
-    ctx.enqueue_function[residual_add_kernel](
-        stages.residual2.unsafe_ptr(),
-        stages.residual1.unsafe_ptr(),
-        stages.down_proj.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
+    var fuse_next_norm = (
+        next_norm_sumsq and next_norm_out and next_norm_weight
+        and next_norm_eps
+        and residual_next_norm_fusion_enabled(m, NORM_RMSNORM, False)
     )
+    step_count_launch()
+    if fuse_next_norm:
+        ctx.enqueue_function[residual_rms_norm_kernel](
+            stages.residual2.unsafe_ptr(), next_norm_sumsq.value(),
+            next_norm_out.value(), stages.residual1.unsafe_ptr(),
+            stages.down_proj.unsafe_ptr(), next_norm_weight.value(), Int32(m),
+            Int32(dm), next_norm_eps.value(), grid_dim=(_grid(m), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual2.unsafe_ptr(),
+            stages.residual1.unsafe_ptr(),
+            stages.down_proj.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -5082,6 +5113,11 @@ def llama_decoder_layer_forward(
     pos0: Int,
     mut trace: IdentityTrace,
     prefix: String,
+    norm1_ready: Bool = False,
+    next_norm_sumsq: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_out: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_weight: Optional[MutPointer[Float32, MutAnyOrigin]] = None,
+    next_norm_eps: Optional[Float32] = None,
 ) raises:
     """THE ORDINARY ENTRY POINT. One block call with NO score plant.
 
@@ -5108,4 +5144,9 @@ def llama_decoder_layer_forward(
         trace,
         prefix,
         materialize=False,
+        norm1_ready=norm1_ready,
+        next_norm_sumsq=next_norm_sumsq,
+        next_norm_out=next_norm_out,
+        next_norm_weight=next_norm_weight,
+        next_norm_eps=next_norm_eps,
     )

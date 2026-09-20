@@ -53,6 +53,7 @@ from transformer.impl.llama.modeling_llama import (
     LlamaKVCache,
     LlamaRopeTable,
     llama_decoder_layer_forward,
+    residual_next_norm_fusion_enabled,
 )
 
 
@@ -178,12 +179,35 @@ def _logits_forward(
         var st = sc.stages.pop(layer)
         sc.cache.s = 0
         var prefix = String("byte.logits.block") + String(layer) + ".forward"
+        var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
+            m, weights[layer].opts.norm_kind, weights[layer].opts.norm_bias
+        )
+        var fuse_next = layer + 1 < config.n_layers and residual_next_norm_fusion_enabled(
+            m, weights[layer + 1].opts.norm_kind,
+            weights[layer + 1].opts.norm_bias,
+        )
         if layer == 0:
-            llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
-                batch, length, 0, trace, prefix)
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(sc.stages[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(sc.stages[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(weights[layer + 1].eps))
+            else:
+                llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
         else:
-            llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
-                batch, length, 0, trace, prefix)
+            if fuse_next:
+                llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready,
+                    next_norm_sumsq=Optional(sc.stages[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(sc.stages[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_eps=Optional(weights[layer + 1].eps))
+            else:
+                llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
+                    batch, length, 0, trace, prefix, norm1_ready=norm1_ready)
         sc.stages.insert(layer, st^)
 
     identical_gemm_into(ctx, sc.logits, sc.stages[config.n_layers - 1].residual2, lm_w, sc.head_ws,
