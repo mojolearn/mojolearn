@@ -134,13 +134,32 @@ it does not verify a state and a sentence:
 | OWED (not run) | no committed record carries a hash for it, so every part would read OWED |
 | HELD | it is held out of the public set on a condition running it would not settle, named in `host_surface.PUBLIC_PENDING_LANES` |
 | NOT RUN | exposed, but this run did not select it, or its fixture moved past the shipped reference |
-| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/check_lane_exposure.py` fails on it |
+| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it |
 
-**None of these but VERIFIED can be read as success.** A run passes only when
-every lane in its own scope read VERIFIED, so a run made entirely of NOT
-APPLICABLE lanes exits 5 with INCOMPLETE even though every cell part it
-produced read IDENTICAL. That is deliberate: a cell that cannot fail is not a
-check.
+**Every state above except VERIFIED and NOT APPLICABLE costs the run its
+pass.** The line between them is whether anything is UNKNOWN. OWED, HELD, NOT
+RUN and UNDECLARED all mean something could be checked and was not, so the
+verdict cannot be VERIFIED while any of them is in the run's scope. NOT
+APPLICABLE means no run on this hardware could ever check it — `verify` is
+always a one-device run, since it refuses `MOJOLEARN_PAR_DEVICES`, so the
+`par-*` two-device claim is not stateable by this command on any machine.
+Gating on it would make VERIFIED unreachable for everyone, and a verdict that
+can never be positive says as little as one that is always positive. It is
+reported, not counted against you. This is the same rule the part level has
+always followed: a part declared `n/a:no-backward` has never made a run
+INCOMPLETE.
+
+**A run that checked nothing is still not a pass.** If a run's whole scope is
+NOT APPLICABLE, it exits 4 with CANNOT RUN even though every cell part it
+produced read IDENTICAL, because a one-device `par-*` column is compared
+against itself and passes whatever the code does.
+
+**The verdict carries its own scope**, so a pass cannot overstate itself:
+
+```
+RESULT: VERIFIED (verified 12 of 15 cell parts (0 divergent, 0 owed, 0 refused,
+3 n/a); 2 of 3 lanes verified; 1 not applicable to any run of this command).
+```
 
 Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:
 

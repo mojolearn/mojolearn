@@ -517,7 +517,7 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
         elif row["status"] == "UNDECLARED":
             state, reason = LANE_UNDECLARED, (
                 "nothing in host_surface.py says whether this lane is exposed, inapplicable "
-                "or owed. A lane nobody declared is the gap tools/check_lane_exposure.py exists "
+                "or owed. A lane nobody declared is the gap tools/lane_accounting.py exists "
                 "to refuse; this run cannot say anything about it")
         elif lane in by_lane:
             state, reason = ran_state, ran_reason
@@ -547,27 +547,118 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
                 verified=sorted(l for l, e in out.items() if e["state"] == LANE_VERIFIED))
 
 
-def lane_verdict_gaps(accounting, scope):
-    """`{lane: reason}` for every lane IN `scope` that is not VERIFIED.
+#: THE ONE STATE THAT IS REPORTED AND DOES NOT GATE, and the reasoning is
+#: worth keeping because the first version of this lane got it wrong
+#: (corrected 2026-09-20, same day).
+#:
+#: The first version made every non-VERIFIED state a gap, `par-*` included.
+#: That is the 0.8.6 defect in a mirror. 0.8.6 made VERIFIED too easy to
+#: reach; this made it IMPOSSIBLE to reach, for everyone, and a verdict that
+#: can never be positive carries exactly as much information as one that is
+#: always positive. Users learn to ignore both.
+#:
+#: It was not merely harsh, it was unreachable by construction. `verify` is
+#: ALWAYS a one-device run: `load_harness()` refuses a set MOJOLEARN_PAR_DEVICES
+#: before any fit. So the `par-*` claim is not unstateable on a small machine,
+#: it is unstateable by this command on ANY machine, and gating on it would
+#: have denied VERIFIED to an eight-GPU box as surely as to a laptop.
+#:
+#: TWO THINGS IN THE TREE ALREADY SAID SO, and neither is an opinion:
+#:
+#:   * `verdict()` below consults DIVERGENT, REFUSED, OWED and IDENTICAL, and
+#:     `vref.NA` appears in it ZERO times. A part declared `n/a:no-backward`
+#:     has never made a run INCOMPLETE. Gating at the LANE level on the same
+#:     concept the PART level ignores judges one run by two rules depending on
+#:     which layer the inapplicability happens to be written at.
+#:     `test_part_level_na_and_lane_level_not_applicable_agree` pins them.
+#:   * `host_surface.RECORD_EXCLUDED_PREFIXES` keeps every `par-*` lane out of
+#:     a RELEASE RECORD. Holding a user's install to a bar our own release
+#:     does not meet is a double standard, not honesty.
+#:
+#: The distinction that decides it is whether anything is UNKNOWN:
+#:
+#:   NOT APPLICABLE  cannot be checked here and no run on this hardware could
+#:                   ever check it. Nothing is unknown. Reported, not gated.
+#:   OWED            could be checked, should be checked, no reference exists
+#:                   yet. Something IS unknown. Gates.
+#:   REFUSED         should have run and did not. Gates.
+#:
+#: The abuse this opens is obvious and is closed at the source: a lane could
+#: be relabelled NOT APPLICABLE to buy a pass. So NOT APPLICABLE has exactly
+#: ONE derivation -- `host_surface.PUBLIC_EXCLUDED_PREFIXES` with a written
+#: sentence -- it cannot be reached from `PUBLIC_PENDING_LANES` at all, and
+#: `test_not_applicable_has_exactly_one_derivation` holds it there.
+LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE,)
 
-    This is the whole safety property of the statuses this lane adds: a run
-    passes only when every lane in its own scope read VERIFIED, so no new
-    state -- NOT APPLICABLE, HELD, OWED, NOT RUN, UNDECLARED -- can ever be
-    read as success. It is the lane-level restatement of the rule `verdict()`
-    learned at the cell-part level after a CPU-only install printed VERIFIED,
-    exit 0, on 44 IDENTICAL and 288 REFUSED parts and cost 0.8.6 its release.
+
+def lane_verdict_gaps(accounting, scope):
+    """`{lane: reason}` for every lane IN `scope` that is not VERIFIED and is
+    not one of `LANE_STATES_THAT_DO_NOT_GATE`.
+
+    This is the safety property of the states this lane adds: HELD, OWED, NOT
+    RUN, UNDECLARED and a divergent or refused lane all cost the run its pass,
+    because each of them leaves something UNKNOWN. It is the lane-level
+    restatement of the rule `verdict()` learned at the cell-part level after a
+    CPU-only install printed VERIFIED, exit 0, on 44 IDENTICAL and 288 REFUSED
+    parts and cost 0.8.6 its release.
+
+    NOT APPLICABLE is excluded for the reasons written over
+    `LANE_STATES_THAT_DO_NOT_GATE`. It is still counted, still printed and
+    still named in the report; it just is not evidence of anything missing.
     """
     gaps = {}
     for lane in scope:
         entry = accounting["lanes"].get(lane)
         if entry is None:
             gaps[lane] = "not accounted for by this run at all"
+        elif entry["state"] in LANE_STATES_THAT_DO_NOT_GATE:
+            continue
         elif entry["state"] != LANE_VERIFIED:
             gaps[lane] = f"{entry['state']}: {entry['reason'] or 'no reason given'}"
     return gaps
 
 
-def verdict(counts, scope_gaps=()):
+def lane_scope(accounting, scope):
+    """What the run's own scope came to, in lanes: how many were VERIFIED, how
+    many were inapplicable here, and how many are gaps.
+
+    `checked` is load-bearing and is not the same question as `gaps`. A run
+    whose whole scope is NOT APPLICABLE has no gaps -- nothing is unknown --
+    and has also CHECKED NOTHING, and `verdict()` must not call that a pass
+    either. `format_cross_check` already draws this line, printing NOTHING
+    COMPARED rather than a pass when no lane produced both answers.
+    """
+    scope = list(scope)
+    states = [(accounting["lanes"].get(l) or {}).get("state") for l in scope]
+    return dict(
+        scope=len(scope),
+        checked=sum(1 for s in states if s == LANE_VERIFIED),
+        not_applicable=sum(1 for s in states if s in LANE_STATES_THAT_DO_NOT_GATE),
+        gaps=lane_verdict_gaps(accounting, scope))
+
+
+def lane_scope_clause(accounting, scope):
+    """The scope, as a clause that rides with the verdict.
+
+    THE SKIPPED COUNT RIDES WITH THE VERDICT is already the rule one command
+    over (`format_cross_check`, which prints `across 5 of 24 lanes (19
+    SKIPPED)` beside its pass). A confident headline over a run that verified
+    186 of 256 lanes is a pass whose scope is much smaller than it looks, and
+    the fix for that is to say the scope on the same line, not to refuse to
+    pass at all.
+    """
+    s = lane_scope(accounting, scope)
+    if not s["scope"]:
+        return ""
+    parts = [f"{s['checked']} of {s['scope']} lanes verified"]
+    if s["not_applicable"]:
+        parts.append(f"{s['not_applicable']} not applicable to any run of this command")
+    if s["gaps"]:
+        parts.append(f"{len(s['gaps'])} not checked")
+    return "; ".join(parts)
+
+
+def verdict(counts, scope_gaps=(), lanes_checked=None):
     """(exit code, headline) from the state counts of every judged part.
 
     A REFUSED PART DID NOT RUN, so it is never evidence of success, and the
@@ -585,6 +676,16 @@ def verdict(counts, scope_gaps=()):
         return EXIT_MISMATCH, "MISMATCH"
     if counts[vref.REFUSED]:
         return EXIT_CANNOT_RUN, "INCOMPLETE"
+    # NOTHING WAS CHECKED IS NOT A PASS, and it is a different thing from a
+    # gap (lane/verifier-full-exposure, 2026-09-20). A run whose whole scope
+    # is NOT APPLICABLE leaves nothing unknown, so it has no gaps, and it also
+    # established nothing: every cell part it produced can read IDENTICAL,
+    # because a one-device `par-*` column is compared against itself. Passing
+    # on that would be a verification that cannot fail, which is the thing
+    # this whole file exists to refuse. `lanes_checked` is None for callers
+    # that judge in cell parts only, and those are unchanged.
+    if lanes_checked == 0:
+        return EXIT_CANNOT_RUN, "CANNOT RUN"
     if counts[vref.OWED] or scope_gaps:
         return EXIT_NO_REFERENCE, "INCOMPLETE" if counts[vref.IDENTICAL] else "NO REFERENCE"
     if counts[vref.IDENTICAL]:
@@ -2936,12 +3037,19 @@ def format_lane_accounting(accounting, examples=6):
     for (state, reason), names in sorted(by_state.items(), key=lambda kv: (-len(kv[1]), kv[0][0])):
         shown = ", ".join(sorted(names)[:examples])
         more = f", ... {len(names) - examples} more" if len(names) > examples else ""
-        lines.append(f"  {state} ({len(names)}): {shown}{more}")
+        gates = "" if state in LANE_STATES_THAT_DO_NOT_GATE else "  [not checked]"
+        lines.append(f"  {state} ({len(names)}){gates}: {shown}{more}")
         for part in str(reason or "no reason given").splitlines():
             lines.append(f"      {part}")
+    if any(s in LANE_STATES_THAT_DO_NOT_GATE for s, _ in by_state):
+        lines.append("  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its "
+                     "pass; it is reported because an absence a user cannot see is worse than a "
+                     "gap they can. Every other state above does cost it.")
     gaps = accounting.get("unverified_in_scope") or {}
+    summary = accounting.get("scope_summary") or {}
     lines.append(f"  this run's scope is {len(accounting.get('verdict_scope', []))} lanes, "
-                 f"{len(gaps)} of them not VERIFIED"
+                 f"{summary.get('checked', 0)} VERIFIED, "
+                 f"{summary.get('not_applicable', 0)} not applicable, {len(gaps)} not checked"
                  + ("; the verdict cannot be VERIFIED" if gaps else ""))
     lines.append("")
     return lines
@@ -3258,13 +3366,23 @@ def cmd_verify_all(args):
         verdict_scope = list(lanes)            # --quick is a declared sample of the families
     else:
         verdict_scope = harness_lanes          # --all means all 256, not the 186 that ran
-    lane_gaps = lane_verdict_gaps(accounting, verdict_scope)
+    scope_summary = lane_scope(accounting, verdict_scope)
+    lane_gaps = scope_summary["gaps"]
     for name, why in lane_gaps.items():
         scope_gaps.setdefault(name, why)
     accounting["verdict_scope"] = sorted(verdict_scope)
     accounting["unverified_in_scope"] = lane_gaps
-    code, headline = verdict(counts, scope_gaps)
+    accounting["scope_summary"] = {k: v for k, v in scope_summary.items() if k != "gaps"}
+    code, headline = verdict(counts, scope_gaps,
+                             lanes_checked=scope_summary["checked"] if verdict_scope else None)
+    # THE SCOPE RIDES WITH THE VERDICT, as it already does in
+    # `format_cross_check`. VERIFIED over 186 of 256 lanes is a real pass and
+    # must stay reachable, but it must say on the same line how much of the
+    # harness it covered and how much it could not.
     detail = detail_line(counts)
+    clause = lane_scope_clause(accounting, verdict_scope)
+    if clause:
+        detail = f"{detail}; {clause}"
     harness_sha = vref.sha256_file(harness_file)
     report = dict(
         format="mojolearn.verify-all-report.v1", verdict=headline, exit=code, detail=detail,

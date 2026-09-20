@@ -1,0 +1,6 @@
+lane=verifier-exposure
+commit=be8fdb1ae1094d09fed0a52082e18182331fd402
+dirty_tracked=5
+worktree=/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a5043344b9327bf9b
+source=3100	19377345	5c37876a8fc5cd30bf16c6f515e1d5230ff4ade74e5baa437a0c68ec9ffcd3d2
+box_clock_minus_mac=0

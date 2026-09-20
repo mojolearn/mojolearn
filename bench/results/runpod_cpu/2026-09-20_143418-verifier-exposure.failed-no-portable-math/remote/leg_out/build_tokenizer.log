@@ -1,0 +1,127 @@
+tokenizer/impl/unicode_table_generated.mojo: written (unicodedata 16.0.0, sha256 ad4e106533e0f7ef)
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:269:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=text.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:284:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[k] = Int32(ids[count - 1 - k])
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:286:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[k] = Int32(ids[k])
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:339:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+               ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:339:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+                                    ~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:344:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                + String(Int(offs[0]))
+                             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:346:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                + String(Int(offs[n_docs]))
+                             ~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:349:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if Int(offs[k + 1]) < Int(offs[k]):
+                   ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:349:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if Int(offs[k + 1]) < Int(offs[k]):
+                                      ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:370:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var a = Int(offs[k])
+                            ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:371:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                var m = Int(offs[k + 1]) - a
+                            ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:376:25: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+                        memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
+                        ^~~~~~
+                        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:394:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var a = Int(offs[k])
+                        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:420:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cnt[k] = Int64(counts[k])
+            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:424:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                dst[j] = Int32(all_ids[j])
+                ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:453:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ids.append(Int(src[k]))
+                           ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:468:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:510:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+               ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:510:41: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(offs[0]) != 0 or Int(offs[n_docs]) != n:
+                                    ~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:515:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                + String(Int(offs[0]))
+                             ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:517:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                + String(Int(offs[n_docs]))
+                             ~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:520:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if Int(offs[k + 1]) < Int(offs[k]):
+                   ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:520:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if Int(offs[k + 1]) < Int(offs[k]):
+                                      ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:526:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var a = Int(offs[k])
+                        ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:527:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var m = Int(offs[k + 1]) - a
+                        ~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:530:17: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+                memcpy(
+                ^~~~~~
+                unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:588:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            arena[at + i] = v.arena[src + i]
+            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:590:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        lengths[id] = Int64(m)
+        ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:595:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            left[k] = Int64(v.merge_left[k])
+            ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_tokenizer_host.mojo:596:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            right[k] = Int64(v.merge_right[k])
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+built python/mojolearn/host/_mojolearn_tokenizer_host.so
+BINCACHE miss+built-uploaded bindings/build_tokenizer_host.sh key=9a3ed7fa3b0225f7 seconds=15.0

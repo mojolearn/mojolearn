@@ -1,0 +1,5 @@
+pod='jod7khp3wdkn66'
+target='-p 12448 root@154.54.102.19'
+armed_utc='2026-09-20T14:35:29Z'
+deadline_epoch=1789919429
+minutes=75

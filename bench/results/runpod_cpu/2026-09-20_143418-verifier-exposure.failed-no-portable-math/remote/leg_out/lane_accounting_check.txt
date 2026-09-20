@@ -1,0 +1,3 @@
+256 registered lanes: 255 carry cells in the shipped table, 15 are declared in PUBLIC_PENDING_LANES (14 in both), 0 in neither
+harness cross-check: ran
+OK: 0 problems

@@ -1,0 +1,79 @@
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:212:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = c[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:373:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = c[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:411:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[i] = c[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:439:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            qp[i] = qr.q[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:441:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ep[r] = qr.e[r]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:470:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            yp[i] = y[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:492:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = bits[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:513:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            dp[i] = x[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_linalg_host.mojo:47:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_linalg_host.mojo:47:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_linalg_host.mojo:47:
+./bindings/hostptr.mojo:92:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_linalg_host.mojo:47:
+./bindings/hostptr.mojo:102:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:205:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:276:16: warning: assignment to 'info' was never used; assign to '_' instead?
+    var info = 0
+               ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:362:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:365:30: warning: assignment to 'c' was never used; assign to '_' instead?
+        var c = List[Float32]()
+                             ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:403:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:434:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+/root/mojolearn/bindings/_mojolearn_linalg_host.mojo:464:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/host/_mojolearn_linalg_host.so
+BINCACHE miss+built-uploaded bindings/build_linalg_host.sh key=dfad8629a55390d3 seconds=13.3

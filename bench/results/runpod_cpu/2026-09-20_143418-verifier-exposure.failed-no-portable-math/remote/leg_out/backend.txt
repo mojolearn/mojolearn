@@ -1,0 +1,27 @@
+Traceback (most recent call last):
+  File "<string>", line 1, in <module>
+    import mojolearn, mojolearn._backend as b; print('vendor', b.vendor(), 'mode', b.numeric_mode())
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/__init__.py", line 152, in <module>
+    from .neural_network import SmallMLPTrainer
+  File "/root/mojolearn/python/mojolearn/neural_network.py", line 3, in <module>
+    from ._mlp_impl import SmallMLPTrainer
+  File "/root/mojolearn/python/mojolearn/_mlp_impl.py", line 29, in <module>
+    from . import _backend, _linalg_impl, _training_impl
+  File "/root/mojolearn/python/mojolearn/_training_impl.py", line 1762, in <module>
+    class Generator(object):
+    ...<127 lines>...
+            return dx.reshape(dy.shape)
+  File "/root/mojolearn/python/mojolearn/_training_impl.py", line 1844, in Generator
+    def kaiming_uniform(self, shape, fan_in, a=math.sqrt(5.0)):
+                                               ~~~~~~~~~^^^^^
+  File "/root/mojolearn/python/mojolearn/_portable_math.py", line 65, in sqrt
+    return _native("sqrt", x)
+  File "/root/mojolearn/python/mojolearn/_portable_math.py", line 36, in _native
+    lib = ctypes.CDLL(str(path))
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 433, in __init__
+    self._handle = self._load_library(name, mode, handle, winmode)
+                   ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 475, in _load_library
+    return _dlopen(name, mode)
+OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory

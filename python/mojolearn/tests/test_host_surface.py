@@ -1109,49 +1109,6 @@ def test_no_fixture_is_shrunk_below_its_declared_floor():
     assert bad == [], "fixture floor violations:\n  " + "\n  ".join(bad)
 
 
-def _lane_exposure():
-    """`tools/check_lane_exposure.py` loaded by path, like `_fixture_floors`
-    above, so it runs on a box with nothing built."""
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location(
-        "check_lane_exposure", ROOT / "tools" / "check_lane_exposure.py")
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
-
-
-def test_every_harness_lane_is_exposed_or_declared_and_no_public_algorithm_is_laneless():
-    """AN ABSENCE HAS NO FAILURE MODE OF ITS OWN (lane/verifier-full-exposure,
-    2026-09-20).
-
-    The harness defines 256 lanes and the shipped verifier exposed 186. The
-    other 70 were not reported as anything: 55 left by prefix and 15 sat in
-    `PUBLIC_PENDING_LANES`, and neither route printed a word, so `186 lanes`
-    read exactly like all of them. Nothing could catch that by looking at the
-    lanes, because the defect was that they were not there. It is caught by
-    COUNTING, in both directions: every harness lane must come back from
-    `host_surface.lane_exposure()` as EXPOSED or as a hold with a written
-    reason, and every public algorithm must have a lane or a declaration of
-    what is owed. `tools/check_lane_exposure.py` is that count; this is the
-    gate half of it, run beside the CPU surface tests it belongs with."""
-    bad = _lane_exposure().check()
-    assert bad == [], "lane exposure problems:\n  " + "\n  ".join(bad)
-
-
-def test_the_lane_exposure_check_refuses_every_way_a_lane_can_vanish(capsys):
-    """A CHECK THAT HAS NEVER BEEN WATCHED TO FAIL IS NOT A CHECK, and this
-    one is a count, which is the kind that most easily passes for the wrong
-    reason: a reader who deleted every lane from the harness would see it
-    print OK. `--self-test` perturbs the real manifest seven ways -- a prefix
-    excluding 55 lanes with no sentence anywhere, a lane nothing declares, a
-    hold with a blank reason, a declaration for a lane that does not exist, a
-    public lane the harness does not define, an eighth laneless public
-    algorithm, and an excuse for one that has since gained a lane -- and
-    requires each to be REFUSED by the message that names it."""
-    assert _lane_exposure().self_test() is True, capsys.readouterr().out
-
-
 def test_the_fixture_floor_check_refuses_a_violating_shrink(capsys):
     """A CHECK THAT HAS NOT BEEN SEEN TO REFUSE ANYTHING is the prose floor it
     replaces. `--self-test` mutates the real harness source five ways (a cut
@@ -1198,7 +1155,23 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
     This is the check that owns the gap between them. It is deliberately the
     weakest possible statement -- accounted for AT ALL, not accounted for
     WELL -- because the strong statements already have tests and a lane they
-    never see cannot fail one."""
+    never see cannot fail one.
+
+    IT COUNTS TWO MORE WAYS SINCE 2026-09-20 (lane/verifier-full-exposure),
+    folded in from a second gate that lane wrote while this one was in flight.
+    Two files that both answer "is this lane accounted for" can disagree, and
+    then a reader has to know which is authoritative, which is the shape of
+    the gap they both exist to close.
+
+      * EVERY LANE IS EXPOSED OR SAYS WHY NOT. The harness defines 256 lanes
+        and the shipped verifier exposes 186; the other 70 were reported as
+        nothing, so `186 lanes` read like all of them. Fifty-five of them
+        leave by PREFIX, and a prefix is not a list, so the invariant above
+        cannot see them: a `par-` lane with a table cell satisfies it while
+        still vanishing from the command with no sentence anywhere.
+      * NO PUBLIC ALGORITHM IS SILENTLY LANELESS, which is the same count run
+        the other way. An algorithm with no lane at all cannot be MISSING a
+        cell, so no lane census can see it."""
     mod = _lane_accounting()
     bad = mod.check()
     assert bad == [], "lanes that no mechanism accounts for:\n  " + "\n  ".join(bad)
@@ -1217,6 +1190,13 @@ def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
     It also asserts the clean direction first: a lane with no table cells
     that IS declared pending reads clean, which is the claim that makes
     declaring a real alternative to promoting rather than a second-class
-    one."""
+    one.
+
+    SEVEN MORE SINCE 2026-09-20 (lane/verifier-full-exposure): a prefix that
+    excludes 55 lanes and says why nowhere, a reason for a prefix nothing
+    excludes, a lane the manifest never heard of, a hold with a blank reason,
+    an exposure map that loses a lane, an undeclared laneless public
+    algorithm, and an excuse for one that has since gained a lane. Fifteen in
+    all, each refused by the message that names it."""
     mod = _lane_accounting()
     assert mod.self_test(verbose=True) is True, capsys.readouterr().out

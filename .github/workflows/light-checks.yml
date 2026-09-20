@@ -40,14 +40,6 @@ jobs:
         run: |
           python3 tools/fixture_floors.py --self-test
           python3 tools/fixture_floors.py
-      - name: Every lane is in the shipped table or declared pending
-        # Three lanes added since v0.8.8 were in NEITHER on 2026-09-20. Each
-        # mechanism refused them for a correct reason and handed them to the
-        # other, so nothing failed and nothing counted. --self-test runs
-        # first, for the same reason it does above.
-        run: |
-          python3 tools/lane_accounting.py --self-test
-          python3 tools/lane_accounting.py --check
       - name: Every workflow parses, and only this one starts by itself
         run: |
           python3 -m venv /tmp/yaml-venv
@@ -69,12 +61,19 @@ jobs:
         run: |
           /tmp/yaml-venv/bin/pip install --quiet pytest==8.3.5 numpy==2.2.6
           /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects
-      - name: No lane is silently absent and no public algorithm is silently laneless
-        # An absence has no failure mode of its own. The shipped verifier ran
-        # 186 of the harness's 256 lanes and reported the other 70 as nothing
-        # at all, so `186 lanes` read like all of them. This is the count that
-        # catches it, in both directions. --self-test runs first, because a
-        # count that cannot refuse anything would print OK on an empty tree.
+      - name: Every lane is accounted for, and no public algorithm is laneless
+        # Three lanes added since v0.8.8 were in NEITHER the shipped table nor
+        # PUBLIC_PENDING_LANES on 2026-09-20. Each mechanism refused them for
+        # a correct reason and handed them to the other, so nothing failed and
+        # nothing counted. The same file also counts the 70 lanes the shipped
+        # verifier does not run (55 of them by prefix, which no list can see)
+        # and the public algorithms with no lane at all.
+        #
+        # IT RUNS ON THE VENV PYTHON, NOT THE SYSTEM ONE. Two of its
+        # cross-checks import the harness, which needs numpy: under a bare
+        # python3 they report themselves SKIPPED and the step still passes,
+        # which is a check quietly not running. --self-test runs first, for
+        # the same reason it does above.
         run: |
-          /tmp/yaml-venv/bin/python tools/check_lane_exposure.py --self-test
-          /tmp/yaml-venv/bin/python tools/check_lane_exposure.py
+          /tmp/yaml-venv/bin/python tools/lane_accounting.py --self-test
+          /tmp/yaml-venv/bin/python tools/lane_accounting.py --check

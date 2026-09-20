@@ -2775,7 +2775,7 @@ PUBLIC_EXCLUDED_PREFIX_REASONS = {
 #: four are the shapes an absence takes, spelled out so a reader cannot mistake
 #: one for coverage. `UNDECLARED` exists so that the default for a lane nobody
 #: has thought about is a REFUSAL, not a silent omission: it is what the gate
-#: `tools/check_lane_exposure.py` fails on.
+#: `tools/lane_accounting.py` fails on.
 LANE_EXPOSED = "EXPOSED"
 LANE_NOT_APPLICABLE = "NOT APPLICABLE"
 LANE_OWED = "OWED"
@@ -3222,7 +3222,7 @@ def lane_exposure(lanes):
                       that running it would not settle
       UNDECLARED      nothing in this manifest says anything about it. This is
                       the failure state, not a category: `tools/
-                      check_lane_exposure.py` refuses it.
+                      lane_accounting.py` refuses it.
 
     It is DERIVED from the same three tables `public_reference_lanes()` is
     derived from, so a lane cannot be exposed here and pending there.
