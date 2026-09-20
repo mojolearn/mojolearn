@@ -1,0 +1,65 @@
+started=2026-09-20T16:01:56Z
+commit=4caa892a9bf88792573fc3a7f2fa2813accb2621
+visible_gpus=2
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-04a9b693-f2e9-fde9-46d6-27cd336fb5de)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-18e68c28-8132-04f5-ccb5-2f083529d617)
+gpu_archs=sm_89
+portable_math_exit=0
+build_failed=none
+elapsed_after_build=743
+import_check=IMPORT_OK cuda 0.8.8
+par_self_test_exit=0  (MUST BE 0: the self test runs an arm that is supposed to fail)
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (default): 1 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  base     train=DIVERGENT infer=DIVERGENT model=DIVERGENT batch=DIVERGENT   3.52s
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+SELF-TEST ARM: the two-device column was fed an input whose first column was
+moved up by one ULP. Every compared part MUST read DIVERGENT. A part that
+reads IDENTICAL here means this comparison cannot fail and is worthless.
+
+  par-arima                  base     train     DIVERGENT   one=377790cb117abb61  two=28a25430973fa636
+  par-arima                  base     infer     DIVERGENT   one=9f76be0396a666ca  two=0957a2b49d4ce602
+  par-arima                  base     model     DIVERGENT   one=30ba4efd0914b6c6  two=eb2aee044112ebd7
+  par-arima                  base     batch     DIVERGENT   one=cef3c859431cbbaf  two=110cee7462be27eb
+Device witness: 1 pool(s), 2 worker(s), placement=physical.
+
+RESULT: THE TWO COLUMNS DISAGREE. DIVERGENT=4.
+A DIVERGENT part means sharding the work changed the bits. A ONE-COLUMN part
+means the work refused on exactly one of the two columns, which is a defect
+only a two-device run can see. Both are above, with the hashes and the error.
+SELF-TEST PASSED: the perturbed two-device column read DIVERGENT on 4 compared part(s). This comparison can fail.
+verify_par_nn_exit=0  (1 with batch ONE-COLUMN reproduces it; 0 means the regression is GONE and the item closes)
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (default): 1 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-queries-nn             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.21s
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-queries-nn             base     train     IDENTICAL   one=6869ae45e01fcb7a  two=6869ae45e01fcb7a
+  par-queries-nn             base     infer     IDENTICAL   one=da53642fe53493ad  two=da53642fe53493ad
+  par-queries-nn             base     model     IDENTICAL   one=2262556d652b5187  two=2262556d652b5187
+  par-queries-nn             base     batch     IDENTICAL   one=da944e45126bd8e0  two=da944e45126bd8e0
+Device witness: 4 pool(s), 8 worker(s), placement=physical.
+
+RESULT: THE TWO COLUMNS AGREE on 4 compared cell parts across 1 lane(s)
+and 1 fixture(s), IDENTICAL=4, N/A=1.
+Sharding this work across the devices did not move a bit.
+ib_one_exit=0 ib_two_exit=0 ib_diff_exit=0
+summary: IDENTICAL=9
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+elapsed_total=933
+finished=2026-09-20T16:17:29Z
