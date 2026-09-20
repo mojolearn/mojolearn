@@ -46,7 +46,7 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 269 | 4 |
+| gpu column (any class) | 270 | 3 |
 | gpu column on all three classes | 235 | 38 |
 | cpu verifier declared | 239 | 34 |
 | sabotage seen to move a build | 230 | 43 |
@@ -399,7 +399,7 @@ A blank cell means no lane of this algorithm has that kind.
 | gbdt-query-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_gbdt-pair-logit/confirm-3b1b2d6f6/cpu-x86-64-runpod.sabotage.json` | part | yes |
 | gbdt-ranking-defaults | apple | training | declared | - | part | NO |
 | gbdt-rmse | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-rmse/gbdt-rmse/cpu-sabotage.json` | part | yes |
-| gbdt-stochastic-arms | - | training | declared | - | part | NO |
+| gbdt-stochastic-arms | apple | training | declared | - | part | NO |
 | gbdt-symmetric | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-symmetric/gbdt-symmetric/cpu-sabotage.json` | part | yes |
 | gbdt-symmetric-eval | apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_gbdt-symmetric-eval/cpu-apple-m4-sabotage.json (clean partner at another commit)` | part | yes |
 | gbdt-tensor-ctr-tables | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/x86-runpod/cpu-sab.json` | part | yes |
@@ -649,15 +649,15 @@ been advertising 13 gaps that cannot be closed. A $3.34 two-device
 MI300X leg was bought on 2026-09-19 before this was noticed; what it
 proved is real and is reported under the driver heading below, not here.
 
-**No GPU column at all: 1**
+**No GPU column at all: 0**
 
-> gbdt-stochastic-arms
+> none
 
 > (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 12**
+**GPU column on fewer than three classes: 13**
 
-> gbdt-multiclass-defaults, gbdt-ranking-defaults, gbdt-symmetric-eval, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, mamba1-decode-session, qn-absolute, qn-squared, spectral-embedding, transformer-decode-session
+> gbdt-multiclass-defaults, gbdt-ranking-defaults, gbdt-stochastic-arms, gbdt-symmetric-eval, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, mamba1-decode-session, qn-absolute, qn-squared, spectral-embedding, transformer-decode-session
 
 > (plus 22 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
