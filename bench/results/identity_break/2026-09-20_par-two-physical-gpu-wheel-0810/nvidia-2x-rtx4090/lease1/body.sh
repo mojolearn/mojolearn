@@ -1,6 +1,6 @@
 #!/bin/sh
 # MOJOLEARN_GEMM_LEG_EXTRA body: `python -m mojolearn verify --par` on TWO
-# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==@VERSION@.
+# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==0.8.10.
 #
 # The runner (tools/gemm_remote_leg.sh, gemm payload) ships a source archive
 # and runs its own gates first. NOTHING BELOW USES THAT SOURCE TREE. The
@@ -9,23 +9,23 @@
 # body refuses to measure unless `mojolearn.__file__` resolves inside the venv.
 #
 # Placeholders substituted per lease by make_body.sh (RunPod passes no env):
-#   @VERSION@   the wheel version
-#   @SLUG@      this lease's distinct output slug
-#   @FIXTURES@  space separated fixtures this lease runs, in order
-#   @LANES@     empty for every par-* lane, or a comma separated --lanes value
-#   @QUICK@     1 to run `verify --par quick` before the fixtures, else 0
-#   @BUDGET@    seconds this body may spend, from its own start
+#   0.8.10   the wheel version
+#   nvidia-lease1      this lease's distinct output slug
+#   base ties hashed wide denormal denormal_ftz dupes odd negative  space separated fixtures this lease runs, in order
+#        empty for every par-* lane, or a comma separated --lanes value
+#   1     1 to run `verify --par quick` before the fixtures, else 0
+#   2500    seconds this body may spend, from its own start
 #
 # Every cell is fitted ONCE per column: no --repeats anywhere. Every command
 # is bounded with timeout(1). set -u and NOT set -e: a red verdict is a
 # result and its log has to come home.
 set -u
-VERSION="@VERSION@"
-SLUG="@SLUG@"
-FIXTURES="@FIXTURES@"
-LANES="@LANES@"
-QUICK="@QUICK@"
-BUDGET="@BUDGET@"
+VERSION="0.8.10"
+SLUG="nvidia-lease1"
+FIXTURES="base ties hashed wide denormal denormal_ftz dupes odd negative"
+LANES=""
+QUICK="1"
+BUDGET="2500"
 
 OUT="/root/gemm_leg_out/$SLUG"
 mkdir -p "$OUT"
@@ -132,71 +132,6 @@ case "$(cat "$OUT/import_where.txt")" in
     *) say "REFUSED: import mojolearn did not resolve to $VERSION inside $VENV. Nothing was measured."; exit 13 ;;
 esac
 run env_report 120 "$P" -m mojolearn env --json
-
-# ---- LEASE 1 FINDING (pod n55vv7n35fizci): with the venv NOT activated, every
-# `verify --par` command ended CANNOT RUN (exit 4) because the child that
-# `_gpu_witness.require_device_count` spawns with `sys.executable` was
-# /usr/bin/python3, which has no mojolearn. This diagnostic prints
-# sys.executable at each step, first exactly as lease 1 ran (venv python by
-# full path, PATH untouched), then with the venv ACTIVATED the way its own
-# bin/activate does it. The measurement below runs ACTIVATED.
-cat > "$RUN/where_is_python.py" <<'PYDIAG'
-import os, shutil, sys
-print("argv0_executable      ", sys.executable)
-print("base_executable       ", getattr(sys, "_base_executable", None))
-print("prefix / base_prefix  ", sys.prefix, "/", sys.base_prefix)
-print("which python3 on PATH ", shutil.which("python3"))
-print("VIRTUAL_ENV           ", os.environ.get("VIRTUAL_ENV"))
-import mojolearn
-print("after import mojolearn", sys.executable)
-from mojolearn import _backend
-print("vendor                ", _backend.vendor())
-print("after vendor()        ", sys.executable)
-from mojolearn._verify_all import load_harness
-load_harness(par_axis=True)
-print("after load_harness    ", sys.executable)
-from mojolearn._gpu_witness import require_device_count
-try:
-    require_device_count(_backend.vendor(), 2)
-    print("require_device_count(2): ok")
-except Exception as exc:
-    print("require_device_count(2): REFUSED:", exc)
-print("at exit               ", sys.executable)
-PYDIAG
-run python_where_unactivated 300 "$P" "$RUN/where_is_python.py"
-. "$VENV/bin/activate"
-P=python
-say "activated: VIRTUAL_ENV=$VIRTUAL_ENV python=$(command -v python)"
-run python_where_activated 300 "$P" "$RUN/where_is_python.py"
-"$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_activated.txt" 2>&1
-say "import_where_activated=$(cat "$OUT/import_where_activated.txt")"
-case "$(cat "$OUT/import_where_activated.txt")" in
-    "$VERSION $VENV/"*) : ;;
-    *) say "REFUSED: activated import did not resolve to $VERSION inside $VENV. Nothing was measured."; exit 13 ;;
-esac
-
-# ---- FALLBACK, used only if the ACTIVATED venv still cannot count devices:
-# install the SAME hashed wheel file into the system interpreter (no venv) and
-# measure there. Which interpreter measured is recorded in gate.txt.
-INSTALL_MODE=venv-activated
-if ! grep -q 'require_device_count(2): ok' "$OUT/python_where_activated.out"; then
-    say "ACTIVATED VENV STILL CANNOT COUNT DEVICES; falling back to the system interpreter $PY"
-    deactivate 2>/dev/null || true
-    run pip_install_system 600 "$PY" -m pip install --disable-pip-version-check numpy "$WH"/mojolearn-"$VERSION"-*.whl
-    say "pip_install_system_exit=$?"
-    P="$PY"
-    INSTALL_MODE=system-interpreter
-    "$P" -m pip show mojolearn > "$OUT/pip_show_system.txt" 2>&1
-    run python_where_system 300 "$P" "$RUN/where_is_python.py"
-    "$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_system.txt" 2>&1
-    say "import_where_system=$(cat "$OUT/import_where_system.txt")"
-    case "$(cat "$OUT/import_where_system.txt")" in
-        "$VERSION /root/mojolearn"*|"$VERSION $RUN"*) say "REFUSED: system import resolved into the checkout."; exit 13 ;;
-        "$VERSION "*) : ;;
-        *) say "REFUSED: system import is not $VERSION."; exit 13 ;;
-    esac
-fi
-say "install_mode=$INSTALL_MODE"
 
 # ---- (1) THE SELF TEST, FIRST. It must exit 0: its arm is supposed to fail.
 run par_self_test 900 "$P" -m mojolearn verify --par --par-self-test

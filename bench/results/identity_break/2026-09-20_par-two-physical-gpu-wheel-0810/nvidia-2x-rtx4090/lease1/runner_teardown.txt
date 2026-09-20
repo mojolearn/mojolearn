@@ -1,0 +1,6 @@
+pod=n55vv7n35fizci
+armed=1
+terminated=1
+deadman_pid=47176
+exit=0
+at=2026-09-20T22:40:10Z
