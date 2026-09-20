@@ -1,0 +1,22 @@
+{
+  "guard": "amd-root-serial-v1",
+  "reason": null,
+  "cpu_affinity": "0,1",
+  "thread_limit": 2,
+  "device_sysfs": "/sys/devices/pci0000:80/0000:80:00.0/0000:81:00.0/0000:82:00.0/0000:83:00.0",
+  "vram_total_bytes": 274542362624,
+  "telemetry": {
+    "initial_vram_bytes": 299687936,
+    "peak_vram_bytes": 4428996608,
+    "last_vram_bytes": 3686330368,
+    "initial_rss_bytes": 7536640,
+    "peak_rss_bytes": 7019106304,
+    "last_rss_bytes": 5193285632,
+    "initial_host_available_bytes": 162374393856,
+    "last_host_available_bytes": 159240970240,
+    "samples": 322,
+    "last_elapsed_seconds": 322.589739529,
+    "crossing_sample": null
+  },
+  "returncode": 0
+}
