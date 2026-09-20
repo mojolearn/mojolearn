@@ -489,8 +489,13 @@ def host_model(path):
     """The host model for a saved classical file, by its `format` and
     `estimator` members. Any other format is refused with the tag it
     carries."""
-    arrays = _serialize.read_npz(path, CLASSICAL_FORMATS)
-    fmt = _serialize.scalar_str(arrays, "format")
+    arrays = _serialize.peek_npz(path, ("format", "estimator"))
+    fmt = _serialize.scalar_str(arrays, "format") if "format" in arrays else ""
+    if fmt not in CLASSICAL_FORMATS:
+        # Keep the former full-decode error precedence for malformed files;
+        # only accepted archives take the routing fast path.
+        _serialize.read_npz(path, CLASSICAL_FORMATS)
+        raise AssertionError("read_npz accepted a format rejected by the router")
     estimator = _serialize.scalar_str(arrays, "estimator")
     cls = _FORMATS[fmt].get(estimator)
     if cls is None:

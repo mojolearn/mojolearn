@@ -331,7 +331,15 @@ def host_model(path):
     from ._gbdt_host import GBDT_FORMAT, HostGBDT
     accepted = (tuple(_FORMATS) + tuple(f + _GROVES_SUFFIX for f in _FORMATS)
                 + (GBDT_FORMAT,) + CLASSICAL_FORMATS)
-    fmt = _serialize.scalar_str(_serialize.read_npz(path, accepted), 'format')
+    routing = _serialize.peek_npz(path, ('format',))
+    fmt = _serialize.scalar_str(routing, 'format') if 'format' in routing else ''
+    if fmt not in accepted:
+        # Preserve the old malformed-archive error precedence: before the
+        # routing peek, every member was decoded before the format refusal.
+        # The full reader raises either that earlier member error or the
+        # same format mismatch; this branch cannot return successfully.
+        _serialize.read_npz(path, accepted)
+        raise AssertionError("read_npz accepted a format rejected by the router")
     if fmt == GBDT_FORMAT:
         return HostGBDT.from_file(path)
     if fmt in CLASSICAL_FORMATS:

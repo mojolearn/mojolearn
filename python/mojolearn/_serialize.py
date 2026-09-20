@@ -309,6 +309,23 @@ def read_npz(path, expected_format):
     return out
 
 
+def peek_npz(path, names):
+    """Decode only named members for loader routing, not model loading.
+
+    The selected loader must still call :func:`read_npz`, which validates and
+    decodes every member.  This helper only avoids materializing model-sized
+    tensors while ``host_model`` decides which full loader owns the archive.
+    Duplicate member names retain ``read_npz``'s last-entry-wins behavior.
+    """
+    wanted = set(names)
+    out = {}
+    with zipfile.ZipFile(path, "r") as zf:
+        for member in zf.namelist():
+            if member.endswith(".npy") and member[:-4] in wanted:
+                out[member[:-4]] = decode_npy(zf.read(member))
+    return out
+
+
 def _first(value, name):
     """The first element of a member in flat order, as the old
     `np.asarray(v).reshape(-1)[0]` gave it."""
