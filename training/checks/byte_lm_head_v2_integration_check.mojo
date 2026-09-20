@@ -37,7 +37,7 @@ def run(ctx: DeviceContext, config: ByteConfig) raises -> Tuple[Float32, List[Fl
     var tr = ByteTrainer(ctx, p, z, z.copy(), flags, 0, opt, config)
     var head_cells = len(tr.buffers.logits) + len(tr.buffers.ce_expo) + len(tr.buffers.ce_ones) + len(tr.buffers.ce_ws) + len(tr.buffers.head_ws) + len(tr.buffers.head_bwd_ws)
     if config.chunked_lm_head_v2:
-        if len(tr.buffers.logits) != 1 or len(tr.buffers.ce_expo) != 1 or len(tr.buffers.ce_dlogits) != 1:
+        if len(tr.buffers.logits) != config.batch * config.length * min(config.vocab_size, 256) or len(tr.buffers.ce_expo) != 1 or len(tr.buffers.ce_dlogits) != 1:
             raise Error("chunked LM-head v2 retained a full V1 tensor")
     var start = Int(perf_counter_ns())
     var result = byte_train_step_resident(ctx, tr, ids(config))
@@ -62,7 +62,7 @@ def main() raises:
         raise Error("chunked LM-head v2 loss quality differs from V1")
     print("v1_ns", base[2], "v2_ns", a[2])
     print("v1_logits_cells", v1.batch * v1.length * v1.vocab_size,
-          "v2_logits_cells", 1)
+          "v2_logits_cells", v2.batch * v2.length * min(v2.vocab_size, 256))
     print("v1_head_cells", base[3], "v2_head_cells", a[3])
     var large1 = ByteConfig(1, 64, 64, 8, 2, 8, 128, 1, 8192, False)
     var large2 = ByteConfig(1, 64, 64, 8, 2, 8, 128, 1, 8192, True)

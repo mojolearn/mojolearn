@@ -83,12 +83,14 @@ bytes. It never allocates full logits or dlogits.
 forward and backward inside `ByteTrainer`. The selector is included in the
 checkpoint/profile string. The default is `False`.
 
-When selected, the full logits, CE exponential/dlogit storage, CE ones and
-workspace, and LM-head forward/backward GEMM workspaces are replaced by
-one-cell placeholders. Row maximum, denominator, and row-loss arrays remain.
-The integration never invokes a V1 kernel with those placeholders.
+When selected, full logits become one reusable `[rows,256]` chunk. CE
+exponential/dlogit storage and CE ones/workspace become one-cell placeholders;
+the LM-head workspace is sized only for that chunk. Row maximum, denominator,
+and row-loss arrays remain. The integration never invokes a V1 kernel with
+those placeholders.
 
 The V2 route is a memory/maximum-shape option, not a speed default. Local Metal
-evidence at B=1, L=64, DM=64, V=8192 retained 6 rather than 1,323,009
-head-path cells, but took 241.529 ms versus V1's 37.217 ms. See
+evidence at B=1, L=64, DM=64, V=8192 retained 16,389 rather than 1,323,009
+head-path cells. Chunk GEMM cut scalar V2 from 232--242 ms to 122--157 ms,
+while V1 remained faster. See
 `bench/evidence/2026-09-20_byte_lm_chunked_head_v2.md`.
