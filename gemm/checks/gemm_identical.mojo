@@ -148,6 +148,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
+    COLUMN_AMD,
     COLUMN_APPLE,
     PINNED_ACC_COLS_PER_TH,
     PINNED_ACC_ROWS_PER_TH,
@@ -4432,6 +4433,19 @@ def _shipped_body_kpack_hg[
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
     if m <= 0 or n <= 0:
         return
+    # MI325X, 2026-09-20: the packed body wins strongly for the narrow
+    # d_model output of B1/L2048 and for the MLP down projections, but its
+    # gather staging loses once a k=768 training projection has enough rows
+    # or output columns.  Keep this a measured AMD-only scheduling choice;
+    # NVIDIA and Apple have opposite results at the same shapes.  The forced
+    # plan and packed body have the same leaf/fold DAG and were bit-equal over
+    # every output cell in the GPT-3-small production-shape matrix.
+    comptime if not SAB and TARGET_COLUMN == COLUMN_AMD:
+        if k == 768 and (m >= 4096 or (m >= 2048 and n >= 1024)):
+            identical_gemm_with_plan(
+                ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8
+            )
+            return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
         comptime if GEMM_REUSE_GROUP_WS:
             var gl = gemm_default_ksplit_leaves(m, n, k)
