@@ -2459,6 +2459,12 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
         if m >= 1024 and n >= 768 and k >= 768 and (n == 768 or k == 768):
             return PLAN_TUNED_64_4X4
+        # GPT weight gradients transpose the token dimension into the
+        # contraction: Q/K/V/O and MLP-down have m=d_model and k=rows.
+        # The smaller tile exposes more independent output tiles without
+        # changing any leaf or fold in the exact GEMM DAG.
+        if m == 768 and n >= 768 and k >= 1024:
+            return PLAN_TUNED_64_4X4
     if m >= 2 * TUNED_BM_WIDE and n >= 2 * TUNED_BN_WIDE:
         return PLAN_TUNED_128_8X8
     if m >= TUNED_BM_WIDE and n >= TUNED_BN_WIDE:
