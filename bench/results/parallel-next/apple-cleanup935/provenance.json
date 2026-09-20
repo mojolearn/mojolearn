@@ -1,0 +1,9 @@
+{
+  "python_source_commit": "935b6f9046ac59b12d467a13c2ef4700e635bd5c",
+  "native_source_commit": "819a47ae48166e91951f54f54e64ee173658e32a",
+  "native_wheel_sha256": "6703bd788ee926df92d9f43bebbde3703c2ffbc4eb6277c841acb6bc30ef45e4",
+  "scope": "Single-device Metal causal-model cleanup regression; nine fixtures, full parts, one repeat",
+  "peak_sampled_rss_bytes": 343506944,
+  "numeric_cpu_matches": 18,
+  "table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5"
+}
