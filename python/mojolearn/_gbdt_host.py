@@ -661,10 +661,11 @@ class HostGBDT:
         if n_features != self.n_features_in_:
             raise ValueError(
                 f"mojolearn: model was fitted on {self.n_features_in_} features, got {n_features}")
-        Xa = Xc._as_order('F')
         a = self._arrays
         dim = self.approx_dim_
         n_cols = self.n_model_columns_
+        row_major = not (a['n_ctr_tables'] or a['n_tensor_tables'])
+        Xa = Xc if row_major else Xc._as_order('F')
         if a['n_ctr_tables'] or a['n_tensor_tables']:
             expanded = empty((n_rows * n_cols,), '<f4')
             names = ('ctr_ints', 'ctr_floats', 'tensor_ints', 'tensor_floats', 'ctr_counts',
@@ -687,7 +688,7 @@ class HostGBDT:
         wrote = self._binding.forest_host_gbdt_predict(
             addresses,
             [int(n_rows), int(n_features), a['n_trees'], dim, 1 if a['non_symmetric'] else 0,
-             a['n_splits'], a['n_leaf_values'], a['n_borders']],
+             a['n_splits'], a['n_leaf_values'], a['n_borders'], 1 if row_major else 0],
             float(self.bias_))
         if int(wrote) != n_rows:
             raise RuntimeError(f"forest_host_gbdt_predict wrote {wrote} of {n_rows} rows")

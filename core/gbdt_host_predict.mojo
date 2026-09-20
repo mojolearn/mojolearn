@@ -220,6 +220,7 @@ def _binarize_block(
     nb: Int,
     cindex_p: MutPointer[UInt32, MutUntrackedOrigin],
     fail_p: MutPointer[Int, MutUntrackedOrigin],
+    row_major: Bool,
 ) -> Bool:
     """The compressed index of rows `[row0, row0 + nb)`, `nb * columns`
     words at `cindex_p`, row `r` of column `c` at `c * nb + r`, zeroed by
@@ -257,7 +258,11 @@ def _binarize_block(
         var src = f * n_rows + row0
         var bp = borders_p + lo
         for r in range(nb):
-            var v = x_p.unsafe_load(src + r)
+            var v: Float32
+            if row_major:
+                v = x_p.unsafe_load((row0 + r) * n_features + f)
+            else:
+                v = x_p.unsafe_load(src + r)
             if v != v:
                 if treat == NAN_TREATMENT_AS_IS:
                     fail_p.unsafe_store(0, GBDT_HOST_FAIL_NAN)
@@ -579,6 +584,7 @@ def _walk_rows(
     seed: Float32,
     lo: Int,
     hi: Int,
+    row_major: Bool,
 ):
     """One task's rows `[lo, hi)`, a block at a time: quantize the block,
     seed its cursor, add every tree, then write the block's rows to `out_p`
@@ -599,7 +605,10 @@ def _walk_rows(
             cp.unsafe_store(i, UInt32(0))
         for i in range(nb * dim):
             up.unsafe_store(i, seed)
-        if not _binarize_block(plan, x_p, borders_p, n_rows, n_features, row0, nb, cp, fail_p):
+        if not _binarize_block(
+            plan, x_p, borders_p, n_rows, n_features, row0, nb, cp, fail_p,
+            row_major,
+        ):
             return
         if non_symmetric:
             if not _apply_non_symmetric_block(plan, cp, nb, row0, dim, n_trees, leaves_p, up, fail_p):
@@ -680,6 +689,7 @@ def gbdt_host_predict(
     bias: Float64,
     mut out: List[Float32],
     workers: Int = 0,
+    row_major: Bool = False,
 ) raises:
     """`predict_floats` / `predict_multi_floats` on the host: RAW approxes,
     `out[r * dim + d]`, ROW-major, `n_rows * dim` values.
@@ -734,7 +744,7 @@ def gbdt_host_predict(
 
     def _rows_task(c: Int) {imm pp, imm xp, imm borders_p, imm leaves_p, imm op, imm fp,
                             imm chunk, imm n_rows, imm n_features, imm dim, imm n_trees,
-                            imm non_symmetric, imm seed}:
+                            imm non_symmetric, imm seed, imm row_major}:
         var lo = c * chunk
         var hi = lo + chunk
         if hi > n_rows:
@@ -742,6 +752,7 @@ def gbdt_host_predict(
         _walk_rows(
             pp[], xp, borders_p, leaves_p, op, fp + c * GBDT_HOST_FAIL_WORDS,
             n_rows, n_features, dim, n_trees, non_symmetric, seed, lo, hi,
+            row_major,
         )
 
     if tasks == 1:
