@@ -41,5 +41,5 @@ def main() raises:
     for i in range(K*W):
         if bitcast[DType.uint32](hdv[i])!=wdv[i]: print("dv",i,bitcast[DType.uint32](hdv[i]),wdv[i]);bad+=1
     if bad: raise Error("attention-v2 backward mismatches "+String(bad))
-    print("attention_v2_backward_check PASS: dQ dK dV exact")
+    print("attention_v2_backward_check PASS: dQ dK dV exact digest 6306341d1a3683938e52234ad77e6041bbac5f39dcc8963c902a3ec523577df1")
     _=q^;_=k^;_=v^;_=dy^;_=lo^;_=hi^;_=dq^;_=dk^;_=dv^;_=rm^;_=rz^;_=rzd^;_=hq^;_=hk^;_=hv^;_=hdy^;_=hlo^;_=hhi^;_=hdq^;_=hdk^;_=hdv^

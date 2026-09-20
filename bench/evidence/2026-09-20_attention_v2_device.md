@@ -23,3 +23,17 @@ Forward B1 H12 L1024 HD64: 31.660, 31.202, 31.091, 31.061. Backward B1 H12
 L2048 HD64: 246.882, 244.273, 245.170. Resident bytes were 15,925,248 and
 38,240,256 respectively. Raw logs are under ignored
 `bench/results/attention-v2-backward/amd-mi325x/remote/attention_v2/`.
+
+RunPod NVIDIA L40S (pod `jfomr6t7qoch8k`, 46,068 MiB, destroyed and
+GET-confirmed 404) qualified the pinned-division commit `2c83aee58` twice.
+V2 forward was 17.443, 17.260, 17.249, 17.239 ms, while production v1 was
+0.649 warmup then 0.411, 0.411, 0.409 ms. V1 retained 12,582,912 exponent
+cells (50,331,648 bytes); v2 retained none. V2 backward was 191.551, 191.383,
+191.383 ms, while v1 was 3.406, 2.732, 2.720 ms and retained 50,331,648
+exponent cells (201,326,592 bytes). This makes the tradeoff explicit: v2
+substantially reduces memory on NVIDIA but is not performance-promotable.
+
+The AMD and NVIDIA raw directories (21 compact objects) were uploaded to R2
+and every object was verified by readback. Python analytic-quality witnesses,
+repeatability, reverse-fold sabotage, and exact device fixtures passed; no
+end-to-end language-model quality claim is made by this stage.

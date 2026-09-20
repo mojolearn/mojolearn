@@ -1,7 +1,8 @@
 # Exact tiled attention v2 (opt-in foundation)
 
-Status: host arithmetic plus an opt-in Apple-qualified forward kernel. This
-does not alter the v1 default and makes no NVIDIA/AMD or backward claim.
+Status: host arithmetic plus opt-in forward/backward device kernels qualified
+on exact Apple, NVIDIA, and AMD fixtures. This does not alter the v1 default;
+large-shape evidence shows v2's memory/speed tradeoff is not promotable.
 
 V2 fixes the logical KV tile at 32 elements. Rows visit tiles and cells in
 ascending order. Each tile computes its maximum with `identical_fmax`; the
