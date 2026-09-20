@@ -1429,7 +1429,7 @@ def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonOb
         if owner[].pool_optimizer:
             reduction_bytes = 4*(len(owner[].pool_totals[i])+len(owner[].pool_incoming[i]))
         elif i == 0:
-            reduction_bytes = 4*(len(owner[].total.value())+len(owner[].incoming.value()))
+            reduction_bytes = 4*len(owner[].total.value())
         row.append(PythonObject(reduction_bytes))
         out.append(row)
     return out
