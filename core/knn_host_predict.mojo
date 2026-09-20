@@ -650,11 +650,26 @@ def host_monotonic(y: List[Int32], n: Int, uniq: List[Int32]) -> List[Int32]:
     var out = List[Int32](length=n, fill=Int32(0))
     for tid in range(n):
         var v = y[tid]
-        for i in range(len(uniq)):
-            if v == uniq[i]:
-                out[tid] = Int32(i + 1)
-                break
-        out[tid] = out[tid] - Int32(1)
+        # `uniq` is sorted by `host_unique_labels`.  The device reference's
+        # linear scan selects the sole equal entry. Keep that cheaper scan for
+        # tiny class sets; lower_bound changes no observable value while
+        # avoiding O(n * n_unique) host inference for larger label sets.
+        if len(uniq) <= 16:
+            for i in range(len(uniq)):
+                if v == uniq[i]:
+                    out[tid] = Int32(i)
+                    break
+            continue
+        var lo = 0
+        var hi = len(uniq)
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if uniq[mid] < v:
+                lo = mid + 1
+            else:
+                hi = mid
+        # Every value in y produced uniq, hence lower_bound is an exact hit.
+        out[tid] = Int32(lo)
     return out^
 
 
