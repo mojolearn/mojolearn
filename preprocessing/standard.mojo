@@ -164,3 +164,17 @@ def standard_transform(
     var result = download_f32(ctx,output,n*d)
     _ = output^
     return result^
+
+
+def standard_transform_into(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
+    mut mean: DeviceBuffer[DType.float32], mut scale: DeviceBuffer[DType.float32],
+    mut output: DeviceBuffer[DType.float32], n: Int, d: Int, inverse: Int,
+    with_mean: Int, with_std: Int,
+) raises:
+    """Transform into caller-owned device storage without a host materialization."""
+    ctx.enqueue_function[standard_transform_kernel](
+        x.unsafe_ptr(),mean.unsafe_ptr(),scale.unsafe_ptr(),output.unsafe_ptr(),
+        Int32(n*d),Int32(d),Int32(inverse),Int32(with_mean),Int32(with_std),
+        grid_dim=(n*d+255)//256,block_dim=256,
+    )

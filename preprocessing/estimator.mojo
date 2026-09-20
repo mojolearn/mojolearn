@@ -3,8 +3,9 @@
 from std.math import isfinite
 from max.gpu.host import DeviceContext
 from metrics.checks.device_io import upload_f32
-from preprocessing.minmax import minmax_fit, minmax_transform
-from preprocessing.standard import standard_fit, standard_transform
+from core.device_scan import device_first_nonfinite
+from preprocessing.minmax import minmax_fit, minmax_transform, minmax_transform_into
+from preprocessing.standard import standard_fit, standard_transform, standard_transform_into
 
 
 def validate_dimensions(n: Int, d: Int, lower: Float32, upper: Float32) raises:
@@ -119,3 +120,57 @@ def standard_transform_host(
     _ = ctx^
     standard_finite(result)
     return result^
+
+
+def standard_transform_host_into[out_origin: MutOrigin, //](
+    mut x: List[Float32], mut mean: List[Float32], mut scale: List[Float32],
+    output: MutPointer[Float32, out_origin], n: Int, d: Int, inverse: Int,
+    with_mean: Int, with_std: Int,
+) raises:
+    validate_standard(n,d,with_mean,with_std)
+    if len(x) < n*d or len(mean) < d or len(scale) < d or inverse < 0 or inverse > 1:
+        raise Error("StandardScaler: invalid transform parameters")
+    standard_finite(x)
+    if with_mean != 0:
+        standard_finite(mean)
+    if with_std != 0:
+        standard_finite(scale)
+        for c in range(d):
+            if scale[c] <= 0:
+                raise Error("StandardScaler: scale must be positive")
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx,x)
+    var dm = upload_f32(ctx,mean)
+    var ds = upload_f32(ctx,scale)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    standard_transform_into(ctx,dx,dm,ds,dout,n,d,inverse,with_mean,with_std)
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+    ctx.synchronize()
+    _ = dout^; _ = ds^; _ = dm^; _ = dx^; _ = ctx^
+
+
+def minmax_transform_host_into[out_origin: MutOrigin, //](
+    mut x: List[Float32], mut scale: List[Float32], mut offset: List[Float32],
+    output: MutPointer[Float32, out_origin], n: Int, d: Int, inverse: Int,
+    clip: Int, lower: Float32, upper: Float32,
+) raises:
+    validate_dimensions(n,d,lower,upper)
+    if len(x) < n*d or len(scale) < d or len(offset) < d or inverse < 0 or inverse > 1 or clip < 0 or clip > 1:
+        raise Error("MinMaxScaler: invalid transform parameters")
+    finite_values(x); finite_values(scale); finite_values(offset)
+    for c in range(d):
+        if scale[c] <= 0:
+            raise Error("MinMaxScaler: scale must be positive")
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx,x)
+    var ds = upload_f32(ctx,scale)
+    var dm = upload_f32(ctx,offset)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    minmax_transform_into(ctx,dx,ds,dm,dout,n,d,inverse,clip,lower,upper)
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        raise Error("MinMaxScaler: nonfinite input or Float32 arithmetic overflow")
+    ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+    ctx.synchronize()
+    _ = dout^; _ = dm^; _ = ds^; _ = dx^; _ = ctx^
