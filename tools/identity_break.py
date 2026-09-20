@@ -203,15 +203,35 @@ disagreeing with itself and a DIVERGENT column is two vendors disagreeing.
                 MOJOLEARN_IDENTITY_RLPAIR_SABOTAGE=1 MOJOLEARN_NUMERIC_MODE=identical \\
                   python3 tools/identity_break.py --lanes mamba1 --fixtures base --repeats 1
 
-FOUR OPT-IN PARTS (2026-09-15, the fourth 2026-09-16), each its own JSON keys (`<part>`,
+FOUR PROPERTY PARTS (2026-09-15, the fourth 2026-09-16), each its own JSON keys (`<part>`,
 `<part>_verdict`, `<part>_error`, `<part>_notes`, `<part>_protocol`,
 `<part>_sabotage`) and its own `summary (<part>):` line of `--diff`,
-printed only where a column carries it. A run that does not pass the flag
-writes none of the keys, so every record and gate grep before them reads
-exactly as it did. The verdicts are the batch part's: STABLE, MOVED,
-BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
+printed only where a column carries it. The verdicts are the batch part's:
+STABLE, MOVED, BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
 
-    batchgrad   `--batch-grad`. THE BACKWARD PASS. Two questions, and the
+THEY ARE COLLECTED BY DEFAULT SINCE 2026-09-20 (lane/full-part-set-by-default).
+From 2026-09-15 to 2026-09-20 they were OPT-IN, behind `--batch-grad`,
+`--batch-scale`, `--ragged` and `--step-full`, and the census of what that
+produced is why the default is now the other way: of 559 admissible
+committed columns, 245 carry FOUR parts, 151 five, and only 15 carry all
+nine; only 249 of 559 carry `stepfull` AT ALL, though `stepfull` is a
+MANDATORY member of `_verify_reference.PARTS`, the tuple `python -m
+mojolearn verify --all` compares against. The flagship records
+(`2026-09-14_118-lanes`, `166-lanes`, `120-lanes-2711flip`) are themselves
+four-part, and 29 (lane, class) pairs of the shipped table have no
+`stepfull` reference anywhere -- including `mamba1` and `mamba2` on all
+three vendor classes, so decode-state identity for the two core blocks has
+never been verified on any box. Nobody chose that. It is what a
+default-off flag collects when the caller forgets it.
+
+The four old flags are still ACCEPTED and now mean nothing: they ask for
+what already happens, so a leg mid-flight that passes them keeps running.
+To run LESS, `--partial-column <part>[,<part>...]` narrows explicitly, and
+the JSON it writes stamps `partial_column: true` and `parts_omitted`, which
+`_verify_reference.admit()` REFUSES. A narrowed column is a local loop, not
+a record, and it now says so about itself instead of looking like one.
+
+    batchgrad   THE BACKWARD PASS. Two questions, and the
             contracts decide which one each gradient is asked.
             A PER-ROW gradient (the sequence blocks' `backward(x, g)["x"]`,
             `cross_entropy` dlogits under reduction='sum' with the divisor
@@ -255,7 +275,7 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             BATCH_MOVED); `=serial` replaces condition 5's tree with a running
             pair sum, which the contract says is inert at A <= 2, so a cell
             that moves at A = 4 is condition 5 seen biting (recorded).
-    batchscale  `--batch-scale`. SERVING-SCALE B. A whole call of 1024 rows
+    batchscale  SERVING-SCALE B. A whole call of 1024 rows
             and sub-batches of B in {1, 17, 64, 256} at its start, middle and
             end, every sub-batch row equal to its row of the whole; for the
             causal sequence models also B = 2 at L = 1024 against every
@@ -267,7 +287,7 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             knn, rf-clf, rf-reg, gbdt-symmetric, gbdt-rmse, ols, ridge,
             logistic, pca. Inputs past a fixture's size wrap around it. The
             batch part's sabotage switch sabotages this part too.
-    ragged  `--ragged`. PADDED AND RAGGED BATCHES, through the `lengths=`
+    ragged  PADDED AND RAGGED BATCHES, through the `lengths=`
             argument the causal sequence models take since 2026-09-15
             (python/mojolearn/_ragged.py: TransformerBlock, Mamba1/2/3Block
             and SambaStack `forward`, the byte LM `logits` and `next_bytes`).
@@ -278,7 +298,7 @@ BATCH_MOVED (a failure under IDENTICAL only), N/A, REFUSED.
             output must be exactly +0.0; next_bytes must equal the row alone.
             The batch part's sabotage switch sabotages this part too.
 
-    stepfull `--step-full`. THE DECODE IS THE PREFILL
+    stepfull THE DECODE IS THE PREFILL
             (lane/stateful-cpu-decoding, 2026-09-16). One fresh-state
             forward pass over a sequence of 16 positions, against the SAME
             sequence decoded one token at a time through `allocate_state`
@@ -9849,6 +9869,37 @@ EXTRA_PARTS = {
     "stepfull": (STEPFULL, STEPFULL_DEFAULT, "step_full", BATCH_SABOTAGE_ENV),
 }
 
+#: THE FOUR PROPERTY PARTS, collected by default since 2026-09-20.
+PROPERTY_PARTS = tuple(EXTRA_PARTS)
+#: every part a run may be told to leave out. `train`, `infer` and `model`
+#: are not here: they are the column, not a part of it.
+NARROWABLE_PARTS = ("batch", "rlpair") + PROPERTY_PARTS
+
+
+def resolve_omitted_parts(args):
+    """The parts this run will NOT collect, sorted, from `--partial-column`
+    and the two older `--no-*` flags. Raises SystemExit on an unknown name.
+
+    The four old opt-in flags (`--batch-grad`, `--batch-scale`, `--ragged`,
+    `--step-full`) are read nowhere: since 2026-09-20 their parts are on by
+    default and the flags are accepted only so a leg that was already running
+    when the default flipped keeps working."""
+    asked = [p.strip() for p in str(getattr(args, "partial_column", "") or "").split(",") if p.strip()]
+    omit = set()
+    for name in asked:
+        if name == "properties":
+            omit |= set(PROPERTY_PARTS)
+        elif name in NARROWABLE_PARTS:
+            omit.add(name)
+        else:
+            raise SystemExit(f"REFUSING: --partial-column names no part: {name!r}; the parts are "
+                             f"{', '.join(NARROWABLE_PARTS)} or 'properties'")
+    if getattr(args, "no_batch", False):
+        omit.add("batch")
+    if getattr(args, "no_rlpair", False):
+        omit.add("rlpair")
+    return sorted(omit)
+
 
 def _part_protocol(part, alone):
     if part == "batchgrad":
@@ -10665,26 +10716,38 @@ def _run_reference(args):
                       for f, (X, yc, yr) in data.items()}
     heldout_hashes = {f: dict(X=_h(X)) for f, X in held.items()}
     cells = {}
+    # WHAT THIS RUN LEAVES OUT, DECIDED ONCE (2026-09-20). Every part is
+    # collected unless it is named here, and a run that names any part is a
+    # partial column and stamps itself as one.
+    omitted = resolve_omitted_parts(args)
+    no_batch = "batch" in omitted
+    no_rlpair = "rlpair" in omitted
+    if omitted:
+        print(f"# PARTIAL COLUMN: {len(omitted)} of {len(NARROWABLE_PARTS)} parts left out: "
+              f"{', '.join(omitted)}. This JSON is stamped partial_column=true and "
+              "_verify_reference.admit() refuses it; it is a local loop, not a record.")
     batch_sabotage = os.environ.get(BATCH_SABOTAGE_ENV, "").strip() not in ("", "0")
     if args.batch_alone < 1:
         raise SystemExit("REFUSING: --batch-alone must be at least 1")
     batch_protocol = dict(alone=args.batch_alone, split=list(BATCH_SPLIT) + ["n"], prefix="1,7,full-1",
-                          enabled=not args.no_batch)
+                          enabled=not no_batch)
     if batch_sabotage:
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
     rlpair_sabotage = os.environ.get(RLPAIR_SABOTAGE_ENV, "").strip() not in ("", "0")
-    rlpair_protocol = _rlpair_protocol(enabled=not args.no_rlpair)
+    rlpair_protocol = _rlpair_protocol(enabled=not no_rlpair)
     if rlpair_sabotage:
         print(f"# {RLPAIR_SABOTAGE_ENV} is ON: the first sampler log-probability of every rlpair cell is "
               "perturbed by one low-bit flip; every rlpair cell with a hash MUST read RLPAIR_MOVED. "
               "This JSON is not evidence.")
     undeclared = [n for n in lanes if n not in BATCH]
-    if undeclared and not args.no_batch:
+    if undeclared and not no_batch:
         print(f"# WARNING: no batch declaration for {undeclared}; their batch part reads n/a:UNDECLARED")
-    # the opt-in parts (2026-09-15): absent from the JSON unless asked, so a
-    # record that never asked diffs as it always did
-    extra = [part for part, (_, _, flag, _) in EXTRA_PARTS.items() if getattr(args, flag)]
+    # THE FOUR PROPERTY PARTS RUN UNLESS NARROWED (2026-09-20). They were
+    # opt-in from 2026-09-15, which is how 245 of 559 admissible committed
+    # columns ended up four-part and `stepfull` -- a MANDATORY member of
+    # `_verify_reference.PARTS` -- ended up absent from 310 of them.
+    extra = [part for part in EXTRA_PARTS if part not in omitted]
     extra_sabotage = {part: os.environ.get(EXTRA_PARTS[part][3], "").strip().lower() for part in extra}
     extra_sabotage = {k: ("" if v == "0" else v) for k, v in extra_sabotage.items()}
     for part in extra:
@@ -10713,7 +10776,16 @@ def _run_reference(args):
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
-                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS))
+                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS),
+                      # WHICH PARTS THIS COLUMN CARRIES, IN THE COLUMN ITSELF
+                      # (2026-09-20). `complete` answers "did the run finish",
+                      # never "what did it collect", and for five years of
+                      # columns the two were read as the same question: a
+                      # four-part column and a nine-part column were both
+                      # `complete: true` and `admit()` could not tell them
+                      # apart. These two keys are what it reads now.
+                      parts_collected=sorted(set(NARROWABLE_PARTS) - set(omitted)),
+                      parts_omitted=list(omitted), partial_column=bool(omitted))
         # A DEGENERATE CELL READS AS COVERAGE (2026-09-19). `verify_lanes.py`
         # asks `lane_applicability.check()` whether a lane can state its
         # proposition on the column being run, and REFUSES the ones that
@@ -11271,6 +11343,13 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
     for n, (_, j) in zip(names, cols):
         if not j.get("complete", True):
             print(f"NOTE: column {n} is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean")
+        # INCOMPLETE AND PARTIAL ARE DIFFERENT FAULTS (2026-09-20). The line
+        # above says the run stopped early; this one says the run never asked
+        # for those parts at all, which no count of cells can show.
+        if j.get("partial_column"):
+            print(f"NOTE: column {n} is a PARTIAL COLUMN: it left out "
+                  f"{', '.join(j.get('parts_omitted') or ['(unnamed)'])}. Those parts are absent because "
+                  "they were not run, not because they agree; it is refused as a record")
         if j.get("skipped"):
             print(f"NOTE: column {n} SKIPPED {j['skipped']} on request")
     # Refuse to blame the library for a fixture the vendors did not share.
@@ -11418,8 +11497,13 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 
 
 #: the keys every part of one column must agree on before --merge joins them
+#: `parts_omitted` is here (2026-09-20) because two parts that collected
+#: DIFFERENT parts are not two parts of one column, and joining them would
+#: hand `admit()` a record whose `partial_column` flag described only the
+#: first part read.
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions") + tuple(
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions",
+              "parts_omitted") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
 
@@ -11506,6 +11590,12 @@ def merge(paths, out, allow_separate_builds=False):
                                   platform=j.get("platform"), bindings=(j.get("package") or {}).get("bindings"))
                              for p, j in parts]
     record["merged_separate_builds"] = len(set(json.dumps(_build_digests(j)) for _, j in parts)) > 1
+    # A MERGE NEVER LAUNDERS A PARTIAL PART INTO A WHOLE COLUMN (2026-09-20).
+    # MERGE_SAME already refuses parts whose `parts_omitted` differ, so this
+    # only restates it where the record is written; if every part left the
+    # same parts out, so does their join.
+    if any(j.get("partial_column") for _, j in parts):
+        record["partial_column"] = True
     with open(out, "w") as fh:
         json.dump(record, fh, indent=1)
     print(f"merged {len(parts)} parts, {len(cells)} cells, complete={record['complete']} -> {out}")
@@ -11649,20 +11739,29 @@ def main():
     ap.add_argument("--batch-alone", type=int, default=BATCH_ALONE, metavar="N",
                     help="rows evaluated alone per batch call (default %(default)s); the split and the "
                          "prefixes are fixed, and the part's hash does not depend on N")
+    # THE FULL PART SET IS THE DEFAULT (2026-09-20, lane/full-part-set-by-default).
+    # See the module docstring. `--no-batch`, `--no-rlpair` and the four old
+    # opt-in flags all funnel into ONE narrowing option so there is exactly
+    # one place a column can be made smaller, and exactly one stamp
+    # (`partial_column`) that says it was.
+    ap.add_argument("--partial-column", default="", metavar="PART[,PART...]",
+                    help="RUN A PARTIAL COLUMN, leaving out these parts: "
+                         + ", ".join(NARROWABLE_PARTS) + ", or 'properties' for the four property parts. "
+                         "The parts left out are NOT collected, the JSON is stamped partial_column=true "
+                         "with parts_omitted, and _verify_reference.admit() REFUSES it, so it can never be "
+                         "read as a record. For a fast local loop only")
     ap.add_argument("--no-batch", action="store_true",
-                    help="skip the batch part; its cells record n/a:skipped (--no-batch)")
-    ap.add_argument("--batch-grad", action="store_true",
-                    help="add the batchgrad part: per-row gradients and clause 9.2 aligned accumulation")
-    ap.add_argument("--batch-scale", action="store_true",
-                    help="add the batchscale part: B in {1, 17, 64, 256} inside B = 1024, and long-L prefixes")
-    ap.add_argument("--ragged", action="store_true",
-                    help="add the ragged part: lengths= right-padded batches against each row alone")
-    ap.add_argument("--step-full", action="store_true",
-                    help="add the stepfull part: one fresh-state forward pass over a sequence against the "
-                         "same sequence decoded one token at a time with a carried state, compared bitwise "
-                         "position by position")
+                    help="equivalent to --partial-column batch; kept for the legs that pass it")
     ap.add_argument("--no-rlpair", action="store_true",
-                    help="skip the rlpair part; the lanes that declare it record n/a:skipped (--no-rlpair)")
+                    help="equivalent to --partial-column rlpair; kept for the legs that pass it")
+    # ACCEPTED AND INERT. Until 2026-09-20 each of these turned its part ON.
+    # The parts are now on by default, so the flags ask for what already
+    # happens. They stay accepted, not removed, because legs were mid-flight
+    # when the default flipped and a removed flag would have killed them.
+    for _flag, _part in (("--batch-grad", "batchgrad"), ("--batch-scale", "batchscale"),
+                         ("--ragged", "ragged"), ("--step-full", "stepfull")):
+        ap.add_argument(_flag, action="store_true",
+                        help=f"accepted and inert since 2026-09-20: the {_part} part is collected by default")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")

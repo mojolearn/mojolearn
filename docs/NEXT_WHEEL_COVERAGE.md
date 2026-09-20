@@ -115,9 +115,12 @@ records and replay, as their `PUBLIC_REFERENCE_CANDIDATES` comments specify.
 Do not remove the holds until those conditions actually pass.
 
 Capture all required properties together on the actual candidate artifacts:
-`--repeats 2 --batch-grad --batch-scale --ragged --step-full`, with all nine
-fixtures, the default batch and sampler/replay probes, an explicit backend,
-and failure on refused stages. Build scoped references without dropping an
+`--repeats 2`, with all nine fixtures, an explicit backend, and failure on
+refused stages. Since 2026-09-20 every part is collected by default, so the
+four old flags (`--batch-grad`, `--batch-scale`, `--ragged`, `--step-full`)
+are accepted and inert and nothing has to be remembered; `--partial-column`
+is the only way to collect less, and a column that used it is stamped
+`partial_column` and refused as a record. Build scoped references without dropping an
 existing property; compare vendor classes and replay the resulting candidate
 on CPU before promoting the lane. Repeat final installed-wheel qualification
 after the table and public selection change.

@@ -13,8 +13,9 @@ record's directory and commit. No hash in it is typed: `build_table` reads the J
 WHICH RECORDS COUNT. A column is admitted only if it is identical mode, names
 a commit, ran the default fixture size on one device, is not a sabotage run
 (by its JSON flags and by its file name), is not a partial or an unfixed
-before-picture, and its fixture hashes equal the ones this harness generates
-now. A column whose fixtures differ hashed different input bytes, so its
+before-picture, did not declare itself a PARTIAL COLUMN (`partial_column`,
+written by a harness run that was told to leave parts out, 2026-09-20), and
+its fixture hashes equal the ones this harness generates now. A column whose fixtures differ hashed different input bytes, so its
 cells say nothing about the current lanes. The same holds per lane for the
 harness's `LANE_REVISIONS` (a lane whose input changed, 2026-09-15): a column
 whose revision of that lane is not the harness's contributes no cell there,
@@ -33,6 +34,7 @@ is never blamed for it.
 FORMAT (`mojolearn.verify-reference.v1`)
 
     records  [{dir, file, vendor, class, commit, commit_time}]
+    absent_parts {part: {reason: count}} over the admitted columns
     fixtures {fixture: {X, y_clf, y_reg}}, heldout {fixture: {X}}
     cells    {"<lane>/<fixture>": {part: {"ref": value | null,
                                            "cols": {class: record index
@@ -327,6 +329,33 @@ def admit(j, path, par_axis=False):
         return "not an identity_break column"
     if j.get("complete") is False:
         return "incomplete identity_break checkpoint"
+    # COMPLETE AND WHOLE ARE DIFFERENT QUESTIONS (2026-09-20,
+    # lane/full-part-set-by-default). `complete` is a RUN-LEVEL flag: it says
+    # the process reached the end, and says NOTHING about which parts the
+    # column carries. From 2026-09-15 to 2026-09-20 four of the nine parts
+    # were opt-in, and a four-part column and a nine-part column were both
+    # `complete: true` and both admitted here, identically. Measured over the
+    # committed corpus: 245 of the 559 admissible columns carry four parts,
+    # 151 five, and only 15 all nine; 310 of 559 carry no `stepfull` at all,
+    # though `stepfull` is in the mandatory PARTS tuple above.
+    #
+    # THE HARNESS NOW SAYS SO ABOUT ITSELF and this REFUSES it, rather than
+    # admitting it with a marker. A partial column is by construction a local
+    # loop: the caller typed `--partial-column` and named what to leave out,
+    # so there is no case where one should feed the shipped table. Admitting
+    # it with a marker would leave every downstream reader to remember to
+    # check the marker, which is the same shape of defect one layer up.
+    #
+    # THIS REFUSES NOTHING THAT EXISTS. `partial_column` is written only by
+    # runs after 2026-09-20; every committed column lacks the key, reads
+    # falsey, and is admitted exactly as before. The corpus is not
+    # retroactively invalidated -- which is also why a partial column cannot
+    # be recognised by counting parts: an honest pre-2026-09-20 record and a
+    # deliberately narrowed one carry the same four.
+    if j.get("partial_column"):
+        left_out = j.get("parts_omitted") or []
+        return ("partial column: the run left out "
+                + (", ".join(str(p) for p in left_out) if left_out else "parts it did not name"))
     if j.get("mode") != "identical":
         return f"mode {j.get('mode')!r}"
     if not _COMMIT.match(str(j.get("commit") or "")):
@@ -404,6 +433,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     want_held = {f: dict(X=harness._h(harness.heldout(f))) for f in harness.FIXTURES}
     records, cache = [], {}
     best = {}                      # (cell, part, class) -> (key, record idx, value)
+    absent_total = {}              # part -> {reason: count}, over every admitted column
     for path in sorted(record_paths):
         try:
             with open(path, "r", encoding="utf-8") as fh:
@@ -434,6 +464,21 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         records.append(rec)
         key = (rec["commit_time"], rec["dir"], rec["file"])
         kept = 0
+        # AN ABSENT PART WAS INVISIBLE HERE (2026-09-20). Every rejection
+        # below used to be a bare `continue`: no log line, no flag, no count.
+        # The ONLY signal a reader got was a smaller N in `use <path>: ... N
+        # cell parts`, a number with no denominator to compare it against, so
+        # a column missing four of its nine parts and a whole one produced
+        # the same shape of line and nobody could tell which was which
+        # without reopening the JSON. `asked` is the denominator and `absent`
+        # says why each slot is not in `kept`.
+        asked = 0
+        absent = {}          # part -> {reason: count}
+
+        def _absent(part, why):
+            absent.setdefault(part, {})
+            absent[part][why] = absent[part].get(why, 0) + 1
+
         revs = getattr(harness, "LANE_REVISIONS", {})
         have_revs = j.get("lane_revisions") or {}
         for cell_key, cell in j["cells"].items():
@@ -446,28 +491,57 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
             if lane in revs and have_revs.get(lane) != revs[lane]:
                 continue
             for part in parts:
+                asked += 1
                 if part != "train" and held.get(fixture) != want_held[fixture]:
+                    _absent(part, "held-out bytes differ")
                     continue
                 if part in OPTIONAL_PARTS:
                     expected = (harness._rlpair_protocol() if part == "rlpair" else
                                 harness._part_protocol(part, harness.BATCH_ALONE))
                     # A different split/length protocol is a different claim.
                     if j.get(f"{part}_protocol") != expected:
+                        _absent(part, "not run" if j.get(f"{part}_protocol") is None
+                                else "protocol differs")
                         continue
                 value = _part_value(cell, part, min_repeats=2)
                 if value is None:
+                    # NOT RUN and RAN BUT UNUSABLE are different facts. The
+                    # first is a hole in the column; the second is a moved,
+                    # refused, skipped or single-repeat cell that the column
+                    # did collect. Reading both as "absent" is how a
+                    # four-part column passed for a nine-part one.
+                    ran = ("verdict" if part == "train" else f"{part}_verdict") in cell
+                    _absent(part, "not usable (moved, refused, skipped or one repeat)"
+                            if ran else "not run")
                     continue
                 if not value.startswith("n/a:") and part in ("batch", "stepfull"):
                     expected = (dict(alone=harness.BATCH_ALONE, split=list(harness.BATCH_SPLIT) + ["n"],
                                      prefix="1,7,full-1", enabled=True) if part == "batch" else
                                 harness._part_protocol(part, harness.BATCH_ALONE))
                     if j.get(f"{part}_protocol") != expected:
+                        _absent(part, "not run" if j.get(f"{part}_protocol") is None
+                                else "protocol differs")
                         continue
                 slot = (cell_key, part, cls)
                 if slot not in best or key > best[slot][0]:
                     best[slot] = (key, idx, value)
                 kept += 1
-        log(f"use  {path}: class {cls}, commit {commit[:9]}, {kept} cell parts")
+        line = f"use  {path}: class {cls}, commit {commit[:9]}, {kept} of {asked} cell parts"
+        if absent:
+            line += "; absent " + ", ".join(
+                f"{part} x{sum(why.values())} ({'; '.join(sorted(why))})"
+                for part, why in sorted(absent.items()))
+        log(line)
+        for part, why in absent.items():
+            for reason, n in why.items():
+                absent_total.setdefault(part, {})
+                absent_total[part][reason] = absent_total[part].get(reason, 0) + n
+    # THE TOTAL, NOT JUST THE PER-COLUMN LINES. One column short of a part
+    # reads as a detail; every column short of the same part is the defect.
+    for part in sorted(absent_total):
+        why = absent_total[part]
+        log(f"absent {part}: {sum(why.values())} cell parts over {len(records)} admitted columns ("
+            + ", ".join(f"{reason} x{n}" for reason, n in sorted(why.items())) + ")")
     # only records a winning value points at are kept, renumbered
     cells = {}
     grouped = {}
@@ -504,6 +578,13 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: generated before this key existed carries none, which reads as
         #: "unknown" and therefore stale for any lane that has a revision.
         admission_policy=dict(min_repeats=2, input_witness_required=True, property_protocol_required=True),
+        #: WHAT THE ADMITTED COLUMNS DID NOT CARRY (2026-09-20). The per-part
+        #: counts `build_table` logged, kept in the table so a reader of the
+        #: FILE, not only of the build log, can see that (say) every stepfull
+        #: slot of this table came up "not run". A part missing here is a part
+        #: no record collected, which is a different fact from a part that
+        #: disagreed, and neither one is visible in the cell counts.
+        absent_parts={p: dict(sorted(w.items())) for p, w in sorted(absent_total.items())},
         lane_revisions=dict(getattr(harness, "LANE_REVISIONS", {}) or {}),
         fixtures=want_fix, heldout=want_held,
         records=[records[i] for i in used],

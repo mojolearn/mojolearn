@@ -227,9 +227,12 @@ def _collapse(values, errors):
 
 
 #: THE DECODE PART, by the name the harness gives it. It is one of
-#: `identity_break.EXTRA_PARTS`, which the harness runs only behind
-#: `--step-full` because a column is a maintainer artifact; here it always
-#: runs, because a property a user cannot check is not a property they have.
+#: `identity_break.EXTRA_PARTS`. Until 2026-09-20 the harness ran it only
+#: behind `--step-full`, while `verify --all` always ran it here, because a
+#: property a user cannot check is not a property they have -- and the gap
+#: between the two defaults is exactly why 310 of 559 admissible committed
+#: columns carry no `stepfull` value for the reference to be built from.
+#: Both sides now collect it by default.
 STEPFULL = "stepfull"
 
 
