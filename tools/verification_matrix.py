@@ -681,6 +681,53 @@ def gpu_vacuous_lanes():
     return _GPU_VACUOUS
 
 
+_CPU_VACUOUS = None
+
+
+def cpu_vacuous_lanes():
+    """Lanes a CPU column cannot judge at all, derived (2026-09-20).
+
+    THE MIRROR OF `gpu_vacuous_lanes`, and it exists for the same reason that
+    one does. `lane_applicability` refuses a lane on `cpu-host` for two
+    different reasons, and only one of them is a gap:
+
+      * DEGENERATE (device axis) -- the `par-*` drivers, already held out of
+        both CPU-axis counts by the `two_device` flag below;
+      * DEGENERATE, no CPU route -- `host_surface` declares no CPU family for
+        the lane and it stands on a binding, so the CPU column has no
+        arithmetic to run and the cell REFUSES rather than answering.
+
+    The second kind is UNREACHABLE on the CPU axis, in both directions at
+    once: no CPU run can ever declare a verifier for a class whose native
+    entry exists only in a GPU binding, and no CPU run can ever move a
+    sabotage build through a door that is not there. The two resident decode
+    sessions are the case (lane/unlaned-public-algorithms, 2026-09-20):
+    `mamba1_session_create` and `transformer_decode_session_create` are in
+    `bindings/_mojolearn_mamba.mojo` and
+    `bindings/_mojolearn_transformer.mojo` and in no host binding, and each
+    constructor refuses BY NAME on the host route. Listing them under "No CPU
+    verifier declared" and "Sabotage not seen to move a build" advertises two
+    gaps that no run on any hardware can close, which is the same defect
+    already fixed for `par-*` on the CPU axis and then on the GPU axis.
+
+    THEY ARE STILL REAL GAPS ON THE GPU AXIS, and they stay in those counts:
+    a GPU column is exactly where their proposition is stateable, no column
+    carries them yet, and no sabotage has moved them. Held out of the CPU
+    counts only, and reported by name under their own heading.
+
+    Derived by asking `lane_applicability` and reading the reason it gives,
+    never a list of names: a lane whose family gains a host route stops being
+    vacuous here by itself.
+    """
+    global _CPU_VACUOUS
+    if _CPU_VACUOUS is None:
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import lane_applicability as la
+        _CPU_VACUOUS = {lane for lane, why in la.degenerate("cpu-host").items()
+                        if "declares no CPU route" in why}
+    return _CPU_VACUOUS
+
+
 def lane_rows(harness, surface_mod, cols):
     gpu = gpu_coverage(cols)
     two_dev = par_two_device(cols)
@@ -745,6 +792,7 @@ def lane_rows(harness, surface_mod, cols):
             lane=lane,
             two_device=lane.startswith("par-"),
             gpu_vacuous=lane in gpu_vacuous_lanes(),
+            cpu_vacuous=lane in cpu_vacuous_lanes(),
             # The drivers' OWN axis: vendor classes carrying a TWO-DEVICE
             # column for this lane. Empty for every non-`par-*` lane.
             par_two=sorted(two_dev.get(lane, {})),
@@ -1065,7 +1113,8 @@ def render(data):
             ("Batch undeclared", lambda r: r["batch"] == "UNDECLARED", False, False)):
         hit = [r for r in lanes if pred(r)
                and not ((cpu_axis or gpu_axis) and r["two_device"])
-               and not (gpu_axis and r.get("gpu_vacuous"))]
+               and not (gpu_axis and r.get("gpu_vacuous"))
+               and not (cpu_axis and r.get("cpu_vacuous"))]
         w(f"**{label}: {len(hit)}**")
         w("")
         w("> " + (", ".join(r["lane"] for r in hit) if hit else "none"))
@@ -1077,6 +1126,50 @@ def render(data):
             w(f"> (plus {len(held)} `par-*` multi-GPU driver lanes, held out of "
               f"this count: {why}. They are listed once below.)")
             w("")
+        if cpu_axis:
+            # The mirror of the GPU-axis hold-out above (2026-09-20). A lane
+            # whose native entry exists only in a GPU binding cannot gain a
+            # CPU verifier or a CPU sabotage pair from any run, so listing it
+            # here advertises a gap nothing can close. It stays in the two
+            # GPU-axis counts, which is where its proposition is stateable.
+            no_route = [r for r in lanes if pred(r) and r.get("cpu_vacuous")
+                        and not r["two_device"]]
+            if no_route:
+                w(f"> (plus {len(no_route)} lane(s) with no CPU route at all, held out of this "
+                  "count: their native entry exists only in a GPU binding and the public "
+                  "constructor refuses by name on the host route, so no CPU run can close "
+                  "this. They are listed once below, and they remain in the two GPU-axis "
+                  f"counts: {', '.join(r['lane'] for r in no_route)}.)")
+                w("")
+
+    novac = [r for r in lanes if r.get("cpu_vacuous") and not r["two_device"]]
+    if novac:
+        w("## Lanes a CPU column cannot judge at all")
+        w("")
+        w(f"{len(novac)} lane(s) are DEGENERATE on the cpu-host column, and not for the")
+        w("`par-*` device-axis reason. Their native entry exists ONLY in a GPU")
+        w("binding and the public constructor refuses BY NAME on the host route, so")
+        w("a CPU column has no arithmetic of theirs to run: the cell REFUSES rather")
+        w("than answering, and a REFUSED cell and a passing cell are the same thing")
+        w("in a column total. They are held out of the two CPU-axis counts above")
+        w("for the reason `par-*` and the host-routed lanes are held out of theirs:")
+        w("no run on any hardware can close a count that is unreachable.")
+        w("")
+        w("THIS IS THE MIRROR OF THE SECTION BELOW, NOT AN EXCUSE. They stay in")
+        w("BOTH GPU-axis counts, because a GPU column is exactly where their")
+        w("proposition is stateable and no column carries them yet.")
+        w("")
+        w("`identity_break.GPU_ONLY_LANES` drops them from a full-column run on a")
+        w("CPU-only install and prints the reason per lane, so a CPU record never")
+        w("counts a refusal as a cell. `--lanes` is never filtered, and")
+        w("`bench/results/identity_break/2026-09-20_unlaned-public-algorithms/`")
+        w("carries the refusals recorded that way, verbatim.")
+        w("")
+        w("| lane | the entry that is missing | what it refuses with |")
+        w("|---|---|---|")
+        for r in sorted(novac, key=lambda x: x["lane"]):
+            w(f"| {r['lane']} | GPU binding only | refuses by name on the host route |")
+        w("")
 
     # `par-*` are vacuous on a one-device GPU column too, but they have
     # their own heading below and the reason there is different (two

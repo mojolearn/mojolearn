@@ -7253,6 +7253,555 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda est: _dist_search(DistributedIVFIndex, est, np.ascontiguousarray(Xh[:64]), _par_devices()))
 
 
+# ------------------------------------------------- the six unlaned public algorithms
+# lane/unlaned-public-algorithms (2026-09-20). `tools/verification_matrix.py
+# --json` reported SIX public entries with no identity lane at all: the two
+# resident decode sessions, `models.ParallelCausalLM`, the two
+# `parallel_gaussian_process` classifier drivers and
+# `parallel_model_selection.cross_val_score`. An algorithm with no lane cannot
+# be missing a cell, so a lane census hides it entirely; these six now have
+# names, parts and a written-down owed column.
+#
+# THEY DO NOT ALL COST THE SAME. Measured on this branch, on the M4's CPU
+# host route, before a line of lane body was written:
+#
+#   `fit_gaussian_process_classifier` / `predict_gaussian_process_classifier`
+#       refused with `no CPU implementation of the parallel worker operation
+#       gpc_class_fit yet` -- a CPU_OPERATIONS gap and nothing more. The
+#       class-level partition is the driver's own Python and each shard is the
+#       gp family's host `gpc_fit`/`gpc_predict`, which the covered `gpc` and
+#       `gpc-multiclass` lanes already hash, so the two operations were
+#       admitted to `_parallel_pool.CPU_OPERATIONS` against that docstring's
+#       bar (the reasoning is there, not here). Both lanes take a CPU column.
+#
+#   `Mamba1DecodeSession` / `TransformerDecodeSession` refuse BY NAME on the
+#       host route: `mamba1_session_create` and
+#       `transformer_decode_session_create` exist only in
+#       `bindings/_mojolearn_mamba.mojo` and
+#       `bindings/_mojolearn_transformer.mojo`. There is no CPU arithmetic to
+#       hash, so these two lanes are in `GPU_ONLY_LANES` and a CPU-only
+#       install drops them BY NAME instead of recording nine REFUSED cells,
+#       which in a column total reads exactly like coverage.
+#
+#   `ParallelCausalLM` and `parallel_model_selection.cross_val_score` refuse
+#       on anything that is not CUDA or HIP -- not only on the CPU column but
+#       on Apple's too (`_backend.vendor() not in ('cuda', 'hip')`, raised
+#       before either one touches a fold or a layer). They are `par-*` lanes
+#       by nature AND `GPU_ONLY_LANES` by route: their cells exist only on a
+#       two-device NVIDIA or AMD column.
+#
+# WHAT THE CPU CELLS PROVE AND WHAT THEY DO NOT. The two GPC lanes hold the
+# sharded driver to the plain fit byte for byte inside the cell, so they can
+# fail on this box with no record at all. That is AGREEMENT, not rightness: if
+# `gpc_fit`'s Newton loop were wrong, the driver and the plain fit would be
+# wrong together and every column would say IDENTICAL. The device axis is not
+# tested here either; at one device the partition is one worker process per
+# class, which is what `_par_devices`'s docstring says of every `par-*` lane.
+#
+# FOUR OF THE SIX HAVE NO SABOTAGE ARM ON THIS PASS, AND NOT BECAUSE ONE WAS
+# SKIPPED. A negative control is a BUILD that computes a wrong answer through
+# the same door the lane opens; the four lanes in `GPU_ONLY_LANES` open no
+# door on a CPU-only install at all, so there is nothing for a host define to
+# be wrong inside. Their arms are the ordinary ones of the families that serve
+# them on a GPU column -- the mamba and transformer bindings for the two decode
+# sessions, the neural set for `par-causal-lm`, the gbdt set for
+# `par-cross-val`'s folds -- and each is owed with the column, not before it.
+# This is written down rather than left blank because a lane with no arm and
+# no reason is indistinguishable from a lane whose arm was never run.
+
+#: Lanes whose PUBLIC SURFACE refuses by name on a CPU-only install, so a CPU
+#: column has no arithmetic of theirs to run (lane/unlaned-public-algorithms,
+#: 2026-09-20). A full-column run on a CPU-only install drops them by name and
+#: says so; `--lanes` names lanes explicitly and is never filtered, and a GPU
+#: column runs them exactly as it runs every other lane, so no record loses a
+#: cell. This is NOT `RECORD_EXCLUDED_PREFIXES`, which is about a release
+#: record's scope on every column; this is one column's inability to state the
+#: proposition at all, the same fact `lane_applicability` derives for cpu-host.
+GPU_ONLY_LANES = {
+    "mamba1-decode-session":
+        "Mamba1DecodeSession: mamba1_session_create exists only in "
+        "bindings/_mojolearn_mamba.mojo, and the constructor refuses by name on the host route",
+    "transformer-decode-session":
+        "TransformerDecodeSession: transformer_decode_session_create exists only in "
+        "bindings/_mojolearn_transformer.mojo, and the constructor refuses by name on the host route",
+    "par-causal-lm":
+        "models.ParallelCausalLM raises NotImplementedError unless _backend.vendor() is cuda or hip, "
+        "before it builds a single layer",
+    "par-cross-val":
+        "parallel_model_selection.cross_val_score raises NotImplementedError unless "
+        "_backend.vendor() is cuda or hip, before it prepares a single fold",
+}
+
+
+def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
+    """A resident decode session's outputs against the PER-CALL step, which
+    is the session's whole documented contract ("Every output is BYTE FOR
+    BYTE the per-call `step` on the same block and state").
+
+    Returns `(parts, session_outputs)`. The session is opened on one fresh
+    state and stepped `length` times; a second fresh state is stepped the
+    same `length` times through `blk.step(x, state)` with no session at all,
+    and the two are held to each other IN THE CELL. `sync_state` is then
+    asked for the resident state and held to the per-call state's buffers,
+    because a session whose outputs agree but whose state does not is a
+    session that cannot be handed back."""
+    x = _seq(Xh, rows, length, dm)
+    session_out, per_call_out = [], []
+    st = state_fn()
+    with blk.decode_session(st) as sess:
+        for t in range(length):
+            session_out.append(np.ascontiguousarray(np.asarray(sess.step(np.ascontiguousarray(x[:, t:t + 1])))))
+        sess.sync_state()
+        resident = _decode_state_arrays(st)
+    plain = state_fn()
+    for t in range(length):
+        per_call_out.append(np.ascontiguousarray(np.asarray(blk.step(np.ascontiguousarray(x[:, t:t + 1]), plain))))
+    _same_bytes("decode_session step", np.concatenate(session_out, axis=1),
+                "per-call block.step", np.concatenate(per_call_out, axis=1))
+    _same_bytes("decode_session sync_state", np.concatenate(resident),
+                "per-call state", np.concatenate(_decode_state_arrays(plain)))
+    return session_out, resident
+
+
+def _decode_state_arrays(state):
+    """Every float buffer a decode state carries, in a fixed name order, so
+    two states are comparable byte for byte."""
+    out = []
+    for name in ("conv_window", "h", "k_cache", "v_cache"):
+        buf = getattr(state, name, None)
+        if buf is not None:
+            out.append(np.ascontiguousarray(np.asarray(buf)).reshape(-1))
+    return out
+
+
+@lane("mamba1-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """`Mamba1Block.decode_session(state)` -> Mamba1DecodeSession
+    (DEVIATION 2941), the RESIDENT decode path: one device context and one
+    set of device structs built once and stepped, instead of per token.
+
+    THE PARTS. `step` is the 16 decoded positions of two rows, the same
+    weights and the same `_seq` slab the `mamba1` lane's held-out probe uses,
+    so a reader can hold this lane's cells against that one. `state` is the
+    resident `conv_window` and `h` after `sync_state()`. `flags` is the
+    session's refusals, which are part of its contract and which no sabotage
+    build can move: a closed session refuses to step, a state that already
+    belongs to a session refuses to open a second one, and a row count that
+    does not match the state's refuses by name.
+
+    THE ORACLE IS IN THE CELL. Both hashed parts are held BYTE FOR BYTE to
+    the per-call `block.step` on a second fresh state, which is the session
+    docstring's own claim, so this cell can fail on one box with no record.
+
+    `batch` IS NOT A BATCH AXIS HERE, and this is the part of the declaration
+    that needed thinking about rather than defaulting. The batch part asks
+    "does a row's answer depend on which other rows were in the call"; a
+    decode session is opened FOR a fixed batch size (`state.batch_size`, the
+    resident device buffers are allocated for it) and `step` refuses a row
+    count that is not the session's by name. Asking a batch of one of a
+    session opened for two is not a smaller batch of the same call, it is a
+    different session, and the answer it gives belongs to `mamba1`'s batch
+    part, which already asks the per-call `step` the session is held to.
+    `batchscale` is the same fact at serving scale. Declared n/a, with that
+    reason, in the declarations below.
+
+    NO CPU COLUMN EXISTS, and none can be faked (GPU_ONLY_LANES above).
+    OWED, to be taken in the coordinated three-column record:
+      MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
+        --lanes mamba1-decode-session --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
+        --json <column>.json"""
+    dm, di, r = 32, 64, 2
+    w = _block_weights("mamba1", {
+        "norm.weight": (dm,), "in_proj.weight": (2 * di, dm), "conv1d.weight": (di, 1, 4),
+        "conv1d.bias": (di,), "x_proj.weight": (r + 32, di), "dt_proj.weight": (di, r),
+        "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
+        ones=("norm.weight",))
+    blk = ml.Mamba1Block(w)
+    from mojolearn.mamba import Mamba1DecodeSession
+    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
+    held = blk.allocate_state(2)
+    sess = blk.decode_session(held)
+    sess.close()
+    busy = blk.allocate_state(2)
+    open_session = blk.decode_session(busy)
+    flags = np.asarray([
+        # THE DOOR RETURNS THE DOCUMENTED CLASS. `decode_session` is the only
+        # public door onto it, so the name is checked here rather than assumed;
+        # it is also what attributes this lane to `mamba.Mamba1DecodeSession`
+        # in tools/verification_matrix.py, which reads the lane body's
+        # references and not a hand-kept map.
+        type(open_session) is Mamba1DecodeSession,
+        int(open_session.is_open) and not sess.is_open,
+        _refused(lambda: sess.step(np.zeros((2, 1, dm), dtype=np.float32)), "session is closed"),
+        _refused(lambda: blk.decode_session(busy), "resident"),
+        _refused(lambda: open_session.step(np.zeros((3, 1, dm), dtype=np.float32)), "rows"),
+        _refused(lambda: blk.decode_session(None), "state is required"),
+    ], dtype=np.int64)
+    open_session.close()
+    return _fit(dict(step=_h(*steps), state=_h(*resident), flags=_h(flags)),
+                blk, lambda e: (np.asarray(e.forward(_seq(Xh, 2, 16, dm))),))
+
+
+@lane("transformer-decode-session")
+def _(ml, X, yc, yr, Xh=None):
+    """`TransformerBlock.decode_session(state)` -> TransformerDecodeSession
+    (DEVIATION 2940), the RESIDENT decode path over one KV cache.
+
+    THE PARTS. `step` is the 16 decoded positions of two rows on the
+    `transformer` lane's weights and slab; `prefill` is the session's
+    `forward(x)`, the chunked continuation on the resident cache, which the
+    Mamba-1 session has no counterpart for; `state` is the resident k and v
+    caches after `sync_state()`; `flags` is the refusals (a closed session, a
+    state already owned by a session, a window that does not match the
+    block's, a missing state). Both arithmetic parts are held BYTE FOR BYTE
+    in the cell to the per-call `block.step` and `block.forward` on a second
+    fresh state, which is the session docstring's own claim.
+
+    `batch` and `batchscale` are n/a for the Mamba-1 session's reason, which
+    is written out on that lane: the session is opened for a fixed
+    `state.batch_size` and refuses any other row count by name, so there is
+    no batch axis to vary without opening a different session.
+
+    NO CPU COLUMN EXISTS (GPU_ONLY_LANES above). OWED:
+      MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
+        --lanes transformer-decode-session --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
+        --json <column>.json"""
+    dm, nh, nkv, hd, it = 32, 2, 1, 16, 64
+    w = _block_weights("transformer", {
+        "input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+        "q_proj.weight": (nh * hd, dm), "k_proj.weight": (nkv * hd, dm), "v_proj.weight": (nkv * hd, dm),
+        "o_proj.weight": (dm, nh * hd), "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+        "down_proj.weight": (dm, it)},
+        near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
+    blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
+
+    from mojolearn.transformer import TransformerDecodeSession
+
+    def fresh():
+        return blk.allocate_state(2, max_tokens=32)
+
+    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
+    # THE PREFILL HALF, which only the transformer session has: L tokens on
+    # the resident cache in one call, held to the per-call forward on a
+    # second fresh state.
+    chunk = _seq(X, 2, 16, dm, skip=1024)
+    st = fresh()
+    with blk.decode_session(st) as sess:
+        prefill = np.ascontiguousarray(np.asarray(sess.forward(chunk)))
+    plain = fresh()
+    _same_bytes("decode_session forward", prefill,
+                "per-call block.forward", np.asarray(blk.forward(chunk, plain)))
+    held = fresh()
+    sess = blk.decode_session(held)
+    sess.close()
+    busy = fresh()
+    open_session = blk.decode_session(busy)
+    flags = np.asarray([
+        # the door returns the documented class; see the mamba1 lane
+        type(open_session) is TransformerDecodeSession,
+        int(open_session.is_open) and not sess.is_open,
+        _refused(lambda: sess.step(np.zeros((2, 1, dm), dtype=np.float32)), "session is closed"),
+        _refused(lambda: blk.decode_session(busy), "resident"),
+        _refused(lambda: blk.decode_session(None), "state is required"),
+        _refused(lambda: blk.decode_session(blk.allocate_state(2, max_tokens=32, window=8)), "window"),
+    ], dtype=np.int64)
+    open_session.close()
+    return _fit(dict(step=_h(*steps), prefill=_h(prefill), state=_h(*resident), flags=_h(flags)),
+                blk, lambda e: (np.asarray(_neural_inference(ml, "transformer", e).forward(_seq(Xh, 2, 16, dm))),))
+
+
+def _par_gpc_kernel(ml):
+    """The `gpc` lane's kernel, so this driver's cells are readable against
+    that lane's."""
+    return ml.ConstantKernel(1.0) * ml.RBF(1.0)
+
+
+@lane("par-gpc-fit")
+def _(ml, X, yc, yr, Xh=None):
+    """`parallel_gaussian_process.fit_gaussian_process_classifier`: the
+    GaussianProcessClassifier's ONE-VS-REST class problems scheduled one to a
+    worker, held to the plain `GaussianProcessClassifier.fit`.
+
+    THE SHAPE IS THE `gpc` AND `gpc-multiclass` LANES', deliberately: 256
+    rows of four columns, the same kernel, and both arms in one cell -- the
+    BINARY fit, whose `columns = [1]` means the driver builds exactly ONE
+    task and the merge is trivial, and the THREE-CLASS fit over
+    `_gpc_three_classes`, where the driver builds three tasks and
+    `_set_fitted` merges them in class order. A cell with only the binary arm
+    could not see a class-order defect at all.
+
+    THE ORACLE IS IN THE CELL. `_same_bytes` holds the driver's per-class
+    Cholesky factor and the three-class posterior mean to the plain fit's, so
+    this cell fails on one box with no record. What it does NOT say is that
+    the Laplace fit is RIGHT: a wrong Newton loop is wrong identically on both
+    sides of that comparison and on every column.
+
+    THE DEVICE AXIS IS `_par_devices()`, as every `par-*` lane's is. At one
+    device the partition is one worker PROCESS per class, which exercises the
+    Python split, the pickling of each class's target vector and the ordered
+    merge, and says nothing about two devices. The two-device column is owed.
+
+    `parts`: `L` and `pi` are the per-class Laplace state the driver
+    published, `lml` the log marginal likelihoods, `three_L` and `three_lml`
+    the three-class arm, `flags` the driver's refusals (a foreign estimator,
+    a FAST numeric mode, a label vector of the wrong length, a single-class
+    target). None of the refusals is arithmetic; they are hashed because a
+    driver that stops refusing has changed its contract and nothing else here
+    would see it.
+
+    SABOTAGE, SEEN TO MOVE. The arm is the gp family's own define,
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_gp_host.mojo`,
+    against a CLEAN build of the SAME source (a .so digest does not prove a
+    define; `gp_host_sabotage()` reads False on one and the loader refuses the
+    other BY NAME). MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
+    all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_unlaned-public-algorithms/):
+    every cell, infer, model and batch hash of BOTH GPC lanes moved, 18 of 18
+    cells and 36 of 36 infer/model parts DIVERGENT. `base`
+    53f3a09fc600d61d -> 59b4a6c2ea6454a4 here, `L`
+    cf8752e79a59c592 -> 07c415bd8bfe2ff3, `pi`
+    3e4e62ab648dd40a -> c2d8c272fe84b3a4.
+
+    WHAT THE ARM DOES NOT MOVE, said rather than left to be assumed. `flags`
+    never moves on any fixture (d529dd94544bb118 both sides, 9 of 9): a
+    refusal is a type check and a length check, not arithmetic, and no build
+    define can reach it -- which is the whole reason it is hashed as a number.
+    `lml` holds on `hashed`, `odd` and `ties` while `L` and `pi` move on all
+    nine; a lane whose only float part were the log marginal likelihood would
+    have read clean on a third of this column.
+
+    CPU COLUMN: yes, since `gpc_class_fit` joined
+    `_parallel_pool.CPU_OPERATIONS` on this branch. OWED GPU COLUMNS:
+      MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
+        --lanes par-gpc-fit,par-gpc-predict --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
+        --json <column>.json
+    and the two-device leg that is the actual claim:
+      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
+        tools/identity_break.py --lanes par-gpc-fit,par-gpc-predict \\
+        --repeats 2 --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
+    from mojolearn.parallel_gaussian_process import fit_gaussian_process_classifier
+    dev = _par_devices()
+    k = _par_gpc_kernel(ml)
+    xs, ys = X[:256, :4], yc[:256]
+    par = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k), xs, ys, devices=dev)
+    plain = ml.GaussianProcessClassifier(kernel=k).fit(xs, ys)
+    _same_bytes("fit_gaussian_process_classifier L", par.estimators_[0].L_,
+                "plain L", plain.estimators_[0].L_)
+    k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    y3 = _gpc_three_classes(X)
+    par3 = fit_gaussian_process_classifier(ml.GaussianProcessClassifier(kernel=k3), xs, y3, devices=dev)
+    plain3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, y3)
+    _same_bytes("fit_gaussian_process_classifier three-class proba", par3.predict_proba(X[256:320, :4]),
+                "plain three-class proba", plain3.predict_proba(X[256:320, :4]))
+    flags = np.asarray([
+        _refused(lambda: fit_gaussian_process_classifier(ml.GaussianProcessRegressor(kernel=k), xs, ys, devices=dev),
+                 "requires mojolearn.GaussianProcessClassifier"),
+        _refused(lambda: fit_gaussian_process_classifier(
+            ml.GaussianProcessClassifier(kernel=k, numeric_mode="fast"), xs, ys, devices=dev), "IDENTICAL"),
+        _refused(lambda: fit_gaussian_process_classifier(
+            ml.GaussianProcessClassifier(kernel=k), xs, ys[:128], devices=dev), "y length"),
+        _refused(lambda: fit_gaussian_process_classifier(
+            ml.GaussianProcessClassifier(kernel=k), xs, np.zeros(256, dtype=np.int64), devices=dev),
+            "at least two classes"),
+    ], dtype=np.int64)
+    return _fit(dict(L=_h(*[e.L_ for e in par.estimators_]),
+                     pi=_h(*[e.pi_ for e in par.estimators_]),
+                     lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par.estimators_],
+                                     dtype=np.float64)),
+                     three_L=_h(*[e.L_ for e in par3.estimators_]),
+                     three_lml=_h(np.array([e.log_marginal_likelihood_value_ for e in par3.estimators_],
+                                           dtype=np.float64)),
+                     flags=_h(flags)),
+                par, lambda e: (e.predict(Xh[:64, :4]), e.predict_proba(Xh[:64, :4])))
+
+
+@lane("par-gpc-predict")
+def _(ml, X, yc, yr, Xh=None):
+    """`parallel_gaussian_process.predict_gaussian_process_classifier`: the
+    PREDICTION driver, which `par-gpc-fit` does not reach (it schedules a
+    fit), over a fit taken the ordinary way.
+
+    Each worker is handed ONE class's covariance state plus the shared
+    training and query matrices, and the merge -- the binary `[1 - v, v]`
+    pair, the multiclass row-wise normalization and the arg-max that picks a
+    code -- is the driver's own Python in
+    `predict_gaussian_process_classifier` itself. Both `method` arms are
+    asked, on the binary and the three-class fit, and each is held BYTE FOR
+    BYTE in the cell to the plain estimator's `predict`/`predict_proba`,
+    which is the driver's whole documented contract.
+
+    `predict` returns the DECODED labels, so it is hashed as the integer
+    codes `classes_.index` gives back rather than as an object array (`_h`
+    refuses one, and would be hashing addresses if it did not).
+
+    SABOTAGE, SEEN TO MOVE, the same gp-family pair `par-gpc-fit` describes.
+    MEASURED, all nine fixtures, `--repeats 2`, 2026-09-20: `base`
+    2f1217bcae26e6a9 -> 2e25f01e28255189, `proba`
+    on every fixture, `three_proba` on every fixture, and the cell, infer,
+    model and batch hashes on all nine.
+
+    THE LABELS MOSTLY DO NOT MOVE, AND THAT IS WHY `proba` IS HASHED BESIDE
+    THEM. `labels` reads the same bytes under the sabotage on 9 of 9 fixtures
+    and `three_labels` on 8 of 9 (`wide` is the exception): the arm perturbs
+    the latent mean far below the gap between the top two classes, and a
+    `predict` is a sign test and an arg-max. A lane whose only part were the
+    predicted labels would have read CLEAN under a build that computes the
+    posterior wrongly everywhere. `flags` does not move either, for
+    `par-gpc-fit`'s reason.
+
+    Device axis, oracle and the limits of what agreement proves: as
+    `par-gpc-fit`. CPU column: yes. OWED GPU columns: the commands on
+    `par-gpc-fit`."""
+    from mojolearn.parallel_gaussian_process import predict_gaussian_process_classifier
+    dev = _par_devices()
+    k = _par_gpc_kernel(ml)
+    xs, q = X[:256, :4], X[256:320, :4]
+    m = ml.GaussianProcessClassifier(kernel=k).fit(xs, yc[:256])
+    proba = predict_gaussian_process_classifier(m, q, devices=dev, method="predict_proba")
+    labels = predict_gaussian_process_classifier(m, q, devices=dev, method="predict")
+    _same_bytes("predict_gaussian_process_classifier proba", proba, "plain predict_proba", m.predict_proba(q))
+    _same_bytes("predict_gaussian_process_classifier predict", _label_codes(m, labels),
+                "plain predict", _label_codes(m, m.predict(q)))
+    k3 = ml.ConstantKernel(2.0) * ml.Matern(1.0, nu=1.5)
+    m3 = ml.GaussianProcessClassifier(kernel=k3).fit(xs, _gpc_three_classes(X))
+    proba3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict_proba")
+    labels3 = predict_gaussian_process_classifier(m3, q, devices=dev, method="predict")
+    _same_bytes("predict_gaussian_process_classifier three-class proba", proba3,
+                "plain three-class predict_proba", m3.predict_proba(q))
+    flags = np.asarray([
+        _refused(lambda: predict_gaussian_process_classifier(m, q, devices=dev, method="decision_function"),
+                 "method must be predict or predict_proba"),
+        _refused(lambda: predict_gaussian_process_classifier(
+            ml.GaussianProcessRegressor(kernel=k), q, devices=dev),
+            "requires mojolearn.GaussianProcessClassifier"),
+        _refused(lambda: predict_gaussian_process_classifier(m, np.ascontiguousarray(q[:, :2]), devices=dev),
+                 "features"),
+    ], dtype=np.int64)
+    return _fit(dict(proba=_h(proba), labels=_h(_label_codes(m, labels)),
+                     three_proba=_h(proba3), three_labels=_h(_label_codes(m3, labels3)),
+                     flags=_h(flags)),
+                m, lambda e: (e.predict_proba(Xh[:64, :4]),))
+
+
+def _label_codes(estimator, labels):
+    """The integer position of each predicted label in `classes_`. `predict`
+    hands back the caller's own label objects, and `_h` refuses an object
+    array because its bytes are addresses."""
+    order = {v: i for i, v in enumerate(list(estimator.classes_))}
+    return np.asarray([order[v] for v in list(labels)], dtype=np.int64)
+
+
+@lane("par-causal-lm")
+def _(ml, X, yc, yr, Xh=None):
+    """`models.ParallelCausalLM`: EXPLICIT LAYER OWNERSHIP, one device index
+    per checkpoint layer, hidden activations crossing layer boundaries
+    through host memory. Sequential model parallelism, not tensor
+    parallelism and not a throughput claim; the class says so itself.
+
+    THE CLAIM IS THE ORDINARY `CausalLM` PATH'S BITS. `_RemoteBlock` and
+    `_RemotePrimitives` replace the in-process block and the embedding, norm
+    and head calls with RPCs to the layer's owner, and the class docstring
+    says "Output and state mathematics are the ordinary CausalLM path". So
+    the cell holds the layer-owned model's logits to a plain `CausalLM` on
+    the same weights, byte for byte, exactly as the other `par-*` drivers are
+    held to their plain fit.
+
+    THERE IS NO COLUMN ON THIS MACHINE, AND NOT ONLY BECAUSE IT IS A CPU.
+    `__init__` and `load` both raise
+    `NotImplementedError('ParallelCausalLM requires CUDA or HIP device
+    isolation')` before a single layer is constructed, so an APPLE column
+    cannot state this lane's proposition either -- the M4 is not a smaller
+    version of the right box, it is the wrong vendor. It is in
+    `GPU_ONLY_LANES` for that reason and in `par-*` for the ordinary one.
+
+    OWED, on a two-device CUDA or HIP box and nowhere else:
+      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
+        tools/identity_break.py --lanes par-causal-lm --repeats 2 \\
+        --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
+    from mojolearn import _causal_lm_fixtures as fx
+    from mojolearn.models import ParallelCausalLM
+    dev = _par_devices()
+    A = ml.Array.from_buffer
+    ids = _ids(X, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    cfg, tensors = fx.family_fixture("llama", False)
+    with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-") as d:
+        root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
+        plain = ml.models.causal_lm.CausalLM.load(root)
+        want = np.ascontiguousarray(np.asarray(plain.forward(A(ids))))
+        n_layers = plain.plan.n_layers
+        # ONE DEVICE INDEX PER LAYER, cycling the pool so a two-device column
+        # puts consecutive layers on different owners and every hidden state
+        # crosses a real boundary; at one device the tuple repeats an index,
+        # which the class documents as allowed and which is exactly the
+        # degenerate case `_par_devices` describes.
+        owners = tuple(dev[i % len(dev)] for i in range(n_layers))
+        with ParallelCausalLM.load(root, layer_devices=owners) as par:
+            got = np.ascontiguousarray(np.asarray(par.forward(A(ids))))
+            params = np.concatenate([_hf_bytes(w) for _, w in sorted(par.parameters().items())])
+            names_match = sorted(par.parameters()) == sorted(plain.parameters())
+        _same_bytes("ParallelCausalLM forward", got, "plain CausalLM forward", want)
+        flags = np.asarray([
+            names_match,
+            _refused(lambda: ParallelCausalLM.load(root, layer_devices=owners[:-1]), "layer_devices"),
+            _refused(lambda: ParallelCausalLM.load(root, layer_devices=(-1,) * n_layers), "layer_devices"),
+            _refused(lambda: ParallelCausalLM.load(root, layer_devices=owners, weight_format="fp8"),
+                     "weight_format"),
+            ml.models.ParallelCausalLM is ParallelCausalLM,
+        ], dtype=np.int64)
+    return _fit(dict(logits=_h(got), params=_h(params), flags=_h(flags)))
+
+
+@lane("par-cross-val")
+def _(ml, X, yc, yr, Xh=None):
+    """`parallel_model_selection.cross_val_score`: ONE FRESH ESTIMATOR PER
+    FOLD on the requested devices, dispatched in bounded waves of
+    `len(pool.devices)` including a final partial wave.
+
+    THE CLAIM IS THE SERIAL API'S BITS. Its own docstring says "Fold
+    validation, cloning, scoring and output order match the serial API", so
+    the cell holds the parallel scores to `model_selection.cross_val_score`
+    on the same estimator and folds, byte for byte. The `cross-val` lane
+    hashes the serial side of that comparison and the `cross-val-folds` lane
+    hashes the fold partition itself; this lane adds only the dispatch, which
+    is the one thing neither of those can see.
+
+    LIKE `par-causal-lm`, THIS IS NOT A CPU GAP THAT A CPU RUN COULD CLOSE.
+    `cross_val_score` raises `NotImplementedError('parallel cross-validation
+    requires CUDA or HIP GPU workers')` immediately after constructing the
+    pool and before `_prepare_folds`, so on a CPU or Apple column there is no
+    fold, no clone and no score to hash -- only the refusal, and a lane whose
+    only cell is a refusal sentence is the `kmeans-cosine` shape, which is why
+    this one is in `GPU_ONLY_LANES` instead of pretending to a column.
+
+    It also calls `require_distinct_workers` on a device inventory, so a
+    ONE-device run of it is not merely degenerate on the device axis the way
+    the other `par-*` lanes are; the width-1 wave is a different dispatch
+    from the width-2 one. The owed column is therefore TWO devices, and a
+    one-device column would be evidence about a code path the driver does not
+    take in service.
+
+    OWED, on a two-device CUDA or HIP box and nowhere else:
+      MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
+        tools/identity_break.py --lanes par-cross-val --repeats 2 \\
+        --step-full --batch-scale --ragged --batch-grad --json <column>.2gpu.json"""
+    from mojolearn.parallel_model_selection import cross_val_score
+    dev = _par_devices()
+    est = _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4)
+    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
+    serial = ml.model_selection.cross_val_score(
+        _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4), X, yr, cv=3)
+    _same_bytes("parallel cross_val_score", np.asarray(scores, dtype=np.float64),
+                "serial cross_val_score", np.asarray(serial, dtype=np.float64))
+    flags = np.asarray([
+        _refused(lambda: cross_val_score(est, X, yr, devices=()), "devices"),
+        _refused(lambda: cross_val_score(
+            _gbdt(ml.GradientBoostingRegressor, n_estimators=8, max_depth=4, numeric_mode="fast"),
+            X, yr, devices=dev, cv=3), "IDENTICAL"),
+        _refused(lambda: cross_val_score(est, X, yr, devices=dev, cv=3, error_score=0.0), "error_score"),
+    ], dtype=np.int64)
+    return _fit(dict(scores=_h(np.asarray(scores, dtype=np.float64)), flags=_h(flags)))
+
+
 def _neural_inference(ml, lane_name, est):
     """The estimator a neural lane's held-out and batch cells ask
     (lane/inference-tokenizer-neural, 2026-09-15). On a CPU column
@@ -8155,6 +8704,37 @@ _batch_decl(_batch_cross_val, "cross-val")
 # and asks nothing for a row's answer, so there is no batch axis to vary
 # (lane/data-ordering-determinism, 2026-09-16).
 _batch_decl("n/a:function", "cross-val-folds")
+# ---- lane/unlaned-public-algorithms (2026-09-20), the six laneless entries.
+#
+# THE DECODE SESSIONS HAVE NO BATCH AXIS TO VARY, and this needed thinking
+# about rather than defaulting to the `predict`-shaped declaration every
+# estimator gets. The batch part's question is "does a row's answer depend on
+# which other rows were in the call". A resident decode session is opened FOR
+# a fixed batch: `state.batch_size` sizes the device buffers the session
+# builds once, and `step` refuses any other row count BY NAME
+# (`the session holds N rows, x has B = M`). Asking two of the session's rows
+# alone is therefore not the same call on a smaller batch, it is a DIFFERENT
+# SESSION on a different state, whose answer belongs to the per-call `step`
+# that `mamba1` and `transformer` already declare and that this lane's own
+# cell holds the session to byte for byte. `batchscale` is the same fact at
+# serving scale and is left at its default for the same reason.
+_batch_decl("n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any "
+            "other row count by name, so a row alone is a different session and not a smaller batch of this "
+            "call; the per-call step the session is held to carries the batch part on the mamba1 and "
+            "transformer lanes)",
+            "mamba1-decode-session", "transformer-decode-session")
+# The GPC drivers DO have a row axis: `predict_gaussian_process_classifier`
+# takes query rows and the merge is per row, so the part asks it exactly as
+# the `gpc` lanes ask the plain estimator. The FIT driver has none -- its
+# shards are classes, not rows -- so it is declared on the fitted estimator's
+# prediction, which is what its infer column hashes.
+_batch_decl(_rows_calls("predict", "predict_proba", sl=(slice(0, 64), slice(0, 4))),
+            "par-gpc-fit", "par-gpc-predict")
+# `par-cross-val`'s answer is one score per FOLD, not per row: a fold is a
+# partition of the whole data set and a smaller call is a different
+# cross-validation, exactly as `cross-val-folds` says of the partition.
+_batch_decl("n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows "
+            "is a different cross-validation, not the same one in a smaller batch)", "par-cross-val")
 # `language-model-config` (lane/laneless-public-classes, 2026-09-19) is a
 # FROZEN DATACLASS. `parameter_shapes`, `offsets`, `n_total` and `profile`
 # are functions of the CONFIG, not of any input rows -- the lane passes no
@@ -8228,6 +8808,32 @@ def _batch_hf_causal_lm(ml, e, Xh):
 
 
 _batch_decl(_batch_hf_causal_lm, "hf-causal-lm")
+# `par-causal-lm` is `hf-causal-lm`'s Llama row with the layers owned by
+# separate worker processes, so its batch axis is the same one: the layer
+# boundary must not make a row's answer depend on its neighbours. The lane's
+# `est` is None (it returns no estimator), so the declaration rebuilds the
+# model the lane built; it runs only on the CUDA/HIP columns where the lane
+# can run at all (GPU_ONLY_LANES).
+def _batch_par_causal_lm(ml, e, Xh):
+    from mojolearn import _causal_lm_fixtures as fx
+    from mojolearn.models import ParallelCausalLM
+    ids = _ids(Xh, HF_LM_BATCH, HF_LM_LEN, HF_LM_VOCAB)
+    dev = _par_devices()
+    cfg, tensors = fx.family_fixture("llama", False)
+    with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-batch-") as d:
+        root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
+        n_layers = ml.models.causal_lm.CausalLM.load(root).plan.n_layers
+        with ParallelCausalLM.load(
+                root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers))) as par:
+
+            def fwd(rows):
+                return (np.asarray(par.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
+
+            return [_BatchRows("forward", ids, fwd),
+                    _BatchPrefix("forward", HF_LM_LEN, lambda p: fwd(ids[:, :p]), axis=1)]
+
+
+_batch_decl(_batch_par_causal_lm, "par-causal-lm")
 _batch_decl(_batch_optim_sgd, "optim-sgd")
 _batch_decl(_batch_optim_adam, "optim-adam-clip")
 _batch_decl("n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a "
@@ -9193,6 +9799,43 @@ _stepfull_decl(_stepfull_samba, "samba", "samba-untied-dropout-accum")
 _stepfull_decl("n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
                "par-samba", "par-samba-clip", "par-byte-lm", "par-byte-lm-model-pool", "par-byte-lm-offload")
 
+
+def _stepfull_session_spec(state_kw=None):
+    """lane/unlaned-public-algorithms (2026-09-20). THE RESIDENT DECODE IS
+    THE PREFILL. The ordinary stepfull spec asks the block's per-call
+    `step`; these two lanes' subject is the SESSION, whose whole claim is
+    that its output is the per-call step's, so the part asks the block's
+    fresh-state `forward` against the SESSION's streaming `step`. That is a
+    strictly stronger statement than either half alone: the lane's own cell
+    holds the session to the per-call step, and this holds the same session
+    to the prefill."""
+    def spec(ml, blk, Xh, _kw=state_kw):
+        kw = dict(max_tokens=STEPFULL_LENGTH) if _kw == "kv" else {}
+        x = _seq(Xh, STEPFULL_ROWS, STEPFULL_LENGTH, blk.d_model)
+        sessions = []
+
+        def alloc():
+            st = blk.allocate_state(STEPFULL_ROWS, **kw)
+            sessions.append(blk.decode_session(st))
+            return sessions[-1]
+
+        return [_StepFullCall(
+            f"forward(x) vs decode_session step, L={STEPFULL_LENGTH}", x,
+            lambda a: blk.forward(np.ascontiguousarray(a)),
+            alloc,
+            lambda a, sess: sess.step(a))]
+    return spec
+
+
+_stepfull_decl(_stepfull_session_spec(), "mamba1-decode-session")
+_stepfull_decl(_stepfull_session_spec("kv"), "transformer-decode-session")
+_stepfull_decl("n/a:driver-lane (the layer owners hold the state in their own worker processes; the "
+               "single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+               "par-causal-lm")
+_stepfull_decl("n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior "
+               "have no sequence axis and no carried state)",
+               "par-cross-val", "par-gpc-fit", "par-gpc-predict")
+
 STEPFULL_DEFAULT = "n/a:no-decode-state"
 
 
@@ -9987,6 +10630,19 @@ def _run_reference(args):
         if out_of_scope:
             lanes = [n for n in lanes if n not in out_of_scope]
             print(f"# OUT OF RECORD SCOPE ({len(out_of_scope)} lanes): {sorted(out_of_scope)}")
+    # NO CPU ARITHMETIC EXISTS FOR THESE (GPU_ONLY_LANES, above). Their public
+    # surface refuses BY NAME on a CPU-only install, so a full-column run here
+    # would record REFUSED cells, and a REFUSED cell and a passing cell are the
+    # same thing in a column total. Dropped by name with the reason printed;
+    # `--lanes` is never filtered, and a GPU column runs them as it runs
+    # everything else, so no record loses a cell.
+    if not args.lanes and host:
+        no_route = [n for n in lanes if n in GPU_ONLY_LANES]
+        if no_route:
+            lanes = [n for n in lanes if n not in no_route]
+            print(f"# NO CPU ROUTE ({len(no_route)} lanes), owed on a GPU column:")
+            for n in sorted(no_route):
+                print(f"#   {n}: {GPU_ONLY_LANES[n]}")
     # Broad Apple matrices are explicit diagnostics, not release requirements.
     _apple_refusal = refuse_routine_apple_column(lanes, host)
     if _apple_refusal:
