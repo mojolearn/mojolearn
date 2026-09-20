@@ -27,12 +27,11 @@ and 16,389 for V2. `nvidia-smi` reported 1 MiB used before and after the
 process; the persistent allocation accounting is therefore the useful
 per-trainer memory witness at this scale.
 
-At V=8,192 the four exact recomputation passes execute 32 chunks each: 128
-chunk GEMMs plus their serial fold/update launches. The stable 84.1 ms V2
-versus 2.06 ms V1 gap makes launch/recomputation the next bottleneck. No new
-kernel arm was landed: removing passes or combining independently reduced
-chunk gradients would violate the fixed V2 operation order, and no exact
-guarded fusion was qualified during this rental.
+At V=8,192 the three exact recomputation passes execute 32 chunks each: 96
+chunk GEMMs plus their serial fold/update launches. (Forward maximum and
+denominator require separate passes; the backward pass already shares each
+chunk between dHidden and dWeight.) The stable 84.1 ms V2 versus 2.06 ms V1
+gap makes launch/recomputation the next bottleneck.
 
 The first pod (`4pvttd16wqr1wn`) proved the oracle gate but its optional timing
 loop used an unavailable `/usr/bin/time`; it was deleted with HTTP 204 and

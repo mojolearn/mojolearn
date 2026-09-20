@@ -125,12 +125,27 @@ def harness_path():
     return _identity.harness_path()
 
 
-def load_harness(path=None):
+def load_harness(path=None, par_axis=False):
+    """The harness module, or CannotRun naming what would make its hashes
+    incomparable.
+
+    `par_axis=True` is `verify --par` and NOTHING ELSE. That command produces
+    BOTH columns here, so it has no recorded reference to be incomparable
+    with, and it sets MOJOLEARN_PAR_DEVICES itself around each `run_cell`. The
+    refusal below is still right for it and is still raised: an ambient value
+    would be overwritten a moment later, and silently overwriting what the
+    user exported is worse than saying so. Only the SENTENCE changes, because
+    "the reference is the one-device record" is not the reason here.
+    """
     for var in _HARNESS_OVERRIDES:
         if os.environ.get(var, "").strip() not in ("", "0"):
             raise CannotRun(f"{var} is set; it changes what the harness hashes, so no cell would "
                             "be comparable with the record. Unset it.")
     if os.environ.get("MOJOLEARN_PAR_DEVICES", "0").strip() not in ("", "0"):
+        if par_axis:
+            raise CannotRun("MOJOLEARN_PAR_DEVICES is set in the environment; `verify --par` sets "
+                            "it itself, once per column, and would overwrite yours without saying "
+                            "so. Unset it, and name the devices with --par-devices.")
         raise CannotRun("MOJOLEARN_PAR_DEVICES is set to more than device 0; the reference is the "
                         "one-device record. Unset it.")
     if path is None:
@@ -3413,6 +3428,12 @@ def cmd_verify_all(args):
         return _cmd_self_test(args, ml)
     if getattr(args, "cross_check", None):
         return _cmd_cross_check(args, ml)
+    if getattr(args, "par", None) or getattr(args, "par_self_test", False):
+        # The two-device column against the one-device column, both produced
+        # on this box. It needs no reference table, so it dispatches BEFORE
+        # the table is loaded, like --self-test and --cross-check.
+        from ._verify_par import cmd_par_check
+        return cmd_par_check(args, ml)
 
     try:
         table_file = getattr(args, "reference_table", None) or vref.table_path()

@@ -619,7 +619,7 @@ class RandomForestClassifier(_RandomForestBase):
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
-        inference_engine="sequential",
+        inference_engine="auto",
     ):
         code = _criterion_code(criterion, _CLS_CRITERIA, "classifier")
         if min_weight_fraction_leaf:
@@ -755,7 +755,7 @@ class RandomForestRegressor(_RandomForestBase):
         n_streams=_CUML_DEFAULT_N_STREAMS,
         max_batch_size=_CUML_DEFAULT_MAX_BATCH,
         device="gpu",
-        inference_engine="sequential",
+        inference_engine="auto",
     ):
         code = _criterion_code(criterion, _REG_CRITERIA, "regressor")
         if min_weight_fraction_leaf:

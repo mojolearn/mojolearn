@@ -415,7 +415,7 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         max_samples=None,
         monotonic_cst=None,
         device="gpu",
-        inference_engine="sequential",
+        inference_engine="auto",
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)
@@ -530,7 +530,7 @@ class ExtraTreesRegressor(_ExtraTreesBase):
         max_samples=None,
         monotonic_cst=None,
         device="gpu",
-        inference_engine="sequential",
+        inference_engine="auto",
     ):
         super().__init__(device)
         _refuse_forest_knobs(n_jobs, verbose)

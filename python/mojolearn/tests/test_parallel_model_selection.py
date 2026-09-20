@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Scheduler contracts with isolated fake fits; not physical GPU qualification."""
 import ctypes
+import os
 import pickle
 
 import pytest
@@ -8,6 +9,7 @@ import pytest
 from mojolearn import Array, _backend, _buffer
 from mojolearn import model_selection as serial
 from mojolearn import parallel_model_selection as parallel
+from mojolearn._cpu_reference import reference_training
 from mojolearn._parallel_pool import DevicePool, _cpu_refusal
 from mojolearn._parallel_worker import execute
 
@@ -53,6 +55,13 @@ def setup(monkeypatch):
             ctypes.memmove(dst + output * row_bytes, src + source * row_bytes, row_bytes)
     monkeypatch.setitem(_buffer._NATIVE, 'gather_rows_bytes', gather)
     monkeypatch.setattr(_backend, 'vendor', lambda: 'cuda')
+    # THE PRETENDED INSTALL MUST BE CONSISTENT WITH THE PRETENDED VENDOR
+    # (lane/cpu-routes-gpu-only-four, 2026-09-20). This fixture emulates a
+    # CUDA box; a real one has `_CPU_ONLY is None`, and leaving the host
+    # box's real value in place made the worker's new `require_training`
+    # refuse every fold of a test that claims to be on a GPU. Saying 'cuda'
+    # and 'CPU-only install' at once is not a state that exists.
+    monkeypatch.setattr(_backend, '_CPU_ONLY', None)
     instances = []
 
     class Pool(DevicePool):
@@ -132,6 +141,13 @@ def test_unpickleable_scorer_fails_before_launch(setup):
 
 @pytest.mark.parametrize('vendor', ['cpu', 'metal'])
 def test_no_implicit_cpu_or_metal_pool(setup, monkeypatch, vendor):
+    """A GPU INSTALL whose vendor is not CUDA or HIP still refuses.
+
+    `_CPU_ONLY is None` here (the fixture's emulated GPU box), so this is the
+    Metal case and the case of a GPU install that reports `cpu` -- not the
+    CPU-only host route, which `test_cpu_only_install_takes_the_host_route`
+    below covers separately. The two must not be confused: one is "the wrong
+    vendor", the other is "no vendor at all, and one worker is one process"."""
     X, y, pools = setup
     monkeypatch.setattr(_backend, 'vendor', lambda: vendor)
     with pytest.raises(NotImplementedError, match='CUDA or HIP'):
@@ -139,7 +155,86 @@ def test_no_implicit_cpu_or_metal_pool(setup, monkeypatch, vendor):
     assert not pools[-1].widths
     with pytest.raises(NotImplementedError, match='CUDA or HIP'):
         execute(('cross_val_fold', Estimator(), (X, y, X, y, None)))
-    assert _cpu_refusal([('cross_val_fold', None, ())], False) is not None
+
+
+def test_cpu_only_install_takes_the_host_route_with_a_process_witness(setup, monkeypatch):
+    """The CPU-only install DOES run the driver, with the process witness.
+
+    lane/cpu-routes-gpu-only-four (2026-09-20). `cross_val_fold` and
+    `worker_identity` joined `_parallel_pool.CPU_OPERATIONS`, so the refusal
+    is gone; what replaces it is `require_distinct_processes` over one
+    `worker-process-identity` record per index. The fixture's fake pool
+    answers `device_inventory`, so this test makes it answer the host
+    operation instead and checks the driver ASKED for the host one, which is
+    the whole difference between the two routes at this level."""
+    X, y, pools = setup
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'cpu')
+    monkeypatch.setattr(_backend, '_CPU_ONLY', 'no identical binding on this box')
+    asked = []
+    original = parallel.DevicePool
+
+    class HostPool(original):
+        def map(self, requests):
+            asked.append(requests[0][0])
+            if requests[0][0] == 'worker_identity':
+                return [dict(kind='worker-process-identity', vendor='cpu',
+                             pid=1000 + device, ppid=os.getpid())
+                        for device in self.devices]
+            return super().map(requests)
+
+    monkeypatch.setattr(parallel, 'DevicePool', HostPool)
+    # INSIDE `reference_training()`, which is the only scope a CPU fold fits
+    # in. The fixture's pool runs `execute` in this process rather than
+    # through `DevicePool.map`'s `cpu_reference` wrapper, so the scope is
+    # opened here; `test_the_cpu_fold_guard_is_load_bearing` below is the
+    # arm that shows the guard is what closes it.
+    with reference_training():
+        scores = parallel.cross_val_score(Estimator(), X, y, devices=(0, 1), cv=3)
+    assert asked[0] == 'worker_identity'
+    assert 'device_inventory' not in asked
+    expected = serial.cross_val_score(Estimator(), X, y, cv=3)
+    assert scores.tobytes() == expected.tobytes()
+    assert pools[-1].closed
+
+
+def test_the_cpu_fold_guard_is_load_bearing(setup, monkeypatch):
+    """A FOLD IS A FIT, and on a CPU-only install it runs only in the
+    verifier's scope.
+
+    THE HOLE THIS CLOSES, measured on a CPU-only install 2026-09-20
+    (lane/cpu-routes-gpu-only-four). `model_selection._clone` admits ANY
+    object with `get_params`, which is what the driver's docstring means by
+    "Define custom classes/scorers in importable modules"; `Estimator` above
+    is exactly such a foreign class and carries no
+    `_mode._guard_cpu_training`, because it is not a `NumericModeMixin`
+    subclass. With `require_training(state)` deleted from
+    `_parallel_worker`'s `cross_val_fold` arm, the driver FITTED IT ANYWAY,
+    outside `reference_training()`, on a box where the plain mojolearn fit
+    refuses -- watched, scores returned. With the guard the same call
+    refuses by the plain fit's own words. THIS TEST WAS WATCHED TO FAIL with
+    the guard removed and to pass with it in place.
+
+    For a mojolearn estimator the guard is redundant (its public `fit`
+    carries the decorator, which `_fit_score_fold` calls); it is
+    load-bearing for the foreign one, and that is the case this asserts."""
+    X, y, _ = setup
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'cpu')
+    monkeypatch.setattr(_backend, '_CPU_ONLY', 'no identical binding on this box')
+    with pytest.raises(NotImplementedError, match='reserved for the internal bitwise verifier'):
+        execute(('cross_val_fold', Estimator(), (X, y, X, y, None)))
+    with reference_training():
+        assert isinstance(execute(('cross_val_fold', Estimator(), (X, y, X, y, None))), float)
+
+
+def test_the_cpu_route_is_still_gated_by_cpu_operations():
+    """`cross_val_fold` is admitted; a neighbouring operation is not.
+
+    A one-sided assertion here would read the same whether the frozenset had
+    two new names or every name."""
+    assert _cpu_refusal([('cross_val_fold', None, ())], False) is None
+    assert _cpu_refusal([('worker_identity', None, ())], False) is None
+    assert _cpu_refusal([('gbdt_fit', None, ())], False) is not None
+    assert _cpu_refusal([('cross_val_fold', None, ())], True) is not None
 
 
 @pytest.mark.parametrize('devices', [(), (0, 0), (-1,), (True,), ('0',)])

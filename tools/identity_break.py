@@ -7298,17 +7298,29 @@ def _(ml, X, yc, yr, Xh=None):
 #       host route: `mamba1_session_create` and
 #       `transformer_decode_session_create` exist only in
 #       `bindings/_mojolearn_mamba.mojo` and
-#       `bindings/_mojolearn_transformer.mojo`. There is no CPU arithmetic to
-#       hash, so these two lanes are in `GPU_ONLY_LANES` and a CPU-only
-#       install drops them BY NAME instead of recording nine REFUSED cells,
-#       which in a column total reads exactly like coverage.
+#       `bindings/_mojolearn_transformer.mojo`. [SUPERSEDED 2026-09-20; see
+#       below.]
 #
 #   `ParallelCausalLM` and `parallel_model_selection.cross_val_score` refuse
 #       on anything that is not CUDA or HIP -- not only on the CPU column but
 #       on Apple's too (`_backend.vendor() not in ('cuda', 'hip')`, raised
-#       before either one touches a fold or a layer). They are `par-*` lanes
-#       by nature AND `GPU_ONLY_LANES` by route: their cells exist only on a
-#       two-device NVIDIA or AMD column.
+#       before either one touches a fold or a layer). [SUPERSEDED 2026-09-20;
+#       see below.]
+#
+# ALL FOUR OF THOSE READINGS WERE WRONG, AND THE MEASUREMENTS BEHIND THEM
+# WERE RIGHT (lane/cpu-routes-gpu-only-four, 2026-09-20). Each refusal was
+# real, by name, on a CPU-only install; each was taken as a statement about
+# the lane's ARITHMETIC, and none of them was one. A decode session's bytes
+# are `mamba_step` and `transformer_decode_step`, the block at L = 1, which
+# BOTH host bindings export under the per-call names -- what the host lacks
+# is somewhere to keep them resident, which is a fact about cost. The two
+# drivers checked a VENDOR, not their own work: their partitions and merges
+# are the driver's own Python and their shards are host arithmetic covered
+# lanes already hash, so on a CPU-only install a "device index" is one
+# WORKER PROCESS and all of it runs. The four lanes now take a CPU column
+# with an oracle in the cell, `GPU_ONLY_LANES` is empty, and the question
+# that was not asked -- "is the thing that refuses the thing the lane
+# hashes?" -- is written down there as the bar for the next entry.
 #
 # WHAT THE CPU CELLS PROVE AND WHAT THEY DO NOT. The two GPC lanes hold the
 # sharded driver to the plain fit byte for byte inside the cell, so they can
@@ -7318,16 +7330,18 @@ def _(ml, X, yc, yr, Xh=None):
 # tested here either; at one device the partition is one worker process per
 # class, which is what `_par_devices`'s docstring says of every `par-*` lane.
 #
-# FOUR OF THE SIX HAVE NO SABOTAGE ARM ON THIS PASS, AND NOT BECAUSE ONE WAS
-# SKIPPED. A negative control is a BUILD that computes a wrong answer through
-# the same door the lane opens; the four lanes in `GPU_ONLY_LANES` open no
-# door on a CPU-only install at all, so there is nothing for a host define to
-# be wrong inside. Their arms are the ordinary ones of the families that serve
-# them on a GPU column -- the mamba and transformer bindings for the two decode
-# sessions, the neural set for `par-causal-lm`, the gbdt set for
-# `par-cross-val`'s folds -- and each is owed with the column, not before it.
-# This is written down rather than left blank because a lane with no arm and
-# no reason is indistinguishable from a lane whose arm was never run.
+# FOUR OF THE SIX HAD NO SABOTAGE ARM ON THAT PASS, AND NOW THEY DO
+# (lane/cpu-routes-gpu-only-four, 2026-09-20). The reason given then was that
+# a negative control is a BUILD that computes a wrong answer through the same
+# door the lane opens, and that these four opened no door on a CPU-only
+# install. That was the same mistake in a second place: once each lane has a
+# host route, the door is its family's own host binding and the arm is that
+# family's own define -- the mamba binding for `mamba1-decode-session`, the
+# transformer binding for `transformer-decode-session`, the neural binding for
+# `par-causal-lm` and the gbdt binding for `par-cross-val`'s folds, which is
+# exactly the list that paragraph predicted would serve them on a GPU column.
+# Each was built `-D MOJOLEARN_HOST_SABOTAGE=1` against a CLEAN build of the
+# SAME source and watched; what moves and what does not is on each lane.
 
 #: Lanes whose PUBLIC SURFACE refuses by name on a CPU-only install, so a CPU
 #: column has no arithmetic of theirs to run (lane/unlaned-public-algorithms,
@@ -7337,20 +7351,35 @@ def _(ml, X, yc, yr, Xh=None):
 #: cell. This is NOT `RECORD_EXCLUDED_PREFIXES`, which is about a release
 #: record's scope on every column; this is one column's inability to state the
 #: proposition at all, the same fact `lane_applicability` derives for cpu-host.
-GPU_ONLY_LANES = {
-    "mamba1-decode-session":
-        "Mamba1DecodeSession: mamba1_session_create exists only in "
-        "bindings/_mojolearn_mamba.mojo, and the constructor refuses by name on the host route",
-    "transformer-decode-session":
-        "TransformerDecodeSession: transformer_decode_session_create exists only in "
-        "bindings/_mojolearn_transformer.mojo, and the constructor refuses by name on the host route",
-    "par-causal-lm":
-        "models.ParallelCausalLM raises NotImplementedError unless _backend.vendor() is cuda or hip, "
-        "before it builds a single layer",
-    "par-cross-val":
-        "parallel_model_selection.cross_val_score raises NotImplementedError unless "
-        "_backend.vendor() is cuda or hip, before it prepares a single fold",
-}
+#:
+#: EMPTY SINCE 2026-09-20 (lane/cpu-routes-gpu-only-four), and kept because
+#: the four entries it held were WRONG in a way worth writing down rather
+#: than deleting. Every one of the four refusals was real, by name, on a
+#: CPU-only install, and every one was read as a statement about arithmetic:
+#:
+#:   `mamba1-decode-session` / `transformer-decode-session`
+#:       "mamba1_session_create exists only in the GPU binding" was true and
+#:       is still true. What it describes is RESIDENCY -- a device context
+#:       holding weights, state and stages across steps -- and a session's
+#:       BYTES are `mamba_step` / `transformer_decode_step`, the block at
+#:       L = 1, which the host bindings export under the per-call names. Both
+#:       classes now carry a host arm that owns its copies and calls those
+#:       entries, so the lanes' byte-for-byte claim is testable here.
+#:   `par-causal-lm` / `par-cross-val`
+#:       "raises unless _backend.vendor() is cuda or hip" was a check the
+#:       drivers made, not a fact about their work. On a CPU-only install a
+#:       device index is one worker PROCESS; the layer partition, the fold
+#:       partition, the wave dispatch and both merges are the driver's own
+#:       Python, and each shard is host arithmetic a covered lane hashes.
+#:       Metal still refuses, because `DevicePool` gives an Apple group no
+#:       visibility mask at all.
+#:
+#: The mechanism stays: a lane whose PUBLIC SURFACE genuinely has no CPU
+#: arithmetic belongs here, so a full-column CPU run drops it by name instead
+#: of recording a REFUSED cell that reads like coverage in a column total.
+#: The bar to add one is the question these four did not get asked: is the
+#: thing that refuses the thing the lane hashes?
+GPU_ONLY_LANES = {}
 
 
 def _decode_session_probe(blk, state_fn, rows, length, dm, Xh):
@@ -7425,7 +7454,29 @@ def _(ml, X, yc, yr, Xh=None):
     `batchscale` is the same fact at serving scale. Declared n/a, with that
     reason, in the declarations below.
 
-    NO CPU COLUMN EXISTS, and none can be faked (GPU_ONLY_LANES above).
+    THE CPU COLUMN EXISTS AS OF 2026-09-20 (lane/cpu-routes-gpu-only-four),
+    and what made it possible was not new arithmetic. The host binding
+    exports no `mamba1_session_*` entry and never will -- there is nothing on
+    the host to keep resident -- but `step` IS `mamba_step`, the block at
+    L = 1, which `bindings/_mojolearn_mamba_host.mojo` exports as
+    `mamba1_decode_step` over `mamba_block_oracle`. The class now carries a
+    HOST ARM that owns its copies of the ten weights and the two state pieces
+    and calls that entry per token, in `Mamba1Block._call`'s own address
+    order. So this cell's `step` part is the host oracle's bytes and its
+    oracle is still the per-call `block.step` beside it in the cell. The arm
+    makes NO speed claim: on the host it re-reads the weights every step.
+
+    SABOTAGE, SEEN TO MOVE. The mamba family's own define,
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_mamba_host.mojo`
+    (`gemm_oracle`'s descending leaf, which every projection reaches),
+    against a CLEAN build of the SAME source. MEASURED on the M4, one core,
+    `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    train, infer and stepfull DIVERGENT on 9 of 9. What does NOT move is
+    written down too -- `flags` never, because a refusal is not arithmetic,
+    and `step` on the `negative` fixture alone, where only `state` moves,
+    which is why the state part is hashed beside it.
+
     OWED, to be taken in the coordinated three-column record:
       MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
         --lanes mamba1-decode-session --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
@@ -7482,7 +7533,38 @@ def _(ml, X, yc, yr, Xh=None):
     `state.batch_size` and refuses any other row count by name, so there is
     no batch axis to vary without opening a different session.
 
-    NO CPU COLUMN EXISTS (GPU_ONLY_LANES above). OWED:
+    THE CPU COLUMN EXISTS AS OF 2026-09-20 (lane/cpu-routes-gpu-only-four),
+    for the Mamba-1 session's reason: the host binding exports no
+    `transformer_decode_session_*` entry, but `step` and `forward` ARE
+    `transformer_decode_step` and `transformer_forward`, which
+    `bindings/_mojolearn_transformer_host.mojo` exports over
+    `transformer/host/transformer_block_host.mojo` -- the same file that
+    already routes the GPU binding's decode step through the host oracles
+    and converts the KV cache between the device layout and the oracle's.
+    The class now carries a HOST ARM that owns its copies of the nine (plus
+    optional) weights and of the k/v caches and calls those entries in
+    `TransformerBlock._call_impl`'s own address order, options tail included.
+    The oracle is still the per-call `block.step`/`block.forward` beside it
+    in the cell, and the arm makes NO speed claim.
+
+    SABOTAGE, SEEN TO MOVE, AND IT TAKES TWO ARMS. The transformer family's
+    own define, `-D MOJOLEARN_HOST_SABOTAGE=1` on
+    `bindings/_mojolearn_transformer_host.mojo`, against a CLEAN build of the
+    SAME source, moves `step`, `prefill`, `state` and `stepfull` on all nine
+    fixtures -- and moves the HELD-OUT `infer` cell on NONE of them. That is
+    not a miss: the held-out cell is `_neural_inference(ml, "transformer", e)`,
+    which on a CPU column builds `TransformerBlockInference`, the NEURAL
+    family's binding and not this one's, so the transformer define cannot
+    reach it and never could. The neural family's define is the second arm and
+    is the mirror image: `infer` moves 9 of 9 and the train cell and
+    `stepfull` do not move at all. Neither arm is redundant; each watches what
+    the other cannot. MEASURED on the M4, one core, `nice -n 19`,
+    `--repeats 2`, all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/,
+    `sabotage-transformer.json` and `sabotage-neural-transformer-session.json`).
+    `flags` does NOT move under either and cannot.
+
+    OWED:
       MOJOLEARN_NUMERIC_MODE=identical python3 tools/identity_break.py \\
         --lanes transformer-decode-session --repeats 2 --step-full --batch-scale --ragged --batch-grad \\
         --json <column>.json"""
@@ -7726,13 +7808,38 @@ def _(ml, X, yc, yr, Xh=None):
     the same weights, byte for byte, exactly as the other `par-*` drivers are
     held to their plain fit.
 
-    THERE IS NO COLUMN ON THIS MACHINE, AND NOT ONLY BECAUSE IT IS A CPU.
-    `__init__` and `load` both raise
+    THERE IS A CPU COLUMN AS OF 2026-09-20 (lane/cpu-routes-gpu-only-four),
+    AND IT IS NOT A DEVICE CLAIM. `__init__` and `load` used to raise
     `NotImplementedError('ParallelCausalLM requires CUDA or HIP device
-    isolation')` before a single layer is constructed, so an APPLE column
-    cannot state this lane's proposition either -- the M4 is not a smaller
-    version of the right box, it is the wrong vendor. It is in
-    `GPU_ONLY_LANES` for that reason and in `par-*` for the ordinary one.
+    isolation')` before a single layer was constructed. That check was about
+    the VENDOR, not about the work: on a CPU-only install a device index is
+    one WORKER PROCESS, each worker is told its route and builds
+    `_block_classes("cpu")[kind]` and `_CpuPrimitives` over the neural host
+    binding, and the partition (one `_RemoteBlock` per layer) and the merge
+    (`CausalLM._run`'s sequential hand-off, embedding on the first owner and
+    norm and head on the last) are the driver's own Python either way. So
+    `causal_lm_layer` joined `_parallel_pool.CPU_OPERATIONS` against that
+    docstring's bar and this cell holds the layer-owned model to the plain
+    one byte for byte on a box with no GPU at all. METAL is still refused by
+    name, deliberately: `DevicePool` gives an Apple group no visibility mask,
+    so "one device per owner" would be a sentence with nothing behind it.
+
+    WHAT THE CPU CELL DOES NOT SAY. It is AGREEMENT with the plain path, not
+    rightness -- a wrong block would be wrong identically on both sides. And
+    one process per index is the DEGENERATE case of the device axis, which is
+    what `_par_devices`'s docstring says of every `par-*` lane; no hidden
+    activation crosses a device boundary here, only a pipe.
+
+    SABOTAGE, SEEN TO MOVE. The neural family's define,
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_neural_host.mojo`,
+    the same arm the covered `hf-causal-lm` lane uses and for the same
+    reason, against a CLEAN build of the SAME source. MEASURED on the M4, one
+    core, `nice -n 19`, `--repeats 2`, all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    `logits` and `batch` DIVERGENT on 9 of 9. `params` does not move and is
+    not expected to -- it is the weights the owners were SENT, read back, and
+    a wrong GEMM does not change those bytes; it is hashed because a broken
+    RPC round-trip would. `flags` never moves either.
 
     OWED, on a two-device CUDA or HIP box and nowhere else:
       MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
@@ -7785,20 +7892,60 @@ def _(ml, X, yc, yr, Xh=None):
     hashes the fold partition itself; this lane adds only the dispatch, which
     is the one thing neither of those can see.
 
-    LIKE `par-causal-lm`, THIS IS NOT A CPU GAP THAT A CPU RUN COULD CLOSE.
-    `cross_val_score` raises `NotImplementedError('parallel cross-validation
-    requires CUDA or HIP GPU workers')` immediately after constructing the
-    pool and before `_prepare_folds`, so on a CPU or Apple column there is no
-    fold, no clone and no score to hash -- only the refusal, and a lane whose
-    only cell is a refusal sentence is the `kmeans-cosine` shape, which is why
-    this one is in `GPU_ONLY_LANES` instead of pretending to a column.
+    LIKE `par-causal-lm`, THIS TOOK A CPU COLUMN ON 2026-09-20
+    (lane/cpu-routes-gpu-only-four). `cross_val_score` used to raise
+    `NotImplementedError('parallel cross-validation requires CUDA or HIP GPU
+    workers')` immediately after constructing the pool and before
+    `_prepare_folds`. That check was about the VENDOR: the fold partition,
+    the cloning, the wave dispatch, the fold order and the merge are
+    `_prepare_folds`/`_take_rows`/`scores.extend` -- the serial API's own
+    code, in the driver's own Python -- and each fold is the estimator's
+    public `fit` and `score`, which on this route is the same gbdt host
+    arithmetic the `cross-val` lane hashes serially. `cross_val_fold` joined
+    `_parallel_pool.CPU_OPERATIONS` against that docstring's bar.
 
-    It also calls `require_distinct_workers` on a device inventory, so a
-    ONE-device run of it is not merely degenerate on the device axis the way
-    the other `par-*` lanes are; the width-1 wave is a different dispatch
-    from the width-2 one. The owed column is therefore TWO devices, and a
-    one-device column would be evidence about a code path the driver does not
-    take in service.
+    A FOLD IS A FIT, so the same hole `gpc_class_fit` opened was checked
+    here. `_fit_score_fold` calls the estimator's PUBLIC `fit`, so
+    `_mode._guard_cpu_training` stands behind every mojolearn estimator --
+    but `model_selection._clone` admits ANY object with `get_params`, which
+    the driver's own docstring invites, and such a class carries no guard.
+    Measured on a CPU-only install, 2026-09-20: with `require_training`
+    absent from the worker's `cross_val_fold` arm a foreign estimator was
+    FITTED, outside `reference_training()`, on a box where the plain
+    mojolearn fit refuses. The worker now calls `require_training(state)`
+    first, and `test_parallel_model_selection.py::
+    test_the_cpu_fold_guard_is_load_bearing` was watched to FAIL with it
+    removed.
+
+    THE DEVICE INVENTORY IS THE ONE PIECE THAT COULD NOT BE CARRIED OVER, and
+    it is not faked. On CUDA/HIP the driver calls `require_distinct_workers`
+    on `visible_gpu_inventory`: one visible physical GPU per worker, no
+    repeated UUID or PCI id. There is no such question on a host box, so the
+    CPU route asks `require_distinct_processes` over
+    `worker_process_inventory` instead -- one distinct worker PROCESS per
+    index, under its own record kind, in a SEPARATE function so the GPU
+    check's bar is untouched. That admits the dispatch and NOTHING about
+    hardware.
+
+    WHAT IS AND IS NOT DEGENERATE HERE. Unlike the other `par-*` lanes the
+    width-1 wave is a different dispatch from the width-2 one, so a one-index
+    column really would be evidence about a code path the driver does not
+    take in service -- and on this route that costs nothing, because an index
+    is a process: the recorded CPU column was taken at
+    `MOJOLEARN_PAR_DEVICES=0` and again at `0,1` (cv=3, so one full wave and
+    one partial wave) and the two hash EQUAL, cell for cell, which is the
+    driver's whole claim. What remains owed is the DEVICE axis: two real
+    GPUs, where the folds are isolated by a visibility mask rather than by a
+    process boundary.
+
+    SABOTAGE, SEEN TO MOVE. The gbdt family's define,
+    `-D MOJOLEARN_HOST_SABOTAGE=1` on `bindings/_mojolearn_gbdt_host.mojo`,
+    the family that serves every fold's fit, against a CLEAN build of the
+    SAME source. MEASURED on the M4, one core, `nice -n 19`, `--repeats 2`,
+    all nine fixtures, 2026-09-20
+    (bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/):
+    `scores` DIVERGENT on 9 of 9. `flags` never moves, because a refusal is
+    not arithmetic.
 
     OWED, on a two-device CUDA or HIP box and nowhere else:
       MOJOLEARN_PAR_DEVICES=0,1 MOJOLEARN_NUMERIC_MODE=identical python3 \\
@@ -8832,8 +8979,17 @@ _batch_decl(_batch_hf_causal_lm, "hf-causal-lm")
 # separate worker processes, so its batch axis is the same one: the layer
 # boundary must not make a row's answer depend on its neighbours. The lane's
 # `est` is None (it returns no estimator), so the declaration rebuilds the
-# model the lane built; it runs only on the CUDA/HIP columns where the lane
-# can run at all (GPU_ONLY_LANES).
+# model the lane built.
+#
+# THE MODEL OUTLIVES THIS FUNCTION ON PURPOSE. A batch declaration RETURNS
+# probes the harness calls later, so a `with ParallelCausalLM.load(...)`
+# here closed the pool before the first probe ran and every batch cell read
+# REFUSED with `ParallelCausalLM is closed` -- seen the first time any column
+# could run this lane at all (lane/cpu-routes-gpu-only-four, 2026-09-20; the
+# lane was GPU-only when the declaration was written, so nothing had ever
+# called these probes). The model is held by the closures and closed by its
+# own `__del__` when the harness drops them; the checkpoint directory is
+# gone by then and is not needed, because `load` materializes every weight.
 def _batch_par_causal_lm(ml, e, Xh):
     from mojolearn import _causal_lm_fixtures as fx
     from mojolearn.models import ParallelCausalLM
@@ -8843,14 +8999,14 @@ def _batch_par_causal_lm(ml, e, Xh):
     with tempfile.TemporaryDirectory(prefix="ib-par-causal-lm-batch-") as d:
         root = fx._write_checkpoint(os.path.join(d, "llama"), cfg, tensors)
         n_layers = ml.models.causal_lm.CausalLM.load(root).plan.n_layers
-        with ParallelCausalLM.load(
-                root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers))) as par:
+        par = ParallelCausalLM.load(
+            root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers)))
 
-            def fwd(rows):
-                return (np.asarray(par.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
+    def fwd(rows):
+        return (np.asarray(par.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
 
-            return [_BatchRows("forward", ids, fwd),
-                    _BatchPrefix("forward", HF_LM_LEN, lambda p: fwd(ids[:, :p]), axis=1)]
+    return [_BatchRows("forward", ids, fwd),
+            _BatchPrefix("forward", HF_LM_LEN, lambda p: fwd(ids[:, :p]), axis=1)]
 
 
 _batch_decl(_batch_par_causal_lm, "par-causal-lm")

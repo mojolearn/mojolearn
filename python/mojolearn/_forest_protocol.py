@@ -139,12 +139,18 @@ class ForestProtocol:
 
     @staticmethod
     def _validate_inference_engine(engine):
-        if not isinstance(engine, str) or engine not in ("sequential", "parallel_groves"):
-            raise ValueError("inference_engine must be 'sequential' or 'parallel_groves'")
+        if not isinstance(engine, str) or engine not in ("auto", "sequential", "parallel_groves"):
+            raise ValueError("inference_engine must be 'auto', 'sequential' or 'parallel_groves'")
         return engine
 
     def _prediction_engine(self):
-        return self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
+        engine = self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
+        if engine == "auto":
+            # FAST permits the grove-parallel reduction and benefits from a
+            # persistent device snapshot.  The reproducibility tiers retain
+            # the historical sequential traversal and arithmetic.
+            return "parallel_groves" if self._effective_mode() == "fast" else "sequential"
+        return engine
 
     def _prediction_function(self, sequential_name):
         engine = self._prediction_engine()
