@@ -1866,7 +1866,10 @@ struct LlamaBackwardStages(Movable):
             wide = it
 
         self.in_d_residual2 = _zeros[False](ctx, m * dm)
-        self.d_down_proj_out = _zeros[False](ctx, m * dm)
+        # Both residual-add branches receive the incoming cotangent
+        # unchanged. They are read-only afterward, so retain one allocation
+        # while preserving the two separately named trace stages.
+        self.d_down_proj_out = self.in_d_residual2.create_sub_buffer[DType.float32](0, m * dm)
         self.d_mlp_gated = _zeros[False](ctx, m * it)
         self.dw_down = _zeros[False](ctx, dm * it)
         self.d_silu_out = _zeros[False](ctx, m * it)
@@ -1879,7 +1882,10 @@ struct LlamaBackwardStages(Movable):
         self.dw_norm2 = _zeros[False](ctx, dm)
         self.norm2_dx = _zeros[False](ctx, m * dm)
         self.d_residual1 = _zeros[False](ctx, m * dm)
-        self.d_o_proj_out = _zeros[False](ctx, m * dm)
+        # `o_proj` receives the residual-add cotangent verbatim. Keep its
+        # separately named trace stage as a view: both consumers are reads,
+        # and `d_residual1` remains live until the final input fan-in.
+        self.d_o_proj_out = self.d_residual1.create_sub_buffer[DType.float32](0, m * dm)
         self.d_attn_ctx = _zeros[False](ctx, m * qw)
         self.dw_o = _zeros[False](ctx, dm * qw)
         var cells = b * nh * l * s_max
@@ -2864,14 +2870,6 @@ def llama_decoder_layer_backward_device(
         grid_dim=(_grid(m * dm), 1, 1),
         block_dim=(BWD_TPB, 1, 1),
     )
-    step_count_launch()
-    ctx.enqueue_function[bwd_copy_kernel](
-        bst.d_down_proj_out.unsafe_ptr(),
-        d_out.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -3033,19 +3031,10 @@ def llama_decoder_layer_backward_device(
     # it. This wait ordered nothing in either branch.
     _rec(ctx, trace, prefix, 13, bst.d_residual1, m * dm)
     pc.tick(ctx, "grad.residual1_add")
-    step_count_launch()
-    ctx.enqueue_function[bwd_copy_kernel](
-        bst.d_o_proj_out.unsafe_ptr(),
-        bst.d_residual1.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
-    # statement is a trace record. `IdentityTrace.record_device` returns
-    # at once when tracing is off; when it is on it enqueues its OWN copy
-    # behind this kernel on the same in-order context and drains AFTER
-    # it. This wait ordered nothing in either branch.
+    # `d_o_proj_out` aliases the just-recorded `d_residual1`: the derivative
+    # of the residual add is identity on this branch. Recording the second
+    # contract stage still hashes the same bytes, while production avoids a
+    # full tensor copy and allocation.
     _rec(ctx, trace, prefix, 14, bst.d_o_proj_out, m * dm)
     pc.tick(ctx, "grad.o_copy")
 
