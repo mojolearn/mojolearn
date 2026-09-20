@@ -120,6 +120,9 @@ comptime RESIDENT_RAW = 0
 comptime RESIDENT_SOFTMAX = 1
 comptime RESIDENT_SIGMOID = 2
 comptime RESIDENT_SIGMOID_PAIR = 3
+comptime RESIDENT_CLASSES = 4
+comptime RESIDENT_CLASSES_PINNED = 5
+comptime RESIDENT_CLASSES_OVA = 6
 
 #: One float32 slab per model column holds `[count, border_0, ...]`, the
 #: layout `_build_cindex_from_floats` stages per feature into a 256-float
@@ -605,15 +608,16 @@ struct ResidentGbdtModel(Movable):
         n_rows: Int,
         out_f32: MutPointer[Float32, MutUntrackedOrigin],
         out_f64: MutPointer[Float64, MutUntrackedOrigin],
+        out_i64: MutPointer[Int64, MutUntrackedOrigin],
         mode: Int,
         row_major: Bool = False,
     ) raises -> Int:
         """One call: stage, upload once, quantize, apply, read back once,
         transform on the host. `x` holds `n_rows` rows of
         `n_input_features` raw columns, COLUMN-MAJOR unless `row_major`.
-        Returns the width written per row; the float32 output is written
-        for every mode but `RESIDENT_SIGMOID_PAIR`, which writes the
-        float64 output."""
+        Returns the width written per row. Raw/softmax/sigmoid write float32,
+        `RESIDENT_SIGMOID_PAIR` writes float64, and the three class modes
+        write int64 codes."""
         if n_rows <= 0:
             raise Error("gbdt_resident_predict: n_rows must be positive")
         var expanded = List[Float32]()
@@ -682,6 +686,67 @@ struct ResidentGbdtModel(Movable):
         comptime if RESIDENT_SABOTAGE:
             hc.unsafe_store(0, hc.unsafe_load(0) + Float32(1.0))
         var dim = self.approx_dim
+        if mode >= RESIDENT_CLASSES and mode <= RESIDENT_CLASSES_OVA:
+            var kind = mode - RESIDENT_CLASSES
+            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
+            var workers = host_worker_count()
+            if tasks > workers:
+                tasks = workers
+            if tasks < 1:
+                tasks = 1
+            var chunk = (n_rows + tasks - 1) // tasks
+
+            def _classes_task(c: Int) {imm hc, imm out_i64, imm chunk,
+                                       imm n_rows, imm dim, imm kind}:
+                var lo = c * chunk
+                var hi = min(lo + chunk, n_rows)
+                if kind == 0:
+                    for r in range(lo, hi):
+                        out_i64.unsafe_store(
+                            r, Int64(1) if hc.unsafe_load(r) > Float32(0.0) else Int64(0)
+                        )
+                    return
+                # Reproduce the public Float32 probability cells before the
+                # first-max comparison. Comparing raw logits is not sufficient:
+                # the final narrowing can create a tie between nearby values.
+                for r in range(lo, hi):
+                    var best = 0
+                    var best_value = Float32(0.0)
+                    if kind == 1:
+                        var mx = Float64(0.0)
+                        for k in range(dim):
+                            var raw = Float64(hc.unsafe_load(k * n_rows + r))
+                            if raw > mx:
+                                mx = raw
+                        var se = Float64(0.0)
+                        for k in range(dim):
+                            se += identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx)
+                        se += identical_exp64(-mx)
+                        best_value = Float32(identical_exp64(Float64(hc.unsafe_load(r)) - mx) / se)
+                        for k in range(1, dim):
+                            var value = Float32(identical_exp64(Float64(hc.unsafe_load(k * n_rows + r)) - mx) / se)
+                            if value > best_value:
+                                best = k
+                                best_value = value
+                        var pinned = Float32(identical_exp64(-mx) / se)
+                        if pinned > best_value:
+                            best = dim
+                    else:
+                        best_value = Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(r)))))
+                        for k in range(1, dim):
+                            var value = Float32(1.0 / (1.0 + identical_exp64(-Float64(hc.unsafe_load(k * n_rows + r)))))
+                            if value > best_value:
+                                best = k
+                                best_value = value
+                    out_i64.unsafe_store(
+                        r, Int64(best)
+                    )
+
+            if tasks == 1:
+                _classes_task(0)
+            else:
+                sync_parallelize(_classes_task, tasks)
+            return 1
         if mode == RESIDENT_RAW:
             if dim == 1:
                 memcpy(dest=out_f32, src=hc, count=n_rows)
@@ -857,6 +922,7 @@ def gbdt_resident_predict(
     n_rows: Int,
     out_f32: MutPointer[Float32, MutUntrackedOrigin],
     out_f64: MutPointer[Float64, MutUntrackedOrigin],
+    out_i64: MutPointer[Int64, MutUntrackedOrigin],
     mode: Int,
     row_major: Bool = False,
 ) raises -> Int:
@@ -866,5 +932,5 @@ def gbdt_resident_predict(
     if handle not in state[].entries:
         raise Error("unknown or released resident GBDT model handle")
     return state[].entries[handle].predict_into(
-        x, n_rows, out_f32, out_f64, mode, row_major
+        x, n_rows, out_f32, out_f64, out_i64, mode, row_major
     )

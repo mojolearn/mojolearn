@@ -87,6 +87,12 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
     return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
+def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null buffer address")
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
 def gbdt_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST,
     1 IDENTICAL, 2 DETERMINISTIC.
@@ -643,9 +649,10 @@ def gbdt_resident_predict_binding(
     SIGMOID as `gbdt_predict_multi` takes them, plus 3 SIGMOID_PAIR: the
     Logloss and CrossEntropy `predict_proba` columns `[1 - p, p]` written
     as FLOAT64 to `out_addr` (`gbdt_sigmoid_pair`'s two statements over
-    the exact widening of the raw float32 value). Every other mode writes
-    float32 to `out_addr`, `n_rows * width` values row-major, exactly as
-    `gbdt_predict` and `gbdt_predict_multi` write them. `row_major` (an
+    the exact widening of the raw float32 value). Modes 4..6 write int64
+    class codes; every other mode writes float32 to `out_addr`, `n_rows *
+    width` values row-major, exactly as `gbdt_predict` and
+    `gbdt_predict_multi` write them. `row_major` (an
     optional third entry, 0 when absent) says `x` is the C-order
     `[row * n_features + f]` block rather than the column-major one; the
     staging pass transposes it. The feature count comes from the prepared
@@ -665,9 +672,10 @@ def gbdt_resident_predict_binding(
         row_major = Int(py=params[2]) != 0
     var op32 = _f32_ptr(addr)
     var op64 = _f64_ptr(addr)
+    var opi64 = _i64_ptr(addr)
     var width: Int
     with GILReleased(Python()):
-        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, mode, row_major)
+        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, opi64, mode, row_major)
     return PythonObject(width)
 
 

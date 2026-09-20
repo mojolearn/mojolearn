@@ -325,6 +325,9 @@ _PREDICT_SIGMOID = 2   # their `MultiProbability`, MultiClassOneVsAll
 #: pair `[1 - p, p]` as float64 (DEVIATION 2980, the resident door's spelling
 #: of `gbdt_sigmoid_pair`)
 _PREDICT_SIGMOID_PAIR = 3
+_PREDICT_CLASSES = 4
+_PREDICT_CLASSES_PINNED = 5
+_PREDICT_CLASSES_OVA = 6
 
 #: DEVIATION 2980: the device-resident parsed model is the default door of
 #: `GradientBoosting.predict` and `predict_proba` wherever the loaded binding
@@ -2472,6 +2475,36 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: predict_classes needs a classification loss; "
                 f"this model was fitted with {self.loss!r}."
             )
+        # FAST's resident door can fuse the established probability
+        # transform with its first-maximum selection after raw readback.
+        # IDENTICAL and DETERMINISTIC deliberately retain the established
+        # probability/readback/host-argmax boundary.
+        if self.model_ is None:
+            raise RuntimeError("mojolearn: predict_proba() before fit()")
+        binding = self._bind("_mojolearn_gbdt")
+        # At wider multiclass widths the already-parallel probability pass
+        # plus native argmax is faster than fusing the exact transform here.
+        narrow = (self.loss in ("Logloss", "CrossEntropy")
+                  or self.n_classes_ <= 3)
+        if (self.numeric_mode_used() == "fast" and narrow
+                and self.grow_policy == "SymmetricTree"):
+            handle = self._resident_handle(binding)
+            if handle is not None:
+                Xa, n_rows, row_major = self._check_fitted_layout(X)
+                out = empty((n_rows,), "<i8")
+                mode = (_PREDICT_CLASSES_PINNED if self.loss == "MultiClass"
+                        else _PREDICT_CLASSES_OVA if self.loss == "MultiClassOneVsAll"
+                        else _PREDICT_CLASSES)
+                width = binding.gbdt_resident_predict(
+                    handle, addr_ro(Xa, name="X"),
+                    addr(out, name="predict_classes output"),
+                    [n_rows, mode, 1 if row_major else 0],
+                )
+                if int(width) != 1:
+                    raise RuntimeError(
+                        f"mojolearn: predict_classes wrote width {width}, expected 1"
+                    )
+                return out
         return argmax_rows(self.predict_proba(X))
 
     def _tree_metadata(self):
