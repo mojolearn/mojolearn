@@ -143,7 +143,8 @@ fi
 case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
     estash) MEMORY_DEFINE= ;;
     recompute) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash or recompute' >&2; exit 2 ;;
+    packed) MEMORY_DEFINE="-D MOJOLEARN_ATTN_V1_PACKED_ESTASH=1" ;;
+    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, or recompute' >&2; exit 2 ;;
 esac
 
 tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-transformer.XXXXXX")

@@ -61,7 +61,8 @@ trap 'rm -rf "$byte_lm_tmpdir"' EXIT HUP INT TERM
 case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
     estash) ;;
     recompute) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1" ;;
-    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash or recompute' >&2; exit 2 ;;
+    packed) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_ATTN_V1_PACKED_ESTASH=1" ;;
+    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, or recompute' >&2; exit 2 ;;
 esac
 # MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
 # appended verbatim, word-split, for trial builds (for example
