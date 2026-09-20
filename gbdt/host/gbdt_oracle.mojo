@@ -127,6 +127,7 @@ tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 from std.math import exp, floor, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from checks.numerics import (
     ftz,
@@ -705,22 +706,43 @@ def gbdt_host_grid(
         sample_idx = _sample_indices_for_borders(
             n_rows, border_sample_n, random_seed
         )
-    var borders = List[List[Float32]]()
-    var fold_counts = List[Int]()
-    var nan_treatment = List[Int]()
-    for f in range(n_features):
+    # `_calc_quantization_phase_b` used to raise this public refusal while
+    # visiting features serially.  Preserve both its exact text and the first
+    # offending-feature order before worker exceptions are collapsed into the
+    # internal parallel-build error below.  The sampled path also checks the
+    # full learn column before injecting a NaN into its sample.
+    if nan_mode == NAN_MODE_FORBIDDEN:
+        for f in range(n_features):
+            for r in range(n_rows):
+                var v = x_colmajor[f * n_rows + r]
+                if v != v:
+                    raise Error(
+                        "There are nan factors and nan values for float features are"
+                        " not allowed. Set nan_mode != Forbidden."
+                    )
+    var out_cap = border_count + 1
+    var flat_borders = List[Float32](length=n_features * out_cap, fill=Float32(0.0))
+    var out_counts = List[Int](length=n_features, fill=0)
+    var out_modes = List[Int](length=n_features, fill=-1)
+    var xp = rebind[MutPointer[Float32, MutUntrackedOrigin]](x_colmajor.unsafe_ptr())
+    var sip = rebind[MutPointer[UInt32, MutUntrackedOrigin]](sample_idx.unsafe_ptr())
+    var obp = rebind[MutPointer[Float32, MutUntrackedOrigin]](flat_borders.unsafe_ptr())
+    var ocp = rebind[MutPointer[Int, MutUntrackedOrigin]](out_counts.unsafe_ptr())
+    var omp = rebind[MutPointer[Int, MutUntrackedOrigin]](out_modes.unsafe_ptr())
+
+    def _grid_column(f: Int) {imm xp, imm sip, imm obp, imm ocp, imm omp, imm n_rows, imm border_sample_n, imm out_cap, imm border_count, imm nan_mode, imm border_type}:
         var col = List[Float32](capacity=border_sample_n)
         if border_sample_n == n_rows:
             var raw = List[Float32](capacity=n_rows)
             for r in range(n_rows):
-                raw.append(x_colmajor[f * n_rows + r])
+                raw.append(xp.unsafe_load(f * n_rows + r))
             col = _sorted_by_twiddled_key(raw)
         else:
             for i in range(border_sample_n):
-                col.append(x_colmajor[f * n_rows + Int(sample_idx[i])])
+                col.append(xp.unsafe_load(f * n_rows + Int(sip.unsafe_load(i))))
             var has_nan = False
             for r in range(n_rows):
-                var v = x_colmajor[f * n_rows + r]
+                var v = xp.unsafe_load(f * n_rows + r)
                 if v != v:
                     has_nan = True
                     break
@@ -733,15 +755,41 @@ def gbdt_host_grid(
                         break
                 if not sample_has:
                     col[0] = Float32(0.0) / Float32(0.0)
-        var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)
-        var nb = len(q[0])
-        if nb > border_count + 1:
-            raise Error(
-                "parallel border build failed on float column " + String(f)
-            )
-        borders.append(q[0].copy())
+        try:
+            var q = _calc_quantization_phase_b(col^, border_count, nan_mode, border_type)
+            var nb = len(q[0])
+            if nb > out_cap:
+                ocp.unsafe_store(f, -1)
+                return
+            for b in range(nb):
+                obp.unsafe_store(f * out_cap + b, q[0][b])
+            ocp.unsafe_store(f, nb)
+            omp.unsafe_store(f, nan_value_treatment(q[1]))
+        except:
+            ocp.unsafe_store(f, -1)
+
+    # Border searches own disjoint output slots and share only immutable X
+    # and sample indices.  Keep small fits serial to avoid pool overhead.
+    if n_features > 1 and n_rows * n_features >= (1 << 18):
+        sync_parallelize(_grid_column, n_features)
+    else:
+        for f in range(n_features):
+            _grid_column(f)
+    _ = sample_idx^
+
+    var borders = List[List[Float32]]()
+    var fold_counts = List[Int]()
+    var nan_treatment = List[Int]()
+    for f in range(n_features):
+        var nb = out_counts[f]
+        if nb < 0:
+            raise Error("parallel border build failed on float column " + String(f))
+        var fb = List[Float32](capacity=nb)
+        for b in range(nb):
+            fb.append(flat_borders[f * out_cap + b])
+        borders.append(fb^)
         fold_counts.append(nb)
-        nan_treatment.append(nan_value_treatment(q[1]))
+        nan_treatment.append(out_modes[f])
     return GbdtHostGrid(borders^, fold_counts^, nan_treatment^)
 
 
