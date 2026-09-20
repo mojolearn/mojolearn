@@ -448,7 +448,16 @@ is not written (all three 2026-09-13 GPU columns carry "commit": "").
 `--diff ... --require-columns N --lanes a,b` exits non-zero when any named
 lane has fewer than N real hashes on a compared cell, because `IDENTICAL x3`
 on a lane the CPU column should cover is the CPU binding refusing, not a
-pass.
+pass. THE FLOOR IS ON BY DEFAULT since 2026-09-20: `--require-columns`
+defaults to 2 whenever two or more JSONs are given, so a cell only one column
+hashed (ONE-COLUMN) or no column hashed (REFUSED) exits non-zero on its own.
+It defaulted to 0, and `bad` counts only MOVED, DIVERGENT, RELOAD-MOVED,
+BATCH_MOVED and RLPAIR_MOVED, so a diff whose every cell read ONE-COLUMN --
+nothing compared with anything -- exited 0; one of the 37 executable
+`tools/*.sh` sites that run `--diff` passed the flag. `--require-columns 0`
+turns the floor off by name. `--lanes` naming a lane no JSON carries is a
+REQUIRE FAIL with or without a floor; that check used to live inside
+`if require_columns:`, which made `--lanes` alone inert.
 
 A REFUSED PART NAMES ITS CAUSE (2026-09-19). Every `*_error` field carries
 the stage, the exception TYPE, its message and the traceback of the raise,
@@ -11661,6 +11670,13 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
         outside = len(set(k.split("/")[0] for k in keys) - set(require_lanes))
         keys = [k for k in keys if k.split("/")[0] in set(require_lanes)]
         print(f"NOTE: --lanes scopes this diff to {len(set(require_lanes))} lane(s); {outside} other lane(s) the JSONs carry are not compared")
+    # A LANE NAMED BY --lanes THAT NO JSON CARRIES IS A GAP, WITH OR WITHOUT
+    # --require-columns (2026-09-20). This check used to live inside
+    # `if require_columns:`, which made `--lanes` on its own FULLY INERT: it
+    # narrowed the table and then could not report that the narrowing left
+    # nothing. `--lanes a-lane-nobody-hashed` printed a scoped diff of zero
+    # rows and exited 0.
+    lane_gaps = sorted(set(require_lanes or ()) - set(k.split("/")[0] for k in keys))
     names = [c for c, _ in cols]
     if require_columns and require_columns > len(cols):
         print(f"REQUIRE FAIL: --require-columns {require_columns} with {len(cols)} JSONs given")
@@ -11855,13 +11871,17 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
                   f"--require-columns {require_columns} demands that many; a column that "
                   "should cover this lane is refusing, which is not a pass"
                   + (f" (not OWED: {why})" if why else ""))
-        missing = sorted(required - set(k.split("/")[0] for k in keys))
-        for lane_name in missing:
-            print(f"REQUIRE FAIL {lane_name}: no JSON carries a cell for this lane")
-        bad += len(short) + len(missing)
-        print(f"require-columns {require_columns} over {sorted(required)}: "
-              f"{'OK' if not short and not missing else str(len(short) + len(missing)) + ' short'}"
+        bad += len(short)
+        # The lane list is printed when `--lanes` named it, because then it IS
+        # the scope the caller asked for; otherwise it is every lane the JSONs
+        # carry and a count says the same thing in one line.
+        scope = sorted(required) if require_lanes else f"{len(required)} lane(s)"
+        print(f"require-columns {require_columns} over {scope}: "
+              f"{'OK' if not short and not lane_gaps else str(len(short) + len(lane_gaps)) + ' short'}"
               + (f" ({len(owed)} OWED)" if owed_json else ""))
+    for lane_name in lane_gaps:
+        print(f"REQUIRE FAIL {lane_name}: no JSON carries a cell for this lane")
+    bad += len(lane_gaps)
     if owed_json:
         for o in owed:
             print(f"OWED {o['lane']}/{o['fixture']} {o['part']}: no hash in {','.join(o['missing'])}; "
@@ -12143,10 +12163,13 @@ def main():
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--diff", nargs="+", default=None, metavar="JSON",
                     help="compare JSONs cell by cell: the train column, then infer and model where carried")
-    ap.add_argument("--require-columns", type=int, default=0, metavar="N",
+    ap.add_argument("--require-columns", type=int, default=None, metavar="N",
                     help="with --diff: exit non-zero unless every compared cell of the lanes named by "
                          "--lanes (every lane when --lanes is empty) rests on at least N real hashes; "
-                         "--lanes also scopes which cells --diff compares at all")
+                         "--lanes also scopes which cells --diff compares at all. DEFAULTS TO 2 when "
+                         "two or more JSONs are given: a cell only one column hashed was not compared, "
+                         "and a diff that reports nothing over a table of ONE-COLUMN prints is not a "
+                         "pass. Pass 0 to turn the floor off explicitly")
     ap.add_argument("--owed-json", default="", metavar="PATH",
                     help="with --diff --require-columns: a cell part short ONLY because a record has no hash "
                          "for it (cell absent, part absent or n/a) reads OWED xK instead of failing, when every "
@@ -12175,7 +12198,31 @@ def main():
             unknown = [n for n in lanes if n not in LANES]
             if unknown:
                 raise SystemExit(f"REFUSING: --lanes names no lane: {unknown}; lanes are {sorted(LANES)}")
-        return diff(args.diff, args.require_columns, lanes, args.owed_json or None)
+        # THE FLOOR IS ON BY DEFAULT (2026-09-20). `--require-columns` defaulted
+        # to 0, and with no floor `bad` counts only MOVED, DIVERGENT,
+        # RELOAD-MOVED, BATCH_MOVED and RLPAIR_MOVED: a table of nothing but
+        # ONE-COLUMN and REFUSED cells -- nothing compared at all -- exited 0.
+        # Of the 37 executable `tools/*.sh` sites that run `--diff`, ONE passed
+        # the flag. Two is the minimum that makes the word "diff" true: a cell
+        # only one column hashed was not compared with anything.
+        #
+        # It is a CLI default and not a default of `diff()`, so every
+        # programmatic caller and every test keeps the old behaviour until it
+        # asks otherwise.
+        require = args.require_columns
+        if require is None:
+            require = 2 if len(args.diff) >= 2 else 0
+            if require:
+                print("NOTE: --require-columns defaults to 2 (2026-09-20): every compared cell must "
+                      "rest on at least two real hashes, or it was not compared. Pass "
+                      "--require-columns 0 to turn the floor off, or a higher N to demand more.")
+            else:
+                print(f"NOTE: {len(args.diff)} JSON given, so nothing is compared with anything and "
+                      "the --require-columns floor does not apply.")
+        if args.owed_json and args.require_columns is None:
+            raise SystemExit("REFUSING: --owed-json needs an EXPLICIT --require-columns (OWED is a "
+                             "cell short of that count, and the count has to be the one you meant)")
+        return diff(args.diff, require, lanes, args.owed_json or None)
     return run(args)
 
 

@@ -324,15 +324,33 @@ if [ -s "$OUT/$LABEL.par-one.json" ] && [ -s "$OUT/$LABEL.par-two.json" ]; then
     run par_diff timeout "$(cap 300)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
         pixi run python tools/identity_break.py --diff "$OUT/$LABEL.par-one.json" "$OUT/$LABEL.par-two.json"
     say "par_diff_exit=$(awk -F'	' '$1=="par_diff"{print $2}' "$OUT/status.tsv")"
-    grep -E 'DIVERGENT|MOVED|REFUSED|NOT-COMPARED' "$OUT/logs/par_diff.log" | head -40 >> "$G"
+    grep -E 'DIVERGENT|MOVED|REFUSED|ONE-COLUMN|NOT-COMPARED' "$OUT/logs/par_diff.log" | head -40 >> "$G"
     # THE SOLO RE-RUN, and only for what disagreed. A lane named here is
     # re-run one device at a time into files this leg does NOT commit; they
     # exist so the divergence is reproduced before anyone reports it.
     # Both diff tables put `lane/fixture` in the first pipe-delimited field;
     # the lane is what is before the slash, and it is the unit --lanes takes.
-    _bad=$(grep -E '^\| *par-[a-z0-9/_-]+ ' "$OUT/logs/par_diff.log" 2>/dev/null \
-           | grep -E 'DIVERGENT|MOVED' | awk -F'|' '{print $2}' | awk '{print $1}' \
-           | cut -d/ -f1 | sort -u | tr '\n' ',' | sed 's/,$//')
+    #
+    # THE SELECTOR IS POSITIVE (2026-09-20). It used to be
+    # `grep -E 'DIVERGENT|MOVED'`, a list of the bad names, and that list
+    # cannot match ONE-COLUMN -- which is exactly the shape a refusing `par-*`
+    # arm produces and the shape `_verify_par.GATING` was extended to gate on
+    # after `par-queries-nn`'s batch part refused on two AMD devices for a day
+    # while every record read clean. A row is now selected unless its verdict
+    # is one of the CLEAN ones, so a verdict nobody has thought of yet is
+    # re-run rather than dropped. The verdict is the third pipe field in the
+    # train table and the fourth in the second table, which is told apart by
+    # the third field there being a lowercase part name.
+    _bad=$(awk -F'|' '
+        { lane = $2; sub(/^ +/, "", lane); sub(/ +$/, "", lane) }
+        lane !~ /^par-[a-z0-9_-]+\// { next }
+        {
+            v = $3; sub(/^ +/, "", v); sub(/ +$/, "", v)
+            if (v ~ /^[a-z]/) { v = $4; sub(/^ +/, "", v); sub(/ +$/, "", v) }
+            if (v ~ /^IDENTICAL x[0-9]+$/ || v == "N/A" || v == "NOT-COMPARED") next
+            sub(/\/.*/, "", lane); print lane
+        }' "$OUT/logs/par_diff.log" 2>/dev/null \
+        | sort -u | tr '\n' ',' | sed 's/,$//')
     if [ -n "$_bad" ]; then
         say "DISAGREEING LANES: $_bad -- re-running each arm SOLO before this is reported"
         run solo_one timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0 \
@@ -345,7 +363,7 @@ if [ -s "$OUT/$LABEL.par-one.json" ] && [ -s "$OUT/$LABEL.par-two.json" ]; then
             pixi run python tools/identity_break.py --diff "$OUT/solo-one-rerun.json" "$OUT/solo-two-rerun.json"
         say "solo_diff_exit=$(awk -F'	' '$1=="solo_diff"{print $2}' "$OUT/status.tsv")"
     else
-        say "no DIVERGENT or MOVED cell in the one-vs-two diff"
+        say "every compared par-* cell read IDENTICAL, N/A or NOT-COMPARED in the one-vs-two diff"
     fi
 else
     say "PHASE DIFF SKIPPED: one or both columns are missing or empty"
