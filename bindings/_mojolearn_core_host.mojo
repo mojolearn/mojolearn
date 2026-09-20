@@ -139,7 +139,7 @@ from cluster.host.kmeans_oracle import (
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
     host_rbc_edge_distance,
-    host_rbc_knn_row,
+    host_rbc_knn_search,
     host_rbc_radius_row,
     KNN_HOST_WEIGHTS_DISTANCE,
     KNN_HOST_WEIGHTS_UNIFORM,
@@ -1069,8 +1069,9 @@ def rbc_knn_search_binding(
         var queries = read_f32(queries_address, nq * nf)
         var out_idx = List[Int32](length=nq * kk, fill=Int32(-1))
         var out_dist = List[Float32](length=nq * kk, fill=Float32(0.0))
-        for q in range(nq):
-            host_rbc_knn_row(index, ni, queries, q, nf, kk, mtr, marg, out_idx, out_dist)
+        host_rbc_knn_search(
+            index, ni, queries, nq, nf, kk, mtr, marg, out_idx, out_dist,
+        )
         for i in range(nq * kk):
             xp[i] = out_idx[i]
             dp[i] = out_dist[i]
