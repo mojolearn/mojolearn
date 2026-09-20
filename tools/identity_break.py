@@ -7761,8 +7761,8 @@ def _(ml, X, yc, yr, Xh=None):
 #:       device index is one worker PROCESS; the layer partition, the fold
 #:       partition, the wave dispatch and both merges are the driver's own
 #:       Python, and each shard is host arithmetic a covered lane hashes.
-#:       Metal still refuses, because `DevicePool` gives an Apple group no
-#:       visibility mask at all.
+#:       Metal admits only device 0: one worker, without claiming device
+#:       isolation or multiple physical GPUs.
 #:
 #: The mechanism stays: a lane whose PUBLIC SURFACE genuinely has no CPU
 #: arithmetic belongs here, so a full-column CPU run drops it by name instead
@@ -8210,9 +8210,9 @@ def _(ml, X, yc, yr, Xh=None):
     norm and head on the last) are the driver's own Python either way. So
     `causal_lm_layer` joined `_parallel_pool.CPU_OPERATIONS` against that
     docstring's bar and this cell holds the layer-owned model to the plain
-    one byte for byte on a box with no GPU at all. METAL is still refused by
-    name, deliberately: `DevicePool` gives an Apple group no visibility mask,
-    so "one device per owner" would be a sentence with nothing behind it.
+    one byte for byte on a box with no GPU at all. Metal also admits assigning
+    every layer to device 0 in one worker; this does not claim device
+    isolation or execution across multiple physical GPUs.
 
     WHAT THE CPU CELL DOES NOT SAY. It is AGREEMENT with the plain path, not
     rightness -- a wrong block would be wrong identically on both sides. And
@@ -9382,9 +9382,9 @@ _batch_decl(_batch_hf_causal_lm, "hf-causal-lm")
 # REFUSED with `ParallelCausalLM is closed` -- seen the first time any column
 # could run this lane at all (lane/cpu-routes-gpu-only-four, 2026-09-20; the
 # lane was GPU-only when the declaration was written, so nothing had ever
-# called these probes). The model is held by the closures and closed by its
-# own `__del__` when the harness drops them; the checkpoint directory is
-# gone by then and is not needed, because `load` materializes every weight.
+# called these probes). Register explicit cleanup with the probe's finally
+# block: model/block reference cycles make destructor timing unreliable.
+# The checkpoint directory can disappear because load materializes weights.
 def _batch_par_causal_lm(ml, e, Xh):
     from mojolearn import _causal_lm_fixtures as fx
     from mojolearn.models import ParallelCausalLM
@@ -9396,6 +9396,7 @@ def _batch_par_causal_lm(ml, e, Xh):
         n_layers = ml.models.causal_lm.CausalLM.load(root).plan.n_layers
         par = ParallelCausalLM.load(
             root, layer_devices=tuple(dev[i % len(dev)] for i in range(n_layers)))
+        _BATCH_CLOSE.append(par.close)
 
     def fwd(rows):
         return (np.asarray(par.forward(ml.Array.from_buffer(np.ascontiguousarray(rows)))),)
