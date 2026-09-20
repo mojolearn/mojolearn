@@ -48,7 +48,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
-from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
@@ -2784,6 +2784,8 @@ def bwd_rms_norm[which: Int = 0](
             use_fused = m >= 8192 and dm >= 768
         elif TARGET_COLUMN == COLUMN_APPLE:
             use_fused = m >= 8192 and dm >= 768
+        elif TARGET_COLUMN == COLUMN_NVIDIA:
+            use_fused = m >= 32768 and dm >= 768
         if use_fused:
             ctx.enqueue_function[bwd_norm_dh_dot_kernel](
                 dh.unsafe_ptr(), dot_out.unsafe_ptr(), rstd.unsafe_ptr(),

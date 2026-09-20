@@ -1,0 +1,12 @@
+mac_deadman_pid=30086
+mac_deadman_dir=/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-hotaisle-deadman-29613
+mac_deadman_fires_at=2026-09-20T21:34:49Z
+mac_deadman_keyed_by=vm_ref.txt (deployment_id from the create response) and description mojolearn:rmsnorm-backward-cv:20260920T203449Z
+watchdog_seconds=3568
+watchdog_fires_at=2026-09-20T21:35:00Z
+watchdog_WATCHDOG_ALIVE pid=2114
+watchdog_REF_BAKED_IN=1
+watchdog_TOKEN_GET_HTTP=200
+watchdog_DESC_MATCH
+watchdog_WATCHDOG_STILL_ALIVE_SECOND_SESSION
+mac_deadman=cancelled 2026-09-20T20:43:00Z
