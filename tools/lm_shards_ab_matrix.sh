@@ -32,7 +32,7 @@ run_arm() {
     mkdir -p "$out/$round/$name"
     cp "$binary" "$binding"
     python3 "$root/tools/lm_shards_probe.py" \
-        --out "$out/$round/$name" --target --shards 1 2 4 --steps 8 \
+        --out "$out/$round/$name" --target --shards 2 3 5 --steps 6 \
         --seed 93261 --devices "$@" --gpu-index 0 \
         >"$out/$round/$name.log" 2>&1
 }

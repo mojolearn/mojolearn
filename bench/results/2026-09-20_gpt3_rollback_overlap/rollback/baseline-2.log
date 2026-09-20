@@ -1,0 +1,8 @@
+949 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x397700000000, nodemask=2)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/byte_lm_optimizer_pool_check.py", line 149, in <module>
+    main()
+  File "/root/mojolearn/tools/byte_lm_optimizer_pool_check.py", line 70, in main
+    assert replicated[0]['reduction_bytes'] == 8*shape.n_total
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError

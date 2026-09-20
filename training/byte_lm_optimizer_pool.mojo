@@ -40,7 +40,11 @@ def pool_snapshot(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     _copy_into(ctx, tr.buffers.shadow_p, tr.buffers.param, 0, tr.buffers.optimizer_first, n)
     _copy_into(ctx, tr.buffers.shadow_m, tr.buffers.m_state, 0, 0, n)
     _copy_into(ctx, tr.buffers.shadow_v, tr.buffers.v_state, 0, 0, n)
-    ctx.synchronize()
+    # Leave the three copies queued so disjoint owners can snapshot in
+    # parallel. The first-moment refusal scan at the start of pool_update
+    # drains this same in-order context before its update, and pool_restore
+    # queues restoration after these copies then drains it. Thus neither the
+    # success nor failure path can consume an incomplete shadow.
     tr.buffers.flags_before = tr.buffers.buf_initialized.copy()
     tr.shadow_step = tr.completed_steps
     tr.shadow_valid = True
