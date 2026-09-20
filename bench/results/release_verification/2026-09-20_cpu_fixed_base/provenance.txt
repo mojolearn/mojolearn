@@ -1,0 +1,1 @@
+Diagnostic mixed build: hdbscan and hdbscan_infer native from fc6d8ce4b; remaining 30 host bindings from a97676ba18a09fb577ef9faae45ab19a01eec848. Python source fc6d8ce4b with verifier table from 04068fe1b, CTR payload generated for a976 Mac wheel. Not a release artifact.

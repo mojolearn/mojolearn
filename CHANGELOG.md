@@ -9,6 +9,9 @@ contain the detailed investigation record.
   boosting supports default regression, classification, multiclass and ranking
   fits, including bootstrap sampling and score noise. RMSE honors Depthwise
   and Lossguide on CPU. Unsupported configurations still report their limits.
+- Fix the CPU HDBSCAN temporary-buffer lifetime that could produce NaN
+  distances. Both selection methods reproduce the references on all nine
+  fixtures. Accept explicit average initialization for supported GBDT losses.
 - Fix uninitialized GPU held-out cursors when average boosting is disabled.
   CPU and GPU held-out loss curves, early stopping and model shrinking now
   agree across all nine verifier fixtures; restore `gbdt-symmetric-eval`.
