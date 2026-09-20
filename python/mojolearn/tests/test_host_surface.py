@@ -209,6 +209,27 @@ def _loop_registered_lanes(text):
     return out
 
 
+def _gpu_only_lanes():
+    """`identity_break.GPU_ONLY_LANES`, read from the SOURCE as every other
+    fact about the harness in this file is (lane/unlaned-public-algorithms,
+    2026-09-20). It is the set the harness itself uses to drop a lane from a
+    full-column run on a CPU-only install, so a `no cpu route` reason is
+    checked against the mechanism that acts on it and not against prose.
+    Refuses an empty read rather than passing vacuously."""
+    import ast
+
+    for node in ast.parse(_read("tools/identity_break.py")).body:
+        if not isinstance(node, ast.Assign):
+            continue
+        names = [t.id for t in node.targets if isinstance(t, ast.Name)]
+        if "GPU_ONLY_LANES" in names and isinstance(node.value, ast.Dict):
+            out = {k.value for k in node.value.keys
+                   if isinstance(k, ast.Constant) and isinstance(k.value, str)}
+            assert out, "GPU_ONLY_LANES parsed as empty; the reader is wrong"
+            return out
+    raise AssertionError("tools/identity_break.py defines no GPU_ONLY_LANES dict")
+
+
 def test_covered_lanes_are_identity_break_lanes():
     text = _read("tools/identity_break.py")
     defined = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
@@ -876,8 +897,31 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
              if lane in with_cells and table_revisions.get(lane) != rev}
 
     wrong_reason = []
+    gpu_only = _gpu_only_lanes()
     for lane, why in host_surface.PUBLIC_PENDING_LANES.items():
+        if why == "no cpu route":
+            # THE ONE REASON THAT ADMITS AN UNCOVERED LANE, and the only way
+            # in is the harness's own mechanism
+            # (lane/unlaned-public-algorithms, 2026-09-20). Every other
+            # reason means "the evidence has not been taken yet", which
+            # presupposes a box that could take it; this one means the
+            # public surface refuses BY NAME on a CPU-only install, so no
+            # host family can ever declare the lane and `lane in covered`
+            # is a condition it can never meet. It is checked BOTH ways --
+            # the lane must be in GPU_ONLY_LANES, and a lane that IS covered
+            # must not use this reason -- so it cannot become a hiding place
+            # for a lane that merely has no CPU column yet.
+            assert lane in gpu_only, (
+                f"{lane}: held back as 'no cpu route', but identity_break.GPU_ONLY_LANES does not "
+                "name it, so nothing drops it from a full-column CPU run and the reason is unbacked")
+            assert lane not in covered, (
+                f"{lane}: held back as 'no cpu route', but it IS a covered lane, so a CPU column "
+                "can state it; its reason is 'no reference' or 'unwatched'")
+            continue
         assert lane in covered, f"{lane} is held back but is not a covered lane at all"
+        assert lane not in gpu_only, (
+            f"{lane}: identity_break.GPU_ONLY_LANES names it, so no CPU column can carry it and "
+            f"its reason is 'no cpu route', not {why!r}")
         if why == "stale reference":
             assert lane in revisions, f"{lane}: no LANE_REVISIONS entry, so its reference is not stale; let it in"
             # Three outcomes, and the reason must name the right one. When a
