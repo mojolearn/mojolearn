@@ -22,7 +22,12 @@ be checked against a GPU column without owning a GPU.
 - New identity_break lane **`gbdt-symmetric-eval`**, and a negative control of
   its own, `-D MOJOLEARN_GBDT_EVAL_SABOTAGE=1`, which moves the held-out
   cells and nothing else. The family's own arm moves the leaves and so cannot
-  tell a broken test cursor from a broken fit.
+  tell a broken test cursor from a broken fit. The control earned its keep on
+  the first run: it read DIVERGENT on all nine fixtures for the two held-out
+  CURVES and did not move the detector or shrink parts at all, because at the
+  lane's first shape the held-out curve never turned and those two fits were
+  byte for byte the fit without an eval set. The stopping fits now overfit on
+  purpose, and the lane raises if the detector stops firing.
 - **GPU COLUMNS OWED.** The lane has a CPU column only; its cells read OWED
   against the three committed GPU records until the next coordinated record.
 

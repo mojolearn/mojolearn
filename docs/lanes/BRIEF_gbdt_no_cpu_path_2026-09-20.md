@@ -309,10 +309,18 @@ border_count outside 1..255  -> ... for border_count=300 (1 to 255)
 max_depth outside 0..16      -> ... for max_depth=17 (0 to 16)
 ```
 
-The host binding materializes `1 << depth` leaves per tree and the model text
-reader refuses past depth 31. These are limits of the host spelling, not
-missing arithmetic, and a caller hitting them is asking for a fit the device
-also caps.
+`max_depth` is not a CPU limit at all: CatBoost's own
+`CB_ENSURE(MaxDepth <= 16)` is restated on the device path
+(`gbdt/options/catboost_options.mojo:621-629`), so a depth-17 fit is refused
+on a GPU too, and only the wording differs.
+
+`border_count` is a limit of BOTH spellings here and I have not checked it
+against the reference: the host binding caps it at 255 and so does the
+device's Ordered entry (`gbdt/train.mojo:2649`), while the Plain device
+`train` does not test it in the same place. It is a bin-width limit of the
+compressed index rather than missing arithmetic, so it is not one of the six
+NO_CPU_PATH entries, but it is the one row in this file whose "not a gap"
+reading rests on reading the code rather than on running both columns.
 
 ### Refusals that are the DEVICE's, not the CPU column's
 
@@ -338,27 +346,75 @@ GPU refuses them in the same words:
 curve uses, `DetectOverfitting`, and `ShrinkToBestIteration`'s second
 best-iteration tracker. Routed through `gbdt_fit` in
 `bindings/_mojolearn_gbdt_host.mojo`, which now returns a held-out curve in
-its fifth slot.
+its fifth slot on that arm and refuses an eval set BY NAME on every other
+Plain arm, naming the arm in the refusal.
 
-It is **not** a narrower algorithm. An eval set does not reach the learn
-cursor, the borders, the splits or the leaves on the Plain doc-parallel path,
-and four CPU-only checks say so on this build:
+### It is not a narrower algorithm
 
-1. with `use_best_model=False`, the learn curve, `predict(X)` and
-   `predict(Xh)` of a fit WITH an eval set are bitwise the fit's without one;
-   the saved file differs in 9 bytes, all zip CRCs over `meta.npy`;
-2. the held-out curve is exactly incremental — `test_loss_curve_[:k]` of an
+An eval set does not reach the learn cursor, the borders, the splits or the
+leaves on the Plain doc-parallel path. Five CPU-only checks say so:
+
+1. **Cross-lane, on the recorded column.** `gbdt-symmetric-eval`'s first fit
+   is `gbdt-symmetric`'s fit plus an eval set. Their `predict` and `proba`
+   parts are the same bytes on the CPU column: `7f15e34e477a4eae` and
+   `dc63b1265ff9fd00` on `base` in both lanes. If an eval set ever reaches
+   the fit, the two lanes disagree and both are in the gate.
+2. With `use_best_model=False`, the learn curve, `predict(X)` and
+   `predict(Xh)` of a fit WITH an eval set are bitwise the same fit's
+   without one; the saved file differs in 9 bytes, all zip CRCs over
+   `meta.npy` (the metadata records the option).
+3. The held-out curve is exactly incremental: `test_loss_curve_[:k]` of an
    N-tree fit is bitwise `test_loss_curve_` of the same fit stopped at k
-   trees, for every k from 1 to 12;
-3. `use_best_model=True` truncates to the held-out argmin: the shrunk
+   trees, for every k from 1 to 12.
+4. `use_best_model=True` truncates to the held-out argmin: the shrunk
    40-tree fit's `predict(X)` and `predict(Xh)` are bitwise an
-   (argmin+1)-tree fit's;
-4. the Iter detector stops at `best + od_wait + 1` for `od_wait` 1, 3 and 5.
+   (argmin+1)-tree fit's.
+5. The Iter detector stops at `best + od_wait + 1` for `od_wait` 1, 3 and 5.
 
-These show the CPU route is self-consistent. They do **not** show it agrees
-with a GPU column — that is the owed measurement below.
+### The negative control, and what it caught
 
----
+`-D MOJOLEARN_GBDT_EVAL_SABOTAGE=1` adds one ULP to every value the held-out
+cursor takes. The MODEL is untouched, so only the new cells should move; the
+family's own arm (`-D MOJOLEARN_HOST_SABOTAGE=1`) moves the LEAVES and would
+read DIVERGENT on this lane whether or not the held-out restatement is right.
+
+The first run of the arm, against the lane's FIRST shape (all three fits at
+gbdt-symmetric's 20 depth-6 trees, rate 0.03):
+
+```
+summary: DIVERGENT=9            (9 of 9 fixtures)
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+parts differ: test_loss_curve, od_test_loss_curve
+parts agree:  predict, proba, learn_loss_curve, best_iteration,
+              od_predict, od_stopped, od_best_iteration,
+              shrunk_predict, shrunk_proba
+```
+
+Two readings, and both matter.
+
+The arm **works**: every fixture moved, and it moved the held-out curve and
+NOTHING else. `predict`, `proba` and the learn curve are untouched, and the
+infer, model and batch columns are IDENTICAL x2, which is the statement that
+this control isolates the new arithmetic.
+
+And it **caught the lane being inert**. `od_stopped`, `od_best_iteration`,
+`shrunk_predict` and `shrunk_proba` did not move under a deliberate defect,
+because at that shape the held-out curve is still falling at the last tree on
+all nine fixtures: the detector never fired, the shrink never cut, and the two
+stopping fits were byte for byte the plain fit. Two thirds of the lane hashed
+something and would have hashed the same something with the detector deleted.
+The stopping fits now run 30 depth-7 trees at learning_rate 1.8, measured to
+overfit on every fixture (detector fires at 11 to 17 trees, shrink cuts at 9
+to 25 of 30), and the lane RAISES if either stops biting.
+
+### What the CPU column says
+
+These checks show the CPU route is self-consistent and that a deliberate
+defect in it is caught. They do **not** show it agrees with a GPU column.
+**Identity is not correctness either way**: when a GPU column does agree,
+what that will mean is that two spellings compute the same bits, not that
+the held-out curve is right.
 
 ## 3. OWED: the GPU columns
 
