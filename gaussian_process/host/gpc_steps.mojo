@@ -81,6 +81,8 @@ the reference divides zero by zero.
 from std.math import fma, sqrt
 from std.memory import bitcast
 
+from max.algorithm import sync_parallelize
+
 from checks.numerics import (
     ftz,
     identical_exp64,
@@ -89,6 +91,10 @@ from checks.numerics import (
     identical_sigmoid,
     identical_softplus,
     identical_sqrt,
+)
+from core.host_predict_threads import (
+    host_predict_chunk,
+    host_predict_task_count,
 )
 
 #: DEVIATION 2830: float32(1e-10), the reference's tolerance at this width.
@@ -443,7 +449,24 @@ def gpc_proba(mean: List[Float32], variance: List[Float32]) raises -> List[Float
             + " rows and the variance "
             + String(len(variance))
         )
-    var out = List[Float64](capacity=len(mean))
-    for t in range(len(mean)):
-        out.append(gpc_pi_star(mean[t], variance[t]))
+    var n = len(mean)
+    var out = List[Float64](length=n, fill=Float64(0.0))
+    var tasks = host_predict_task_count(n)
+    # The probability expansion is expensive, but a pool join still dominates
+    # very small prediction batches.
+    if n < 128:
+        tasks = 1
+    var chunk = host_predict_chunk(n, tasks)
+    var op = out.unsafe_ptr().unsafe_mut_cast[True]().unsafe_origin_cast[MutAnyOrigin]()
+
+    def _rows(task: Int) {imm mean, imm variance, imm n, imm chunk, imm op}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        for t in range(lo, hi):
+            op.unsafe_store(t, gpc_pi_star(mean[t], variance[t]))
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
     return out^
