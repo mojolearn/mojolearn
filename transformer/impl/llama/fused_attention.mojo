@@ -124,6 +124,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
+    COLUMN_AMD,
     COLUMN_NVIDIA,
     TARGET_COLUMN,
     attn_default_arm_for,
@@ -1262,23 +1263,52 @@ def fused_attention_kv_keys(arm: Int) -> Int:
     return 0
 
 
-comptime ATTN_ES_TQ = 16 if is_defined["MOJOLEARN_ATTN_ES_TQ16"]() else 8
-"""Query rows per 256-thread block of `fused_bwd_zdot_estash_kernel`
-(DEVIATION 2650, brief section 20.3).  The opt-in 16-row schedule retains
-the same 256 cell owners and ascending per-row key fold while trading the
-8x32 row/key tile for 16x16."""
-comptime ATTN_ES_BK = FUSED_THREADS // ATTN_ES_TQ
-"""Keys per block iteration of the same kernel (32 by default, 16 under
-the opt-in 16-row schedule)."""
+comptime ATTN_ES_FORCE_TQ16 = is_defined["MOJOLEARN_ATTN_ES_TQ16"]()
+comptime ATTN_ES_FORCE_TQ8 = is_defined["MOJOLEARN_ATTN_ES_TQ8"]()
+comptime ATTN_ES_TQ = (
+    16 if ATTN_ES_FORCE_TQ16 or (
+        TARGET_COLUMN == COLUMN_NVIDIA and not ATTN_ES_FORCE_TQ8
+    ) else 8
+)
+"""Static tile used by the resource-inspection harness. Production launch
+routing uses `attention_estash_zdot_tq`; AMD's shape-dependent route cannot
+be represented by one compile-time resource probe."""
+
+
+def attention_estash_zdot_tq(l: Int, window: Int) -> Int:
+    """Measured scheduling route for the exact full-estash zdot kernel.
+
+    Explicit trial overrides win first.  NVIDIA uses the qualified 16x16
+    tile.  CDNA AMD uses it only at L>=1536, the non-regressing measured
+    range (including L2048/window512).  Apple, RDNA and every unknown column
+    retain 8x32.  ``window`` is deliberately not a dispatch input yet: the
+    qualification has only one windowed point, already covered by L>=1536.
+    """
+    comptime assert not (ATTN_ES_FORCE_TQ16 and ATTN_ES_FORCE_TQ8), (
+        "MOJOLEARN_ATTN_ES_TQ16 and MOJOLEARN_ATTN_ES_TQ8 are mutually exclusive"
+    )
+    comptime if ATTN_ES_FORCE_TQ16:
+        return 16
+    elif ATTN_ES_FORCE_TQ8:
+        return 8
+    elif TARGET_COLUMN == COLUMN_NVIDIA:
+        return 16
+    elif TARGET_COLUMN == COLUMN_AMD:
+        return 16 if l >= 1536 else 8
+    return 8
 
 
 def _estash_page_bytes(dres: Bool) -> Int:
     """The shared page of `fused_bwd_zdot_estash_kernel` at head_dim 64: the
     V page `[BK][65]`, the y and dy slots `2 x [TQ][BK+1]` and, under
     `dres`, the block's dctx rows `[TQ][64]`."""
-    var floats = ATTN_ES_BK * (ATTN_STASH_HD + 1) + 2 * ATTN_ES_TQ * (ATTN_ES_BK + 1)
+    # TQ8 is the larger of the two qualified pages, so this remains a
+    # conservative compile-time admission check for runtime-routed AMD.
+    comptime tq = 8
+    comptime bk = FUSED_THREADS // tq
+    var floats = bk * (ATTN_STASH_HD + 1) + 2 * tq * (bk + 1)
     if dres:
-        floats += ATTN_ES_TQ * ATTN_STASH_HD
+        floats += tq * ATTN_STASH_HD
     return floats * 4
 
 
@@ -5689,8 +5719,9 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
     above. `e_st` is the `[B, n_heads, L, S]` exp stash the second-round
     forward wrote at every visible cell (`fused_attn_forward_r2_kernel`'s
     pass 2), which this kernel reads only under the copied visibility test.
-    Instantiated at HD 64 and TQ `ATTN_ES_TQ` (8); 256 threads per block,
-    grid `B * nh * ceil(L / TQ)`."""
+    Instantiated at HD 64 and the routed TQ (8 or 16); 256 threads per block,
+    grid `B * nh * ceil(L / TQ)`.  TQ changes ownership only across query
+    rows; every row still folds visible keys in ascending order."""
     comptime BK = FUSED_THREADS // TQ
     comptime KSTRIDE = HD + 1
     comptime ESTRIDE = BK + 1
@@ -6972,17 +7003,28 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
-    comptime zk = fused_bwd_zdot_estash_kernel[HD, ATTN_ES_TQ, DRES, SABN, SWZ]
+    var zdot_tq = attention_estash_zdot_tq(l, window)
     step_count_launch()
-    ctx.enqueue_function[zk](
-        zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
-        v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
-        Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-        Int32(window),
-        grid_dim=(b * nh * ((l + ATTN_ES_TQ - 1) // ATTN_ES_TQ), 1, 1),
-        block_dim=(FUSED_THREADS, 1, 1),
-    )
+    if zdot_tq == 16:
+        comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
+        ctx.enqueue_function[zk16](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+            v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
+        ctx.enqueue_function[zk8](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+            v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
     step_count_sync()
     ctx.synchronize()
     comptime if DRES:
