@@ -1,0 +1,334 @@
+===== par-cholesky/base train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6876, in _
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 430, in fit_cholesky
+    result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 307, in execute
+    native = state._extension()
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 132, in _extension
+    mod, readback = self._door()
+                    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 126, in _door
+    return self._bind(), "gp_numeric_mode"
+           ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh
+
+===== par-cholesky/ties train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6876, in _
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 430, in fit_cholesky
+    result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 307, in execute
+    native = state._extension()
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 132, in _extension
+    mod, readback = self._door()
+                    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 126, in _door
+    return self._bind(), "gp_numeric_mode"
+           ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh
+
+===== par-gmm/base train =====
+ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 232 bytes of 256
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6790, in _
+    _same_bytes("fit_gaussian_mixture covariances_", par.covariances_, "plain covariances_", plain.covariances_)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1697, in _same_bytes
+    raise ValueError(message)
+ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 232 bytes of 256
+
+===== par-gmm/ties train =====
+ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 242 bytes of 256
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6790, in _
+    _same_bytes("fit_gaussian_mixture covariances_", par.covariances_, "plain covariances_", plain.covariances_)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1697, in _same_bytes
+    raise ValueError(message)
+ValueError: fit_gaussian_mixture covariances_ and plain covariances_ differ: 242 bytes of 256
+
+===== par-hdbscan/base train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6849, in _
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 404, in fit_hdbscan
+    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 272, in execute
+    state.fit(*args)
+    ~~~~~~~~~^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/hdbscan.py", line 220, in fit
+    n_clusters = ext.hdbscan_fit(
+        addrs,
+    ...<3 lines>...
+         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],
+    )
+Exception: mst: Number of edges found by MST is invalid. This may be due to loss in precision. Try increasing precision of weights. (found 6000 > 5999)
+
+===== par-hdbscan/ties train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6849, in _
+    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 404, in fit_hdbscan
+    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 272, in execute
+    state.fit(*args)
+    ~~~~~~~~~^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/hdbscan.py", line 220, in fit
+    n_clusters = ext.hdbscan_fit(
+        addrs,
+    ...<3 lines>...
+         1 if self.allow_single_cluster else 0, method, float(self.cluster_selection_epsilon), metric],
+    )
+Exception: mst: Number of edges found by MST is invalid. This may be due to loss in precision. Try increasing precision of weights. (found 6000 > 5999)
+
+===== par-kernel-ridge/base train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6898, in _
+    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 483, in fit_kernel_method
+    result = pool.map([('km_fit', estimator, args)])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 289, in execute
+    state.fit(*args)
+    ~~~~~~~~~^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/kernel_methods.py", line 223, in fit
+    info = self._extension().kernel_ridge_fit(
+        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
+    ...<3 lines>...
+        [n, d, t, kernel, degree, gamma, coef0, alpha],
+    )
+Exception: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=317, the leading minor of order 317 failed). kernel=rbf, n_samples=600. cuML catches this and silently returns a LEAST-SQUARES solution instead (kernel_ridge.py:26-44, behind a warnings.warn); this lane refuses, because a fit that returns a different estimator than the one it was asked for is a wrong answer with no error. THE CLOSURE IS alpha: raise it. A float32 kernel matrix needs a larger ridge than cuML's float64 one at the same data (DEVIATION 1661). To close it properly, implementation an SVD-based least-squares arm -- there is one at solver/checks/lstsq.mojo -- and gate BOTH sides of the branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row
+
+===== par-kernel-ridge/ties train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6898, in _
+    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 483, in fit_kernel_method
+    result = pool.map([('km_fit', estimator, args)])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 289, in execute
+    state.fit(*args)
+    ~~~~~~~~~^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+    return method(self, *args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/kernel_methods.py", line 223, in fit
+    info = self._extension().kernel_ridge_fit(
+        # ORDER MATCHES bindings/_mojolearn_kernel_methods.mojo::kernel_ridge_fit_binding.
+    ...<3 lines>...
+        [n, d, t, kernel, degree, gamma, coef0, alpha],
+    )
+Exception: kernel_ridge_fit_host: the ridged kernel matrix K + alpha I is NOT positive definite (info=317, the leading minor of order 317 failed). kernel=rbf, n_samples=600. cuML catches this and silently returns a LEAST-SQUARES solution instead (kernel_ridge.py:26-44, behind a warnings.warn); this lane refuses, because a fit that returns a different estimator than the one it was asked for is a wrong answer with no error. THE CLOSURE IS alpha: raise it. A float32 kernel matrix needs a larger ridge than cuML's float64 one at the same data (DEVIATION 1661). To close it properly, implementation an SVD-based least-squares arm -- there is one at solver/checks/lstsq.mojo -- and gate BOTH sides of the branch; kernel_methods/NOT_IMPLEMENTED.tsv carries the row
+
+===== par-resample/base train =====
+ValueError: parallel bootstrap distribution and bootstrap distribution differ: 3564 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6815, in _
+    _same_bytes("parallel bootstrap distribution", b.distribution, "bootstrap distribution", plain.distribution)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1697, in _same_bytes
+    raise ValueError(message)
+ValueError: parallel bootstrap distribution and bootstrap distribution differ: 3564 bytes of 8192
+
+===== par-resample/ties train =====
+ValueError: parallel bootstrap distribution and bootstrap distribution differ: 2925 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6815, in _
+    _same_bytes("parallel bootstrap distribution", b.distribution, "bootstrap distribution", plain.distribution)
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1697, in _same_bytes
+    raise ValueError(message)
+ValueError: parallel bootstrap distribution and bootstrap distribution differ: 2925 bytes of 8192
+

@@ -412,6 +412,41 @@ say "declared_gpu_families=${DECL_GPU:-NONE-DERIVED}"
 # ---------------------------------------- the declared families, then the column
 # `build` is the shared kernels and fixtures every lane reaches, so it leads
 # whatever the derivation said.
+#
+# AN ALL-`par-*` LANE LIST DERIVES NOTHING, AND THE DERIVATION CANNOT SAY SO.
+# MEASURED on pod 70i7hnr5avagda, 2026-09-20. The derivation above walks
+# host_surface.FAMILIES and keeps a family whose `training_lanes` or
+# `inference_lanes` intersect the lane list. NO `par-*` LANE IS IN ANY
+# FAMILY'S LANE LIST -- that is the same fact that makes 36 of them read
+# `none` in the sabotage census -- so for a pure par lane list both DECL_GPU
+# and DECL_HOST come back EMPTY, the loop below builds `build` alone, and the
+# column refuses with its own cure in every cell:
+#
+#   ImportError: numeric_mode='identical' needs
+#   python/mojolearn/identical/_mojolearn_gbdt.so, which is not built
+#
+# That leg then spent 1130 s in the insurance pass building the very family
+# the column had just named, reached the backstop rerun with 275 s of budget
+# and the two-device column with 61 s, and BOTH exited 124. It came home with
+# `complete:false` on both halves -- 13 cells and 1 cell -- and `--diff`
+# printed "no DIVERGENT or MOVED cell" over them, which is a verification that
+# cannot fail. `admit()` refused both, correctly, so nothing was credited.
+#
+# So a two-device leg builds EVERYTHING FIRST. It is not an optimisation: for
+# this lane list the derivation has no information to give, and the cost of
+# asking the insurance pass to supply it afterwards is the deliverable.
+if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
+    say "two_device_leg=1: building every family BEFORE the columns (a par-* lane list derives no families)"
+    DECL_GPU=$(ls bindings/build*.sh \
+               | sed 's#^bindings/##; s#\.sh$##' \
+               | grep -v -e '^build_host_family$' -e '_host$' \
+               | tr '\n' ' ')
+    DECL_HOST=$(ls bindings/build_*_host.sh \
+                | sed 's#^bindings/##; s#\.sh$##' \
+                | tr '\n' ' ')
+    say "two_device_gpu_families=$DECL_GPU"
+    say "two_device_host_families=$DECL_HOST"
+fi
 built=0; failed=""; DONE=""
 for b in build $DECL_GPU; do
     [ -f "bindings/$b.sh" ] || { say "derived a GPU build that does not exist: $b"; continue; }
@@ -437,9 +472,30 @@ say "import_check=$(tail -1 "$OUT/logs/import_check.log" 2>/dev/null)"
 # ------------------------------------------------------------------ the deliverable
 # Default fixtures, default size, two repeats in one process, one device. No
 # sabotage switch is set anywhere in this run.
+#
+# MOJOLEARN_GAP_PARTS: FIVE OF NINE PARTS IS NOT A COLUMN (2026-09-20).
+# `_verify_reference.PARTS` is train, infer, model, batch, stepfull and
+# `OPTIONAL_PARTS` is batchgrad, batchscale, ragged, rlpair. Of those nine,
+# `identity_break` runs train/infer/model/batch/rlpair by default and needs
+# --step-full, --batch-grad, --batch-scale and --ragged to be ASKED for the
+# rest. Every gap column this body has recorded was therefore five parts
+# wide, and the four neural lanes it was supposed to have closed --
+# transformer, transformer-window, samba, samba-untied-dropout-accum -- came
+# home carrying a current, admissible NVIDIA column with NO `stepfull` cell
+# in it. A missing part reads as a covered lane, which is the whole trouble:
+# nothing refuses, nothing is flagged, and the gap stays open while the
+# matrix counts the lane as done.
+#
+# So the extra part flags are a VARIABLE, the caller names them, and the
+# gate line below records what this column actually asked for. Unset keeps
+# the historical five-part behaviour rather than silently changing the shape
+# of every column this body has ever produced.
+PARTS_FLAGS="${MOJOLEARN_GAP_PARTS:-}"
+say "extra_part_flags=${PARTS_FLAGS:-none (train,infer,model,batch,rlpair only)}"
 column() {
     run "$1" timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=/root/mojolearn/python \
         pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+        $PARTS_FLAGS \
         --vendor "$LABEL" --json "$JSON"
     say "$1_exit=$(awk -F'	' -v n="$1" '$1==n{print $2}' "$OUT/status.tsv")"
     grep -E '^cells=|MOVED|DIVERGENT|REFUSED|RELOAD' "$OUT/logs/$1.log" | head -120 >> "$G"
@@ -526,6 +582,7 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
         run column-two timeout "$(cap 1200)" env MOJOLEARN_NUMERIC_MODE=identical \
             MOJOLEARN_PAR_DEVICES=0,1 PYTHONPATH=/root/mojolearn/python \
             pixi run python tools/identity_break.py --lanes "$LANES" --repeats 2 \
+            $PARTS_FLAGS \
             --vendor "$LABEL" --json "$TWO"
         say "column_two_exit=$(awk -F'	' '$1=="column-two"{print $2}' "$OUT/status.tsv")"
         grep -E '^cells=|MOVED|DIVERGENT|REFUSED|RELOAD' "$OUT/logs/column-two.log" | head -120 >> "$G"
@@ -542,9 +599,46 @@ if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
         say "par_diff_exit=$(awk -F'	' '$1=="par_diff"{print $2}' "$OUT/status.tsv")"
         grep -E 'summary|DIVERGENT|MOVED|REFUSED|NOT-COMPARED' "$OUT/logs/par_diff.log" | head -40 >> "$G"
         cp "$OUT/logs/par_diff.log" "$OUT/par_diff.log" 2>/dev/null
-        _bad=$(grep -E '^\| *par-[a-z0-9/_-]+ ' "$OUT/logs/par_diff.log" 2>/dev/null \
-               | grep -E 'DIVERGENT|MOVED' | awk -F'|' '{print $2}' | awk '{print $1}' \
-               | cut -d/ -f1 | sort -u | tr '\n' ',' | sed 's/,$//')
+        # THE SELECTOR MUST MATCH EVERY WAY A CELL CAN DISAGREE, NOT TWO OF
+        # THEM (2026-09-20). This grep read `DIVERGENT|MOVED`, and the line
+        # above it -- the one that writes the gate file -- already knew the
+        # set is larger: `DIVERGENT|MOVED|REFUSED|NOT-COMPARED`. So a cell
+        # reading ONE-COLUMN or REFUSED was reported in the gate and then
+        # silently left out of the solo re-run set, and the column came home
+        # looking cleaner than the run had been. An earlier lease on
+        # tools/two_device_par_class_amd_leg.sh, which carries the same
+        # selector at its line 334, ended without ever asking the question a
+        # second time for exactly this reason.
+        #
+        # ONE-COLUMN is the case the narrow pattern could never match: it is
+        # what `--diff` prints when a cell exists on ONE side only, which is
+        # precisely the shape a par-* lane takes when the two-device arm
+        # refuses and the one-device arm does not.
+        #
+        # AND THE SELECTOR IS POSITIVE, NOT A LONGER DENYLIST. An earlier fix
+        # here enumerated the failure verdicts
+        # (DIVERGENT|MOVED|REFUSED|ONE-COLUMN|NOT-COMPARED), which is the same
+        # mistake one size larger: a verdict added later is silently dropped
+        # again, exactly as ONE-COLUMN was. This selects a lane UNLESS the
+        # verdict is one of the three that mean "no disagreement" --
+        # `IDENTICAL xN`, `N/A`, `NOT-COMPARED` -- so a new verdict is caught
+        # by default and has to be explicitly excused to be ignored.
+        #
+        # Taken verbatim from tools/two_device_par_class_amd_leg.sh, which
+        # carries the same phase; the two files had already drifted into two
+        # copies of one selector and fixing only one would have left the other
+        # to be found again. Measured on a log carrying one row of each
+        # verdict: the old grep selected 3 lanes, this selects 6.
+        _bad=$(awk -F'|' '
+            { lane = $2; sub(/^ +/, "", lane); sub(/ +$/, "", lane) }
+            lane !~ /^par-[a-z0-9_-]+\// { next }
+            {
+                v = $3; sub(/^ +/, "", v); sub(/ +$/, "", v)
+                if (v ~ /^[a-z]/) { v = $4; sub(/^ +/, "", v); sub(/ +$/, "", v) }
+                if (v ~ /^IDENTICAL x[0-9]+$/ || v == "N/A" || v == "NOT-COMPARED") next
+                sub(/\/.*/, "", lane); print lane
+            }' "$OUT/logs/par_diff.log" 2>/dev/null \
+            | sort -u | tr '\n' ',' | sed 's/,$//')
         if [ -n "$_bad" ]; then
             say "DISAGREEING LANES: $_bad -- re-running each arm SOLO before this is reported"
             run solo_one timeout "$(cap 600)" env MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_PAR_DEVICES=0 \

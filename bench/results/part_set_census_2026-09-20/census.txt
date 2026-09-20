@@ -1,0 +1,272 @@
+columns under bench/results with an identity_break shape : 1201
+admissible, device-classed, inside bench/results/identity_break: 567
+of those, carrying `stepfull` at all                      : 253
+
+--- part sets, by how many columns have them ---
+  x249   batch, infer, model, train
+  x151   batch, infer, model, stepfull, train
+  x53    batch, batchgrad, batchscale, infer, model, ragged, stepfull, train
+  x31    batch, infer, model, rlpair, stepfull, train
+  x27    batch, infer, model, rlpair, train
+  x26    infer, model, train
+  x17    batch, batchgrad, batchscale, infer, model, ragged, rlpair, stepfull, train
+  x6     (none)
+  x3     batch, batchgrad, batchscale, infer, model, ragged, train
+  x2     train
+  x1     batch, batchgrad, batchscale, infer, model, ragged, rlpair, train
+  x1     batch, infer, model, ragged, rlpair, stepfull, train
+
+--- batchgrad: declared for 28 lanes; 109 (lane,class) pairs have a column, 34 have NO column carrying it ---
+   byte-lm-host-train                 amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   byte-lm-host-train                 apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   byte-lm-host-train                 nvidia  e.g. bench/results/identity_break/2026-09-14_118-lanes/nvidia-h100-sm_90a.json
+   mamba1-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-bf16w.json
+   mamba1-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba1-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-int8w.json
+   mamba1-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   optim-adam-clip                    amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   optim-adam-clip                    apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   optim-adam-clip                    nvidia  e.g. bench/results/identity_break/2026-09-14_118-lanes/nvidia-h100-sm_90a.json
+   optim-sgd                          amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   optim-sgd                          apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   optim-sgd                          nvidia  e.g. bench/results/identity_break/2026-09-14_118-lanes/nvidia-h100-sm_90a.json
+   par-byte-lm                        amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-byte-lm                        apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-byte-lm-model-pool             amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-model-pool             apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-byte-lm-offload                amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-offload                apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-mlp                            amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-mlp                            apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-mlp                            nvidia  e.g. bench/results/identity_break/2026-09-14_136-lanes/nvidia-h100-sm_90a.json
+   par-samba                          amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-samba                          apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-samba-clip                     amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-samba-clip                     apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   transformer-bf16w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-bf16w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-bf16w.json
+   transformer-bf16w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   transformer-int8w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-int8w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-int8w.json
+   transformer-int8w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+
+--- batchscale: declared for 29 lanes; 116 (lane,class) pairs have a column, 24 have NO column carrying it ---
+   mamba1-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-bf16w.json
+   mamba1-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba1-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-int8w.json
+   mamba1-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-bf16w.json
+   mamba2-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-int8w.json
+   mamba2-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-bf16w.json
+   mamba3-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-int8w.json
+   mamba3-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   transformer-bf16w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-bf16w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-bf16w.json
+   transformer-bf16w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   transformer-int8w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-int8w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-int8w.json
+   transformer-int8w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+
+--- ragged: declared for 25 lanes; 97 (lane,class) pairs have a column, 34 have NO column carrying it ---
+   mamba1-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-bf16w.json
+   mamba1-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba1-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-int8w.json
+   mamba1-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-bf16w.json
+   mamba2-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-int8w.json
+   mamba2-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-bf16w.json
+   mamba3-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-int8w.json
+   mamba3-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   par-byte-lm                        amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-byte-lm                        apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-byte-lm-model-pool             amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-model-pool             apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-byte-lm-offload                amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-offload                apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-samba                          amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-samba                          apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-samba-clip                     amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-samba-clip                     apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   transformer-bf16w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-bf16w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-bf16w.json
+   transformer-bf16w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   transformer-int8w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-int8w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-int8w.json
+   transformer-int8w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+
+--- rlpair: declared for 20 lanes; 80 (lane,class) pairs have a column, 7 have NO column carrying it ---
+   byte-lm                            amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   byte-lm-host-infer                 amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   byte-lm-host-infer-threaded        amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   byte-lm-resident                   amd     e.g. bench/results/identity_break/2026-09-14_120-lanes-2712fix/amd-mi300x-gfx942.json
+   mamba1                             amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   mamba2                             amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   mamba2-dtlimit                     amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+
+--- stepfull: declared for 27 lanes; 89 (lane,class) pairs have a column, 41 have NO column carrying it ---
+   mamba1                             amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   mamba1                             apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   mamba1-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-bf16w.json
+   mamba1-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba1-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba1-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba1-int8w.json
+   mamba1-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2                             amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   mamba2                             apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   mamba2-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-bf16w.json
+   mamba2-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba2-dtlimit                     amd     e.g. bench/results/identity_break/2026-09-14_118-lanes/amd-mi300x-gfx942.json
+   mamba2-dtlimit                     apple   e.g. bench/results/identity_break/2026-09-14_120-lanes-2711flip/apple-m4.json
+   mamba2-dtlimit                     nvidia  e.g. bench/results/identity_break/2026-09-14_118-lanes/nvidia-h100-sm_90a.json
+   mamba2-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba2-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba2-int8w.json
+   mamba2-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-bf16w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-bf16w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-bf16w.json
+   mamba3-bf16w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   mamba3-int8w                       amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   mamba3-int8w                       apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-mamba3-int8w.json
+   mamba3-int8w                       nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   par-byte-lm                        amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-byte-lm                        apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-byte-lm-model-pool             amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-model-pool             apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-byte-lm-offload                amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-byte-lm-offload                apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   par-samba                          amd     e.g. bench/results/identity_break/2026-09-14_136-lanes/amd-mi325x-gfx942.json
+   par-samba                          apple   e.g. bench/results/identity_break/2026-09-14_136-lanes/apple-m4.json
+   par-samba-clip                     amd     e.g. bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json
+   par-samba-clip                     apple   e.g. bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json
+   transformer-bf16w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-bf16w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-bf16w.json
+   transformer-bf16w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+   transformer-int8w                  amd     e.g. bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-f7qt7xpx8f6raq/amd-amd-instinct-mi300x-gfx942.lowbit.json
+   transformer-int8w                  apple   e.g. bench/results/identity_break/2026-09-17_lowbit-m4/metal/apple-m4-lowbit-transformer-int8w.json
+   transformer-int8w                  nvidia  e.g. bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json
+
+--- shipped table: 31 (lane,class) pairs for batchgrad-declaring lanes with no batchgrad entry; 26 of them have no committed column either ---
+   byte-lm-host-train                 amd      <-- and nothing committed carries it
+   byte-lm-host-train                 apple    <-- and nothing committed carries it
+   byte-lm-host-train                 nvidia   <-- and nothing committed carries it
+   mamba1-bf16w                       apple    <-- and nothing committed carries it
+   mamba1-int8w                       apple    <-- and nothing committed carries it
+   optim-adam-clip                    amd      <-- and nothing committed carries it
+   optim-adam-clip                    apple    <-- and nothing committed carries it
+   optim-adam-clip                    nvidia   <-- and nothing committed carries it
+   optim-sgd                          amd      <-- and nothing committed carries it
+   optim-sgd                          apple    <-- and nothing committed carries it
+   optim-sgd                          nvidia   <-- and nothing committed carries it
+   par-byte-lm                        amd      <-- and nothing committed carries it
+   par-byte-lm                        apple    <-- and nothing committed carries it
+   par-byte-lm                        nvidia 
+   par-byte-lm-model-pool             amd      <-- and nothing committed carries it
+   par-byte-lm-model-pool             apple    <-- and nothing committed carries it
+   par-byte-lm-model-pool             nvidia 
+   par-byte-lm-offload                amd      <-- and nothing committed carries it
+   par-byte-lm-offload                apple    <-- and nothing committed carries it
+   par-byte-lm-offload                nvidia 
+   par-mlp                            amd      <-- and nothing committed carries it
+   par-mlp                            apple    <-- and nothing committed carries it
+   par-mlp                            nvidia   <-- and nothing committed carries it
+   par-samba                          amd      <-- and nothing committed carries it
+   par-samba                          apple    <-- and nothing committed carries it
+   par-samba                          nvidia 
+   par-samba-clip                     amd      <-- and nothing committed carries it
+   par-samba-clip                     apple    <-- and nothing committed carries it
+   par-samba-clip                     nvidia 
+   transformer-bf16w                  apple    <-- and nothing committed carries it
+   transformer-int8w                  apple    <-- and nothing committed carries it
+
+--- shipped table: 8 (lane,class) pairs for batchscale-declaring lanes with no batchscale entry; 8 of them have no committed column either ---
+   mamba1-bf16w                       apple    <-- and nothing committed carries it
+   mamba1-int8w                       apple    <-- and nothing committed carries it
+   mamba2-bf16w                       apple    <-- and nothing committed carries it
+   mamba2-int8w                       apple    <-- and nothing committed carries it
+   mamba3-bf16w                       apple    <-- and nothing committed carries it
+   mamba3-int8w                       apple    <-- and nothing committed carries it
+   transformer-bf16w                  apple    <-- and nothing committed carries it
+   transformer-int8w                  apple    <-- and nothing committed carries it
+
+--- shipped table: 23 (lane,class) pairs for ragged-declaring lanes with no ragged entry; 18 of them have no committed column either ---
+   mamba1-bf16w                       apple    <-- and nothing committed carries it
+   mamba1-int8w                       apple    <-- and nothing committed carries it
+   mamba2-bf16w                       apple    <-- and nothing committed carries it
+   mamba2-int8w                       apple    <-- and nothing committed carries it
+   mamba3-bf16w                       apple    <-- and nothing committed carries it
+   mamba3-int8w                       apple    <-- and nothing committed carries it
+   par-byte-lm                        amd      <-- and nothing committed carries it
+   par-byte-lm                        apple    <-- and nothing committed carries it
+   par-byte-lm                        nvidia 
+   par-byte-lm-model-pool             amd      <-- and nothing committed carries it
+   par-byte-lm-model-pool             apple    <-- and nothing committed carries it
+   par-byte-lm-model-pool             nvidia 
+   par-byte-lm-offload                amd      <-- and nothing committed carries it
+   par-byte-lm-offload                apple    <-- and nothing committed carries it
+   par-byte-lm-offload                nvidia 
+   par-samba                          amd      <-- and nothing committed carries it
+   par-samba                          apple    <-- and nothing committed carries it
+   par-samba                          nvidia 
+   par-samba-clip                     amd      <-- and nothing committed carries it
+   par-samba-clip                     apple    <-- and nothing committed carries it
+   par-samba-clip                     nvidia 
+   transformer-bf16w                  apple    <-- and nothing committed carries it
+   transformer-int8w                  apple    <-- and nothing committed carries it
+
+--- shipped table: 4 (lane,class) pairs for rlpair-declaring lanes with no rlpair entry; 4 of them have no committed column either ---
+   byte-lm-host-infer                 amd      <-- and nothing committed carries it
+   byte-lm-host-infer-threaded        amd      <-- and nothing committed carries it
+   mamba1                             amd      <-- and nothing committed carries it
+   mamba2                             amd      <-- and nothing committed carries it
+
+--- shipped table: 29 (lane,class) pairs for stepfull-declaring lanes with no stepfull entry; 22 of them have no committed column either ---
+   mamba1                             amd      <-- and nothing committed carries it
+   mamba1                             apple    <-- and nothing committed carries it
+   mamba1                             nvidia 
+   mamba1-bf16w                       apple    <-- and nothing committed carries it
+   mamba1-int8w                       apple    <-- and nothing committed carries it
+   mamba2                             amd      <-- and nothing committed carries it
+   mamba2                             apple    <-- and nothing committed carries it
+   mamba2                             nvidia 
+   mamba2-bf16w                       apple    <-- and nothing committed carries it
+   mamba2-int8w                       apple    <-- and nothing committed carries it
+   mamba3-bf16w                       apple    <-- and nothing committed carries it
+   mamba3-int8w                       apple    <-- and nothing committed carries it
+   par-byte-lm                        amd      <-- and nothing committed carries it
+   par-byte-lm                        apple    <-- and nothing committed carries it
+   par-byte-lm                        nvidia 
+   par-byte-lm-model-pool             amd      <-- and nothing committed carries it
+   par-byte-lm-model-pool             apple    <-- and nothing committed carries it
+   par-byte-lm-model-pool             nvidia 
+   par-byte-lm-offload                amd      <-- and nothing committed carries it
+   par-byte-lm-offload                apple    <-- and nothing committed carries it
+   par-byte-lm-offload                nvidia 
+   par-samba                          amd      <-- and nothing committed carries it
+   par-samba                          apple    <-- and nothing committed carries it
+   par-samba                          nvidia 
+   par-samba-clip                     amd      <-- and nothing committed carries it
+   par-samba-clip                     apple    <-- and nothing committed carries it
+   par-samba-clip                     nvidia 
+   transformer-bf16w                  apple    <-- and nothing committed carries it
+   transformer-int8w                  apple    <-- and nothing committed carries it

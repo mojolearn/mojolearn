@@ -1,0 +1,20 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (default): 1 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-queries-nn             base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.21s
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-queries-nn             base     train     IDENTICAL   one=6869ae45e01fcb7a  two=6869ae45e01fcb7a
+  par-queries-nn             base     infer     IDENTICAL   one=da53642fe53493ad  two=da53642fe53493ad
+  par-queries-nn             base     model     IDENTICAL   one=2262556d652b5187  two=2262556d652b5187
+  par-queries-nn             base     batch     IDENTICAL   one=da944e45126bd8e0  two=da944e45126bd8e0
+Device witness: 4 pool(s), 8 worker(s), placement=physical.
+
+RESULT: THE TWO COLUMNS AGREE on 4 compared cell parts across 1 lane(s)
+and 1 fixture(s), IDENTICAL=4, N/A=1.
+Sharding this work across the devices did not move a bit.

@@ -1,0 +1,47 @@
+| lane/fixture                 | verdict    | nvidia-sm_89     | nvidia-sm_89     |
+|------------------------------|------------|------------------|------------------|
+| par-queries-nn/base          | IDENTICAL x2 | 6869ae45e01fcb7a | 6869ae45e01fcb7a |
+| par-queries-nn/denormal      | IDENTICAL x2 | c5404ea40ba502da | c5404ea40ba502da |
+| par-queries-nn/denormal_ftz  | IDENTICAL x2 | c5404ea40ba502da | c5404ea40ba502da |
+| par-queries-nn/dupes         | IDENTICAL x2 | 55dffcfe5d6aa112 | 55dffcfe5d6aa112 |
+| par-queries-nn/hashed        | IDENTICAL x2 | 96db6b5a57d4d248 | 96db6b5a57d4d248 |
+| par-queries-nn/negative      | IDENTICAL x2 | b73513bc451075d0 | b73513bc451075d0 |
+| par-queries-nn/odd           | IDENTICAL x2 | f4ddd08c4744ae8d | f4ddd08c4744ae8d |
+| par-queries-nn/ties          | IDENTICAL x2 | 23daf3a923d4c74f | 23daf3a923d4c74f |
+| par-queries-nn/wide          | IDENTICAL x2 | 3956d623d56e1786 | 3956d623d56e1786 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | nvidia-sm_89     | nvidia-sm_89     |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-queries-nn/base          | infer  | IDENTICAL x2 | da53642fe53493ad | da53642fe53493ad |
+| par-queries-nn/base          | model  | IDENTICAL x2 | 2262556d652b5187 | 2262556d652b5187 |
+| par-queries-nn/base          | batch  | IDENTICAL x2 | da944e45126bd8e0 | da944e45126bd8e0 |
+| par-queries-nn/denormal      | infer  | IDENTICAL x2 | 32426a86a46b417f | 32426a86a46b417f |
+| par-queries-nn/denormal      | model  | IDENTICAL x2 | d2ef07879ac4916e | d2ef07879ac4916e |
+| par-queries-nn/denormal      | batch  | IDENTICAL x2 | 9af443b575315e61 | 9af443b575315e61 |
+| par-queries-nn/denormal_ftz  | infer  | IDENTICAL x2 | 32426a86a46b417f | 32426a86a46b417f |
+| par-queries-nn/denormal_ftz  | model  | IDENTICAL x2 | 771d0d3df6d1d2ac | 771d0d3df6d1d2ac |
+| par-queries-nn/denormal_ftz  | batch  | IDENTICAL x2 | 9af443b575315e61 | 9af443b575315e61 |
+| par-queries-nn/dupes         | infer  | IDENTICAL x2 | 6776f2a2ef1528ee | 6776f2a2ef1528ee |
+| par-queries-nn/dupes         | model  | IDENTICAL x2 | 0f847e465f0fce2d | 0f847e465f0fce2d |
+| par-queries-nn/dupes         | batch  | IDENTICAL x2 | 4c05d8d24e5cfa27 | 4c05d8d24e5cfa27 |
+| par-queries-nn/hashed        | infer  | IDENTICAL x2 | 906e8d5ef7d91305 | 906e8d5ef7d91305 |
+| par-queries-nn/hashed        | model  | IDENTICAL x2 | 924ef8b2b10467f0 | 924ef8b2b10467f0 |
+| par-queries-nn/hashed        | batch  | IDENTICAL x2 | 1c5e222f1cd206a3 | 1c5e222f1cd206a3 |
+| par-queries-nn/negative      | infer  | IDENTICAL x2 | aa5dd33322e1cb78 | aa5dd33322e1cb78 |
+| par-queries-nn/negative      | model  | IDENTICAL x2 | 5f934babcd0bc097 | 5f934babcd0bc097 |
+| par-queries-nn/negative      | batch  | IDENTICAL x2 | 9f59fac4020afea4 | 9f59fac4020afea4 |
+| par-queries-nn/odd           | infer  | IDENTICAL x2 | ef7c64cd35cc99ad | ef7c64cd35cc99ad |
+| par-queries-nn/odd           | model  | IDENTICAL x2 | 8e7ac0d7c257cac6 | 8e7ac0d7c257cac6 |
+| par-queries-nn/odd           | batch  | IDENTICAL x2 | 7ebe1444150c0ee5 | 7ebe1444150c0ee5 |
+| par-queries-nn/ties          | infer  | IDENTICAL x2 | 234e9e649f45c983 | 234e9e649f45c983 |
+| par-queries-nn/ties          | model  | IDENTICAL x2 | 4049122e7b37a94e | 4049122e7b37a94e |
+| par-queries-nn/ties          | batch  | IDENTICAL x2 | f6f06727f6f8caec | f6f06727f6f8caec |
+| par-queries-nn/wide          | infer  | IDENTICAL x2 | 3173e563e425be1c | 3173e563e425be1c |
+| par-queries-nn/wide          | model  | IDENTICAL x2 | 244f616088763b08 | 244f616088763b08 |
+| par-queries-nn/wide          | batch  | IDENTICAL x2 | 62dabd8ae8cf5b4f | 62dabd8ae8cf5b4f |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 

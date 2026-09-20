@@ -1,0 +1,278 @@
+===== mamba1-decode-session/base train =====
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7421, in _
+    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 651, in decode_session
+    return Mamba1DecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 692, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+
+===== mamba1-decode-session/ties train =====
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7421, in _
+    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 651, in decode_session
+    return Mamba1DecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 692, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+
+===== par-byte-lm-model-pool/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6621, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 58, in _open
+    binding = _ModelPoolBinding(helper._binding())
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+
+===== par-byte-lm-model-pool/ties train =====
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6621, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 58, in _open
+    binding = _ModelPoolBinding(helper._binding())
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+
+===== par-byte-lm-offload/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6639, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 56, in _open
+    binding = _OffloadBinding(_load(self._shape))
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+
+===== par-byte-lm-offload/ties train =====
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6639, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 56, in _open
+    binding = _OffloadBinding(_load(self._shape))
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+
+===== par-byte-lm/base train =====
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6255, in _
+    losses, state, _ = _byte_lm_replay(tr, ref, ids)
+                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 63, in _open
+    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+
+===== par-byte-lm/ties train =====
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6255, in _
+    losses, state, _ = _byte_lm_replay(tr, ref, ids)
+                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 63, in _open
+    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+
+===== par-causal-lm/base train =====
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+
+===== par-causal-lm/ties train =====
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+
+===== par-forecast-arima/base train =====
+ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6076, in _
+    _same_bytes("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246 bytes of 8192
+
+===== par-forecast-arima/ties train =====
+ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 4622 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6076, in _
+    _same_bytes("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_))
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 4622 bytes of 8192
+
+===== par-forecast-holtwinters/base infer-model =====
+infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7224 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10530, in _probe_fit
+    infer = _h(*fit.probe(_public_est(name, fit.est)))
+                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6570, in <lambda>
+    lambda e: _same_bytes(
+              ~~~~~~~~~~~^
+        f"forecast_exponential_smoothing({FORECAST_HORIZON})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7224 bytes of 8192
+
+===== par-forecast-holtwinters/ties infer-model =====
+infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10530, in _probe_fit
+    infer = _h(*fit.probe(_public_est(name, fit.est)))
+                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6570, in <lambda>
+    lambda e: _same_bytes(
+              ~~~~~~~~~~~^
+        f"forecast_exponential_smoothing({FORECAST_HORIZON})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})", e.forecast(FORECAST_HORIZON)))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 1677, in _same_bytes
+    raise ValueError(message)
+ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192
+
+===== transformer-decode-session/base train =====
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7483, in _
+    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1207, in decode_session
+    return TransformerDecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1265, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+
+===== transformer-decode-session/ties train =====
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7483, in _
+    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1207, in decode_session
+    return TransformerDecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1265, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+

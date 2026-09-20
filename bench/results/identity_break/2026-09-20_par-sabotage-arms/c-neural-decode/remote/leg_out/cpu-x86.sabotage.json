@@ -1,0 +1,905 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-71-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+ "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "par-forecast-arima/base": {
+   "verdict": "REFUSED",
+   "error": "ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6076, in _\n    _same_bytes(\"predict_arima(0, n_obs)\", sharded, \"plain ARIMA.predict(0, n_obs)\", m.predict(0, m.n_obs_))\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1677, in _same_bytes\n    raise ValueError(message)\nValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246 bytes of 8192",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.09555814787745476,
+    "stages": {
+     "repeat=1/train": 0.09405649453401566
+    }
+   }
+  },
+  "par-forecast-arima/ties": {
+   "verdict": "REFUSED",
+   "error": "ValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 4622 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6076, in _\n    _same_bytes(\"predict_arima(0, n_obs)\", sharded, \"plain ARIMA.predict(0, n_obs)\", m.predict(0, m.n_obs_))\n    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1677, in _same_bytes\n    raise ValueError(message)\nValueError: predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 4622 bytes of 8192",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.10207591578364372,
+    "stages": {
+     "repeat=1/train": 0.10142240300774574
+    }
+   }
+  },
+  "par-byte-lm/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for parallel training\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6255, in _\n    losses, state, _ = _byte_lm_replay(tr, ref, ids)\n                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 63, in _open\n    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')\nImportError: rebuild bindings/build_byte_lm.sh for parallel training",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.007668696343898773,
+    "stages": {
+     "repeat=1/train": 0.006953652948141098
+    }
+   }
+  },
+  "par-byte-lm/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for parallel training\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6255, in _\n    losses, state, _ = _byte_lm_replay(tr, ref, ids)\n                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 63, in _open\n    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')\nImportError: rebuild bindings/build_byte_lm.sh for parallel training",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00704013928771019,
+    "stages": {
+     "repeat=1/train": 0.006416309624910355
+    }
+   }
+  },
+  "par-forecast-holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7bf9c2cccc9035df",
+    "7bf9c2cccc9035df"
+   ],
+   "parts": [
+    {
+     "predict": "e99a8d79c1fd3e63",
+     "forecast": "e99a8d79c1fd3e63",
+     "indexed": "7c2069b2d773aa66"
+    },
+    {
+     "predict": "e99a8d79c1fd3e63",
+     "forecast": "e99a8d79c1fd3e63",
+     "indexed": "7c2069b2d773aa66"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7224 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10530, in _probe_fit\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6570, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1677, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7224 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x40673f61 vs prefix 0x40269137",
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x40673f61 vs prefix 0x40269137"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "timing": {
+    "total_seconds": 1.195472788065672,
+    "stages": {
+     "repeat=1/train": 0.30120300501585007,
+     "repeat=1/infer-save-reload": 0.10085150972008705,
+     "repeat=1/batch": 0.20025482773780823,
+     "repeat=2/train": 0.2928333580493927,
+     "repeat=2/infer-save-reload": 0.09673183411359787,
+     "repeat=2/batch": 0.2031891942024231
+    }
+   }
+  },
+  "par-forecast-holtwinters/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d99a77e850e0e5c4",
+    "d99a77e850e0e5c4"
+   ],
+   "parts": [
+    {
+     "predict": "1dd66507bbeea0ae",
+     "forecast": "1dd66507bbeea0ae",
+     "indexed": "6cbe769b14401fd2"
+    },
+    {
+     "predict": "1dd66507bbeea0ae",
+     "forecast": "1dd66507bbeea0ae",
+     "indexed": "6cbe769b14401fd2"
+    }
+   ],
+   "infer": [
+    null,
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null,
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10530, in _probe_fit\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6570, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1677, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5724 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x44a41bf9 vs prefix 0x44a3c66c",
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x44a41bf9 vs prefix 0x44a3c66c"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "timing": {
+    "total_seconds": 1.1541809365153313,
+    "stages": {
+     "repeat=1/train": 0.2984947897493839,
+     "repeat=1/infer-save-reload": 0.09732696786522865,
+     "repeat=1/batch": 0.18565545976161957,
+     "repeat=2/train": 0.2912622280418873,
+     "repeat=2/infer-save-reload": 0.09614875167608261,
+     "repeat=2/batch": 0.1849440410733223
+    }
+   }
+  },
+  "par-byte-lm-model-pool/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for model pooling\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6621, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/model_pool_training.py\", line 58, in _open\n    binding = _ModelPoolBinding(helper._binding())\n  File \"/root/mojolearn/python/mojolearn/model_pool_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')\nImportError: rebuild bindings/build_byte_lm.sh for model pooling",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.007096491754055023,
+    "stages": {
+     "repeat=1/train": 0.006355453282594681
+    }
+   }
+  },
+  "par-byte-lm-model-pool/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for model pooling\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6621, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/model_pool_training.py\", line 58, in _open\n    binding = _ModelPoolBinding(helper._binding())\n  File \"/root/mojolearn/python/mojolearn/model_pool_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')\nImportError: rebuild bindings/build_byte_lm.sh for model pooling",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.00650680810213089,
+    "stages": {
+     "repeat=1/train": 0.00588395819067955
+    }
+   }
+  },
+  "par-byte-lm-offload/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6639, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/offload_training.py\", line 56, in _open\n    binding = _OffloadBinding(_load(self._shape))\n  File \"/root/mojolearn/python/mojolearn/offload_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')\nImportError: rebuild bindings/build_byte_lm.sh for offloaded replay",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.005671173334121704,
+    "stages": {
+     "repeat=1/train": 0.004987191408872604
+    }
+   }
+  },
+  "par-byte-lm-offload/ties": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6639, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 6595, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/offload_training.py\", line 56, in _open\n    binding = _OffloadBinding(_load(self._shape))\n  File \"/root/mojolearn/python/mojolearn/offload_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')\nImportError: rebuild bindings/build_byte_lm.sh for offloaded replay",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.005537386983633041,
+    "stages": {
+     "repeat=1/train": 0.004942659288644791
+    }
+   }
+  },
+  "mamba1-decode-session/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7421, in _\n    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/root/mojolearn/python/mojolearn/_mamba_impl.py\", line 651, in decode_session\n    return Mamba1DecodeSession(self, state)\n  File \"/root/mojolearn/python/mojolearn/_mamba_impl.py\", line 692, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001819651573896408,
+    "stages": {
+     "repeat=1/train": 0.0010474659502506256
+    }
+   }
+  },
+  "mamba1-decode-session/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7421, in _\n    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/root/mojolearn/python/mojolearn/_mamba_impl.py\", line 651, in decode_session\n    return Mamba1DecodeSession(self, state)\n  File \"/root/mojolearn/python/mojolearn/_mamba_impl.py\", line 692, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001554679125547409,
+    "stages": {
+     "repeat=1/train": 0.0009963512420654297
+    }
+   }
+  },
+  "transformer-decode-session/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7483, in _\n    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/root/mojolearn/python/mojolearn/_transformer_impl.py\", line 1207, in decode_session\n    return TransformerDecodeSession(self, state)\n  File \"/root/mojolearn/python/mojolearn/_transformer_impl.py\", line 1265, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0016849413514137268,
+    "stages": {
+     "repeat=1/train": 0.001027662307024002
+    }
+   }
+  },
+  "transformer-decode-session/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7483, in _\n    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/root/mojolearn/python/mojolearn/_transformer_impl.py\", line 1207, in decode_session\n    return TransformerDecodeSession(self, state)\n  File \"/root/mojolearn/python/mojolearn/_transformer_impl.py\", line 1265, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0014981701970100403,
+    "stages": {
+     "repeat=1/train": 0.0009607970714569092
+    }
+   }
+  },
+  "par-causal-lm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7738, in _\n    with ParallelCausalLM.load(root, layer_devices=owners) as par:\n         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py\", line 118, in load\n    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')\nNotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.012652728706598282,
+    "stages": {
+     "repeat=1/train": 0.01204267144203186
+    }
+   }
+  },
+  "par-causal-lm/ties": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 7738, in _\n    with ParallelCausalLM.load(root, layer_devices=owners) as par:\n         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py\", line 118, in load\n    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')\nNotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.011796433478593826,
+    "stages": {
+     "repeat=1/train": 0.0112709179520607
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "degenerate_lanes": [
+  "mamba1-decode-session",
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-causal-lm",
+  "par-forecast-arima",
+  "par-forecast-holtwinters",
+  "transformer-decode-session"
+ ],
+ "degenerate_column": "cpu-host",
+ "host": {
+  "cpu_model": "AMD EPYC 9655P 96-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "7ade8c17fc1e4b485ce5b7458575f1848626950f48b2a863bda586bdbc698e96",
+    "size": 399344,
+    "sabotage": true
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "5363bcaf8ba3e64eb24a2eb569b113564410958d3a1e0b61f0c0dd507a9c7886",
+    "size": 595624,
+    "sabotage": true
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "7b0a913084f31f7220f3b953f40b4c71525f7cf4b0abda644d30ba4704cffac8",
+    "size": 981136,
+    "sabotage": true
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "facd8322ec4ae56f881a76437f7d91f75b5d0721606ad65a3d45fb2bebd49085",
+    "size": 207400,
+    "sabotage": true
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "1b121f1822f7b15c37117b7fee2de44f7cfd90e1774f7a4e66084f2655d4840c",
+    "size": 183248,
+    "sabotage": true
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "7b4c9cdc807c7ded0c06853d01e7b6790f37a2cf8ce7b0ef46b135785cefa7b6",
+    "size": 721696,
+    "sabotage": true
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "5303400cd07be811628f19e6a0a0f2e2228962a97f8b137ff481e59d72bacecd",
+    "size": 367112,
+    "sabotage": true
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "6ddc034de265df29257ecf87c74233f8edc64ab4abd09525b125795d72804e09",
+    "size": 515192,
+    "sabotage": true
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "d5a456561456d04afdd82b92367789321bca1d282255fc30b0d2fba6ce9e3687",
+    "size": 1691632,
+    "sabotage": true
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "21180020645868aa5cc58e14c07077177672b6b46f33d2270d3c6812c1ec9b1d",
+    "size": 488648,
+    "sabotage": true
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "902d0c323af51620fb1052b3e66ff7ac54ea6ce01e70ce4bd024de9199858013",
+    "size": 321888,
+    "sabotage": true
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "d64f2836fad177bea079ab9bfa9485dd454b5af0012ed7d60518a89d019da686",
+    "size": 460824,
+    "sabotage": true
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "83d782953f2b2323be922be5791704378095fdb4bfe54858b29d63d3ed8de373",
+    "size": 302728,
+    "sabotage": true
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "5946a243978e1ab218baeab8967e4ee16a52319edc5a3c3198cf7b5186172d6c",
+    "size": 465696,
+    "sabotage": true
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "366b5659bbbc200cf64de284e0e5aa9b0368c0ef9d6dafeba7aa22f4d570c7b2",
+    "size": 281752,
+    "sabotage": true
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "1f8fd302e1e6759c3a25a59072980fced30ede9aa63aeeb95f2dcc0057645741",
+    "size": 375384,
+    "sabotage": true
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "f2d2ec02358fb910a4abebb9407e29d09b1583c429ddd5e2a68bbfe2bfd5137c",
+    "size": 340288,
+    "sabotage": true
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "59e152f56aea0f0b0944582f5a9c7741251fdd7272d2cea8108579495aad28d1",
+    "size": 1262096,
+    "sabotage": true
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "30dd27f12684ab42e69de2cd409031027782fd3877def3ade4a5f7d6cc6a3548",
+    "size": 875936,
+    "sabotage": true
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "ced3c1d308505e4ae2cd5133ab2b57a10a710b136539f5b3986800a7c5e6bff4",
+    "size": 453856,
+    "sabotage": true
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "1e0429208999dc8d7d388acbf20ad8dc96a08effc90eb20a297f1b7f3e1c33b7",
+    "size": 263024,
+    "sabotage": true
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "43f249037570f052f5ccdb463ff112dc76a776536f7c6acc3cc5523da92273d3",
+    "size": 689040,
+    "sabotage": true
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "3325a3d158e7a3054cb18e75c00b407fbca3b143b1e5a79fdc271c6e88e3dec8",
+    "size": 242480,
+    "sabotage": true
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "905649f87d23ace3ccff60d53e22cb9266b817f64eab542774ef862688ccf1f0",
+    "size": 336552,
+    "sabotage": true
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "52fd219aabf4b04b0fe9fd14aea1c5e9e27ce7fcc1e41879af999dda26bc08e1",
+    "size": 560264,
+    "sabotage": true
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "26893d2e548e65d6161e7804e1281fc5eef62cee0b897b43189f82d3f0438d43",
+    "size": 281680,
+    "sabotage": true
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "4c618c2243604612e3c20275ab952975d82a5ec66504e15e9341e45f35c5d3ce",
+    "size": 423720,
+    "sabotage": true
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "796c737709701549041bfa948a92fa87393c24ce9a7cd5a1ffd2bb45bb23b4c7",
+    "size": 484208,
+    "sabotage": true
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "eeff5266bd1158c1a66da1919fffeceec68fb5bfa24c8beaae238a43d7d9d4cb",
+    "size": 445376,
+    "sabotage": true
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "06c8ea6803a6cb462e53519cab9082de372028db64c6403661595fcce4f5cfe2",
+    "size": 448032,
+    "sabotage": true
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "6a5c94d48c3b245eaa5e80d8d9fb6f5eb736f36eb8ade92c83e84e061a7129ac",
+    "size": 563072,
+    "sabotage": true
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "9b366962c39b54b62e057121452abf6f2d3981aa522b9e1869370e0b2556c3bd",
+    "size": 330784,
+    "sabotage": true
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "4dc3e029ecafdd68e4a35aef123588e1fbb430dfc7686c02cad494ad72205546",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-byte-lm,par-byte-lm-model-pool,par-byte-lm-offload,par-causal-lm,par-forecast-arima,par-forecast-holtwinters,mamba1-decode-session,transformer-decode-session",
+   "skip": "",
+   "fixtures": "base,ties",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "bbae749de8bf309b42ac630e376c0067f694a159f4a5160d06a0e984c8994bdd",
+  "provenance": {
+   "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-9655p-96-core-processor",
+   "platform": "Linux-6.8.0-71-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    }
+   }
+  }
+ }
+}

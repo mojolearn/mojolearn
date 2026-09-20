@@ -1,0 +1,110 @@
+===== par-cholesky/base train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6876, in _
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 430, in fit_cholesky
+    result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 307, in execute
+    native = state._extension()
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 132, in _extension
+    mod, readback = self._door()
+                    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 126, in _door
+    return self._bind(), "gp_numeric_mode"
+           ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh
+
+===== par-cholesky/ties train =====
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 11073, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6876, in _
+    par = fit_cholesky(ml.Cholesky(), A, devices=dev)
+  File "/root/mojolearn/python/mojolearn/parallel_classical.py", line 430, in fit_cholesky
+    result = pool.map([('cholesky_fit', estimator, (A,))])[0]
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 308, in map
+    raise error
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 303, in map
+    result.append(future.result())
+                  ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 454, in result
+    return self.__get_result()
+           ~~~~~~~~~~~~~~~~~^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py", line 396, in __get_result
+    raise self._exception
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 86, in run
+    result = ctx.run(self.task)
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py", line 73, in run
+    return fn(*args, **kwargs)
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 280, in _call
+    raise RuntimeError('GPU worker failed:\n' + value)
+RuntimeError: GPU worker failed:
+Traceback (most recent call last):
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 418, in main
+    response = (True, execute(request))
+                      ~~~~~~~^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_worker.py", line 307, in execute
+    native = state._extension()
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 132, in _extension
+    mod, readback = self._door()
+                    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_cholesky_impl.py", line 126, in _door
+    return self._bind(), "gp_numeric_mode"
+           ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh
+

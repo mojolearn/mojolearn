@@ -413,6 +413,42 @@ done
 sha256sum python/mojolearn/host/*.so python/mojolearn/host-sabotage/*.so > "$OUT/so_sha256.txt" 2>/dev/null
 ph build_end
 
+# THE HOST MATH LIBRARY, OR NOTHING IMPORTS (2026-09-20).
+# `python/mojolearn/_portable_math.py` dlopens .libs/libMojolearnMath.so, and
+# `_training_impl.py`'s `def kaiming_uniform(self, shape, fan_in,
+# a=math.sqrt(5.0))` evaluates it as a DEFAULT ARGUMENT at class definition
+# time, so `import mojolearn` needs it unconditionally. It is not lazy and no
+# command can avoid it. Nothing under bindings/ builds it, `.libs/` is
+# gitignored so the shipped tarball carries nothing, and the only thing in the
+# tree that compiles it is packaging/macos/build_release_wheel.sh, which does
+# not run on Linux. A developer Mac has it sitting in the checkout from some
+# past wheel build and never notices; a freshly rented box cannot import the
+# package at all.
+#
+# MEASURED ON THREE PODS TODAY -- zaho1l0oqoy2hh, g60mkatgi6epm4 and
+# epn4g2y79weyad -- every host binding built, both arms differing on all 32,
+# `missing_bindings.txt` EMPTY, and all three commands dead one second in at
+# `OSError: .../libMojolearnMath.so: cannot open shared object file`, having
+# recorded not one cell. $0.34 for three builds and no column.
+#
+# tools/gap_column_leg.sh learned this on 2026-09-19 and builds it; this
+# runner did not, so the lesson sat in one leg body while every CPU leg that
+# imports the package kept walking into it. It lands here instead, once, for
+# every command this runner will ever run.
+#
+# This calls the tree's OWN recipe, packaging/portable_math/stage.py's
+# build(), rather than retyping its compiler flags: -ffp-contract=off,
+# -fno-fast-math, -march=x86-64-v3 and -nostdlib ARE the arithmetic contract,
+# and a second copy of them here would be a second answer to it.
+ph portable_math_start
+t=$(date +%s)
+env PYTHONPATH="$R/packaging/portable_math" "$PY" -c \
+    "import pathlib, stage; stage.build(pathlib.Path('$R/python/mojolearn/.libs/libMojolearnMath.so'))" \
+    > "$OUT/portable_math.log" 2>&1
+printf 'portable-math\t%s\t%s\n' "$?" "$(( $(date +%s) - t ))" >> "$OUT/status.tsv"
+ls -l "$R/python/mojolearn/.libs/" >> "$OUT/portable_math.log" 2>&1
+ph portable_math_end
+
 ph run_start
 export MOJOLEARN_COMMIT=@COMMIT@ PYTHONPATH="$R/python" LEG_OUT="$OUT"
 unset MOJOLEARN_BINCACHE_OUT

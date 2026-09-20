@@ -1,0 +1,6 @@
+lane=parsab-b
+commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+dirty_tracked=0
+worktree=/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-aa202348f9b77c622
+source=3119	19481753	37ede0495305688e559746dbc09137f985c1ca8aaee3593c76b3862064cc490b
+box_clock_minus_mac=0

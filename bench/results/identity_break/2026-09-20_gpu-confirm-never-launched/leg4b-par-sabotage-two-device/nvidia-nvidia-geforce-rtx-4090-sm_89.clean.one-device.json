@@ -1,0 +1,1109 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "8be118b4c629a7006f287b6586ce53a30966b5b7",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  }
+ },
+ "cells": {
+  "par-graph-agglomerative/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6c9e7daffb48878f",
+    "6c9e7daffb48878f"
+   ],
+   "parts": [
+    {
+     "labels": "02ca572ae936a2fa",
+     "children": "61fbeb98d7761d71"
+    },
+    {
+     "labels": "02ca572ae936a2fa",
+     "children": "61fbeb98d7761d71"
+    }
+   ],
+   "infer": [
+    "3a6472714f51d8ab",
+    "3a6472714f51d8ab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9bb9f86300c44f5f",
+    "9bb9f86300c44f5f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3a6472714f51d8ab",
+    "3a6472714f51d8ab"
+   ],
+   "batch": [
+    "a8e67882b424a053",
+    "a8e67882b424a053"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.865891050547361,
+    "stages": {
+     "repeat=1/train": 3.1746508460491896,
+     "repeat=1/infer-save-reload": 0.02522824890911579,
+     "repeat=1/batch": 0.01624489761888981,
+     "repeat=1/batchgrad": 5.2852556109428406e-05,
+     "repeat=1/batchscale": 4.044733941555023e-05,
+     "repeat=1/ragged": 3.876537084579468e-05,
+     "repeat=1/stepfull": 3.813207149505615e-05,
+     "repeat=2/train": 1.6229191273450851,
+     "repeat=2/infer-save-reload": 0.004446486011147499,
+     "repeat=2/batch": 0.021512702107429504,
+     "repeat=2/batchgrad": 8.907169103622437e-05,
+     "repeat=2/batchscale": 7.92238861322403e-05,
+     "repeat=2/ragged": 7.682852447032928e-05,
+     "repeat=2/stepfull": 7.736869156360626e-05
+    }
+   }
+  },
+  "par-graph-agglomerative/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e0ddbabe3fa9e85c",
+    "e0ddbabe3fa9e85c"
+   ],
+   "parts": [
+    {
+     "labels": "8033ec9dd0710431",
+     "children": "edcd67f3c2ea5e9b"
+    },
+    {
+     "labels": "8033ec9dd0710431",
+     "children": "edcd67f3c2ea5e9b"
+    }
+   ],
+   "infer": [
+    "d161892b4ef55128",
+    "d161892b4ef55128"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "64a8cd1101ec17ba",
+    "64a8cd1101ec17ba"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "d161892b4ef55128",
+    "d161892b4ef55128"
+   ],
+   "batch": [
+    "a8e67882b424a053",
+    "a8e67882b424a053"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.291090816259384,
+    "stages": {
+     "repeat=1/train": 1.6162436828017235,
+     "repeat=1/infer-save-reload": 0.004455816000699997,
+     "repeat=1/batch": 0.021588878706097603,
+     "repeat=1/batchgrad": 9.047240018844604e-05,
+     "repeat=1/batchscale": 7.777102291584015e-05,
+     "repeat=1/ragged": 7.859058678150177e-05,
+     "repeat=1/stepfull": 7.805973291397095e-05,
+     "repeat=2/train": 1.6217832211405039,
+     "repeat=2/infer-save-reload": 0.004394324496388435,
+     "repeat=2/batch": 0.021501459181308746,
+     "repeat=2/batchgrad": 8.498318493366241e-05,
+     "repeat=2/batchscale": 7.401220500469208e-05,
+     "repeat=2/ragged": 7.319077849388123e-05,
+     "repeat=2/stepfull": 7.301941514015198e-05
+    }
+   }
+  },
+  "par-gmm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2e2f431921382642",
+    "2e2f431921382642"
+   ],
+   "parts": [
+    {
+     "weights": "a4eba271e632d804",
+     "means": "5d96374f5285923d",
+     "covariances": "a45274e485b39a47",
+     "precisions": "54623c3f36780947",
+     "n_iter": "2125639377726aa4",
+     "lower_bound": "d7b32bec8f0a51c7",
+     "labels": "f0bb298f4c087a9d"
+    },
+    {
+     "weights": "a4eba271e632d804",
+     "means": "5d96374f5285923d",
+     "covariances": "a45274e485b39a47",
+     "precisions": "54623c3f36780947",
+     "n_iter": "2125639377726aa4",
+     "lower_bound": "d7b32bec8f0a51c7",
+     "labels": "f0bb298f4c087a9d"
+    }
+   ],
+   "infer": [
+    "85fe32a2a96f9f7b",
+    "85fe32a2a96f9f7b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c4a997dc3ae320a2",
+    "c4a997dc3ae320a2"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "85fe32a2a96f9f7b",
+    "85fe32a2a96f9f7b"
+   ],
+   "batch": [
+    "7ba1e60c59f6aad6",
+    "7ba1e60c59f6aad6"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 20.850245743989944,
+    "stages": {
+     "repeat=1/train": 4.18452836945653,
+     "repeat=1/infer-save-reload": 6.596631184220314,
+     "repeat=1/batch": 0.03683855012059212,
+     "repeat=1/batchgrad": 9.236671030521393e-05,
+     "repeat=1/batchscale": 6.661564111709595e-05,
+     "repeat=1/ragged": 6.452389061450958e-05,
+     "repeat=1/stepfull": 6.395205855369568e-05,
+     "repeat=2/train": 3.302583107724786,
+     "repeat=2/infer-save-reload": 6.691839823499322,
+     "repeat=2/batch": 0.03652517683804035,
+     "repeat=2/batchgrad": 0.00011689402163028717,
+     "repeat=2/batchscale": 7.15889036655426e-05,
+     "repeat=2/ragged": 6.712041795253754e-05,
+     "repeat=2/stepfull": 6.590597331523895e-05
+    }
+   }
+  },
+  "par-gmm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "391ad032f87985dd",
+    "391ad032f87985dd"
+   ],
+   "parts": [
+    {
+     "weights": "a0e7440550fc01ba",
+     "means": "7ae06407e5f74201",
+     "covariances": "b86abb1963181fd4",
+     "precisions": "fa3659b50a093285",
+     "n_iter": "e6a4d52e2165d1c4",
+     "lower_bound": "e2cba10334fc4334",
+     "labels": "010f866884b7917e"
+    },
+    {
+     "weights": "a0e7440550fc01ba",
+     "means": "7ae06407e5f74201",
+     "covariances": "b86abb1963181fd4",
+     "precisions": "fa3659b50a093285",
+     "n_iter": "e6a4d52e2165d1c4",
+     "lower_bound": "e2cba10334fc4334",
+     "labels": "010f866884b7917e"
+    }
+   ],
+   "infer": [
+    "b826318a10f37b16",
+    "b826318a10f37b16"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fa63a34d1b2e5088",
+    "fa63a34d1b2e5088"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b826318a10f37b16",
+    "b826318a10f37b16"
+   ],
+   "batch": [
+    "fe518740b7ec427e",
+    "fe518740b7ec427e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 20.49635473638773,
+    "stages": {
+     "repeat=1/train": 3.4637868888676167,
+     "repeat=1/infer-save-reload": 6.787680039182305,
+     "repeat=1/batch": 0.02083808369934559,
+     "repeat=1/batchgrad": 5.944445729255676e-05,
+     "repeat=1/batchscale": 4.209950566291809e-05,
+     "repeat=1/ragged": 4.114024341106415e-05,
+     "repeat=1/stepfull": 4.102662205696106e-05,
+     "repeat=2/train": 3.450112607330084,
+     "repeat=2/infer-save-reload": 6.737073939293623,
+     "repeat=2/batch": 0.03588836081326008,
+     "repeat=2/batchgrad": 9.5343217253685e-05,
+     "repeat=2/batchscale": 7.75698572397232e-05,
+     "repeat=2/ragged": 7.628649473190308e-05,
+     "repeat=2/stepfull": 7.554702460765839e-05
+    }
+   }
+  },
+  "par-resample/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "16b7c5812583951d",
+    "16b7c5812583951d"
+   ],
+   "parts": [
+    {
+     "bootstrap-mean": "2610e7a536874406",
+     "bootstrap-quantile": "eb2cb55c74dc674d",
+     "permutation": "5cc6e15a81e61e96",
+     "monte-carlo": "abba0a70ff1ab086"
+    },
+    {
+     "bootstrap-mean": "2610e7a536874406",
+     "bootstrap-quantile": "eb2cb55c74dc674d",
+     "permutation": "5cc6e15a81e61e96",
+     "monte-carlo": "abba0a70ff1ab086"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e234c2830f21479b",
+    "e234c2830f21479b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 246.42561623640358,
+    "stages": {
+     "repeat=1/train": 7.397897731512785,
+     "repeat=1/infer-save-reload": 1.2692064046859741e-05,
+     "repeat=1/batch": 112.3688574321568,
+     "repeat=1/batchgrad": 0.00012390874326229095,
+     "repeat=1/batchscale": 4.052743315696716e-05,
+     "repeat=1/ragged": 3.9186328649520874e-05,
+     "repeat=1/stepfull": 3.9013102650642395e-05,
+     "repeat=2/train": 7.016321957111359,
+     "repeat=2/infer-save-reload": 1.2304633855819702e-05,
+     "repeat=2/batch": 119.64142373763025,
+     "repeat=2/batchgrad": 0.0001339949667453766,
+     "repeat=2/batchscale": 6.862170994281769e-05,
+     "repeat=2/ragged": 6.358139216899872e-05,
+     "repeat=2/stepfull": 6.297975778579712e-05
+    }
+   }
+  },
+  "par-resample/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ee360747ea316f42",
+    "ee360747ea316f42"
+   ],
+   "parts": [
+    {
+     "bootstrap-mean": "c98c8fe149adf4f5",
+     "bootstrap-quantile": "438c9e16607cc4b2",
+     "permutation": "022bb3e17ac73544",
+     "monte-carlo": "abba0a70ff1ab086"
+    },
+    {
+     "bootstrap-mean": "c98c8fe149adf4f5",
+     "bootstrap-quantile": "438c9e16607cc4b2",
+     "permutation": "022bb3e17ac73544",
+     "monte-carlo": "abba0a70ff1ab086"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a5f0ee3a2c5e0107",
+    "a5f0ee3a2c5e0107"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 241.25404181331396,
+    "stages": {
+     "repeat=1/train": 7.289257293567061,
+     "repeat=1/infer-save-reload": 1.2114644050598145e-05,
+     "repeat=1/batch": 114.35999584756792,
+     "repeat=1/batchgrad": 0.00014379620552062988,
+     "repeat=1/batchscale": 5.7602301239967346e-05,
+     "repeat=1/ragged": 4.6348199248313904e-05,
+     "repeat=1/stepfull": 4.592724144458771e-05,
+     "repeat=2/train": 7.328341592103243,
+     "repeat=2/infer-save-reload": 1.2295320630073547e-05,
+     "repeat=2/batch": 112.27519034780562,
+     "repeat=2/batchgrad": 0.00014100037515163422,
+     "repeat=2/batchscale": 8.485093712806702e-05,
+     "repeat=2/ragged": 8.2431361079216e-05,
+     "repeat=2/stepfull": 8.291192352771759e-05
+    }
+   }
+  },
+  "par-hdbscan/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1032d54b827b0e0c",
+    "1032d54b827b0e0c"
+   ],
+   "parts": [
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    },
+    {
+     "labels": "e7b66bd11ad740b3",
+     "core": "b3edcc60c96132db",
+     "counts": "1f7bfb1243884fdd"
+    }
+   ],
+   "infer": [
+    "a104cfe065750353",
+    "a104cfe065750353"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "886b0c2a69e8f5b9",
+    "886b0c2a69e8f5b9"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a104cfe065750353",
+    "a104cfe065750353"
+   ],
+   "batch": [
+    "43c868ddda4bae13",
+    "43c868ddda4bae13"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.195510307326913,
+    "stages": {
+     "repeat=1/train": 2.135367650538683,
+     "repeat=1/infer-save-reload": 0.04225474037230015,
+     "repeat=1/batch": 0.18686816655099392,
+     "repeat=1/batchgrad": 0.00012969784438610077,
+     "repeat=1/batchscale": 4.249252378940582e-05,
+     "repeat=1/ragged": 4.613958299160004e-05,
+     "repeat=1/stepfull": 4.0508806705474854e-05,
+     "repeat=2/train": 1.7604595720767975,
+     "repeat=2/infer-save-reload": 0.007855093106627464,
+     "repeat=2/batch": 0.06190777197480202,
+     "repeat=2/batchgrad": 6.339140236377716e-05,
+     "repeat=2/batchscale": 4.052743315696716e-05,
+     "repeat=2/ragged": 3.8370490074157715e-05,
+     "repeat=2/stepfull": 3.816373646259308e-05
+    }
+   }
+  },
+  "par-hdbscan/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "444bc82f0a607cfb",
+    "444bc82f0a607cfb"
+   ],
+   "parts": [
+    {
+     "labels": "eb63500b53fb5112",
+     "core": "d0ee5e0b999e8c5a",
+     "counts": "76e3312784f12aef"
+    },
+    {
+     "labels": "eb63500b53fb5112",
+     "core": "d0ee5e0b999e8c5a",
+     "counts": "76e3312784f12aef"
+    }
+   ],
+   "infer": [
+    "324146f46faedded",
+    "324146f46faedded"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a282d01525378b33",
+    "a282d01525378b33"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "324146f46faedded",
+    "324146f46faedded"
+   ],
+   "batch": [
+    "a5c1950592d1d992",
+    "a5c1950592d1d992"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.7460636235773563,
+    "stages": {
+     "repeat=1/train": 1.6970192920416594,
+     "repeat=1/infer-save-reload": 0.008300652727484703,
+     "repeat=1/batch": 0.13788224756717682,
+     "repeat=1/batchgrad": 6.922334432601929e-05,
+     "repeat=1/batchscale": 4.13600355386734e-05,
+     "repeat=1/ragged": 3.839470446109772e-05,
+     "repeat=1/stepfull": 3.810226917266846e-05,
+     "repeat=2/train": 1.7557921521365643,
+     "repeat=2/infer-save-reload": 0.008311772719025612,
+     "repeat=2/batch": 0.13785080797970295,
+     "repeat=2/batchgrad": 0.00019029714167118073,
+     "repeat=2/batchscale": 4.090741276741028e-05,
+     "repeat=2/ragged": 4.501640796661377e-05,
+     "repeat=2/stepfull": 3.5276636481285095e-05
+    }
+   }
+  },
+  "par-cholesky/base": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6876, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 307, in execute\n    native = state._extension()\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 132, in _extension\n    mod, readback = self._door()\n                    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 126, in _door\n    return self._bind(), \"gp_numeric_mode\"\n           ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 113, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1587, in binding\n    module = getattr(selected, name)\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1455, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.14406424202024937,
+    "stages": {
+     "repeat=1/train": 0.14086153730750084
+    }
+   }
+  },
+  "par-cholesky/ties": {
+   "verdict": "REFUSED",
+   "error": "RuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11073, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/root/mojolearn/tools/identity_break.py\", line 6876, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/root/mojolearn/python/mojolearn/parallel_classical.py\", line 430, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 308, in map\n    raise error\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 303, in map\n    result.append(future.result())\n                  ~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 454, in result\n    return self.__get_result()\n           ~~~~~~~~~~~~~~~~~^^\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/_base.py\", line 396, in __get_result\n    raise self._exception\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 86, in run\n    result = ctx.run(self.task)\n  File \"/root/mojolearn/.pixi/envs/default/lib/python3.14/concurrent/futures/thread.py\", line 73, in run\n    return fn(*args, **kwargs)\n  File \"/root/mojolearn/python/mojolearn/_parallel_pool.py\", line 280, in _call\n    raise RuntimeError('GPU worker failed:\\n' + value)\nRuntimeError: GPU worker failed:\nTraceback (most recent call last):\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 418, in main\n    response = (True, execute(request))\n                      ~~~~~~~^^^^^^^^^\n  File \"/root/mojolearn/python/mojolearn/_parallel_worker.py\", line 307, in execute\n    native = state._extension()\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 132, in _extension\n    mod, readback = self._door()\n                    ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_cholesky_impl.py\", line 126, in _door\n    return self._bind(), \"gp_numeric_mode\"\n           ~~~~~~~~~~^^\n  File \"/root/mojolearn/python/mojolearn/_mode.py\", line 113, in _bind\n    return _backend.binding(\n           ~~~~~~~~~~~~~~~~^\n        name or self._BINDING, getattr(self, \"numeric_mode\", None)\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n    )\n    ^\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1587, in binding\n    module = getattr(selected, name)\n  File \"/root/mojolearn/python/mojolearn/_backend.py\", line 1455, in __getattr__\n    raise ImportError(\n    ...<5 lines>...\n    )\nImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_gp.so, which is not built. Build it with\n    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_gp.sh",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.13551908172667027,
+    "stages": {
+     "repeat=1/train": 0.13351442478597164
+    }
+   }
+  },
+  "par-kernel-ridge/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e243a5ab9bfb9ff5",
+    "e243a5ab9bfb9ff5"
+   ],
+   "parts": [
+    {
+     "dual": "a5ab58c599e00ec5",
+     "info": "45adabbfed6d5c15",
+     "predict": "b04cbb32b2c86660"
+    },
+    {
+     "dual": "a5ab58c599e00ec5",
+     "info": "45adabbfed6d5c15",
+     "predict": "b04cbb32b2c86660"
+    }
+   ],
+   "infer": [
+    "debe00d116acc0e0",
+    "debe00d116acc0e0"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9a6ab1c1cacac805",
+    "9a6ab1c1cacac805"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "debe00d116acc0e0",
+    "debe00d116acc0e0"
+   ],
+   "batch": [
+    "6763a1e46d080fa1",
+    "6763a1e46d080fa1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 14.233451202511787,
+    "stages": {
+     "repeat=1/train": 3.9101453591138124,
+     "repeat=1/infer-save-reload": 3.3510475661605597,
+     "repeat=1/batch": 0.08329086378216743,
+     "repeat=1/batchgrad": 0.00011928752064704895,
+     "repeat=1/batchscale": 4.3351203203201294e-05,
+     "repeat=1/ragged": 4.218146204948425e-05,
+     "repeat=1/stepfull": 4.186108708381653e-05,
+     "repeat=2/train": 3.526180362328887,
+     "repeat=2/infer-save-reload": 3.345591189339757,
+     "repeat=2/batch": 0.016222652047872543,
+     "repeat=2/batchgrad": 8.674897253513336e-05,
+     "repeat=2/batchscale": 6.689131259918213e-05,
+     "repeat=2/ragged": 6.639771163463593e-05,
+     "repeat=2/stepfull": 6.452389061450958e-05
+    }
+   }
+  },
+  "par-kernel-ridge/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "cb949195fbe57da4",
+    "cb949195fbe57da4"
+   ],
+   "parts": [
+    {
+     "dual": "7c3feb0b1588f779",
+     "info": "45adabbfed6d5c15",
+     "predict": "ddb31160a51d8638"
+    },
+    {
+     "dual": "7c3feb0b1588f779",
+     "info": "45adabbfed6d5c15",
+     "predict": "ddb31160a51d8638"
+    }
+   ],
+   "infer": [
+    "df5816c733355692",
+    "df5816c733355692"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "56eb82130d1dfdc6",
+    "56eb82130d1dfdc6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "df5816c733355692",
+    "df5816c733355692"
+   ],
+   "batch": [
+    "841571214fc43760",
+    "841571214fc43760"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 13.766879511997104,
+    "stages": {
+     "repeat=1/train": 3.5221008956432343,
+     "repeat=1/infer-save-reload": 3.2817775830626488,
+     "repeat=1/batch": 0.016162225976586342,
+     "repeat=1/batchgrad": 9.326077997684479e-05,
+     "repeat=1/batchscale": 7.95125961303711e-05,
+     "repeat=1/ragged": 7.668696343898773e-05,
+     "repeat=1/stepfull": 7.626600563526154e-05,
+     "repeat=2/train": 3.502781677991152,
+     "repeat=2/infer-save-reload": 3.4272754918783903,
+     "repeat=2/batch": 0.015602799132466316,
+     "repeat=2/batchgrad": 0.00011404044926166534,
+     "repeat=2/batchscale": 6.575509905815125e-05,
+     "repeat=2/ragged": 6.215088069438934e-05,
+     "repeat=2/stepfull": 6.285309791564941e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-cholesky",
+  "par-gmm",
+  "par-graph-agglomerative",
+  "par-hdbscan",
+  "par-kernel-ridge",
+  "par-resample"
+ ],
+ "degenerate_column": "nvidia-1gpu",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "486a5ad6a8ec3a69c706dc7dc5730df8f545c576b710c5a802b4e8f8820aa813",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "ee9739f65724544188e72922229f9f73232cf0f0d513bbcec3e2dd4bef729a48",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "18b0e898c200758608bc8b5a9a5b3004e5799f5fd9f17cadcbbeb5b564389d17",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "3dd331a948d0d430e1da1713e2bd187819134a9a6b055f8b516d9b5a88761061",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "a2b3dc8eaff76b394b0903661cd624646d186b4bff2981d6c74cc82461bed3a0",
+    "size": 10423528
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "dcdc3d31976bb1b7799c02c5c7d554a894cd171848fec8327c178971bb36c4a9",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "4f5503628330d1198921d2ec032dde9a42e1e887ec24cf715e20a3d67c01ebdb",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "fd21deda33e6d7c397876f3a4fc1b8e7e0e91e691cfde39109f998636eed7d20",
+    "size": 3036448
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "77ce5904e5df71535a4548687c174fe97f800bba3f28a015d9de6bebfa0d9b48",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-cholesky,par-kernel-ridge,par-hdbscan,par-graph-agglomerative,par-gmm,par-resample",
+   "skip": "",
+   "fixtures": "base,ties",
+   "repeats": 2,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "f49fe88f7ea85f8b94aed1d8392dc7725dd9a90e26a63510607d7a1d486eeff7",
+  "provenance": {
+   "commit": "8be118b4c629a7006f287b6586ce53a30966b5b7",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-117-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    }
+   }
+  }
+ }
+}

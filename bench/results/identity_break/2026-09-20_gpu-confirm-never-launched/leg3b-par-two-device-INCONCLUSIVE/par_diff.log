@@ -1,0 +1,205 @@
+NOTE: column nvidia-nvidia-geforce-rtx-4090-sm_89 is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean
+NOTE: column nvidia-nvidia-geforce-rtx-4090-sm_89 is INCOMPLETE (the run was killed); lanes after the last one written are absent, not clean
+| lane/fixture                 | verdict    | nvidia-nvidia-geforce-rtx-4090-sm_89 | nvidia-nvidia-geforce-rtx-4090-sm_89 |
+|------------------------------|------------|------------------|------------------|
+| par-border-types/base        | IDENTICAL x2 | 10ef01c731a66a06 | 10ef01c731a66a06 |
+| par-border-types/denormal    | IDENTICAL x2 | 10ef01c731a66a06 | 10ef01c731a66a06 |
+| par-border-types/denormal_ftz | IDENTICAL x2 | 10ef01c731a66a06 | 10ef01c731a66a06 |
+| par-border-types/dupes       | IDENTICAL x2 | cbcef08fd74fc613 | cbcef08fd74fc613 |
+| par-border-types/hashed      | IDENTICAL x2 | 7f756ddfe38a2ebe | 7f756ddfe38a2ebe |
+| par-border-types/negative    | IDENTICAL x2 | d638f3adaf1d0bb8 | d638f3adaf1d0bb8 |
+| par-border-types/odd         | IDENTICAL x2 | c24d55c7434cf391 | c24d55c7434cf391 |
+| par-border-types/ties        | IDENTICAL x2 | a7eca40195af6ded | a7eca40195af6ded |
+| par-border-types/wide        | IDENTICAL x2 | 85cc9ad0a84c9aec | 85cc9ad0a84c9aec |
+| par-forecast-arima/base      | IDENTICAL x2 | a44b54d65768bf5e | a44b54d65768bf5e |
+| par-forecast-arima/denormal  | IDENTICAL x2 | a07e96734bdd4228 | a07e96734bdd4228 |
+| par-forecast-arima/denormal_ftz | IDENTICAL x2 | a07e96734bdd4228 | a07e96734bdd4228 |
+| par-forecast-arima/dupes     | IDENTICAL x2 | a44b54d65768bf5e | a44b54d65768bf5e |
+| par-forecast-arima/hashed    | IDENTICAL x2 | 9e1a5684478a1da9 | 9e1a5684478a1da9 |
+| par-forecast-arima/negative  | IDENTICAL x2 | 0682211121cf732a | 0682211121cf732a |
+| par-forecast-arima/odd       | IDENTICAL x2 | ff437787c18ef5c5 | ff437787c18ef5c5 |
+| par-forecast-arima/ties      | IDENTICAL x2 | 8d68e00817197a31 | 8d68e00817197a31 |
+| par-forecast-arima/wide      | IDENTICAL x2 | 22d66d253aa30eaa | 22d66d253aa30eaa |
+| par-forecast-holtwinters/base | IDENTICAL x2 | 5e8ffa04d8c2fb3d | 5e8ffa04d8c2fb3d |
+| par-forecast-holtwinters/denormal | ONE-COLUMN | 61084170fa566d6f | (not run)        |
+| par-forecast-holtwinters/denormal_ftz | ONE-COLUMN | 61084170fa566d6f | (not run)        |
+| par-forecast-holtwinters/dupes | ONE-COLUMN | 5e8ffa04d8c2fb3d | (not run)        |
+| par-forecast-holtwinters/hashed | IDENTICAL x2 | a6b51ab4b2179bd4 | a6b51ab4b2179bd4 |
+| par-forecast-holtwinters/negative | ONE-COLUMN | ecbbbcfd88aa3baa | (not run)        |
+| par-forecast-holtwinters/odd | ONE-COLUMN | 9109112cb670e19d | (not run)        |
+| par-forecast-holtwinters/ties | IDENTICAL x2 | e3926af4c3fcb55a | e3926af4c3fcb55a |
+| par-forecast-holtwinters/wide | ONE-COLUMN | 84779b08ee76181f | (not run)        |
+| par-gpc-fit/base             | ONE-COLUMN | 53f3a09fc600d61d | (not run)        |
+| par-gpc-fit/hashed           | ONE-COLUMN | 04ea8fda33a7b3dc | (not run)        |
+| par-gpc-fit/ties             | ONE-COLUMN | f7640639a72e6940 | (not run)        |
+| par-ivf/base                 | ONE-COLUMN | 82ac27da71d34ea9 | (not run)        |
+| par-ivf/denormal             | ONE-COLUMN | 4e3aa53b96708090 | (not run)        |
+| par-ivf/denormal_ftz         | ONE-COLUMN | 4e3aa53b96708090 | (not run)        |
+| par-ivf/dupes                | ONE-COLUMN | 5f192f5e269eccfd | (not run)        |
+| par-ivf/hashed               | ONE-COLUMN | 10ba4e138bc9450c | (not run)        |
+| par-ivf/negative             | ONE-COLUMN | bfb587574d151b90 | (not run)        |
+| par-ivf/odd                  | ONE-COLUMN | fdeb7028fa3d4458 | (not run)        |
+| par-ivf/ties                 | ONE-COLUMN | 1f1a8383ed41ed53 | (not run)        |
+| par-ivf/wide                 | ONE-COLUMN | 58e21feb2047a65f | (not run)        |
+| par-ordered/base             | IDENTICAL x2 | 0e73adb47576ba74 | 0e73adb47576ba74 |
+| par-ordered/denormal         | IDENTICAL x2 | 0e73adb47576ba74 | 0e73adb47576ba74 |
+| par-ordered/denormal_ftz     | IDENTICAL x2 | 0e73adb47576ba74 | 0e73adb47576ba74 |
+| par-ordered/dupes            | IDENTICAL x2 | d6c73836e3381dd4 | d6c73836e3381dd4 |
+| par-ordered/hashed           | IDENTICAL x2 | 457ba1962b5ee0f3 | 457ba1962b5ee0f3 |
+| par-ordered/negative         | IDENTICAL x2 | ba631525958c6163 | ba631525958c6163 |
+| par-ordered/odd              | IDENTICAL x2 | ff7a264740642731 | ff7a264740642731 |
+| par-ordered/ties             | IDENTICAL x2 | b08dd75a1fd4de8a | b08dd75a1fd4de8a |
+| par-ordered/wide             | IDENTICAL x2 | c143f163f1e23772 | c143f163f1e23772 |
+
+summary: IDENTICAL=30, ONE-COLUMN=18
+
+| lane/fixture                 | column | verdict      | nvidia-nvidia-geforce-rtx-4090-sm_89 | nvidia-nvidia-geforce-rtx-4090-sm_89 |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-border-types/base        | infer  | IDENTICAL x2 | df725acd3908c4f9 | df725acd3908c4f9 |
+| par-border-types/base        | model  | IDENTICAL x2 | 4499afe4e3ed96be | 4499afe4e3ed96be |
+| par-border-types/base        | batch  | IDENTICAL x2 | deba437782731acd | deba437782731acd |
+| par-border-types/denormal    | infer  | IDENTICAL x2 | df725acd3908c4f9 | df725acd3908c4f9 |
+| par-border-types/denormal    | model  | IDENTICAL x2 | 5375b98ac5eca8d2 | 5375b98ac5eca8d2 |
+| par-border-types/denormal    | batch  | IDENTICAL x2 | deba437782731acd | deba437782731acd |
+| par-border-types/denormal_ftz | infer  | IDENTICAL x2 | df725acd3908c4f9 | df725acd3908c4f9 |
+| par-border-types/denormal_ftz | model  | IDENTICAL x2 | 5375b98ac5eca8d2 | 5375b98ac5eca8d2 |
+| par-border-types/denormal_ftz | batch  | IDENTICAL x2 | deba437782731acd | deba437782731acd |
+| par-border-types/dupes       | infer  | IDENTICAL x2 | fd23741816d7611d | fd23741816d7611d |
+| par-border-types/dupes       | model  | IDENTICAL x2 | e4178a57a728a449 | e4178a57a728a449 |
+| par-border-types/dupes       | batch  | IDENTICAL x2 | eaf5c67e384055c5 | eaf5c67e384055c5 |
+| par-border-types/hashed      | infer  | IDENTICAL x2 | 74e7fcf52b8b2c4a | 74e7fcf52b8b2c4a |
+| par-border-types/hashed      | model  | IDENTICAL x2 | 6d959300597b3068 | 6d959300597b3068 |
+| par-border-types/hashed      | batch  | IDENTICAL x2 | 34cb9dc84217d641 | 34cb9dc84217d641 |
+| par-border-types/negative    | infer  | IDENTICAL x2 | 922b88f982e8dfe9 | 922b88f982e8dfe9 |
+| par-border-types/negative    | model  | IDENTICAL x2 | 846dc3e9b49543c0 | 846dc3e9b49543c0 |
+| par-border-types/negative    | batch  | IDENTICAL x2 | 58c475080fa02b79 | 58c475080fa02b79 |
+| par-border-types/odd         | infer  | IDENTICAL x2 | f78a6ffb8b9c4a27 | f78a6ffb8b9c4a27 |
+| par-border-types/odd         | model  | IDENTICAL x2 | eab81b63a3e306ab | eab81b63a3e306ab |
+| par-border-types/odd         | batch  | IDENTICAL x2 | a24f8fe40fa919ba | a24f8fe40fa919ba |
+| par-border-types/ties        | infer  | IDENTICAL x2 | 8ee7f9352fb63cc0 | 8ee7f9352fb63cc0 |
+| par-border-types/ties        | model  | IDENTICAL x2 | 7e32a31d0097a69c | 7e32a31d0097a69c |
+| par-border-types/ties        | batch  | IDENTICAL x2 | 355457a0a246a2a1 | 355457a0a246a2a1 |
+| par-border-types/wide        | infer  | IDENTICAL x2 | a8c4137b0a3660e2 | a8c4137b0a3660e2 |
+| par-border-types/wide        | model  | IDENTICAL x2 | 76527f36b20dab4a | 76527f36b20dab4a |
+| par-border-types/wide        | batch  | IDENTICAL x2 | 49c82a3106bba3a6 | 49c82a3106bba3a6 |
+| par-forecast-arima/base      | infer  | IDENTICAL x2 | 9f76be0396a666ca | 9f76be0396a666ca |
+| par-forecast-arima/base      | model  | IDENTICAL x2 | 6ae822845884aedf | 6ae822845884aedf |
+| par-forecast-arima/base      | batch  | IDENTICAL x2 | ec97b45a1c88081b | ec97b45a1c88081b |
+| par-forecast-arima/denormal  | infer  | IDENTICAL x2 | aab930a9e876ec1e | aab930a9e876ec1e |
+| par-forecast-arima/denormal  | model  | IDENTICAL x2 | b1397e7ed5a747b5 | b1397e7ed5a747b5 |
+| par-forecast-arima/denormal  | batch  | IDENTICAL x2 | 251c7a81a0fec8ce | 251c7a81a0fec8ce |
+| par-forecast-arima/denormal_ftz | infer  | IDENTICAL x2 | aab930a9e876ec1e | aab930a9e876ec1e |
+| par-forecast-arima/denormal_ftz | model  | IDENTICAL x2 | 87b2ac97204e1a6e | 87b2ac97204e1a6e |
+| par-forecast-arima/denormal_ftz | batch  | IDENTICAL x2 | 251c7a81a0fec8ce | 251c7a81a0fec8ce |
+| par-forecast-arima/dupes     | infer  | IDENTICAL x2 | 9f76be0396a666ca | 9f76be0396a666ca |
+| par-forecast-arima/dupes     | model  | IDENTICAL x2 | 6ae822845884aedf | 6ae822845884aedf |
+| par-forecast-arima/dupes     | batch  | IDENTICAL x2 | ec97b45a1c88081b | ec97b45a1c88081b |
+| par-forecast-arima/hashed    | infer  | IDENTICAL x2 | 06461dad67cfb784 | 06461dad67cfb784 |
+| par-forecast-arima/hashed    | model  | IDENTICAL x2 | 913af384ea04d543 | 913af384ea04d543 |
+| par-forecast-arima/hashed    | batch  | IDENTICAL x2 | 331526a2ec20a264 | 331526a2ec20a264 |
+| par-forecast-arima/negative  | infer  | IDENTICAL x2 | 4e0defb4e0feb99f | 4e0defb4e0feb99f |
+| par-forecast-arima/negative  | model  | IDENTICAL x2 | d3fa0fbbec979263 | d3fa0fbbec979263 |
+| par-forecast-arima/negative  | batch  | IDENTICAL x2 | ce5a5438ad2aff04 | ce5a5438ad2aff04 |
+| par-forecast-arima/odd       | infer  | IDENTICAL x2 | 4aa662dbcc728e65 | 4aa662dbcc728e65 |
+| par-forecast-arima/odd       | model  | IDENTICAL x2 | 859442a49f63a8d0 | 859442a49f63a8d0 |
+| par-forecast-arima/odd       | batch  | IDENTICAL x2 | aa9de9b88df728f4 | aa9de9b88df728f4 |
+| par-forecast-arima/ties      | infer  | IDENTICAL x2 | e699bca0934688f0 | e699bca0934688f0 |
+| par-forecast-arima/ties      | model  | IDENTICAL x2 | a70bbb860b0f3fcf | a70bbb860b0f3fcf |
+| par-forecast-arima/ties      | batch  | IDENTICAL x2 | f339cdfecd860934 | f339cdfecd860934 |
+| par-forecast-arima/wide      | infer  | IDENTICAL x2 | 956bebc3f45a1c69 | 956bebc3f45a1c69 |
+| par-forecast-arima/wide      | model  | IDENTICAL x2 | 1f7be9c37fb3f5d6 | 1f7be9c37fb3f5d6 |
+| par-forecast-arima/wide      | batch  | IDENTICAL x2 | a820c7d8f0125432 | a820c7d8f0125432 |
+| par-forecast-holtwinters/base | infer  | IDENTICAL x2 | 2ba6e3fe81256474 | 2ba6e3fe81256474 |
+| par-forecast-holtwinters/base | model  | IDENTICAL x2 | 2b788f20f8d8c145 | 2b788f20f8d8c145 |
+| par-forecast-holtwinters/base | batch  | IDENTICAL x2 | 77ca9a518446c250 | 77ca9a518446c250 |
+| par-forecast-holtwinters/denormal | infer  | ONE-COLUMN   | 3baf29a408512838 | (not run)        |
+| par-forecast-holtwinters/denormal | model  | ONE-COLUMN   | 999974b61bbe0004 | (not run)        |
+| par-forecast-holtwinters/denormal | batch  | ONE-COLUMN   | e14ccee0b3733785 | (not run)        |
+| par-forecast-holtwinters/denormal_ftz | infer  | ONE-COLUMN   | 3baf29a408512838 | (not run)        |
+| par-forecast-holtwinters/denormal_ftz | model  | ONE-COLUMN   | 999974b61bbe0004 | (not run)        |
+| par-forecast-holtwinters/denormal_ftz | batch  | ONE-COLUMN   | e14ccee0b3733785 | (not run)        |
+| par-forecast-holtwinters/dupes | infer  | ONE-COLUMN   | 2ba6e3fe81256474 | (not run)        |
+| par-forecast-holtwinters/dupes | model  | ONE-COLUMN   | 2b788f20f8d8c145 | (not run)        |
+| par-forecast-holtwinters/dupes | batch  | ONE-COLUMN   | 77ca9a518446c250 | (not run)        |
+| par-forecast-holtwinters/hashed | infer  | IDENTICAL x2 | 064801efb15ab008 | 064801efb15ab008 |
+| par-forecast-holtwinters/hashed | model  | IDENTICAL x2 | 0530ffbeced1027e | 0530ffbeced1027e |
+| par-forecast-holtwinters/hashed | batch  | IDENTICAL x2 | df0ed8c8912f42ea | df0ed8c8912f42ea |
+| par-forecast-holtwinters/negative | infer  | ONE-COLUMN   | badfe6614be23470 | (not run)        |
+| par-forecast-holtwinters/negative | model  | ONE-COLUMN   | e97d48fa0ba847d0 | (not run)        |
+| par-forecast-holtwinters/negative | batch  | ONE-COLUMN   | 309b6269cad54229 | (not run)        |
+| par-forecast-holtwinters/odd | infer  | ONE-COLUMN   | ce81b5ac876ab24b | (not run)        |
+| par-forecast-holtwinters/odd | model  | ONE-COLUMN   | 3c4ad8350c73bac5 | (not run)        |
+| par-forecast-holtwinters/odd | batch  | ONE-COLUMN   | 4fc21213f0a13c49 | (not run)        |
+| par-forecast-holtwinters/ties | infer  | IDENTICAL x2 | 9894a75e19343d02 | 9894a75e19343d02 |
+| par-forecast-holtwinters/ties | model  | IDENTICAL x2 | dc2d6a661f911c91 | dc2d6a661f911c91 |
+| par-forecast-holtwinters/ties | batch  | IDENTICAL x2 | 60326d25dd4491b2 | 60326d25dd4491b2 |
+| par-forecast-holtwinters/wide | infer  | ONE-COLUMN   | 1ed7d450da2f1e7e | (not run)        |
+| par-forecast-holtwinters/wide | model  | ONE-COLUMN   | 3280cb2f403e61bb | (not run)        |
+| par-forecast-holtwinters/wide | batch  | ONE-COLUMN   | 4371fe4d83f38591 | (not run)        |
+| par-gpc-fit/base             | infer  | ONE-COLUMN   | fc0b4c2f28c2e079 | (not run)        |
+| par-gpc-fit/base             | model  | ONE-COLUMN   | 81b8bb9e635d8e83 | (not run)        |
+| par-gpc-fit/base             | batch  | ONE-COLUMN   | b46f1f9043e091a8 | (not run)        |
+| par-gpc-fit/hashed           | infer  | ONE-COLUMN   | 9da411da0b1e3037 | (not run)        |
+| par-gpc-fit/hashed           | model  | ONE-COLUMN   | f4c2aca55d9362f2 | (not run)        |
+| par-gpc-fit/hashed           | batch  | ONE-COLUMN   | 0419fbbe5d340ea4 | (not run)        |
+| par-gpc-fit/ties             | infer  | ONE-COLUMN   | ede5baa0c8969b06 | (not run)        |
+| par-gpc-fit/ties             | model  | ONE-COLUMN   | 7b9bf869ad365c26 | (not run)        |
+| par-gpc-fit/ties             | batch  | ONE-COLUMN   | c5069c7b59de4ee1 | (not run)        |
+| par-ivf/base                 | infer  | ONE-COLUMN   | fd6eed35b1338d17 | (not run)        |
+| par-ivf/base                 | model  | ONE-COLUMN   | dcfefe31adc21c6c | (not run)        |
+| par-ivf/base                 | batch  | ONE-COLUMN   | 6baf3cfbde509312 | (not run)        |
+| par-ivf/denormal             | infer  | ONE-COLUMN   | 3ff4c07c575048cf | (not run)        |
+| par-ivf/denormal             | model  | ONE-COLUMN   | c3a1727313e23983 | (not run)        |
+| par-ivf/denormal             | batch  | ONE-COLUMN   | 45f49934c58d1518 | (not run)        |
+| par-ivf/denormal_ftz         | infer  | ONE-COLUMN   | 3ff4c07c575048cf | (not run)        |
+| par-ivf/denormal_ftz         | model  | ONE-COLUMN   | 1f2b8dd1cf726bc0 | (not run)        |
+| par-ivf/denormal_ftz         | batch  | ONE-COLUMN   | 45f49934c58d1518 | (not run)        |
+| par-ivf/dupes                | infer  | ONE-COLUMN   | 4ae50eab359ba1e9 | (not run)        |
+| par-ivf/dupes                | model  | ONE-COLUMN   | 3163ed44a2b28c07 | (not run)        |
+| par-ivf/dupes                | batch  | ONE-COLUMN   | 99ec531fb8ae409f | (not run)        |
+| par-ivf/hashed               | infer  | ONE-COLUMN   | 49c22df302ee0334 | (not run)        |
+| par-ivf/hashed               | model  | ONE-COLUMN   | 9d809fde4ffc96cc | (not run)        |
+| par-ivf/hashed               | batch  | ONE-COLUMN   | 648bf9fc3764372d | (not run)        |
+| par-ivf/negative             | infer  | ONE-COLUMN   | 71333eccc89915b1 | (not run)        |
+| par-ivf/negative             | model  | ONE-COLUMN   | ec79d31b3169a984 | (not run)        |
+| par-ivf/negative             | batch  | ONE-COLUMN   | 9786387eb7123b42 | (not run)        |
+| par-ivf/odd                  | infer  | ONE-COLUMN   | 1e0c2401db49a53d | (not run)        |
+| par-ivf/odd                  | model  | ONE-COLUMN   | 2ab1fd5fac4563e2 | (not run)        |
+| par-ivf/odd                  | batch  | ONE-COLUMN   | 8149b10d16c8ebaa | (not run)        |
+| par-ivf/ties                 | infer  | ONE-COLUMN   | c62b1be91d40fc43 | (not run)        |
+| par-ivf/ties                 | model  | ONE-COLUMN   | 2254dcdb3f209c1d | (not run)        |
+| par-ivf/ties                 | batch  | ONE-COLUMN   | 166f61a6e1f346b8 | (not run)        |
+| par-ivf/wide                 | infer  | ONE-COLUMN   | 2bfe5d9bde8a2564 | (not run)        |
+| par-ivf/wide                 | model  | ONE-COLUMN   | 809bc63c73b2c093 | (not run)        |
+| par-ivf/wide                 | batch  | ONE-COLUMN   | 3e09f4c3db3c3e66 | (not run)        |
+| par-ordered/base             | infer  | IDENTICAL x2 | d7a4f4eeda536f16 | d7a4f4eeda536f16 |
+| par-ordered/base             | model  | IDENTICAL x2 | 3ebe10dd16986fee | 3ebe10dd16986fee |
+| par-ordered/base             | batch  | IDENTICAL x2 | 1b7f902bed2f8264 | 1b7f902bed2f8264 |
+| par-ordered/denormal         | infer  | IDENTICAL x2 | d7a4f4eeda536f16 | d7a4f4eeda536f16 |
+| par-ordered/denormal         | model  | IDENTICAL x2 | 337411e478a47dd5 | 337411e478a47dd5 |
+| par-ordered/denormal         | batch  | IDENTICAL x2 | 1b7f902bed2f8264 | 1b7f902bed2f8264 |
+| par-ordered/denormal_ftz     | infer  | IDENTICAL x2 | d7a4f4eeda536f16 | d7a4f4eeda536f16 |
+| par-ordered/denormal_ftz     | model  | IDENTICAL x2 | 337411e478a47dd5 | 337411e478a47dd5 |
+| par-ordered/denormal_ftz     | batch  | IDENTICAL x2 | 1b7f902bed2f8264 | 1b7f902bed2f8264 |
+| par-ordered/dupes            | infer  | IDENTICAL x2 | d2d7de40eeb0e888 | d2d7de40eeb0e888 |
+| par-ordered/dupes            | model  | IDENTICAL x2 | c110a1e501e287f1 | c110a1e501e287f1 |
+| par-ordered/dupes            | batch  | IDENTICAL x2 | ae28684d368e2b6f | ae28684d368e2b6f |
+| par-ordered/hashed           | infer  | IDENTICAL x2 | f472f8f2e506ce3e | f472f8f2e506ce3e |
+| par-ordered/hashed           | model  | IDENTICAL x2 | b80eb3b72b5c95c7 | b80eb3b72b5c95c7 |
+| par-ordered/hashed           | batch  | IDENTICAL x2 | cd945653faa71f59 | cd945653faa71f59 |
+| par-ordered/negative         | infer  | IDENTICAL x2 | 09e6dfe70a9e8341 | 09e6dfe70a9e8341 |
+| par-ordered/negative         | model  | IDENTICAL x2 | a003b5a16d9f7e2f | a003b5a16d9f7e2f |
+| par-ordered/negative         | batch  | IDENTICAL x2 | 6f79c5a5836408fb | 6f79c5a5836408fb |
+| par-ordered/odd              | infer  | IDENTICAL x2 | 96ab641b67fe93b4 | 96ab641b67fe93b4 |
+| par-ordered/odd              | model  | IDENTICAL x2 | 2762eab7c9aadc51 | 2762eab7c9aadc51 |
+| par-ordered/odd              | batch  | IDENTICAL x2 | 7b18f6ba4d9bf426 | 7b18f6ba4d9bf426 |
+| par-ordered/ties             | infer  | IDENTICAL x2 | 529e6b54d8cfe020 | 529e6b54d8cfe020 |
+| par-ordered/ties             | model  | IDENTICAL x2 | e1ea00b03e0a3d16 | e1ea00b03e0a3d16 |
+| par-ordered/ties             | batch  | IDENTICAL x2 | e60f8dc009c82663 | e60f8dc009c82663 |
+| par-ordered/wide             | infer  | IDENTICAL x2 | e8fde999f64eec22 | e8fde999f64eec22 |
+| par-ordered/wide             | model  | IDENTICAL x2 | c24f27aa4e7d989f | c24f27aa4e7d989f |
+| par-ordered/wide             | batch  | IDENTICAL x2 | 0cc769bdafb5820b | 0cc769bdafb5820b |
+
+summary (infer/model): IDENTICAL=60, ONE-COLUMN=36
+summary (batch): IDENTICAL=30, ONE-COLUMN=18
+summary (rlpair): 
