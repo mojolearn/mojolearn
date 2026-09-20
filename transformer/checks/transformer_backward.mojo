@@ -48,6 +48,7 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
@@ -385,6 +386,13 @@ comptime BWD_ANY_SABOTAGE = (
     or SAB_B_FANIN_ZERO_SEED
     or SAB_B_FANIN_ORDER_QKV_REVERSED
 )
+
+#: Evidence-only control for pricing the pre-fusion RMSNorm backward. A
+#: normal build never defines it. Sabotage builds also retain the split
+#: spelling so each altered seam remains independently localized.
+comptime BWD_NORM_SPLIT_TRIAL = is_defined[
+    "MOJOLEARN_BWD_NORM_SPLIT_TRIAL"
+]()
 
 
 def llama_backward_sabotage_name() -> String:
@@ -771,6 +779,52 @@ def bwd_norm_dh_kernel(
             pinned_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
         ),
     )
+
+
+def bwd_norm_dh_dot_kernel(
+    dh: MutPointer[Float32, MutAnyOrigin],
+    dot: MutPointer[Float32, MutAnyOrigin],
+    rstd_out: MutPointer[Float32, MutAnyOrigin],
+    dv_out: MutPointer[Float32, MutAnyOrigin],
+    dy: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+    eps_in: Float32,
+):
+    """The clean RMSNorm backward's first two kernels in one row owner.
+
+    Ascending ``j`` computes and stores exactly the old rounded ``dh_j``
+    product before feeding it to the unchanged fused ``c`` fold. The pinned
+    reduction order and arithmetic seams therefore do not move. Fusion
+    removes one launch and the dot kernel's global reread of ``dh``.
+    """
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m:
+        return
+    var c = Float32(0.0)
+    for j in range(dm):
+        var i = t * dm + j
+        var dhj = ftz(
+            pinned_mul(ftz(dy.unsafe_load(i)), ftz(weight.unsafe_load(j)))
+        )
+        dh.unsafe_store(i, dhj)
+        c = ftz(identical_mul_add(dhj, ftz(x.unsafe_load(i)), c))
+    c = ftz(c)
+    dot.unsafe_store(t, c)
+    var ss = ftz(sumsq.unsafe_load(t))
+    var mean = ftz(identical_div(ss, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    rstd_out.unsafe_store(t, rstd)
+    var r2 = ftz(pinned_mul(rstd, rstd))
+    var r3 = ftz(pinned_mul(r2, rstd))
+    var cr3 = ftz(pinned_mul(c, r3))
+    var da = ftz(pinned_mul(BWD_NEG_HALF, cr3))
+    dv_out.unsafe_store(t, ftz(identical_div(da, Float32(dm))))
 
 
 def bwd_norm_dot_kernel(
@@ -2678,19 +2732,6 @@ def bwd_rms_norm[which: Int = 0](
     # identical_gemm retains the completion wait. Preserve the old fences
     # in other modes, whose vendor GEMM may return asynchronously.
     var pc = StepPhaseClock(ctx)
-    step_count_launch()
-    ctx.enqueue_function[bwd_norm_dh_kernel](
-        dh.unsafe_ptr(),
-        dy.unsafe_ptr(),
-        weight.unsafe_ptr(),
-        Int32(m),
-        Int32(dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        step_count_sync()
-        ctx.synchronize()
     # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the ONE row kernel here (the `c` fold) at that many threads per block;
@@ -2707,19 +2748,54 @@ def bwd_rms_norm[which: Int = 0](
             dot_blocks = step_glue_blocks(m, glue_rows)
             dot_threads = glue_rows
     step_count_launch()
-    ctx.enqueue_function[bwd_norm_dot_kernel](
-        dot_out.unsafe_ptr(),
-        rstd.unsafe_ptr(),
-        dvcoef.unsafe_ptr(),
-        dh.unsafe_ptr(),
-        x.unsafe_ptr(),
-        sumsq.unsafe_ptr(),
-        Int32(m),
-        Int32(dm),
-        eps,
-        grid_dim=(dot_blocks, 1, 1),
-        block_dim=(dot_threads, 1, 1),
-    )
+    comptime if (
+        BWD_ANY_SABOTAGE
+        or BWD_NORM_SPLIT_TRIAL
+        or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL
+    ):
+        ctx.enqueue_function[bwd_norm_dh_kernel](
+            dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(), Int32(m),
+            Int32(dm), grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(BWD_TPB, 1, 1),
+        )
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            step_count_sync()
+            ctx.synchronize()
+        step_count_launch()
+        ctx.enqueue_function[bwd_norm_dot_kernel](
+            dot_out.unsafe_ptr(), rstd.unsafe_ptr(), dvcoef.unsafe_ptr(),
+            dh.unsafe_ptr(), x.unsafe_ptr(), sumsq.unsafe_ptr(), Int32(m),
+            Int32(dm), eps, grid_dim=(dot_blocks, 1, 1),
+            block_dim=(dot_threads, 1, 1),
+        )
+    else:
+        # The row-owned fusion wins at the repeated GPT training sizes but
+        # not on Apple's small curve. Keep the original cell-parallel path
+        # below that measured boundary; this is scheduling only and both
+        # paths produce the same complete-stage hash.
+        var use_fused = False
+        comptime if TARGET_COLUMN == COLUMN_APPLE:
+            use_fused = m >= 8192 and dm >= 768
+        if use_fused:
+            ctx.enqueue_function[bwd_norm_dh_dot_kernel](
+                dh.unsafe_ptr(), dot_out.unsafe_ptr(), rstd.unsafe_ptr(),
+                dvcoef.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(),
+                x.unsafe_ptr(), sumsq.unsafe_ptr(), Int32(m), Int32(dm), eps,
+                grid_dim=(dot_blocks, 1, 1), block_dim=(dot_threads, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[bwd_norm_dh_kernel](
+                dh.unsafe_ptr(), dy.unsafe_ptr(), weight.unsafe_ptr(),
+                Int32(m), Int32(dm), grid_dim=(_grid(m * dm), 1, 1),
+                block_dim=(BWD_TPB, 1, 1),
+            )
+            step_count_launch()
+            ctx.enqueue_function[bwd_norm_dot_kernel](
+                dot_out.unsafe_ptr(), rstd.unsafe_ptr(), dvcoef.unsafe_ptr(),
+                dh.unsafe_ptr(), x.unsafe_ptr(), sumsq.unsafe_ptr(), Int32(m),
+                Int32(dm), eps, grid_dim=(dot_blocks, 1, 1),
+                block_dim=(dot_threads, 1, 1),
+            )
     comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         step_count_sync()
         ctx.synchronize()
