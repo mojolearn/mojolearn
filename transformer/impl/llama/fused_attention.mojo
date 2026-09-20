@@ -124,6 +124,7 @@ from checks.kernel_matrix import (
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
+    COLUMN_NVIDIA,
     TARGET_COLUMN,
     attn_default_arm_for,
     attn_masked_tail_replay_for,
@@ -1297,11 +1298,21 @@ of the trial tree (the sabotage copies stay trial-only, like
 
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
-comptime ATTN_V1_ALIAS_Y_ESTASH = is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
-"""Opt-in v1 memory profiles. Recompute retains no exponent stash. Packed
-retains visible causal exponents only. Alias-y uses the full exponent layout,
-then overwrites each consumed exponent with y for the unchanged dQ/dK/dV
-readers instead of allocating a second full y matrix."""
+comptime ATTN_V1_ALIAS_Y_ESTASH = (
+    is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
+    or (
+        TARGET_COLUMN == COLUMN_NVIDIA
+        and ATTN_SHIPPED_BWD_ESTASH
+        and not ATTN_V1_RECOMPUTE_BACKWARD
+        and not ATTN_V1_PACKED_ESTASH
+    )
+)
+"""V1 memory profiles. Recompute retains no exponent stash. Packed retains
+visible causal exponents only. Alias-y uses the full exponent layout, then
+overwrites each consumed exponent with y for the unchanged dQ/dK/dV readers
+instead of allocating a second full y matrix. It is automatic only for the
+qualified shipped NVIDIA estash path; AMD and Apple require the explicit
+profile until their own qualification exists."""
 
 def attention_v1_backward_memory_profile() -> String:
     comptime if ATTN_V1_RECOMPUTE_BACKWARD:
