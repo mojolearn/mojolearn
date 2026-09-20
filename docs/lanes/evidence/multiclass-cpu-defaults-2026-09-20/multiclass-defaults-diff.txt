@@ -1,0 +1,90 @@
+NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host'] commit=6552f2766dd353a39e27d349ef5ce6104a2f0244
+| lane/fixture                 | verdict    | cpu-apple-m4     | arm64            |
+|------------------------------|------------|------------------|------------------|
+| gbdt-multiclass-defaults/base | IDENTICAL x2 | a6da1a0f57cd3925 | a6da1a0f57cd3925 |
+| gbdt-multiclass-defaults/denormal | IDENTICAL x2 | 46687313a79031de | 46687313a79031de |
+| gbdt-multiclass-defaults/denormal_ftz | IDENTICAL x2 | 46687313a79031de | 46687313a79031de |
+| gbdt-multiclass-defaults/dupes | IDENTICAL x2 | c290bff9ef5a841e | c290bff9ef5a841e |
+| gbdt-multiclass-defaults/hashed | IDENTICAL x2 | 08fb97ed62fe2aa1 | 08fb97ed62fe2aa1 |
+| gbdt-multiclass-defaults/negative | IDENTICAL x2 | c54c820c562805d1 | c54c820c562805d1 |
+| gbdt-multiclass-defaults/odd | IDENTICAL x2 | 65af4bdf7da87d64 | 65af4bdf7da87d64 |
+| gbdt-multiclass-defaults/ties | IDENTICAL x2 | 2f192b0e8233328b | 2f192b0e8233328b |
+| gbdt-multiclass-defaults/wide | IDENTICAL x2 | a6da1a0f57cd3925 | a6da1a0f57cd3925 |
+
+summary: IDENTICAL=9
+
+| lane/fixture                 | column | verdict      | cpu-apple-m4     | arm64            |
+|------------------------------|--------|--------------|------------------|------------------|
+| gbdt-multiclass-defaults/base | infer  | IDENTICAL x2 | 758485b1e50584e2 | 758485b1e50584e2 |
+| gbdt-multiclass-defaults/base | model  | IDENTICAL x2 | 6e27871395056707 | 6e27871395056707 |
+| gbdt-multiclass-defaults/base | batch  | IDENTICAL x2 | 3a3fdc41958475d9 | 3a3fdc41958475d9 |
+| gbdt-multiclass-defaults/base | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/base | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/base | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/base | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/denormal | infer  | IDENTICAL x2 | 41c7cbee9eef6394 | 41c7cbee9eef6394 |
+| gbdt-multiclass-defaults/denormal | model  | IDENTICAL x2 | 7073cb97a5f05df3 | 7073cb97a5f05df3 |
+| gbdt-multiclass-defaults/denormal | batch  | IDENTICAL x2 | 6638a9ffa1ae43e8 | 6638a9ffa1ae43e8 |
+| gbdt-multiclass-defaults/denormal | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/denormal | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/denormal | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/denormal_ftz | infer  | IDENTICAL x2 | 41c7cbee9eef6394 | 41c7cbee9eef6394 |
+| gbdt-multiclass-defaults/denormal_ftz | model  | IDENTICAL x2 | 7073cb97a5f05df3 | 7073cb97a5f05df3 |
+| gbdt-multiclass-defaults/denormal_ftz | batch  | IDENTICAL x2 | 6638a9ffa1ae43e8 | 6638a9ffa1ae43e8 |
+| gbdt-multiclass-defaults/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/dupes | infer  | IDENTICAL x2 | a0b56afc4627ceaa | a0b56afc4627ceaa |
+| gbdt-multiclass-defaults/dupes | model  | IDENTICAL x2 | 0875cdb127ffad4c | 0875cdb127ffad4c |
+| gbdt-multiclass-defaults/dupes | batch  | IDENTICAL x2 | 73ea5b00d24e2231 | 73ea5b00d24e2231 |
+| gbdt-multiclass-defaults/dupes | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/dupes | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/dupes | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/dupes | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/hashed | infer  | IDENTICAL x2 | 9dab9f60f0aa3ffa | 9dab9f60f0aa3ffa |
+| gbdt-multiclass-defaults/hashed | model  | IDENTICAL x2 | 67618b802eb549e3 | 67618b802eb549e3 |
+| gbdt-multiclass-defaults/hashed | batch  | IDENTICAL x2 | 7bd0cf4fca7e2ffe | 7bd0cf4fca7e2ffe |
+| gbdt-multiclass-defaults/hashed | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/hashed | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/hashed | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/hashed | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/negative | infer  | IDENTICAL x2 | 64852d382f60409e | 64852d382f60409e |
+| gbdt-multiclass-defaults/negative | model  | IDENTICAL x2 | cf0a077c85a01676 | cf0a077c85a01676 |
+| gbdt-multiclass-defaults/negative | batch  | IDENTICAL x2 | dc474025f6578696 | dc474025f6578696 |
+| gbdt-multiclass-defaults/negative | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/negative | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/negative | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/odd | infer  | IDENTICAL x2 | e07e861669c93253 | e07e861669c93253 |
+| gbdt-multiclass-defaults/odd | model  | IDENTICAL x2 | a381c911e0fe71e0 | a381c911e0fe71e0 |
+| gbdt-multiclass-defaults/odd | batch  | IDENTICAL x2 | 38b7e7a5cfd84727 | 38b7e7a5cfd84727 |
+| gbdt-multiclass-defaults/odd | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/odd | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/odd | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/odd | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/ties | infer  | IDENTICAL x2 | c0dd5fc8a24d1848 | c0dd5fc8a24d1848 |
+| gbdt-multiclass-defaults/ties | model  | IDENTICAL x2 | 7e7e77456ba5f7a7 | 7e7e77456ba5f7a7 |
+| gbdt-multiclass-defaults/ties | batch  | IDENTICAL x2 | 0506b165e9dd45ff | 0506b165e9dd45ff |
+| gbdt-multiclass-defaults/ties | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/ties | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/ties | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/ties | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-multiclass-defaults/wide | infer  | IDENTICAL x2 | 758485b1e50584e2 | 758485b1e50584e2 |
+| gbdt-multiclass-defaults/wide | model  | IDENTICAL x2 | e41b3fc8f19b84cf | e41b3fc8f19b84cf |
+| gbdt-multiclass-defaults/wide | batch  | IDENTICAL x2 | 3a3fdc41958475d9 | 3a3fdc41958475d9 |
+| gbdt-multiclass-defaults/wide | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| gbdt-multiclass-defaults/wide | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-multiclass-defaults/wide | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-multiclass-defaults/wide | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+
+summary (infer/model): IDENTICAL=18
+summary (batch): IDENTICAL=9
+summary (rlpair): 
+summary (batchgrad): N/A=9
+summary (batchscale): N/A=9
+summary (ragged): N/A=9
+summary (stepfull): N/A=9
+require-columns 2 over ['gbdt-multiclass-defaults']: OK

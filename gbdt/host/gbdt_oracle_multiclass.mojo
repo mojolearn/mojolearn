@@ -14,7 +14,9 @@ walker runs on the host too) and the symmetric oracle itself.
 THE CONFIGURATIONS THIS COVERS, by name. `gbdt-multiclass`: 20 depth-6
 trees, MultiClass on the three-class target with class weights
 [1, 2, 0.5]. `gbdt-onevsall`: 20 depth-6 trees, MultiClassOneVsAll on the
-same target. Every other option at its default, so the leaves are Newton at
+same target. The public stochastic defaults are also supported: Bayesian,
+Bernoulli and Poisson bootstrap scale every derivative plane; the score
+noise variance reconstructs MultiClass's pinned derivative plane. Leaves are Newton at
 one iteration (`catboost_options.mojo:1314-1321`); the binding refuses by
 name what is outside.
 
@@ -57,7 +59,9 @@ THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
-from std.math import isfinite
+from std.math import exp, isfinite, log
+from gbdt.data.permutation import TRandom
+from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 
 from checks.numerics import (
     ftz,
@@ -88,6 +92,9 @@ from gbdt.host.gbdt_oracle import (
     GBDT_STATS_BLOCK,
     GbdtHostParams,
     _add_leaf_cosine,
+    _bootstrap_pass,
+    _target_std_dev,
+    gbdt_bootstrap_seeds,
     _binarize_columns,
     _choose_scale_from_magnitudes,
     _deterministic_sum_lanes,
@@ -429,11 +436,14 @@ def _cosine_gain_n(
     bin_feature_id: Int,
     lambda_l2: Float32,
     multiclass_optimization: Bool,
+    score_std_dev: Float32 = Float32(0.0),
+    level_seed: UInt64 = 0,
+    feature_id: Int = 0,
 ) -> Float32:
     """One bin-feature of `compute_optimal_splits_kernel[COSINE]`
     (`compute_scores.mojo:140-224`) at `stat_count` planes: the per-class
     `AddLeaf`s, the running totals, the multiclass optimization terms, the
-    sqrt normalization, no noise, feature weight 1.0."""
+    sqrt normalization, per-feature noise, feature weight 1.0."""
     var score = Float32(0.0)
     var denum_sqr = Float32(1e-10)
     for i in range(n_live):
@@ -460,6 +470,12 @@ def _cosine_gain_n(
         final_score = ftz(score / identical_sqrt(denum_sqr))
     else:
         final_score = -GBDT_FLOAT32_MAX
+    if score_std_dev != Float32(0.0):
+        var seed = advance_seed_k(level_seed + UInt64(feature_id), 4)
+        var draw = next_normal_f(seed)
+        var neg_draw = -draw[0]
+        final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+        score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
     return ftz(ftz(final_score - score_before) * Float32(1.0))
 
 
@@ -652,6 +668,9 @@ def gbdt_multi_host_fit(
     params: GbdtHostParams,
     objective: Int,
     class_weights: List[Float32],
+    bootstrap_kind: Int = -1,
+    bootstrap_param: Float32 = Float32(1.0),
+    random_strength: Float32 = Float32(0.0),
 ) raises -> GbdtHostMultiModel:
     """`train` then `fit_with_test` on the two covered configurations."""
     if n_rows < 1 or n_features < 1:
@@ -743,6 +762,11 @@ def gbdt_multi_host_fit(
     tree_leaf_offsets.append(0)
     var model_leaves = List[Float32]()
 
+    var boot_seeds = List[UInt64]()
+    if bootstrap_kind >= 0:
+        boot_seeds = gbdt_bootstrap_seeds(params.random_seed)
+    var noise_rand = TRandom(params.random_seed)
+
     for iteration in range(params.n_estimators):
         _multi_pass(
             objective, num_classes, y, weights, has_weights, cursor, n_rows,
@@ -750,7 +774,20 @@ def gbdt_multi_host_fit(
         )
         var fv = _deterministic_sum_lanes(fv_part, 1, mse_blocks)[0]
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
+        var noise_mult = Float64(0.0)
+        if random_strength != Float32(0.0):
+            var model_left = exp(log(Float64(n_rows)) - Float64(iteration) * Float64(params.learning_rate))
+            noise_mult = model_left / (1.0 + model_left)
+        var tree_seed = noise_rand.next_uniform_l()
+        if bootstrap_kind >= 0:
+            var bm = _bootstrap_pass(bootstrap_kind, boot_seeds, stats, n_rows, bootstrap_param, stat_count)
+            mags[0] = bm[0]
+            mags[1] = bm[1]
         var fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        var score_std_dev = Float32(0.0)
+        if random_strength != Float32(0.0):
+            score_std_dev = Float32(Float64(Float32(noise_mult * Float64(random_strength))) * _target_std_dev(stats, n_rows, stat_count, is_mc))
+        var level_rand = TRandom(tree_seed)
 
         # ---- `run_tree_layout_traced` at `stat_count` planes (TWIN of the
         # loop in `gbdt_oracle.mojo::gbdt_host_fit`) ----
@@ -770,6 +807,7 @@ def gbdt_multi_host_fit(
         var winners_bf = List[UInt32]()
         var n_live = 1
         for depth in range(max_depth):
+            var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
             var compute = List[Int]()
@@ -843,6 +881,7 @@ def gbdt_multi_host_fit(
                 var gain = _cosine_gain_n(
                     hist, hist_cells, stat_count, part_stats, n_live, bf,
                     params.l2_leaf_reg, is_mc,
+                    score_std_dev, level_seed, bf_feature[bf],
                 )
                 if gain > best_gain:
                     best_gain = gain

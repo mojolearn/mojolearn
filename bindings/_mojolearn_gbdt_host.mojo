@@ -1158,14 +1158,14 @@ def gbdt_fit_binding(
     # and NewtonCosine under Lossguide (gbdt-lossguide-newtoncosine), where
     # the searcher knobs of that lane are restated as well
     var lossguide_knobs = grow_code == GBDT_HOST_GROW_LOSSGUIDE and loss == String("Logloss")
-    # the symmetric Logloss and RMSE fits' stochastic arm, CatBoost's GPU
+    # the symmetric Logloss, RMSE and multiclass fits' stochastic arm, CatBoost's GPU
     # defaults (Bayesian bootstrap, random_strength 1):
     # gbdt_oracle.mojo::gbdt_host_fit and gbdt_oracle_rmse.mojo::
     # gbdt_rmse_host_fit; numeric columns only, as the one-hot arm is
     # measured without it
     var symmetric_stochastic = (
-        grow_code == 0 and (loss == String("Logloss") or is_rmse)
-        and not is_pointwise and not is_multi and n_flags == 0
+        grow_code == 0 and (loss == String("Logloss") or is_rmse or is_multi)
+        and not is_pointwise and n_flags == 0
     )
     # the non-symmetric driver's stochastic arm, Logloss and RMSE:
     # gbdt_oracle_depthwise.mojo::gbdt_host_fit_non_symmetric reads the
@@ -1491,7 +1491,7 @@ def gbdt_fit_binding(
             var multi_model = gbdt_multi_host_fit(
                 x, y, n_rows, n_features, p,
                 GBDT_OBJ_MULTICLASS if loss == String("MultiClass") else GBDT_OBJ_MULTICLASS_OVA,
-                class_weights,
+                class_weights, sym_boot_kind, sym_boot_param, random_strength,
             )
             text = gbdt_multi_host_model_text(multi_model)
             losses = multi_model.losses.copy()

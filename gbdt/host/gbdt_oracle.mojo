@@ -1260,9 +1260,10 @@ def _bootstrap_pass(
     mut stats: List[Float32],
     n_rows: Int,
     param: Float32,
+    stat_count: Int = 2,
 ) raises -> Tuple[Float32, Float32]:
     """`launch_bootstrap` + `bootstrap_kernel` (`bootstrap.mojo:118-246`,
-    `:292-348`) at two stat planes, then `deterministic_sum_lanes_kernel[2]`
+    `:292-348`) at `stat_count` planes (two by default), then `deterministic_sum_lanes_kernel[2]`
     over the block magnitudes. Returns the two folded magnitudes."""
     var by_rows = (n_rows + GBDT_BOOT_BLOCK - 1) // GBDT_BOOT_BLOCK
     var blocks = GBDT_BOOT_SEEDS // GBDT_BOOT_BLOCK
@@ -1305,9 +1306,12 @@ def _bootstrap_pass(
                 var w = stats[i] * bw
                 stats[i] = w
                 mag_w += abs(w)
-                var g = stats[n_rows + i] * bw
-                stats[n_rows + i] = g
-                mag_g += abs(g)
+                var gmax = Float32(0.0)
+                for k in range(1, stat_count):
+                    var g = stats[k * n_rows + i] * bw
+                    stats[k * n_rows + i] = g
+                    gmax = max(gmax, abs(g))
+                mag_g += gmax
                 i += stride
             seeds[gid] = s
             s_w[tid] = mag_w
@@ -1325,10 +1329,13 @@ def _bootstrap_pass(
 # ===========================================================================
 
 
-def _target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
+def _target_std_dev(
+    stats: List[Float32], n_rows: Int, stat_count: Int = 2,
+    multiclass_optimization: Bool = False,
+) -> Float64:
     """`compute_target_std_dev` (`greedy_search_helper.mojo:224-280`) over
     `compute_target_variance_kernel` (`compute_scores.mojo:274-318`) at stat
-    count 2: `min(4 * 32, ceil(n / 512))` blocks of 512 threads striding the
+    count `stat_count`: `min(4 * 32, ceil(n / 512))` blocks of 512 threads striding the
     rows, the flushed per-thread accumulations of rows with weight above
     1e-15, the per-block halving folds stored flushed, the three-lane fold,
     then `sqrt(sum2 / (weight + 1e-100))` in double."""
@@ -1352,9 +1359,15 @@ def _target_std_dev(stats: List[Float32], n_rows: Int) -> Float64:
             while i < n_rows:
                 var w = stats[i]
                 if w > Float32(1e-15):
-                    var wt = stats[n_rows + i]
-                    weighted_sum = ftz(weighted_sum + wt)
-                    weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
+                    var stat_sum = Float32(0.0)
+                    for k in range(1, stat_count):
+                        var wt = stats[k * n_rows + i]
+                        weighted_sum = ftz(weighted_sum + wt)
+                        weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(wt * wt) / w))
+                        stat_sum = ftz(stat_sum + wt)
+                    if multiclass_optimization:
+                        weighted_sum = ftz(weighted_sum + -stat_sum)
+                        weighted_sum2 = ftz(weighted_sum2 + ftz(ftz(stat_sum * stat_sum) / w))
                     total_weight = ftz(total_weight + w)
                 i += stride
             s0[tid] = weighted_sum

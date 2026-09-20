@@ -3180,6 +3180,19 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
 
 
+@lane("gbdt-multiclass-defaults")
+def _(ml, X, yc, yr, Xh=None):
+    """Public multiclass defaults: Bayesian bootstrap and random strength one."""
+    target = _three_class_centered(X)
+    parts = {}
+    m = None
+    for loss in ("MultiClass", "MultiClassOneVsAll"):
+        m = ml.GradientBoosting(n_estimators=20, max_depth=6, loss=loss,
+                                class_weights=[1.0, 2.0, 0.5]).fit(X, target)
+        parts[loss] = _h(m.predict(X), m.predict_proba(X))
+    return _fit(parts, m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
 @lane("gbdt-parametric-losses")
 @floor(rows=(1500, "1500 rows was measured to cost no detection against the 20000 this lane used to fit "
                    "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4): the eleven loss parts "
@@ -8670,7 +8683,7 @@ _batch_decl(_rows_calls("predict", "predict_proba"),
             "gbdt-ordered",
             "rf-clf", "et-clf", "gbdt-symmetric", "gbdt-symmetric-eval",
             "rf-clf-entropy-log2-noboot", "rf-clf-balanced-parallel",
-            "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-pointwise-l2-bayesian-eval",
+            "et-clf-entropy-bestfirst", "gbdt-multiclass", "gbdt-onevsall", "gbdt-multiclass-defaults", "gbdt-pointwise-l2-bayesian-eval",
             "par-forest", "par-boosting", "par-forest-et-clf")
 _batch_decl(_rows_calls("predict"),
             "rf-reg", "et-reg", "gbdt-depthwise", "gbdt-lossguide", "gbdt-rmse", "gbdt-ordered-rmse",
