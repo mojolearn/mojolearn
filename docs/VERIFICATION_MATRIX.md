@@ -37,7 +37,7 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 227 | 17 |
+| gpu column | 233 | 11 |
 | cpu verifier | 205 | 39 |
 | sabotage seen to move a build | 198 | 46 |
 | batch part or named n/a | 238 | 6 |
@@ -46,7 +46,7 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 250 | 6 |
+| gpu column (any class) | 253 | 3 |
 | gpu column on all three classes | 235 | 21 |
 | cpu verifier declared | 222 | 34 |
 | sabotage seen to move a build | 215 | 41 |
@@ -119,7 +119,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `Cholesky` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ConstantKernel` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `DBSCAN` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `DistributedIVFIndex` | 1 |  | training | declared | part | NO |
+| `DistributedIVFIndex` | 1 | nvidia | training | declared | part | NO |
 | `ElasticNet` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Embedding` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `ExperimentalTwoLevelFeatureFreq` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -305,15 +305,15 @@ A blank cell means no lane of this algorithm has that kind.
 | `parallel_ensemble.fit_isolation_forest` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ensemble.fit_ordered_rmse` | 1 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_ensemble.score_isolation_forest` | 1 | amd,apple,nvidia |  | none | part | NO |
-| `parallel_forecasting.forecast_arima` | 1 |  | training | declared | part | NO |
-| `parallel_forecasting.forecast_exponential_smoothing` | 1 |  | training | declared | part | NO |
-| `parallel_forecasting.predict_arima` | 1 |  | training | declared | part | NO |
-| `parallel_forecasting.predict_exponential_smoothing` | 1 |  | training | declared | part | NO |
+| `parallel_forecasting.forecast_arima` | 1 | nvidia | training | declared | part | NO |
+| `parallel_forecasting.forecast_exponential_smoothing` | 1 | nvidia | training | declared | part | NO |
+| `parallel_forecasting.predict_arima` | 1 | nvidia | training | declared | part | NO |
+| `parallel_forecasting.predict_exponential_smoothing` | 1 | nvidia | training | declared | part | NO |
 | `parallel_gaussian_process.fit_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_gaussian_process.predict_gaussian_process_classifier` | **0** |  |  |  |  | NO |
 | `parallel_graph.fit_graph` | 3 | amd,apple,nvidia |  | none | part | NO |
 | `parallel_graph.transform_umap` | 1 | amd,apple,nvidia |  | none | part | NO |
-| `parallel_ivf.DistributedIVFIndex` | 1 |  | training | declared | part | NO |
+| `parallel_ivf.DistributedIVFIndex` | 1 | nvidia | training | declared | part | NO |
 | `parallel_model_selection.cross_val_score` | **0** |  |  |  |  | NO |
 | `parallel_neighbors.ParallelQueries` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `parallel_neighbors_reference.ReferenceShardedNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -531,8 +531,8 @@ A blank cell means no lane of this algorithm has that kind.
 | par-cholesky | amd,apple,nvidia | - | none | - | part | NO |
 | par-dbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-feature-freq | amd,apple,nvidia | - | none | - | part | NO |
-| par-forecast-arima | - | training | declared | - | part | NO |
-| par-forecast-holtwinters | - | training | declared | - | part | NO |
+| par-forecast-arima | nvidia | training | declared | - | part | NO |
+| par-forecast-holtwinters | nvidia | training | declared | - | part | NO |
 | par-forest | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
 | par-forest-et | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/b-trees-gbdt/cpu-x86.sabotage.json` | part | yes |
 | par-forest-et-clf | amd,nvidia | training | declared | - | part | NO |
@@ -550,7 +550,7 @@ A blank cell means no lane of this algorithm has that kind.
 | par-hdbscan | amd,apple,nvidia | - | none | - | part | NO |
 | par-holtwinters | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_sabotage-sweep/c-classical/cpu-x86.sabotage.json` | part | yes |
 | par-iforest | amd,apple,nvidia | - | none | - | part | NO |
-| par-ivf | - | training | declared | - | part | NO |
+| par-ivf | nvidia | training | declared | - | part | NO |
 | par-kernel-ridge | amd,apple,nvidia | - | none | - | part | NO |
 | par-kmeans | amd,apple,nvidia | - | none | - | part | NO |
 | par-logistic | amd,apple,nvidia | - | none | - | part | NO |
@@ -651,13 +651,13 @@ proved is real and is reported under the driver heading below, not here.
 
 > none
 
-> (plus 3 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+> (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
 **GPU column on fewer than three classes: 0**
 
 > none
 
-> (plus 15 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
+> (plus 18 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
 **No CPU verifier declared: 0**
 
@@ -739,7 +739,7 @@ coverage, and they are not evidence for any vendor claim.
 
 55 `par-*` lanes exist. THEIR CLAIM IS ONLY STATEABLE ON TWO DEVICES -- that a two-device column hashes equal to the one-device column cell for cell -- so a one-device run of one is DEGENERATE: it compares a run against itself and passes whatever the code does. They are held out of the vendor-class counts above for that reason.
 
-**52 of 55 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
+**55 of 55 now carry a TWO-DEVICE column**, read through `admit(..., par_axis=True)`. Until 2026-09-19 the default rule refused `par_devices != "0"`, so the only run that can state their claim was inadmissible and this evidence counted for nothing.
 
 | par-arima | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-boosting | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
@@ -755,8 +755,8 @@ coverage, and they are not evidence for any vendor claim.
 | par-cholesky | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
 | par-dbscan | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-feature-freq | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
-| par-forecast-arima | - | no two-device column |
-| par-forecast-holtwinters | - | no two-device column |
+| par-forecast-arima | nvidia | bench/results/identity_break/2026-09-19_par-two-device-final3b/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-final3b.two-device.json |
+| par-forecast-holtwinters | nvidia | bench/results/identity_break/2026-09-19_par-two-device-final3b/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-final3b.two-device.json |
 | par-forest | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-forest-et | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-forest-et-clf | amd,nvidia | bench/results/identity_break/2026-09-19_hardware-gaps/amd-par-forest-et-clf-two.json |
@@ -774,7 +774,7 @@ coverage, and they are not evidence for any vendor claim.
 | par-hdbscan | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/two.json |
 | par-holtwinters | amd,nvidia | bench/results/identity_break/2026-09-14_166-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-iforest | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
-| par-ivf | - | no two-device column |
+| par-ivf | nvidia | bench/results/identity_break/2026-09-19_par-two-device-final3b/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-final3b.two-device.json |
 | par-kernel-ridge | amd,nvidia | bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-new8/two.json |
 | par-kmeans | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
 | par-logistic | amd,nvidia | bench/results/identity_break/2026-09-14_136-lanes/amd-2xmi300x-gfx942.par-devices-0-1.json |
