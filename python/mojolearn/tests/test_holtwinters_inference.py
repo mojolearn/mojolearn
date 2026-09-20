@@ -76,6 +76,7 @@ def test_three_bindings_register_predict_from_one_source():
 def test_prediction_sources_reach_no_fit():
     allowed = {
         "std.math", "std.memory", "std.python", "std.python._cpython", "std.sys.compile",
+        "max.algorithm", "core.host_predict_threads",
         "checks.numerics", "bindings.hostptr", "holtwinters.host.hw_predict",
         "holtwinters.impl.tsa.holtwinters_params",
     }
