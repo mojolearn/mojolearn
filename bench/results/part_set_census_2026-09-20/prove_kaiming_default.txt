@@ -1,0 +1,23 @@
+=== 1. the default value itself, as raw IEEE-754 bits ===
+  sqrt(5.0) = 2.23606797749979  bits 0x4001e3779b97f4a8
+  sqrt(2.0) = 1.4142135623730951  bits 0x3ff6a09e667f3bcd
+  sqrt(5)  class-def-time 0x4001e3779b97f4a8  call-time 0x4001e3779b97f4a8  IDENTICAL
+  sqrt(2)  class-def-time 0x3ff6a09e667f3bcd  call-time 0x3ff6a09e667f3bcd  IDENTICAL
+
+=== 2. the shipping source no longer evaluates it at import time ===
+  kaiming_normal   gain  default = None   calls-at-import=0  OK
+  kaiming_uniform  a     default = None   calls-at-import=0  OK
+
+=== 3. the value that crosses from changed code into unchanged code ===
+  fan_in=1     bound 0x3fefffffffffffff==0x3fefffffffffffff  sigma 0x3ff6a09e667f3bcd==0x3ff6a09e667f3bcd  IDENTICAL
+  fan_in=3     bound 0x3fe279a74590331c==0x3fe279a74590331c  sigma 0x3fea20bd700c2c3f==0x3fea20bd700c2c3f  IDENTICAL
+  fan_in=8     bound 0x3fd6a09e667f3bcc==0x3fd6a09e667f3bcc  sigma 0x3fe0000000000000==0x3fe0000000000000  IDENTICAL
+  fan_in=64    bound 0x3fbfffffffffffff==0x3fbfffffffffffff  sigma 0x3fc6a09e667f3bcd==0x3fc6a09e667f3bcd  IDENTICAL
+  fan_in=256   bound 0x3fafffffffffffff==0x3fafffffffffffff  sigma 0x3fb6a09e667f3bcd==0x3fb6a09e667f3bcd  IDENTICAL
+  fan_in=1024  bound 0x3f9fffffffffffff==0x3f9fffffffffffff  sigma 0x3fa6a09e667f3bcd==0x3fa6a09e667f3bcd  IDENTICAL
+  fan_in=4096  bound 0x3f8fffffffffffff==0x3f8fffffffffffff  sigma 0x3f96a09e667f3bcd==0x3f96a09e667f3bcd  IDENTICAL
+
+=== 4. the library really is what the import used to need ===
+  _portable_math.sqrt -> native lib: True
+
+VERDICT: IDENTICAL on every arm

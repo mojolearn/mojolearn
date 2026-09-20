@@ -1841,10 +1841,38 @@ class Generator(object):
                         float(_round_f32(mean)), sd)
         return out.reshape(shape)
 
-    def kaiming_uniform(self, shape, fan_in, a=math.sqrt(5.0)):
+    def kaiming_uniform(self, shape, fan_in, a=None):
         """`torch.nn.init.kaiming_uniform_`'s bound
         `sqrt(2 / (1 + a^2)) * sqrt(3 / fan_in)`; torch's Linear default is
-        `a = sqrt(5)`, which makes the bound `1 / sqrt(fan_in)`."""
+        `a = sqrt(5)`, which makes the bound `1 / sqrt(fan_in)`.
+
+        `a=None` MEANS sqrt(5) AND IS NOT A BEHAVIOUR CHANGE (2026-09-20).
+        This default used to read `a=math.sqrt(5.0)`, and a default argument is
+        evaluated at CLASS DEFINITION TIME. `math` here is
+        `_portable_math`, whose `sqrt` dlopens `.libs/libMojolearnMath.so`. So
+        `import mojolearn` could not complete without that library -- not
+        lazily, not for a caller who never touches a Generator, not for
+        `tools/identity_break.py --lanes <anything>`. `.libs/` is gitignored,
+        nothing under `bindings/` builds it, and the only thing in the tree
+        that compiles it is `packaging/macos/build_release_wheel.sh`, which
+        does not run on Linux. A developer Mac has it sitting in the checkout
+        from some past wheel build and never notices; a freshly rented Linux
+        box cannot import the package at all. Measured three times: this
+        lane's three CPU pods ($0.34, every binding built, zero cells),
+        lane/verifier-full-exposure ($0.019), and tools/gap_column_leg.sh,
+        which learned it on 2026-09-19 and fixed only itself.
+        A whole package's importability hung on a native call for a constant.
+
+        THE SAME CALL STILL HAPPENS, one frame later. The sentinel defers
+        `math.sqrt(5.0)` to call time; it does not replace it with a literal.
+        That is deliberate: a literal would be a second answer to the question
+        `_portable_math` exists to answer, and proving it equal would mean
+        proving the native sqrt correctly rounded on every platform we ship.
+        Deferring proves bit-identity by construction instead -- the bytes come
+        from the same function, on the same box, in the same mode.
+        """
+        if a is None:
+            a = math.sqrt(5.0)
         gain = math.sqrt(2.0 / (1.0 + float(a) * float(a)))
         bound = gain * math.sqrt(3.0 / float(int(fan_in)))
         return self.uniform(shape, -bound, bound)
@@ -1854,7 +1882,11 @@ class Generator(object):
             6.0 / float(int(fan_in) + int(fan_out)))
         return self.uniform(shape, -bound, bound)
 
-    def kaiming_normal(self, shape, fan_in, gain=math.sqrt(2.0)):
+    def kaiming_normal(self, shape, fan_in, gain=None):
+        # `gain=None` means sqrt(2), deferred for the reason spelled out on
+        # kaiming_uniform above: the same native call, one frame later.
+        if gain is None:
+            gain = math.sqrt(2.0)
         return self.normal(
             shape, 0.0, float(gain) / math.sqrt(float(int(fan_in))))
 
