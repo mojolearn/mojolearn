@@ -4,6 +4,7 @@
 Physical multi-GPU qualification is pending; see LANE_STATUS_multigpu-cv.md.
 This schedules whole fits. It does not partition one fit across device memory.
 """
+import os
 import pickle
 
 from . import _backend
@@ -15,9 +16,21 @@ from .model_selection import _clone, _prepare_folds, _take_rows
 __all__ = ['cross_val_score']
 
 
+def _require_single_metal_worker(records):
+    """Check the one child process, without asserting physical GPU isolation."""
+    if len(records) != 1:
+        raise RuntimeError('single-device Metal cross-validation requires one worker')
+    record = records[0]
+    if (record.get('kind') != 'single-metal-worker'
+            or record.get('vendor') != 'metal'
+            or type(record.get('pid')) is not int or record['pid'] < 1
+            or record.get('ppid') != os.getpid()):
+        raise RuntimeError('single-device Metal worker identity is invalid')
+
+
 def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
                     groups=None, error_score='raise'):
-    """Fit one fresh estimator per fold on the requested CUDA/HIP devices.
+    """Fit one fresh estimator per fold on CUDA/HIP devices or Metal device 0.
 
     Fold validation, cloning, scoring and output order match the serial API.
     Workers receive only their fold's data and an unfitted clone. At most one
@@ -44,16 +57,18 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     nothing else; it is not device isolation, not placement and not a
     throughput claim, and the two-device CUDA/HIP column remains owed. CPU
     training is public, so the fold fits run on a CPU-only install.
-    METAL IS STILL REFUSED: `DevicePool` gives an Apple group no visibility
-    mask, so one-fold-per-device would be a sentence with nothing behind it.
+    Metal supports only explicit ``devices=(0,)``: one child executes folds
+    sequentially on the available Metal device. Its process identity is
+    checked, but no physical isolation or multi-GPU execution is claimed.
     """
     pool = DevicePool(devices)
     vendor = _backend.vendor()
     host = vendor not in ('cuda', 'hip') and _backend._CPU_ONLY is not None
-    if vendor not in ('cuda', 'hip') and not host:
+    metal = vendor == 'metal' and pool.devices == (0,)
+    if vendor not in ('cuda', 'hip') and not host and not metal:
         raise NotImplementedError(
-            'parallel cross-validation requires CUDA or HIP GPU workers, or a '
-            'CPU-only install where one worker is one process')
+            'parallel cross-validation requires CUDA or HIP GPU workers, '
+            'Metal devices=(0,), or a CPU-only install where one worker is one process')
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
     prototype = _clone(estimator)
     params = prototype.get_params(deep=True)
@@ -76,6 +91,8 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
         if host:
             require_distinct_processes(
                 pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)
+        elif metal:
+            _require_single_metal_worker(pool.map([('metal_worker_identity', None, ())]))
         else:
             inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])
             require_distinct_workers(inventory, vendor, width)
