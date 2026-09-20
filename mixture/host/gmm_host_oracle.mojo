@@ -628,7 +628,7 @@ def gmmh_fit(
         var prev = lower_bound
         var es = gmmh_e_step(
             x, ms.means, pre.precisions, pre.log_det_chol, ms.log_weights,
-            n, d, ncomp,
+            n, d, ncomp, parallel_components=True,
         )
         ms = gmmh_m_step(x, es.logresp, n, d, ncomp, params.reg_covar, False)
         pre = gmmh_precision_cholesky(ms.covariances, d, ncomp)
