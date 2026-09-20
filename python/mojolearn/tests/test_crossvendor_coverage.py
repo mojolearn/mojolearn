@@ -121,3 +121,37 @@ def test_statically_inapplicable_part_cannot_hide_numeric_contradiction():
     result = audit(table(), {'par-demo': {'train': 'n/a:no-backward'}}, ['base'])
     assert not result['complete']
     assert set(result['gaps'][0]['reasons'].values()) == {'contract_mismatch'}
+
+
+@pytest.mark.parametrize('vendors', [('amd', 'apple', 'nvidia'), ('apple',)])
+def test_unanimous_gpu_values_must_match_numeric_cpu_reference(vendors):
+    t = table()
+    entry = t['cells']['par-demo/base']['train']
+    entry['cols']['cpu'] = 3
+    for vendor in ('amd', 'apple', 'nvidia'):
+        entry['cols'][vendor] = [0, 'fedcba9876543210']
+    result = audit(t, CONTRACT, ['base'], vendors)
+    assert not result['complete']
+    gap = result['gaps'][0]
+    assert gap['reasons'] == dict.fromkeys(vendors, 'cpu_value_mismatch')
+    assert gap['cpu_role'] == 'numeric'
+    assert gap['cpu_value'] == gap['target'] == HASH
+    assert set(result['collection_plan']) == set(vendors)
+
+
+def test_cpu_target_can_be_an_explicit_column_value():
+    t = table()
+    t['cells']['par-demo/base']['train']['cols']['cpu'] = [3, 'fedcba9876543210']
+    result = audit(t, CONTRACT, ['base'])
+    assert not result['complete']
+    assert result['gaps'][0]['target'] == 'fedcba9876543210'
+
+
+def test_only_the_gpu_differing_from_cpu_is_planned():
+    t = table()
+    entry = t['cells']['par-demo/base']['train']
+    entry['cols']['cpu'] = 3
+    entry['cols']['amd'] = [0, 'fedcba9876543210']
+    result = audit(t, CONTRACT, ['base'])
+    assert result['gaps'][0]['reasons'] == {'amd': 'cpu_value_mismatch'}
+    assert result['collection_plan']['apple'] == result['collection_plan']['nvidia'] == {}
