@@ -1,0 +1,10 @@
+668 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5a4380000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B2_L1024_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=default candidate_requested=default
+baseline=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz candidate=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz rounds=15 warmups=4
+PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+--- kind hashed
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: attention_step_price: batch must be 1 (the caches are packed per batch)

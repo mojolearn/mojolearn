@@ -1,0 +1,290 @@
+406 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7b4ec0000000, nodemask=2)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=True
+DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=default candidate_requested=default
+NOTE: built with MOJOLEARN_ATTN_PHASE_TIMERS; under MOJOLEARN_TRANSFORMER_TIMING=1 every launch is serialized and PRICE lines are a breakdown, not a price
+baseline=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz candidate=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz rounds=2 warmups=1
+PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+RESOURCES_DEVICE column=nvidia source_counts=per_thread_hd64
+RESOURCES_BEGIN label=zdot_stash_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_stash_pf regs=126
+RESOURCES label=zdot_stash_pf local=0
+RESOURCES label=zdot_stash_pf shared=17696
+RESOURCES label=zdot_stash_pf const=0
+RESOURCES label=zdot_stash_pf max_threads=512
+RESOURCES label=zdot_stash_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=zdot_zdefer_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zdefer_pf regs=127
+RESOURCES label=zdot_zdefer_pf local=0
+RESOURCES label=zdot_zdefer_pf shared=17696
+RESOURCES label=zdot_zdefer_pf const=0
+RESOURCES label=zdot_zdefer_pf max_threads=512
+RESOURCES label=zdot_zdefer_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=zdot_zlag_pf rows=4 keys_per_iteration=32 accumulators_per_thread=2 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=zdot_zlag_pf regs=128
+RESOURCES label=zdot_zlag_pf local=0
+RESOURCES label=zdot_zlag_pf shared=17696
+RESOURCES label=zdot_zlag_pf const=0
+RESOURCES label=zdot_zlag_pf max_threads=512
+RESOURCES label=zdot_zlag_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=zdot_estash_pf rows=8 keys_per_iteration=32 accumulators_per_thread=1 operand_registers_per_thread=3 thread_local_floats=64 page_bytes=10432 allocations=2 threads_per_block=256
+RESOURCES label=zdot_estash_pf regs=128
+RESOURCES label=zdot_estash_pf local=0
+RESOURCES label=zdot_estash_pf shared=10432
+RESOURCES label=zdot_estash_pf const=0
+RESOURCES label=zdot_estash_pf max_threads=512
+RESOURCES label=zdot_estash_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=zdot_estash_dres_pf rows=8 keys_per_iteration=32 accumulators_per_thread=1 operand_registers_per_thread=3 thread_local_floats=0 page_bytes=12480 allocations=2 threads_per_block=256
+RESOURCES label=zdot_estash_dres_pf regs=64
+RESOURCES label=zdot_estash_dres_pf local=0
+RESOURCES label=zdot_estash_dres_pf shared=12480
+RESOURCES label=zdot_estash_dres_pf const=0
+RESOURCES label=zdot_estash_dres_pf max_threads=1024
+RESOURCES label=zdot_estash_dres_pf blocks_per_sm_256=4
+RESOURCES_BEGIN label=zdot_estash_dres_pf_bswz rows=8 keys_per_iteration=32 accumulators_per_thread=1 operand_registers_per_thread=3 thread_local_floats=0 page_bytes=12480 allocations=2 threads_per_block=256
+RESOURCES label=zdot_estash_dres_pf_bswz regs=72
+RESOURCES label=zdot_estash_dres_pf_bswz local=0
+RESOURCES label=zdot_estash_dres_pf_bswz shared=12480
+RESOURCES label=zdot_estash_dres_pf_bswz const=0
+RESOURCES label=zdot_estash_dres_pf_bswz max_threads=896
+RESOURCES label=zdot_estash_dres_pf_bswz blocks_per_sm_256=3
+RESOURCES_BEGIN label=fwd_r2_r32_qres_pf_bswz rows=32 keys_per_iteration=32 qres=True preflush=True accumulators_per_thread=11 operand_registers_per_thread=8 thread_local_floats=0 page_bytes=15232 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r32_qres_pf_bswz regs=96
+RESOURCES label=fwd_r2_r32_qres_pf_bswz local=0
+RESOURCES label=fwd_r2_r32_qres_pf_bswz shared=15232
+RESOURCES label=fwd_r2_r32_qres_pf_bswz const=0
+RESOURCES label=fwd_r2_r32_qres_pf_bswz max_threads=640
+RESOURCES label=fwd_r2_r32_qres_pf_bswz blocks_per_sm_256=2
+RESOURCES_BEGIN label=dq_tiled_pf_bswz rows=64 keys_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8448 allocations=3 threads_per_block=256
+RESOURCES label=dq_tiled_pf_bswz regs=128
+RESOURCES label=dq_tiled_pf_bswz local=0
+RESOURCES label=dq_tiled_pf_bswz shared=8448
+RESOURCES label=dq_tiled_pf_bswz const=0
+RESOURCES label=dq_tiled_pf_bswz max_threads=512
+RESOURCES label=dq_tiled_pf_bswz blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r32_bswz keys=32 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=12288 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r32_bswz regs=64
+RESOURCES label=kvgrid_r32_bswz local=0
+RESOURCES label=kvgrid_r32_bswz shared=12288
+RESOURCES label=kvgrid_r32_bswz const=0
+RESOURCES label=kvgrid_r32_bswz max_threads=1024
+RESOURCES label=kvgrid_r32_bswz blocks_per_sm_256=4
+RESOURCES_BEGIN label=fwd_r2_r32_qres_pf rows=32 keys_per_iteration=32 qres=True preflush=True accumulators_per_thread=11 operand_registers_per_thread=8 thread_local_floats=0 page_bytes=15232 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r32_qres_pf regs=102
+RESOURCES label=fwd_r2_r32_qres_pf local=0
+RESOURCES label=fwd_r2_r32_qres_pf shared=15232
+RESOURCES label=fwd_r2_r32_qres_pf const=0
+RESOURCES label=fwd_r2_r32_qres_pf max_threads=512
+RESOURCES label=fwd_r2_r32_qres_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=fwd_r2_r32_qres rows=32 keys_per_iteration=32 qres=True preflush=False accumulators_per_thread=11 operand_registers_per_thread=8 thread_local_floats=0 page_bytes=15232 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r32_qres regs=101
+RESOURCES label=fwd_r2_r32_qres local=0
+RESOURCES label=fwd_r2_r32_qres shared=15232
+RESOURCES label=fwd_r2_r32_qres const=0
+RESOURCES label=fwd_r2_r32_qres max_threads=512
+RESOURCES label=fwd_r2_r32_qres blocks_per_sm_256=2
+RESOURCES_BEGIN label=fwd_r2_r32_pf rows=32 keys_per_iteration=32 qres=False preflush=True accumulators_per_thread=11 operand_registers_per_thread=8 thread_local_floats=0 page_bytes=12672 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r32_pf regs=96
+RESOURCES label=fwd_r2_r32_pf local=0
+RESOURCES label=fwd_r2_r32_pf shared=12672
+RESOURCES label=fwd_r2_r32_pf const=0
+RESOURCES label=fwd_r2_r32_pf max_threads=640
+RESOURCES label=fwd_r2_r32_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=fwd_r2_r32 rows=32 keys_per_iteration=32 qres=False preflush=False accumulators_per_thread=11 operand_registers_per_thread=8 thread_local_floats=0 page_bytes=12672 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r32 regs=96
+RESOURCES label=fwd_r2_r32 local=0
+RESOURCES label=fwd_r2_r32 shared=12672
+RESOURCES label=fwd_r2_r32 const=0
+RESOURCES label=fwd_r2_r32 max_threads=640
+RESOURCES label=fwd_r2_r32 blocks_per_sm_256=2
+RESOURCES_BEGIN label=fwd_r2_r64_pf rows=64 keys_per_iteration=32 qres=False preflush=True accumulators_per_thread=21 operand_registers_per_thread=14 thread_local_floats=0 page_bytes=17152 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r64_pf regs=166
+RESOURCES label=fwd_r2_r64_pf local=0
+RESOURCES label=fwd_r2_r64_pf shared=17152
+RESOURCES label=fwd_r2_r64_pf const=0
+RESOURCES label=fwd_r2_r64_pf max_threads=384
+RESOURCES label=fwd_r2_r64_pf blocks_per_sm_256=1
+RESOURCES_BEGIN label=fwd_r2_r64 rows=64 keys_per_iteration=32 qres=False preflush=False accumulators_per_thread=21 operand_registers_per_thread=14 thread_local_floats=0 page_bytes=17152 allocations=1 threads_per_block=256
+RESOURCES label=fwd_r2_r64 regs=166
+RESOURCES label=fwd_r2_r64 local=0
+RESOURCES label=fwd_r2_r64 shared=17152
+RESOURCES label=fwd_r2_r64 const=0
+RESOURCES label=fwd_r2_r64 max_threads=384
+RESOURCES label=fwd_r2_r64 blocks_per_sm_256=1
+RESOURCES_BEGIN label=dq_tiled_pf rows=64 keys_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8448 allocations=3 threads_per_block=256
+RESOURCES label=dq_tiled_pf regs=128
+RESOURCES label=dq_tiled_pf local=0
+RESOURCES label=dq_tiled_pf shared=8448
+RESOURCES label=dq_tiled_pf const=0
+RESOURCES label=dq_tiled_pf max_threads=512
+RESOURCES label=dq_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_recompute keys=4 queries_per_iteration=32 accumulators_per_thread=3 operand_registers_per_thread=4 thread_local_floats=64 page_bytes=17696 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_recompute regs=124
+RESOURCES label=dkdv_recompute local=0
+RESOURCES label=dkdv_recompute shared=17696
+RESOURCES label=dkdv_recompute const=0
+RESOURCES label=dkdv_recompute max_threads=512
+RESOURCES label=dkdv_recompute blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_tiled keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled regs=116
+RESOURCES label=dkdv_tiled local=0
+RESOURCES label=dkdv_tiled shared=16384
+RESOURCES label=dkdv_tiled const=0
+RESOURCES label=dkdv_tiled max_threads=512
+RESOURCES label=dkdv_tiled blocks_per_sm_256=2
+RESOURCES_BEGIN label=dkdv_tiled_pf keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=dkdv_tiled_pf regs=114
+RESOURCES label=dkdv_tiled_pf local=0
+RESOURCES label=dkdv_tiled_pf shared=16384
+RESOURCES label=dkdv_tiled_pf const=0
+RESOURCES label=dkdv_tiled_pf max_threads=512
+RESOURCES label=dkdv_tiled_pf blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r64 keys=64 queries_per_tile=16 accumulators_per_thread=32 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=16384 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r64 regs=114
+RESOURCES label=kvgrid_r64 local=0
+RESOURCES label=kvgrid_r64 shared=16384
+RESOURCES label=kvgrid_r64 const=0
+RESOURCES label=kvgrid_r64 max_threads=512
+RESOURCES label=kvgrid_r64 blocks_per_sm_256=2
+RESOURCES_BEGIN label=kvgrid_r32 keys=32 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=10 thread_local_floats=0 page_bytes=12288 allocations=4 threads_per_block=256
+RESOURCES label=kvgrid_r32 regs=64
+RESOURCES label=kvgrid_r32 local=0
+RESOURCES label=kvgrid_r32 shared=12288
+RESOURCES label=kvgrid_r32 const=0
+RESOURCES label=kvgrid_r32 max_threads=1024
+RESOURCES label=kvgrid_r32 blocks_per_sm_256=4
+RESOURCES_BEGIN label=kvsplit_r64_fold keys=64 queries_per_tile=16 accumulators_per_thread=16 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=8192 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r64_fold regs=80
+RESOURCES label=kvsplit_r64_fold local=0
+RESOURCES label=kvsplit_r64_fold shared=8192
+RESOURCES label=kvsplit_r64_fold const=0
+RESOURCES label=kvsplit_r64_fold max_threads=768
+RESOURCES label=kvsplit_r64_fold blocks_per_sm_256=3
+RESOURCES_BEGIN label=kvsplit_r32_fold keys=32 queries_per_tile=16 accumulators_per_thread=8 operand_registers_per_thread=5 thread_local_floats=0 page_bytes=6144 allocations=2 threads_per_block=256
+RESOURCES label=kvsplit_r32_fold regs=48
+RESOURCES label=kvsplit_r32_fold local=0
+RESOURCES label=kvsplit_r32_fold shared=6144
+RESOURCES label=kvsplit_r32_fold const=0
+RESOURCES label=kvsplit_r32_fold max_threads=1024
+RESOURCES label=kvsplit_r32_fold blocks_per_sm_256=5
+RESOURCES_DONE
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+timing attn.fwd_regime_scan 0.238889 ms
+timing attn.fwd_estash_alloc 0.028112 ms
+timing attn.fwd_r2_keep_kernel 0.940723 ms
+timing attn.fwd_corner_flag 0.02643 ms
+timing attn.bwd_regime_scan 0.104667 ms
+timing attn.bwd_scratch_alloc 2.408689 ms
+timing attn.bwd_zdot_estash_dres_pf 1.043798 ms
+timing attn.bwd_dq_tiled_pf 0.883728 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.748004 ms
+timing attn.bwd_corner_flag 0.031377 ms
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32_bswz
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed eager ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_eager dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.114642 ms
+timing attn.fwd_r2_keep_kernel 0.959762 ms
+timing attn.fwd_corner_flag 0.01981 ms
+timing attn.bwd_regime_scan 0.098488 ms
+timing attn.bwd_scratch_alloc 0.010966 ms
+timing attn.bwd_zdot_estash_dres_pf 1.035586 ms
+timing attn.bwd_dq_tiled_pf 0.888935 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.748615 ms
+timing attn.bwd_corner_flag 0.024877 ms
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_estash_dres_kvgrid_r32_bswz
+DIGEST hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz amax MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz denom MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot MATCH 0 of 24576
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz dq MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz dk MATCH 0 of 1572864
+BITS hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz_vs_stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz dv MATCH 0 of 1572864
+timing attn.fwd_regime_scan 0.116014 ms
+timing attn.fwd_r2_keep_kernel 0.948555 ms
+timing attn.fwd_corner_flag 0.018448 ms
+timing attn.bwd_regime_scan 0.095203 ms
+timing attn.bwd_scratch_alloc 0.009294 ms
+timing attn.bwd_zdot_estash_dres_pf 1.023407 ms
+timing attn.bwd_dq_tiled_pf 0.878119 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.740433 ms
+timing attn.bwd_corner_flag 0.023745 ms
+timing attn.fwd_regime_scan 0.082243 ms
+timing attn.fwd_r2_keep_kernel 0.935346 ms
+timing attn.fwd_corner_flag 0.018848 ms
+timing attn.bwd_regime_scan 0.099169 ms
+timing attn.bwd_scratch_alloc 0.009334 ms
+timing attn.bwd_zdot_estash_dres_pf 1.020403 ms
+timing attn.bwd_dq_tiled_pf 0.876867 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.737018 ms
+timing attn.bwd_corner_flag 0.021292 ms
+timing attn.fwd_regime_scan 0.081723 ms
+timing attn.fwd_r2_keep_kernel 0.939572 ms
+timing attn.fwd_corner_flag 0.02029 ms
+timing attn.fwd_regime_scan 0.076815 ms
+timing attn.fwd_r2_keep_kernel 0.952491 ms
+timing attn.fwd_corner_flag 0.018598 ms
+timing attn.bwd_regime_scan 0.10616 ms
+timing attn.bwd_scratch_alloc 0.010505 ms
+timing attn.bwd_zdot_estash_dres_pf 1.020393 ms
+timing attn.bwd_dq_tiled_pf 0.875706 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.746802 ms
+timing attn.bwd_corner_flag 0.023896 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwd hashed 1.046712 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwdbwd hashed 3.838488 ms
+timing attn.fwd_regime_scan 0.081472 ms
+timing attn.fwd_r2_keep_kernel 0.935505 ms
+timing attn.fwd_corner_flag 0.018147 ms
+timing attn.fwd_regime_scan 0.068002 ms
+timing attn.fwd_r2_keep_kernel 0.946432 ms
+timing attn.fwd_corner_flag 0.021232 ms
+timing attn.bwd_regime_scan 0.094772 ms
+timing attn.bwd_scratch_alloc 0.009304 ms
+timing attn.bwd_zdot_estash_dres_pf 1.019743 ms
+timing attn.bwd_dq_tiled_pf 0.874213 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.742165 ms
+timing attn.bwd_corner_flag 0.024778 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwd hashed 1.039451 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwdbwd hashed 3.80732 ms
+timing attn.fwd_regime_scan 0.081943 ms
+timing attn.fwd_r2_keep_kernel 0.937869 ms
+timing attn.fwd_corner_flag 0.020922 ms
+timing attn.fwd_regime_scan 0.074272 ms
+timing attn.fwd_r2_keep_kernel 0.946822 ms
+timing attn.fwd_corner_flag 0.024757 ms
+timing attn.bwd_regime_scan 0.103586 ms
+timing attn.bwd_scratch_alloc 0.009945 ms
+timing attn.bwd_zdot_estash_dres_pf 1.021454 ms
+timing attn.bwd_dq_tiled_pf 0.872852 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.741824 ms
+timing attn.bwd_corner_flag 0.02637 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwd hashed 1.04509 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwdbwd hashed 3.829824 ms
+timing attn.fwd_regime_scan 0.087161 ms
+timing attn.fwd_r2_keep_kernel 0.937819 ms
+timing attn.fwd_corner_flag 0.019419 ms
+timing attn.fwd_regime_scan 0.074452 ms
+timing attn.fwd_r2_keep_kernel 0.952952 ms
+timing attn.fwd_corner_flag 0.022283 ms
+timing attn.bwd_regime_scan 0.104768 ms
+timing attn.bwd_scratch_alloc 0.010195 ms
+timing attn.bwd_zdot_estash_dres_pf 1.020834 ms
+timing attn.bwd_dq_tiled_pf 0.877088 ms
+timing attn.bwd_kvgrid_dkdv_pf 0.739811 ms
+timing attn.bwd_corner_flag 0.023846 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwd hashed 1.049056 ms
+PRICE attention stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz fwdbwd hashed 3.833649 ms
+TABLE kind=hashed shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz | 1.047884 | 6.1510593462635175 | 3.8360684999999997 | 2.7881845 | 5.779385001243641 | 1.0 | 1.0
+TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz | 1.0422704999999999 | 6.1841879550462195 | 3.8185719999999996 | 2.7763014999999998 | 5.804121663299178 | 1.0053858379374645 | 1.0045819484351741
+attention_step_price: PASS (stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz vs stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz)

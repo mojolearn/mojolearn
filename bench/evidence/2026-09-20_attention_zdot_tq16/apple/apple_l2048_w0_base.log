@@ -1,0 +1,60 @@
+=== attention step price, mode IDENTICAL, column apple, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=True phase_timers_built=False
+DEFAULT column=apple arm=stash_tiled source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=default candidate_requested=default
+baseline=stash_tiled candidate=stash_tiled rounds=7 warmups=2
+PATH baseline arm=stash_tiled is_default=True resolved_hd64=stash_tiled zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage kv_keys=- kv_split=False zsched=- estash=- bswz=-
+PATH candidate arm=stash_tiled is_default=True resolved_hd64=stash_tiled zdot_rows=- fwd_rows=- preflush=False reach_bit=sabotage kv_keys=- kv_split=False zsched=- estash=- bswz=-
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+RAN hashed stash_tiled forward=fwd_sstash backward=bwd_stash_tiled
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+DIGEST hashed eager ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_vs_eager ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_eager amax MATCH 0 of 24576
+BITS hashed stash_tiled_vs_eager denom MATCH 0 of 24576
+BITS hashed stash_tiled_vs_eager zdot MATCH 0 of 24576
+BITS hashed stash_tiled_vs_eager dq MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_eager dk MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_eager dv MATCH 0 of 1572864
+RAN hashed stash_tiled forward=fwd_sstash backward=bwd_stash_tiled
+DIGEST hashed stash_tiled ctx 13ccc93eac28789a amax afaf4c3ad51a2071 denom 461ef8b28777ac11 zdot aba1ca249126f2a9 dq d66200e4f5fecee1 dk cec17a18979026ec dv 1082386d9d9af404
+BITS hashed stash_tiled_vs_stash_tiled ctx MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_stash_tiled amax MATCH 0 of 24576
+BITS hashed stash_tiled_vs_stash_tiled denom MATCH 0 of 24576
+BITS hashed stash_tiled_vs_stash_tiled zdot MATCH 0 of 24576
+BITS hashed stash_tiled_vs_stash_tiled dq MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_stash_tiled dk MATCH 0 of 1572864
+BITS hashed stash_tiled_vs_stash_tiled dv MATCH 0 of 1572864
+PRICE attention stash_tiled fwd hashed 123.054 ms
+PRICE attention stash_tiled fwdbwd hashed 292.367 ms
+PRICE attention stash_tiled fwd hashed 114.699 ms
+PRICE attention stash_tiled fwdbwd hashed 307.469 ms
+PRICE attention stash_tiled fwd hashed 112.483 ms
+PRICE attention stash_tiled fwdbwd hashed 296.701 ms
+PRICE attention stash_tiled fwd hashed 120.584 ms
+PRICE attention stash_tiled fwdbwd hashed 299.109 ms
+PRICE attention stash_tiled fwd hashed 113.424 ms
+PRICE attention stash_tiled fwdbwd hashed 300.357 ms
+PRICE attention stash_tiled fwd hashed 114.283 ms
+PRICE attention stash_tiled fwdbwd hashed 292.367 ms
+PRICE attention stash_tiled fwd hashed 114.463 ms
+PRICE attention stash_tiled fwdbwd hashed 299.932 ms
+PRICE attention stash_tiled fwd hashed 114.626 ms
+PRICE attention stash_tiled fwdbwd hashed 293.826 ms
+PRICE attention stash_tiled fwd hashed 112.823 ms
+PRICE attention stash_tiled fwdbwd hashed 303.733 ms
+PRICE attention stash_tiled fwd hashed 114.169 ms
+PRICE attention stash_tiled fwdbwd hashed 302.911 ms
+PRICE attention stash_tiled fwd hashed 118.968 ms
+PRICE attention stash_tiled fwdbwd hashed 305.615 ms
+PRICE attention stash_tiled fwd hashed 119.348 ms
+PRICE attention stash_tiled fwdbwd hashed 304.561 ms
+PRICE attention stash_tiled fwd hashed 108.902 ms
+PRICE attention stash_tiled fwdbwd hashed 271.171 ms
+PRICE attention stash_tiled fwd hashed 134.376 ms
+PRICE attention stash_tiled fwdbwd hashed 294.804 ms
+TABLE kind=hashed shape=B1_L2048_nh12_nkv12_hd64_win0 column=apple default_arm=stash_tiled visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
+TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
+TABLE stash_tiled | 114.626 | 0.05623154146528711 | 299.109 | 184.48299999999998 | 0.08734675650330927 | 1.0 | 1.0
+TABLE stash_tiled | 114.463 | 0.05631161748337891 | 299.932 | 185.46900000000002 | 0.0868823991071284 | 1.0014240409564663 | 0.997256044703466
+attention_step_price: PASS (stash_tiled vs stash_tiled)

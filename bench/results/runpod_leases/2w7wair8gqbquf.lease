@@ -1,0 +1,5 @@
+pod='2w7wair8gqbquf'
+target='-p 11100 root@202.181.159.213'
+armed_utc='2026-09-20T19:41:16Z'
+deadline_epoch=1789936876
+minutes=60

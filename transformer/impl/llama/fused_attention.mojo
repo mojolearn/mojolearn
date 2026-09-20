@@ -1262,17 +1262,20 @@ def fused_attention_kv_keys(arm: Int) -> Int:
     return 0
 
 
-comptime ATTN_ES_TQ = 8
+comptime ATTN_ES_TQ = 16 if is_defined["MOJOLEARN_ATTN_ES_TQ16"]() else 8
 """Query rows per 256-thread block of `fused_bwd_zdot_estash_kernel`
-(DEVIATION 2650, brief section 20.3): twice the shipped zdot copy's 4."""
+(DEVIATION 2650, brief section 20.3).  The opt-in 16-row schedule retains
+the same 256 cell owners and ascending per-row key fold while trading the
+8x32 row/key tile for 16x16."""
 comptime ATTN_ES_BK = FUSED_THREADS // ATTN_ES_TQ
-"""Keys per block iteration of the same kernel (32, the shipped copy's)."""
+"""Keys per block iteration of the same kernel (32 by default, 16 under
+the opt-in 16-row schedule)."""
 
 
 def _estash_page_bytes(dres: Bool) -> Int:
     """The shared page of `fused_bwd_zdot_estash_kernel` at head_dim 64: the
-    V page `[32][65]`, the y and dy slots `2 x [8][33]` and, under `dres`,
-    the block's dctx rows `[8][64]` (10,432 and 12,480 bytes)."""
+    V page `[BK][65]`, the y and dy slots `2 x [TQ][BK+1]` and, under
+    `dres`, the block's dctx rows `[TQ][64]`."""
     var floats = ATTN_ES_BK * (ATTN_STASH_HD + 1) + 2 * ATTN_ES_TQ * (ATTN_ES_BK + 1)
     if dres:
         floats += ATTN_ES_TQ * ATTN_STASH_HD
