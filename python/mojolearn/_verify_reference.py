@@ -283,6 +283,33 @@ def _commit_time(root, commit, cache):
     return t
 
 
+def _declared_part_gap(j):
+    """Reject missing modern full-part fields without changing legacy records."""
+    if "parts_collected" not in j:
+        return None
+    declared = j["parts_collected"]
+    expected = {"batch", "stepfull", *OPTIONAL_PARTS}
+    if (not isinstance(declared, list) or any(not isinstance(p, str) for p in declared)
+            or len(set(declared)) != len(declared) or not expected.issubset(declared)):
+        return "incomplete full-part declaration"
+    # rlpair exists only on lanes declaring an actor/learner pair. Every
+    # other collected part must have a value, even an explicit N/A/refusal.
+    required = {"train", "infer", "model", *declared} - {"rlpair"}
+    for key, cell in j["cells"].items():
+        if not isinstance(cell, dict) or cell.get("verdict") != "STABLE":
+            continue  # Failed training has no fitted model to probe.
+        parts = required | ({"rlpair"} if "rlpair" in cell or "rlpair_verdict" in cell else set())
+        for part in sorted(parts):
+            values = cell.get("hashes" if part == "train" else part)
+            verdict = cell.get("verdict" if part == "train" else f"{part}_verdict")
+            if not isinstance(values, list) or not values or not isinstance(verdict, str):
+                return f"incomplete declared part: {key} {part}"
+            repeats = j.get("repeats")
+            if type(repeats) is int and repeats > 0 and len(values) != repeats:
+                return f"incomplete declared repeats: {key} {part}"
+    return None
+
+
 def admit(j, path, par_axis=False):
     """None when the column is admissible, else the reason it is not.
 
@@ -356,6 +383,9 @@ def admit(j, path, par_axis=False):
         left_out = j.get("parts_omitted") or []
         return ("partial column: the run left out "
                 + (", ".join(str(p) for p in left_out) if left_out else "parts it did not name"))
+    gap = _declared_part_gap(j)
+    if gap:
+        return gap
     if j.get("mode") != "identical":
         return f"mode {j.get('mode')!r}"
     if not _COMMIT.match(str(j.get("commit") or "")):
