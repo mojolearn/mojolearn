@@ -73,7 +73,7 @@ from gemm.host.identical_gemm import (
     leaf_end,
 )
 from checks.numerics import ftz, identical_exp, identical_mul, identical_mul_add
-from core.host_predict_threads import HostF32Ptr, host_predict_chunk
+from core.host_predict_threads import HostF32Ptr, host_predict_chunk, host_predict_task_count
 from svm.impl.smosolver import fold_order_for, hash_f32_list
 from svm.impl.svm_parameter import (
     EPSILON_SVR,
@@ -724,17 +724,33 @@ def smo_oracle_fit[
             # SAME accumulator into `f` and into `f + n_rows`, which is
             # `smosolver.cuh:261-278`'s second gemv: one tile, one
             # delta_alpha, only the destination moves.
-            for i in range(n_rows):
-                var acc = Scalar[dt](0)
-                for rr in range(nnz):
-                    var j = Int(order[rr])
-                    var kij = _kernel_cell[dt](
-                        kp, x, norms, Int(nz_idx[j]), x, norms, i, n_rows, n_rows, k
-                    )
-                    acc = _flush[dt](_mad[dt](kij, nz_da[j], acc))
-                f[i] = _flush[dt](f[i] + acc)
-                if is_svr:
-                    f[i + n_rows] = _flush[dt](f[i + n_rows] + acc)
+            var update_tasks = host_predict_task_count(n_rows)
+            if n_rows * nnz * k < (1 << 18):
+                update_tasks = 1
+            var update_chunk = host_predict_chunk(n_rows, update_tasks)
+            # Every training row owns one independent kernel fold and one
+            # (SVC) or two (SVR) disjoint gradient cells.  Preserve the
+            # ascending nonzero-delta fold within each row while scheduling
+            # medium and large UpdateF batches across the host pool.
+            def _update_f(task: Int) {imm kp, imm x, imm norms, imm nz_idx, imm nz_da, imm order, mut f, imm update_chunk, imm n_rows, imm nnz, imm k, imm is_svr}:
+                var lo = task * update_chunk
+                var hi = min(lo + update_chunk, n_rows)
+                for i in range(lo, hi):
+                    var acc = Scalar[dt](0)
+                    for rr in range(nnz):
+                        var j = Int(order[rr])
+                        var kij = _kernel_cell[dt](
+                            kp, x, norms, Int(nz_idx[j]), x, norms, i,
+                            n_rows, n_rows, k,
+                        )
+                        acc = _flush[dt](_mad[dt](kij, nz_da[j], acc))
+                    f[i] = _flush[dt](f[i] + acc)
+                    if is_svr:
+                        f[i + n_rows] = _flush[dt](f[i + n_rows] + acc)
+            if update_tasks == 1:
+                _update_f(0)
+            else:
+                sync_parallelize(_update_f, update_tasks)
         # CheckStoppingCondition
         if Float64(diff) > Float64(diff_prev) * 1.5 and n_outer_iter > 0:
             n_increased_diff += 1
