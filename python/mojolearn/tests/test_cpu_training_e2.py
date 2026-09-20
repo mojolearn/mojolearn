@@ -258,6 +258,10 @@ def test_manifest_covers_logistic():
         assert named in text, f"{named} is not in {QN_ORACLE}"
     assert "comptime if QN_ORACLE_HOST_SABOTAGE:" in text
     assert "QN_ORACLE_HOST_SABOTAGE" in src
+    # Binary training reuses the exact row-parallel inference primitive only
+    # above a work threshold; small fits retain the original serial loop.
+    assert "if self.n_rows * self.d < (1 << 19):" in text
+    assert "self.z = host_qn_decision(" in text
 
 
 @reference_training()

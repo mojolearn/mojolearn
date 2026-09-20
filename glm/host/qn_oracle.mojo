@@ -132,7 +132,11 @@ from std.math import isinf, isnan, sqrt
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_exp, identical_log, identical_mul_add
-from core.classical_host_predict import host_pinned_cell, host_qn_decision_multi
+from core.classical_host_predict import (
+    host_pinned_cell,
+    host_qn_decision,
+    host_qn_decision_multi,
+)
 from decomposition.host.pca_oracle import STATS_TPB, host_halving_sum
 from glm.host.glm_oracle import host_xty
 
@@ -309,12 +313,17 @@ struct HostGLM(Movable):
                 self.x, w, self.n_rows, self.d, self.c, self.fit_intercept
             )
             return
-        for i in range(self.n_rows):
-            self.z[i] = host_pinned_cell(self.x, i * self.d, w, 0, self.d)
-        if self.fit_intercept:
-            var b = w[self.d]
+        if self.n_rows * self.d < (1 << 19):
             for i in range(self.n_rows):
-                self.z[i] = ftz(self.z[i] + b)
+                self.z[i] = host_pinned_cell(self.x, i * self.d, w, 0, self.d)
+            if self.fit_intercept:
+                var b = w[self.d]
+                for i in range(self.n_rows):
+                    self.z[i] = ftz(self.z[i] + b)
+        else:
+            self.z = host_qn_decision(
+                self.x, w, self.n_rows, self.d, self.fit_intercept
+            )
 
     def get_loss_and_dz(mut self) -> Float32:
         """`get_loss_and_dz`, the logistic or the softmax arm, then
