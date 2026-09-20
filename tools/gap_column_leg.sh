@@ -412,6 +412,41 @@ say "declared_gpu_families=${DECL_GPU:-NONE-DERIVED}"
 # ---------------------------------------- the declared families, then the column
 # `build` is the shared kernels and fixtures every lane reaches, so it leads
 # whatever the derivation said.
+#
+# AN ALL-`par-*` LANE LIST DERIVES NOTHING, AND THE DERIVATION CANNOT SAY SO.
+# MEASURED on pod 70i7hnr5avagda, 2026-09-20. The derivation above walks
+# host_surface.FAMILIES and keeps a family whose `training_lanes` or
+# `inference_lanes` intersect the lane list. NO `par-*` LANE IS IN ANY
+# FAMILY'S LANE LIST -- that is the same fact that makes 36 of them read
+# `none` in the sabotage census -- so for a pure par lane list both DECL_GPU
+# and DECL_HOST come back EMPTY, the loop below builds `build` alone, and the
+# column refuses with its own cure in every cell:
+#
+#   ImportError: numeric_mode='identical' needs
+#   python/mojolearn/identical/_mojolearn_gbdt.so, which is not built
+#
+# That leg then spent 1130 s in the insurance pass building the very family
+# the column had just named, reached the backstop rerun with 275 s of budget
+# and the two-device column with 61 s, and BOTH exited 124. It came home with
+# `complete:false` on both halves -- 13 cells and 1 cell -- and `--diff`
+# printed "no DIVERGENT or MOVED cell" over them, which is a verification that
+# cannot fail. `admit()` refused both, correctly, so nothing was credited.
+#
+# So a two-device leg builds EVERYTHING FIRST. It is not an optimisation: for
+# this lane list the derivation has no information to give, and the cost of
+# asking the insurance pass to supply it afterwards is the deliverable.
+if [ "${MOJOLEARN_GAP_TWO_DEVICE:-0}" = 1 ]; then
+    say "two_device_leg=1: building every family BEFORE the columns (a par-* lane list derives no families)"
+    DECL_GPU=$(ls bindings/build*.sh \
+               | sed 's#^bindings/##; s#\.sh$##' \
+               | grep -v -e '^build_host_family$' -e '_host$' \
+               | tr '\n' ' ')
+    DECL_HOST=$(ls bindings/build_*_host.sh \
+                | sed 's#^bindings/##; s#\.sh$##' \
+                | tr '\n' ' ')
+    say "two_device_gpu_families=$DECL_GPU"
+    say "two_device_host_families=$DECL_HOST"
+fi
 built=0; failed=""; DONE=""
 for b in build $DECL_GPU; do
     [ -f "bindings/$b.sh" ] || { say "derived a GPU build that does not exist: $b"; continue; }
