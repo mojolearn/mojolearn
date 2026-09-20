@@ -69,7 +69,7 @@ from training.checks.loss import (
 )
 from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
 from training.chunked_lm_head_v2 import (
-    chunked_lm_head_v2_forward_into, chunked_lm_head_v2_backward_into,
+    chunked_lm_head_v2_gemm_forward_into, chunked_lm_head_v2_gemm_backward_into,
 )
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
@@ -398,6 +398,8 @@ def _byte_validate_allocations(config: ByteConfig) raises:
                             config.intermediate]
     if not config.chunked_lm_head_v2:
         widths.append(config.vocab_size)
+    else:
+        _byte_check_gemm(m, min(config.vocab_size, 256), config.d_model)
     for width in widths:
         _byte_check_gemm(m, width, config.d_model)
     _byte_check_gemm(m, config.d_model, config.intermediate)
@@ -538,7 +540,7 @@ struct ByteBuffers(Movable):
         self.targets = _zeros_i32(ctx, M)
 
         self.x = _zeros(ctx, M * DM)
-        self.logits = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
+        self.logits = _zeros(ctx, M * min(V, 256) if config.chunked_lm_head_v2 else M * V)
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
@@ -607,7 +609,7 @@ struct ByteBuffers(Movable):
         self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
         self.ce_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN))
 
-        self.head_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_workspace_max_floats(M, V, DM))
+        self.head_ws = _zeros(ctx, identical_gemm_workspace_max_floats(M, min(V, 256) if config.chunked_lm_head_v2 else V, DM))
         self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
 
         var scratch = emb_run_scratch_ints(V, M)
@@ -1160,9 +1162,10 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1.
     var pg = StepPhaseClock(ctx)
     if config.chunked_lm_head_v2:
-        chunked_lm_head_v2_forward_into(
+        chunked_lm_head_v2_gemm_forward_into(
             ctx, tr.buffers.ce_loss, tr.buffers.ce_max, tr.buffers.ce_denom,
-            tr.buffers.ce_row, tr.forward[config.n_layers - 1].residual2,
+            tr.buffers.ce_row, tr.buffers.logits, tr.buffers.head_ws,
+            tr.forward[config.n_layers - 1].residual2,
             tr.buffers.lm_w, tr.buffers.targets, M, config.vocab_size,
             config.d_model,
         )
@@ -1290,8 +1293,9 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
     if config.chunked_lm_head_v2:
-        chunked_lm_head_v2_backward_into(
-            ctx, tr.buffers.d_h, tr.buffers.dw_lm,
+        chunked_lm_head_v2_gemm_backward_into(
+            ctx, tr.buffers.d_h, tr.buffers.dw_lm, tr.buffers.logits,
+            tr.buffers.head_ws,
             tr.forward[config.n_layers - 1].residual2, tr.buffers.lm_w,
             tr.buffers.targets, tr.buffers.ce_max, tr.buffers.ce_denom,
             M, config.vocab_size, config.d_model,

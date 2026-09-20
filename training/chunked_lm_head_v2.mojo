@@ -10,6 +10,8 @@ from checks.numerics import (
 )
 from training.checks.loss_oracle import CE_NEG_INF_BITS, neg_by_bits
 from std.memory import bitcast
+from gemm.checks.gemm_identical import identical_gemm_into
+from gemm.checks.gemm_oracle import OP_NT
 
 comptime LM_HEAD_V2_CHUNK = 256
 comptime LM_HEAD_V2_TPB = 256
@@ -323,3 +325,89 @@ def chunked_lm_head_v2_backward_into(
         Int32(rows), Int32(vocab), Int32(width), grid_dim=vocab_grid,
         block_dim=LM_HEAD_V2_TPB,
     )
+
+
+def _chunk_max_kernel(maxima: MutPointer[Float32, MutAnyOrigin], logits: MutPointer[Float32, MutAnyOrigin], rows: Int32, n: Int32, first: Int32):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(rows): return
+    var acc = bitcast[DType.float32](CE_NEG_INF_BITS) if first != 0 else maxima.unsafe_load(row)
+    for j in range(Int(n)):
+        acc = identical_fmax(acc, logits.unsafe_load(row * Int(n) + j))
+    maxima.unsafe_store(row, acc)
+
+
+def _chunk_denom_kernel(denom: MutPointer[Float32, MutAnyOrigin], target_shift: MutPointer[Float32, MutAnyOrigin], logits: MutPointer[Float32, MutAnyOrigin], maxima: MutPointer[Float32, MutAnyOrigin], targets: MutPointer[Int32, MutAnyOrigin], rows: Int32, n: Int32, chunk0: Int32):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(rows): return
+    var acc = Float32(0.0) if chunk0 == 0 else denom.unsafe_load(row)
+    for j in range(Int(n)):
+        var shifted = ftz(ftz(logits.unsafe_load(row * Int(n) + j)) - ftz(maxima.unsafe_load(row)))
+        acc = ftz(acc + ftz(identical_exp(shifted)))
+        if Int(chunk0) + j == Int(targets.unsafe_load(row)):
+            target_shift.unsafe_store(row, shifted)
+    denom.unsafe_store(row, acc)
+
+
+def _chunk_loss_kernel(row_loss: MutPointer[Float32, MutAnyOrigin], denom: MutPointer[Float32, MutAnyOrigin], rows: Int32):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(rows): return
+    row_loss.unsafe_store(row, neg_by_bits(ftz(ftz(row_loss.unsafe_load(row)) - ftz(identical_log(ftz(denom.unsafe_load(row)))))))
+
+
+def _chunk_dhidden_kernel(d_hidden: MutPointer[Float32, MutAnyOrigin], logits: MutPointer[Float32, MutAnyOrigin], weight: MutPointer[Float32, MutAnyOrigin], targets: MutPointer[Int32, MutAnyOrigin], maxima: MutPointer[Float32, MutAnyOrigin], denom: MutPointer[Float32, MutAnyOrigin], rows: Int32, n: Int32, width: Int32, chunk0: Int32):
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if row >= Int(rows): return
+    if chunk0 == 0:
+        for f in range(Int(width)): d_hidden.unsafe_store(row * Int(width) + f, Float32(0.0))
+    for j in range(Int(n)):
+        var shifted = ftz(ftz(logits.unsafe_load(row * Int(n) + j)) - ftz(maxima.unsafe_load(row)))
+        var p = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom.unsafe_load(row))))
+        var target = Float32(1.0) if Int(chunk0) + j == Int(targets.unsafe_load(row)) else Float32(0.0)
+        var dl = ftz(identical_div(ftz(p - target), Float32(rows)))
+        for f in range(Int(width)):
+            var cell = row * Int(width) + f
+            d_hidden.unsafe_store(cell, identical_mul_add(dl, weight.unsafe_load((Int(chunk0) + j) * Int(width) + f), d_hidden.unsafe_load(cell)))
+
+
+def _chunk_dweight_kernel(d_weight: MutPointer[Float32, MutAnyOrigin], logits: MutPointer[Float32, MutAnyOrigin], hidden: MutPointer[Float32, MutAnyOrigin], targets: MutPointer[Int32, MutAnyOrigin], maxima: MutPointer[Float32, MutAnyOrigin], denom: MutPointer[Float32, MutAnyOrigin], rows: Int32, n: Int32, width: Int32, chunk0: Int32):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if j >= Int(n): return
+    var token = Int(chunk0) + j
+    for f in range(Int(width)):
+        var acc = Float32(0.0)
+        for row in range(Int(rows)):
+            var shifted = ftz(ftz(logits.unsafe_load(row * Int(n) + j)) - ftz(maxima.unsafe_load(row)))
+            var p = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom.unsafe_load(row))))
+            var target = Float32(1.0) if token == Int(targets.unsafe_load(row)) else Float32(0.0)
+            var dl = ftz(identical_div(ftz(p - target), Float32(rows)))
+            acc = identical_mul_add(dl, hidden.unsafe_load(row * Int(width) + f), acc)
+        d_weight.unsafe_store(token * Int(width) + f, ftz(acc))
+
+
+def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuffer[DType.float32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], mut row_loss: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], rows: Int, vocab: Int, width: Int) raises:
+    var grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+    for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
+        var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
+        var wb = weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
+        identical_gemm_into(ctx, chunk, hidden, wb, ws, rows, n, width, OP_NT)
+        ctx.enqueue_function[_chunk_max_kernel](maxima.unsafe_ptr(), chunk.unsafe_ptr(), Int32(rows), Int32(n), Int32(1 if chunk0 == 0 else 0), grid_dim=grid, block_dim=LM_HEAD_V2_TPB)
+        _ = wb
+    for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
+        var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
+        var wb = weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
+        identical_gemm_into(ctx, chunk, hidden, wb, ws, rows, n, width, OP_NT)
+        ctx.enqueue_function[_chunk_denom_kernel](denom.unsafe_ptr(), row_loss.unsafe_ptr(), chunk.unsafe_ptr(), maxima.unsafe_ptr(), targets.unsafe_ptr(), Int32(rows), Int32(n), Int32(chunk0), grid_dim=grid, block_dim=LM_HEAD_V2_TPB)
+        _ = wb
+    ctx.enqueue_function[_chunk_loss_kernel](row_loss.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows), grid_dim=grid, block_dim=LM_HEAD_V2_TPB)
+    ctx.enqueue_function[chunked_lm_head_v2_total_kernel](loss.unsafe_ptr(), row_loss.unsafe_ptr(), Int32(rows), grid_dim=1, block_dim=1)
+
+
+def chunked_lm_head_v2_gemm_backward_into(ctx: DeviceContext, mut d_hidden: DeviceBuffer[DType.float32], mut d_weight: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], rows: Int, vocab: Int, width: Int) raises:
+    var row_grid = (rows + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB
+    for chunk0 in range(0, vocab, LM_HEAD_V2_CHUNK):
+        var n = min(LM_HEAD_V2_CHUNK, vocab - chunk0)
+        var wb = weight.create_sub_buffer[DType.float32](chunk0 * width, n * width)
+        identical_gemm_into(ctx, chunk, hidden, wb, ws, rows, n, width, OP_NT)
+        ctx.enqueue_function[_chunk_dhidden_kernel](d_hidden.unsafe_ptr(), chunk.unsafe_ptr(), weight.unsafe_ptr(), targets.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows), Int32(n), Int32(width), Int32(chunk0), grid_dim=row_grid, block_dim=LM_HEAD_V2_TPB)
+        ctx.enqueue_function[_chunk_dweight_kernel](d_weight.unsafe_ptr(), chunk.unsafe_ptr(), hidden.unsafe_ptr(), targets.unsafe_ptr(), maxima.unsafe_ptr(), denom.unsafe_ptr(), Int32(rows), Int32(n), Int32(width), Int32(chunk0), grid_dim=(n + LM_HEAD_V2_TPB - 1) // LM_HEAD_V2_TPB, block_dim=LM_HEAD_V2_TPB)
+        _ = wb

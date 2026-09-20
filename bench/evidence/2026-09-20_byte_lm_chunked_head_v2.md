@@ -5,21 +5,24 @@
 - Build concurrency: `MAX_JOBS=2`
 - Gate: `training/checks/byte_lm_head_v2_integration_check.mojo`
 - Small shape: B=1, L=8, DM=16, one layer, V=513
-  - V1 step: 13.224 ms; V2 step: 30.901 ms
-  - V1 retained head-path cells: 9,402; V2: 6
+  - Representative V1/V2 chunk-GEMM step: 15.570/22.309 ms
+  - V1 retained head-path cells: 9,402; V2: 2,053
 - Larger shape: B=1, L=64, DM=64, one layer, V=8,192
-  - V1 step: 37.217 ms; V2 step: 241.529 ms
-  - V1 retained head-path cells: 1,323,009; V2: 6
-  - Persistent head-path saving: 5,292,012 bytes
-- Whole gate maximum RSS: 90,963,968 bytes; reported peak footprint:
-  138,330,856 bytes. Both trainers coexist during this gate, so this is not a
+  - Scalar V2 baseline before this change: 232.226--241.529 ms
+  - Chunk-GEMM V2 raw repeats: 128.988, 149.995, 122.362, 157.341 ms
+  - Same-process V1 raw repeats: 17.755, 44.048, 25.086, 21.812 ms
+  - V1 retained head-path cells: 1,323,009; V2: 16,389
+  - Persistent head-path saving: 5,226,480 bytes
+- Whole gate maximum RSS: 94,961,664 bytes; reported peak footprint:
+  151,421,648 bytes. Both trainers coexist during this gate, so this is not a
   per-trainer device-memory claim.
 
 Two independently constructed V2 trainers produce identical loss and updated
 parameter bits. V2 and V1 loss differ by at most 2e-5 on both shapes. The V2
-configuration asserts that logits, CE exponentials/dlogits, and the head/CE
-workspaces are one-cell placeholders before executing the step.
+configuration asserts that only one rows-by-256 logits chunk is retained and
+CE exponentials/dlogits remain one-cell placeholders. The direct device gate
+also matches the CPU oracle bit-for-bit for all loss/statistic/gradient cells.
 
-V2 is deliberately opt-in. On this Apple GPU it is 6.49x slower at the larger
-shape because the exact bounded-memory kernels recompute logits. This result
-qualifies the memory path, not a throughput win; the default remains V1.
+The tuned chunk path improves scalar V2 by 32--49% across the raw large-shape
+samples. V2 remains deliberately opt-in because it is still slower than V1;
+this qualifies a bounded-memory speedup, not a new throughput default.
