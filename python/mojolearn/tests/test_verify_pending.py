@@ -7,7 +7,10 @@ from mojolearn import __main__ as cli, _verify_all as va, _verify_reference as v
 from mojolearn import _verification_coverage as coverage
 
 
-def test_pending_selection_runs_declared_cpu_shards_without_admitting_gpu_only_drivers():
+def test_pending_selection_runs_declared_cpu_shards_without_admitting_gpu_only_drivers(monkeypatch):
+    # Exercise pending selection even after every shipping lane is admitted.
+    surface = va.host_surface()
+    monkeypatch.setattr(surface, "PUBLIC_PENDING_LANES", {"gbdt-symmetric": "no reference"})
     h = va.load_harness()
     table = vr.load_table()
     normal, _ = va.select_lanes(h, table, 'cpu', 'full', [])
@@ -18,7 +21,6 @@ def test_pending_selection_runs_declared_cpu_shards_without_admitting_gpu_only_d
     # raise is a REFUSED part, which still gates. Selecting them would turn a
     # structural fact about the box into a failure of the run. They are still
     # PUBLIC and still reported, as NOT APPLICABLE with the reason.
-    surface = va.host_surface()
     blocked = {l for l in surface.PUBLIC_PENDING_LANES if surface.pending_blocks_comparison(l)}
     assert set(surface.PUBLIC_PENDING_LANES) - blocked <= set(broad)
     assert blocked, "the case this test distinguishes has to exist"

@@ -1558,8 +1558,10 @@ def _(ml, X, yc, yr, Xh=None):
     Lossguide: RMSE at the policy defaults, the Bayesian and Bernoulli
     bootstraps for both losses, and Depthwise with random_strength 1 under
     the Bayesian bootstrap. Then the ten pointwise losses at their defaults
-    (Bayesian bootstrap, random_strength 1), eight trees each. The first 4000
-    rows of the fixture."""
+    (Bayesian bootstrap, random_strength 1), eight trees each. Poisson keeps
+    ten leaf iterations so its backtracking can handle the wide fixture's
+    large counts; the small-fit one-step shortcut overflows on both devices.
+    The first 4000 rows of the fixture."""
     rows = 4000
     X, yc, yr = X[:rows], yc[:rows], yr[:rows]
     m = ml.GradientBoosting(n_estimators=20, loss="RMSE").fit(X, yr)
@@ -1586,7 +1588,7 @@ def _(ml, X, yc, yr, Xh=None):
             bootstrap_type="Bayesian", random_strength=1.0)
     ypos = _pos(yr)
     for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
-                     ("Poisson", {}), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
+                     ("Poisson", dict(leaf_estimation_iterations=10)), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
                      ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
         g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
         parts["sym-%s" % loss] = _h(g.predict(X))
