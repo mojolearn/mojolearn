@@ -54,3 +54,47 @@ def test_visible_device_order_and_hip_filter_are_preserved(monkeypatch, vendor, 
             assert all(other not in env for env in started)
     finally:
         pool.close()
+
+
+@pytest.mark.parametrize('vendor,devices,cooperative', [
+    ('cuda', (1, 0), False), ('hip', (1, 0), False),
+    ('cpu', (1, 0), False), ('metal', (0,), False),
+    ('cuda', (1, 0), True), ('hip', (1, 0), True),
+    ('cpu', (0,), True), ('metal', (0,), True),
+])
+def test_worker_native_counts_match_its_group_not_parent(
+        monkeypatch, vendor, devices, cooperative):
+    import io
+    import os
+    from mojolearn import _parallel_pool
+
+    monkeypatch.setattr(_backend, 'vendor', lambda: vendor)
+    for name in ('CUDA_VISIBLE_DEVICES', 'HIP_VISIBLE_DEVICES', 'ROCR_VISIBLE_DEVICES'):
+        monkeypatch.delenv(name, raising=False)
+    for name in _parallel_pool.DEVICE_COUNT_VARIABLES:
+        monkeypatch.setenv(name, '8')
+    started = []
+
+    class Child:
+        def __init__(self, *args, **kw):
+            started.append(kw['env'])
+            self.stdin, self.stdout = io.BytesIO(), io.BytesIO()
+        def poll(self): return 0
+        def wait(self, timeout=None): return 0
+
+    monkeypatch.setattr(_parallel_pool.subprocess, 'Popen', Child)
+    pool = DevicePool(devices, cooperative=cooperative)
+    try:
+        pool._start()
+        expected = len(devices) if cooperative else 1
+        assert len(started) == (1 if cooperative else len(devices))
+        for env in started:
+            # These concrete inherited settings previously reached workers
+            # unchanged despite their single-device visibility mask.
+            assert env['MOJOLEARN_GBDT_DEVICE_COUNT'] == str(expected)
+            assert env['MOJOLEARN_GP_DEVICE_COUNT'] == str(expected)
+            assert all(env[name] == str(expected)
+                       for name in _parallel_pool.DEVICE_COUNT_VARIABLES)
+        assert os.environ['MOJOLEARN_GP_DEVICE_COUNT'] == '8'
+    finally:
+        pool.close()

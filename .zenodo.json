@@ -10,7 +10,7 @@
       "affiliation": "Latent Archon"
     }
   ],
-  "description": "<p>mojolearn is a GPU machine-learning library written in Mojo whose opt-in <em>identical</em> numeric mode makes supported inference and training return the same bits on Apple Metal, NVIDIA CUDA and AMD HIP. One Mojo source implements a shared numerical profile across the three backends: fixed reductions, portable arithmetic and explicit refusal of unsupported configurations. The claim is established by stage-level identity cards and separating sabotage tests, never inferred from a final-output hash, and applies only to configurations recorded in SUPPORT_MATRIX.md.</p><p>The contract covers Mamba and transformer inference and fixed-shape training (a byte-level language model trained on real text reproduces its parameters, gradients, optimizer state and checkpoint bytes on all three vendors, with checkpoint continuation between NVIDIA and AMD), gradient-boosted and randomized trees, classical estimators and UMAP. The classical side implements GPU kernels in one Mojo source, with CatBoost, cuML, cuVS, RAFT and FAISS as references, so GPU tree training and classical learning also run on Apple silicon, which those libraries do not reach. Two further modes ship beside identical: <em>fast</em> (throughput, bits may move run to run) and <em>deterministic</em> (same bits on repeated runs of one device). Bitwise identity has a cost: identical mode is competitive on some tree workloads and substantially slower on many classical, matrix and neural workloads against cuML, cuBLAS and PyTorch; the measurements and certificates are in the repository's bench/results and in the accompanying paper.</p>",
+  "description": "<p>mojolearn supports bitwise-identical training and inference across more than 50 machine-learning algorithms.</p>",
   "keywords": [
     "machine learning",
     "gpu",
@@ -34,30 +34,6 @@
     {
       "identifier": "https://github.com/mojolearn/mojolearn",
       "relation": "isSupplementTo",
-      "resource_type": "software",
-      "scheme": "url"
-    },
-    {
-      "identifier": "https://github.com/catboost/catboost",
-      "relation": "isDerivedFrom",
-      "resource_type": "software",
-      "scheme": "url"
-    },
-    {
-      "identifier": "https://github.com/rapidsai/cuvs",
-      "relation": "isDerivedFrom",
-      "resource_type": "software",
-      "scheme": "url"
-    },
-    {
-      "identifier": "https://github.com/rapidsai/cuml",
-      "relation": "isDerivedFrom",
-      "resource_type": "software",
-      "scheme": "url"
-    },
-    {
-      "identifier": "https://github.com/rapidsai/raft",
-      "relation": "isDerivedFrom",
       "resource_type": "software",
       "scheme": "url"
     }

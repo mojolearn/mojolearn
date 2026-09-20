@@ -1,0 +1,3 @@
+NVIDIA H100 (sm_90a), native source `819a47ae48166e91951f54f54e64ee173658e32a`. All 72 selected lanes ran all nine fixtures with full verifier parts and one fit per cell. The record is complete, with no omitted parts and exit code 0.
+
+648 completed cells yielded 2,934 numeric CPU-reference comparisons, all exactly equal with no findings. The comparison was independently rerun before this evidence commit. Raw logs are retained in `mojolearn-evidence/final819-nvidia-vendor-columns`. This commit preserves evidence only; it does not change the reference table, source implementation, or release wheels.

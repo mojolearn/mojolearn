@@ -1,0 +1,9 @@
+{
+  "version": "0.8.9",
+  "filename": "mojolearn-0.8.9-py3-none-manylinux_2_35_x86_64.whl",
+  "sha256": "b2f7856e5959a518ce0ebc23af0240e9092a9f3a5256faf77cc389565915638f",
+  "public_url": "https://files.pythonhosted.org/packages/75/65/25ac051e3c1b21ac0a76227686dccb1d98293bf29774a56e85fce3b14c44/mojolearn-0.8.9-py3-none-manylinux_2_35_x86_64.whl",
+  "uploaded_at": "2026-09-20T20:29:19.707802Z",
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/35535614776",
+  "download_hash_verified": true
+}

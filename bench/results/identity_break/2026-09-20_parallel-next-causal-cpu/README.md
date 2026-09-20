@@ -1,0 +1,5 @@
+Next-release parallel verification, collected on Apple M4 with published 0.8.9 native bindings from source819a47ae4. These records do not change the published wheel or its source archive.
+
+Apple Metal causal-LM: Python/harness sourcebcdfc9ab77eff46f937f656f936c53f96369bad0, nine fixtures, full parts, one repeat, exit0, all nine STABLE. All18 numeric train/batch comparisons exactly match existing CPU references. One real Metal GPU, all layer owners device0; no physical multi-GPU claim. The earlier source445 refusal remains in the separate Apple base-trial record.
+
+CPU ARIMA and RBF sampler: Python/harness source4459379a4b21bf8045ac53e01c3c448575afba4c, CPU-only package, nine fixtures each, full parts, one repeat, all STABLE. ARIMA retains all27 previous train/infer/batch hashes; its nine model hashes change under trend-metadata-1. RBF sampler provides nine numeric model hashes previously recorded as no-save. Adjacent provenance files distinguish Python source from unchanged native source.
