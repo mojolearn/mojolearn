@@ -456,6 +456,64 @@ class TokenBatches:
             out._mv[b * width:(b + 1) * width] = self.ids_all._mv[start:start + width]
         return out
 
+    def prefetch(self, start_step, steps, *, depth=2):
+        """Yield ``(step, ids)`` in order while preparing later batches.
+
+        This is the bounded loading stage for pretokenized corpora staged from
+        the dataset store: the producer reads only the already verified mmap,
+        never R2 credentials or mutable remote state.  At most ``depth``
+        batches are live.  Producer failures are re-raised at their exact
+        logical step, before any later batch is yielded.
+        """
+        import queue
+        import threading
+
+        if type(start_step) is not int or start_step < 0:
+            raise ValueError(f"mojolearn: start_step must be a nonnegative int, got {start_step!r}")
+        if type(steps) is not int or steps < 0:
+            raise ValueError(f"mojolearn: steps must be a nonnegative int, got {steps!r}")
+        if type(depth) is not int or depth < 1:
+            raise ValueError(f"mojolearn: prefetch depth must be a positive int, got {depth!r}")
+
+        ready = queue.Queue(maxsize=depth)
+        stopped = threading.Event()
+        done = object()
+
+        def put(item):
+            while not stopped.is_set():
+                try:
+                    ready.put(item, timeout=0.05)
+                    return True
+                except queue.Full:
+                    pass
+            return False
+
+        def produce():
+            for step in range(start_step, start_step + steps):
+                try:
+                    batch = self.ids(step)
+                except BaseException as exc:
+                    put((step, None, exc))
+                    return
+                if not put((step, batch, None)):
+                    return
+            put(done)
+
+        worker = threading.Thread(target=produce, name="mojolearn-token-prefetch", daemon=True)
+        worker.start()
+        try:
+            while True:
+                item = ready.get()
+                if item is done:
+                    return
+                step, batch, error = item
+                if error is not None:
+                    raise error
+                yield step, batch
+        finally:
+            stopped.set()
+            worker.join()
+
     def describe(self):
         v = self.manifest["vocabulary"]
         return dict(path=str(self.dir / "tokens.i32"), sha256=self.sha256, manifest_sha256=self.manifest_sha256,
