@@ -3310,8 +3310,23 @@ def lane_exposure(lanes, device_class="cpu"):
         else:
             blocking = pending_blocks_comparison(lane, device_class)
             if blocking is None:
+                # `public_reference_lanes()` is derived from `covered_lanes()`,
+                # which is the CPU TRAINING surface, so it is the right test on
+                # a CPU-only install and the WRONG one anywhere else: a GPU
+                # install runs every lane the harness defines
+                # (`select_lanes` sets `allowed = all_lanes` there). Measured
+                # 2026-09-20 on an Apple M4: `mamba1-decode-session` and
+                # `transformer-decode-session` read UNDECLARED, the gate's
+                # failure state, purely because they have no CPU route -- on
+                # the one class of box where they run fine.
+                #
+                # UNDECLARED therefore only fires for `device_class == "cpu"`,
+                # which is what `tools/lane_accounting.py` checks with, so the
+                # state stays reachable exactly where it is meant to catch a
+                # manifest gap.
+                known = lane in public or device_class != "cpu"
                 row = (dict(status=LANE_EXPOSED, reason=None, comparable=True)
-                       if lane in public else
+                       if known else
                        dict(status=LANE_UNDECLARED, reason=None, comparable=False))
             elif any(blocking.startswith(r) for r in PUBLIC_PENDING_OWED_REASONS):
                 row = dict(status=LANE_OWED, comparable=False,

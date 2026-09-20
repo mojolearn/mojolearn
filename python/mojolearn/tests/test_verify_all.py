@@ -831,6 +831,153 @@ def test_the_accounting_is_printed_even_when_nothing_is_wrong():
     assert "2 of 2 harness lanes accounted for" in text and "2 VERIFIED" in text
 
 
+# ------------------------------------------------- the smoke tier
+
+class _SmokeHarness:
+    """A harness whose one lane is whatever the test hands it, so the smoke
+    checks can be watched failing on each defect separately."""
+    FIXTURES = ["base"]
+    BATCH_ALONE = 3
+
+    def __init__(self, body):
+        self.LANES = {"probe": body}
+        self.calls = 0
+        self._DUMP_TAG = ""
+
+    def _train_hash(self, fit):
+        return fit.parts
+
+    def _exc_text(self, stage, exc):
+        return f"{stage or ''}{type(exc).__name__}: {exc}"
+
+
+class _Fit:
+    def __init__(self, parts, probe=None, est=None):
+        self.parts, self.probe, self.est = parts, probe, est
+
+
+def _smoke(body):
+    import numpy as np
+    h = _SmokeHarness(body)
+    data = (np.zeros((4, 2)), np.zeros(4), np.zeros(4))
+    return h, va.smoke_cell(h, None, "probe", "base", data, np.zeros((2, 2)))
+
+
+def test_smoke_runs_two_full_fits_and_not_two_probes_of_one():
+    """THE TRAP THIS TIER WAS ALMOST BUILT INTO. A second PROBE of one fitted
+    model re-reads the same arrays: it compares a thing against itself and
+    cannot fail, whatever the code does. This repository has shipped that
+    shape before -- a `par_diff` that exited 0 over a column holding one cell,
+    a sabotage move discarded by a single flag on 135 lanes -- and a cheap
+    check that cannot fail is worse than none, because it produces a number
+    people trust.
+
+    So this counts the FITS, not the comparisons. If someone rewrites
+    `smoke_cell` to fit once and probe twice, this fails and says why."""
+    import numpy as np
+    fits = []
+
+    def body(ml, X, yc, yr, Xh=None):
+        fits.append(1)
+        return _Fit("abc", probe=lambda e: (np.ones(3),))
+
+    _h, got = _smoke(body)
+    assert got["ok"] is True, got
+    assert len(fits) == 2, (
+        "the lane was fitted once; a second probe of one fit compares a thing "
+        "against itself and cannot fail")
+    assert got["checks"] == ["ran", "shaped", "finite", "repeatable"]
+
+
+def test_a_smoke_failure_is_watched_for_every_defect_it_claims_to_catch():
+    """Each defect, separately, and each refused by the sentence that names
+    it. A tier whose failure has never been seen is a tier that reports
+    `ok` forever."""
+    import numpy as np
+
+    def raises(ml, X, yc, yr, Xh=None):
+        raise RuntimeError("the driver fell over")
+
+    def nan(ml, X, yc, yr, Xh=None):
+        return _Fit("abc", probe=lambda e: (np.array([1.0, float("nan"), 3.0]),))
+
+    def infinite(ml, X, yc, yr, Xh=None):
+        return _Fit("abc", probe=lambda e: (np.array([1.0, float("inf")]),))
+
+    seen = {"n": 0}
+
+    def unstable(ml, X, yc, yr, Xh=None):
+        seen["n"] += 1
+        return _Fit(f"digest{seen['n']}", probe=lambda e: (np.ones(3),))
+
+    shape = {"n": 0}
+
+    def reshaped(ml, X, yc, yr, Xh=None):
+        shape["n"] += 1
+        return _Fit("abc", probe=lambda e: (np.ones(shape["n"] + 2),))
+
+    cases = [
+        (raises, "it raised", "a lane that raises"),
+        (nan, "non-finite", "a lane that returns NaN"),
+        (infinite, "non-finite", "a lane that returns inf"),
+        (unstable, "DIFFERENT BITS", "a lane that is not repeatable on one box"),
+        (reshaped, "output shape changed", "a lane whose output shape moves"),
+    ]
+    for body, fragment, label in cases:
+        _h, got = _smoke(body)
+        assert got["ok"] is False, f"{label} was not caught"
+        assert fragment in got["why"], f"{label}: {got['why']!r} does not name it"
+
+
+def test_smoke_does_not_gate_but_a_failed_smoke_does():
+    """SMOKE is never VERIFIED and never costs the run its pass; SMOKE FAILED
+    is the whole point of the tier and gates like any other wrongness."""
+    assert va.LANE_SMOKE in va.LANE_STATES_THAT_DO_NOT_GATE
+    assert va.LANE_SMOKE_FAILED not in va.LANE_STATES_THAT_DO_NOT_GATE
+
+    def acc(state):
+        return dict(total=1, counts={state: 1},
+                    lanes={"par-x": dict(state=state, reason="because", exposed=True,
+                                         ran=False, ran_state=None)})
+
+    assert va.lane_verdict_gaps(acc(va.LANE_SMOKE), ["par-x"]) == {}
+    assert va.verdict(_counts(IDENTICAL=9),
+                      va.lane_verdict_gaps(acc(va.LANE_SMOKE), ["par-x"]),
+                      lanes_checked=1)[0] == va.EXIT_VERIFIED
+    gaps = va.lane_verdict_gaps(acc(va.LANE_SMOKE_FAILED), ["par-x"])
+    assert gaps != {}
+    assert va.verdict(_counts(IDENTICAL=9), gaps, lanes_checked=1)[0] != va.EXIT_VERIFIED
+
+
+def test_smoke_never_reads_as_verified_and_says_the_claim_is_still_owed():
+    exposure = {"par-x": dict(status="NOT APPLICABLE", reason="claim requires two devices",
+                              exposed=True, comparable=False)}
+    smoke = {"par-x": dict(ok=True, checks=["ran", "shaped", "finite", "repeatable"], why=None)}
+    acc = va.lane_accounting(["par-x"], exposure, [], [], smoke=smoke)
+    row = acc["lanes"]["par-x"]
+    assert row["state"] == va.LANE_SMOKE != va.LANE_VERIFIED
+    assert acc["counts"][va.LANE_VERIFIED] == 0, "a smoke test is not a verification"
+    assert "needs a second device" in row["reason"]
+    assert "smoke" in va.lane_scope_clause(acc, ["par-x"])
+
+
+def test_a_lane_the_run_already_executed_is_not_smoked_again():
+    """A lane the run RAN is not left with nothing -- its result is kept in
+    `ran_state` -- so fitting it twice more would buy a weaker version of what
+    the run already has. On a GPU install every par-* lane runs, so the smoke
+    set there is empty and the flag costs nothing."""
+    surface = va.host_surface()
+    harness = va.load_harness()
+    exposure = surface.lane_exposure(list(harness.LANES), "cpu")
+    none_run = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=[])
+    assert none_run, "a CPU box has par-* lanes it can run but cannot judge"
+    assert all(l.startswith("par-") for l in none_run)
+    assert set(none_run) <= set(surface.covered_lanes()), (
+        "a lane with no CPU route cannot be smoked on a CPU box either")
+    already = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=none_run)
+    assert already == [], "a lane the run executed was smoked a second time"
+
+
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     """The table's own references, judged as if this box produced them,
     verify; flip one character of one shipped hash and the same rows read

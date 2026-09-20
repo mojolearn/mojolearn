@@ -231,6 +231,13 @@ def build_parser():
                    help="also run gradient, batch-size, ragged and sampler/replay probes; missing references read OWED")
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
+    v.add_argument("--smoke", action="store_true",
+                   help="for lanes this box can run but cannot judge (the par-* multi-GPU "
+                        "drivers on one device), fit each TWICE on the base fixture and report "
+                        "whether it ran, kept its shape, stayed finite and gave the same bits "
+                        "both times. SMOKE is never VERIFIED and is counted separately; a FAILED "
+                        "smoke is a real defect and fails the run. Off by default because two "
+                        "full fits per lane is real work")
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
     scope = v.add_mutually_exclusive_group()

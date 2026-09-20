@@ -344,6 +344,131 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
+def _probe_arrays(harness, fit):
+    """The raw outputs a lane declares for its held-out rows, as arrays, or
+    None when the lane declares none.
+
+    This is the one thing the hash path cannot give a smoke test. `_h()`
+    hashes bytes, and a NaN hashes as stably as any other bit pattern, so a
+    column of NaN reads IDENTICAL forever. The arrays come back through
+    `fit.probe(fit.est)`, which is the lane's OWN declaration of what a user
+    reads off it -- not a guess this file makes about the estimator.
+    """
+    probe = getattr(fit, "probe", None)
+    if not callable(probe):
+        return None
+    out = probe(fit.est)
+    return out if isinstance(out, (tuple, list)) else (out,)
+
+
+def _finite_problems(arrays):
+    """The non-finite values in `arrays`, named. Non-numeric outputs (string
+    labels, object arrays) are skipped rather than guessed at, and skipping is
+    reported by the caller rather than counted as a pass."""
+    import numpy as np
+
+    problems, checked = [], 0
+    for index, value in enumerate(arrays or ()):
+        try:
+            a = np.asarray(value)
+            if a.dtype.kind not in "fc":      # only floats and complex can be NaN/inf
+                continue
+            checked += 1
+            bad = ~np.isfinite(a)
+            if bad.any():
+                nan = int(np.isnan(a).sum())
+                problems.append(f"output {index} has {int(bad.sum())} non-finite value(s) "
+                                f"({nan} NaN, {int(bad.sum()) - nan} inf) of {a.size}")
+        except (TypeError, ValueError):
+            continue
+    return problems, checked
+
+
+def smoke_cell(harness, ml, lane, fixture, data, held):
+    """TWO FULL FITS, and everything that can be checked without the claim.
+
+    WHY TWO FULL FITS AND NOT TWO PROBES OF ONE FIT. A second probe of one
+    fitted model compares a thing against itself: it re-reads the same arrays
+    and cannot fail, whatever the code does. This repository has shipped that
+    mistake more than once -- a grep that returned 0 from a wrapped phrase, a
+    `par_diff` that exited 0 over a column holding one cell -- and a cheap
+    check that cannot fail is worse than no check, because it produces a
+    number people trust. So the lane is FITTED twice, from the same input, and
+    the two results must agree bit for bit.
+
+    What that buys, on a box that cannot state the lane's real claim:
+
+      it runs        the lane constructs and executes without raising
+      it is shaped   the declared outputs exist and keep their shape
+      it is finite   no NaN, no inf, in any float output
+      it is stable   two independent fits on this box give the same bits,
+                     which is what catches nondeterminism, uninitialised
+                     memory and a device-order dependency
+
+    None of that is the identity claim. It is what is left of it when the
+    hardware cannot express the claim, and it is a great deal more than zero.
+    """
+    X, yc, yr = data
+    digests, shapes, notes = [], [], []
+    skipped_finite = 0
+    for repeat in range(2):
+        harness._DUMP_TAG = f"smoke:{lane}/{fixture}/{repeat}"
+        try:
+            fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="it raised: " + _error_text(harness, None, exc))
+        try:
+            digests.append(harness._train_hash(fit))
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="the fit could not be read back: "
+                        + _error_text(harness, "train", exc))
+        try:
+            arrays = _probe_arrays(harness, fit)
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="its declared outputs raised: "
+                        + _error_text(harness, "infer", exc))
+        bad, checked = _finite_problems(arrays)
+        if bad:
+            return dict(ok=False, checks=[], why="; ".join(bad))
+        skipped_finite += (len(arrays or ()) - checked)
+        try:
+            import numpy as np
+            shapes.append(tuple(np.asarray(v).shape for v in (arrays or ())))
+        except (TypeError, ValueError):
+            shapes.append(None)
+
+    checks = ["ran"]
+    if shapes[0] != shapes[1]:
+        return dict(ok=False, checks=checks,
+                    why=f"its output shape changed between two fits: {shapes[0]} then {shapes[1]}")
+    if shapes[0]:
+        checks.append("shaped")
+    checks.append("finite" if skipped_finite == 0 else "finite (some outputs not numeric)")
+    if digests[0] != digests[1]:
+        return dict(ok=False, checks=checks,
+                    why="TWO FULL FITS ON THIS BOX GAVE DIFFERENT BITS "
+                        f"({digests[0]} then {digests[1]}). That is nondeterminism on one "
+                        "device, which no second device is needed to call a defect")
+    checks.append("repeatable")
+    return dict(ok=True, checks=checks, why=None, digest=digests[0])
+
+
+def run_smoke(harness, ml, lanes, fixture, data, held, log=None):
+    """`{lane: result}` over the lanes this box can execute but cannot judge."""
+    log = log or (lambda s: None)
+    out = {}
+    for lane in lanes:
+        t0 = time.time()
+        try:
+            out[lane] = smoke_cell(harness, ml, lane, fixture, data, held)
+        except Exception as exc:                       # a smoke test must not kill the run
+            out[lane] = dict(ok=False, checks=[], why=f"{type(exc).__name__}: {exc}"[:300])
+        out[lane]["seconds"] = round(time.time() - t0, 3)
+        log(f"  smoke {lane:<30} {'ok' if out[lane]['ok'] else 'FAILED'} "
+            f"{out[lane]['seconds']:6.1f}s")
+    return out
+
+
 def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=False):
     """The portable models: for each saved model the file's hash against the
     table's model reference, then the harness's batch part of the LOADED
@@ -454,8 +579,21 @@ LANE_NOT_APPLICABLE = "NOT APPLICABLE"
 LANE_HELD = "HELD"
 LANE_NOT_RUN = "NOT RUN"
 LANE_UNDECLARED = "UNDECLARED"
-LANE_STATES = (LANE_VERIFIED, LANE_DIVERGENT, LANE_REFUSED, LANE_OWED,
-               LANE_NOT_APPLICABLE, LANE_HELD, LANE_NOT_RUN, LANE_UNDECLARED)
+#: A LOOSER TIER, SO A LANE WE CANNOT FULLY CHECK IS NOT LEFT WITH NOTHING
+#: (Andrew, 2026-09-20). A `par-*` driver on one device cannot prove its
+#: claim, that two devices hash equal to one cell for cell. It can still be
+#: constructed, run, and checked for sanity, and a smoke test is strictly more
+#: than the shrug `NOT APPLICABLE` gives on its own.
+#:
+#: `SMOKE` is NEVER `VERIFIED` and is counted in its own column. `SMOKE FAILED`
+#: is the point of the tier: a lane that raised, produced a non-finite value,
+#: changed shape, or gave different bits on two consecutive full fits on this
+#: one box has a real defect, and that gates like any other wrongness.
+LANE_SMOKE = "SMOKE"
+LANE_SMOKE_FAILED = "SMOKE FAILED"
+LANE_STATES = (LANE_VERIFIED, LANE_SMOKE, LANE_SMOKE_FAILED, LANE_DIVERGENT,
+               LANE_REFUSED, LANE_OWED, LANE_NOT_APPLICABLE, LANE_HELD,
+               LANE_NOT_RUN, LANE_UNDECLARED)
 
 
 def lane_state_from_rows(states):
@@ -477,7 +615,30 @@ def lane_state_from_rows(states):
     return LANE_NOT_RUN, "every part read n/a; nothing about this lane was compared"
 
 
-def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
+def smokeable_lanes(harness, surface, exposure, device_class, run_lanes=()):
+    """The lanes this box can EXECUTE but cannot JUDGE, and which this run has
+    not already executed.
+
+    Three conditions, and the third is the one that keeps the tier cheap and
+    honest. A lane the run ALREADY RAN is not left with nothing: its result is
+    kept in `ran_state` beside the NOT APPLICABLE verdict, and fitting it two
+    more times would buy a weaker version of what the run already has. On a
+    GPU install `verify --all` runs every `par-*` lane at one device, so the
+    smoke set there is empty and the flag costs nothing. On a CPU-only install
+    the drivers are not selected, and that is where the tier earns its keep.
+
+    A lane with no CPU route at all is not smokeable on a CPU install -- it
+    refuses by name, which is a fact about the box rather than a defect to
+    report. Those stay NOT APPLICABLE with their reason.
+    """
+    covered, already = set(surface.covered_lanes()), set(run_lanes)
+    return [lane for lane in harness.LANES
+            if exposure[lane]["status"] == LANE_NOT_APPLICABLE
+            and lane not in already
+            and (device_class != "cpu" or lane in covered)]
+
+
+def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=None):
     """EVERY LANE THE HARNESS DEFINES, with one honest state each.
 
     WHY THIS EXISTS. `verify --all` used to report only the lanes it ran. On a
@@ -517,7 +678,15 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
         ran_state, ran_reason = (lane_state_from_rows(by_lane[lane]) if lane in by_lane
                                  else (None, None))
         if row["status"] == "NOT APPLICABLE":
-            state, reason = LANE_NOT_APPLICABLE, row["reason"]
+            got = (smoke or {}).get(lane)
+            if got is None:
+                state, reason = LANE_NOT_APPLICABLE, row["reason"]
+            elif got["ok"]:
+                state = LANE_SMOKE
+                reason = (f"{', '.join(got['checks'])}; the full claim still needs a second "
+                          "device, so this is NOT a verification")
+            else:
+                state, reason = LANE_SMOKE_FAILED, got["why"]
         elif row["status"] == "HELD":
             state, reason = LANE_HELD, row["reason"]
         elif row["status"] == "UNDECLARED":
@@ -609,7 +778,8 @@ def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=()):
 #: cover a lot of unreferenced surface, so the headline states what it
 #: covered, in lanes, on the same line as the verdict. That is the trade for
 #: the looser gate and it is why `lane_scope_clause()` is not optional.
-LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD, LANE_NOT_RUN)
+LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD,
+                                LANE_NOT_RUN, LANE_SMOKE)
 
 
 def lane_verdict_gaps(accounting, scope):
@@ -678,7 +848,10 @@ def lane_scope_clause(accounting, scope):
     # was inapplicable. Every state is named even at zero: a category a reader
     # has to infer from an absent word is the defect this whole lane is about.
     by = s["by_state"]
-    return (f"{by[LANE_VERIFIED]} verified, {by[LANE_NOT_APPLICABLE]} not applicable, "
+    return (f"{by[LANE_VERIFIED]} verified"
+            + (f", {by[LANE_SMOKE]} smoke" if by[LANE_SMOKE] else "")
+            + (f", {by[LANE_SMOKE_FAILED]} SMOKE FAILED" if by[LANE_SMOKE_FAILED] else "")
+            + f", {by[LANE_NOT_APPLICABLE]} not applicable, "
             f"{by[LANE_OWED]} owed, {by[LANE_HELD]} held"
             + (f", {by[LANE_DIVERGENT]} DIVERGENT" if by[LANE_DIVERGENT] else "")
             + (f", {by[LANE_REFUSED]} REFUSED" if by[LANE_REFUSED] else "")
@@ -3385,8 +3558,22 @@ def cmd_verify_all(args):
     # before the verdict may say so.
     surface = host_surface()
     harness_lanes = list(harness.LANES)
-    exposure = surface.lane_exposure(harness_lanes)
-    accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale)
+    exposure = surface.lane_exposure(harness_lanes, vclass)
+    smoke = None
+    if getattr(args, "smoke", False):
+        # TWO FULL FITS PER LANE, so it is opt-in rather than weakened. The
+        # base fixture only, for the same reason: the tier exists to say more
+        # than nothing, not to double the cost of every run.
+        smokeable = smokeable_lanes(harness, surface, exposure, vclass, lanes)
+        if asked:
+            smokeable = [l for l in smokeable if l in asked]
+        sfix = "base" if "base" in harness.FIXTURES else harness.FIXTURES[0]
+        log(f"# smoke: {len(smokeable)} lane(s) this box can run but cannot judge, "
+            f"on {sfix}, two full fits each")
+        sdata = data.get(sfix) or harness.fixture(sfix)
+        sheld = held.get(sfix) if held.get(sfix) is not None else harness.heldout(sfix)
+        smoke = run_smoke(harness, ml, smokeable, sfix, sdata, sheld, log=log)
+    accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke)
     if models_only:
         verdict_scope = []                     # judged by the portable models, not by lanes
     elif asked:
@@ -3433,7 +3620,7 @@ def cmd_verify_all(args):
         table=dict(path=table_file, sha256=vref.sha256_file(table_file), format=table["format"],
                    records=len(table["records"]), harness_sha256=table.get("harness_sha256")),
         counts=counts, families=fams, cells=rows,
-        lane_accounting=accounting,
+        lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only,
