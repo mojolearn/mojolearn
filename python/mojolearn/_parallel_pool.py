@@ -172,6 +172,17 @@ CPU_OPERATIONS = frozenset((
 #: samba-untied-dropout-accum lane already checks.
 CPU_SINGLE_DEVICE_COOPERATIVE = frozenset(('mlp_update', 'samba_update'))
 
+# Every worker's native device group must match its visibility mask. A
+# non-cooperative worker sees one GPU, even when the parent was configured
+# to use several; inheriting those counts would make its kernels select
+# devices that the worker cannot see.
+DEVICE_COUNT_VARIABLES = tuple(
+    'MOJOLEARN_' + family + '_DEVICE_COUNT'
+    for family in ('KMEANS', 'GBDT', 'GRAM', 'QR', 'OPTIMIZER', 'GLM',
+                   'SOLVER', 'IFOREST', 'FOREST', 'SVM', 'GP', 'GMM',
+                   'RESAMPLE', 'DBSCAN', 'NEIGHBORS', 'HIERARCHY')
+)
+
 
 def _cpu_refusal(requests, cooperative, n_devices=1):
     names = sorted({request[0] for request in requests})
@@ -247,23 +258,8 @@ class DevicePool:
                         env[name] = ','.join(ids[d] for d in group)
                     else:
                         env[name] = ','.join(str(d) for d in group)
-                if self.cooperative:
-                    env['MOJOLEARN_KMEANS_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_GBDT_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_GRAM_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_QR_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_OPTIMIZER_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_GLM_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_SOLVER_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_IFOREST_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_FOREST_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_SVM_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_GP_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_GMM_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_RESAMPLE_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_DBSCAN_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_NEIGHBORS_DEVICE_COUNT'] = str(len(group))
-                    env['MOJOLEARN_HIERARCHY_DEVICE_COUNT'] = str(len(group))
+                for name in DEVICE_COUNT_VARIABLES:
+                    env[name] = str(len(group))
                 self._workers.append(subprocess.Popen(
                     [sys.executable, '-m', 'mojolearn._parallel_worker'], env=env,
                     stdin=subprocess.PIPE, stdout=subprocess.PIPE))
