@@ -1,4 +1,0 @@
-arming a 150-minute self-kill on pod ig3gc81cswsk5k ...
-ARMED. Pod ig3gc81cswsk5k is TERMINATED through the API in 150 minutes.
-  lease: bench/results/identity_break/2026-09-20_par-sabotage-arms/a-trees-gbdt/lease/ig3gc81cswsk5k.lease
-  extend with: tools/runpod_guard.sh extend ig3gc81cswsk5k '-p 19756 root@213.173.105.69' <minutes>
