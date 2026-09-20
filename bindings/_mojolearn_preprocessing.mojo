@@ -9,7 +9,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host, validate_standard, standard_fit_host, standard_transform_host
+from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -59,8 +59,7 @@ def transform_binding(
     var offset = load(Int(py=min_addr),d)
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        var result = minmax_transform_host(x,scale,offset,n,d,inverse,clip,lower,upper)
-        copy_f32(result.unsafe_ptr(), output, n*d)
+        minmax_transform_host_into(x,scale,offset,output,n,d,inverse,clip,lower,upper)
     return PythonObject(n*d)
 
 
@@ -99,8 +98,7 @@ def standard_transform_binding(
     var scale = load(Int(py=scale_addr),d)
     var output = ptr(Int(py=out_addr))
     with GILReleased(Python()):
-        var result = standard_transform_host(x,mean,scale,n,d,inverse,with_mean,with_std)
-        copy_f32(result.unsafe_ptr(), output, n*d)
+        standard_transform_host_into(x,mean,scale,output,n,d,inverse,with_mean,with_std)
     return PythonObject(n*d)
 
 
