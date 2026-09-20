@@ -47,7 +47,7 @@ from kernel_methods.estimator import (
     kernel_ridge_fit_host,
     kernel_ridge_predict_host,
     nystroem_fit_host,
-    nystroem_transform_host,
+    nystroem_transform_host_into,
     rbf_sampler_fit_host,
     rbf_sampler_transform_host_into,
 )
@@ -351,8 +351,7 @@ def _nystroem_transform_run(
     op: MutPointer[Float32, MutUntrackedOrigin],
 ) raises:
     var trace = IdentityTrace()
-    var out = nystroem_transform_host(model, x, m, trace)
-    copy_f32(out.unsafe_ptr(), op, m * model.n_components)
+    nystroem_transform_host_into(model, x, m, op, trace)
 
 
 def nystroem_transform_binding(
