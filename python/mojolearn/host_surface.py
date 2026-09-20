@@ -1669,7 +1669,7 @@ FAMILIES = (
             "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
-            "qn_decision_function", "qn_sigmoid", "qn_softmax",
+            "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax",
             "standard_transform", "minmax_transform", "cd_predict",
             "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
         ),

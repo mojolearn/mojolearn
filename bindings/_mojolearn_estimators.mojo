@@ -43,6 +43,7 @@ from glm.estimator import (
     ols_predict_host,
     qn_decision_function_host,
     qn_fit_host,
+    qn_predict_binary_host,
     qn_sigmoid_host,
     qn_softmax_host,
     ridge_fit_host,
@@ -585,6 +586,28 @@ def qn_decision_function_binding(
     return PythonObject(0)
 
 
+def qn_predict_binary_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Binary `qn_predict`: int64 0/1 codes under strict score > 0."""
+    if len(params) != 3:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        qn_predict_binary_host(
+            ctx, _f32_ptr(Int(py=x_addr)), _f32_ptr(Int(py=coef_addr)),
+            op, nr, nf, fi,
+        )
+    return PythonObject(0)
+
+
 def qn_sigmoid_binding(
     scores_addr: PythonObject,
     out_addr: PythonObject,
@@ -808,6 +831,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
+        m.def_function[qn_predict_binary_binding]("qn_predict_binary")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         return m.finalize()

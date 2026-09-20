@@ -74,6 +74,7 @@ from core.classical_host_predict import (
     host_pca_whiten_transform_into,
     host_qn_decision_into,
     host_qn_decision_multi_into,
+    host_qn_predict_binary_into,
     host_qn_sigmoid_into,
     host_qn_softmax_into,
     host_tsvd_transform_into,
@@ -897,6 +898,29 @@ def qn_decision_function_binding(
     return PythonObject(0)
 
 
+def qn_predict_binary_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Host binary `qn_predict`, the GPU binding's address contract."""
+    if len(params) != 3:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var fi = _index(params[2]) != 0
+    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_index(out_addr))
+    with GILReleased(Python()):
+        _positive(nr, "n_rows")
+        _positive(nf, "n_features")
+        host_qn_predict_binary_into(
+            f32_ptr(_index(x_addr)), f32_ptr(_index(coef_addr)), op,
+            nr, nf, fi, host_predict_task_count(nr),
+        )
+    return PythonObject(0)
+
+
 def qn_softmax_binding(
     scores_addr: PythonObject,
     out_addr: PythonObject,
@@ -1259,6 +1283,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[pca_whiten_transform_binding]("pca_whiten_transform")
         module.def_function[pca_whiten_inverse_transform_binding]("pca_whiten_inverse_transform")
         module.def_function[qn_decision_function_binding]("qn_decision_function")
+        module.def_function[qn_predict_binary_binding]("qn_predict_binary")
         module.def_function[qn_sigmoid_binding]("qn_sigmoid")
         module.def_function[qn_softmax_binding]("qn_softmax")
         module.def_function[standard_transform_binding]("standard_transform")
