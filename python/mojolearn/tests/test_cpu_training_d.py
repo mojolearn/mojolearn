@@ -172,6 +172,21 @@ def test_gmm_scoring_parallelizes_components_not_numeric_folds():
     assert "acc = ftz(identical_mul_add(t, t, acc))" in estep
 
 
+def test_hdbscan_parallelizes_vertex_scans_not_mst_folds():
+    """Each dense graph row is independent; color and union folds stay serial."""
+    text = _read(ORACLES["hdbscan"])
+    boruvka = text[text.index("def hdbh_boruvka("):text.index("struct HdbscanHostDendrogram")]
+    assert "sync_parallelize(_vertex_min, tasks)" in boruvka
+    assert "host_predict_task_count(m)" in boruvka
+    assert "if m * m < (1 << 14):\n        tasks = 1\n    var chunk" in boruvka
+    assert "candp.unsafe_store(u, best)" in boruvka
+    launch = boruvka.index("sync_parallelize(_vertex_min, tasks)")
+    color_fold = boruvka.index("# Preserve min_edge_per_color", launch)
+    union_fold = boruvka.index("# label_prop:", color_fold)
+    assert launch < color_fold < union_fold
+    assert "for u in range(m):" in boruvka[color_fold:union_fold]
+
+
 def test_unvalidated_factorization_where_the_device_skips_validation():
     chol = _read("cholesky/host/chol_oracle.mojo")
     assert "def chol_host_factor_lower(" in chol
@@ -225,6 +240,25 @@ def test_estimators_fit_on_the_host_when_built():
         _twice(lambda: np.asarray(mojolearn.GaussianMixture(n_components=2, max_iter=5, random_state=3).fit(x).score_samples(x[:8])).tobytes())
     if _built("_mojolearn_hdbscan_host"):
         _twice(lambda: np.asarray(mojolearn.HDBSCAN(min_cluster_size=5).fit(x).labels_).tobytes())
+        # 96**2 is below the Boruvka parallel threshold.  Its default-worker
+        # answer must cover every row just like the explicit one-task path.
+        import os
+        old_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+        try:
+            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+            default = mojolearn.HDBSCAN(min_cluster_size=5).fit(x)
+            os.environ["MOJOLEARN_CPU_THREADS"] = "1"
+            serial = mojolearn.HDBSCAN(min_cluster_size=5).fit(x)
+        finally:
+            if old_threads is None:
+                os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+            else:
+                os.environ["MOJOLEARN_CPU_THREADS"] = old_threads
+        assert np.asarray(default.labels_).tobytes() == np.asarray(serial.labels_).tobytes()
+        assert np.asarray(default.core_distances_).tobytes() == np.asarray(serial.core_distances_).tobytes()
+        assert (default.n_clusters_, default.n_outliers_, default.n_boruvka_rounds_) == (
+            serial.n_clusters_, serial.n_outliers_, serial.n_boruvka_rounds_
+        )
 
 
 if __name__ == "__main__":

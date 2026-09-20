@@ -645,6 +645,45 @@ def hdbh_boruvka(mr: List[Float32], m: Int) raises -> HdbscanHostMst:
     var cmin_wk = List[Int32](length=m, fill=HDBH_KEY_SENTINEL)
     var cmin_lo = List[Int32](length=m, fill=Int32(0))
     var cmin_hi = List[Int32](length=m, fill=Int32(0))
+    var mrp = rebind[MutPointer[Float32, MutUntrackedOrigin]](mr.unsafe_ptr())
+    var colorp = rebind[MutPointer[Int, MutUntrackedOrigin]](color.unsafe_ptr())
+    var candp = rebind[MutPointer[Int, MutUntrackedOrigin]](cand.unsafe_ptr())
+    var candwkp = rebind[MutPointer[Int32, MutUntrackedOrigin]](cand_wk.unsafe_ptr())
+    var candlop = rebind[MutPointer[Int32, MutUntrackedOrigin]](cand_lo.unsafe_ptr())
+    var candhip = rebind[MutPointer[Int32, MutUntrackedOrigin]](cand_hi.unsafe_ptr())
+    var tasks = host_predict_task_count(m)
+    if m * m < (1 << 14):
+        tasks = 1
+    var chunk = host_predict_chunk(m, tasks)
+
+    def _vertex_min(task: Int) {imm mrp, imm colorp, imm candp, imm candwkp, imm candlop, imm candhip, imm chunk, imm m}:
+        var lo_u = task * chunk
+        var hi_u = min(lo_u + chunk, m)
+        for u in range(lo_u, hi_u):
+            var best = -1
+            var bwk = HDBH_KEY_SENTINEL
+            var blo = Int32(0x7FFFFFFF)
+            var bhi = Int32(0x7FFFFFFF)
+            var cu = colorp.unsafe_load(u)
+            var base = u * m
+            for j in range(m):
+                if colorp.unsafe_load(j) == cu:
+                    continue
+                var wk = weight_order_key(mrp.unsafe_load(base + j))
+                var edge_l = edge_lo(Int32(u), Int32(j))
+                var edge_h = edge_hi(Int32(u), Int32(j))
+                if triple_less(wk, edge_l, edge_h, bwk, blo, bhi):
+                    bwk = wk
+                    blo = edge_l
+                    bhi = edge_h
+                    best = j
+            if bwk == HDBH_KEY_SENTINEL:
+                best = -1
+            candp.unsafe_store(u, best)
+            candwkp.unsafe_store(u, bwk)
+            candlop.unsafe_store(u, blo)
+            candhip.unsafe_store(u, bhi)
+
     for _it in range(m):
         # kernel_min_edge_per_vertex: the minimum triple over a vertex's
         # row, restricted to edges leaving its color.
@@ -652,30 +691,18 @@ def hdbh_boruvka(mr: List[Float32], m: Int) raises -> HdbscanHostMst:
             cmin_wk[c] = HDBH_KEY_SENTINEL
             cmin_lo[c] = Int32(0x7FFFFFFF)
             cmin_hi[c] = Int32(0x7FFFFFFF)
+        if tasks > 1:
+            sync_parallelize(_vertex_min, tasks)
+        else:
+            _vertex_min(0)
+        # Preserve min_edge_per_color's original ascending-vertex fold.  The
+        # parallel region changes only where each independent row scan runs.
         for u in range(m):
-            var best = -1
-            var bwk = HDBH_KEY_SENTINEL
-            var blo = Int32(0x7FFFFFFF)
-            var bhi = Int32(0x7FFFFFFF)
+            var best = cand[u]
+            var bwk = cand_wk[u]
+            var blo = cand_lo[u]
+            var bhi = cand_hi[u]
             var cu = color[u]
-            var base = u * m
-            for j in range(m):
-                if color[j] == cu:
-                    continue
-                var wk = weight_order_key(mr[base + j])
-                var lo = edge_lo(Int32(u), Int32(j))
-                var hi = edge_hi(Int32(u), Int32(j))
-                if triple_less(wk, lo, hi, bwk, blo, bhi):
-                    bwk = wk
-                    blo = lo
-                    bhi = hi
-                    best = j
-            if bwk == HDBH_KEY_SENTINEL:
-                best = -1
-            cand[u] = best
-            cand_wk[u] = bwk
-            cand_lo[u] = blo
-            cand_hi[u] = bhi
             # min_edge_{,lo_,hi_}per_color: the color's minimum triple.
             if best >= 0 and triple_less(bwk, blo, bhi, cmin_wk[cu], cmin_lo[cu], cmin_hi[cu]):
                 cmin_wk[cu] = bwk
