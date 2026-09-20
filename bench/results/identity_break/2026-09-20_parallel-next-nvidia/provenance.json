@@ -1,0 +1,9 @@
+{
+  "python_source_commit": "14944378ff9d7a733cd39779c6bdb24b7d041e76",
+  "native_source_commit": "819a47ae48166e91951f54f54e64ee173658e32a",
+  "published_wheel_sha256": "b2f7856e5959a518ce0ebc23af0240e9092a9f3a5256faf77cc389565915638f",
+  "repeats": 1,
+  "fixtures": "all9",
+  "parts": "full",
+  "python": "3.11.10"
+}
