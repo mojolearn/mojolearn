@@ -11661,7 +11661,66 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
                 del j["cells"][k]
             print(f"NOTE: column {name} hashed {', '.join(stale)} at an older lane revision "
                   f"(LANE_REVISIONS); its {len(dropped)} cell(s) there are not compared and read as absent")
+    # ------------------------------------------------------------------
+    # A DIFF THAT CANNOT FAIL IS NOT A PASS (2026-09-20).
+    #
+    # MEASURED on pod 70i7hnr5avagda: a two-device par leg whose one-device
+    # column timed out at 13 cells and whose two-device column timed out at 1,
+    # both `complete:false`. `--diff` compared them, found no cell where both
+    # sides carried a usable value AND disagreed, printed "no DIVERGENT or
+    # MOVED cell in the one-vs-two diff", and EXITED 0. The leg's own gate
+    # file recorded that as a pass. Only `admit()`, asked separately afterwards
+    # because a rule forced it, refused both halves for "incomplete
+    # identity_break checkpoint". A leg that did not print `admit()` would have
+    # committed that as a clean two-device column.
+    #
+    # THE REFUSAL BELONGS HERE AND NOT IN THE CALLER. `--require-columns`
+    # exists for adjacent reasons and 36 of 37 `--diff` call sites in leg
+    # scripts omit it. A safety property that every caller must opt into is one
+    # the next leg script will forget, which is how this arrived.
+    #
+    # This is the same shape as the solo-re-run selector that matched
+    # DIVERGENT|MOVED and silently dropped ONE-COLUMN: the check passed because
+    # it never ran.
+    for (name, j), p in zip(cols, paths):
+        if j.get("complete") is False:
+            raise SystemExit(
+                f"REFUSING TO DIFF: column {name} ({p}) is an INCOMPLETE checkpoint "
+                f"(complete:false) carrying {len(j['cells'])} cell(s). A truncated column "
+                f"credits nothing, and comparing one reports agreement over the cells it "
+                f"never reached. Re-run the column, or pass the pair to `admit()` and read "
+                f"its verdict instead of this one.")
+
     keys = sorted(set(k for _, j in cols for k in j["cells"]))
+    # AND THE TWO SIDES MUST ACTUALLY MEET. Absence is not agreement: a key
+    # only one column carries is reported ONE-COLUMN and is not a disagreement,
+    # so a pair with little or no overlap can read clean while having compared
+    # almost nothing. Refuse on an empty intersection, and on one so small that
+    # "they agree" is a statement about the cells that are missing.
+    #
+    # ONLY FOR A BARE TWO-COLUMN PAIR, and the exception is not a loophole.
+    # `--require-columns` (with `--owed-json`) is the mode built to compare
+    # columns that DO carry different cell sets: a cell short of the required
+    # count is reported OWED, by name, with the columns that lack it. Its own
+    # test diffs apple=2, nvidia=2, amd=1, cpu=2 on purpose, and this rule
+    # refused it -- caught by tools/test_cpu_identity_gate.py before it
+    # shipped. That mode already says out loud what is missing, so the silent
+    # pass this rule exists to stop cannot happen there. A diff of three or
+    # more columns is the same situation: their common intersection is
+    # naturally small and the per-cell verdicts carry the detail.
+    if len(cols) == 2 and not require_columns:
+        sets = [set(j["cells"]) for _, j in cols]
+        shared = set.intersection(*sets)
+        widest = max(len(s) for s in sets)
+        floor = max(2, (widest + 3) // 4)          # a quarter of the widest, at least 2
+        if not shared or len(shared) < floor:
+            counts = ", ".join(f"{n}={len(s)}" for (n, _), s in zip(cols, sets))
+            raise SystemExit(
+                f"REFUSING TO DIFF: the columns share {len(shared)} comparable cell(s) "
+                f"(cells per column: {counts}; widest {widest}, minimum overlap {floor}). "
+                f"A cell only one side carries reads ONE-COLUMN and is not a disagreement, "
+                f"so a verdict over this pair would be a statement about what is missing "
+                f"rather than about the arithmetic.")
     if require_lanes:
         # --lanes SCOPES the diff (2026-09-14 night): the verdicts, the
         # summaries and the exit status are over the named lanes only. Until
