@@ -28,7 +28,7 @@ The four kinds, for one lane:
 
 - Lanes: **264** (205 single-device, 59 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **248**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **203** of 248.
+- Source public API entries with ALL FOUR kinds on at least one lane: **206** of 248.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
@@ -37,29 +37,29 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 236 | 12 |
+| gpu column | 239 | 9 |
 | cpu verifier | 215 | 33 |
-| sabotage seen to move a build | 212 | 36 |
+| sabotage seen to move a build | 215 | 33 |
 | batch part or named n/a | 248 | 0 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 255 | 9 |
+| gpu column (any class) | 256 | 8 |
 | gpu column on all three classes | 235 | 29 |
 | cpu verifier declared | 230 | 34 |
-| sabotage seen to move a build | 229 | 35 |
+| sabotage seen to move a build | 230 | 34 |
 | batch part or named n/a | 264 | 0 |
-| ALL FOUR | 221 | 43 |
+| ALL FOUR | 222 | 42 |
 
 Sabotage, split by what was actually watched:
 
 | verdict | lanes | what it means |
 |---|---|---|
-| seen(build) | 229 | a sabotage BUILD moved the bytes; a real negative control |
+| seen(build) | 230 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 3 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 1 | the family declares a define; no committed pair moves this lane |
+| declared | 0 | the family declares a define; no committed pair moves this lane |
 | none | 31 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -156,7 +156,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `SmallByteLanguageModelTrainer` | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SmallMLPTrainer` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `SpectralClustering` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `SpectralEmbedding` | 1 |  | training | declared | n/a | NO |
+| `SpectralEmbedding` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `StandardScaler` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlock` | 11 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `TransformerBlockInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -211,9 +211,9 @@ A blank cell means no lane of this algorithm has that kind.
 | `mamba.Mamba1DecodeSession` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `mamba.Mamba2Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `mamba.Mamba3Block` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `manifold.SpectralEmbedding` | 1 |  | training | declared | n/a | NO |
+| `manifold.SpectralEmbedding` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `manifold.UMAP` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `manifold.spectral_embedding` | 1 |  | training | declared | n/a | NO |
+| `manifold.spectral_embedding` | 1 | nvidia | training | seen(build) | n/a | yes |
 | `matmul` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `metrics.accuracy_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `metrics.adjusted_rand_score` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
@@ -581,7 +581,7 @@ A blank cell means no lane of this algorithm has that kind.
 | saved-model-host-infer | - | training | seen(build) | `bench/results/identity_break/2026-09-19_laneless-public-classes/sabotage-forest-own-define.json` | part | NO |
 | select-d | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
 | spectral | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
-| spectral-embedding | - | training | declared | - | n/a n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike) | NO |
+| spectral-embedding | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_spectral-embedding/cpu-x86-sabotage.json` | n/a n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike) | yes |
 | spectral-precomputed | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | standard-scaler | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | standard-scaler-no-mean | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
@@ -633,15 +633,15 @@ been advertising 13 gaps that cannot be closed. A $3.34 two-device
 MI300X leg was bought on 2026-09-19 before this was noticed; what it
 proved is real and is reported under the driver heading below, not here.
 
-**No GPU column at all: 2**
+**No GPU column at all: 1**
 
-> gbdt-symmetric-eval, spectral-embedding
+> gbdt-symmetric-eval
 
 > (plus 4 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 2**
+**GPU column on fewer than three classes: 3**
 
-> mamba1-decode-session, transformer-decode-session
+> mamba1-decode-session, spectral-embedding, transformer-decode-session
 
 > (plus 18 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
@@ -651,9 +651,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Sabotage not seen to move a build: 1**
+**Sabotage not seen to move a build: 0**
 
-> spectral-embedding
+> none
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
