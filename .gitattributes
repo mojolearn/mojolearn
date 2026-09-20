@@ -1,3 +1,7 @@
-/bench/results export-ignore
+# Keep raw verifier records and release receipts in DOI source archives.
+/bench/results/* export-ignore
+/bench/results/identity_break -export-ignore
+/bench/results/release_verification -export-ignore
+/bench/results/release089 -export-ignore
 /mamba/corpus/** export-ignore
 /mamba/corpus/gen_corpus.py -export-ignore
