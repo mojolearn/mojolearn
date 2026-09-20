@@ -11,6 +11,14 @@ tests (a corrupted reference reading DIVERGENT with exit 1, and the drift
 test) need an importable identical build and skip without one; the drift
 test runs the public CPU reference lanes on the base fixture by default and
 takes MOJOLEARN_VERIFY_ALL_DRIFT_LANES=a,b (or `all`) for more.
+
+THE THIRD PREREQUISITE IS NUMPY. tools/identity_break.py imports it at
+module scope, so the five tests that need the real harness cannot run
+without it, and `verify` itself answers exit 4 CANNOT RUN there rather than
+failing. Those five state that prerequisite the same way they state the
+other two, and skip. NOTHING ELSE IS SKIPPED: every other reason the
+harness refuses to load (a MOJOLEARN_IDENTITY_* override set, non-zero
+MOJOLEARN_PAR_DEVICES, a harness that raises) still fails, loudly.
 """
 import copy
 import json
@@ -29,6 +37,23 @@ from mojolearn import _verify_reference as vref
 
 PKG = Path(va.__file__).resolve().parent
 ROOT = PKG.parents[1] if (PKG.parents[1] / "tools" / "identity_break.py").is_file() else None
+
+try:
+    import numpy as _numpy  # noqa: F401  (probed, never used: see _need_numpy)
+except ImportError as _numpy_exc:  # pragma: no cover - depends on the interpreter
+    _NO_NUMPY = f"verification needs NumPy and this interpreter has none: {_numpy_exc}"
+else:
+    _NO_NUMPY = ""
+
+
+def _need_numpy():
+    """Skip ONLY for an absent NumPy, and only where the real harness is
+    needed. The probe is this interpreter's own import, and the subprocess
+    tests launch sys.executable, so it answers for them too. It is
+    deliberately NOT a catch of CannotRun: an override that changes what the
+    harness hashes must still read as a failure, never as a skip."""
+    if _NO_NUMPY:
+        pytest.skip(_NO_NUMPY)
 
 
 # ---------------------------------------------------------------- the table
@@ -601,6 +626,7 @@ def test_cross_check_scope_tiers_respect_the_apple_lane_cap():
     """The default must not exceed what one Apple Metal process may run:
     identity_break refuses a full column outside a release, in code."""
     assert va.APPLE_LANE_CAP == 24
+    _need_numpy()
     harness = va.load_harness()
     quick, every, per_family = va.cross_check_lanes(harness, "quick")
     default, _, _ = va.cross_check_lanes(harness, "default")
@@ -746,6 +772,7 @@ def test_a_harness_with_no_stepfull_part_refuses_rather_than_passing():
 def _harness_for_error_text():
     if ROOT is None:
         pytest.skip("no checkout: tools/identity_break.py is not beside this package")
+    _need_numpy()
     return va.load_harness(str(ROOT / "tools" / "identity_break.py"))
 
 
@@ -987,6 +1014,7 @@ def test_cli_corrupted_table_exits_1():
     build = _identical_build()
     if not build:
         pytest.skip("no importable identical build")
+    _need_numpy()
     table = vref.load_table()
     ref = vref.entry(table, "gemm-pinned", "base", "train")["ref"]
     ok = _run_cli(["verify", "--lanes", "gemm-pinned", "--fixtures", "base", "--no-models", "--json"])
@@ -1010,6 +1038,7 @@ def test_shipped_verifier_hashes_like_the_harness():
     build = _identical_build()
     if not build:
         pytest.skip("no importable identical build")
+    _need_numpy()
     _, vendor = build
     lanes = os.environ.get("MOJOLEARN_VERIFY_ALL_DRIFT_LANES", "").strip()
     if not lanes:
