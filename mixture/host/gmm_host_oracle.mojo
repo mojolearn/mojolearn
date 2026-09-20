@@ -56,6 +56,7 @@ initialization.
 """
 
 from std.memory import bitcast
+from max.algorithm import sync_parallelize
 
 from checks.numerics import (
     ftz,
@@ -72,6 +73,11 @@ from cluster.host.kmeans_oracle import (
     host_kmeans_fit,
 )
 from core.philox import philox4x32_10
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 from gemm.host.identical_gemm import OP_NN, OP_TN, gemm_oracle
 
 comptime GMMH_COV_FULL = 0
@@ -473,6 +479,7 @@ def gmmh_e_step(
     d: Int,
     ncomp: Int,
     output_level: Int = 3,
+    parallel_components: Bool = False,
 ) -> GmmHostEStep:
     """`gmm_e_step` at GMM_SAB_NONE.
 
@@ -483,21 +490,40 @@ def gmmh_e_step(
     """
     var dd = d * d
     var mahal = List[Float32](length=n * ncomp, fill=Float32(0.0))
-    for kc in range(ncomp):
-        var pk = List[Float32](capacity=dd)
-        for i in range(dd):
-            pk.append(prec[kc * dd + i])
-        var muk = List[Float32](capacity=d)
-        for j in range(d):
-            muk.append(means[kc * d + j])
-        var y = gemm_oracle(x, pk, OP_NN, n, d, d)
-        var murow = gemm_oracle(muk, pk, OP_NN, 1, d, d)
-        for i in range(n):
-            var acc = Float32(0.0)
+    var mahalp = host_list_ptr(mahal)
+    # Below 1K input cells the pool handoff is larger than the work (for
+    # example an 8 x 8, K=2 score is only a few microseconds serially).
+    var component_tasks = (
+        host_predict_task_count(ncomp)
+        if parallel_components and n * d >= 1024 else 1
+    )
+    var component_chunk = host_predict_chunk(ncomp, component_tasks)
+    # Components own disjoint columns of ``mahal``.  Keep each GEMM cell and
+    # Mahalanobis fold byte-for-byte serial, but let independent fitted
+    # components run on separate CPU workers, just as the other saved-model
+    # host inference paths split independent output rows.
+    def _components(c: Int) {imm x, imm means, imm prec, imm mahalp, imm component_chunk, imm ncomp, imm n, imm d, imm dd}:
+        var lo = c * component_chunk
+        var hi = min(lo + component_chunk, ncomp)
+        for kc in range(lo, hi):
+            var pk = List[Float32](capacity=dd)
+            for i in range(dd):
+                pk.append(prec[kc * dd + i])
+            var muk = List[Float32](capacity=d)
             for j in range(d):
-                var t = ftz(ftz(y[i * d + j]) - ftz(murow[j]))
-                acc = ftz(identical_mul_add(t, t, acc))
-            mahal[i * ncomp + kc] = acc
+                muk.append(means[kc * d + j])
+            var y = gemm_oracle(x, pk, OP_NN, n, d, d)
+            var murow = gemm_oracle(muk, pk, OP_NN, 1, d, d)
+            for i in range(n):
+                var acc = Float32(0.0)
+                for j in range(d):
+                    var t = ftz(ftz(y[i * d + j]) - ftz(murow[j]))
+                    acc = ftz(identical_mul_add(t, t, acc))
+                mahalp.unsafe_store(i * ncomp + kc, acc)
+    if component_tasks == 1:
+        _components(0)
+    else:
+        sync_parallelize(_components, component_tasks)
 
     var d_log_2pi = ftz(
         identical_mul(Float32(d), bitcast[DType.float32](GMMH_LOG_2PI_BITS))
@@ -649,7 +675,7 @@ def _score_e_step(
     for k in range(ncomp):
         lw.append(_safe_log(weights[k]))
     return gmmh_e_step(
-        x, means, prec, log_det_chol, lw, n, d, ncomp, output_level
+        x, means, prec, log_det_chol, lw, n, d, ncomp, output_level, True
     )
 
 
