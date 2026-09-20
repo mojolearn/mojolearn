@@ -38,3 +38,12 @@ python tools/identity_break.py --lanes gbdt-multiclass-defaults \
   --diff cpu.json apple.json --require-columns 2
 PYTHONPATH=python python -m mojolearn.tests.test_gbdt_multiclass_stochastic
 ```
+
+Committed-source refresh: both CPU and Apple columns were rerun with all nine
+fixtures and full parts at `6ff1d924ebe28e39c227af6626f8a7401fe6954c`, one fit
+per column, in `bench/results/identity_break/2026-09-20_gbdt-multiclass-defaults`.
+The two independent device classes agree on all 36 numerical parts; scoped
+reference admission accepts 72 parts including declarations, with zero conflicts.
+These committed-source columns supersede the development records above for
+reference-table admission. Native executable code is unchanged from the measured
+fresh builds; the intervening edits were comments, the harness and tests.
