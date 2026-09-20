@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-tree data replication: global RNG IDs and canonical prediction order."""
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, driver_read_shift
 from ._array import Array
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
@@ -58,9 +58,13 @@ def fit_forest(estimator, X, y, *, devices=(0,), trees_per_shard=1):
     if count < 1:
         raise ValueError('n_estimators must be positive')
     requests = []
-    for start in range(0, count, trees_per_shard):
+    for index, start in enumerate(range(0, count, trees_per_shard)):
         shard_params = dict(params, n_estimators=min(trees_per_shard, count - start))
-        requests.append(('forest_fit', (type(estimator).__name__, shard_params), (X, y, start)))
+        # `driver_read_shift` is 0 unless the driver sabotage switch is on, and
+        # 0 for the first shard whatever the switch says; the shard COUNT is
+        # untouched, so only the global tree IDs each shard seeds from move.
+        requests.append(('forest_fit', (type(estimator).__name__, shard_params),
+                         (X, y, start - driver_read_shift(index, start))))
     pool = DevicePool(devices)
     try:
         parts = pool.map(requests)

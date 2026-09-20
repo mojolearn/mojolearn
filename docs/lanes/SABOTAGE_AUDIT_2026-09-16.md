@@ -296,6 +296,61 @@ that EVERY driver's shard staging runs through. A lane whose host family is
 `par-holtwinters` and `par-arima` move under a build that touches neither
 family's own arm.
 
+## CLOSED 2026-09-20 (lane/par-sabotage-defines): the 28 category (c) lanes now have arms
+
+The Owed item above -- "a two-device box for any negative control over the 28
+par-* lanes" -- was owed because no arm reached those lanes at all. The four
+defines in the table above defended the native multi-GPU CHECKS under
+`training/checks/`; none of them had ever been pointed at an `identity_break`
+cell, and the other thirteen partitions had no define of any kind.
+
+THIRTEEN NEW DEFINES, one per cooperative partition no host binding restates,
+each a `comptime if` that shifts a READ offset for owners above rank 0 only.
+`docs/multi_gpu/PAR_SABOTAGE_ARMS.md` is the manifest: the define, the module,
+the build script that compiles it (computed with `tools/bincache.py`'s own
+import-closure resolver, not guessed), and the exact two-device command.
+
+| define | lanes it is for |
+|---|---|
+| `MOJOLEARN_GBDT_PARALLEL_SABOTAGE` | par-boosting, -clf, -reg, -pointwise, par-border-types, par-feature-freq, par-ordered, par-ordered-rmse |
+| `MOJOLEARN_GRAM_PARALLEL_SABOTAGE`, `MOJOLEARN_QR_PARALLEL_SABOTAGE` | par-gram, par-gram-ols, par-gram-pca, par-gram-tsvd |
+| `MOJOLEARN_SVM_PARALLEL_SABOTAGE` | par-svm, par-svm-svr, par-kernel-ridge, par-nystroem |
+| `MOJOLEARN_SOLVER_PARALLEL_SABOTAGE` | par-cd, par-cd-elasticnet |
+| `MOJOLEARN_NEIGHBORS_PARALLEL_SABOTAGE` | par-graph-agglomerative, par-graph-spectral, par-graph-umap |
+| `MOJOLEARN_KMEANS_PARALLEL_SABOTAGE` | par-kmeans |
+| `MOJOLEARN_GLM_PARALLEL_SABOTAGE` | par-logistic |
+| `MOJOLEARN_DBSCAN_PARALLEL_SABOTAGE` | par-dbscan |
+| `MOJOLEARN_GP_PARALLEL_SABOTAGE` | par-gp |
+| `MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE` | par-iforest |
+| `MOJOLEARN_FOREST_POOL_PARALLEL_SABOTAGE` | par-forest-pool |
+| `MOJOLEARN_BYTE_LM_PARALLEL_SABOTAGE` | par-byte-lm, par-byte-lm-model-pool, par-byte-lm-offload |
+
+WRITTEN IS NOT WATCHED, and this document exists to keep the two apart. None
+of the thirteen has been seen to move a cell: every one of their lanes refuses
+on a CPU column for the structural reason the driver states itself ("its
+shards are device row tiles, chunks or ranges inside the GPU binding, which no
+host binding restates"), or, for the three byte-LM lanes, because the GPU
+binding is absent. They stay category (c) in the table below until a
+two-device CUDA or HIP column carries them, and the command that would do it
+is written down so the next box can run it without re-deriving anything.
+
+WHAT WAS WATCHED. Two things, on this Mac's CPU route, one core,
+`--repeats 2`, base fixture
+(`bench/results/identity_break/2026-09-20_par-sabotage-defines/`):
+
+* the 44 `par-*` lanes whose in-cell oracle was a bare `_same_bytes` now carry
+  `_mismatch_bytes` / `NumericalMismatch(msg, parts)`, so an arm that fires
+  produces a DIVERGENT cell instead of a REFUSED one. `audit_bare_oracles.py`
+  reads 0 `par-*` lanes with a bare body oracle, against 45 at the branch
+  point. Without this, every one of the thirteen defines would have credited
+  nothing even when working perfectly, which is `par-scaler`'s defect and the
+  eight lanes of `lane/broken-par-sabotage-arms`.
+* `MOJOLEARN_PAR_DRIVER_SABOTAGE`, the Python-side arm for the
+  NON-cooperative drivers, whose partition is the driver's own Python and
+  which therefore has no binding to rebuild. See
+  `docs/multi_gpu/PAR_SABOTAGE_ARMS.md` for what a column carrying it may and
+  may not be counted as.
+
 ## The per-lane table
 
 Category (a) means at least one cell part has been seen to move. Where an arm

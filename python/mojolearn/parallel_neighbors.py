@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole-query GPU partitions with the original complete reference-row order."""
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, driver_read_shift
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
 
@@ -83,9 +83,14 @@ class ParallelQueries:
                   for i in range(0, n, self.rows_per_shard)] or [(0, 0)]
         state = copy.copy(self.estimator)
         state.numeric_mode = 'identical'
+        # The READ is shifted by `driver_read_shift` (0 unless the driver
+        # sabotage switch is on, and 0 for the first shard either way); the
+        # join below is still in shard order over unchanged widths.
         results = self._pool.map([
-            ('neighbor_query', state, (data[start:end], method, kwargs))
-            for start, end in ranges])
+            ('neighbor_query', state,
+             (data[start - driver_read_shift(index, start):
+                   end - driver_read_shift(index, start)], method, kwargs))
+            for index, (start, end) in enumerate(ranges)])
         output = _join([r[0] for r in results], ragged=method == 'radius_neighbors')
         # Diagnostics describe actual shard calls, not a fictitious global tile.
         diagnostics = [dict(start=start, end=end,

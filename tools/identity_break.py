@@ -11267,6 +11267,25 @@ def _run_reference(args):
     if batch_sabotage:
         print(f"# {BATCH_SABOTAGE_ENV} is ON: every whole-batch evaluation is perturbed by one "
               "low-bit flip; every batch cell with a hash MUST read BATCH_MOVED. This JSON is not evidence.")
+    # THE NON-COOPERATIVE DRIVERS' ARM, READ BACK FROM THE SHIPPED MODULE
+    # rather than from this process's environment (lane/par-sabotage-defines,
+    # 2026-09-20). `_parallel_pool.par_driver_sabotage()` is what the drivers
+    # themselves call, and it needs BOTH `MOJOLEARN_PAR_DRIVER_SABOTAGE=1` and
+    # `MOJOLEARN_HOST_ALLOW_SABOTAGE=1`; asking the module means the column
+    # cannot say "clean" while the code says otherwise. It is NOT a harness
+    # switch: nothing in this file is perturbed. What moves is the SHIPPED
+    # partition of `parallel_ensemble`, `parallel_preprocessing`,
+    # `parallel_classical` and `parallel_neighbors`, which is product code and
+    # is exactly what a `par-*` lane exists to check.
+    try:
+        from mojolearn._parallel_pool import par_driver_sabotage as _pds
+        par_driver_sabotage = bool(_pds())
+    except Exception:
+        par_driver_sabotage = False
+    if par_driver_sabotage:
+        print("# MOJOLEARN_PAR_DRIVER_SABOTAGE is ON: every non-cooperative driver shard after "
+              "the first reads one position early while the merge still writes at the true "
+              "offset. This JSON is a NEGATIVE CONTROL and is not a reference column.")
     rlpair_sabotage = os.environ.get(RLPAIR_SABOTAGE_ENV, "").strip() not in ("", "0")
     rlpair_protocol = _rlpair_protocol(enabled=not no_rlpair)
     if rlpair_sabotage:
@@ -11309,7 +11328,9 @@ def _run_reference(args):
                       heldout=heldout_hashes, cells=cells, complete=complete,
                       skipped=sorted(skip), batch_protocol=batch_protocol,
                       batch_sabotage=batch_sabotage, rlpair_protocol=rlpair_protocol,
-                      rlpair_sabotage=rlpair_sabotage, lane_revisions=dict(LANE_REVISIONS),
+                      rlpair_sabotage=rlpair_sabotage,
+                      par_driver_sabotage=par_driver_sabotage,
+                      lane_revisions=dict(LANE_REVISIONS),
                       # WHICH PARTS THIS COLUMN CARRIES, IN THE COLUMN ITSELF
                       # (2026-09-20). `complete` answers "did the run finish",
                       # never "what did it collect", and for five years of
@@ -12046,7 +12067,8 @@ def diff(paths, require_columns=0, require_lanes=None, owed_json=None):
 #: hand `admit()` a record whose `partial_column` flag described only the
 #: first part read.
 MERGE_SAME = ("vendor", "commit", "mode", "repeats", "heldout_seed", "fixtures", "heldout",
-              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage", "lane_revisions",
+              "batch_protocol", "batch_sabotage", "rlpair_protocol", "rlpair_sabotage",
+              "par_driver_sabotage", "lane_revisions",
               "parts_omitted") + tuple(
     f"{part}_{k}" for part in EXTRA_PARTS for k in ("protocol", "sabotage"))
 
@@ -12096,6 +12118,8 @@ def merge(paths, out, allow_separate_builds=False):
             raise SystemExit(f"REFUSING --merge: {p} is a batch sabotage run")
         if j.get("rlpair_sabotage"):
             raise SystemExit(f"REFUSING --merge: {p} is an rlpair sabotage run")
+        if j.get("par_driver_sabotage"):
+            raise SystemExit(f"REFUSING --merge: {p} is a par-driver sabotage run")
         pk, fk = j.get("package") or {}, first.get("package") or {}
         if pk.get("par_devices") != fk.get("par_devices"):
             raise SystemExit(f"REFUSING --merge: {p} ran par_devices={pk.get('par_devices')!r}, "
