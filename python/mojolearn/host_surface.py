@@ -2320,7 +2320,10 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(
-            "Ships: the boosting fit, which is twenty-two covered lanes, the largest block of "
+            # COUNTED, not carried forward: this said "twenty-one" while the
+            # family declared 26 training lanes (lane/close-no-cpu-path-gbdt,
+            # 2026-09-20). len(family("gbdt")["training_lanes"]) is the number.
+            "Ships: the boosting fit, which is twenty-seven declared training lanes, the largest block of "
             "checkable surface any one binding holds. Saved models still predict through the "
             "shipped forest binding. CPU training of sample weights and of CTR categorical "
             "features still refuses by name (NO_CPU_PATH). At about 1.4 MB it is the largest "
