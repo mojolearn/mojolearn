@@ -1,0 +1,324 @@
+===== hf-causal-lm/base train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/denormal train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/denormal_ftz train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/dupes train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/hashed train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/negative train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/odd train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/ties train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
+===== hf-causal-lm/wide train =====
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 5105, in _
+    every = np.concatenate([_hf_bytes(np.asarray(one.forward(A(ids)))) for one in models])
+                                                 ~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 472, in forward
+    return self._run(self._ids(ids, what), state, False, what)
+           ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/causal_lm.py", line 456, in _run
+    x = blk.forward(x)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1103, in forward
+    return self._call(x, state, step=False)
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 956, in _call
+    ext = self._extension()
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1065, in _extension
+    mod = self._bind()
+  File "/root/mojolearn/python/mojolearn/_mode.py", line 113, in _bind
+    return _backend.binding(
+           ~~~~~~~~~~~~~~~~^
+        name or self._BINDING, getattr(self, "numeric_mode", None)
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1587, in binding
+    module = getattr(selected, name)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1455, in __getattr__
+    raise ImportError(
+    ...<5 lines>...
+    )
+ImportError: mojolearn: numeric_mode='identical' needs python/mojolearn/identical/_mojolearn_transformer.so, which is not built. Build it with
+    MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh
+
