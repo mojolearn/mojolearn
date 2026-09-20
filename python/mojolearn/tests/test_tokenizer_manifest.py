@@ -120,6 +120,17 @@ def test_binding_source_reads_the_sabotage_define():
     assert sorted(names) == sorted(host_surface.family("tokenizer")["exports"])
 
 
+def test_batch_encoder_parallelizes_whole_documents_only():
+    src = _read("bindings/_mojolearn_tokenizer_host.mojo")
+    body = src[src.index("def bpe_encode_batch_binding("):src.index("def bpe_decode_binding(")]
+    assert "sync_parallelize(_documents, tasks)" in body
+    assert "host_predict_task_count(n_docs) if n >= 16384 else 1" in body
+    assert "stagep.unsafe_store(a + j" in body
+    join = body.index("sync_parallelize(_documents, tasks)")
+    compact = body.index("all_ids.append(Int(staged[a + j]))")
+    assert join < compact, "document results must be compacted in input order after the join"
+
+
 def test_no_vocabulary_is_tracked_or_shipped():
     """mojolearn ships no vocabulary and tracks no tokenizer data file
     (2026-09-15): the tables are gone from the tree, the Unicode classes are
