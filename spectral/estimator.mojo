@@ -71,8 +71,14 @@ from spectral.impl.spectral_clustering import (
     fit_predict_connectivity_keep,
     fit_predict_keep,
 )
+from spectral.impl.spectral_embedding import (
+    MLSpectralEmbeddingParams,
+    transform,
+    transform_connectivity,
+)
 from spectral.impl.spectral_predict import spectral_predict_device
 from spectral.impl.sparse.coo import CooGraph
+from spectral.impl.sparse.op.coo_ops import coo_remove_diagonal
 
 
 def _config(
@@ -325,3 +331,115 @@ def spectral_predict_host(
         ctx, input, train_x, n_train, n_queries, n_features, n_components,
         n_clusters, n_neighbors, affinity, state,
     )
+
+
+def _embedding_config(
+    n_components: Int,
+    n_neighbors: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+) -> MLSpectralEmbeddingParams:
+    """`ML::SpectralEmbedding::params`. There is always a seed: the no-seed
+    arm of the Lanczos start vector is refused (DEVIATION 772)."""
+    return MLSpectralEmbeddingParams(
+        n_components=n_components,
+        n_neighbors=n_neighbors,
+        norm_laplacian=norm_laplacian,
+        drop_first=drop_first,
+        has_seed=True,
+        seed=seed,
+    )
+
+
+def spectral_embedding_dataset_host(
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    n_components: Int,
+    n_neighbors: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding: List[Float32],
+) raises -> Int:
+    """`ML::SpectralEmbedding::transform(handle, config, dataset,
+    embedding)`: the kNN connectivity graph, the Laplacian, the Lanczos.
+
+    `n_components` is the Lanczos count, the caller's plus one when
+    `drop_first` (the reference's Python does that sum, and so does ours).
+    `embedding` comes back row-major `n_samples x n_out`; returns `n_out`."""
+    if n_samples <= 0 or n_features <= 0:
+        raise Error(
+            "spectral embedding: X must be n_samples x n_features with both"
+            " positive, got " + String(n_samples) + " x " + String(n_features)
+        )
+    if len(dataset) < n_samples * n_features:
+        raise Error(
+            "spectral embedding: X holds " + String(len(dataset))
+            + " floats, needs " + String(n_samples * n_features)
+        )
+    var config = _embedding_config(
+        n_components, n_neighbors, norm_laplacian, drop_first, seed
+    )
+    var ctx = DeviceContext()
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral embedding (dataset): n_samples=" + String(n_samples)
+        + " n_features=" + String(n_features)
+        + " n_components=" + String(n_components)
+        + " n_neighbors=" + String(n_neighbors)
+        + " norm_laplacian=" + String(norm_laplacian)
+        + " drop_first=" + String(drop_first)
+        + " seed=" + String(seed)
+    )
+    return transform(ctx, config, dataset, n_samples, n_features, embedding, trace)
+
+
+def spectral_embedding_graph_host(
+    rows: List[Int32],
+    cols: List[Int32],
+    vals: List[Float32],
+    n_samples: Int,
+    n_components: Int,
+    norm_laplacian: Bool,
+    drop_first: Bool,
+    seed: UInt64,
+    mut embedding: List[Float32],
+) raises -> Int:
+    """`ML::SpectralEmbedding::transform(handle, config, rows, cols, vals,
+    embedding)`: the affinity graph is GIVEN as COO triples, so no kNN runs.
+    Diagonal entries are dropped first, as the reference's Python does. A repeated `(row, col)` key, a non-finite value and a negative value are
+    each refused by name further down. Returns `n_out`."""
+    if n_samples <= 0:
+        raise Error(
+            "spectral embedding: n_samples must be positive, got "
+            + String(n_samples)
+        )
+    var nnz = len(vals)
+    if nnz <= 0:
+        raise Error("spectral embedding: the connectivity graph has no entries")
+    if len(rows) != nnz or len(cols) != nnz:
+        raise Error(
+            "spectral embedding: rows, cols and vals must be the same"
+            " length, got " + String(len(rows)) + ", " + String(len(cols))
+            + ", " + String(nnz)
+        )
+    var config = _embedding_config(
+        n_components, 0, norm_laplacian, drop_first, seed
+    )
+    var ctx = DeviceContext()
+    var trace = IdentityTrace()
+    trace.header(
+        "spectral embedding (precomputed graph): n_samples="
+        + String(n_samples) + " nnz=" + String(nnz)
+        + " n_components=" + String(n_components)
+        + " norm_laplacian=" + String(norm_laplacian)
+        + " drop_first=" + String(drop_first)
+        + " seed=" + String(seed)
+    )
+    var r = rows.copy()
+    var c = cols.copy()
+    var v = vals.copy()
+    var graph = coo_remove_diagonal(CooGraph(n_samples, r^, c^, v^))
+    return transform_connectivity(ctx, config, graph, embedding, trace)

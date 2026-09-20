@@ -101,7 +101,7 @@ from .ensemble import (ExperimentalTwoLevelFeatureFreq, GradientBoosting, Ordere
 from .extratrees import ExtraTreesClassifier, ExtraTreesRegressor
 from . import preprocessing
 from .preprocessing import MinMaxScaler, StandardScaler
-from .linear_model import LinearRegression, LogisticRegression, Ridge
+from .linear_model import LinearRegression, LogisticRegression, QNRegressor, Ridge
 from .neighbors import (
     KNeighborsClassifier,
     KNeighborsRegressor,
@@ -146,7 +146,8 @@ from . import _metrics_impl as metrics
 from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
-from ._spectral_impl import SpectralClustering
+from ._spectral_impl import SpectralClustering, SpectralEmbedding
+from . import manifold
 from . import umap
 from .umap import UMAP
 from .neural_network import SmallMLPTrainer
@@ -161,6 +162,11 @@ from .language_model import (SmallByteLanguageModelTrainer, ByteLanguageModelCon
 from ._forest_host import HostForest, host_model, host_predict, host_predict_proba
 from ._gbdt_host import HostGBDT
 from ._svm_impl import SVC, SVR
+# lane/expose-qn-objectives (2026-09-20): the linear machines, the
+# quasi-Newton solver on the four hinge-family losses, and the `svm`
+# namespace that holds all four.
+from . import svm
+from .svm import LinearSVC, LinearSVR
 from ._arima_impl import ARIMA
 from ._tsa_impl import ExponentialSmoothing, kpss_test, select_d
 from . import tokenizer
@@ -375,7 +381,10 @@ __all__ = [
     "KNeighborsRegressor",
     "Lasso",
     "LinearRegression",
+    "LinearSVC",
+    "LinearSVR",
     "LogisticRegression",
+    "QNRegressor",
     "Mamba1Block",
     "Mamba1State",
     "Mamba2Block",
@@ -384,7 +393,9 @@ __all__ = [
     "Mamba3State",
     "SVC",
     "SVR",
+    "svm",
     "SpectralClustering",
+    "SpectralEmbedding",
     "TransformerBlock",
     "TransformerState",
     "NearestNeighbors",
@@ -413,6 +424,7 @@ __all__ = [
     "models",
     "matmul",
     "mamba",
+    "manifold",
     "metrics",
     "neural_network",
     "language_model",

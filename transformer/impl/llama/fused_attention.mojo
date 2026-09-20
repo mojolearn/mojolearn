@@ -1297,15 +1297,19 @@ of the trial tree (the sabotage copies stay trial-only, like
 
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
 comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
-"""Opt-in memory arm: keep v1 arithmetic but do not retain forward exp cells.
-The backward consequently takes the existing exact recompute launcher. The
-default remains the tuned estash route on columns whose matrix selects it."""
+comptime ATTN_V1_ALIAS_Y_ESTASH = is_defined["MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH"]()
+"""Opt-in v1 memory profiles. Recompute retains no exponent stash. Packed
+retains visible causal exponents only. Alias-y uses the full exponent layout,
+then overwrites each consumed exponent with y for the unchanged dQ/dK/dV
+readers instead of allocating a second full y matrix."""
 
 def attention_v1_backward_memory_profile() -> String:
     comptime if ATTN_V1_RECOMPUTE_BACKWARD:
         return String("v1-recompute")
     comptime if ATTN_V1_PACKED_ESTASH:
         return String("v1-packed-estash")
+    comptime if ATTN_V1_ALIAS_Y_ESTASH:
+        return String("v1-alias-y-estash")
     return String("v1-estash-default")
 
 @always_inline
@@ -5797,7 +5801,10 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                 var e = e_st.unsafe_load(ecell)
                 var yv = ftz(identical_div(ftz(e), d_row))
                 ys.unsafe_store(tr * ESTRIDE + kj, yv)
-                y_st.unsafe_store(stbase + j, yv)
+                comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                    e_st.unsafe_store(ecell, yv)
+                else:
+                    y_st.unsafe_store(stbase + j, yv)
                 dys.unsafe_store(tr * ESTRIDE + kj, dyv)
                 dy_st.unsafe_store(stbase + j, dyv)
         barrier()
@@ -6937,9 +6944,15 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     instantiates only `[HD, ATTN_DEFAULT_ESTASH_DRES, False]`, and only when
     its column default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
+    comptime assert not (ATTN_V1_ALIAS_Y_ESTASH and ATTN_V1_PACKED_ESTASH), (
+        "MOJOLEARN_ATTN_V1_ALIAS_Y_ESTASH currently requires the full estash layout"
+    )
     var cells = b * nh * l * s
+    var y_cells = cells
+    comptime if ATTN_V1_ALIAS_Y_ESTASH:
+        y_cells = 1
     step_count_device_alloc()
-    var y_st = ctx.enqueue_create_buffer[DType.float32](cells)
+    var y_st = ctx.enqueue_create_buffer[DType.float32](y_cells)
     step_count_device_alloc()
     var dy_st = ctx.enqueue_create_buffer[DType.float32](cells)
     step_count_sync()
@@ -6965,25 +6978,21 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     var dq_blocks = b * nh * ((l + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
-    ctx.enqueue_function[qp](
-        dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(),
-        Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s),
-        Int32(pos0), Int32(key_lo), Int32(window), scale,
-        dctx.unsafe_ptr(), v_cache.unsafe_ptr(),
-        grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-    )
+    comptime if ATTN_V1_ALIAS_Y_ESTASH:
+        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), kept.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+    else:
+        ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
     _attn_tick(ctx, on, tk, "bwd_dq_tiled_pf")
     if keys == 32:
-        _estash_dkdv_launch[HD, 32, SWZ](
-            ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s,
-            pos0, key_lo, window, ksab,
-        )
+        comptime if ATTN_V1_ALIAS_Y_ESTASH:
+            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+        else:
+            _estash_dkdv_launch[HD, 32, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     else:
-        _estash_dkdv_launch[HD, 64, SWZ](
-            ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s,
-            pos0, key_lo, window, ksab,
-        )
+        comptime if ATTN_V1_ALIAS_Y_ESTASH:
+            _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, kept, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
+        else:
+            _estash_dkdv_launch[HD, 64, SWZ](ctx, dk, dv, corner, y_st, dy_st, q_rope, dctx, b, l, nh, nkv, s, pos0, key_lo, window, ksab)
     _attn_tick(ctx, on, tk, "bwd_kvgrid_dkdv_pf")
     # The stashes must outlive the enqueued kernels: synchronize, then the
     # explicit last use (a buffer is freed at its last use).

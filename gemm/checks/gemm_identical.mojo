@@ -148,6 +148,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
+    COLUMN_AMD,
     COLUMN_APPLE,
     PINNED_ACC_COLS_PER_TH,
     PINNED_ACC_ROWS_PER_TH,
@@ -2445,16 +2446,18 @@ def choose_gemm_plan(m: Int, n: Int, k: Int) -> Int:
         return base
     if m < 32 or n < 32 or m * n < 128 * 1024:
         return base
-    # Large transformer-training batches on Apple are throughput-bound by
-    # the 128x128 tile's per-thread accumulator footprint.  On an M3 Max,
-    # 64x64 cut the median by 26.3%, 27.8%, and 29.7% at n=2304, 3072, and
-    # 1024 respectively (m=32768, k=768), with zero bit mismatches across
-    # all 209,715,200 output cells.  It preserves the identical leaf/fold
-    # DAG while exposing four times as many output tiles.  Keep this an
-    # IDENTICAL-only scheduling choice; FAST and DETERMINISTIC retain their
-    # existing dispatcher unchanged.
+    # Transformer-training projections on Apple are throughput-bound by the
+    # 128x128 tile's per-thread accumulator footprint.  The 64x64 plan keeps
+    # the identical leaf/fold DAG while exposing four times as many output
+    # tiles.  The original evidence covered m=32768 with k=768.  The GPT-3
+    # small qualification extends that scheduling choice to rows >=1024
+    # whenever one matrix output/input width is d_model=768: Q/K/V/O, both
+    # MLP directions, and the chunked head.  B1/L1024 through B8/L2048 and
+    # FFN widths 2048/3072 were faster on Apple M4 with zero bit mismatches.
+    # Keep this IDENTICAL-only; FAST and DETERMINISTIC retain their existing
+    # dispatcher unchanged.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and TARGET_COLUMN == COLUMN_APPLE:
-        if m >= 32768 and n >= 1024 and k == 768:
+        if m >= 1024 and n >= 768 and k >= 768 and (n == 768 or k == 768):
             return PLAN_TUNED_64_4X4
     if m >= 2 * TUNED_BM_WIDE and n >= 2 * TUNED_BN_WIDE:
         return PLAN_TUNED_128_8X8
@@ -4430,6 +4433,19 @@ def _shipped_body_kpack_hg[
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
     if m <= 0 or n <= 0:
         return
+    # MI325X, 2026-09-20: the packed body wins strongly for the narrow
+    # d_model output of B1/L2048 and for the MLP down projections, but its
+    # gather staging loses once a k=768 training projection has enough rows
+    # or output columns.  Keep this a measured AMD-only scheduling choice;
+    # NVIDIA and Apple have opposite results at the same shapes.  The forced
+    # plan and packed body have the same leaf/fold DAG and were bit-equal over
+    # every output cell in the GPT-3-small production-shape matrix.
+    comptime if not SAB and TARGET_COLUMN == COLUMN_AMD:
+        if k == 768 and (m >= 4096 or (m >= 2048 and n >= 1024)):
+            identical_gemm_with_plan(
+                ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8
+            )
+            return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
         comptime if GEMM_REUSE_GROUP_WS:
             var gl = gemm_default_ksplit_leaves(m, n, k)

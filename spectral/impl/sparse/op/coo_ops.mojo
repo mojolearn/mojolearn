@@ -166,6 +166,26 @@ def coo_remove_scalar(g: CooGraph, scalar: Float32) -> CooGraph:
     return CooGraph(g.n, rows^, cols^, vals^)
 
 
+def coo_remove_diagonal(g: CooGraph) raises -> CooGraph:
+    """Keep every entry with `row != col`, in order: what cuML's
+    `spectral_embedding.pyx:255-262` does to a precomputed affinity before
+    the transform (the Laplacian's diagonal is the degree, whatever was
+    given there). A graph with nothing left is refused by name."""
+    var rows = List[Int32]()
+    var cols = List[Int32]()
+    var vals = List[Float32]()
+    for i in range(g.nnz()):
+        if g.rows[i] != g.cols[i]:
+            rows.append(g.rows[i])
+            cols.append(g.cols[i])
+            vals.append(g.vals[i])
+    if len(vals) == 0:
+        raise Error(
+            "spectral embedding: the connectivity graph has no off-diagonal entries"
+        )
+    return CooGraph(g.n, rows^, cols^, vals^)
+
+
 def sorted_coo_to_csr(g: CooGraph) -> List[Int32]:
     """`csr.cuh:78-90`, plus an `n + 1`-th entry holding `nnz`.
 

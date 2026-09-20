@@ -43,6 +43,7 @@ from glm.estimator import (
     ols_predict_host,
     qn_decision_function_host,
     qn_fit_host,
+    qn_predict_binary_host,
     qn_sigmoid_host,
     qn_softmax_host,
     ridge_fit_host,
@@ -527,10 +528,14 @@ def qn_fit_binding(
     since lane/logistic-multiclass (2026-09-14), an OPTIONAL 14th, the loss
     id: QN_LOSS_LOGISTIC (0) with `n_classes == 2`, the value a 13-field
     call gets, or QN_LOSS_SOFTMAX (2) with `n_classes > 2`, the coef buffer
-    then `n_classes * (n_features + fit_intercept)` floats. Returns
-    num_iters; info[0] = objective, info[1] = retcode."""
-    if len(params) != 13 and len(params) != 14:
-        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id")
+    then `n_classes * (n_features + fit_intercept)` floats. Since
+    lane/expose-qn-objectives (2026-09-20) the 14th also takes the SVC
+    losses (3, 4; `n_classes == 2`, y in {0, 1}) and the regression losses
+    (squared 1, absolute 7, SVR 5 and 6; `n_classes == 1`), and an
+    OPTIONAL 15th is `svr_eps`, the SVR sensitivity (0 when absent).
+    Returns num_iters; info[0] = objective, info[1] = retcode."""
+    if len(params) < 13 or len(params) > 15:
+        raise Error("qn_fit: params must carry the 13 qn_params fields, plus an optional 14th, the loss id, and an optional 15th, svr_eps")
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var wp = _f32_ptr(Int(py=coef_addr))
@@ -548,13 +553,15 @@ def qn_fit_binding(
     var fit_intercept = Int(py=params[10]) != 0
     var normalized = Int(py=params[11]) != 0
     var has_sw = Int(py=params[12]) != 0
-    var loss = Int(py=params[13]) if len(params) == 14 else 0
+    var loss = Int(py=params[13]) if len(params) >= 14 else 0
+    var svr_eps = Float64(py=params[14]) if len(params) == 15 else 0.0
     var iters = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
         iters = qn_fit_host(
             ctx, xp, yp, wp, ip, nr, nf, nc, l1, l2, grad_tol, change_tol,
             max_iter, ls_max, mem, fit_intercept, normalized, has_sw, loss,
+            svr_eps,
         )
     return PythonObject(iters)
 
@@ -582,6 +589,28 @@ def qn_decision_function_binding(
     with GILReleased(Python()):
         var ctx = DeviceContext()
         qn_decision_function_host(ctx, xp, cp, op, nr, nf, fi, nc)
+    return PythonObject(0)
+
+
+def qn_predict_binary_binding(
+    x_addr: PythonObject,
+    coef_addr: PythonObject,
+    out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """Binary `qn_predict`: int64 0/1 codes under strict score > 0."""
+    if len(params) != 3:
+        raise Error("qn_predict_binary: params must contain n_rows, n_features, fit_intercept")
+    var nr = Int(py=params[0])
+    var nf = Int(py=params[1])
+    var fi = Int(py=params[2]) != 0
+    var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        qn_predict_binary_host(
+            ctx, _f32_ptr(Int(py=x_addr)), _f32_ptr(Int(py=coef_addr)),
+            op, nr, nf, fi,
+        )
     return PythonObject(0)
 
 
@@ -808,6 +837,7 @@ def PyInit__mojolearn_estimators() abi("C") -> PythonObject:
         m.def_function[ridge_fit_binding]("ridge_fit")
         m.def_function[qn_fit_binding]("qn_fit")
         m.def_function[qn_decision_function_binding]("qn_decision_function")
+        m.def_function[qn_predict_binary_binding]("qn_predict_binary")
         m.def_function[qn_sigmoid_binding]("qn_sigmoid")
         m.def_function[qn_softmax_binding]("qn_softmax")
         return m.finalize()

@@ -46,7 +46,17 @@ from glm.impl.ols import (
 )
 from glm.impl.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
-from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QN_LOSS_SOFTMAX, QNParams
+from glm.impl.linear_model.qn import (
+    QN_LOSS_ABS,
+    QN_LOSS_LOGISTIC,
+    QN_LOSS_SOFTMAX,
+    QN_LOSS_SQUARED,
+    QN_LOSS_SVC_L1,
+    QN_LOSS_SVC_L2,
+    QN_LOSS_SVR_L1,
+    QN_LOSS_SVR_L2,
+    QNParams,
+)
 from checks.numerics import ftz, identical_exp64
 
 
@@ -281,6 +291,60 @@ def ridge_fit_host(
 # ===========================================================================
 
 
+def qn_loss_name(loss: Int) -> String:
+    """The identity card's header word for a loss id."""
+    if loss == QN_LOSS_LOGISTIC:
+        return "logistic"
+    if loss == QN_LOSS_SOFTMAX:
+        return "softmax"
+    if loss == QN_LOSS_SQUARED:
+        return "qn-squared"
+    if loss == QN_LOSS_ABS:
+        return "qn-absolute"
+    if loss == QN_LOSS_SVC_L1:
+        return "svc-l1"
+    if loss == QN_LOSS_SVC_L2:
+        return "svc-l2"
+    if loss == QN_LOSS_SVR_L1:
+        return "svr-l1"
+    return "svr-l2"
+
+
+def qn_check_loss_args(loss: Int, n_classes: Int, svr_eps: Float64) raises:
+    """The entry's refusals: the eight routed ids, the `C` each one's
+    `ASSERT` in `qn_fit_x` demands (`qn.cuh:121-173`), and `svr_eps` finite,
+    non-negative and nonzero only where the loss reads it."""
+    var is_svr = loss == QN_LOSS_SVR_L1 or loss == QN_LOSS_SVR_L2
+    var is_regression = is_svr or loss == QN_LOSS_SQUARED or loss == QN_LOSS_ABS
+    var is_binary = (
+        loss == QN_LOSS_LOGISTIC or loss == QN_LOSS_SVC_L1 or loss == QN_LOSS_SVC_L2
+    )
+    if not (is_regression or is_binary or loss == QN_LOSS_SOFTMAX):
+        raise Error(
+            "qn_fit: loss " + String(loss) + " is not a qn_loss_type id;"
+            " 0 to 7 are (glm/impl/linear_model/qn.mojo)"
+        )
+    if is_regression and n_classes != 1:
+        raise Error(
+            "qn_fit: loss " + String(loss) + " is a regression loss and needs"
+            " n_classes == 1, got " + String(n_classes)
+        )
+    if is_binary and n_classes != 2:
+        raise Error(
+            "qn_fit: loss " + String(loss) + " needs n_classes == 2, got "
+            + String(n_classes)
+        )
+    if loss == QN_LOSS_SOFTMAX and not (n_classes > 2):
+        raise Error("qn_fit: the softmax loss needs n_classes > 2, got " + String(n_classes))
+    if not (svr_eps >= 0.0) or svr_eps > 3.0e38:
+        raise Error("qn_fit: svr_eps must be finite and non-negative, got " + String(svr_eps))
+    if svr_eps != 0.0 and not is_svr:
+        raise Error(
+            "qn_fit: svr_eps is read by the two SVR losses only; loss "
+            + String(loss) + " must be given 0"
+        )
+
+
 def qn_fit_host(
     ctx: DeviceContext,
     x_ptr: MutPointer[Float32, MutUntrackedOrigin],
@@ -301,23 +365,24 @@ def qn_fit_host(
     penalty_normalized: Bool,
     has_sample_weight: Bool,
     loss: Int = QN_LOSS_LOGISTIC,
+    svr_eps: Float64 = 0.0,
 ) raises -> Int:
     """`qnFit` (`qn.cuh:176-193`) for a dense row-major `X`, through
-    `qn_fit_x`'s loss switch. `loss` (lane/logistic-multiclass, 2026-09-14)
-    is QN_LOSS_LOGISTIC, the default and the only value until that day, or
-    QN_LOSS_SOFTMAX with `n_classes > 2`; every other id is refused here by
-    name before a buffer exists. `coef_ptr` holds `n_targets * (n_features
+    `qn_fit_x`'s loss switch. `loss` is QN_LOSS_LOGISTIC (the default) with
+    `n_classes == 2`, QN_LOSS_SOFTMAX with `n_classes > 2`, the two SVC
+    losses with `n_classes == 2`, or one of the four regression losses
+    (squared, absolute, the two SVR) with `n_classes == 1`
+    (lane/expose-qn-objectives, 2026-09-20); `svr_eps` is the SVR
+    sensitivity, non-negative, and must be 0 for every other loss. An
+    unknown id or a mismatched `n_classes` is refused here by name before a
+    buffer exists. `coef_ptr` holds `n_targets * (n_features
     + fit_intercept)` floats, cuML's column-major `W` (`w[c + C*j]`, the
     bias column last; `n_targets` is 1 for the logistic loss), zero-
     initialized here as `solvers/qn.pyx:552-554` does (no warm start).
     `info_ptr[0]` receives the final objective, `info_ptr[1]` the
     `OPT_RETCODE`; the return value is `num_iters`. Carries the identity
     card (`qn.*`); the logistic header line is the string it always was."""
-    if loss != QN_LOSS_LOGISTIC and loss != QN_LOSS_SOFTMAX:
-        raise Error(
-            "qn_fit: loss " + String(loss) + " is not routed from this entry;"
-            " QN_LOSS_LOGISTIC (0) and QN_LOSS_SOFTMAX (2) are"
-        )
+    qn_check_loss_args(loss, n_classes, svr_eps)
     var n_targets = 1 if n_classes == 2 else n_classes
     var n_param = (n_features + (1 if fit_intercept else 0)) * n_targets
     var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
@@ -341,15 +406,14 @@ def qn_fit_host(
     var trace = IdentityTrace()
     if trace.enabled:
         trace.header(
-            String("logistic n=" if loss == QN_LOSS_LOGISTIC else "softmax n=")
-            + String(n_rows) + " d=" + String(n_features)
+            qn_loss_name(loss) + " n=" + String(n_rows) + " d=" + String(n_features)
             + " loss=" + String(loss)
         )
     var fx = Float32(0.0)
     var iters = 0
     var ret = qn_fit_x(
         ctx, pams, x^, y^, n_rows, n_features, n_classes, w, fx, iters,
-        has_sample_weight, trace,
+        has_sample_weight, trace, Float32(svr_eps),
     )
     var hw = ctx.enqueue_create_host_buffer[DType.float32](n_param)
     ctx.enqueue_copy(dst_ptr=hw.unsafe_ptr(), src_buf=w)
@@ -399,6 +463,39 @@ def qn_decision_function_host(
     ctx.synchronize()
     for i in range(n_rows * n_targets):
         out_ptr.unsafe_store(i, hs.unsafe_ptr().unsafe_load(i))
+    _ = hs^
+
+
+def qn_predict_binary_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Int64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+) raises:
+    """Binary `qn_predict`, retaining the score and threshold boundary in
+    native code so Python never materializes scalar score/code objects."""
+    var n_param = n_features + (1 if fit_intercept else 0)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
+    ctx.synchronize()
+    var pams = QNParams.default()
+    pams.loss = QN_LOSS_LOGISTIC
+    pams.fit_intercept = fit_intercept
+    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
+    ctx.synchronize()
+    for i in range(n_rows):
+        out_ptr.unsafe_store(
+            i, Int64(1) if hs.unsafe_ptr().unsafe_load(i) > Float32(0.0)
+            else Int64(0),
+        )
     _ = hs^
 
 

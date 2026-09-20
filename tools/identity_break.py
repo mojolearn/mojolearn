@@ -398,6 +398,8 @@ sampler, a solver, a metric, a reduction).
     2026-09-20 (lane/gbdt-cpu-default-parity: the bootstraps and the score
                noise on RMSE and on Depthwise and Lossguide)
       gbdt-stochastic-arms
+    2026-09-20 (lane/expose-spectral-embedding, SpectralEmbedding's Python door)
+      spectral-embedding
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -3958,6 +3960,49 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(coef=_h(m.coef_), proba=_h(m.predict_proba(X[:256]))), m, lambda e: (e.predict_proba(Xh[:256]),))
 
 
+# lane/expose-qn-objectives (2026-09-20): the six one-target quasi-Newton
+# objectives, one lane each. The two classifiers and the two qn lanes take
+# L-BFGS (an l2 penalty); the two SVR lanes keep the reference's default l1
+# penalty, which is OWL-QN.
+
+@lane("linear-svc")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.svm.LinearSVC(loss="hinge", C=1.0, max_iter=50).fit(X, yc)
+    return _fit(dict(coef=_h(m.coef_), intercept=_h(m.intercept_), decision=_h(m.decision_function(X[:256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("linear-svc-squared-hinge")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.svm.LinearSVC(loss="squared_hinge", C=1.0, max_iter=50).fit(X, yc)
+    return _fit(dict(coef=_h(m.coef_), intercept=_h(m.intercept_), decision=_h(m.decision_function(X[:256]))),
+                m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
+
+@lane("linear-svr")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.svm.LinearSVR(loss="epsilon_insensitive", C=1.0, epsilon=0.1, max_iter=50).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("linear-svr-squared")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.svm.LinearSVR(loss="squared_epsilon_insensitive", C=1.0, epsilon=0.1, max_iter=50).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("qn-squared")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QNRegressor(loss="squared_error", l2_strength=1.0, max_iter=50).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
+@lane("qn-absolute")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QNRegressor(loss="absolute_error", l2_strength=1.0, max_iter=50).fit(X, yr)
+    return _fit(dict(coef=_h(m.coef_), predict=_h(m.predict(X[:256]))), m, lambda e: (e.predict(Xh[:256]),))
+
+
 @lane("elasticnet-l2end-no-intercept")
 def _(ml, X, yc, yr, Xh=None):
     """l1_ratio=0 is the end where the soft threshold never fires; no
@@ -4076,6 +4121,23 @@ def _(ml, X, yc, yr, Xh=None):
     Ah = _cross_affinity(Xh[:256, :4], X[:1000, :4])
     m._identity_heldout_affinity = Ah
     return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, lambda e: (e.predict(Ah),))
+
+
+@lane("spectral-embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20), its two
+    bindings and the two switches the class fixes: the k-NN graph arm on the
+    spectral lane's rows, the precomputed arm on the spectral-precomputed
+    lane's affinity, and spectral_embedding with the unnormalized Laplacian
+    and the trivial eigenvector kept. No out-of-sample method exists."""
+    P = np.ascontiguousarray(X[:512, :4])
+    m = ml.SpectralEmbedding(n_components=3, n_neighbors=10, random_state=3).fit(P)
+    A = _affinity(X[:1000, :4])
+    pre = ml.SpectralEmbedding(n_components=3, affinity="precomputed", random_state=3).fit(A)
+    raw = ml.manifold.spectral_embedding(P, n_components=3, n_neighbors=10, random_state=3,
+                                         norm_laplacian=False, drop_first=False)
+    return _fit(dict(embedding=_h(m.embedding_), affinity=_h(A), precomputed=_h(pre.embedding_),
+                     unnormalized=_h(raw)), m, "n/a:transductive")
 
 
 @lane("holtwinters-multiplicative")
@@ -8668,6 +8730,8 @@ _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "spectral")
 _batch_decl(lambda ml, e, Xh: [_BatchRows("predict", e._identity_heldout_affinity[:64], lambda r: (e.predict(r),))],
             "spectral-precomputed")
+_batch_decl("n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, "
+            "in the reference and in scikit-learn alike)", "spectral-embedding")
 
 
 def _batch_hdbscan(ml, e, Xh):
@@ -8719,6 +8783,8 @@ _batch_decl(_rows_calls("predict_proba", sl=slice(0, 256)), "logistic", "logisti
             "logistic-unpenalized-no-intercept", "par-logistic")
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 256)), "logistic-multiclass")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "svc", "svc-linear", "par-svm", "svc-poly")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "linear-svc", "linear-svc-squared-hinge")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "linear-svr", "linear-svr-squared", "qn-squared", "qn-absolute")
 _batch_decl(_rows_calls("score_samples", sl=(slice(0, 256), slice(0, 4))), "kde", "kde-weighted",
             "kde-tophat-sqeuclidean", "kde-epanechnikov-l1", "kde-exponential-chebyshev",
             "kde-cosine-minkowski")

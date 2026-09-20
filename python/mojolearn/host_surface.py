@@ -394,6 +394,11 @@ TRAINING_LANE_NAMES = {
     # dense affinity's COO scan (nonzero_f64_count, nonzero_f64_fill) in the
     # core host binding.
     "spectral-precomputed": "spectral clustering on a precomputed affinity",
+    # lane/expose-spectral-embedding (2026-09-20): SpectralEmbedding and
+    # manifold.spectral_embedding, through spectral_embedding_dataset and
+    # spectral_embedding_graph in the metrics host binding over
+    # host_spectral_embedding_dataset and host_spectral_embedding_coo.
+    "spectral-embedding": "spectral embedding (Laplacian eigenmaps)",
     # Workstream E, the gp host lane (2026-09-14): the Gaussian process fit
     # and predict through gaussian_process/host/gpr_oracle.mojo over
     # cholesky/host/chol_oracle.mojo and gemm_oracle, exported under the GPU
@@ -506,6 +511,14 @@ TRAINING_LANE_NAMES = {
     "logistic-l1": "l1-penalized logistic regression",
     "logistic-elasticnet": "elasticnet-penalized logistic regression",
     "logistic-multiclass": "multiclass logistic regression",
+    # lane/expose-qn-objectives (2026-09-20): the six one-target
+    # quasi-Newton objectives (glm/host/qn_oracle.mojo::host_one_target_lz).
+    "linear-svc": "linear SVC on the hinge loss",
+    "linear-svc-squared-hinge": "linear SVC on the squared hinge loss",
+    "linear-svr": "linear SVR on the epsilon-insensitive loss",
+    "linear-svr-squared": "linear SVR on the squared epsilon-insensitive loss",
+    "qn-squared": "quasi-Newton regression on the squared loss",
+    "qn-absolute": "quasi-Newton regression on the absolute loss",
     "kpss": "the KPSS stationarity test",
     "svr": "SVR",
     "svr-linear": "the linear SVR",
@@ -1614,6 +1627,9 @@ FAMILIES = (
             "logistic-unpenalized-no-intercept", "dbscan-weighted", "logistic-l1",
             "logistic-elasticnet", "logistic-multiclass", "pca-full-whiten",
             "par-queries-kde",
+            # lane/expose-qn-objectives (2026-09-20)
+            "linear-svc", "linear-svc-squared-hinge", "linear-svr",
+            "linear-svr-squared", "qn-squared", "qn-absolute",
         ),
         # lane/inference-linear-svm (2026-09-15): the option variants of
         # ols, ridge and logistic load through the same formats; the
@@ -1642,9 +1658,9 @@ FAMILIES = (
             "LinearRegression", "Ridge", "TruncatedSVD", "LogisticRegression",
             "PCA", "KernelDensity", "DBSCAN", "StandardScaler", "MinMaxScaler",
             "Lasso", "ElasticNet", "KernelRidge", "Nystroem", "RBFSampler",
-            "AgglomerativeClustering",
+            "AgglomerativeClustering", "LinearSVC", "LinearSVR", "QNRegressor",
         ),
-        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features",
+        display="linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features, linear SVC and SVR and quasi-Newton regression on the squared and absolute losses",
         # lane/inference-transductive-predict (2026-09-15): `dbscan_fit_core`
         # (the fit's core mask for DBSCAN(prediction_data=True)) and
         # `labeled_reference_predict`, the out-of-sample labels of DBSCAN
@@ -1671,7 +1687,7 @@ FAMILIES = (
             "dbscan_fit_core", "labeled_reference_predict",
             "ols_predict", "tsvd_transform", "pca_transform",
             "pca_whiten_transform", "pca_whiten_inverse_transform",
-            "qn_decision_function", "qn_sigmoid", "qn_softmax",
+            "qn_decision_function", "qn_predict_binary", "qn_sigmoid", "qn_softmax",
             "standard_transform", "minmax_transform", "cd_predict",
             "kernel_ridge_predict", "nystroem_transform", "rbf_sampler_transform",
         ),
@@ -1697,7 +1713,8 @@ FAMILIES = (
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness"),
+                        "metrics-fowlkes-mallows", "metrics-homogeneity-completeness",
+                        "spectral-embedding"),
         # UMAP.transform from a saved embedding (lane/inference-forecast-
         # umap-pca, 2026-09-15). Its answer depended on the query batch by the
         # transform's contract until lane/umap-batch-fix (2026-09-16) made all
@@ -1712,7 +1729,7 @@ FAMILIES = (
         inference_display="UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch)",
         forest_kinds=(),
         classes=(
-            "SpectralClustering", "UMAP",
+            "SpectralClustering", "SpectralEmbedding", "manifold.spectral_embedding", "UMAP",
             "metrics.accuracy_score", "metrics.adjusted_rand_score",
             "metrics.entropy", "metrics.mutual_info_score",
             "metrics.homogeneity_score", "metrics.completeness_score",
@@ -1751,6 +1768,7 @@ FAMILIES = (
             # 2860), so a saved model predicts from the inference wheel.
             "spectral_fit_predict_dataset_state", "spectral_fit_predict_graph_state",
             "spectral_predict",
+            "spectral_embedding_dataset", "spectral_embedding_graph",
             "umap_fit_transform", "umap_transform", "umap_numeric_mode",
             "rand_score", "mean_squared_error", "mean_absolute_error",
             "root_mean_squared_error", "roc_auc_score", "precision_recall_curve",
@@ -3126,7 +3144,14 @@ PUBLIC_PENDING_LANES = {
     # next coordinated record, which is where GPU columns are taken. Until
     # one lands there is no reference to ship, so an installed `verify --all`
     # is told not to ask rather than left reading OWED.
-    # ADMITTED 2026-09-20: gbdt-symmetric-eval carries cells in the shipped table now.
+    # WITHDRAWN 2026-09-20, THE SAME DAY IT WAS ADMITTED. Its CPU column and
+    # its first GPU column DISAGREE (RTX 4090,
+    # bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/):
+    # the held-out loss curve differs on all nine fixtures, the model differs
+    # on dupes and negative where that moves the early-stopping cut, and wide
+    # refuses on the GPU because the shrink never cuts there. The CPU eval
+    # oracle had never been run against a GPU. No reference until the two agree.
+    "gbdt-symmetric-eval": "no reference",
 
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
     # committed record and no shipped table cell describes it yet, and a
@@ -3313,8 +3338,8 @@ PUBLIC_PENDING_LANES = {
     # `verify --all` would read OWED for every part. `PUBLIC_INAPPLICABLE_PREFIXES`
     # already keeps every `par-` lane out of the public set; this says why the
     # table is empty as well.
-    "par-gpc-fit": "no reference",
-    "par-gpc-predict": "no reference",
+    # ADMITTED 2026-09-20: par-gpc-fit, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-gpc-predict, CPU and a two-device RTX 4090 column agree on all nine fixtures.
     # THE OTHER FOUR, AND THE REASON THAT WAS WRONG
     # (lane/cpu-routes-gpu-only-four, 2026-09-20). The four lines above used
     # to read `no cpu route`, the reason that says "this box is the wrong box,
@@ -3350,8 +3375,8 @@ PUBLIC_PENDING_LANES = {
     # and nothing here claims otherwise.
     # ADMITTED 2026-09-20: mamba1-decode-session carries cells in the shipped table now.
     # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
-    "par-causal-lm": "no reference",
-    "par-cross-val": "no reference",
+    # ADMITTED 2026-09-20: par-causal-lm, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-cross-val, CPU and a two-device RTX 4090 column agree on all nine fixtures.
 }
 
 
