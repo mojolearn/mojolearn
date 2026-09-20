@@ -28,6 +28,7 @@ gate's, not this file's.
 # Gate-runner scope: host runtime checks require the CPU-only route.
 GATE_BACKENDS = ("cpu",)
 import re
+import os
 import sys
 from pathlib import Path
 
@@ -62,6 +63,13 @@ def test_manifest_covers_kmeans():
     assert (ROOT / ORACLE).is_file(), f"{ORACLE} does not exist"
     assert "k-means" not in host_surface.no_cpu_path_sentence(), host_surface.no_cpu_path_sentence()
     assert "k-means" in host_surface.training_sentence()
+
+
+def test_accuracy_host_uses_pointer_parallel_count():
+    binding = _read("bindings/_mojolearn_metrics_host.mojo")
+    oracle = _read(METRICS_ORACLE)
+    assert "host_accuracy_score_ptr(yt, yp, n)" in binding
+    assert "sync_parallelize(_rows, tasks)" in oracle
 
 
 def test_binding_registers_kmeans_fit():
@@ -300,6 +308,18 @@ def test_metrics_run_on_the_host_when_built():
     x = rng.standard_normal((300, 3)).astype(np.float32)
     yt = (rng.integers(0, 3, 300)).astype(np.int32)
     yp = (yt + (rng.random(300) < 0.2)).astype(np.int32) % 3
+    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+    try:
+        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
+        serial = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
+        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
+        parallel = module.accuracy_score(yt.ctypes.data, yp.ctypes.data, [len(yt)])
+    finally:
+        if previous_threads is None:
+            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+        else:
+            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
+    assert serial == parallel
     got = [(mt.accuracy_score(yt, yp), mt.adjusted_rand_score(yt, yp), mt.v_measure_score(yt, yp),
             mt.r2_score(x[:, 0], x[:, 0] * np.float32(0.9)), mt.silhouette_score(x, yp))
            for _ in range(2)]
