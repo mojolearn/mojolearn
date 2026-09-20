@@ -395,6 +395,8 @@ sampler, a solver, a metric, a reduction).
                boosting, the seven border types, the quantile constant)
       gbdt-catboost-defaults gbdt-ordered gbdt-ordered-bayesian-noise
                gbdt-border-types gbdt-bfa-quantile par-ordered par-border-types
+    2026-09-20 (lane/expose-spectral-embedding, SpectralEmbedding's Python door)
+      spectral-embedding
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -4021,6 +4023,23 @@ def _(ml, X, yc, yr, Xh=None):
     Ah = _cross_affinity(Xh[:256, :4], X[:1000, :4])
     m._identity_heldout_affinity = Ah
     return _fit(dict(affinity=_h(A), labels=_h(m.labels_)), m, lambda e: (e.predict(Ah),))
+
+
+@lane("spectral-embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """SpectralEmbedding (lane/expose-spectral-embedding, 2026-09-20), its two
+    bindings and the two switches the class fixes: the k-NN graph arm on the
+    spectral lane's rows, the precomputed arm on the spectral-precomputed
+    lane's affinity, and spectral_embedding with the unnormalized Laplacian
+    and the trivial eigenvector kept. No out-of-sample method exists."""
+    P = np.ascontiguousarray(X[:512, :4])
+    m = ml.SpectralEmbedding(n_components=3, n_neighbors=10, random_state=3).fit(P)
+    A = _affinity(X[:1000, :4])
+    pre = ml.SpectralEmbedding(n_components=3, affinity="precomputed", random_state=3).fit(A)
+    raw = ml.manifold.spectral_embedding(P, n_components=3, n_neighbors=10, random_state=3,
+                                         norm_laplacian=False, drop_first=False)
+    return _fit(dict(embedding=_h(m.embedding_), affinity=_h(A), precomputed=_h(pre.embedding_),
+                     unnormalized=_h(raw)), m, "n/a:transductive")
 
 
 @lane("holtwinters-multiplicative")
@@ -8613,6 +8632,8 @@ _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]),
 _batch_decl(_rows_calls("predict", sl=np.s_[:64, :4]), "spectral")
 _batch_decl(lambda ml, e, Xh: [_BatchRows("predict", e._identity_heldout_affinity[:64], lambda r: (e.predict(r),))],
             "spectral-precomputed")
+_batch_decl("n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, "
+            "in the reference and in scikit-learn alike)", "spectral-embedding")
 
 
 def _batch_hdbscan(ml, e, Xh):

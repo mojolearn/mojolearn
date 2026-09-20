@@ -129,7 +129,8 @@ def test_manifest_covers_metrics():
     # umap on lane/cpu-training-umap-b (tests/test_cpu_training_umap.py),
     # metrics-classification on lane/cpu-training-metrics-classification.
     assert fam["training_lanes"] == ("metrics", "spectral", "spectral-precomputed", "umap", "metrics-classification",
-                                     "metrics-fowlkes-mallows", "metrics-homogeneity-completeness")
+                                     "metrics-fowlkes-mallows", "metrics-homogeneity-completeness",
+                                     "spectral-embedding")
     assert METRICS_ORACLE in fam["host_modules"]
     assert (ROOT / METRICS_ORACLE).is_file()
     assert (ROOT / "bindings/build_metrics_host.sh").is_file()
