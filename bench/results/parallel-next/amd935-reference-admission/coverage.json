@@ -1,0 +1,3303 @@
+{
+  "collection_plan": {
+    "amd": {},
+    "apple": {},
+    "nvidia": {
+      "par-arima": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ]
+      },
+      "par-forest-pool": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "infer",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ]
+      },
+      "par-holtwinters": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ]
+      },
+      "par-queries-radius": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ]
+      },
+      "par-rbf-sampler": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ]
+      },
+      "par-resample": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "batch",
+            "reason": "missing_vendor"
+          },
+          {
+            "kind": "numeric",
+            "part": "train",
+            "reason": "missing_vendor"
+          }
+        ]
+      },
+      "par-scaler": {
+        "base": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "denormal_ftz": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "dupes": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "hashed": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "negative": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "odd": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "ties": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ],
+        "wide": [
+          {
+            "kind": "numeric",
+            "part": "model",
+            "reason": "stale_na"
+          }
+        ]
+      }
+    }
+  },
+  "complete": false,
+  "counts": {
+    "expected_parts": 4779,
+    "incomplete_parts": 126,
+    "not_applicable_parts": 2844,
+    "numeric_all_vendors_exact": 1809,
+    "numeric_incomplete_parts": 126
+  },
+  "fixtures": [
+    "base",
+    "denormal",
+    "denormal_ftz",
+    "dupes",
+    "hashed",
+    "negative",
+    "odd",
+    "ties",
+    "wide"
+  ],
+  "format": "mojolearn.crossvendor-coverage.v1",
+  "gaps": [
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "cef3c859431cbbaf",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "cef3c859431cbbaf",
+      "values": {
+        "amd": "cef3c859431cbbaf",
+        "apple": "cef3c859431cbbaf"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "9f76be0396a666ca",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "9f76be0396a666ca",
+      "values": {
+        "amd": "9f76be0396a666ca",
+        "apple": "9f76be0396a666ca"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "6ae822845884aedf",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "6ae822845884aedf",
+      "values": {
+        "amd": "6ae822845884aedf",
+        "apple": "6ae822845884aedf"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "377790cb117abb61",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "377790cb117abb61",
+      "values": {
+        "amd": "377790cb117abb61",
+        "apple": "377790cb117abb61"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "a5e918e8c07deeeb",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "a5e918e8c07deeeb",
+      "values": {
+        "amd": "a5e918e8c07deeeb",
+        "apple": "a5e918e8c07deeeb"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "aab930a9e876ec1e",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "aab930a9e876ec1e",
+      "values": {
+        "amd": "aab930a9e876ec1e",
+        "apple": "aab930a9e876ec1e"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "b1397e7ed5a747b5",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "b1397e7ed5a747b5",
+      "values": {
+        "amd": "b1397e7ed5a747b5",
+        "apple": "b1397e7ed5a747b5"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "7dbefd70378dfac6",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "7dbefd70378dfac6",
+      "values": {
+        "amd": "7dbefd70378dfac6",
+        "apple": "7dbefd70378dfac6"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "a5e918e8c07deeeb",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "a5e918e8c07deeeb",
+      "values": {
+        "amd": "a5e918e8c07deeeb",
+        "apple": "a5e918e8c07deeeb"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "aab930a9e876ec1e",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "aab930a9e876ec1e",
+      "values": {
+        "amd": "aab930a9e876ec1e",
+        "apple": "aab930a9e876ec1e"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "87b2ac97204e1a6e",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "87b2ac97204e1a6e",
+      "values": {
+        "amd": "87b2ac97204e1a6e",
+        "apple": "87b2ac97204e1a6e"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "7dbefd70378dfac6",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "7dbefd70378dfac6",
+      "values": {
+        "amd": "7dbefd70378dfac6",
+        "apple": "7dbefd70378dfac6"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "cef3c859431cbbaf",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "cef3c859431cbbaf",
+      "values": {
+        "amd": "cef3c859431cbbaf",
+        "apple": "cef3c859431cbbaf"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "9f76be0396a666ca",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "9f76be0396a666ca",
+      "values": {
+        "amd": "9f76be0396a666ca",
+        "apple": "9f76be0396a666ca"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "6ae822845884aedf",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "6ae822845884aedf",
+      "values": {
+        "amd": "6ae822845884aedf",
+        "apple": "6ae822845884aedf"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "377790cb117abb61",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "377790cb117abb61",
+      "values": {
+        "amd": "377790cb117abb61",
+        "apple": "377790cb117abb61"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "4d744e464df6b3d6",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "4d744e464df6b3d6",
+      "values": {
+        "amd": "4d744e464df6b3d6",
+        "apple": "4d744e464df6b3d6"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "06461dad67cfb784",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "06461dad67cfb784",
+      "values": {
+        "amd": "06461dad67cfb784",
+        "apple": "06461dad67cfb784"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "913af384ea04d543",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "913af384ea04d543",
+      "values": {
+        "amd": "913af384ea04d543",
+        "apple": "913af384ea04d543"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4ed8b9405da9691",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "d4ed8b9405da9691",
+      "values": {
+        "amd": "d4ed8b9405da9691",
+        "apple": "d4ed8b9405da9691"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "a00b86402bf13b42",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "a00b86402bf13b42",
+      "values": {
+        "amd": "a00b86402bf13b42",
+        "apple": "a00b86402bf13b42"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "4e0defb4e0feb99f",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "4e0defb4e0feb99f",
+      "values": {
+        "amd": "4e0defb4e0feb99f",
+        "apple": "4e0defb4e0feb99f"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d3fa0fbbec979263",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "d3fa0fbbec979263",
+      "values": {
+        "amd": "d3fa0fbbec979263",
+        "apple": "d3fa0fbbec979263"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "29f18fa209679839",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "29f18fa209679839",
+      "values": {
+        "amd": "29f18fa209679839",
+        "apple": "29f18fa209679839"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "8e0a0c4068873ad7",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "8e0a0c4068873ad7",
+      "values": {
+        "amd": "8e0a0c4068873ad7",
+        "apple": "8e0a0c4068873ad7"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "4aa662dbcc728e65",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "4aa662dbcc728e65",
+      "values": {
+        "amd": "4aa662dbcc728e65",
+        "apple": "4aa662dbcc728e65"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "859442a49f63a8d0",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "859442a49f63a8d0",
+      "values": {
+        "amd": "859442a49f63a8d0",
+        "apple": "859442a49f63a8d0"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "20bf64323fc5fa12",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "20bf64323fc5fa12",
+      "values": {
+        "amd": "20bf64323fc5fa12",
+        "apple": "20bf64323fc5fa12"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "7abdf42416059c68",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "7abdf42416059c68",
+      "values": {
+        "amd": "7abdf42416059c68",
+        "apple": "7abdf42416059c68"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "e699bca0934688f0",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "e699bca0934688f0",
+      "values": {
+        "amd": "e699bca0934688f0",
+        "apple": "e699bca0934688f0"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "a70bbb860b0f3fcf",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "a70bbb860b0f3fcf",
+      "values": {
+        "amd": "a70bbb860b0f3fcf",
+        "apple": "a70bbb860b0f3fcf"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "990e96a6d7fd2874",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "990e96a6d7fd2874",
+      "values": {
+        "amd": "990e96a6d7fd2874",
+        "apple": "990e96a6d7fd2874"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "9103785606065f64",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "9103785606065f64",
+      "values": {
+        "amd": "9103785606065f64",
+        "apple": "9103785606065f64"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "956bebc3f45a1c69",
+      "expected": "recorded",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "956bebc3f45a1c69",
+      "values": {
+        "amd": "956bebc3f45a1c69",
+        "apple": "956bebc3f45a1c69"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "1f7be9c37fb3f5d6",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "1f7be9c37fb3f5d6",
+      "values": {
+        "amd": "1f7be9c37fb3f5d6",
+        "apple": "1f7be9c37fb3f5d6"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "440f5eba6a3ddede",
+      "expected": "numeric",
+      "expected_revision": "trend-metadata-1",
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-arima",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": "trend-metadata-1",
+      "target": "440f5eba6a3ddede",
+      "values": {
+        "amd": "440f5eba6a3ddede",
+        "apple": "440f5eba6a3ddede"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "9a1b203d4dea67de",
+        "apple": "9a1b203d4dea67de"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "218afdf707fafb37",
+        "apple": "218afdf707fafb37"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "a40f092484bf5019",
+        "apple": "a40f092484bf5019"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ec3bd98f3843f806",
+        "apple": "ec3bd98f3843f806"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "856eb88a9f6333a6",
+        "apple": "856eb88a9f6333a6"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "dbec1223a5e9f1b8",
+        "apple": "dbec1223a5e9f1b8"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ce858a257a715073",
+        "apple": "ce858a257a715073"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "3ed53f693f8b6640",
+        "apple": "3ed53f693f8b6640"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "856eb88a9f6333a6",
+        "apple": "856eb88a9f6333a6"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "dbec1223a5e9f1b8",
+        "apple": "dbec1223a5e9f1b8"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ce858a257a715073",
+        "apple": "ce858a257a715073"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "3ed53f693f8b6640",
+        "apple": "3ed53f693f8b6640"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "0073a86db7911807",
+        "apple": "0073a86db7911807"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "2d2a22015635749f",
+        "apple": "2d2a22015635749f"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "24c2f39aceedf815",
+        "apple": "24c2f39aceedf815"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "4e67e3e91efb7c00",
+        "apple": "4e67e3e91efb7c00"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "3e6eda11d8bca648",
+        "apple": "3e6eda11d8bca648"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "6892d68d02eff4a3",
+        "apple": "6892d68d02eff4a3"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "657ecb0d20635197",
+        "apple": "657ecb0d20635197"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "0152e8011badd318",
+        "apple": "0152e8011badd318"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "9fc61a2ec91dce68",
+        "apple": "9fc61a2ec91dce68"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "e08335ce6d02f919",
+        "apple": "e08335ce6d02f919"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "2d6aced317e7053d",
+        "apple": "2d6aced317e7053d"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "27c176318b7e2d83",
+        "apple": "27c176318b7e2d83"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "6fd25d7af83689ac",
+        "apple": "6fd25d7af83689ac"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "4ed57e5084725d65",
+        "apple": "4ed57e5084725d65"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "b23cd1b8caf1a1ba",
+        "apple": "b23cd1b8caf1a1ba"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ae3200f0920488f0",
+        "apple": "ae3200f0920488f0"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "14c4888984f52442",
+        "apple": "14c4888984f52442"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "b762e42bf992386c",
+        "apple": "b762e42bf992386c"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "2c532280c917b0f9",
+        "apple": "2c532280c917b0f9"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ed6ebb8d17c0d8be",
+        "apple": "ed6ebb8d17c0d8be"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "327eb3522003b1d1",
+        "apple": "327eb3522003b1d1"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "infer",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "85658ce0e0f66091",
+        "apple": "85658ce0e0f66091"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "recorded",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "model",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "5989a0ecc598afb4",
+        "apple": "5989a0ecc598afb4"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-forest-pool",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "0fa817cfbbc3f208",
+        "apple": "0fa817cfbbc3f208"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "2b788f20f8d8c145",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "2b788f20f8d8c145",
+      "values": {
+        "amd": "2b788f20f8d8c145",
+        "apple": "2b788f20f8d8c145",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "999974b61bbe0004",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "999974b61bbe0004",
+      "values": {
+        "amd": "999974b61bbe0004",
+        "apple": "999974b61bbe0004",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "999974b61bbe0004",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "999974b61bbe0004",
+      "values": {
+        "amd": "999974b61bbe0004",
+        "apple": "999974b61bbe0004",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "2b788f20f8d8c145",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "2b788f20f8d8c145",
+      "values": {
+        "amd": "2b788f20f8d8c145",
+        "apple": "2b788f20f8d8c145",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "0530ffbeced1027e",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "0530ffbeced1027e",
+      "values": {
+        "amd": "0530ffbeced1027e",
+        "apple": "0530ffbeced1027e",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "e97d48fa0ba847d0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "e97d48fa0ba847d0",
+      "values": {
+        "amd": "e97d48fa0ba847d0",
+        "apple": "e97d48fa0ba847d0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "3c4ad8350c73bac5",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "3c4ad8350c73bac5",
+      "values": {
+        "amd": "3c4ad8350c73bac5",
+        "apple": "3c4ad8350c73bac5",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "dc2d6a661f911c91",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "dc2d6a661f911c91",
+      "values": {
+        "amd": "dc2d6a661f911c91",
+        "apple": "dc2d6a661f911c91",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "3280cb2f403e61bb",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-holtwinters",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "3280cb2f403e61bb",
+      "values": {
+        "amd": "3280cb2f403e61bb",
+        "apple": "3280cb2f403e61bb",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "2ee81955e923d21f",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "2ee81955e923d21f",
+      "values": {
+        "amd": "2ee81955e923d21f",
+        "apple": "2ee81955e923d21f",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "c6abf4949fd3ef45",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "c6abf4949fd3ef45",
+      "values": {
+        "amd": "c6abf4949fd3ef45",
+        "apple": "c6abf4949fd3ef45",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "83650c2063c0b192",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "83650c2063c0b192",
+      "values": {
+        "amd": "83650c2063c0b192",
+        "apple": "83650c2063c0b192",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "5167cd08ec11b8bd",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "5167cd08ec11b8bd",
+      "values": {
+        "amd": "5167cd08ec11b8bd",
+        "apple": "5167cd08ec11b8bd",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d6588b0e2d717746",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d6588b0e2d717746",
+      "values": {
+        "amd": "d6588b0e2d717746",
+        "apple": "d6588b0e2d717746",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "86a355173ea5999a",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "86a355173ea5999a",
+      "values": {
+        "amd": "86a355173ea5999a",
+        "apple": "86a355173ea5999a",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "5f50d73e7a4f1146",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "5f50d73e7a4f1146",
+      "values": {
+        "amd": "5f50d73e7a4f1146",
+        "apple": "5f50d73e7a4f1146",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "57306f414d5af0b4",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "57306f414d5af0b4",
+      "values": {
+        "amd": "57306f414d5af0b4",
+        "apple": "57306f414d5af0b4",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "76078d052fa5fc25",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-queries-radius",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "76078d052fa5fc25",
+      "values": {
+        "amd": "76078d052fa5fc25",
+        "apple": "76078d052fa5fc25",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "25e2cd67cb3f991a",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "25e2cd67cb3f991a",
+      "values": {
+        "amd": "25e2cd67cb3f991a",
+        "apple": "25e2cd67cb3f991a",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d4b54301bf9a47f0",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-rbf-sampler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d4b54301bf9a47f0",
+      "values": {
+        "amd": "d4b54301bf9a47f0",
+        "apple": "d4b54301bf9a47f0",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "e234c2830f21479b",
+        "apple": "e234c2830f21479b"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "16b7c5812583951d",
+        "apple": "16b7c5812583951d"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "2cc6cdaaad3d21eb",
+        "apple": "2cc6cdaaad3d21eb"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "afe735a9eaf62c84",
+        "apple": "afe735a9eaf62c84"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "2cc6cdaaad3d21eb",
+        "apple": "2cc6cdaaad3d21eb"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "afe735a9eaf62c84",
+        "apple": "afe735a9eaf62c84"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "6c49abf4d134f6ce",
+        "apple": "6c49abf4d134f6ce"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "efd0083badfd7ff2",
+        "apple": "efd0083badfd7ff2"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "9a2ef0b0ae72b989",
+        "apple": "9a2ef0b0ae72b989"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "7bf2b557d8949793",
+        "apple": "7bf2b557d8949793"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "c0dee74a1f2626c1",
+        "apple": "c0dee74a1f2626c1"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "1018b1bbba5e41e4",
+        "apple": "1018b1bbba5e41e4"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "c783c4d2569a5295",
+        "apple": "c783c4d2569a5295"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "f6838acea7906089",
+        "apple": "f6838acea7906089"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "a5f0ee3a2c5e0107",
+        "apple": "a5f0ee3a2c5e0107"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "ee360747ea316f42",
+        "apple": "ee360747ea316f42"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "batch",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "5519df53ffdded2e",
+        "apple": "5519df53ffdded2e"
+      }
+    },
+    {
+      "cpu_role": "missing",
+      "cpu_value": null,
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-resample",
+      "part": "train",
+      "reasons": {
+        "nvidia": "missing_vendor"
+      },
+      "recorded_revision": null,
+      "target": null,
+      "values": {
+        "amd": "aba528d158fe9172",
+        "apple": "aba528d158fe9172"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "3adc4c98c02a61b6",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "base",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "3adc4c98c02a61b6",
+      "values": {
+        "amd": "3adc4c98c02a61b6",
+        "apple": "3adc4c98c02a61b6",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "68df93d8ec0c437b",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "68df93d8ec0c437b",
+      "values": {
+        "amd": "68df93d8ec0c437b",
+        "apple": "68df93d8ec0c437b",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "68df93d8ec0c437b",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "denormal_ftz",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "68df93d8ec0c437b",
+      "values": {
+        "amd": "68df93d8ec0c437b",
+        "apple": "68df93d8ec0c437b",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "05c29b3ea7e5d0fd",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "dupes",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "05c29b3ea7e5d0fd",
+      "values": {
+        "amd": "05c29b3ea7e5d0fd",
+        "apple": "05c29b3ea7e5d0fd",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "56f8f885e1f14002",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "hashed",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "56f8f885e1f14002",
+      "values": {
+        "amd": "56f8f885e1f14002",
+        "apple": "56f8f885e1f14002",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "d35ffb14a4d2873d",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "negative",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "d35ffb14a4d2873d",
+      "values": {
+        "amd": "d35ffb14a4d2873d",
+        "apple": "d35ffb14a4d2873d",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "05cf9a316c018eea",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "odd",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "05cf9a316c018eea",
+      "values": {
+        "amd": "05cf9a316c018eea",
+        "apple": "05cf9a316c018eea",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "b10d8fc2c81e61e7",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "ties",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "b10d8fc2c81e61e7",
+      "values": {
+        "amd": "b10d8fc2c81e61e7",
+        "apple": "b10d8fc2c81e61e7",
+        "nvidia": "n/a:no-save"
+      }
+    },
+    {
+      "cpu_role": "numeric",
+      "cpu_value": "a5b9d7c55d36b98e",
+      "expected": "numeric",
+      "expected_revision": null,
+      "fixture": "wide",
+      "kind": "numeric",
+      "lane": "par-scaler",
+      "part": "model",
+      "reasons": {
+        "nvidia": "stale_na"
+      },
+      "recorded_revision": null,
+      "target": "a5b9d7c55d36b98e",
+      "values": {
+        "amd": "a5b9d7c55d36b98e",
+        "apple": "a5b9d7c55d36b98e",
+        "nvidia": "n/a:no-save"
+      }
+    }
+  ],
+  "lanes": [
+    "par-arima",
+    "par-boosting",
+    "par-boosting-clf",
+    "par-boosting-pointwise",
+    "par-boosting-reg",
+    "par-border-types",
+    "par-byte-lm",
+    "par-byte-lm-model-pool",
+    "par-byte-lm-offload",
+    "par-causal-lm",
+    "par-cd",
+    "par-cd-elasticnet",
+    "par-cholesky",
+    "par-cross-val",
+    "par-dbscan",
+    "par-feature-freq",
+    "par-forecast-arima",
+    "par-forecast-holtwinters",
+    "par-forest",
+    "par-forest-et",
+    "par-forest-et-clf",
+    "par-forest-pool",
+    "par-forest-reg",
+    "par-gmm",
+    "par-gp",
+    "par-gpc-fit",
+    "par-gpc-predict",
+    "par-gram",
+    "par-gram-ols",
+    "par-gram-pca",
+    "par-gram-tsvd",
+    "par-graph-agglomerative",
+    "par-graph-spectral",
+    "par-graph-umap",
+    "par-hdbscan",
+    "par-holtwinters",
+    "par-iforest",
+    "par-ivf",
+    "par-kernel-ridge",
+    "par-kmeans",
+    "par-logistic",
+    "par-mlp",
+    "par-nystroem",
+    "par-ordered",
+    "par-ordered-rmse",
+    "par-queries-kde",
+    "par-queries-knn",
+    "par-queries-nn",
+    "par-queries-radius",
+    "par-rbf-sampler",
+    "par-reference-knn",
+    "par-reference-knn-reg",
+    "par-resample",
+    "par-samba",
+    "par-samba-clip",
+    "par-scaler",
+    "par-scaler-minmax",
+    "par-svm",
+    "par-svm-svr"
+  ],
+  "numeric_missing_values_by_vendor": {
+    "amd": 0,
+    "apple": 0,
+    "nvidia": 126
+  },
+  "reference_table_sha256": "450d748e410454d8342aca5c4c941c94a1de052d8e3a92ebf89a59932654fcd5",
+  "scope": "one-device cross-vendor reference coverage; not physical multi-GPU qualification",
+  "vendors": [
+    "amd",
+    "apple",
+    "nvidia"
+  ]
+}
