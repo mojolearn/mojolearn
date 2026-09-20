@@ -58,6 +58,12 @@ if [ -e "$byte_lm_destination" ] || [ -L "$byte_lm_destination" ]; then
 fi
 byte_lm_tmpdir=$(mktemp -d "$byte_lm_outdir/.byte-lm-build.XXXXXX")
 trap 'rm -rf "$byte_lm_tmpdir"' EXIT HUP INT TERM
+case "${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}" in
+    estash) ;;
+    recompute) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD=1" ;;
+    packed) MOJOLEARN_BUILD_EXTRA_DEFINES="${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -D MOJOLEARN_ATTN_V1_PACKED_ESTASH=1" ;;
+    *) echo 'MOJOLEARN_ATTENTION_MEMORY_PROFILE must be estash, packed, or recompute' >&2; exit 2 ;;
+esac
 # MOJOLEARN_BUILD_EXTRA_DEFINES (optional, empty by default): extra flags
 # appended verbatim, word-split, for trial builds (for example
 # -D MOJOLEARN_BYTE_LM_FAULT_INJECT=1 for the session gate's native faults),
@@ -69,4 +75,4 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib "$@" ${M
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings \
     bindings/_mojolearn_byte_lm.mojo -o "$byte_lm_tmpdir/_mojolearn_byte_lm.so"
 ln "$byte_lm_tmpdir/_mojolearn_byte_lm.so" "$byte_lm_destination"
-echo "built $byte_lm_destination; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence"
+echo "built $byte_lm_destination; attention_memory_profile=${MOJOLEARN_ATTENTION_MEMORY_PROFILE:-estash}; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence"

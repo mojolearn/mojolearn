@@ -69,6 +69,9 @@ def _wants_suite(args):
                 or getattr(args, "emit_models", None)
                 or getattr(args, "self_test", False)
                 or getattr(args, "cross_check", None)
+                # the two-device column is a run on this box, not a card check
+                or getattr(args, "par", None)
+                or getattr(args, "par_self_test", False)
                 or getattr(args, "compare", None)
                 # sealing a document is a pure function over one JSON file, the
                 # same as comparing two, and must not fall through to the
@@ -231,6 +234,13 @@ def build_parser():
                    help="also run gradient, batch-size, ragged and sampler/replay probes; missing references read OWED")
     v.add_argument("--coverage", action="store_true",
                    help="inspect all appendix variants, lane availability and batch contracts without fitting")
+    v.add_argument("--smoke", action="store_true",
+                   help="for lanes this box can run but cannot judge (the par-* multi-GPU "
+                        "drivers on one device), fit each TWICE on the base fixture and report "
+                        "whether it ran, kept its shape, stayed finite and gave the same bits "
+                        "both times. SMOKE is never VERIFIED and is counted separately; a FAILED "
+                        "smoke is a real defect and fails the run. Off by default because two "
+                        "full fits per lane is real work")
     v.add_argument("--include-pending", action="store_true",
                    help="also execute unqualified CPU routes and supported logical-shard drivers; stale references read OWED, and missing routes remain scope gaps")
     scope = v.add_mutually_exclusive_group()
@@ -283,6 +293,36 @@ def build_parser():
                         "is refused on Apple by that same rule. --lanes and "
                         "--fixtures widen or narrow any of them. On a CPU-only "
                         "install it says so rather than silently skipping")
+    v.add_argument("--par", nargs="?", const="default",
+                   choices=("quick", "default", "all"), default=None,
+                   help="THE TWO-DEVICE COLUMN, on this box, against the "
+                        "one-device column, also on this box. A `par-*` driver "
+                        "lane's whole claim is that sharding its work across "
+                        "devices does not move a bit, and no release record "
+                        "states it: every par-* cell in the recorded table is a "
+                        "one-device run. This runs each par-* lane twice in one "
+                        "process, once with MOJOLEARN_PAR_DEVICES=0 and once "
+                        "with 0,1, and compares the two columns cell for cell. "
+                        "No reference table is involved; the local one-device "
+                        "column IS the reference. The two-device column is "
+                        "WITNESSED: every device pool it starts is inventoried, "
+                        "and a column that never sharded is refused instead of "
+                        "reported as agreement. 'quick' is one lane per family, "
+                        "the default is all 59 par-* lanes on the base fixture, "
+                        "'all' is the same lanes for --fixtures. Apple is "
+                        "refused structurally: DevicePool admits metal only at "
+                        "one device")
+    v.add_argument("--par-devices", dest="par_devices", default="",
+                   help="with --par: the device group the second column runs "
+                        "on, comma separated, at least two distinct indices "
+                        "(default 0,1). The first index is also the one-device "
+                        "column")
+    v.add_argument("--par-self-test", dest="par_self_test", action="store_true",
+                   help="SHOW THAT --par CAN FAIL. Runs one par-* lane's two "
+                        "columns with every value of the two-device arm's "
+                        "first input column moved up by one ULP, and requires "
+                        "every compared part to read DIVERGENT. A comparison "
+                        "never seen to fail is not a comparison")
     v.add_argument("--compare", nargs=2, metavar=("A", "B"), default=None,
                    help="DIFF TWO EVIDENCE DOCUMENTS, with us out of the loop. "
                         "Two people on different hardware each run "

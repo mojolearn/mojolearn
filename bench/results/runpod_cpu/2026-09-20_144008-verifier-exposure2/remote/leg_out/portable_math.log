@@ -1,0 +1,3 @@
+{'source_sha256': '2f3026ef468254ee2f785327a4c1ccde46f63abf03e14782ec9e864e814a28e9', 'constants_sha256': 'd2a0d4a86a78c87df53a21da122b2a53a67ef3634d021d000ec5d979de32317a', 'output_sha256': 'ca974b50f442abb493a16a52d4247b59ca04bd755edebfe2a05cfbce0dd5fb74', 'command': ['cc', '-O2', '-ffp-contract=off', '-fno-fast-math', '-shared', '-fPIC', '-march=x86-64-v3', '-nostdlib', '-Wl,-soname,libMojolearnMath.so']}
+total 20
+-rwxr-xr-x 1 root root 18560 Sep 20 14:42 libMojolearnMath.so

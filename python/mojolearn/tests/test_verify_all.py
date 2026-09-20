@@ -206,10 +206,13 @@ def _counts(**kw):
 def test_verdict_exit_codes():
     # a refused part did not run, so it costs the run its pass
     # (lane/expose-inference-surface, 2026-09-16; it used to read VERIFIED)
+    # OWED STOPPED GATING ON 2026-09-20 (Andrew). Only DIVERGENT and REFUSED
+    # gate now: they mean something went WRONG, not that something is missing.
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1))[0] == va.EXIT_CANNOT_RUN
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_NO_REFERENCE
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3))[0] == va.EXIT_VERIFIED
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1))[0] == va.EXIT_MISMATCH
     assert va.verdict(_counts(REFUSED=2, OWED=1))[0] == va.EXIT_CANNOT_RUN
+    # nothing IDENTICAL at all is still not a pass
     assert va.verdict(_counts(OWED=4, NA=1))[0] == va.EXIT_NO_REFERENCE
     from mojolearn import _verify
     assert (va.EXIT_VERIFIED, va.EXIT_MISMATCH, va.EXIT_USAGE, va.EXIT_REFUSED_FAST, va.EXIT_CANNOT_RUN,
@@ -235,8 +238,9 @@ def test_a_run_that_refused_is_not_reported_as_verified():
 
     # one refused part is enough
     assert va.verdict(_counts(IDENTICAL=5, OWED=3, REFUSED=1)) == (va.EXIT_CANNOT_RUN, "INCOMPLETE")
+    # and a refusal outranks the looser OWED rule
     # Missing references cannot be offset by successful comparisons; N/A is different.
-    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_NO_REFERENCE, "INCOMPLETE")
+    assert va.verdict(_counts(IDENTICAL=5, OWED=3, NA=2)) == (va.EXIT_VERIFIED, "VERIFIED")
     # a wrong answer still outranks an absent one
     assert va.verdict(_counts(IDENTICAL=5, DIVERGENT=1, REFUSED=9))[0] == va.EXIT_MISMATCH
 
@@ -637,6 +641,343 @@ def test_cross_check_scope_tiers_respect_the_apple_lane_cap():
     assert set(default) <= set(every), "the default must stay inside the intersection"
 
 
+# --------------------------------------------- every lane accounted for
+
+def _exposure(lanes, status="NOT APPLICABLE", reason="claim requires two devices"):
+    return {l: dict(status=status, reason=reason, exposed=status == "EXPOSED") for l in lanes}
+
+
+def test_the_accounting_denominator_is_the_whole_harness():
+    """THE NUMBER A USER READS IS 256, NOT 186 (lane/verifier-full-exposure,
+    2026-09-20). Every lane the harness defines gets exactly one state, and
+    the states sum to the lane list. A lane that fell out of the accounting
+    would be exactly the silent absence this block exists to remove, so the
+    sum is asserted rather than assumed."""
+    harness = va.load_harness()
+    lanes = list(harness.LANES)
+    exposure = va.host_surface().lane_exposure(lanes)
+    acc = va.lane_accounting(lanes, exposure, [], [])
+    assert acc["total"] == len(lanes) == 262
+    assert sum(acc["counts"].values()) == len(lanes)
+    assert set(acc["lanes"]) == set(lanes)
+    # and the 70 that a CPU-only install does not run are each a named state
+    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 61, "59 par-* drivers plus 2 GPU-only lanes"
+    assert acc["counts"][va.LANE_UNDECLARED] == 0
+    assert all(e["reason"] for e in acc["lanes"].values() if e["state"] != va.LANE_VERIFIED)
+
+
+@pytest.mark.parametrize("state", [s for s in va.LANE_STATES
+                                   if s not in (va.LANE_VERIFIED,) + va.LANE_STATES_THAT_DO_NOT_GATE])
+def test_no_lane_state_but_verified_can_contribute_to_a_pass(state):
+    """Every state that leaves something UNKNOWN, held to the one rule that
+    matters. NOT APPLICABLE is excluded by construction and has its own two
+    tests below; the parametrization reads the exemption list rather than
+    naming it, so adding a second non-gating state cannot quietly widen this
+    test's blind spot."""
+    acc = dict(total=1, counts={state: 1},
+               lanes={"x": dict(state=state, reason="because", exposed=False, ran=False, ran_state=None)})
+    assert va.lane_verdict_gaps(acc, ["x"]) != {}, f"{state} was read as coverage"
+    assert va.verdict(_counts(IDENTICAL=99), va.lane_verdict_gaps(acc, ["x"]))[0] != va.EXIT_VERIFIED
+
+
+def test_part_level_na_and_lane_level_not_applicable_agree():
+    """ONE RUN, ONE RULE, WHICHEVER LAYER SAYS `INAPPLICABLE`
+    (lane/verifier-full-exposure, 2026-09-20, correcting the same lane).
+
+    `verdict()` consults DIVERGENT, REFUSED, OWED and IDENTICAL, and `vref.NA`
+    appears in it ZERO times: a part declared `n/a:no-backward` has never made
+    a run INCOMPLETE. The first version of the lane accounting gated at the
+    LANE level on exactly that concept, so the same run was judged by two
+    different rules depending on which layer the inapplicability happened to
+    be expressed at.
+
+    This pins them together. The left arm expresses inapplicability in parts,
+    the right arm in a lane state, everything else is identical, and the two
+    verdicts must be the same. If either layer starts gating, this fails."""
+    part_level = _counts(IDENTICAL=8, NA=99)
+    assert va.verdict(part_level)[0] == va.EXIT_VERIFIED, (
+        "part-level n/a has never gated; if that changed, change the lane level with it")
+
+    lanes = ["ols", "par-forest"]
+    acc = va.lane_accounting(
+        lanes,
+        dict(ols=dict(status="EXPOSED", reason=None, exposed=True),
+             **{"par-forest": dict(status="NOT APPLICABLE", reason="claim requires two devices",
+                                   exposed=False)}),
+        lanes,
+        [dict(lane=l, fixture="base", part="train", state=vref.IDENTICAL) for l in lanes])
+    lane_level = va.verdict(_counts(IDENTICAL=8, NA=99), va.lane_verdict_gaps(acc, lanes),
+                            lanes_checked=va.lane_scope(acc, lanes)["checked"])
+    assert lane_level == va.verdict(part_level), (
+        "the same run is judged differently depending on which layer says `inapplicable`")
+
+
+def test_not_applicable_has_exactly_two_derivations_and_both_are_structural():
+    """THE ESCAPE HATCH, NAILED SHUT. NOT APPLICABLE is a non-gating state, so
+    if a lane could be moved into it by editing a reason string, any hold
+    could be converted into a pass. It cannot. There are exactly two ways in,
+    and both are facts about the lane rather than opinions about it:
+
+      * an inapplicable PREFIX (`par-`), a rule over lane names that requires
+        a written sentence `tools/lane_accounting.py` will not let be missing;
+      * the `no cpu route` reason, which is checked against
+        `identity_break.GPU_ONLY_LANES` -- the list the harness itself uses to
+        drop a lane from a CPU column -- so it cannot be claimed for a lane
+        that merely lacks a CPU column so far.
+
+    Every other reason string, including ones that do not exist, leaves the
+    lane in a gating state. That is asserted below by trying them."""
+    surface = va.host_surface()
+    harness = va.load_harness()
+    lanes = list(harness.LANES)
+    exposure = surface.lane_exposure(lanes)
+    inapplicable = [l for l, r in exposure.items() if r["status"] == surface.LANE_NOT_APPLICABLE]
+    assert inapplicable, "the state exists, so something must reach it"
+    gpu_only = set(getattr(harness, "GPU_ONLY_LANES", ()) or ())
+    for lane in inapplicable:
+        assert lane.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES) or lane in gpu_only, (
+            f"{lane} reached the non-gating state by neither route")
+    # no reason string invents a third way in
+    for why in ("no reference", "one column", "unwatched", "owed artifact nvidia x",
+                "anything", "not applicable", "NOT APPLICABLE"):
+        probe = dict(surface.PUBLIC_PENDING_LANES, ols=why)
+        saved, surface.PUBLIC_PENDING_LANES = surface.PUBLIC_PENDING_LANES, probe
+        try:
+            assert surface.lane_exposure(["ols"])["ols"]["status"] != surface.LANE_NOT_APPLICABLE, why
+        finally:
+            surface.PUBLIC_PENDING_LANES = saved
+
+
+def test_a_clean_run_with_inapplicable_lanes_beside_it_is_still_verified():
+    """A VERDICT THAT CAN NEVER BE POSITIVE CARRIES NO INFORMATION
+    (lane/verifier-full-exposure, 2026-09-20, correcting itself).
+
+    The first version of this block made every non-VERIFIED lane a gap, which
+    made VERIFIED unreachable -- not merely hard on a laptop, but unreachable
+    on ANY hardware, because `load_harness()` refuses a set
+    MOJOLEARN_PAR_DEVICES, so `verify` is a one-device run on an eight-GPU box
+    too and the 55 `par-*` lanes are inapplicable there as well. A user who
+    can never earn a pass stops reading the verdict, which is the 0.8.6 defect
+    wearing the opposite sign.
+
+    So the pass has to stay reachable, and what it must not do is OVERSTATE
+    itself. The scope rides with it, as it already does in
+    `format_cross_check`."""
+    lanes = ["ols", "ridge", "par-forest", "par-mlp"]
+    exposure = {l: (dict(status="EXPOSED", reason=None, exposed=True) if not l.startswith("par-")
+                    else dict(status="NOT APPLICABLE", reason="claim requires two devices",
+                              exposed=False))
+                for l in lanes}
+    rows = [dict(lane=l, fixture="base", part=p, state=vref.IDENTICAL)
+            for l in lanes for p in ("train", "infer")]
+    acc = va.lane_accounting(lanes, exposure, lanes, rows)
+    assert acc["counts"][va.LANE_VERIFIED] == 2 and acc["counts"][va.LANE_NOT_APPLICABLE] == 2
+    scope = va.lane_scope(acc, lanes)
+    assert {k: scope[k] for k in ('scope', 'checked', 'not_applicable', 'gaps')} == dict(
+        scope=4, checked=2, not_applicable=2, gaps={})
+    assert scope['by_state'][va.LANE_VERIFIED] == 2
+    assert va.verdict(_counts(IDENTICAL=8), scope["gaps"], lanes_checked=scope["checked"]) == (
+        va.EXIT_VERIFIED, "VERIFIED")
+    # and it says so rather than implying it covered everything
+    clause = va.lane_scope_clause(acc, lanes)
+    assert clause == "2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes"
+
+
+def test_an_all_inapplicable_run_is_cannot_run_because_nothing_was_checked():
+    """NOTHING CHECKED IS NOT A PASS, WHICH IS NOT THE SAME AS A GAP.
+
+    A run whose entire scope is NOT APPLICABLE leaves nothing unknown, so it
+    has no gaps -- and it also established nothing. Every cell part it
+    produces can read IDENTICAL, because a one-device `par-*` column is
+    compared against itself and passes whatever the code does. The cell-part
+    counts alone say VERIFIED, and the assertion below shows them saying it.
+
+    `format_cross_check` already draws this line, printing NOTHING COMPARED
+    rather than a pass when no lane produced both answers. MEASURED end to end
+    on an Apple M4 at this commit:
+
+        python -m mojolearn verify --all --lanes par-forest,par-mlp \\
+            --fixtures base --no-models
+        ... verified 8 of 10 cell parts (0 divergent, 0 owed, 0 refused, 2 n/a)
+        RESULT: CANNOT RUN ... exit 4
+    """
+    lanes = ["par-forest", "par-mlp"]
+    rows = [dict(lane=l, fixture="base", part=p, state=vref.IDENTICAL)
+            for l in lanes for p in ("train", "infer", "batch", "stepfull")]
+    counts = _counts(IDENTICAL=len(rows), NA=2)
+    assert va.verdict(counts) == (va.EXIT_VERIFIED, "VERIFIED"), (
+        "the cell-part counts alone are a pass; that is the reading that must not survive")
+
+    acc = va.lane_accounting(lanes, _exposure(lanes), lanes, rows)
+    assert acc["counts"][va.LANE_NOT_APPLICABLE] == 2
+    assert acc["counts"][va.LANE_VERIFIED] == 0, "a degenerate cell is not a verified lane"
+    assert all(e["ran_state"] == va.LANE_VERIFIED for e in acc["lanes"].values()), (
+        "the run's own reading is kept as evidence, it is just not the verdict")
+    scope = va.lane_scope(acc, lanes)
+    assert scope["gaps"] == {}, "nothing is unknown, so nothing is a gap"
+    assert scope["checked"] == 0, "and nothing was checked either"
+    assert va.verdict(counts, scope["gaps"], lanes_checked=scope["checked"]) == (
+        va.EXIT_CANNOT_RUN, "CANNOT RUN")
+
+
+def test_the_accounting_is_printed_even_when_nothing_is_wrong():
+    """`186 lanes` used to be printed by a passing run and said nothing about
+    the 70. The block is unconditional, so the passing run carries the
+    denominator too."""
+    acc = va.lane_accounting(["a", "b"], _exposure(["a", "b"], "EXPOSED", None), ["a", "b"],
+                             [dict(lane=l, fixture="base", part="train", state=vref.IDENTICAL)
+                              for l in ("a", "b")])
+    text = "\n".join(va.format_lane_accounting(acc))
+    assert "2 of 2 harness lanes accounted for" in text and "2 VERIFIED" in text
+
+
+# ------------------------------------------------- the smoke tier
+
+class _SmokeHarness:
+    """A harness whose one lane is whatever the test hands it, so the smoke
+    checks can be watched failing on each defect separately."""
+    FIXTURES = ["base"]
+    BATCH_ALONE = 3
+
+    def __init__(self, body):
+        self.LANES = {"probe": body}
+        self.calls = 0
+        self._DUMP_TAG = ""
+
+    def _train_hash(self, fit):
+        return fit.parts
+
+    def _exc_text(self, stage, exc):
+        return f"{stage or ''}{type(exc).__name__}: {exc}"
+
+
+class _Fit:
+    def __init__(self, parts, probe=None, est=None):
+        self.parts, self.probe, self.est = parts, probe, est
+
+
+def _smoke(body):
+    import numpy as np
+    h = _SmokeHarness(body)
+    data = (np.zeros((4, 2)), np.zeros(4), np.zeros(4))
+    return h, va.smoke_cell(h, None, "probe", "base", data, np.zeros((2, 2)))
+
+
+def test_smoke_runs_two_full_fits_and_not_two_probes_of_one():
+    """THE TRAP THIS TIER WAS ALMOST BUILT INTO. A second PROBE of one fitted
+    model re-reads the same arrays: it compares a thing against itself and
+    cannot fail, whatever the code does. This repository has shipped that
+    shape before -- a `par_diff` that exited 0 over a column holding one cell,
+    a sabotage move discarded by a single flag on 135 lanes -- and a cheap
+    check that cannot fail is worse than none, because it produces a number
+    people trust.
+
+    So this counts the FITS, not the comparisons. If someone rewrites
+    `smoke_cell` to fit once and probe twice, this fails and says why."""
+    import numpy as np
+    fits = []
+
+    def body(ml, X, yc, yr, Xh=None):
+        fits.append(1)
+        return _Fit("abc", probe=lambda e: (np.ones(3),))
+
+    _h, got = _smoke(body)
+    assert got["ok"] is True, got
+    assert len(fits) == 2, (
+        "the lane was fitted once; a second probe of one fit compares a thing "
+        "against itself and cannot fail")
+    assert got["checks"] == ["ran", "shaped", "finite", "repeatable"]
+
+
+def test_a_smoke_failure_is_watched_for_every_defect_it_claims_to_catch():
+    """Each defect, separately, and each refused by the sentence that names
+    it. A tier whose failure has never been seen is a tier that reports
+    `ok` forever."""
+    import numpy as np
+
+    def raises(ml, X, yc, yr, Xh=None):
+        raise RuntimeError("the driver fell over")
+
+    def nan(ml, X, yc, yr, Xh=None):
+        return _Fit("abc", probe=lambda e: (np.array([1.0, float("nan"), 3.0]),))
+
+    def infinite(ml, X, yc, yr, Xh=None):
+        return _Fit("abc", probe=lambda e: (np.array([1.0, float("inf")]),))
+
+    seen = {"n": 0}
+
+    def unstable(ml, X, yc, yr, Xh=None):
+        seen["n"] += 1
+        return _Fit(f"digest{seen['n']}", probe=lambda e: (np.ones(3),))
+
+    shape = {"n": 0}
+
+    def reshaped(ml, X, yc, yr, Xh=None):
+        shape["n"] += 1
+        return _Fit("abc", probe=lambda e: (np.ones(shape["n"] + 2),))
+
+    cases = [
+        (raises, "it raised", "a lane that raises"),
+        (nan, "non-finite", "a lane that returns NaN"),
+        (infinite, "non-finite", "a lane that returns inf"),
+        (unstable, "DIFFERENT BITS", "a lane that is not repeatable on one box"),
+        (reshaped, "output shape changed", "a lane whose output shape moves"),
+    ]
+    for body, fragment, label in cases:
+        _h, got = _smoke(body)
+        assert got["ok"] is False, f"{label} was not caught"
+        assert fragment in got["why"], f"{label}: {got['why']!r} does not name it"
+
+
+def test_smoke_does_not_gate_but_a_failed_smoke_does():
+    """SMOKE is never VERIFIED and never costs the run its pass; SMOKE FAILED
+    is the whole point of the tier and gates like any other wrongness."""
+    assert va.LANE_SMOKE in va.LANE_STATES_THAT_DO_NOT_GATE
+    assert va.LANE_SMOKE_FAILED not in va.LANE_STATES_THAT_DO_NOT_GATE
+
+    def acc(state):
+        return dict(total=1, counts={state: 1},
+                    lanes={"par-x": dict(state=state, reason="because", exposed=True,
+                                         ran=False, ran_state=None)})
+
+    assert va.lane_verdict_gaps(acc(va.LANE_SMOKE), ["par-x"]) == {}
+    assert va.verdict(_counts(IDENTICAL=9),
+                      va.lane_verdict_gaps(acc(va.LANE_SMOKE), ["par-x"]),
+                      lanes_checked=1)[0] == va.EXIT_VERIFIED
+    gaps = va.lane_verdict_gaps(acc(va.LANE_SMOKE_FAILED), ["par-x"])
+    assert gaps != {}
+    assert va.verdict(_counts(IDENTICAL=9), gaps, lanes_checked=1)[0] != va.EXIT_VERIFIED
+
+
+def test_smoke_never_reads_as_verified_and_says_the_claim_is_still_owed():
+    exposure = {"par-x": dict(status="NOT APPLICABLE", reason="claim requires two devices",
+                              exposed=True, comparable=False)}
+    smoke = {"par-x": dict(ok=True, checks=["ran", "shaped", "finite", "repeatable"], why=None)}
+    acc = va.lane_accounting(["par-x"], exposure, [], [], smoke=smoke)
+    row = acc["lanes"]["par-x"]
+    assert row["state"] == va.LANE_SMOKE != va.LANE_VERIFIED
+    assert acc["counts"][va.LANE_VERIFIED] == 0, "a smoke test is not a verification"
+    assert "needs a second device" in row["reason"]
+    assert "smoke" in va.lane_scope_clause(acc, ["par-x"])
+
+
+def test_a_lane_the_run_already_executed_is_not_smoked_again():
+    """A lane the run RAN is not left with nothing -- its result is kept in
+    `ran_state` -- so fitting it twice more would buy a weaker version of what
+    the run already has. On a GPU install every par-* lane runs, so the smoke
+    set there is empty and the flag costs nothing."""
+    surface = va.host_surface()
+    harness = va.load_harness()
+    exposure = surface.lane_exposure(list(harness.LANES), "cpu")
+    none_run = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=[])
+    assert none_run, "a CPU box has par-* lanes it can run but cannot judge"
+    assert all(l.startswith("par-") for l in none_run)
+    assert set(none_run) <= set(surface.covered_lanes()), (
+        "a lane with no CPU route cannot be smoked on a CPU box either")
+    already = va.smokeable_lanes(harness, surface, exposure, "cpu", run_lanes=none_run)
+    assert already == [], "a lane the run executed was smoked a second time"
+
+
 def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
     """The table's own references, judged as if this box produced them,
     verify; flip one character of one shipped hash and the same rows read
@@ -866,7 +1207,7 @@ def test_full_and_cpu_lane_sets():
     # A lane a CPU-only install does not run is refused by name rather than
     # silently dropped. The example is `par-forest` rather than a lane that
     # merely happens to be off the list: `par-*` is excluded by RULE
-    # (host_surface.PUBLIC_EXCLUDED_PREFIXES), so this stays a real test of
+    # (host_surface.PUBLIC_INAPPLICABLE_PREFIXES), so this stays a real test of
     # the refusal as the public set grows. It used `rf-clf` until
     # lane/ship-cpu-host-families shipped the rf binding and made that lane
     # public, at which point the assertion had nothing left to catch.
@@ -1029,6 +1370,35 @@ def test_cli_corrupted_table_exits_1():
     assert r.returncode == 1, r.stdout[-2000:] + r.stderr[-2000:]
     report = json.loads(r.stdout)
     assert report["counts"]["DIVERGENT"] == 1 and report["verdict"] == "MISMATCH"
+
+
+def test_the_printed_verdict_carries_its_own_scope_end_to_end():
+    """THE SKIPPED COUNT RIDES WITH THE VERDICT, seen on the real RESULT line.
+
+    Caught by its own absence (2026-09-20). A sabotage that dropped the scope
+    clause from `cmd_verify_all` was NOT REFUSED by the first version of these
+    tests: the clause was asserted only against `lane_scope_clause()` in
+    isolation, so nothing checked that the sentence a USER reads carries it.
+    A check on a helper nobody is required to call is not a check on the
+    output. This runs the command and reads the printed line.
+
+    Both halves matter. A pass must say how much of the harness it covered,
+    and a run that covered nothing must not say VERIFIED at all."""
+    build = _identical_build()
+    if not build:
+        pytest.skip("no importable identical build")
+    ok = _run_cli(["verify", "--lanes", "ols,ridge,par-forest", "--fixtures", "base", "--no-models"])
+    assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
+    result = [l for l in ok.stdout.splitlines() if l.startswith("RESULT:")][-1]
+    assert "VERIFIED" in result, result
+    assert "2 verified" in result and "of 3 lanes" in result, (
+        "a pass that does not say its own scope overstates itself: " + result)
+    assert "1 not applicable" in result, result
+
+    nothing = _run_cli(["verify", "--lanes", "par-forest,par-mlp", "--fixtures", "base", "--no-models"])
+    result = [l for l in nothing.stdout.splitlines() if l.startswith("RESULT:")][-1]
+    assert nothing.returncode == va.EXIT_CANNOT_RUN, result
+    assert "CANNOT RUN" in result and "0 verified" in result and "of 2 lanes" in result, result
 
 
 @pytest.mark.skipif(ROOT is None, reason="needs tools/identity_break.py beside the package")

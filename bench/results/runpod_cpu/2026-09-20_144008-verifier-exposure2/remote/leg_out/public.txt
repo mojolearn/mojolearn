@@ -1,0 +1,787 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: cpu (cpu), 186 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  rf-clf                             rf                  0.1s
+  rf-reg                             rf                  0.0s
+  et-clf                             trees               0.0s
+  et-reg                             trees               0.0s
+  gbdt-symmetric                     gbdt                0.0s
+  gbdt-depthwise                     gbdt                0.0s
+  gbdt-lossguide                     gbdt                0.0s
+  gbdt-rmse                          gbdt                0.0s
+  gbdt-ordered                       gbdt                0.0s
+  gbdt-ordered-bayesian-noise        gbdt                0.0s
+  gbdt-catboost-defaults             gbdt                0.0s
+  gbdt-bfa-quantile                  gbdt                0.0s
+  gbdt-border-types                  gbdt                0.0s
+  kmeans                             core               23.4s
+  knn                                core                1.5s
+  knn-clf                            core                2.8s
+  knn-reg                            core                1.5s
+  dbscan                             estimators          4.1s
+  pca                                estimators          0.1s
+  pca-whiten                         estimators          0.1s
+  tsvd                               estimators          0.1s
+  ols                                estimators          0.1s
+  ridge                              estimators          0.2s
+  logistic                           estimators          1.0s
+  lasso                              solver              0.0s
+  elasticnet                         solver              0.0s
+  svc                                svm                 0.0s
+  kde                                estimators          2.0s
+  agglomerative                      solver              0.0s
+  spectral                           metrics             0.0s
+  holtwinters                        tsa                 0.0s
+  gemm-pinned                        linalg              0.1s
+  metrics                            metrics             0.2s
+  svr                                svm                 0.0s
+  arima                              arima               0.0s
+  gp                                 gp                  0.0s
+  gpc                                gp                  0.0s
+  gpc-multiclass                     gp                  0.0s
+  umap                               metrics             0.0s
+  radius                             core                2.1s
+  standard-scaler                    preprocessing       0.0s
+  minmax-scaler                      preprocessing       0.0s
+  gbdt-ordered-rmse                  gbdt                0.1s
+  gbdt-feature-freq                  gbdt                0.0s
+  mlp                                training            0.3s
+  byte-lm                            byte_lm             0.1s
+  byte-lm-host-infer                 byte_lm             0.0s
+  byte-lm-host-train                 byte_lm             0.0s
+  mamba1                             mamba               0.7s
+  mamba2                             mamba               6.1s
+  transformer-bf16w                  transformer         0.7s
+  transformer-int8w                  transformer         0.7s
+  mamba1-bf16w                       mamba               0.7s
+  mamba1-int8w                       mamba               0.7s
+  mamba2-bf16w                       mamba               6.2s
+  mamba2-int8w                       mamba               6.2s
+  mamba3-bf16w                       mamba               3.9s
+  mamba3-int8w                       mamba               3.8s
+  mlp-bf16w                          training            0.2s
+  mlp-int8w                          training            0.2s
+  samba-bf16w                        training            0.9s
+  samba-int8w                        training            0.9s
+  gemm-bf16                          linalg              0.1s
+  gemm-int8                          linalg              0.0s
+  rf-clf-entropy-log2-noboot         rf                  0.0s
+  rf-clf-balanced-parallel           rf                  0.0s
+  rf-reg-poisson                     rf                  0.0s
+  rf-reg-gamma-ig                    rf                  0.0s
+  et-clf-entropy-bestfirst           trees               0.0s
+  et-reg-bootstrap-parallel          trees               0.0s
+  gbdt-multiclass                    gbdt                0.0s
+  gbdt-onevsall                      gbdt                0.0s
+  gbdt-parametric-losses             gbdt                0.0s
+  gbdt-lossguide-newtoncosine        gbdt                0.0s
+  gbdt-pointwise-l2-bayesian-eval    gbdt                0.1s
+  gbdt-exact-mae                     gbdt                0.0s
+  gbdt-categorical-ctr               gbdt                0.0s
+  gbdt-categorical-ctr-tables        forest              0.1s
+  gbdt-tensor-ctr-tables             forest              0.1s
+  gbdt-nan-modes                     gbdt                0.0s
+  gbdt-adapter-clf                   gbdt                0.0s
+  gbdt-adapter-reg                   gbdt                0.0s
+  gbdt-query-rmse                    gbdt                0.1s
+  gbdt-pair-logit                    gbdt                0.0s
+  gbdt-yeti-rank                     gbdt                0.1s
+  gbdt-adapter-score-weighted        gbdt                0.0s
+  rf-score-weighted                  rf                  0.0s
+  mamba2-dtlimit                     mamba               5.9s
+  byte-lm-resident                   byte_lm             0.0s
+  byte-lm-host-infer-threaded        byte_lm             0.0s
+  optim-sgd                          training            0.2s
+  optim-adam-clip                    training            0.2s
+  cross-entropy-arms                 training            0.0s
+  kmeans-random                      core               43.8s
+  kmeans-array                       core               18.3s
+  kmeans-weighted                    core               22.5s
+  dbscan-brute-l1                    estimators          8.9s
+  dbscan-weighted                    estimators          6.3s
+  kde-tophat-sqeuclidean             estimators          2.1s
+  kde-epanechnikov-l1                estimators          1.6s
+  kde-exponential-chebyshev          estimators          1.2s
+  kde-linear-cosine                  estimators          2.5s
+  kde-cosine-minkowski               estimators          7.4s
+  kde-weighted                       estimators          2.0s
+  pca-full-whiten                    estimators          0.3s
+  ols-no-intercept                   estimators          0.1s
+  ols-weighted                       estimators          0.4s
+  ridge-no-intercept                 estimators          0.2s
+  logistic-l1                        estimators          2.6s
+  logistic-multiclass                estimators          2.4s
+  logistic-elasticnet                estimators          2.6s
+  logistic-unpenalized-no-intercept  estimators          0.9s
+  elasticnet-l2end-no-intercept      solver              0.0s
+  svc-linear                         svm                 0.0s
+  svc-poly                           svm                 0.0s
+  svr-linear                         svm                 0.0s
+  knn-sqeuclidean                    core                1.3s
+  knn-manhattan                      core                1.0s
+  knn-chebyshev                      core                0.6s
+  knn-cosine                         core                1.6s
+  knn-minkowski-p3                   core                5.5s
+  knn-rbc                            core                0.9s
+  knn-clf-distance                   core                2.8s
+  knn-reg-distance                   core                1.5s
+  radius-manhattan                   core                2.1s
+  radius-chebyshev                   core                1.9s
+  radius-minkowski-p3                core               11.9s
+  standard-scaler-no-mean            preprocessing       0.0s
+  standard-scaler-no-std             preprocessing       0.0s
+  minmax-scaler-clip                 preprocessing       0.0s
+  spectral-precomputed               metrics             0.3s
+  holtwinters-multiplicative         tsa                 0.0s
+  kpss                               tsa                 0.0s
+  select-d                           tsa                 0.0s
+  arima-011                          arima               0.0s
+  arima-seasonal-c                   arima               0.0s
+  arima-exog                         arima               0.0s
+  arima-exog-seasonal                arima               0.0s
+  gp-normalize-y                     gp                  0.0s
+  gp-sample-y                        gp                  0.0s
+  gp-sample-y-normalize              gp                  0.0s
+  gp-optimize                        gp                  0.0s
+  gp-optimize-restarts               gp                  0.0s
+  gp-matern12                        gp                  0.0s
+  gp-matern32                        gp                  0.0s
+  gp-matern52-ard                    gp                  0.0s
+  gemm-transposed                    linalg              0.1s
+  metrics-classification             metrics             0.2s
+  metrics-homogeneity-completeness   metrics             0.0s
+  metrics-fowlkes-mallows            metrics             0.0s
+  tokenizer                          tokenizer           0.3s
+  bpe-trainer                        tokenizer           0.0s
+  bpe-vocabulary                     tokenizer           0.1s
+  tokenized-corpus                   tokenizer           0.2s
+  cross-val                          gbdt                0.0s
+  cross-val-folds                    other               0.1s
+  cholesky                           linalg              0.1s
+  kernel-ridge                       kernel_methods      0.0s
+  nystroem                           kernel_methods      0.0s
+  kernel-ridge-poly                  kernel_methods      0.0s
+  kernel-ridge-sigmoid               kernel_methods      0.0s
+  kernel-ridge-laplacian             kernel_methods      0.0s
+  nystroem-poly                      kernel_methods      0.0s
+  nystroem-sigmoid                   kernel_methods      0.0s
+  nystroem-laplacian                 kernel_methods      0.0s
+  rbf-sampler                        kernel_methods      0.0s
+  gmm                                mixture             0.0s
+  gmm-random-init                    mixture             0.0s
+  gmm-sample                         mixture             0.0s
+  gmm-random-init-sample             mixture             0.0s
+  hdbscan                            hdbscan             0.0s
+  hdbscan-leaf                       hdbscan             0.0s
+  bootstrap                          resample            0.0s
+  permutation-test                   resample            0.0s
+  monte-carlo                        resample            0.0s
+  ordered-gradient-sum               training            0.0s
+  training-primitives                training            0.1s
+  ivf                                ivf                 0.0s
+  ivf-euclidean                      ivf                 0.0s
+  ivf-extend                         ivf                 0.0s
+  embedding                          embedding           0.0s
+  embedding-sort                     embedding           0.0s
+  kmeans-sqrt                        core               27.3s
+  kmeans-classic-pp                  core               15.6s
+  iforest                            svm                 0.0s
+  iforest-tuned                      svm                 0.0s
+  portable:rf-clf                    base        0.0s
+  portable:gbdt-symmetric            base        0.0s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.0s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.8  commit be8fdb1ae1094d09fed0a52082e18182331fd402 (MOJOLEARN_COMMIT)
+# mode identical  vendor cpu (class cpu)  device Linux x86_64 (no vendor tool answered)
+# cpu AMD EPYC 9754 128-Core Processor  Linux-5.15.0-94-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 18ae8f05155b18fd, 348 records)
+# depth full: 186 lanes x 9 fixtures, 1 repeat(s), 58 portable model(s)
+# note: this harness is not the one the table was generated with; lanes added or changed since then read OWED or DIVERGENT until the table is regenerated
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| rf              |     7 |         0 |         0 |    0 |     315 |   0 |
+| trees           |     4 |         0 |         0 |    0 |     180 |   0 |
+| gbdt            |    26 |         0 |         0 |    0 |    1170 |   0 |
+| core            |    21 |       756 |         0 |    0 |       0 | 189 |
+| estimators      |    24 |       864 |         0 |    0 |       0 | 216 |
+| solver          |     4 |         0 |         0 |    0 |     180 |   0 |
+| svm             |     7 |         0 |         0 |    0 |     315 |   0 |
+| metrics         |     7 |         0 |         0 |    0 |     315 |   0 |
+| tsa             |     4 |         0 |         0 |    0 |     180 |   0 |
+| linalg          |     5 |        90 |         0 |    0 |       0 | 135 |
+| arima           |     5 |         0 |         0 |    0 |     225 |   0 |
+| gp              |    11 |         0 |         0 |    0 |     495 |   0 |
+| preprocessing   |     5 |         0 |         0 |    0 |     225 |   0 |
+| training        |    10 |       234 |         0 |    0 |       0 | 216 |
+| byte_lm         |     5 |         0 |         0 |    0 |     225 |   0 |
+| mamba           |     9 |       324 |         0 |    0 |       0 |  81 |
+| transformer     |     2 |        72 |         0 |    0 |       0 |  18 |
+| forest          |     2 |         0 |         0 |    0 |      90 |   0 |
+| tokenizer       |     4 |        54 |         0 |    0 |       0 | 126 |
+| other           |     1 |         9 |         0 |    0 |       0 |  36 |
+| kernel_methods  |     9 |         0 |         0 |    0 |     405 |   0 |
+| mixture         |     4 |         0 |         0 |    0 |     180 |   0 |
+| hdbscan         |     2 |         0 |         0 |    0 |      90 |   0 |
+| resample        |     3 |         0 |         0 |    0 |     135 |   0 |
+| ivf             |     3 |         0 |         0 |    0 |     135 |   0 |
+| embedding       |     2 |         0 |         0 |    0 |      90 |   0 |
+| portable models |    10 |       114 |         0 |    0 |       2 |   0 |
+| all             |   196 |      2517 |         0 |    0 |    4952 | 1017 |
+
+REFUSED (4952):
+  rf-clf train: ImportError: mojolearn: no CPU implementation of _mojolearn_rf.rf_classifier_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_rf; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1320, in _
+          m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 639, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 653, in _fit_with_tree_start
+          fit_fn = _forest_fit_function(binding, "rf_classifier_fit")
+        File "/root/mojolearn/python/mojolearn/_forest_protocol.py", line 335, in _forest_fit_function
+          entry = getattr(native, name + '_export', None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_rf.rf_classifier_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_rf; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  rf-reg train: ImportError: mojolearn: no CPU implementation of _mojolearn_rf.rf_regressor_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_rf; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1328, in _
+          m = ml.RandomForestRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 775, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 814, in _fit_with_tree_start
+          return self._fit_arrays(X, y32, 0, _forest_fit_function(binding, "rf_regressor_fit"),
+                                             ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_forest_protocol.py", line 335, in _forest_fit_function
+          entry = getattr(native, name + '_export', None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_rf.rf_regressor_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_rf; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  et-clf train: ImportError: mojolearn: no CPU implementation of _mojolearn_trees.et_classifier_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_trees; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1334, in _
+          m = ml.ExtraTreesClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/extratrees.py", line 451, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/extratrees.py", line 473, in _fit_with_tree_start
+          _forest_fit_function(self._bind("_mojolearn_trees"), "et_classifier_fit"),
+          ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_forest_protocol.py", line 335, in _forest_fit_function
+          entry = getattr(native, name + '_export', None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_trees.et_classifier_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_trees; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  et-reg train: ImportError: mojolearn: no CPU implementation of _mojolearn_trees.et_regressor_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_trees; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1342, in _
+          m = ml.ExtraTreesRegressor(n_estimators=16, max_depth=8, random_state=7).fit(X, yr)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/extratrees.py", line 571, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/extratrees.py", line 588, in _fit_with_tree_start
+          _forest_fit_function(self._bind("_mojolearn_trees"), "et_regressor_fit"),
+          ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_forest_protocol.py", line 335, in _forest_fit_function
+          entry = getattr(native, name + '_export', None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_trees.et_regressor_fit_export yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_trees; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-symmetric train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1348, in _
+          m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss").fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-depthwise train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1356, in _
+          loss="Logloss").fit(X, yc)
+                          ~~~^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-lossguide train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1363, in _
+          loss="Logloss").fit(X, yc)
+                          ~~~^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-rmse train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1369, in _
+          m = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE").fit(X, yr)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-ordered train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1392, in _
+          ).fit(X, yc, eval_set=(Xh, ych))
+            ~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-ordered-bayesian-noise train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1413, in _
+          m = ml.GradientBoosting(**kw).fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-catboost-defaults train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1432, in _
+          m = ml.GradientBoosting(n_estimators=20, loss="Logloss").fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-bfa-quantile train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1457, in _
+          random_strength=0.0, bootstrap_type="No", **kw).fit(X, y)
+                                                          ~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  gbdt-border-types train: ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1474, in _
+          loss="Logloss", feature_border_type=bt).fit(X, yc)
+                                                  ~~~^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/ensemble.py", line 2117, in fit
+          out = self._bind("_mojolearn_gbdt").gbdt_fit(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_gbdt.gbdt_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_gbdt; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  lasso train: ImportError: mojolearn: no CPU implementation of _mojolearn_solver.cd_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1582, in _
+          m = ml.Lasso(alpha=0.01, max_iter=200).fit(X, yr)
+        File "/root/mojolearn/python/mojolearn/_solver_impl.py", line 357, in fit
+          n_iter = self._solver().cd_fit(
+                   ^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_solver.cd_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  elasticnet train: ImportError: mojolearn: no CPU implementation of _mojolearn_solver.cd_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1588, in _
+          m = ml.ElasticNet(alpha=0.01, l1_ratio=0.5, max_iter=200).fit(X, yr)
+        File "/root/mojolearn/python/mojolearn/_solver_impl.py", line 357, in fit
+          n_iter = self._solver().cd_fit(
+                   ^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_solver.cd_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  svc train: ImportError: mojolearn: no CPU implementation of _mojolearn_svm.svc_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_svm; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1594, in _
+          m = ml.SVC(C=1.0, kernel="rbf", max_iter=200).fit(X[:2000], yc[:2000])
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 51, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/_svm_impl.py", line 556, in fit
+          n_support = self._bind(_EXT_NAME).svc_fit(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_svm.svc_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_svm; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  agglomerative train: ImportError: mojolearn: no CPU implementation of _mojolearn_solver.linkage_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1610, in _
+          m = ml.AgglomerativeClustering(n_clusters=4, prediction_data=True).fit(X[:2000, :4])
+        File "/root/mojolearn/python/mojolearn/_hierarchy_impl.py", line 317, in fit
+          _mojolearn_solver.linkage_fit(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_solver.linkage_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_solver; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  spectral train: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1626, in _
+          m = ml.SpectralClustering(n_clusters=4, random_state=3, prediction_data=True).fit(X[:rows, :4])
+        File "/root/mojolearn/python/mojolearn/_spectral_impl.py", line 564, in fit
+          n_out = int(_get_binding().spectral_fit_predict_dataset_state(
+                      ~~~~~~~~~~~~^^
+        File "/root/mojolearn/python/mojolearn/_metrics_impl.py", line 117, in _get_binding
+          read_mode = getattr(mod, "metrics_numeric_mode", None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  holtwinters train: ImportError: mojolearn: no CPU implementation of _mojolearn_tsa.holtwinters_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_tsa; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1640, in _
+          m = ml.ExponentialSmoothing(series, seasonal="additive", seasonal_periods=12).fit()
+        File "/root/mojolearn/python/mojolearn/_tsa_impl.py", line 528, in fit
+          self._bind().holtwinters_fit(
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_tsa.holtwinters_fit yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_tsa; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+  metrics train: ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 293, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1701, in _
+          accuracy=_h(np.float64(mt.accuracy_score(yc[:3000], (labels % 2).astype(np.int32)))),
+                                 ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_metrics_impl.py", line 392, in accuracy_score
+          _get_binding(numeric_mode).accuracy_score(
+          ~~~~~~~~~~~~^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_metrics_impl.py", line 117, in _get_binding
+          read_mode = getattr(mod, "metrics_numeric_mode", None)
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1192, in __getattr__
+          raise ImportError(_no_cpu_implementation(self.__name, item, self.__reason))
+      ImportError: mojolearn: no CPU implementation of _mojolearn_metrics.metrics_numeric_mode yet; see docs/lanes/BRIEF_cpu_training_2026-09-13.md (no host binding covers _mojolearn_metrics; host bindings built here: _mojolearn_core_host, _mojolearn_estimators_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_neural_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:
+      mojolearn: MOJOLEARN_NUMERIC_MODE=identical but no identical binary exists under /root/mojolearn/python/mojolearn/identical. Build them with
+          MOJOLEARN_NUMERIC_MODE=identical bash bindings/build*.sh
+
+LANE ACCOUNTING: 256 of 256 harness lanes accounted for; 76 VERIFIED, 180 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  REFUSED (110)  [not checked]: agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 104 more
+      a part raised, so it did not run
+  NOT APPLICABLE (55): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 49 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  HELD (8)  [not checked]: grad-accumulation, hf-causal-lm, hf-checkpoint, hf-tokenizer, linalg-eigh, linalg-qr, ... 2 more
+      unwatched
+  HELD (1)  [not checked]: mamba3
+      owed artifact nvidia column. No committed column anywhere under bench/results/ carries mamba3 on an NVIDIA device at fixture revision 'norms-near-one-1'; the twenty that name it all predate the 2026-09-16 norm change (lane/dead-arms) and describe bytes this harness no longer produces. Unlike the other four neural holds there is no near miss to repair. Owed, on a current NVIDIA box: `MOJOLEARN_COMMIT=$(git rev-parse HEAD) python3 tools/identity_break.py --repeats 2 --lanes mamba3 --step-full --batch-grad --batch-scale --ragged --json identity_break.nvidia.json`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: transformer
+      owed artifact nvidia stepfull. An admissible NVIDIA column at the current fixture revision exists (bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json, admit() None, nine fixtures, two repeats) but carries only train, infer, model, batch and rlpair. The DEFAULT part `stepfull` is absent, as are batchgrad, batchscale and ragged, and the file sits outside bench/results/identity_break/ so build_table never sees it. Owed: re-run those lanes on a current NVIDIA box with `--step-full --batch-grad --batch-scale --ragged` and land the column under bench/results/identity_break/
+  HELD (1)  [not checked]: saved-model-host-infer
+      one column
+  HELD (1)  [not checked]: samba
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`: the attention-replay NVIDIA column is admissible at revision 'steps-1-1' on nine fixtures but carries no `stepfull`, batchgrad, batchscale or ragged value, and is outside bench/results/identity_break/. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: transformer-window
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`: bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json is admissible at the current revision on nine fixtures but has no `stepfull`, batchgrad, batchscale or ragged value, and is outside the tree build_table walks. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  HELD (1)  [not checked]: samba-untied-dropout-accum
+      owed artifact nvidia stepfull. Same column and same gap as `transformer`, at revision 'steps-3-1'. This is the one lane whose PRE-revision NVIDIA records also agree, because lane/shrink-floors reversed its step cut, but an old column of coincidentally equal bytes is not a current witness. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  OWED (1)  [not checked]: language-model-config
+      no committed record carries a hash for this lane, so every part of it would read OWED; owed: a release record that runs it
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 256 lanes, 76 VERIFIED, 55 not applicable, 125 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (125):
+  language-model-config: no reference
+  mamba3: owed artifact nvidia column. No committed column anywhere under bench/results/ carries mamba3 on an NVIDIA device at fixture revision 'norms-near-one-1'; the twenty that name it all predate the 2026-09-16 norm change (lane/dead-arms) and describe bytes this harness no longer produces. Unlike the other four neural holds there is no near miss to repair. Owed, on a current NVIDIA box: `MOJOLEARN_COMMIT=$(git rev-parse HEAD) python3 tools/identity_break.py --repeats 2 --lanes mamba3 --step-full --batch-grad --batch-scale --ragged --json identity_break.nvidia.json`, landed under bench/results/identity_break/
+  transformer: owed artifact nvidia stepfull. An admissible NVIDIA column at the current fixture revision exists (bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json, admit() None, nine fixtures, two repeats) but carries only train, infer, model, batch and rlpair. The DEFAULT part `stepfull` is absent, as are batchgrad, batchscale and ragged, and the file sits outside bench/results/identity_break/ so build_table never sees it. Owed: re-run those lanes on a current NVIDIA box with `--step-full --batch-grad --batch-scale --ragged` and land the column under bench/results/identity_break/
+  saved-model-host-infer: one column
+  lowbit-conversions: unwatched
+  samba: owed artifact nvidia stepfull. Same column and same gap as `transformer`: the attention-replay NVIDIA column is admissible at revision 'steps-1-1' on nine fixtures but carries no `stepfull`, batchgrad, batchscale or ragged value, and is outside bench/results/identity_break/. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  transformer-window: owed artifact nvidia stepfull. Same column and same gap as `transformer`: bench/results/attention_replay_vendors_2026-09-18/nvidia_identity/remote/attn-replay-extra/identity_break.after.nvidia-sm_90a.json is admissible at the current revision on nine fixtures but has no `stepfull`, batchgrad, batchscale or ragged value, and is outside the tree build_table walks. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  samba-untied-dropout-accum: owed artifact nvidia stepfull. Same column and same gap as `transformer`, at revision 'steps-3-1'. This is the one lane whose PRE-revision NVIDIA records also agree, because lane/shrink-floors reversed its step cut, but an old column of coincidentally equal bytes is not a current witness. Owed: the same NVIDIA re-run with `--step-full --batch-grad --batch-scale --ragged`, landed under bench/results/identity_break/
+  linalg-qr: unwatched
+  linalg-eigh: unwatched
+  linalg-svdvals: unwatched
+  hf-checkpoint: unwatched
+  hf-tokenizer: unwatched
+  hf-causal-lm: unwatched
+  grad-accumulation: unwatched
+  rf-clf: REFUSED: a part raised, so it did not run
+  rf-reg: REFUSED: a part raised, so it did not run
+  et-clf: REFUSED: a part raised, so it did not run
+  et-reg: REFUSED: a part raised, so it did not run
+  gbdt-symmetric: REFUSED: a part raised, so it did not run
+  gbdt-depthwise: REFUSED: a part raised, so it did not run
+  gbdt-lossguide: REFUSED: a part raised, so it did not run
+  gbdt-rmse: REFUSED: a part raised, so it did not run
+  gbdt-ordered: REFUSED: a part raised, so it did not run
+  gbdt-ordered-bayesian-noise: REFUSED: a part raised, so it did not run
+  gbdt-catboost-defaults: REFUSED: a part raised, so it did not run
+  gbdt-bfa-quantile: REFUSED: a part raised, so it did not run
+  gbdt-border-types: REFUSED: a part raised, so it did not run
+  lasso: REFUSED: a part raised, so it did not run
+  elasticnet: REFUSED: a part raised, so it did not run
+  svc: REFUSED: a part raised, so it did not run
+  agglomerative: REFUSED: a part raised, so it did not run
+  spectral: REFUSED: a part raised, so it did not run
+  holtwinters: REFUSED: a part raised, so it did not run
+  metrics: REFUSED: a part raised, so it did not run
+  svr: REFUSED: a part raised, so it did not run
+  arima: REFUSED: a part raised, so it did not run
+  gp: REFUSED: a part raised, so it did not run
+  gpc: REFUSED: a part raised, so it did not run
+  gpc-multiclass: REFUSED: a part raised, so it did not run
+  umap: REFUSED: a part raised, so it did not run
+  standard-scaler: REFUSED: a part raised, so it did not run
+  minmax-scaler: REFUSED: a part raised, so it did not run
+  gbdt-ordered-rmse: REFUSED: a part raised, so it did not run
+  gbdt-feature-freq: REFUSED: a part raised, so it did not run
+  byte-lm: REFUSED: a part raised, so it did not run
+  byte-lm-host-infer: REFUSED: a part raised, so it did not run
+  byte-lm-host-train: REFUSED: a part raised, so it did not run
+  rf-clf-entropy-log2-noboot: REFUSED: a part raised, so it did not run
+  rf-clf-balanced-parallel: REFUSED: a part raised, so it did not run
+  rf-reg-poisson: REFUSED: a part raised, so it did not run
+  rf-reg-gamma-ig: REFUSED: a part raised, so it did not run
+  et-clf-entropy-bestfirst: REFUSED: a part raised, so it did not run
+  et-reg-bootstrap-parallel: REFUSED: a part raised, so it did not run
+  gbdt-multiclass: REFUSED: a part raised, so it did not run
+  gbdt-onevsall: REFUSED: a part raised, so it did not run
+  gbdt-parametric-losses: REFUSED: a part raised, so it did not run
+  gbdt-lossguide-newtoncosine: REFUSED: a part raised, so it did not run
+  gbdt-pointwise-l2-bayesian-eval: REFUSED: a part raised, so it did not run
+  gbdt-exact-mae: REFUSED: a part raised, so it did not run
+  gbdt-categorical-ctr: REFUSED: a part raised, so it did not run
+  gbdt-categorical-ctr-tables: REFUSED: a part raised, so it did not run
+  gbdt-tensor-ctr-tables: REFUSED: a part raised, so it did not run
+  gbdt-nan-modes: REFUSED: a part raised, so it did not run
+  gbdt-adapter-clf: REFUSED: a part raised, so it did not run
+  gbdt-adapter-reg: REFUSED: a part raised, so it did not run
+  gbdt-query-rmse: REFUSED: a part raised, so it did not run
+  gbdt-pair-logit: REFUSED: a part raised, so it did not run
+  gbdt-yeti-rank: REFUSED: a part raised, so it did not run
+  gbdt-adapter-score-weighted: REFUSED: a part raised, so it did not run
+  rf-score-weighted: REFUSED: a part raised, so it did not run
+  byte-lm-resident: REFUSED: a part raised, so it did not run
+  byte-lm-host-infer-threaded: REFUSED: a part raised, so it did not run
+  elasticnet-l2end-no-intercept: REFUSED: a part raised, so it did not run
+  svc-linear: REFUSED: a part raised, so it did not run
+  svc-poly: REFUSED: a part raised, so it did not run
+  svr-linear: REFUSED: a part raised, so it did not run
+  standard-scaler-no-mean: REFUSED: a part raised, so it did not run
+  standard-scaler-no-std: REFUSED: a part raised, so it did not run
+  minmax-scaler-clip: REFUSED: a part raised, so it did not run
+  spectral-precomputed: REFUSED: a part raised, so it did not run
+  holtwinters-multiplicative: REFUSED: a part raised, so it did not run
+  kpss: REFUSED: a part raised, so it did not run
+  select-d: REFUSED: a part raised, so it did not run
+  arima-011: REFUSED: a part raised, so it did not run
+  arima-seasonal-c: REFUSED: a part raised, so it did not run
+  arima-exog: REFUSED: a part raised, so it did not run
+  arima-exog-seasonal: REFUSED: a part raised, so it did not run
+  gp-normalize-y: REFUSED: a part raised, so it did not run
+  gp-sample-y: REFUSED: a part raised, so it did not run
+  gp-sample-y-normalize: REFUSED: a part raised, so it did not run
+  gp-optimize: REFUSED: a part raised, so it did not run
+  gp-optimize-restarts: REFUSED: a part raised, so it did not run
+  gp-matern12: REFUSED: a part raised, so it did not run
+  gp-matern32: REFUSED: a part raised, so it did not run
+  gp-matern52-ard: REFUSED: a part raised, so it did not run
+  metrics-classification: REFUSED: a part raised, so it did not run
+  metrics-homogeneity-completeness: REFUSED: a part raised, so it did not run
+  metrics-fowlkes-mallows: REFUSED: a part raised, so it did not run
+  cross-val: REFUSED: a part raised, so it did not run
+  kernel-ridge: REFUSED: a part raised, so it did not run
+  nystroem: REFUSED: a part raised, so it did not run
+  kernel-ridge-poly: REFUSED: a part raised, so it did not run
+  kernel-ridge-sigmoid: REFUSED: a part raised, so it did not run
+  kernel-ridge-laplacian: REFUSED: a part raised, so it did not run
+  nystroem-poly: REFUSED: a part raised, so it did not run
+  nystroem-sigmoid: REFUSED: a part raised, so it did not run
+  nystroem-laplacian: REFUSED: a part raised, so it did not run
+  rbf-sampler: REFUSED: a part raised, so it did not run
+  gmm: REFUSED: a part raised, so it did not run
+  gmm-random-init: REFUSED: a part raised, so it did not run
+  gmm-sample: REFUSED: a part raised, so it did not run
+  gmm-random-init-sample: REFUSED: a part raised, so it did not run
+  hdbscan: REFUSED: a part raised, so it did not run
+  hdbscan-leaf: REFUSED: a part raised, so it did not run
+  bootstrap: REFUSED: a part raised, so it did not run
+  permutation-test: REFUSED: a part raised, so it did not run
+  monte-carlo: REFUSED: a part raised, so it did not run
+  ivf: REFUSED: a part raised, so it did not run
+  ivf-euclidean: REFUSED: a part raised, so it did not run
+  ivf-extend: REFUSED: a part raised, so it did not run
+  embedding: REFUSED: a part raised, so it did not run
+  embedding-sort: REFUSED: a part raised, so it did not run
+  iforest: REFUSED: a part raised, so it did not run
+  iforest-tuned: REFUSED: a part raised, so it did not run
+Batch invariance: IDENTICAL=641, DIVERGENT=0, OWED=0, REFUSED=992, N/A=99
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: INCOMPLETE (verified 2517 of 8486 cell parts (0 divergent, 0 owed, 4952 refused, 1017 n/a); 76 of 256 lanes verified; 55 not applicable to any run of this command; 125 not checked). 282.5s. exit 4
+# evidence written to /root/leg_out/public.json

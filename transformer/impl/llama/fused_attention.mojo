@@ -1296,9 +1296,52 @@ of the trial tree (the sabotage copies stay trial-only, like
 `ATTN_SHIPPED_BWD_KV`'s)."""
 
 comptime ATTN_V1_RECOMPUTE_BACKWARD = is_defined["MOJOLEARN_ATTN_V1_RECOMPUTE_BACKWARD"]()
+comptime ATTN_V1_PACKED_ESTASH = is_defined["MOJOLEARN_ATTN_V1_PACKED_ESTASH"]()
 """Opt-in memory arm: keep v1 arithmetic but do not retain forward exp cells.
 The backward consequently takes the existing exact recompute launcher. The
 default remains the tuned estash route on columns whose matrix selects it."""
+
+def attention_v1_backward_memory_profile() -> String:
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD:
+        return String("v1-recompute")
+    comptime if ATTN_V1_PACKED_ESTASH:
+        return String("v1-packed-estash")
+    return String("v1-estash-default")
+
+@always_inline
+def _visible_ramp_sum(c: Int, n: Int, cap: Int) -> Int:
+    """Sum clamp(c+r, 0, cap), r in [0,n), without a row loop."""
+    var first = max(0, 1 - c)
+    var saturated = max(0, cap - c)
+    var stop = min(n, saturated)
+    var count = max(0, stop - first)
+    var total = count * c + (first + stop - 1) * count // 2
+    return total + max(0, n - saturated) * cap
+
+@always_inline
+def _visible_prefix(n: Int, pos0: Int, key_lo: Int, window: Int, s: Int) -> Int:
+    var hi = _visible_ramp_sum(pos0 - key_lo + 1, n, s)
+    if window <= 0:
+        return hi
+    return hi - _visible_ramp_sum(pos0 - window + 1 - key_lo, n, s)
+
+@always_inline
+def _estash_cell[PACKED: Bool](bb: Int, h: Int, t: Int, j: Int, l: Int, nh: Int, s: Int, pos0: Int, key_lo: Int, window: Int) -> Int:
+    comptime if PACKED:
+        var per_head = _visible_prefix(l, pos0, key_lo, window, s)
+        var lo = _row_range(t, pos0, key_lo, window, s)[0]
+        return (bb * nh + h) * per_head + _visible_prefix(t, pos0, key_lo, window, s) + j - lo
+    return ((bb * nh + h) * l + t) * s + j
+
+def attention_v1_retained_exp_cells(b:Int,l:Int,nh:Int,s:Int) -> Int:
+    comptime if ATTN_V1_RECOMPUTE_BACKWARD or not ATTN_SHIPPED_BWD_ESTASH:
+        return 0
+    comptime if ATTN_V1_PACKED_ESTASH:
+        return b*nh*l*(l+1)//2
+    return b*l*nh*s
+
+def attention_v1_retained_exp_bytes(b:Int,l:Int,nh:Int,s:Int) -> Int:
+    return 4*attention_v1_retained_exp_cells(b,l,nh,s)
 
 comptime ATTN_DEFAULT_ESTASH_DRES = (ATTN_ARM_DEFAULT & ATTN_ARM_ESTASH_DRES) != 0
 """Whether the column default carries DEVIATION 2651's `_dres` bit, so a
@@ -5504,7 +5547,8 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                         if t < l and j >= rr[0] and j <= rr[1]:
                             var masked = ftz(_pmul(dots[u * 2 + v], scale_in) + Float32(0.0))
                             mpart[u] = identical_fmax(mpart[u], masked)
-                            sstash.unsafe_store(stbase + t * s + j, masked)
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                            sstash.unsafe_store(cell, masked)
             else:
                 comptime for u in range(RPT):
                     var r = tr + u * 16
@@ -5514,7 +5558,7 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
                         var jj = tc + v * 16
                         var j = kb * BK + jj
                         if t < l and j >= rr[0] and j <= rr[1]:
-                            var cell = stbase + t * s + j
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
                             comptime if phase == 1:
                                 var masked = sstash.unsafe_load(cell)
                                 var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
@@ -5749,7 +5793,8 @@ def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: 
                     comptime for p in range(HD):
                         dy = _step_preflushed(vec.unsafe_load(p), vs.unsafe_load(kj * KSTRIDE + p), dy)
                 var dyv = ftz(dy)
-                var e = e_st.unsafe_load(stbase + j)
+                var ecell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, tt, j, l, nh, s, pos0, key_lo, window)
+                var e = e_st.unsafe_load(ecell)
                 var yv = ftz(identical_div(ftz(e), d_row))
                 ys.unsafe_store(tr * ESTRIDE + kj, yv)
                 y_st.unsafe_store(stbase + j, yv)
@@ -7625,6 +7670,8 @@ def fused_forward_launch_estash_ran(
             _attn_tick(ctx, ton, tk, "fwd_regime_scan")
             var corner = _zero_flag(ctx)
             var cells = b * nh * l * s
+            comptime if ATTN_V1_PACKED_ESTASH:
+                cells = b * nh * _visible_prefix(l, pos0, key_lo, window, s)
             if len(kept) < cells:
                 step_count_device_alloc()
                 kept = ctx.enqueue_create_buffer[DType.float32](cells)
@@ -7770,7 +7817,10 @@ def fused_backward_launch_estash_report(
     plain launcher's."""
     repaired = 0
     comptime if ATTN_ARM_TRIAL or ATTN_SHIPPED_BWD_ESTASH:
-        if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD and kept_cells > 0 and kept_cells == b * nh * l * s:
+        var expected_kept_cells = b * nh * l * s
+        comptime if ATTN_V1_PACKED_ESTASH:
+            expected_kept_cells = b * nh * _visible_prefix(l, pos0, key_lo, window, s)
+        if fused_attention_arm_estash_runs(arm) and hd == ATTN_STASH_HD and kept_cells > 0 and kept_cells == expected_kept_cells:
             ran = ATTN_ARM_BASELINE
             if not fused_supported_head_dim(hd):
                 return FUSED_REFUSED_REGIME

@@ -118,6 +118,67 @@ requires equal values.
   on the held-out rows, whole, row by row and split, must equal the recorded
   GPU answers.
 
+### Every lane is public, and every lane says what this box did with it
+
+The harness defines 262 lanes. Until 2026-09-20 the shipped verifier exposed
+186 of them and the other 76 were not reported as anything at all, so
+`186 lanes` was indistinguishable from all of them. Fifty-nine left by a
+prefix rule and the rest sat in a pending list. **Nothing is hidden now.**
+`PUBLIC_PENDING_LANES` and the inapplicable-prefix rule no longer remove a
+lane from anything; they annotate. A reason decides what a lane REPORTS, and
+whether this box can compare it, never whether you can see it.
+
+The reasoning is short: an absence is indistinguishable from a feature we do
+not have, and we do have these. A lane with no reference reads OWED, which
+names what is missing. That is more than silence gives anyone.
+
+Every run prints a LANE ACCOUNTING block whose denominator is the whole
+harness, and gives each lane a state and a sentence:
+
+| state | what it means | gates? |
+|---|---|---|
+| VERIFIED | it ran and every part read IDENTICAL or N/A | — |
+| SMOKE | its full claim is not expressible on this box, but `--smoke` fitted it **twice** and it ran, kept its shape, stayed finite and gave the same bits both times. Never a verification | — |
+| SMOKE FAILED | that smoke test found a raise, a NaN or inf, a changed shape, or different bits from two fits on one box. A real defect | **yes** |
+| DIVERGENT | its bits differ from the reference | **yes** |
+| REFUSED | a part raised, so it did not run | **yes** |
+| OWED | no committed record carries a hash for a part of it | no |
+| NOT APPLICABLE | no run on this box could ever state its claim. The 59 `par-*` drivers claim a two-device column hashes equal to the one-device column cell for cell, and `verify` is a one-device run; and a handful of lanes refuse by name on a CPU-only install | no |
+| HELD | its comparison is blocked by a named condition | no |
+| NOT RUN | this run did not select it, or its fixture moved past the shipped reference | no |
+| UNDECLARED | nothing in the manifest says anything about it. This is a bug, and `tools/lane_accounting.py` fails on it | no |
+
+**Only DIVERGENT, REFUSED and SMOKE FAILED cost the run its pass.** Those are the two that
+mean something went WRONG rather than something is missing. A lane whose bits
+differ from its reference is the single thing this library exists to detect,
+and a lane that raised did not run at all; passing over either would make the
+word mean nothing. Everything else is reported and counted, not held against
+you. That is the same rule the part level has always followed: a part declared
+`n/a:no-backward` has never made a run INCOMPLETE.
+
+**`--smoke` is a looser tier, not a weaker one.** For a lane whose real claim
+needs hardware you do not have — the 59 `par-*` drivers claim two devices hash
+equal to one — it fits the lane **twice, in full**, and reports whether it
+ran, kept its shape, stayed finite and produced the same bits both times. Two
+full fits, never two probes of one fit: a second probe re-reads the same
+arrays and cannot fail, and a cheap check that cannot fail is worse than none.
+It is off by default because two full fits is real work, and it skips lanes
+the run already executed, so on a GPU install it costs nothing.
+
+**A run that checked nothing is still not a pass.** If a run's whole scope is
+NOT APPLICABLE it exits 4 with CANNOT RUN, even though every cell part it
+produced read IDENTICAL, because a one-device `par-*` column is compared
+against itself and passes whatever the code does.
+
+**The verdict carries its own scope**, which is what keeps a looser gate
+honest. Nobody should have to open the JSON to learn that a quarter of the run
+was inapplicable:
+
+```
+RESULT: VERIFIED (verified 16 of 20 cell parts (0 divergent, 0 owed, 0 refused,
+4 n/a); 2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes). exit 0
+```
+
 Every cell (a lane on a fixture) has five standard parts; `--batch-checks` adds the four optional probes:
 
 | part | question |
@@ -279,9 +340,12 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
+| `--par [quick\|default\|all]` | compare your two-device column against your one-device column (below) |
+| `--par-devices 0,1` | with `--par`: which devices the second column runs on |
+| `--par-self-test` | show that `--par` can fail |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
 
-The three checks answer different questions, and are worth more together than
+The four checks answer different questions, and are worth more together than
 separately:
 
 1. **`--cross-check`**, your GPU against your CPU. Trusts nobody: you generated
@@ -290,8 +354,58 @@ separately:
    which is auditable because the raw columns are committed under
    `bench/results/identity_break/` and the document names the exact file and
    commit each reference came from.
-3. **`--self-test`**, which shows the comparison can fail at all. Without it the
-   first two are checks nobody has watched fail.
+3. **`--par`**, your two-device column against your one-device column, for the
+   59 `par-*` multi-device driver lanes. Trusts nobody for the same reason
+   `--cross-check` does not, and it is the only command that states the
+   drivers' claim at all: every `par-*` cell in the recorded table is a
+   ONE-device run, so `--all` cannot ask this question.
+4. **`--self-test`** and **`--par-self-test`**, which show the comparisons can
+   fail at all. Without them the first three are checks nobody has watched
+   fail.
+
+## Your two devices against your one device
+
+A `par-*` lane is a multi-device DRIVER: it cuts one fit or one query into
+shards, sends each shard to its own device, and merges the results. Its whole
+claim, in `identity_break._par_devices`, is that the two-device column hashes
+equal to the one-device column cell for cell. Sharding must not move a bit.
+
+That claim is not in any release record. `identity_break.RECORD_EXCLUDED_PREFIXES`
+keeps `par-*` out of a full column, and every `par-*` reference in the shipped
+table is a one-device run, so `verify --all` compares one device against one
+device and passes whatever the sharding does.
+
+```sh
+python -m mojolearn verify --par                  # all 59 par-* lanes, base fixture
+python -m mojolearn verify --par quick            # one lane per family
+python -m mojolearn verify --par --lanes par-queries-nn --fixtures base,ties
+python -m mojolearn verify --par-devices 2,3      # another pair
+```
+
+It runs each lane twice in one process, once with `MOJOLEARN_PAR_DEVICES=0` and
+once with `0,1`, and compares. There is no reference table: the one-device
+column, produced on your box minutes earlier off the same build, IS the
+reference.
+
+**A column that never sharded is refused, not passed.** If a driver silently
+falls back to one device, both columns agree instantly and a naive command
+would print a confident pass over nothing. So every device pool the two-device
+column starts is inventoried through the driver, each worker is required to
+resolve to its own process and its own physical GPU by UUID and PCI id, and a
+run in which no pool started at all is reported as CANNOT RUN with that
+sentence.
+
+`DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the work
+refused on exactly one of the two columns, which is a defect only a two-device
+run can see. Both exit non-zero.
+
+**Apple is excluded structurally, not by policy.** `DevicePool._start` admits
+the metal vendor only at a single device and raises for any other group, so no
+Mac can produce a two-device `par-*` column with this code. The command says so
+by name rather than leaving you to look for hardware that would never have
+worked. On a CPU-only install it runs the drivers' own partition and merge
+across two worker processes and states, in the report, that this is not a
+device claim.
 
 ## Can you watch it fail?
 

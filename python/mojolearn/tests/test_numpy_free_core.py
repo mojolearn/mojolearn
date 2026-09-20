@@ -258,8 +258,25 @@ def test_npy_bytes_identical_to_numpy():
                 want = _numpy_npy(x)
                 got_np = _serialize.encode_npy(x)
                 _assert_same_bytes(got_np, want, f"encode_npy(ndarray {dt.__name__} {shape} {order})")
+                streamed = io.BytesIO()
+                _serialize.write_npy(streamed, x)
+                _assert_same_bytes(streamed.getvalue(), want,
+                                   f"write_npy(ndarray {dt.__name__} {shape} {order})")
                 got_arr = _serialize.encode_npy(Array.from_buffer(x))
                 _assert_same_bytes(got_arr, want, f"encode_npy(Array {dt.__name__} {shape} {order})")
+                if x.nbytes and order == "C":
+                    writes = []
+
+                    class RecordingBytesIO(io.BytesIO):
+                        def write(self, value):
+                            writes.append(type(value))
+                            return super().write(value)
+
+                    streamed_array = RecordingBytesIO()
+                    _serialize.write_npy(streamed_array, Array.from_buffer(x))
+                    _assert_same_bytes(streamed_array.getvalue(), want,
+                                       f"write_npy(Array {dt.__name__} {shape} {order})")
+                    assert memoryview in writes, "Array payload must stay borrowed while streaming"
                 back = np.load(io.BytesIO(got_arr))
                 assert back.dtype == dt and back.shape == shape
                 assert np.array_equal(back, x)

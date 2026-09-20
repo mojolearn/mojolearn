@@ -879,8 +879,23 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     public = host_surface.public_reference_lanes()
 
     assert len(public) == len(set(public)), "a lane is listed twice"
-    assert not [lane for lane in public if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)]
-    assert not (set(public) & set(host_surface.PUBLIC_PENDING_LANES)), "a pending lane is public"
+    # NOTHING IS HIDDEN ANY MORE (Andrew, 2026-09-20). These two assertions
+    # used to demand the opposite: that no prefix-excluded lane and no pending
+    # lane was public. That was the rule that hid 76 lanes behind a list and a
+    # prefix. `public_reference_lanes()` is now the COMPARABLE set -- what the
+    # verifier runs and compares on a CPU install -- and a pending lane joins
+    # it unless its reason is one of the three that block a comparison.
+    assert not [lane for lane in public
+                if lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)], (
+        "a par-* lane is comparable on one device, where its claim cannot be stated")
+    still_blocked = {lane for lane in host_surface.PUBLIC_PENDING_LANES
+                     if host_surface.pending_blocks_comparison(lane)}
+    assert not (set(public) & still_blocked), (
+        f"a lane whose comparison is blocked is in the comparable set: {sorted(set(public) & still_blocked)}")
+    annotated = set(host_surface.PUBLIC_PENDING_LANES) - still_blocked - set(covered_par := set())
+    assert all(lane in public or lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)
+               for lane in annotated), (
+        "a pending lane with a merely annotating reason must be comparable, not hidden")
     trained = set(public) - host_only
     assert trained <= covered, f"public lanes with no CPU training path: {sorted(trained - covered)}"
     assert trained <= with_cells, f"public lanes the shipped table has no cell for: {sorted(trained - with_cells)}"
@@ -990,9 +1005,42 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
                     f"({', '.join(classes) or 'none'}), so its reference has one witness and "
                     "nothing has ever reproduced it. Its reason is 'one column', and what it owes "
                     "is a second column, not a watched run")
-        elif why == "qualification pending":
-            assert lane in with_cells and lane not in stale, lane
-            assert len(_reference_classes(table, lane)) >= 2, lane
+        elif why.startswith("owed artifact "):
+            # ONE MISSING DEVICE CLASS, NAMED, WITH THE FILE OR COMMAND THAT
+            # WOULD SUPPLY IT (lane/verifier-full-exposure, 2026-09-20). This
+            # reason replaced `qualification pending`, which five lanes carried
+            # and which said "the expanded property/hardware completion plan is
+            # not met" -- a sentence that named no artifact, so a reader could
+            # not tell a rental from a merge from a re-run, and nothing could
+            # ever observe it being paid. The old string's only check was that
+            # the lane had two device classes in the UNION of its cells, which
+            # is the loose reading `_classes_on_every_part` exists to replace.
+            #
+            # The shape is `owed artifact <class> ...`, and it is checked BOTH
+            # ways, like `one column`: the class must be one the table's `cols`
+            # can carry, the reason must name a path or a command, and -- the
+            # load-bearing half -- the hold FAILS the day the shipped table's
+            # cells carry that class on every part of every fixture. An excuse
+            # cannot outlive the column that pays it.
+            words = why.split()
+            klass = words[2] if len(words) > 2 else ""
+            assert klass in TRAINING_GPU_CLASSES + ("cpu",), (
+                f"{lane}: {why!r} does not name a device class as its third word; "
+                f"`owed artifact <class> ...` is the shape this test can check")
+            assert lane in with_cells and lane not in stale, (
+                f"{lane}: held back for a missing {klass} column, but the shipped table "
+                f"has no current cell for it at all; its reason is 'no reference' or "
+                f"'stale reference' and what is owed is a whole record")
+            assert "bench/results/" in why or "identity_break.py" in why, (
+                f"{lane}: `owed artifact` has to name the file or the command that would "
+                f"supply the column. {why!r} names neither, which makes it the vague "
+                f"phrase it replaced")
+            if klass in _classes_on_every_part(table, lane):
+                wrong_reason.append(
+                    f"{lane}: held back for a missing {klass} column, but the shipped "
+                    f"table's cells for it carry {klass} on EVERY part of every fixture, "
+                    f"so the hold no longer applies: promote it once a CPU-only "
+                    f"`verify --all` has been watched to read IDENTICAL for it")
         elif why == "one column":
             # THE REFERENCE HAS ONE WITNESS (lane/reference-regen, 2026-09-17).
             # The lanes whose fixture or arithmetic moved lost every cell they
@@ -1047,7 +1095,7 @@ def test_public_reference_lanes_are_derived_and_every_pending_reason_is_true():
     # assertion demanded an entry that the same test's own loop would then
     # reject.
     excluded = {lane for lane in revisions
-                if lane.startswith(host_surface.PUBLIC_EXCLUDED_PREFIXES)}
+                if lane.startswith(host_surface.PUBLIC_INAPPLICABLE_PREFIXES)}
     moved = sorted(stale - set(host_surface.PUBLIC_PENDING_LANES)
                    - host_only - excluded)
     assert moved == [], (
@@ -1120,7 +1168,7 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
 
     Neither list was wrong on its own terms, which is exactly how this
     happens. `PUBLIC_PENDING_LANES` only ever admits lanes that could become
-    PUBLIC, and `PUBLIC_EXCLUDED_PREFIXES` excludes every `par-` driver from
+    PUBLIC, and `PUBLIC_INAPPLICABLE_PREFIXES` excludes every `par-` driver from
     the public set -- the test above even states that a prefix-excluded lane
     "must not be required in PUBLIC_PENDING_LANES", and it is right. So one
     mechanism refused the lanes for a good reason and handed them to the
@@ -1130,7 +1178,23 @@ def test_every_lane_is_either_in_the_shipped_table_or_declared_pending():
     This is the check that owns the gap between them. It is deliberately the
     weakest possible statement -- accounted for AT ALL, not accounted for
     WELL -- because the strong statements already have tests and a lane they
-    never see cannot fail one."""
+    never see cannot fail one.
+
+    IT COUNTS TWO MORE WAYS SINCE 2026-09-20 (lane/verifier-full-exposure),
+    folded in from a second gate that lane wrote while this one was in flight.
+    Two files that both answer "is this lane accounted for" can disagree, and
+    then a reader has to know which is authoritative, which is the shape of
+    the gap they both exist to close.
+
+      * EVERY LANE IS EXPOSED OR SAYS WHY NOT. The harness defines 256 lanes
+        and the shipped verifier exposes 186; the other 70 were reported as
+        nothing, so `186 lanes` read like all of them. Fifty-five of them
+        leave by PREFIX, and a prefix is not a list, so the invariant above
+        cannot see them: a `par-` lane with a table cell satisfies it while
+        still vanishing from the command with no sentence anywhere.
+      * NO PUBLIC ALGORITHM IS SILENTLY LANELESS, which is the same count run
+        the other way. An algorithm with no lane at all cannot be MISSING a
+        cell, so no lane census can see it."""
     mod = _lane_accounting()
     bad = mod.check()
     assert bad == [], "lanes that no mechanism accounts for:\n  " + "\n  ".join(bad)
@@ -1149,6 +1213,13 @@ def test_the_lane_accounting_check_refuses_every_way_the_gap_comes_back(capsys):
     It also asserts the clean direction first: a lane with no table cells
     that IS declared pending reads clean, which is the claim that makes
     declaring a real alternative to promoting rather than a second-class
-    one."""
+    one.
+
+    SEVEN MORE SINCE 2026-09-20 (lane/verifier-full-exposure): a prefix that
+    excludes 55 lanes and says why nowhere, a reason for a prefix nothing
+    excludes, a lane the manifest never heard of, a hold with a blank reason,
+    an exposure map that loses a lane, an undeclared laneless public
+    algorithm, and an excuse for one that has since gained a lane. Fifteen in
+    all, each refused by the message that names it."""
     mod = _lane_accounting()
     assert mod.self_test(verbose=True) is True, capsys.readouterr().out

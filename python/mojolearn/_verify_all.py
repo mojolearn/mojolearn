@@ -29,9 +29,20 @@ and whose batch answers the table carries for the GPU columns. Loading one
 on a CPU and getting the same answers is the train on GPU, infer anywhere
 claim, checked where the user is.
 
+EVERY LANE IS ACCOUNTED FOR (lane/verifier-full-exposure, 2026-09-20). The
+harness defines 256 lanes and a CPU-only install runs 186 of them. The other
+70 used to be absent from this report rather than reported as anything, so
+`186 lanes` was indistinguishable from all of them. The report now carries a
+`lane_accounting` block whose denominator is the whole harness on every run,
+and each lane it does not verify reads NOT APPLICABLE, OWED, HELD, NOT RUN or
+UNDECLARED with the sentence that says why. Only VERIFIED contributes to a
+pass: `lane_verdict_gaps()` turns every other state into a scope gap, so no
+state listed here can be read as success.
+
 WHAT A PASS DOES NOT SAY. It is one machine. It does not re-measure other
 vendors (the committed records did), cover inputs other than the fixtures,
-or say anything about speed. An OWED part is not a pass.
+or say anything about speed. An OWED part is not a pass, and neither is a
+NOT APPLICABLE lane.
 """
 import hashlib
 import importlib.util
@@ -114,12 +125,27 @@ def harness_path():
     return _identity.harness_path()
 
 
-def load_harness(path=None):
+def load_harness(path=None, par_axis=False):
+    """The harness module, or CannotRun naming what would make its hashes
+    incomparable.
+
+    `par_axis=True` is `verify --par` and NOTHING ELSE. That command produces
+    BOTH columns here, so it has no recorded reference to be incomparable
+    with, and it sets MOJOLEARN_PAR_DEVICES itself around each `run_cell`. The
+    refusal below is still right for it and is still raised: an ambient value
+    would be overwritten a moment later, and silently overwriting what the
+    user exported is worse than saying so. Only the SENTENCE changes, because
+    "the reference is the one-device record" is not the reason here.
+    """
     for var in _HARNESS_OVERRIDES:
         if os.environ.get(var, "").strip() not in ("", "0"):
             raise CannotRun(f"{var} is set; it changes what the harness hashes, so no cell would "
                             "be comparable with the record. Unset it.")
     if os.environ.get("MOJOLEARN_PAR_DEVICES", "0").strip() not in ("", "0"):
+        if par_axis:
+            raise CannotRun("MOJOLEARN_PAR_DEVICES is set in the environment; `verify --par` sets "
+                            "it itself, once per column, and would overwrite yours without saying "
+                            "so. Unset it, and name the devices with --par-devices.")
         raise CannotRun("MOJOLEARN_PAR_DEVICES is set to more than device 0; the reference is the "
                         "one-device record. Unset it.")
     if path is None:
@@ -154,12 +180,18 @@ def select_lanes(harness, table, vendor_class, depth, asked, include_pending=Fal
     all_lanes = list(harness.LANES)
     if vendor_class == "cpu":
         surface = host_surface()
-        public = surface.public_reference_lanes()
-        # A user may explicitly exercise a declared CPU route before its
-        # reference is ready. Its results read OWED, never VERIFIED.
-        eligible = (set(public) | set(surface.covered_lanes())) if asked or include_pending else set(public)
+        # EVERY LANE IS PUBLIC; WHAT VARIES IS WHETHER THIS BOX CAN COMPARE IT
+        # (Andrew, 2026-09-20). `comparable_lanes()` is the execution set, and
+        # it is NOT a visibility filter: the lanes it leaves out are reported
+        # by name, with the reason, in the run's lane accounting. It exists
+        # because running them would not help. A `par-*` driver on one device
+        # compares a run against itself; a `no cpu route` lane RAISES by name
+        # on a CPU install, and a raise is a REFUSED part, which still gates.
+        # Selecting them would turn a structural fact into a failure.
+        comparable = surface.comparable_lanes(all_lanes, "cpu")
+        eligible = (set(comparable) | set(surface.covered_lanes())) if asked or include_pending else set(comparable)
         allowed = [l for l in harness.LANES if l in eligible
-                   and (include_pending or not l.startswith(surface.PUBLIC_EXCLUDED_PREFIXES))]
+                   and (include_pending or not l.startswith(surface.PUBLIC_INAPPLICABLE_PREFIXES))]
     else:
         allowed = all_lanes
     if asked:
@@ -327,6 +359,131 @@ def run_cell(harness, ml, lane, fixture, data, held, repeats, extra_parts=()):
     return {p: _collapse(vals[p], errs[p]) for p in parts}
 
 
+def _probe_arrays(harness, fit):
+    """The raw outputs a lane declares for its held-out rows, as arrays, or
+    None when the lane declares none.
+
+    This is the one thing the hash path cannot give a smoke test. `_h()`
+    hashes bytes, and a NaN hashes as stably as any other bit pattern, so a
+    column of NaN reads IDENTICAL forever. The arrays come back through
+    `fit.probe(fit.est)`, which is the lane's OWN declaration of what a user
+    reads off it -- not a guess this file makes about the estimator.
+    """
+    probe = getattr(fit, "probe", None)
+    if not callable(probe):
+        return None
+    out = probe(fit.est)
+    return out if isinstance(out, (tuple, list)) else (out,)
+
+
+def _finite_problems(arrays):
+    """The non-finite values in `arrays`, named. Non-numeric outputs (string
+    labels, object arrays) are skipped rather than guessed at, and skipping is
+    reported by the caller rather than counted as a pass."""
+    import numpy as np
+
+    problems, checked = [], 0
+    for index, value in enumerate(arrays or ()):
+        try:
+            a = np.asarray(value)
+            if a.dtype.kind not in "fc":      # only floats and complex can be NaN/inf
+                continue
+            checked += 1
+            bad = ~np.isfinite(a)
+            if bad.any():
+                nan = int(np.isnan(a).sum())
+                problems.append(f"output {index} has {int(bad.sum())} non-finite value(s) "
+                                f"({nan} NaN, {int(bad.sum()) - nan} inf) of {a.size}")
+        except (TypeError, ValueError):
+            continue
+    return problems, checked
+
+
+def smoke_cell(harness, ml, lane, fixture, data, held):
+    """TWO FULL FITS, and everything that can be checked without the claim.
+
+    WHY TWO FULL FITS AND NOT TWO PROBES OF ONE FIT. A second probe of one
+    fitted model compares a thing against itself: it re-reads the same arrays
+    and cannot fail, whatever the code does. This repository has shipped that
+    mistake more than once -- a grep that returned 0 from a wrapped phrase, a
+    `par_diff` that exited 0 over a column holding one cell -- and a cheap
+    check that cannot fail is worse than no check, because it produces a
+    number people trust. So the lane is FITTED twice, from the same input, and
+    the two results must agree bit for bit.
+
+    What that buys, on a box that cannot state the lane's real claim:
+
+      it runs        the lane constructs and executes without raising
+      it is shaped   the declared outputs exist and keep their shape
+      it is finite   no NaN, no inf, in any float output
+      it is stable   two independent fits on this box give the same bits,
+                     which is what catches nondeterminism, uninitialised
+                     memory and a device-order dependency
+
+    None of that is the identity claim. It is what is left of it when the
+    hardware cannot express the claim, and it is a great deal more than zero.
+    """
+    X, yc, yr = data
+    digests, shapes, notes = [], [], []
+    skipped_finite = 0
+    for repeat in range(2):
+        harness._DUMP_TAG = f"smoke:{lane}/{fixture}/{repeat}"
+        try:
+            fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="it raised: " + _error_text(harness, None, exc))
+        try:
+            digests.append(harness._train_hash(fit))
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="the fit could not be read back: "
+                        + _error_text(harness, "train", exc))
+        try:
+            arrays = _probe_arrays(harness, fit)
+        except Exception as exc:
+            return dict(ok=False, checks=[], why="its declared outputs raised: "
+                        + _error_text(harness, "infer", exc))
+        bad, checked = _finite_problems(arrays)
+        if bad:
+            return dict(ok=False, checks=[], why="; ".join(bad))
+        skipped_finite += (len(arrays or ()) - checked)
+        try:
+            import numpy as np
+            shapes.append(tuple(np.asarray(v).shape for v in (arrays or ())))
+        except (TypeError, ValueError):
+            shapes.append(None)
+
+    checks = ["ran"]
+    if shapes[0] != shapes[1]:
+        return dict(ok=False, checks=checks,
+                    why=f"its output shape changed between two fits: {shapes[0]} then {shapes[1]}")
+    if shapes[0]:
+        checks.append("shaped")
+    checks.append("finite" if skipped_finite == 0 else "finite (some outputs not numeric)")
+    if digests[0] != digests[1]:
+        return dict(ok=False, checks=checks,
+                    why="TWO FULL FITS ON THIS BOX GAVE DIFFERENT BITS "
+                        f"({digests[0]} then {digests[1]}). That is nondeterminism on one "
+                        "device, which no second device is needed to call a defect")
+    checks.append("repeatable")
+    return dict(ok=True, checks=checks, why=None, digest=digests[0])
+
+
+def run_smoke(harness, ml, lanes, fixture, data, held, log=None):
+    """`{lane: result}` over the lanes this box can execute but cannot judge."""
+    log = log or (lambda s: None)
+    out = {}
+    for lane in lanes:
+        t0 = time.time()
+        try:
+            out[lane] = smoke_cell(harness, ml, lane, fixture, data, held)
+        except Exception as exc:                       # a smoke test must not kill the run
+            out[lane] = dict(ok=False, checks=[], why=f"{type(exc).__name__}: {exc}"[:300])
+        out[lane]["seconds"] = round(time.time() - t0, 3)
+        log(f"  smoke {lane:<30} {'ok' if out[lane]['ok'] else 'FAILED'} "
+            f"{out[lane]['seconds']:6.1f}s")
+    return out
+
+
 def run_models(harness, ml, table, pkg_dir=None, log=None, repeats=1, host_only=False):
     """The portable models: for each saved model the file's hash against the
     table's model reference, then the harness's batch part of the LOADED
@@ -424,7 +581,301 @@ def summarize(rows, families):
     return [(fam, table[fam]) for fam in order]
 
 
-def verdict(counts, scope_gaps=()):
+#: THE LANE-LEVEL STATES, one per lane in the harness, and the whole
+#: vocabulary of them (lane/verifier-full-exposure, 2026-09-20). Exactly one
+#: of them, `LANE_VERIFIED`, may contribute to a pass. The others are the
+#: shapes an absence takes; `lane_verdict_gaps()` turns every one of them into
+#: a gap, so no status added here can be read as success.
+LANE_VERIFIED = "VERIFIED"
+LANE_DIVERGENT = "DIVERGENT"
+LANE_REFUSED = "REFUSED"
+LANE_OWED = "OWED"
+LANE_NOT_APPLICABLE = "NOT APPLICABLE"
+LANE_HELD = "HELD"
+LANE_NOT_RUN = "NOT RUN"
+LANE_UNDECLARED = "UNDECLARED"
+#: A LOOSER TIER, SO A LANE WE CANNOT FULLY CHECK IS NOT LEFT WITH NOTHING
+#: (Andrew, 2026-09-20). A `par-*` driver on one device cannot prove its
+#: claim, that two devices hash equal to one cell for cell. It can still be
+#: constructed, run, and checked for sanity, and a smoke test is strictly more
+#: than the shrug `NOT APPLICABLE` gives on its own.
+#:
+#: `SMOKE` is NEVER `VERIFIED` and is counted in its own column. `SMOKE FAILED`
+#: is the point of the tier: a lane that raised, produced a non-finite value,
+#: changed shape, or gave different bits on two consecutive full fits on this
+#: one box has a real defect, and that gates like any other wrongness.
+LANE_SMOKE = "SMOKE"
+LANE_SMOKE_FAILED = "SMOKE FAILED"
+LANE_STATES = (LANE_VERIFIED, LANE_SMOKE, LANE_SMOKE_FAILED, LANE_DIVERGENT,
+               LANE_REFUSED, LANE_OWED, LANE_NOT_APPLICABLE, LANE_HELD,
+               LANE_NOT_RUN, LANE_UNDECLARED)
+
+
+def lane_state_from_rows(states):
+    """(state, reason) for one lane from the judged states of its parts.
+
+    A WRONG ANSWER OUTRANKS AN ABSENT ONE, and an absent one outranks a
+    missing reference, which is `verdict()`'s order one level down. The last
+    branch is the one that matters: a lane whose every part read N/A compared
+    NOTHING, and calling that checked is the 0.8.6 defect in miniature.
+    """
+    if vref.DIVERGENT in states:
+        return LANE_DIVERGENT, "a part disagrees with the reference"
+    if vref.REFUSED in states:
+        return LANE_REFUSED, "a part raised, so it did not run"
+    if vref.OWED in states:
+        return LANE_OWED, "no committed record carries a reference for a part of it"
+    if vref.IDENTICAL in states:
+        return LANE_VERIFIED, None
+    return LANE_NOT_RUN, "every part read n/a; nothing about this lane was compared"
+
+
+def smokeable_lanes(harness, surface, exposure, device_class, run_lanes=()):
+    """The lanes this box can EXECUTE but cannot JUDGE, and which this run has
+    not already executed.
+
+    Three conditions, and the third is the one that keeps the tier cheap and
+    honest. A lane the run ALREADY RAN is not left with nothing: its result is
+    kept in `ran_state` beside the NOT APPLICABLE verdict, and fitting it two
+    more times would buy a weaker version of what the run already has. On a
+    GPU install `verify --all` runs every `par-*` lane at one device, so the
+    smoke set there is empty and the flag costs nothing. On a CPU-only install
+    the drivers are not selected, and that is where the tier earns its keep.
+
+    A lane with no CPU route at all is not smokeable on a CPU install -- it
+    refuses by name, which is a fact about the box rather than a defect to
+    report. Those stay NOT APPLICABLE with their reason.
+    """
+    covered, already = set(surface.covered_lanes()), set(run_lanes)
+    return [lane for lane in harness.LANES
+            if exposure[lane]["status"] == LANE_NOT_APPLICABLE
+            and lane not in already
+            and (device_class != "cpu" or lane in covered)]
+
+
+def lane_accounting(harness_lanes, exposure, run_lanes, rows, stale=(), smoke=None):
+    """EVERY LANE THE HARNESS DEFINES, with one honest state each.
+
+    WHY THIS EXISTS. `verify --all` used to report only the lanes it ran. On a
+    CPU-only install that was 186 of the harness's 256, and the other 70 were
+    not reported as anything at all: 55 removed by
+    `host_surface.PUBLIC_INAPPLICABLE_PREFIXES` and 15 held in
+    `PUBLIC_PENDING_LANES`. A user read `186 lanes` and could not tell that
+    number from `all of them`. This block makes the denominator 256 on every
+    run and gives each of the 70 a state and a sentence.
+
+    A LANE THAT RAN DOES NOT AUTOMATICALLY GET ITS RUN'S STATE. Two kinds
+    keep the state their EXPOSURE gives them however cleanly they ran:
+
+      * `NOT APPLICABLE` (the `par-*` drivers). `verify` is a one-device run,
+        and on one device a driver's two-device claim is compared against
+        itself: `lane_applicability.degenerate('apple-metal')` holds all
+        thirteen covered ones. A cell that cannot fail is not a check, so a
+        GPU install that ran them one-device still reads NOT APPLICABLE here,
+        with what it read kept in `ran_state` as evidence rather than as a
+        verdict.
+      * `HELD`. The hold is on the COMPARISON -- a missing NVIDIA column, a
+        single-witness reference -- so running the lane does not settle it,
+        and `--include-pending` executing it must not look like a promotion.
+
+    `stale` lanes are exposed but were dropped because their fixture moved
+    past the shipped reference; they read NOT RUN, never VERIFIED.
+    """
+    by_lane = {}
+    for r in rows:
+        if not r["lane"].startswith("portable:"):
+            by_lane.setdefault(r["lane"], []).append(r["state"])
+    stale = set(stale)
+    ran = set(run_lanes)
+    out = {}
+    for lane in harness_lanes:
+        row = exposure.get(lane) or dict(status="UNDECLARED", reason=None)
+        ran_state, ran_reason = (lane_state_from_rows(by_lane[lane]) if lane in by_lane
+                                 else (None, None))
+        if row["status"] == "NOT APPLICABLE":
+            got = (smoke or {}).get(lane)
+            if got is None:
+                state, reason = LANE_NOT_APPLICABLE, row["reason"]
+            elif got["ok"]:
+                state = LANE_SMOKE
+                reason = (f"{', '.join(got['checks'])}; the full claim still needs a second "
+                          "device, so this is NOT a verification")
+            else:
+                state, reason = LANE_SMOKE_FAILED, got["why"]
+        elif row["status"] == "HELD":
+            state, reason = LANE_HELD, row["reason"]
+        elif row["status"] == "UNDECLARED":
+            state, reason = LANE_UNDECLARED, (
+                "nothing in host_surface.py says whether this lane is exposed, inapplicable "
+                "or owed. A lane nobody declared is the gap tools/lane_accounting.py exists "
+                "to refuse; this run cannot say anything about it")
+        elif lane in by_lane:
+            state, reason = ran_state, ran_reason
+        elif lane in stale:
+            state, reason = LANE_NOT_RUN, (
+                "its fixture moved past the reference this table carries (identity_break "
+                "LANE_REVISIONS); the next release record regenerates it")
+        elif row["status"] == "OWED":
+            state, reason = LANE_OWED, row["reason"]
+        elif lane in ran:
+            state, reason = LANE_NOT_RUN, (
+                "this run selected it and it produced no comparable part at all")
+        else:
+            state, reason = LANE_NOT_RUN, "exposed, but this run did not select it"
+        out[lane] = dict(state=state, reason=reason, exposed=bool(row.get("exposed")),
+                         ran=lane in by_lane, ran_state=ran_state)
+    counts = {s: 0 for s in LANE_STATES}
+    for entry in out.values():
+        counts[entry["state"]] += 1
+    # NOT an assert: `python -O` strips those, and this is the one invariant
+    # the whole block rests on. A lost lane is the silent absence again.
+    if sum(counts.values()) != len(harness_lanes):
+        raise RuntimeError(f"lane accounting covered {sum(counts.values())} of "
+                           f"{len(harness_lanes)} harness lanes; the denominator must be "
+                           "the whole harness or a lane has gone silently absent again")
+    return dict(total=len(harness_lanes), counts=counts, lanes=out,
+                verified=sorted(l for l, e in out.items() if e["state"] == LANE_VERIFIED))
+
+
+#: THE ONE STATE THAT IS REPORTED AND DOES NOT GATE, and the reasoning is
+#: worth keeping because the first version of this lane got it wrong
+#: (corrected 2026-09-20, same day).
+#:
+#: The first version made every non-VERIFIED state a gap, `par-*` included.
+#: That is the 0.8.6 defect in a mirror. 0.8.6 made VERIFIED too easy to
+#: reach; this made it IMPOSSIBLE to reach, for everyone, and a verdict that
+#: can never be positive carries exactly as much information as one that is
+#: always positive. Users learn to ignore both.
+#:
+#: It was not merely harsh, it was unreachable by construction. `verify` is
+#: ALWAYS a one-device run: `load_harness()` refuses a set MOJOLEARN_PAR_DEVICES
+#: before any fit. So the `par-*` claim is not unstateable on a small machine,
+#: it is unstateable by this command on ANY machine, and gating on it would
+#: have denied VERIFIED to an eight-GPU box as surely as to a laptop.
+#:
+#: TWO THINGS IN THE TREE ALREADY SAID SO, and neither is an opinion:
+#:
+#:   * `verdict()` below consults DIVERGENT, REFUSED, OWED and IDENTICAL, and
+#:     `vref.NA` appears in it ZERO times. A part declared `n/a:no-backward`
+#:     has never made a run INCOMPLETE. Gating at the LANE level on the same
+#:     concept the PART level ignores judges one run by two rules depending on
+#:     which layer the inapplicability happens to be written at.
+#:     `test_part_level_na_and_lane_level_not_applicable_agree` pins them.
+#:   * `host_surface.RECORD_EXCLUDED_PREFIXES` keeps every `par-*` lane out of
+#:     a RELEASE RECORD. Holding a user's install to a bar our own release
+#:     does not meet is a double standard, not honesty.
+#:
+#: The distinction that decides it is whether anything is UNKNOWN:
+#:
+#:   NOT APPLICABLE  cannot be checked here and no run on this hardware could
+#:                   ever check it. Nothing is unknown. Reported, not gated.
+#:   OWED            could be checked, should be checked, no reference exists
+#:                   yet. Something IS unknown. Gates.
+#:   REFUSED         should have run and did not. Gates.
+#:
+#: The abuse this opens is obvious and is closed at the source: a lane could
+#: be relabelled NOT APPLICABLE to buy a pass. So NOT APPLICABLE has exactly
+#: ONE derivation -- `host_surface.PUBLIC_INAPPLICABLE_PREFIXES` with a written
+#: sentence -- it cannot be reached from `PUBLIC_PENDING_LANES` at all, and
+#: `test_not_applicable_has_exactly_one_derivation` holds it there.
+#: ANDREW, 2026-09-20, after the narrower rule was argued and decided against:
+#: OWED, HELD and NOT RUN stop gating too. A run reads VERIFIED when nothing
+#: DIVERGED and nothing REFUSED, whatever else is unreferenced or inapplicable.
+#:
+#: THE TWO THAT STILL GATE ARE THE TWO THAT MEAN SOMETHING WENT WRONG rather
+#: than something is missing. A DIVERGENT lane's bits differ from its
+#: reference, which is the single thing this library exists to detect. A
+#: REFUSED lane raised, so it did not run at all. Passing over either would
+#: not be a looser rule, it would make the word mean nothing, and that is the
+#: 0.8.6 defect exactly.
+#:
+#: WHAT CARRIES THE HONESTY NOW IS THE SCOPE LINE, not the gate. A pass can
+#: cover a lot of unreferenced surface, so the headline states what it
+#: covered, in lanes, on the same line as the verdict. That is the trade for
+#: the looser gate and it is why `lane_scope_clause()` is not optional.
+LANE_STATES_THAT_DO_NOT_GATE = (LANE_NOT_APPLICABLE, LANE_OWED, LANE_HELD,
+                                LANE_NOT_RUN, LANE_SMOKE)
+
+
+def lane_verdict_gaps(accounting, scope):
+    """`{lane: reason}` for every lane IN `scope` that is not VERIFIED and is
+    not one of `LANE_STATES_THAT_DO_NOT_GATE`.
+
+    This is the safety property of the states this lane adds: HELD, OWED, NOT
+    RUN, UNDECLARED and a divergent or refused lane all cost the run its pass,
+    because each of them leaves something UNKNOWN. It is the lane-level
+    restatement of the rule `verdict()` learned at the cell-part level after a
+    CPU-only install printed VERIFIED, exit 0, on 44 IDENTICAL and 288 REFUSED
+    parts and cost 0.8.6 its release.
+
+    NOT APPLICABLE is excluded for the reasons written over
+    `LANE_STATES_THAT_DO_NOT_GATE`. It is still counted, still printed and
+    still named in the report; it just is not evidence of anything missing.
+    """
+    gaps = {}
+    for lane in scope:
+        entry = accounting["lanes"].get(lane)
+        if entry is None:
+            gaps[lane] = "not accounted for by this run at all"
+        elif entry["state"] in LANE_STATES_THAT_DO_NOT_GATE:
+            continue
+        elif entry["state"] != LANE_VERIFIED:
+            gaps[lane] = f"{entry['state']}: {entry['reason'] or 'no reason given'}"
+    return gaps
+
+
+def lane_scope(accounting, scope):
+    """What the run's own scope came to, in lanes: how many were VERIFIED, how
+    many were inapplicable here, and how many are gaps.
+
+    `checked` is load-bearing and is not the same question as `gaps`. A run
+    whose whole scope is NOT APPLICABLE has no gaps -- nothing is unknown --
+    and has also CHECKED NOTHING, and `verdict()` must not call that a pass
+    either. `format_cross_check` already draws this line, printing NOTHING
+    COMPARED rather than a pass when no lane produced both answers.
+    """
+    scope = list(scope)
+    states = [(accounting["lanes"].get(l) or {}).get("state") for l in scope]
+    return dict(
+        scope=len(scope),
+        checked=sum(1 for s in states if s == LANE_VERIFIED),
+        not_applicable=sum(1 for s in states if s == LANE_NOT_APPLICABLE),
+        by_state={state: sum(1 for s in states if s == state) for state in LANE_STATES},
+        gaps=lane_verdict_gaps(accounting, scope))
+
+
+def lane_scope_clause(accounting, scope):
+    """The scope, as a clause that rides with the verdict.
+
+    THE SKIPPED COUNT RIDES WITH THE VERDICT is already the rule one command
+    over (`format_cross_check`, which prints `across 5 of 24 lanes (19
+    SKIPPED)` beside its pass). A confident headline over a run that verified
+    186 of 256 lanes is a pass whose scope is much smaller than it looks, and
+    the fix for that is to say the scope on the same line, not to refuse to
+    pass at all.
+    """
+    s = lane_scope(accounting, scope)
+    if not s["scope"]:
+        return ""
+    # THE FULL SHAPE, IN ONE LINE, because the gate no longer carries it.
+    # Since 2026-09-20 a pass can cover a lot of unreferenced surface, so
+    # nobody should have to open the JSON to learn that a quarter of the run
+    # was inapplicable. Every state is named even at zero: a category a reader
+    # has to infer from an absent word is the defect this whole lane is about.
+    by = s["by_state"]
+    return (f"{by[LANE_VERIFIED]} verified"
+            + (f", {by[LANE_SMOKE]} smoke" if by[LANE_SMOKE] else "")
+            + (f", {by[LANE_SMOKE_FAILED]} SMOKE FAILED" if by[LANE_SMOKE_FAILED] else "")
+            + f", {by[LANE_NOT_APPLICABLE]} not applicable, "
+            f"{by[LANE_OWED]} owed, {by[LANE_HELD]} held"
+            + (f", {by[LANE_DIVERGENT]} DIVERGENT" if by[LANE_DIVERGENT] else "")
+            + (f", {by[LANE_REFUSED]} REFUSED" if by[LANE_REFUSED] else "")
+            + (f", {by[LANE_NOT_RUN]} not run" if by[LANE_NOT_RUN] else "")
+            + (f", {by[LANE_UNDECLARED]} UNDECLARED" if by[LANE_UNDECLARED] else "")
+            + f", of {s['scope']} lanes")
+
+
+def verdict(counts, scope_gaps=(), lanes_checked=None):
     """(exit code, headline) from the state counts of every judged part.
 
     A REFUSED PART DID NOT RUN, so it is never evidence of success, and the
@@ -442,8 +893,18 @@ def verdict(counts, scope_gaps=()):
         return EXIT_MISMATCH, "MISMATCH"
     if counts[vref.REFUSED]:
         return EXIT_CANNOT_RUN, "INCOMPLETE"
-    if counts[vref.OWED] or scope_gaps:
-        return EXIT_NO_REFERENCE, "INCOMPLETE" if counts[vref.IDENTICAL] else "NO REFERENCE"
+    # NOTHING WAS CHECKED IS NOT A PASS, and it is a different thing from a
+    # gap (lane/verifier-full-exposure, 2026-09-20). A run whose whole scope
+    # is NOT APPLICABLE leaves nothing unknown, so it has no gaps, and it also
+    # established nothing: every cell part it produced can read IDENTICAL,
+    # because a one-device `par-*` column is compared against itself. Passing
+    # on that would be a verification that cannot fail, which is the thing
+    # this whole file exists to refuse. `lanes_checked` is None for callers
+    # that judge in cell parts only, and those are unchanged.
+    if lanes_checked == 0:
+        return EXIT_CANNOT_RUN, "CANNOT RUN"
+    if scope_gaps:
+        return EXIT_MISMATCH, "MISMATCH"
     if counts[vref.IDENTICAL]:
         return EXIT_VERIFIED, "VERIFIED"
     return EXIT_NO_REFERENCE, "NO REFERENCE"
@@ -2769,6 +3230,48 @@ def judge_rows(raw, table, families=None, unreferenced_lanes=(), device_class=No
     return out
 
 
+def format_lane_accounting(accounting, examples=6):
+    """The 256-lane accounting as lines, one block per state that is not
+    VERIFIED, with the reason and a few lane names.
+
+    IT IS PRINTED EVEN WHEN EVERYTHING IS VERIFIED, because the sentence a
+    reader needs -- `256 of 256 lanes accounted for` -- is exactly the one
+    that used to be missing, and printing it only on failure would leave the
+    passing run saying `186 lanes` again.
+    """
+    if not accounting:
+        return []
+    counts = accounting["counts"]
+    total, verified = accounting["total"], counts[LANE_VERIFIED]
+    lines = [f"LANE ACCOUNTING: {total} of {total} harness lanes accounted for; "
+             f"{verified} VERIFIED, {total - verified} not.",
+             "  a lane that is not VERIFIED is not checked, whatever its state says:"]
+    by_state = {}
+    for lane, entry in accounting["lanes"].items():
+        if entry["state"] == LANE_VERIFIED:
+            continue
+        by_state.setdefault((entry["state"], entry["reason"]), []).append(lane)
+    for (state, reason), names in sorted(by_state.items(), key=lambda kv: (-len(kv[1]), kv[0][0])):
+        shown = ", ".join(sorted(names)[:examples])
+        more = f", ... {len(names) - examples} more" if len(names) > examples else ""
+        gates = "" if state in LANE_STATES_THAT_DO_NOT_GATE else "  [not checked]"
+        lines.append(f"  {state} ({len(names)}){gates}: {shown}{more}")
+        for part in str(reason or "no reason given").splitlines():
+            lines.append(f"      {part}")
+    if any(s in LANE_STATES_THAT_DO_NOT_GATE for s, _ in by_state):
+        lines.append("  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its "
+                     "pass; it is reported because an absence a user cannot see is worse than a "
+                     "gap they can. Every other state above does cost it.")
+    gaps = accounting.get("unverified_in_scope") or {}
+    summary = accounting.get("scope_summary") or {}
+    lines.append(f"  this run's scope is {len(accounting.get('verdict_scope', []))} lanes, "
+                 f"{summary.get('checked', 0)} VERIFIED, "
+                 f"{summary.get('not_applicable', 0)} not applicable, {len(gaps)} not checked"
+                 + ("; the verdict cannot be VERIFIED" if gaps else ""))
+    lines.append("")
+    return lines
+
+
 def format_human(report):
     lines = []
     d = report["device"]
@@ -2823,6 +3326,7 @@ def format_human(report):
             if len(seen) >= 20:
                 break
     lines.append("")
+    lines.extend(format_lane_accounting(report.get("lane_accounting")))
     if report.get("scope_gaps"):
         lines.append(f"UNVERIFIED LANES ({len(report['scope_gaps'])}):")
         lines.extend(f"  {name}: {reason}" for name, reason in report["scope_gaps"].items())
@@ -2921,6 +3425,12 @@ def cmd_verify_all(args):
         return _cmd_self_test(args, ml)
     if getattr(args, "cross_check", None):
         return _cmd_cross_check(args, ml)
+    if getattr(args, "par", None) or getattr(args, "par_self_test", False):
+        # The two-device column against the one-device column, both produced
+        # on this box. It needs no reference table, so it dispatches BEFORE
+        # the table is loaded, like --self-test and --cross-check.
+        from ._verify_par import cmd_par_check
+        return cmd_par_check(args, ml)
 
     try:
         table_file = getattr(args, "reference_table", None) or vref.table_path()
@@ -3059,8 +3569,64 @@ def cmd_verify_all(args):
                 scope_gaps.update({name: row["reason"] for name, row in coverage_report["lanes"].items()
                                    if name not in lanes and row["status"] in ("excluded", "unavailable")})
     scope_gaps.update({name: "stale reference" for name in stale})
-    code, headline = verdict(counts, scope_gaps)
+
+    # EVERY LANE THE HARNESS DEFINES, ACCOUNTED FOR (lane/verifier-full-exposure,
+    # 2026-09-20). The 70 lanes a CPU-only install does not run used to be
+    # absent from this report rather than reported as anything, so `186 lanes`
+    # read like all of them. The denominator is now the harness's whole lane
+    # list on every run, and the run's own scope -- the lanes it asked for, or
+    # all of them when it asked for everything -- must be VERIFIED lane by lane
+    # before the verdict may say so.
+    surface = host_surface()
+    harness_lanes = list(harness.LANES)
+    exposure = surface.lane_exposure(harness_lanes, vclass)
+    smoke = None
+    if getattr(args, "smoke", False):
+        # TWO FULL FITS PER LANE, so it is opt-in rather than weakened. The
+        # base fixture only, for the same reason: the tier exists to say more
+        # than nothing, not to double the cost of every run.
+        smokeable = smokeable_lanes(harness, surface, exposure, vclass, lanes)
+        if asked:
+            smokeable = [l for l in smokeable if l in asked]
+        sfix = "base" if "base" in harness.FIXTURES else harness.FIXTURES[0]
+        log(f"# smoke: {len(smokeable)} lane(s) this box can run but cannot judge, "
+            f"on {sfix}, two full fits each")
+        sdata = data.get(sfix) or harness.fixture(sfix)
+        sheld = held.get(sfix) if held.get(sfix) is not None else harness.heldout(sfix)
+        smoke = run_smoke(harness, ml, smokeable, sfix, sdata, sheld, log=log)
+    accounting = lane_accounting(harness_lanes, exposure, lanes, rows, stale=stale, smoke=smoke)
+    if models_only:
+        verdict_scope = []                     # judged by the portable models, not by lanes
+    elif asked:
+        verdict_scope = list(asked)            # an explicit subset passes its own scope
+    elif depth != "full":
+        verdict_scope = list(lanes)            # --quick is a declared sample of the families
+    else:
+        verdict_scope = harness_lanes          # --all means all 256, not the 186 that ran
+    scope_summary = lane_scope(accounting, verdict_scope)
+    lane_gaps = scope_summary["gaps"]
+    for name, why in lane_gaps.items():
+        scope_gaps.setdefault(name, why)
+    accounting["verdict_scope"] = sorted(verdict_scope)
+    accounting["unverified_in_scope"] = lane_gaps
+    accounting["scope_summary"] = {k: v for k, v in scope_summary.items() if k != "gaps"}
+    # THE REPORT'S `scope_gaps` AND THE VERDICT'S ARE NOW DIFFERENT THINGS
+    # (2026-09-20). `scope_gaps` above is everything a reader should know was
+    # not covered -- withheld CPU routes, stale references, inapplicable
+    # claims -- and it stays in the document in full. Only `lane_gaps` reaches
+    # the verdict, and `lane_verdict_gaps()` puts a lane there only when its
+    # state GATES. Feeding the reporting set to the verdict would make every
+    # inapplicable lane a MISMATCH, which is the opposite of the rule.
+    code, headline = verdict(counts, lane_gaps,
+                             lanes_checked=scope_summary["checked"] if verdict_scope else None)
+    # THE SCOPE RIDES WITH THE VERDICT, as it already does in
+    # `format_cross_check`. VERIFIED over 186 of 256 lanes is a real pass and
+    # must stay reachable, but it must say on the same line how much of the
+    # harness it covered and how much it could not.
     detail = detail_line(counts)
+    clause = lane_scope_clause(accounting, verdict_scope)
+    if clause:
+        detail = f"{detail}; {clause}"
     harness_sha = vref.sha256_file(harness_file)
     report = dict(
         format="mojolearn.verify-all-report.v1", verdict=headline, exit=code, detail=detail,
@@ -3075,6 +3641,7 @@ def cmd_verify_all(args):
         table=dict(path=table_file, sha256=vref.sha256_file(table_file), format=table["format"],
                    records=len(table["records"]), harness_sha256=table.get("harness_sha256")),
         counts=counts, families=fams, cells=rows,
+        lane_accounting=accounting, smoke=smoke,
         lane_seconds=lane_seconds,
         coverage=coverage_report, scope_gaps=scope_gaps, verification_contract=contract,
         selection=dict(include_pending=include_pending, models_only=models_only,

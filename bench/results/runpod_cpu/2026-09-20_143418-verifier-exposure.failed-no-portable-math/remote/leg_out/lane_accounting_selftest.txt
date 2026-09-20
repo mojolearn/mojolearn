@@ -1,0 +1,10 @@
+refused: a referenced lane loses its table cells -> agglomerative: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES. An installed `verify --all` has no hash for it and nothing s
+refused: a pending declaration is deleted -> agglomerative: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES. An installed `verify --all` has no hash for it and nothing s
+refused: a new lane is registered and nothing else -> zz-new-lane: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES, and it is not a covered lane, so PUBLIC_PENDING_LANES cannot t
+refused: an uncovered lane loses its table cells -> cross-val-folds: in NEITHER the shipped table NOR PUBLIC_PENDING_LANES, and it is not a covered lane, so PUBLIC_PENDING_LANES cann
+refused: the lane reader under-reads -> the lane reader did not see 1 lane(s) that the shipped table names, so it is under-reading tools/identity_break.py and every check
+refused: the reader disagrees with the harness's LANES -> the lane reader disagrees with the harness's own LANES; a new registration form needs a reader. missed by the reader: ['zz-new-lan
+refused: a pending reason outlives its lane -> zz-retired-lane: declared in PUBLIC_PENDING_LANES but tools/identity_break.py registers no such lane; the reason outlived the thin
+refused: a pending reason is blank -> agglomerative: declared in PUBLIC_PENDING_LANES with an empty reason, which declares nothing
+refused: an uncovered lane is told to get a record, not a declaration
+OK: 8 perturbations, all refused by name

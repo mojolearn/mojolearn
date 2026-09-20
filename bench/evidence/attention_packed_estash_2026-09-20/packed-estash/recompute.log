@@ -1,0 +1,13 @@
+819 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x129bc0000000, nodemask=1)
+=== attention step price, mode IDENTICAL, column nvidia, generator shape B1_L2048_nh12_nkv12_hd64_win0 (a file: kind carries its own shape)
+trial_hook=False phase_timers_built=False
+DEFAULT column=nvidia arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz source=kernel_matrix.attn_default_arm_for baseline_is_default=True candidate_is_default=True baseline_requested=default candidate_requested=default
+baseline=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz candidate=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz rounds=9 warmups=3
+PATH baseline arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+PATH candidate arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz is_default=True resolved_hd64=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz zdot_rows=- fwd_rows=32 preflush=True reach_bit=sabotage_new kv_keys=32 kv_split=False zsched=- estash=estash_dres bswz=bswz
+NOTE: no -D MOJOLEARN_ATTN_ARM_TRIAL=1: the candidate arm runs the shipped kernels; reach will FAIL
+--- kind hashed
+shape=B1_L2048_nh12_nkv12_hd64_win0 visible_cells=25178112 S=2048 key_lo=0 pos0=0
+RAN hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz forward=fwd_sstash_fgrid_r32_qres_pf backward=bwd_stash_tiled_pf_kvgrid_r32
+stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
+Unhandled exception caught during execution: hashed stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz: RAN forward fwd_sstash_fgrid_r32_qres_pf backward bwd_stash_tiled_pf_kvgrid_r32 and this build resolves fwd_sstash_fgrid_r32_qres_pf / bwd_stash_tiled_pf_estash_dres_kvgrid_r32_bswz

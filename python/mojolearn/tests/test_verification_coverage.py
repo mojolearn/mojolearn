@@ -54,15 +54,33 @@ def test_inspection_and_batch_flags_route_to_suite():
         assert cli._wants_suite(cli.build_parser().parse_args(['verify', flag]))
 
 
-def test_explicit_pending_cpu_lane_can_run_but_is_not_promoted(monkeypatch):
-    # Keep testing this behavior even after every real pending lane is closed.
-    monkeypatch.setitem(va.host_surface().PUBLIC_PENDING_LANES, 'ols', 'unwatched')
+def test_a_pending_reason_annotates_and_only_a_blocking_one_withholds(monkeypatch):
+    """A PENDING REASON STOPPED DECIDING VISIBILITY (Andrew, 2026-09-20).
+
+    This test used to assert the opposite: that a lane in PUBLIC_PENDING_LANES
+    was NOT in the public set, whatever its reason said. That is the rule that
+    hid 76 lanes. Now the dict annotates, and only three classes of reason --
+    `no reference`, `no cpu route`, `stale reference` -- stop the verifier
+    comparing a lane. Both directions are checked, because a rule that only
+    ever admits is not a rule."""
+    surface = va.host_surface()
     h = va.load_harness()
+
+    # an ANNOTATING reason leaves the lane comparable and public
+    monkeypatch.setitem(surface.PUBLIC_PENDING_LANES, 'ols', 'unwatched')
+    assert 'ols' in surface.public_reference_lanes()
+    assert 'ols' in surface.comparable_lanes(list(h.LANES), 'cpu')
     lanes, _ = va.select_lanes(h, vr.load_table(), 'cpu', 'full', ['ols'])
     assert lanes == ['ols']
-    assert 'ols' not in va.host_surface().public_reference_lanes()
+
+    # a BLOCKING reason does not hide it either; it withholds the comparison
+    monkeypatch.setitem(surface.PUBLIC_PENDING_LANES, 'ols', 'no reference')
+    assert 'ols' not in surface.comparable_lanes(list(h.LANES), 'cpu')
+    assert 'ols' in surface.public_lane_scope(list(h.LANES)), "a blocked lane is still public"
+    assert surface.lane_exposure(list(h.LANES))['ols']['status'] == surface.LANE_OWED
+
     for name in ('bpe-trainer', 'cross-val-folds'):
-        assert name in va.host_surface().public_reference_lanes()
+        assert name in surface.public_reference_lanes()
 
 
 def test_partial_lane_is_not_counted_as_end_to_end():
@@ -122,12 +140,26 @@ def test_select_d_cpu_chooses_first_stationary_order_and_preserves_input(monkeyp
         tsa.select_d(data, D=1, s=12, d_max=2)
 
 
-def test_a_withheld_lane_blocks_a_full_scope_pass():
+def test_an_unreferenced_lane_no_longer_blocks_a_pass_but_a_wrong_one_does():
+    """THE GATE WAS LOOSENED ON PURPOSE, AND EXACTLY TWICE (Andrew,
+    2026-09-20). This test asserted the old rule, that any withheld or
+    unreferenced lane cost the run its pass. It now asserts the new one and
+    the line that was kept: DIVERGENT and REFUSED still gate, because they
+    mean something WENT WRONG rather than something is missing, and passing
+    over either would make the word mean nothing.
+
+    `verdict`'s second argument is now the GATING gaps only, which is why an
+    unreferenced lane never reaches it."""
     counts = {state: int(state == vr.IDENTICAL) for state in vr.STATES}
     assert va.verdict(counts) == (0, "VERIFIED")
-    assert va.verdict(counts, {"pending": "no reference"}) == (va.EXIT_NO_REFERENCE, "INCOMPLETE")
+    assert va.verdict(counts, {}) == (0, "VERIFIED"), "an unreferenced lane is not a gate"
+    counts[vr.OWED] = 7
+    assert va.verdict(counts) == (0, "VERIFIED"), "owed parts do not gate either"
     counts[vr.DIVERGENT] = 1
-    assert va.verdict(counts, {"pending": "no reference"})[0] == va.EXIT_MISMATCH
+    assert va.verdict(counts)[0] == va.EXIT_MISMATCH
+    counts[vr.DIVERGENT] = 0
+    counts[vr.REFUSED] = 1
+    assert va.verdict(counts)[0] == va.EXIT_CANNOT_RUN
 
 
 def test_missing_portable_models_cannot_silently_pass(tmp_path):
