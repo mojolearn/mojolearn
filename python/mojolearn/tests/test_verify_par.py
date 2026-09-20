@@ -437,3 +437,53 @@ def test_the_state_ladder_reads_worst_first():
 
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))
+
+
+@pytest.mark.parametrize('axis', ['lane', 'fixture'])
+@pytest.mark.parametrize('missing_index', [0, 1])
+def test_each_parallel_cell_needs_its_own_device_witness(monkeypatch, axis, missing_index):
+    """A valid neighboring cell must not certify a silent single-device fallback."""
+    import contextlib
+    from mojolearn import _backend, _cpu_reference
+    _need_numpy()
+    active = []
+
+    class Witness(vpar.PoolWitness):
+        @contextlib.contextmanager
+        def watching(self):
+            active.append(self)
+            try:
+                yield
+            finally:
+                active.pop()
+
+    monkeypatch.setattr(_backend, 'vendor', lambda: 'hip')
+    monkeypatch.setattr(_cpu_reference, 'reference_training',
+                        lambda: contextlib.nullcontext())
+    monkeypatch.setattr(vpar, 'PoolWitness', Witness)
+    monkeypatch.setattr(vpar, 'par_devices', lambda devices: contextlib.nullcontext())
+    two_calls = 0
+
+    def run_cell(*args, **kwargs):
+        nonlocal two_calls
+        if active:
+            if two_calls != missing_index:
+                active[-1].pools.append(dict(devices=[0, 1], workers=[
+                    dict(pid=101, devices=['GPU-a']), dict(pid=102, devices=['GPU-b'])]))
+            two_calls += 1
+        return _cell(train='aaaa000011112222')
+
+    monkeypatch.setattr(vpar, 'run_cell', run_cell)
+    lanes = ['par-gram', 'par-covariance'] if axis == 'lane' else ['par-gram']
+    fixtures = ['base'] if axis == 'lane' else ['base', 'wide']
+    result = vpar.par_check(_StubHarness(), None, lanes, fixtures)
+    assert result['counts']['IDENTICAL'] == 2
+    assert result['witness']['pools'] == 1
+    assert result['state'] == 'INCOMPLETE' and result['passed'] is None
+    assert len(result['cell_witnesses']) == 2
+    missing = result['cell_witnesses'][missing_index]
+    assert missing['witness']['pools'] == 0
+    assert 'NO device pool' in missing['witness_refusal']
+    assert result['witness_refusal'].startswith(missing['lane'] + '/' + missing['fixture'])
+    assert result['cell_witnesses'][1 - missing_index]['witness_refusal'] is None
+    assert 'CANNOT RUN' in vpar.format_par_check(result)

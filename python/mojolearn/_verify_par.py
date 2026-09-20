@@ -385,10 +385,12 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
     log = log or (lambda s: None)
     vendor = _backend.vendor()
     cells, counts = [], {}
-    witness = PoolWitness(vendor, devices)
+    cell_witnesses = []
     for lane in lanes:
         for fx in fixtures:
             t0 = time.time()
+            # Placement from another lane or fixture cannot certify this cell.
+            witness = PoolWitness(vendor, devices)
             X, yc, yr = harness.fixture(fx)
             held = harness.heldout(fx)
             # The same scope `self_test` opens. On a GPU install it changes
@@ -411,6 +413,9 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
                     data = (Xp, yc, yr)
                 with par_devices(devices), witness.watching():
                     two = run_cell(harness, ml, lane, fx, data, held, repeats)
+            cell_witnesses.append(dict(lane=lane, fixture=fx,
+                                       witness=witness.summary(),
+                                       witness_refusal=witness.refusal()))
             secs = round(time.time() - t0, 3)
             rows = compare_parts(one, two, cpu_route=(vendor == "cpu"))
             for row in rows:
@@ -420,11 +425,24 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
                              if r["verdict"] != "N/A")
             log(f"  {lane:<26} {fx:<8} {shown:<58} {secs:6.2f}s")
     state, passed = par_state(counts, cells)
+    failures = [c for c in cell_witnesses if c["witness_refusal"]]
+    witness_refusal = (f"{failures[0]['lane']}/{failures[0]['fixture']}: "
+                       f"{failures[0]['witness_refusal']}" if failures else None)
+    if witness_refusal and state != "MISMATCH":
+        state, passed = "INCOMPLETE", None
+    # Retain the aggregate report shape for existing readers, but admission
+    # above requires a witness for every individual lane/fixture.
+    summaries = [c["witness"] for c in cell_witnesses]
+    aggregate = dict(pools=sum(s["pools"] for s in summaries),
+                     workers=sum(s["workers"] for s in summaries),
+                     devices=list(devices),
+                     placement="physical" if vendor in ("cuda", "hip") else "process-only",
+                     detail=[p for s in summaries for p in s["detail"]])
     return dict(ran=True, vendor=vendor, devices=list(devices), repeats=repeats,
                 lanes=sorted({c["lane"] for c in cells}), fixtures=list(fixtures),
                 compared=len(cells), counts=counts, cells=cells,
-                perturbed=bool(perturb), witness=witness.summary(),
-                witness_refusal=witness.refusal(),
+                perturbed=bool(perturb), witness=aggregate,
+                cell_witnesses=cell_witnesses, witness_refusal=witness_refusal,
                 state=state, passed=passed)
 
 
