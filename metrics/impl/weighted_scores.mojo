@@ -43,6 +43,7 @@ from metrics.checks.pinned_sum import (
     virtual_block_sum,
 )
 from metrics.impl.stats.detail.scores import r2_epilogue
+from metrics.checks.device_io import download_f32
 
 
 def weighted_equal_chunks_kernel[
@@ -147,6 +148,22 @@ def weighted_sse_ssto_chunks_kernel[
         chunk += physical_block_count()
 
 
+def weighted_accuracy_finalize_kernel(
+    num_partials: MutPointer[Float32, MutAnyOrigin],
+    den_partials: MutPointer[Float32, MutAnyOrigin],
+    chunks: Int32,
+    result: MutPointer[Float32, MutAnyOrigin],
+):
+    if Int(thread_idx.x) == 0:
+        var num = Float32(0)
+        var den = Float32(0)
+        for c in range(Int(chunks)):
+            num = ftz(num + num_partials.unsafe_load(c))
+            den = ftz(den + den_partials.unsafe_load(c))
+        result.unsafe_store(0,ftz(identical_div(num,den)) if den > 0 else Float32(0))
+        result.unsafe_store(1,den)
+
+
 def _fold(
     ctx: DeviceContext, mut partials: DeviceBuffer[DType.float32], chunks: Int
 ) raises -> Float32:
@@ -183,13 +200,20 @@ def weighted_accuracy_score(
         grid_dim=(chunks, 1, 1),
         block_dim=(PINNED_SUM_TPB, 1, 1),
     )
-    var num = _fold(ctx, num_p, chunks)
-    var den = _fold(ctx, den_p, chunks)
+    var result = ctx.enqueue_create_buffer[DType.float32](2)
+    ctx.enqueue_function[weighted_accuracy_finalize_kernel](
+        num_p.unsafe_ptr(),den_p.unsafe_ptr(),Int32(chunks),result.unsafe_ptr(),
+        grid_dim=1,block_dim=32,
+    )
+    var host = download_f32(ctx,result,2)
+    var score = host[0]
+    var den = host[1]
     _ = num_p^
     _ = den_p^
+    _ = result^
     if den <= Float32(0.0):
         raise Error("weighted accuracy_score: the weights must have positive total")
-    return ftz(identical_div(num, den))
+    return score
 
 
 def weighted_r2_score(
