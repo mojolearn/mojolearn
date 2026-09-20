@@ -104,6 +104,7 @@ tools/identity_break.py on the rf-clf and rf-reg lanes is the measurement.
 """
 from std.math import ceildiv, floor
 from std.memory import bitcast
+from std.builtin.sort import sort
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_log, identical_mul_add
@@ -1039,17 +1040,14 @@ def host_compute_quantiles(
     for col in range(n_cols):
         # The segmented radix sort (`core/segmented_sort.mojo`) over CUB's
         # twiddled keys: an ascending sort of the keys, which moves bits
-        # and sums nothing. Insertion sort; equal keys are equal bits.
+        # and sums nothing.  The production host path may use the standard
+        # integer sort here: the keys already encode the complete float
+        # total order, and equal keys are identical bits, so stability is
+        # unobservable while avoiding quadratic quantile preprocessing.
         var keys = List[UInt32](capacity=sample_count)
         for s in range(sample_count):
             keys.append(_float_to_sortable(bitcast[DType.uint32](x[col * n_rows + sample_rows[s]])))
-        for a in range(1, sample_count):
-            var key = keys[a]
-            var b = a - 1
-            while b >= 0 and keys[b] > key:
-                keys[b + 1] = keys[b]
-                b -= 1
-            keys[b + 1] = key
+        sort(keys)
         var col_q = col * max_n_bins
         # `compute_quantiles_batched_kernel` (`:598-660`): the gather, then
         # the sequential unique over `ftz`-flushed operands (DEVIATION 403).
