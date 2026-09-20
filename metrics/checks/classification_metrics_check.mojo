@@ -125,6 +125,29 @@ def synthetic_large_counts() raises:
     _ = ctx^
 
 
+def multiblock_prf_none() raises:
+    """Cover the per-class finish launch beyond a single 256-thread block."""
+    comptime k = 513
+    var ctx = DeviceContext()
+    var h = List[Int32](length=3*k, fill=7)
+    var counts = upload_i32(ctx,h)
+    var result = ctx.enqueue_create_buffer[DType.float32](3*k+3)
+    ctx.enqueue_function[prf_finish_kernel](
+        counts.unsafe_ptr(),Int32(k),Int32(k),Int32(0),Int32(0),Int32(0),result.unsafe_ptr(),
+        grid_dim=(k+255)//256,block_dim=256,
+    )
+    var got = download_f32(ctx,result,3*k+3)
+    for i in range(3*k):
+        if bitcast[DType.uint32](got[i]) != bitcast[DType.uint32](Float32(1)):
+            raise Error("multiblock per-class PRF score mismatch")
+    for i in range(3*k,3*k+3):
+        if bitcast[DType.uint32](got[i]) != bitcast[DType.uint32](Float32(0)):
+            raise Error("multiblock per-class PRF warning mismatch")
+    _ = result^
+    _ = counts^
+    _ = ctx^
+
+
 def main() raises:
     print("numeric_mode",numeric_mode_name())
     var y: List[Int32] = [0,0,1,1,2,2,3,0]
@@ -151,6 +174,7 @@ def main() raises:
     check_confusion(many_y,many_p,7)
     check_prf(many_y,many_p,7,4)
     synthetic_large_counts()
+    multiblock_prf_none()
     for invalid in range(4):
         var rejected = False
         try:
