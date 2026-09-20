@@ -1424,8 +1424,10 @@ for line in sys.stdin:
     if any(d in excluded or d.startswith(".") for d in p.parts[:-1]): continue
     native=name.endswith(".mojo") or (name.startswith(("bindings/", "packaging/linux/", "python/mojolearn/", "tokenizer/tools/")) and name.endswith((".py", ".sh")))
     tooling=name.startswith("tools/") and name.endswith((".py", ".sh"))
+    # stage_libs imports this helper and compiles its owned C/header sources.
+    portable_math=name.startswith("packaging/portable_math/") and name.endswith((".py", ".c", ".h"))
     metadata=name in {".gitattributes", "pixi.toml", "pixi.lock", "python/pyproject.toml", "python/mojolearn_diagnostics.py", "python/mojolearn/ALPHA_API.md", "README.md", "CITATION.cff", "LICENSE", "NOTICE"}
-    if native or tooling or metadata:
+    if native or tooling or metadata or portable_math:
         if any(c.isspace() for c in name): raise SystemExit("Whitespace source paths unsupported")
         print(name)
 ') || return 1
