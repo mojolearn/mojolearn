@@ -23,3 +23,23 @@ and GET-confirmed 404), same B1 H12 L2048 HD64 inputs:
 This is a memory/throughput tradeoff, not a new default. It is useful when the
 201 MB stash prevents the requested batch/sequence from fitting; the tuned
 estash path remains appropriate when memory is available.
+
+The supported build surface is:
+
+```sh
+MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute sh bindings/build_byte_lm.sh
+MOJOLEARN_ATTENTION_MEMORY_PROFILE=recompute sh bindings/build_transformer.sh
+```
+
+Unset or `estash` preserves the default. Other values are refused. The byte-LM
+binding reports `byte_lm_attention_memory_profile(shape)` as
+`[profile_name, retained_exp_bytes_per_layer]`; checkpoint/run provenance
+records both fields under `native_attention_arm`. A locally built recompute
+binding reported `['v1-recompute', 0]` for the default byte-LM shape.
+
+No safe speed follow-up survived static review. Recompute already reuses the
+forward's exact row maxima and denominators. Reusing per-cell work requires
+retaining either scores or exponentials, both the same float32 LxL size.
+Losslessly packing only visible causal cells could halve full-causal storage,
+but changes every forward/backward address and needs an independent NVIDIA
+kernel campaign; it is not smuggled into this usability stage.

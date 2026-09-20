@@ -74,6 +74,8 @@ from transformer.impl.llama.fused_attention import (
     fused_attention_arm_forward_resolved,
     fused_attention_arm_from_env,
     fused_attention_arm_name,
+    attention_v1_backward_memory_profile,
+    attention_v1_retained_exp_bytes,
 )
 # DEVIATION 2648: the step glue arm read-back (core/step_glue.mojo).
 from core.step_glue import (
@@ -115,6 +117,14 @@ def byte_lm_attention_arm_binding() raises -> PythonObject:
     out.append(PythonObject(fused_attention_arm_name(ATTN_ARM_DEFAULT)))
     out.append(PythonObject(1 if ATTN_ARM_TRIAL else 0))
     out.append(PythonObject(fused_attention_arm_name(resolved)))
+    return out
+
+def byte_lm_attention_memory_profile_binding(shape: PythonObject) raises -> PythonObject:
+    """Build-profile readback plus retained-exp allocation for one layer."""
+    var cfg = _byte_config(shape)
+    var out = Python.list()
+    out.append(PythonObject(attention_v1_backward_memory_profile()))
+    out.append(PythonObject(attention_v1_retained_exp_bytes(cfg.batch,cfg.length,cfg.n_heads,cfg.length)))
     return out
 
 
@@ -1686,6 +1696,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
         # DEVIATION 2534: the attention arm read-back (arm, default, trial, resolved).
         module.def_function[byte_lm_attention_arm_binding]("byte_lm_attention_arm")
+        module.def_function[byte_lm_attention_memory_profile_binding]("byte_lm_attention_memory_profile")
         # DEVIATION 2648: the step glue arm read-back (arm, trial).
         module.def_function[byte_lm_step_glue_arm_binding]("byte_lm_step_glue_arm")
         _ = module.add_type[ByteParallelTrainer]("_ByteParallelTrainer")
