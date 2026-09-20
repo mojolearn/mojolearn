@@ -83,6 +83,7 @@ from training.mlp_ops import (
     mlp_validate_shape,
 )
 from training.checks.optimizer_oracle import microbatch_split_is_identical
+from training.chunked_lm_head_v2 import chunked_lm_head_v2_loss_host
 from training.samba_ops import (
     samba_accumulate_host,
     samba_embedding_backward_host,
@@ -661,6 +662,27 @@ def neural_rng_binding(
     return PythonObject(count)
 
 
+def chunked_lm_head_v2_loss_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """Opt-in v2 forward/loss. addresses=[loss,max,denom,h,w,target],
+    params=[rows,vocab,width]. V1 remains the default everywhere else."""
+    var a = _addrs(addresses, 6, "chunked_lm_head_v2_loss")
+    _params(params, 3, "chunked_lm_head_v2_loss")
+    var rows = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        var ctx = DeviceContext()
+        count = chunked_lm_head_v2_loss_host(
+            ctx, _f32_ptr(a[0]), _f32_ptr(a[1]), _f32_ptr(a[2]),
+            _f32_ptr(a[3]), _f32_ptr(a[4]), _i32_ptr(a[5]),
+            rows, vocab, width,
+        )
+    return PythonObject(count)
+
+
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
     # IDENTICAL-ONLY (2026-09-10). The FAST and DETERMINISTIC builds of this
@@ -702,6 +724,7 @@ def PyInit__mojolearn_training() abi("C") -> PythonObject:
         m.def_function[accumulate_binding]("accumulate")
         m.def_function[accumulation_is_aligned_binding]("accumulation_is_aligned")
         m.def_function[neural_rng_binding]("neural_rng")
+        m.def_function[chunked_lm_head_v2_loss_binding]("chunked_lm_head_v2_loss")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_training: ", e))
