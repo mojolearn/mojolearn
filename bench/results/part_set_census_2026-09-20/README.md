@@ -98,6 +98,38 @@ plus `mamba1/2/3-bf16w`, `mamba1/2-int8w`, `transformer-bf16w` and
 Mamba-1 and Mamba-2 — core shipped blocks — has never been verified on any
 vendor.** Not divergent. Never asked.
 
+### CORRECTION, from running it: five of those seven were never gaps
+
+This census answers "is the lane in the harness's `STEPFULL` table" and "does
+any committed column carry the part". For the seven all-three-class lanes
+above both answers were yes and no, and the first version of this README
+read that as *decode identity has never been verified* for all seven. **That
+was right for two of them and wrong for five.**
+
+`bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-...stepfull-never-recorded-2026-09-20.json`
+asked the question on an RTX 4090. `mamba1` and `mamba2` returned real
+hashes — `f582474b00117f8e` and `bfd516aa93fe1b12`, the first `stepfull`
+cells either lane has ever had on any vendor. The other five returned:
+
+    n/a:driver-lane (the multi-GPU drivers carry no decode state;
+                     the single-device twin lane is asked)
+
+**"No column carries this part" and "this part has never been answered" are
+different statements.** A part can be absent because nobody asked, and asking
+can return `n/a` by design. Only a run distinguishes them, and a census over
+committed JSON cannot.
+
+This is the same error as counting `arima`'s absent `stepfull` as
+under-collection, one layer deeper: restricting to the declaring lane set
+removed the lanes with no decode state at all, and left the driver lanes,
+which *declare* the probe and answer `n/a` when asked. Read a row of this
+census as **"nothing has asked this question here"**, which is exactly what
+it measures, and not as "this question is unanswered".
+
+The five now carry an explicit `n/a` on NVIDIA, so they drop out of the
+census as soon as that column is committed — the mechanism working rather
+than a patch.
+
 ## The bar this sets
 
 **Nine parts or it is not a record.** A record run that takes the harness
