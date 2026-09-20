@@ -2,13 +2,28 @@
 """Audit parallel reference coverage and emit per-vendor collection requirements."""
 import argparse
 import json
+import importlib.util
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'python'))
-from mojolearn._crossvendor_coverage import audit, parallel_contract
-from mojolearn import _verify_reference as vref
-from mojolearn._verify_all import load_harness
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def _load(name, path):
+    """Read-only modules must not initialize mojolearn or load native bindings."""
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+vref = _load('parallel_audit_reference', ROOT / 'python/mojolearn/_verify_reference.py')
+coverage = _load('parallel_audit_coverage', ROOT / 'python/mojolearn/_crossvendor_coverage.py')
+
+
+def load_harness(**_kwargs):
+    return _load('parallel_audit_harness', ROOT / 'tools/identity_break.py')
 
 
 def main(argv=None):
@@ -21,10 +36,11 @@ def main(argv=None):
     parser.add_argument('--fail-on-incomplete', action='store_true')
     args = parser.parse_args(argv)
     harness = load_harness(par_axis=True)
-    contract = json.loads(args.contract.read_text()) if args.contract else parallel_contract(harness)
-    report = audit(vref.load_table(args.reference_table), contract,
+    contract = json.loads(args.contract.read_text()) if args.contract else coverage.parallel_contract(harness, reference=vref)
+    report = coverage.audit(vref.load_table(args.reference_table), contract,
                    args.fixtures.split(',') if args.fixtures else harness.FIXTURES,
-                   args.vendors.split(','))
+                   args.vendors.split(','),
+                   lane_revisions=getattr(harness, 'LANE_REVISIONS', {}))
     report['reference_table_sha256'] = vref.sha256_file(args.reference_table)
     payload = json.dumps(report, indent=2, sort_keys=True) + '\n'
     if args.output:

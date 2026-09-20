@@ -18,17 +18,18 @@ def _na(value):
             and not value.startswith(('n/a:skipped', 'n/a:UNDECLARED')))
 
 
-def parallel_contract(harness):
+def parallel_contract(harness, reference=None):
     """Declare expected parts independently of which table entries exist.
 
     Core probes return their N/A declarations at runtime. Their ``recorded``
     contract requires actual applicability evidence and every numerical vendor.
     The harness independently declares parts requiring numerical output.
     """
-    from . import _verify_reference as vref
+    if reference is None:
+        from . import _verify_reference as reference
     contracts = {}
     for lane in sorted(n for n in harness.LANES if n.startswith('par-')):
-        parts = {part: 'recorded' for part in vref.PARTS + vref.OPTIONAL_PARTS}
+        parts = {part: 'recorded' for part in reference.PARTS + reference.OPTIONAL_PARTS}
         parts['train'] = 'numeric'
         specs = {'batch': getattr(harness, 'BATCH', {}).get(lane),
                  'rlpair': getattr(harness, 'RLPAIR', {}).get(lane, 'n/a:no-sampler-trainer-pair')}
@@ -42,7 +43,7 @@ def parallel_contract(harness):
     return contracts
 
 
-def audit(table, contract, fixtures, vendors=VENDORS):
+def audit(table, contract, fixtures, vendors=VENDORS, *, lane_revisions=None):
     """Inspect the independent lane/fixture/part contract, including absent cells.
 
     Contract values are ``numeric``, ``recorded`` or an exact ``n/a:`` reason.
@@ -58,9 +59,13 @@ def audit(table, contract, fixtures, vendors=VENDORS):
         raise ValueError('coverage needs a nonempty contract and fixture selection')
     gaps, totals, plans = [], Counter(), {v: {} for v in vendors}
     cells = table.get('cells', {})
+    lane_revisions = lane_revisions or {}
+    recorded_revisions = table.get('lane_revisions', {})
     for lane, parts in sorted(contract.items()):
         if not parts:
             raise ValueError(f'{lane}: empty part contract')
+        stale = (lane in lane_revisions and
+                 recorded_revisions.get(lane) != lane_revisions[lane])
         for fixture in fixtures:
             cell = cells.get(f'{lane}/{fixture}')
             for part, expected in sorted(parts.items()):
@@ -107,6 +112,8 @@ def audit(table, contract, fixtures, vendors=VENDORS):
                 elif len(set(v for v in values.values() if isinstance(v, str))) > 1:
                     for vendor in values:
                         reasons.setdefault(vendor, 'value_mismatch')
+                if stale and ent is not None and (requires_numeric or not _na(expected)):
+                    reasons = dict.fromkeys(vendors, 'stale_revision')
                 if isinstance(ent, dict) and ent.get('conflict'):
                     for vendor in vendors:
                         reasons[vendor] = 'table_conflict'
@@ -119,10 +126,12 @@ def audit(table, contract, fixtures, vendors=VENDORS):
                     totals[kind + '_incomplete_parts'] += 1
                     gaps.append(dict(lane=lane, fixture=fixture, part=part, expected=expected,
                                      kind=kind, values=values, reasons=reasons,
-                                     cpu_role=('numeric' if _numeric(cpu_value) else
+                                     cpu_role=('stale' if stale else 'numeric' if _numeric(cpu_value) else
                                                'not_applicable' if _na(cpu_value) else 'missing'),
                                      cpu_value=cpu_value,
-                                     target=cpu_value if _numeric(cpu_value) else None))
+                                     target=cpu_value if _numeric(cpu_value) and not stale else None,
+                                     expected_revision=lane_revisions.get(lane),
+                                     recorded_revision=recorded_revisions.get(lane)))
                     for vendor, reason in sorted(reasons.items()):
                         plans[vendor].setdefault(lane, {}).setdefault(fixture, []).append(
                             dict(part=part, kind=kind, reason=reason))
