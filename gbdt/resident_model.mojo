@@ -120,6 +120,9 @@ comptime RESIDENT_RAW = 0
 comptime RESIDENT_SOFTMAX = 1
 comptime RESIDENT_SIGMOID = 2
 comptime RESIDENT_SIGMOID_PAIR = 3
+#: FAST binary classifier codes. The resident raw cursor is unchanged;
+#: sigmoid(raw) > 0.5 iff raw > 0, with equality retaining class zero.
+comptime RESIDENT_CLASSES_BINARY = 4
 
 #: One float32 slab per model column holds `[count, border_0, ...]`, the
 #: layout `_build_cindex_from_floats` stages per feature into a 256-float
@@ -605,6 +608,7 @@ struct ResidentGbdtModel(Movable):
         n_rows: Int,
         out_f32: MutPointer[Float32, MutUntrackedOrigin],
         out_f64: MutPointer[Float64, MutUntrackedOrigin],
+        out_i64: MutPointer[Int64, MutUntrackedOrigin],
         mode: Int,
         row_major: Bool = False,
     ) raises -> Int:
@@ -682,6 +686,32 @@ struct ResidentGbdtModel(Movable):
         comptime if RESIDENT_SABOTAGE:
             hc.unsafe_store(0, hc.unsafe_load(0) + Float32(1.0))
         var dim = self.approx_dim
+        if mode == RESIDENT_CLASSES_BINARY:
+            if dim != 1:
+                raise Error("binary class prediction requires one model dimension")
+            var tasks = (n_rows + STAGE_MIN_ROWS_PER_TASK - 1) // STAGE_MIN_ROWS_PER_TASK
+            var workers = host_worker_count()
+            if tasks > workers:
+                tasks = workers
+            if tasks < 1:
+                tasks = 1
+            var chunk = (n_rows + tasks - 1) // tasks
+
+            def _binary_task(c: Int) {imm hc, imm out_i64, imm chunk, imm n_rows}:
+                var lo = c * chunk
+                var hi = lo + chunk
+                if hi > n_rows:
+                    hi = n_rows
+                for r in range(lo, hi):
+                    out_i64.unsafe_store(
+                        r, Int64(1 if hc.unsafe_load(r) > 0 else 0)
+                    )
+
+            if tasks == 1:
+                _binary_task(0)
+            else:
+                sync_parallelize(_binary_task, tasks)
+            return 1
         if mode == RESIDENT_RAW:
             if dim == 1:
                 memcpy(dest=out_f32, src=hc, count=n_rows)
@@ -857,6 +887,7 @@ def gbdt_resident_predict(
     n_rows: Int,
     out_f32: MutPointer[Float32, MutUntrackedOrigin],
     out_f64: MutPointer[Float64, MutUntrackedOrigin],
+    out_i64: MutPointer[Int64, MutUntrackedOrigin],
     mode: Int,
     row_major: Bool = False,
 ) raises -> Int:
@@ -866,5 +897,5 @@ def gbdt_resident_predict(
     if handle not in state[].entries:
         raise Error("unknown or released resident GBDT model handle")
     return state[].entries[handle].predict_into(
-        x, n_rows, out_f32, out_f64, mode, row_major
+        x, n_rows, out_f32, out_f64, out_i64, mode, row_major
     )

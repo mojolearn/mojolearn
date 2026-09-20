@@ -168,6 +168,8 @@ class GradientBoostingClassifier(_GBDTAdapter):
         return self._learner_.predict(X)
 
     def _binary_output(self, X, probabilities):
+        if not probabilities and self.numeric_mode_ == 'fast':
+            return self._learner_.predict_classes(X)
         margins = as_f32_c(self.decision_function(X), ndim=1, name="margins")[0]
         if margins.ndim != 1 or not all_finite(margins):
             raise ValueError('Classifier margins must be finite scalar Float32 values')

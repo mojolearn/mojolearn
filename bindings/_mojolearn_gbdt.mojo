@@ -87,6 +87,12 @@ def _f64_ptr(addr: Int) raises -> MutPointer[Float64, MutUntrackedOrigin]:
     return MutPointer[Float64, MutUntrackedOrigin](unsafe_from_address=addr)
 
 
+def _i64_ptr(addr: Int) raises -> MutPointer[Int64, MutUntrackedOrigin]:
+    if addr == 0:
+        raise Error("mojolearn: null buffer address")
+    return MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=addr)
+
+
 def gbdt_numeric_mode_binding() raises -> PythonObject:
     """THE BUILD'S TIER, as the `NUMERIC_*` code itself: 0 FAST,
     1 IDENTICAL, 2 DETERMINISTIC.
@@ -665,10 +671,38 @@ def gbdt_resident_predict_binding(
         row_major = Int(py=params[2]) != 0
     var op32 = _f32_ptr(addr)
     var op64 = _f64_ptr(addr)
+    var op64i = _i64_ptr(addr)
     var width: Int
     with GILReleased(Python()):
-        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, mode, row_major)
+        width = gbdt_resident_predict(h, xp, n_rows, op32, op64, op64i, mode, row_major)
     return PythonObject(width)
+
+
+def gbdt_resident_binary_classes_binding(
+    handle: PythonObject, x_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """FAST resident Logloss/CrossEntropy codes into caller-owned Int64."""
+    if len(params) != 2:
+        raise Error("gbdt_resident_binary_classes requires [n_rows, row_major]")
+    var h = Int(py=handle)
+    var n_rows = Int(py=params[0])
+    var row_major = Int(py=params[1]) != 0
+    if n_rows <= 0:
+        raise Error("invalid resident binary class prediction row count")
+    var xp = _f32_ptr(Int(py=x_addr))
+    var out_address = Int(py=out_addr)
+    var op32 = _f32_ptr(out_address)
+    var op64 = _f64_ptr(out_address)
+    var op64i = _i64_ptr(out_address)
+    var width: Int
+    with GILReleased(Python()):
+        width = gbdt_resident_predict(
+            h, xp, n_rows, op32, op64, op64i, 4, row_major
+        )
+    if width != 1:
+        raise Error("resident binary class prediction returned an invalid width")
+    return PythonObject(n_rows)
 
 
 def gbdt_vendor_binding() raises -> PythonObject:
@@ -801,6 +835,7 @@ def PyInit__mojolearn_gbdt() abi("C") -> PythonObject:
         # DEVIATION 2980: the device-resident parsed model
         m.def_function[gbdt_resident_prepare_binding]("gbdt_resident_prepare")
         m.def_function[gbdt_resident_predict_binding]("gbdt_resident_predict")
+        m.def_function[gbdt_resident_binary_classes_binding]("gbdt_resident_binary_classes")
         m.def_function[gbdt_resident_release_binding]("gbdt_resident_release")
         m.def_function[gbdt_resident_info_binding]("gbdt_resident_info")
         return m.finalize()
